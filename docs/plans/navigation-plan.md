@@ -146,7 +146,11 @@ sections, as today.
 
 The cue model plan's all-cues table (R1 D13, its session 5) joins Library as **Cues**, after Looks,
 and is hidden in a venue like the rest of Library. (`navigation.test.ts` pins Library's ids and the
-venue's hidden ids, so the row adds `cues` to both.)
+venue's hidden ids, so the row adds `cues` to both.) R1.5 (`a410c6c5`) added it.
+
+Venue-visit S14 (`dae7dd5d`) gave Programmer a child row, **Applied** (`programmer-applied`,
+`/programmer/applied`), `needsRig` and kept in a venue. A child row is left off the home's cards;
+⌘K lists its three tables instead.
 
 - **Run goes first.** Running a show is what the desk is most used for. The live-view group's order
   test (`navigation.test.ts:91-102`) becomes Run's: the four live views and then Stage.
@@ -157,8 +161,9 @@ venue's hidden ids, so the row adds `cues` to both.)
   - Two rows can't both say *Stage*, and the Run row already does.
 - **Project › Sync** and **Desk › Sync** stay "Sync" under their headings. ⌘K, which has no headings,
   reads `NavItem.commandLabel`: *Project sync* and *Desk sync*.
-- **In a venue** (`hiddenInVenue`), Run keeps the Programmer and Stage, Library keeps nothing and its
-  heading goes. The eight hidden ids are unchanged.
+- **In a venue** (`hiddenInVenue`), Run keeps the Programmer (with its Applied child) and Stage,
+  Library keeps nothing and its heading goes. The eight hidden ids are unchanged (nine with R1.5's
+  Cues).
 - **Projects** (`/projects`) is the Desk section's first row, lit by `mostSpecificActiveId` on the
   Projects page.
 
@@ -270,14 +275,16 @@ venue's hidden ids, so the row adds `cues` to both.)
   - **Live.** It appears only on the rig: the live cue per stack, each cue a press holds loose
     (`cueHolds.state`), Blind, and the held state, read from `cueRunState` and the existing queries.
 - **Sections.** The registry's sections, minus Desk, are rendered as cards from the same `navItems`,
-  so a new row reaches the home without a hand-picked card.
+  so a new row reaches the home without a hand-picked card. A child row does not (`homeSectionsOf`):
+  S14's Applied, under Programmer, is left off by Chris's call.
   - Each card is its row's icon, label and an optional count, from `NavItem.homeCount?: (data) =>
     number | string`:
     - patches 60, fixtures 57, groups 24, *2 stacks · 35 cues*, looks 9, palettes 31, speed masters 4,
       surfaces 0.
     - Since R1.4 a cue can sit in several stacks or in none, so a count of cues per stack counts a
       shared cue twice and misses a loose one. By Chris's call in session 4, Show counts the stacks
-      and the project's cues, each cue once.
+      and the project's cues, each cue once. Since R1.5 (`a410c6c5`) Show's card counts the stacks
+      and the Cues card the cues.
   - Off the rig, the `needsRig` cards take D4's treatment.
 
 ### 5.2 A venue's home
@@ -287,12 +294,13 @@ venue's hidden ids, so the row adds `cues` to both.)
   - **On the rig** or **Make current**.
   - The ⋮.
 - **Status block:**
-  - *v8 · 14 Oct 2026 · "re-patched LX2"*, with *History*.
+  - *v8 · 14 Oct 2026 · "re-patched LX2"*, with *History*. As built (Nav.5), an operator's line is
+    read from the list's `venueSummary`, which has no note, and has no *History*, an admin's action.
   - *Draft: 3 changes (1 changes output)*, with *Publish v9…* and *Discard* for an admin, read from
     the history query the band already makes.
-  - The venue's repo and sync state.
+  - The venue's repo and sync state, an admin's line as on a show's home.
 - **Shows on this venue.** `VenueShowsList`, with each show's pinned version, whether it's behind,
-  and *Open* and *Make current*.
+  and *Open* and *Make current* (`rigRowActions`, which the switcher's rows read too).
 - **Sections.** As §5.1. The venue filter leaves Run (Programmer, Stage), Rig and Project.
 - **The band stays.** `VenueBand` still crosses a venue's views. The home gives History and Publish
   a second, permanent door.
@@ -309,7 +317,7 @@ venue's hidden ids, so the row adds `cues` to both.)
 | Settings | always | rig |
 | Clone | a show, or an admin on a venue | copy |
 | Export | admin | copy |
-| Update venue to vN… | a show on a venue that's behind | venue |
+| Update venue to vN… | a show on a venue that's behind, whose pinned version the desk holds (Nav.5) | venue |
 | Detach from venue… | a show on a venue held here | venue |
 | Attach to venue… | a standalone show (`venue-attach-plan.md`) | venue |
 | Extract a venue… | admin, a standalone show | venue |
@@ -320,7 +328,8 @@ venue's hidden ids, so the row adds `cues` to both.)
   - the Projects card's ⋮;
   - the home's ⋮;
   - the switcher, which takes *Open* and *Make current* from the *rig* group (*Settings* left off a
-    row for room on a phone, by Chris's call in session 4);
+    row for room on a phone, by Chris's call in session 4), through `rigRowActions` since Nav.5, as
+    the venue home's shows list does;
   - ⌘K's **Project** group, for the viewed project.
 - **The ⌘K Project group:**
   - Its *Projects* list gains *Make <name> current* beside *Go to <name>*.

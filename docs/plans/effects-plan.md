@@ -30,7 +30,7 @@ below build on: the flag is `seconds` on the same four effect homes they extend 
 by `FxPicker`, the palette editor and the MCP tools — so session 6's "a Beam master takes a new beam
 effect by S15's default" needs only `usage` to gain `beam`. Nothing here changes timing. Sessions 1–3
 each bump `formatVersion`, each taking its number by venue-visit P5: S11 took 28, S15 29, session 1 30,
-S8 31, R1.3 32, session 2 33 and session 3 34. Sessions 6 and 7 took none, and session 5 stores nothing.
+S8 31, R1.3 32, session 2 33 and session 3 34. Sessions 4, 6 and 7 took none, and session 5 stores nothing.
 
 ### 1.1 The survey
 
@@ -62,8 +62,9 @@ Summarised from [`effects-design/survey.md`](effects-design/survey.md), where ea
 
 Read from `main` at `8182be4`, 2026-10-15. Since then session 1 has given every effect a size and made
 `intensityMultiplier` the envelope (§3.5), session 2 has shaped the spread, session 3 has run one effect
-over a selection, sessions 6 and 7 have added beam and step effects, and R1.2 has put a GO on the hold
-registry, `fx/CueHolds.kt`; the bullets that name the old code say so.
+over a selection, sessions 6 and 7 have added beam and step effects, session 4 has faded effects with
+the cue, session 5 has given a stack its size, and R1.2 has put a GO on the hold registry,
+`fx/CueHolds.kt`; the bullets that name the old code say so.
 
 - **24 built-ins**, all `.fx.kts` (`src/main/resources/fx/`): eleven level effects, six colour, six
   position, one composite. Each takes literal parameters — `min`/`max`, a radius, a range, a colour
@@ -90,7 +91,7 @@ registry, `fx/CueHolds.kt`; the bullets that name the old code say so.
   Colour Cycle has none.
 - **Effects snap at GO.** `CueStackManager.activateCueInStack` removes the outgoing cue's effects and
   starts the incoming at full (since R1.2, `activateEntry` through `CueHolds.bringOn` and `takeOff`); `CueCrossfadeDriver`'s doc says this "matches Eos / grandMA / Hog 4",
-  which the manuals contradict.
+  which the manuals contradict. (Session 4 fades them by size, `fx/EffectEnvelope.kt`.)
 - **An effect targets one fixture or one group.** A Local effect over loose fixtures runs them in
   unison; R3 left that to this plan (`FU-FX-SELECTION-DISTRIBUTION`). (Session 3 added
   `FxTargetRef.SelectionRef`, one instance over an ordered list.)
@@ -163,7 +164,9 @@ The plan adds its own:
   on (its first hold) in one GO. The incoming cue is acquired before the outgoing is released, and
   effects are tagged and removed by cue (`CueHolds.takeOff`), so session 4 must hand the acquire the
   outgoing cue to adopt from. Neither `EffectEntry` nor `FxInstance` carries the Look effect's uuid
-  yet.
+  yet. (As built in session 4: `FxInstance.layerEffectUuid`, the Look's, palette's or cue's own effect
+  row, handed over through `CueHolds.acquire`'s `adoptFrom`; the match also needs the same property and
+  `lookEffectSettings()`, and never takes a paused instance or an N-shot, §11 question 19.)
 - **P5 — A stored field is a `formatVersion` bump in the session that adds it** (sessions 1, 2 and 3).
   A parameter of one effect (the step lists) rides `parameters` and is not.
 - **P6 — The built-ins keep their shapes.** Ramp Down stays though Ramp Up backward equals it, and the
@@ -248,16 +251,19 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 
 - **On GO** (and GO TO, GO BACK), an outgoing effect's envelope runs 1 → 0 over the cue's fade on the
   cue's curve, and the instance is removed at 0; an incoming one runs 0 → 1. A continuing effect
-  (P4) is untouched. A 0 s fade is today's snap.
+  (P4) is untouched. A 0 s fade is today's snap. (As built, a first GO from a stopped stack and a
+  re-fire snap too.)
 - **Under shared cues** (the cue model plan's holds), the envelope follows the cue's holds: it fades
   in on the first hold and out on the last release. A GO between two entries of a cue that stays
   held moves no envelope, as it moves no value. A loose hold (a pad, a slot, `apply_cue`) has no
   fade: its rows snap on and off (`CueHolds.takeLoose`, `dropLoose`), and so do its effects.
-- **A stack stop** fades its effects over the time it fades its values.
+- **A stack stop** fades its effects over the time it fades its values. (As built, a stop releases with
+  `Departure.SNAP`, so both snap.)
 - **The programmer** (D13): a layer added or removed by a press, a release (`clearTarget`,
   `clearEntry` on an effect) and Clear move the envelope over the programmer fade — except an effect
   over a programmer value the same gesture moves, which lands or goes at once so that value ramps
-  (§11, question 18).
+  (§11, question 18). The three press routes take the fade as an optional `fadeMs`, which the client
+  does not send yet (`FU-FX-PRESS-FADE-CLIENT`), so a press from the UI still lands at once.
 - **Blind** holds programmer effects (R2.1, `fx/BlindHold.kt`): the envelope stays 1 while held, and
   leaving Blind fades them in over the Blind fade, like a press. This replaces R2.1's "the Blind fade
   does not fade an effect" in `fx-engineering.md`, `lighting-composition-model.md` §Blind and
@@ -265,7 +271,10 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 - The envelope is runtime, never stored and never recorded: Record takes the row's own `size`.
 - Where it lives (session 1): the envelope is `FxInstance.intensityMultiplier`, and `FxInstance.weight`
   is the one product the targets apply after the blend (`size × envelope`, clamped to 0–1), so the
-  envelope and session 5's stack size multiply in there. A programmer layer's N-shot that has run its
+  envelope and session 5's stack size multiply in there. (As built in session 4, the envelope is an
+  immutable ramp on the clock, `fx/EffectEnvelope.kt`, which `intensityMultiplier` reads; an instance
+  let go on a fade is `leaving`, removed at 0 by the wall-clock pass. Session 5's factor is
+  `FxEngine.weightOf`.) A programmer layer's N-shot that has run its
   count is kept in the engine painting nothing (`FxInstance.spent`) until its layer goes; a release
   that fades it fades nothing visible and removes it at 0 like any other.
 
@@ -293,9 +302,12 @@ between them — and the **target** resolves it per head, which is what no outpu
 |---|---|
 | `POST /fx/add`, `PUT /fx/{id}`, `updateFx`, `POST /groups/{name}/fx` | gain `size`, `direction`, `nShot` (s1); `spread`, `wings`, `blocks`, `groups` (s2); a `targets` list on `POST /fx/add` (s3), and on `PUT /fx/{id}` and `updateFx` for the apply-model plan's split (its session 2) |
 | Look, cue and palette effect DTOs, `ActiveEffect` | the same fields |
-| `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5) |
-| a stack-size state frame and its set frame | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 20), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush`. Not on `cueRunStateChanged`, which a fader drag would flood |
-| MIDI `BindingTarget.StackEffectSize {stackUuid}` | new fader target (s5) |
+| `POST /busk/pads/{id}/press`, `/palettes/{id}/toggle`, `/looks/{id}/toggle` | gain an optional `fadeMs`, the programmer fade (s4) |
+| `EffectDto` | gains `leaving` (s4) |
+| `GET/PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5) |
+| `stackEffectSize.state` / `stackEffectSize.set` | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 20), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLiveFader` (over `useLivePush`). Not on `cueRunStateChanged`, which a fader drag would flood |
+| `cueHolds.state` | each cue gains `stackId`, its highest hold's stack, the one that weighs it (s5) |
+| MIDI `BindingTarget.StackEffectSize {stackId, stackUuid}` (`stackEffectSize`) | new fader target (s5) |
 | MCP effect schemas (`AiToolSchemas`) | gain each field as its session lands |
 
 ## 4. UX
@@ -353,7 +365,8 @@ changes meaning (P6). Older desks refuse a newer archive by `formatVersion`, as 
   project only), `plugins/GrandMasterSocket.kt` (one `StateFlow`-backed state frame following the live
   show, one `CONTINUOUS` set frame), `BindingTarget.GrandMasterFader` with its health arm and a
   `GrandMasterEntry` in `SurfaceFeedbackPublisher` (a value with no channel behind it, fed back and
-  armed for PICKUP as `SpeedMasterEntry` is), and `GrandMasterOverviewPanel.tsx` over `useLivePush`. The
+  armed for PICKUP as `SpeedMasterEntry` is), and `GrandMasterOverviewPanel.tsx` over `useLivePush`
+  (since session 5, over `useLiveFader`, which the stack's slider shares). The
   grand master persists per project; a stack's size is dropped on a switch, so it needs no table.
 - **The cue model plan's session 2 (holds)** has landed (`595aced3`): session 4 builds the envelope
   on `fx/CueHolds.kt` (§3.5), not on a stack's live cue.
@@ -480,8 +493,8 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - **Docs:** `fx-engineering.md`, `fixtures-engineering.md` (settings as effect targets).
 
 Order: 1, 2, 3, 4, 5, 6, 7. Session 3 is ahead of R3's session 2 (D12); 4 needs 1's weight; 5 needs
-4's envelope composition; 6 and 7 are independent of the rest after 1. They are running 1, 2,
-3, 6, 7, then 4 and 5.
+4's envelope composition; 6 and 7 are independent of the rest after 1. They ran 1, 2, 3, 6, 7,
+then 4 and 5.
 
 ## 9. Explicitly out of scope
 
@@ -507,6 +520,13 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 - `FU-FX-SPLIT-DUPLICATE` (session 2): `SPLIT` and `EDGES_IN` give the same offsets. Ready.
 - `FU-FX-STEPS-COLOUR-WHEEL` (session 7, recorded): colour Palette Steps skip a head whose colour is a
   wheel. Trigger: an operator steps colour palettes over a group holding a colour-wheel head.
+- `FU-FX-PRESS-FADE-CLIENT` (session 4, recorded): the client sends no `fadeMs` on the three press
+  doors. Ready.
+- `FU-FX-VALUE-FADE-UNDER-EFFECT` (session 4, recorded): a programmer value and the effect over it
+  cannot fade together (§11, question 18). Trigger: an operator wants both to fade on one gesture.
+- `FU-FX-KEYSTACK-STACK-SIZE` (session 5, recorded): `programmer.keyStack`'s effect layers report the
+  instance's own size and its first hold's stack, not the weighing stack and its size. Trigger: an
+  operator misreads a property's stack under a stack below full.
 
 ## 11. Questions
 

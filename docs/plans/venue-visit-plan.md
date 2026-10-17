@@ -156,8 +156,9 @@ The plan adds its own:
     docs, `followups.md` and its plan row, and `ProjectRoundTripTest` and `RichProjectFixture`;
   - never takes or changes a number `main` already has.
 
-  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34. Still to bump: S16, and possibly
-  venue-attach session 1.
+  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34, S16 35. Venue-attach session 1
+  needed none (`e5b60d72`: an older reader loses only the origin), and session 2 writes only records
+  v24 and v27 carry. Nothing left in §4 is known to bump.
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -201,15 +202,29 @@ Grouped by area. §4 gives the order.
   selection that is one group is in that group's own member order, as a spread over one already is
   since S7.
 - Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
+- `SpreadPanel` has three hosts: row C's popover, the rail's Spread tab and, since R2.5, the cue
+  editor's Values grid. A focused Look layer and the Values grid resolve with `write: false` into the
+  row being edited, so there a head's current position is that row's, not the stage's; the sketch
+  says which a fan reads.
+- The position cell's popup has no *Spread…*. Since R3.5 (`293db483`) it sits in `PaletteBands`,
+  whose footer `tools` slot (apply-model §4.3's *Spread…*, *Pick*, *Aim…*) no cell fills yet; the
+  colour editor's own *Spread…* seeds the rail's tab.
 - Start with a one-board sketch of the panel. No separate design session.
 
 **S13 — Aim from the floor plan.**
 - Click to aim the selection, single or multiple, on the Stage view's Plan camera.
 - Height comes from a Z control or a region's surface.
-- Aim also opens from the programmer.
+- Aim also opens from the programmer: the position cell popup's footer, `PaletteBands`' `tools`
+  slot, where apply-model §4.3 puts *Aim…* (R3.5 built the slot and filled nothing).
 - Points outside the stage (auditorium, walls, the room) are reachable because the plan extends to
-  the room, with numeric entry for anything off the drawing.
+  the room, with numeric entry for anything off the drawing. Today the Plan is fitted to the rig's
+  bounds (`orthoSection`, `stageCameras.ts`), and a pointer maps to its metres only in the editor
+  (`edit/sectionView.ts`).
 - Show skipped heads by reason, as the route already answers them.
+- The Stage view already aims at a typed point: `StageAimControls` (X, Y, Z; a region's centre at
+  head height above its top, `regionAimPoint`; skipped heads by name and reason), the *Aim…*
+  popover on the fixture sheet's Position row in the Stage view's single-fixture panel, and
+  `StageAimPanel` for a multi-selection. S13 adds the click and the programmer's door to it.
 
 ### Effects
 
@@ -251,6 +266,11 @@ a one-line row here.
 - ~~K3 — after twelve more~~ — done, `d9cb8382` (plans corrected for R3.1–R3.4, R4.3, R4.6, R4.7,
   R2.3, R2.4 and Nav.2–Nav.4; R1.6's and Att.3's needs met; nine questions answered by Chris, in
   the plans' question lists; no manual check run).
+- ~~K4 — after eight more~~ — done, `71388bad`, `f026cc10`, `d25ffaae`, `1a1acf9b`, `b6f1ec21`,
+  `bb1ccd3e` (plans corrected for S14, R4.5, R3.5, R2.6, S16, R1.5, R3.6 and Att.1, and for R2.5, Nav.5
+  and R4.4; Effects and Navigation folded; Att.2's, R1.6's and R3.7's bodies checked before they
+  start; three operator checks filed and nine corrected; three questions answered by Chris; no manual
+  check run).
 
 ### Research and design — done
 
@@ -278,9 +298,8 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
-once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
-chains reach R3.8: Cue editor (R2.6, one deep since R2.5 merged) and Apply (R3.5–R3.7, three).
-Apply is the longer again, so keep it moving.
+once everything in its *From other lanes* column has merged. Run three or four lanes at once. Every
+lane is two deep and none waits on another: R2.6 has merged, so R3.8 waits only for R3.7.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
@@ -295,20 +314,22 @@ and every need they met. R2.5 (#190), Nav.5 (#191) and R4.4 (#192) were in fligh
 merged before K3 did, and are out of the lanes. Three lanes have not started: Cue library,
 Programmer and Venue attach. Each can start now.
 
+K4 (2026-10-17) took out S14, R4.5, R3.5, R2.6, S16, R1.5, R3.6 and Att.1, and R3.8's need on R2.6. It
+folded the Effects lane and the Navigation lane, whose plans have no session left. R2.7 was finishing
+as it ran, with no branch pushed yet, and Att.2, R1.6 and R3.7 were about to start. Programmer has
+still not started: the next free slot runs S13, ahead of R2.8 (Chris, 2026-10-17, K4).
+
 **Cue editor.**
 
 | Session | From other lanes |
 |---|---|
-| R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
 
-**Cue library.** Not started; S16 and R1.5 can both start now.
+**Cue library.**
 
 | Session | From other lanes |
 |---|---|
-| S16 Speed masters on a cue | — |
-| R1.5 The Cues table | — |
 | R1.6 Copy from another show | — |
 | R1.7 The MCP tools | — |
 
@@ -319,33 +340,17 @@ Programmer and Venue attach. Each can start now.
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Effects.**
+**Apply.**
 
 | Session | From other lanes |
 |---|---|
-| R4.5 A stack's effect size | — |
-
-**Apply.** R3.5 and R2.6 both change `AddLayerSheet`: R3.5 moves the programmer's door and R3.8 the
-cue editor's, so either order works (the apply plan's §5).
-
-| Session | From other lanes |
-|---|---|
-| R3.5 The palette popup and the one picker | — |
-| R3.6 Effects in the popup | — |
 | R3.7 The busk side sheets | — |
-| R3.8 Into the cue editor | R2.6 |
+| R3.8 Into the cue editor | — |
 
-**Navigation.** Nav.4 and Nav.5 ran ahead of S14, the lane's last session, which stays unclaimed.
-
-| Session | From other lanes |
-|---|---|
-| S14 Applied tables | — |
-
-**Venue attach.** Not started. Nav.4 has merged, so Att.3 hangs off its project actions.
+**Venue attach.**
 
 | Session | From other lanes |
 |---|---|
-| Att.1 The origin, and the pairing | — |
 | Att.2 The attach | — |
 | Att.3 The sheet | — |
 

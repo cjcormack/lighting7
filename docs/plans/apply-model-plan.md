@@ -339,7 +339,9 @@ calls:
   - *+ Effect …*, which opens `FxPicker` on this property for a bare effect (§3.4).
 - **Footer**: *Save as palette…* for every family, from the cell's values
   (`NewTemplateFromSelectionSheet` with the family), and the family's own tools (*Spread…*, *Pick*,
-  *Aim…*).
+  *Aim…*). As session 5 built it (`293db483`), `PaletteFooter`'s `tools` slot is drawn empty and the
+  colour editor keeps its own *Pick* and *Spread…*; the position cell's *Spread…* and *Aim…* are
+  venue-visit S12's and S13's.
 - **Under a focused Look** a teal band says *Into Warm wash*. The rings go, since a Look holds values.
   The presses follow §3.6.
 
@@ -408,7 +410,8 @@ only on the next press.
 - **S10 (*All attributes*)** before session 4.
 - **S15 (effect timing)** before session 2, so a bare effect starts on S15's default.
 - **S14 (applied tables)**: independent. Whichever lands second carries *Detach* onto the other's rows.
-- **R2 sessions 5–6** before session 8.
+  S14 landed second and carries it, in the layer tables' settings popover (`dae7dd5d`).
+- **R2 sessions 5–6** before session 8. Both have merged (`ec093275`, `639fe8ca`).
 
 ## 8. Implementation — eight sessions
 
@@ -612,12 +615,38 @@ Each session is one PR (P1).
 ### Session 7 — The busk side sheets (frontend)
 
 - §4.5's tabs and the Effects tab's add and split.
+- **The tab list.** `LIVE_SHEET_TABS` and the `BuskSheet` vocabulary in `lib/buskWindow.ts` (today
+  `speed · colour · spread · effects · show`) are the one list, with `SIDE_SHEET_TABS` in
+  `SideSheet.tsx`. A tab added there reaches the strip, the fold, the Screens sheet's Sheet segment
+  and the MIDI toggle's memory; `SideSheetOverlay` (no Speed, opening on `OVERLAY_SHEET_TAB`,
+  Colour) mounts each tab by name.
+- **Eight tabs do not fit the floor as measured.** `SHEET_MIN_WIDTH` (320) holds five only because
+  `tabWordClass` folds every tab but the open one to a 30px glyph below `BUSK_TAB_WORDS_FROM` (460):
+  243px of strip at the floor, where the row has 296. Three more glyphs are about 90px. The overlay's
+  `w-80` strip has less room still. This session re-measures the floor, the rung and the overlay.
+- **What a family tab can dock.** `ColourEditor` is the one editor body with a docked host
+  (`ColourSheet`, which plans the busk writes through `planColourWrites` / `writeTargetsOf`). The
+  level and position editors live inside `SliderCell` and `PositionCell`, and the XY pad is written
+  twice, both private: `PositionCell`'s `XyPad` and the fixture sheet's `PositionPad`
+  (`fixtureSheet/PropertyRow.tsx`, writing through `sheetWrites.ts`). The Level, Position and Beam
+  tabs lift one of each rather than add a third.
+- **The bands.** `PaletteBand` and `EffectsBand` (`components/editor/PaletteBands.tsx`) are exported
+  and take their targets and mask. Session 5 put the Palettes band in the Colour tab where Recent
+  sat, at the foot of its scroller, pressed under the busk pair's mask. Session 6 left that tab
+  without an Effects band, its effects being the Effects tab's; whether the Level, Position and Beam
+  tabs draw one is this session's call.
+- **The Effects tab today.** `EffectsSheet` lists the programmer-owned effects on the selection
+  (`effectsOnSelection`) and opens `FxEditor` inline, with no split. Session 6's split editor is
+  `SplitEditor`, private to `FxEditorPopover.tsx`, which reads the window's pair
+  (`useWindowPressPair`) when given no `selection`. *+ Effect …* is `ApplyPicker`'s effects arm
+  (`library="effects"`) on `useWindowEffectPair(false)`: the desk's pair while following, the busk
+  view's copy when unlinked.
 - **Tests:**
   - Each family tab presses over the busk pair.
   - The Position tab's XY writes Local.
   - The Effects tab's add uses the busk selection.
-- **Docs:** the frontend CLAUDE.md's busk section; `lib/buskWindow.ts`'s tab list in
-  `docs/desk-screens.md` if it names them.
+- **Docs:** the frontend CLAUDE.md's busk section, whose §"Focus and the side sheet" lists
+  `busk.sheet`'s values and the overlay's tabs (`docs/desk-screens.md` names none).
 
 ### Session 8 — Into the cue editor (backend + frontend)
 
@@ -631,6 +660,19 @@ Each session is one PR (P1).
   `selectionTargets` what *+ Look*, *+ Palette*, *Targets* and *+ Effect* act on; `AddLayerSheet`
   takes it as `defaultTargets`. The tabs write through `CueRowStore.editLayers` / `editEffects`, a
   whole list built on `fetchLatestCue` — what a press route answering the cue would replace.
+- **What sessions 5 and 6 left.** The bands and the picker press the programmer. `usePress` and
+  `ApplyPicker` take a scope of `'window' | 'programmer'` and land in Local or a focused Look
+  (`PressInto`); neither has a cue arm. `PaletteBands` draws nothing without `projectId`, which
+  R2.5's grid withholds, so its cells are bare today. `EffectsBand` lists the running effects
+  (`fx/active`), and its *+ Effect …* opens the picker's effects arm on the bare press. In the cue a
+  bare effect is R2.6's `FxPicker` draft arm (`draft={{current, onPick}}`), which stores the effect
+  and runs nothing (§3.6).
+- **A cue layer's timing and masters move to its settings popover** (§11, 12). `AddLayerSheet`'s
+  last step (`LayerPicker`'s timing step) is the only place a cue layer's delay, interval, random
+  window and speed or rate master override are set; `LookStack` shows them as a `TimingBadge` and
+  edits none. The cue Looks tab's layer settings popover gains those fields, so a layer the picker
+  adds takes them there, and so does an existing one. `FU-PRESS-LAYER-MASTER` stays the
+  programmer's.
 - **Tests:**
   - A palette pressed on cue cells adds a cue layer, and Blue replaces Red in the stored cue.
   - A second press takes it off.
@@ -657,6 +699,9 @@ In [`followups.md`](followups.md), when the session that creates them lands:
   effect over the selection (`effects-plan.md` D3).
 - `FU-PRESS-REPLACE-LOOKS` (session 1): a Look pressed over a Look on the same heads stacks (D6).
   Trigger: an operator expects the second to take the first off outside a solo bank.
+- `FU-PRESS-LAYER-MASTER` (session 5, recorded then): a programmer layer has no speed or rate master
+  override since the add-layer sheet left the programmer. Session 8 meets the same question for a
+  cue layer.
 
 ## 11. Questions
 
@@ -688,3 +733,9 @@ Answered by Chris, 2026-10-17, at venue-visit course check K3:
 11. **A gobo or prism cell's popup, now Slot Steps exists?** It gains the popup with only its Effects
     band, offering Slot Steps and its effect palettes. Leaving it to *+ Effect* in the rail was
     declined.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K4:
+
+12. **A cue layer's timing and masters, once the add-layer sheet goes?** The cue Looks tab's layer
+    settings popover gains them, for new and existing layers alike. A timing step after the
+    picker's press, and dropping them under `FU-PRESS-LAYER-MASTER`, were declined.
