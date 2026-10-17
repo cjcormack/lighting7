@@ -375,8 +375,10 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | `eye` | `plan` |
 `front` | `side`, stage-view plan session 1), a saved `stage_viewpoints` row by its uuid
 (session 2) or an unsaved seat, `seat:<seating uuid>:<seat id>` (session 3), and its `source` — the
-vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` (session 3; the Screens row
-offers Output and Next GO), and its `workLights` — `off` | `on` (stage-view menu plan D8; the
+vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` | `edit` (session 3; the Screens
+row offers Output and Next GO, and *Cue in edit* only while the window shows one) — under `edit` its
+cue rides beside it as `editEntry` or `editCue`, applied only with one (show-cue-editing plan §3.7) —
+and its `workLights` — `off` | `on` (stage-view menu plan D8; the
 Screens row's *Work lights · Off | On*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own

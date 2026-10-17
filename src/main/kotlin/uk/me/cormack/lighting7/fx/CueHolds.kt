@@ -182,6 +182,9 @@ class CueHolds internal constructor(
     /** The priority [cueId] composes at, or null when nothing holds it. */
     fun priorityOf(cueId: Int): Int? = view[cueId]?.priority
 
+    /** The priority the next loose press would compose at, on top of every press so far — what a loose preview asks. */
+    fun nextLoosePriority(): Int = synchronized(lock) { loosePriority(looseSeq + 1) }
+
     /** The stack of [cueId]'s highest hold; null when that is loose or nothing holds it. */
     fun stackOf(cueId: Int): Int? = view[cueId]?.stackId
 

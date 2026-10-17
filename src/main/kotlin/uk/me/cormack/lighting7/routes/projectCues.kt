@@ -500,6 +500,26 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
+    // GET /{projectId}/cues/{cueId}/preview - Compose a cue as a loose press would land it, sending
+    // nothing (show-cue-editing plan §3.7): the Stage view's *Cue in edit* for a cue with no entry.
+    get<PreviewCueResource> { resource ->
+        withCurrentProject(state, resource.parent.projectId, "Cannot preview - not current project") { project ->
+            val exists = transaction(state.database) {
+                DaoCue.findById(resource.cueId)?.project?.id == project.id
+            }
+            if (!exists) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+                return@withCurrentProject
+            }
+            try {
+                call.respond(previewLooseCue(state, resource.cueId))
+            } catch (_: IllegalArgumentException) {
+                // Deleted between the check above and the compose.
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+            }
+        }
+    }
+
     // POST /{projectId}/cues/{cueId}/update-stage - Send a live cue's stored rows and effects to the
     // stage over its own fade (show-cue-editing plan §3.5, D11); `dryRun` answers the counts alone.
     // Both roles, as a GO is: it stores nothing.
@@ -581,6 +601,9 @@ data class DuplicateCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/{cueId}/apply")
 data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/{cueId}/preview")
+data class PreviewCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/{cueId}/stop")
 data class StopCueResource(val parent: ProjectCuesResource, val cueId: Int)

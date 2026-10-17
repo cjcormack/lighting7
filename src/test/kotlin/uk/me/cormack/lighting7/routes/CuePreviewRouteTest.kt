@@ -43,7 +43,7 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
     private suspend fun createCue(
         client: HttpClient,
         name: String,
-        stackId: Int,
+        stackId: Int?,
         fixtureKey: String,
         dimmer: Int,
     ): Int {
@@ -178,5 +178,70 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
         val stackId = createStack(client, "Act 1")
 
         assertEquals(HttpStatusCode.BadRequest, preview(client, stackId).status)
+    }
+
+    private suspend fun previewLoose(client: HttpClient, cueId: Int): HttpResponse =
+        client.get("/api/rest/projects/$projectId/cues/$cueId/preview")
+
+    @Test
+    fun `a loose preview composes the cue above the live stacks, and changes nothing live`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", hex1Dimmer)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", hex2Dimmer)
+
+        val stackA = createStack(client, "Act 1")
+        val a1 = createCue(client, "a1", stackA, "hex-1", 100)
+        val a2 = createCue(client, "a2", stackA, "hex-2", 80)
+        val loose = createCue(client, "storm", null, "hex-1", 200)
+        activate(client, stackA, a1)
+
+        val before = state.show.fxEngine.layerResolver.currentCueLayerState
+
+        val response = previewLoose(client, loose).body<PreviewCueResponse>()
+        assertEquals(loose, response.cueId)
+        assertEquals(200, response.channels.at(hex1Dimmer), "a press composes above every stack")
+
+        // A cue in a stack previewed loose keeps its stack's live cue: a press releases nothing.
+        val placed = previewLoose(client, a2).body<PreviewCueResponse>()
+        assertEquals(100, placed.channels.at(hex1Dimmer), "the stack's live cue is retained")
+        assertEquals(80, placed.channels.at(hex2Dimmer))
+
+        assertEquals(before, state.show.fxEngine.layerResolver.currentCueLayerState, "a preview must not disturb the live cue layer")
+        assertTrue(!state.show.cueStackManager.holds.isHeld(loose), "a preview takes no hold")
+    }
+
+    @Test
+    fun `a loose preview agrees with the press that follows it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", hex1Dimmer)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", hex2Dimmer)
+
+        val stackA = createStack(client, "Act 1")
+        val a1 = createCue(client, "a1", stackA, "hex-1", 100)
+        val loose = createCue(client, "storm", null, "hex-1", 200)
+        activate(client, stackA, a1)
+
+        val previewed = previewLoose(client, loose).body<PreviewCueResponse>()
+        val press = client.post("/api/rest/projects/$projectId/cues/$loose/apply")
+        assertEquals(HttpStatusCode.OK, press.status, press.bodyAsText())
+
+        val live = state.show.fxEngine.layerResolver.currentCueLayerState
+        val liveByChannel = live.entries.flatMap { (key, value) ->
+            uk.me.cormack.lighting7.fx.PropertyChannelWriter
+                .resolve(state.show.fixtures.untypedFixture(key.targetKey), key.propertyName, value)
+                .map { it.channel to it.value.toInt() }
+        }.toMap()
+        for (channel in previewed.channels) {
+            assertEquals(channel.value.toInt(), liveByChannel[channel.channel], "channel ${channel.channel} disagrees between preview and the press")
+        }
+    }
+
+    @Test
+    fun `a loose preview of a cue the project lacks is not found`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        assertEquals(HttpStatusCode.NotFound, previewLoose(client, 999_999).status)
     }
 }

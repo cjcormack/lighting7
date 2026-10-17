@@ -126,6 +126,7 @@ import { DEFAULT_RIGGING_LENGTH_M } from '../components/stage3d/RiggingMeshes'
 import { StageViewMenu, type StageViewMenuTab } from '../components/stage3d/StageViewMenu'
 import { useStageView } from '../components/stage3d/useStageView'
 import { setVisSource, useVisSource } from '../hooks/useVisSource'
+import { useEditCueStatus } from '../hooks/useEditCuePreview'
 import { useNextGoStatus } from '../hooks/useNextGoPreview'
 import { StageChannelSourceProvider } from '../hooks/useChannelSource'
 import { useModifierHeld } from '../components/stage3d/useShiftHeld'
@@ -241,6 +242,7 @@ export function Stage() {
   const visSource = useVisSource()
   // Reads the same cached queries the Next GO source does, so it costs no extra request.
   const nextGoStatus = useNextGoStatus(visSource === 'nextGo')
+  const editStatus = useEditCueStatus(visSource === 'edit')
   const isTabletOrLarger = useMediaQuery(SM_BREAKPOINT)
   // One snap preference for every camera — see useSnapGrid on why Shift
   // *disables* snapping rather than enabling it.
@@ -1293,7 +1295,7 @@ export function Stage() {
             onTestRecovery={() => recoveryRef.current?.testContextLoss()}
             visSource={visSource}
             setVisSource={setVisSource}
-            sourceStatus={{ nextGo: nextGoStatus }}
+            sourceStatus={{ nextGo: nextGoStatus, edit: editStatus }}
             layers={sceneLayers}
             setLayer={setSceneLayer}
             setHaze={setHazeExtent}

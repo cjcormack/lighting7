@@ -457,7 +457,7 @@ canvas lays each element's interpolated state over its `params.states` before bu
 (`lib/scenery.ts`'s `sceneryElements`), so the builders draw tabs and trims unchanged and **beam
 reach reads closed tabs** for free; `useSceneryClock` invalidates every frame only while a move is in
 flight. The vis source picks the scenery too (`StageSceneryContext` from `StageChannelSourceProvider`:
-Next GO draws the preview's). Authoring is one `components/scenery/SceneryEditor.tsx` in the cue
+Next GO and Cue in edit draw their previews'). Authoring is one `components/scenery/SceneryEditor.tsx` in the cue
 editor's Scenery tab, `CueStackForm` and `LookDetailSheet`, saving the owner's whole list per gesture and
 holding its draft over a refetch; since the scenery-programmer plan's session 2 each of its rows is
 element select · time · × over a `SceneryControl` (§"The editor kit") in `commit="release"`, so a row
@@ -5324,16 +5324,17 @@ top-level announce key would drop the frame (`windowsApi.test.ts` still pins the
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
 the libraries, carrying three options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
 Plan | Front | Side*), since session 3 `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
-GO*, an `enum` segment) and since the stage-view menu plan's session 2 `workLights`
+GO*, an `enum` segment, with *Cue in edit* while the window shows one) and since the stage-view menu plan's session 2 `workLights`
 (`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*) — and **no immersive** — it is a window view,
 not a live view, so it has no `ShowHeader` to leave standing. `announcedViewOptions` takes the Stage
 options (`stageViewOptions`: the viewpoint, the source and the work lights) as its fourth argument
 and sends them only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose
 descriptor carries it and the three only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
 which ignores a value outside each vocabulary — a camera, a saved view's uuid since session 2 or an
-unsaved seat since session 3; one of the four vis sources; `off | on`). ⌘K gains *Show Stage on
-<window>* and *Open Stage on another display* from the same list, and `windowSetupUrl` carries
-`viewpoint=`, `source=` and `workLights=`, which the Stage route applies on arrival and strips
+unsaved seat since session 3; one of the five vis sources, `edit` only beside a positive `editEntry`
+or `editCue`; `off | on`). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
+the same list, and `windowSetupUrl` carries `viewpoint=`, `source=` (with `editEntry=` or `editCue=`
+under `edit`) and `workLights=`, which the Stage route applies on arrival and strips
 (`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today
@@ -5770,6 +5771,17 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   lock is not the operator's. It is REST, so the P2 no-frame tests are unchanged. The header reaches
   the provider through `runner/cueActionDialogsContext.ts`, the openers alone, so the editor does not
   import the dialogs; under no provider (a test) the button is not drawn.
+- **Show on stage** (session 8, D13, §3.7; `ShowOnStageButton.tsx`) sits after *Update stage…* in
+  the header, so the card, the pane and `CueEditorSheet` all draw it. It points **this window's**
+  Stage view and Positions plan at the cue through the `edit` vis source — the entry it was opened
+  from, else the cue itself (`EditTarget`, `useVisSource.ts`), announced inside `viewOptions` as
+  `editEntry` / `editCue` — and draws the stored cue through the desk's preview, never output: an
+  entry's in its stack's context, a cue with no entry on `GET cues/{id}/preview` as a loose press,
+  refetched 300 ms after each `cueListChanged` and each `cuesRecomposed` naming the cue
+  (`hooks/useEditCuePreview.ts`). It is lit while the window shows that cue. Another editor's press
+  moves it, and a press while lit goes back to Output. It works locked, and is withheld with the
+  reason for another project's cue. The Screens row and the View menu offer *Cue in edit* only while
+  the window shows one. See `docs/stage-vis-engineering.md` §"The fifth source: Cue in edit".
 - **Not yet**: a row's own fade and move-in-dark are kept on every write but not edited here
   (`FU-CUE-ROW-TIMING`).
 
@@ -6017,7 +6029,7 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   header field half-typed when its host goes — a GO collapsing a live card — commits
   (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did. While the
   desk marks the cue edited since GO it draws the *Edited since GO* chip and *Update stage…* (§The
-  cue editor); *Show on stage* is session 8, and draws nothing yet.
+  cue editor); *Show on stage* points this window's Stage view at the cue (§The cue editor).
 - **The tabs are *Values n · Looks n · FX n · Scenery n · Events n · Cue*.** Values counts the
   values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
   (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and

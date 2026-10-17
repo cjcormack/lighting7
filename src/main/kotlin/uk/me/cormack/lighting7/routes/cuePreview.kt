@@ -13,6 +13,7 @@ import uk.me.cormack.lighting7.models.sceneryStateObject
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.fx.cueDerivedPriority
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
+import uk.me.cormack.lighting7.state.SceneryService
 
 /**
  * "What would this cue look like?" — composes a cue's Layer 4 contribution against what is
@@ -96,13 +97,47 @@ internal fun previewCueLook(state: State, stackId: Int, requestedEntryId: Int?):
         val placed = buildCueApplyData(cue, entry)
         holds.priorityOf(cue.id.value)?.let { placed.copy(livePriority = maxOf(it, cueDerivedPriority(placed))) } ?: placed
     }
-    val cueId = applyData.cueId
-
     // What the GO leaves alone: every published cue but the ones only this stack holds — a cue
     // another stack or a loose press keeps live stays on stage through the GO (cue model plan D3) —
     // and the previewed cue's own published rows, which its incoming ones stand in for.
-    val retained = engine.cueLayer.assignmentsExcludingCues(holds.cuesHeldOnlyBy(stackId) + cueId)
+    val retained = engine.cueLayer.assignmentsExcludingCues(holds.cuesHeldOnlyBy(stackId) + applyData.cueId)
+    return composePreview(state, applyData, retained) {
+        state.sceneryService.preview(stackId, entryId, applyData.cueId)
+    }
+}
 
+/**
+ * Compose cue [cueId] as stored, as a loose press would land it on its first hold (show-cue-editing
+ * plan §3.7): above every stack and every earlier press, with no stack's context — a cue in no stack,
+ * or one opened from none, has no entry for [previewCueLook] to name. Nothing is released by a press,
+ * so every published cue is retained but the cue's own rows. A press of a cue already held only
+ * restamps it and keeps its published rows (*Edited since GO*, *Update stage*); this draws the stored
+ * edit, which is what *Cue in edit* wants. Throws [IllegalArgumentException] for a cue that does not
+ * exist.
+ */
+internal fun previewLooseCue(state: State, cueId: Int): PreviewCueResponse {
+    val engine = state.show.fxEngine
+    val holds = state.show.cueStackManager.holds
+    val applyData = transaction(state.database) {
+        val cue = DaoCue.findById(cueId) ?: throw IllegalArgumentException("Cue $cueId not found")
+        buildCueApplyData(cue, null).copy(livePriority = holds.nextLoosePriority())
+    }
+    val retained = engine.cueLayer.assignmentsExcludingCues(setOf(cueId))
+    return composePreview(state, applyData, retained) { state.sceneryService.previewLoose(cueId) }
+}
+
+/**
+ * [applyData]'s rows composed over [retained] in a fresh resolver and written out as channels — the
+ * one composition both previews share, so neither can drift from the other or from the GO or first
+ * press that would bring the cue on.
+ */
+private fun composePreview(
+    state: State,
+    applyData: CueApplyData,
+    retained: List<CueAssignmentResolver.Assignment>,
+    scenery: () -> List<SceneryService.PreviewEntry>,
+): PreviewCueResponse {
+    val cueId = applyData.cueId
     val incoming = buildCombinedCueLayerRows(state, cueId, applyData, priority = cueDerivedPriority(applyData)).rows
 
     // A fresh resolver, not `engine.layerResolver`: [CueAssignmentResolver.resolve] is a pure
@@ -142,7 +177,7 @@ internal fun previewCueLook(state: State, stackId: Int, requestedEntryId: Int?):
         cueId = cueId,
         channels = channels.values.sortedWith(compareBy({ it.universe }, { it.channel })),
         skipped = skipped.sorted(),
-        scenery = state.sceneryService.preview(stackId, entryId, cueId).map {
+        scenery = scenery().map {
             PreviewSceneryDto(it.elementUuid.toString(), sceneryStateObject(it.state), sceneryStateObject(it.from), it.durationMs)
         },
     )

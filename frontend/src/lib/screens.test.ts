@@ -47,6 +47,12 @@ describe('windowSetupUrl', () => {
     )
   })
 
+  it('carries the cue in edit beside a Stage row’s source (show-cue-editing plan §3.7)', () => {
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'front', source: 'edit', editEntry: '170', workLights: 'off' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=front&source=edit&editEntry=170&workLights=off',
+    )
+  })
+
   it('carries a Stage row’s work lights beside its source, both values (stage-view menu plan D8)', () => {
     expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', source: 'output', workLights: 'on' }, 'http://desk')).toBe(
       'http://desk/projects/1/stage?window=Hall&viewpoint=plan&source=output&workLights=on',

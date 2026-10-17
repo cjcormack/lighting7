@@ -25,6 +25,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R2-8`](#fu-manual-venue-visit-r2-8) | the Stage view pointed at Q7 by its editor's *Show on stage* while Q1 is live draws Q7's state, levels and scenery, follows an edit to Q7 within a moment, moves to Q9 on Q9's toggle and back to Output on a second press, and nothing on the rig moves throughout | Venue visit R2.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-7`](#fu-manual-venue-visit-r2-7) | a dimmer edited in Q4's Values grid while Q4 is live marks it *Edited since GO* and moves nothing, and *Update stage* fades the rig to the edit over Q4's own fade — an edited effect running on in phase — and clears the mark | Venue visit R2.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-6`](#fu-manual-venue-visit-r2-6) | Q1's Looks reordered and one switched off, and a Pulse added in draft on its FX tab, move nothing on the rig — the next GO into Q1 lands the new order, leaves the disabled Look off and runs the Pulse — while a locked ⌫ on either tab asks to unlock and never goes back a cue | Venue visit R2.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
@@ -436,6 +437,37 @@ desk lacks:
    *Make current* is refused with its reason in all four, and nothing switches.
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-8`
+
+**What it proves**: *the Stage view can draw the cue in edit, and drawing it sends nothing* —
+venue-visit R2.8, show-cue-editing plan session 8 (D13, §3.7, §10): *Show on stage* points the
+window's Stage view at a cue as it is stored, composed by the desk's preview, while the rig keeps
+running what is live.
+
+**Why it is here**: the tests read the preview's requests and the source's channels; only the rig and
+the canvas show that what is drawn is Q7 and not Q1, that an edit lands on the canvas within a
+moment, and that the beams on stage never move.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show running:
+
+1. **GO into Q1** of Act 1, so Q1 is live.
+2. **Point the window at Q7.** In the Show view open Q7 and press *Show on stage* in its editor's
+   header: the toggle lights. Open the Stage view in this window. Its View button reads *View · Cue
+   in edit*, and its Source group says *Showing Q7 · … as stored*. **The canvas draws Q7's levels,
+   colours and scenery**, the pieces moving as a GO into Q7 would move them, while **the rig stays on
+   Q1**. The Positions plan under the header draws Q7 too.
+3. **Edit Q7.** Back in the Show view, change a level on Q7's Values tab, then look at the Stage view
+   again (or open Q7 over it, from the FX tray's *on Q7* or a piece's *Moves with*). The canvas has
+   followed the edit, and the rig has not moved.
+4. **Another cue.** Open Q9's editor and press its *Show on stage*: the window moves to Q9, and Q7's
+   toggle goes dark. Press Q9's again: the window goes back to Output, drawing Q1 as the rig has it.
+5. **A loose cue.** From the Cues table open a loose cue (or one in two stacks) and press *Show on
+   stage*: it draws as a press would land it, above Q1.
+6. **Another screen.** On the Screens sheet the window's row reads *Source · Cue in edit*; press
+   *Output* there and the window goes back to Output, and *Cue in edit* leaves the row.
 
 ---
 

@@ -25,7 +25,8 @@ export interface StageRenderRequest {
   viewpoint: StageViewpoint
   width: number
   height: number
-  source: VisSource
+  /** Never `edit`: that source draws this window's cue in edit, which a render must not read. */
+  source: Exclude<VisSource, 'edit'>
   /**
    * The capture's work lights (stage-view menu plan D9): the request's, never this window's own.
    * The desk sends a boolean; a frame without one — a desk that predates the field — is off.
@@ -53,6 +54,7 @@ export function parseStageRenderRequest(raw: unknown): StageRenderRequest | null
     !isPositiveInt(r.width) ||
     !isPositiveInt(r.height) ||
     !isVisSource(r.source) ||
+    r.source === 'edit' ||
     (r.workLights !== undefined && typeof r.workLights !== 'boolean') ||
     typeof r.timeoutMs !== 'number'
   ) {

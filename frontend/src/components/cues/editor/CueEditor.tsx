@@ -29,6 +29,7 @@ import { CueValuesGrid } from './CueValuesGrid'
 import { CueValuesViewProvider } from './CueValuesView'
 import { CueLooksTab } from './CueLooksTab'
 import { CueEffectsTab } from './CueEffectsTab'
+import { SHOW_ON_STAGE_OFF_RIG, ShowOnStageButton } from './ShowOnStageButton'
 
 /** What mounts the editor: the open card, the cue sheet's bottom pane, or a sheet over a view. */
 export type CueEditorHost = 'card' | 'pane' | 'sheet'
@@ -213,7 +214,7 @@ function EditorTab({ value, label, count }: { value: CueEditorTab; label: string
 /**
  * The header, one 40px chrome row: the entry's fields (the stack, this place's number and follow),
  * a rule, then the cue's (name, fade, curve), the shared chip, *Edited since GO* with *Update
- * stage…*, and the save state.
+ * stage…*, *Show on stage*, and the save state.
  */
 function CueEditorHeader({
   cue,
@@ -377,6 +378,11 @@ function CueEditorHeader({
         locked={showLocked}
         onRequestUnlock={onRequestUnlock}
         readOnlyReason={readOnlyReason}
+      />
+      <ShowOnStageButton
+        cueId={cue.id}
+        entryId={stackId != null ? entryId : null}
+        withheldReason={cue.canEdit === false ? SHOW_ON_STAGE_OFF_RIG : null}
       />
       <span className="flex-1" />
       <CueValuesSaveState />
