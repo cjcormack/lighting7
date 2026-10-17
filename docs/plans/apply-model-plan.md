@@ -667,11 +667,12 @@ Each session is one PR (P1).
   (`fx/active`), and its *+ Effect …* opens the picker's effects arm on the bare press. In the cue a
   bare effect is R2.6's `FxPicker` draft arm (`draft={{current, onPick}}`), which stores the effect
   and runs nothing (§3.6).
-- **Ask Chris before building: a cue layer's timing and masters.** `AddLayerSheet`'s last step
-  (`LayerPicker`'s timing step) is the only place a cue layer's delay, interval, random window and
-  speed or rate master override are set. `LookStack` shows them as a `TimingBadge` and edits none.
-  Retiring the sheet for the picker leaves a new cue layer no way to take them, as session 5's move
-  did for the programmer (`FU-PRESS-LAYER-MASTER`).
+- **A cue layer's timing and masters move to its settings popover** (§11, 12). `AddLayerSheet`'s
+  last step (`LayerPicker`'s timing step) is the only place a cue layer's delay, interval, random
+  window and speed or rate master override are set; `LookStack` shows them as a `TimingBadge` and
+  edits none. The cue Looks tab's layer settings popover gains those fields, so a layer the picker
+  adds takes them there, and so does an existing one. `FU-PRESS-LAYER-MASTER` stays the
+  programmer's.
 - **Tests:**
   - A palette pressed on cue cells adds a cue layer, and Blue replaces Red in the stored cue.
   - A second press takes it off.
@@ -732,3 +733,9 @@ Answered by Chris, 2026-10-17, at venue-visit course check K3:
 11. **A gobo or prism cell's popup, now Slot Steps exists?** It gains the popup with only its Effects
     band, offering Slot Steps and its effect palettes. Leaving it to *+ Effect* in the rail was
     declined.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K4:
+
+12. **A cue layer's timing and masters, once the add-layer sheet goes?** The cue Looks tab's layer
+    settings popover gains them, for new and existing layers alike. A timing step after the
+    picker's press, and dropping them under `FU-PRESS-LAYER-MASTER`, were declined.

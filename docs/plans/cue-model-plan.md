@@ -296,7 +296,7 @@ and the rule-3 sentence naming `/cues` change with it.
 - **Filters:** a stack, *Loose only*, *Shared only*, *On a pad*. Sort and filter are a query
   string, as the venue-visit plan's S14 tables are.
 - **Multi-select:** *Add to stack…* (shares, appended or by number), *Duplicate*, *Delete…* (the
-  D8 confirm), *Copy from another show…* (§3.8).
+  D8 confirm). *Copy from another show…* (§3.8) is the library row's verb instead (§10, 22).
 - **A row opens** the cue in its first entry's stack. A loose cue opens `CueEditor` in a
   right-hand sheet, as `stage/OwnerEditor` opens a cue (R2.4, `a4ab679`); with no entry it says
   the cue has no number or follow.
@@ -304,7 +304,7 @@ and the rule-3 sentence naming `/cues` change with it.
 Built by session 5 (`a410c6c5`): the bar is `CueActions` as its fourth host, so a multi-select
 carries the set's *Duplicate*, *Delete…*, *Add to stack…*, *Move to stack…* and *Remove from stack*,
 and no verb of the table's own. The library row draws no create verb. Another project's table reads
-only and draws no action set. *Copy from another show…* is session 6's.
+only and draws no action set. *Copy from another show…* is session 6's, in the library row.
 
 ### 3.8 Copy from another show (D9)
 
@@ -593,14 +593,12 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   restamped from `stackEntryPriorities`, `cueListChanged` and `cueStackListChanged`, and
   `announceCuePadsChanged` over the stack's cues, so a neighbour's relabelled auto number reaches its
   pad (`FU-BUSK-PAD-STALE-NUMBER` lists the handlers that miss it).
-- **Where the dialog opens.** Session 5's bar is `CueActions`, which acts on the shown project's
-  cues, and another project's table draws no action set; the library row has no create verb (§3.7).
-  So the multi-select §3.7 names has no row to start from: the source cues are another project's.
-  **Ask Chris** whether *Copy from another show…* is the library row's verb on the current project's
-  table, opening a dialog that picks the source project and its cues, or a *Copy here…* verb over a
-  selection on another project's read-only table, the other libraries' *Copy to…* reversed
-  (`CopyToProjectSheet`). Either honours the show-editing lock while the show runs, as the table's
-  bar does (§10, 20).
+- **Where the dialog opens** (§10, 22). *Copy from another show…* is a verb in the library row of the
+  current project's Cues table, not a multi-select action: session 5's bar is `CueActions` over the
+  shown project's cues, and the source cues are another project's. It opens a dialog that picks the
+  source project, then its cues, a stack and where, with the dry run's answer before the copy.
+  Another project's table keeps no action set. It honours the show-editing lock while the show
+  runs, as the table's bar does (§10, 20).
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;
@@ -720,3 +718,9 @@ Answered by Chris, 2026-10-17, at venue-visit course check K3:
     does. Read-only only off the rig, as the Looks sheet is, was declined.
 21. **Does an MCP tool move an entry to another stack?** Yes, on R2 session 3's move route, so the
     number, follow and anchor go with it. Leaving models to add then remove was declined.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K4:
+
+22. **Where does *Copy from another show…* open?** A verb on the current project's Cues table,
+    opening a dialog that picks the source project and its cues. A *Copy here…* action over a
+    selection on another project's table, and both, were declined.

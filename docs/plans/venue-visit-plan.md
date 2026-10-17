@@ -312,7 +312,7 @@ Programmer and Venue attach. Each can start now.
 K4 (2026-10-17) took out S14, R4.5, R3.5, R2.6, S16, R1.5, R3.6 and Att.1, and R3.8's need on R2.6. It
 folded the Effects lane and the Navigation lane, whose plans have no session left. R2.7 was finishing
 as it ran, with no branch pushed yet, and Att.2, R1.6 and R3.7 were about to start. Programmer has
-still not started.
+still not started: the next free slot runs S13, ahead of R2.8 (Chris, 2026-10-17, K4).
 
 **Cue editor.**
 
