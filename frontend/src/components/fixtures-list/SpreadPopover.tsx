@@ -9,6 +9,8 @@ import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { landValuesInLook } from '../programmer/landValuesInLook'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
+import { useEditorContext } from '../programmer/EditorContext'
+import { useCueRowStore } from '../cues/editor/CueRowStore'
 import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { usePressFamilies } from '../../store/selection'
@@ -143,8 +145,15 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
   const [spread] = useSpreadMutation()
   const { data: templates } = useTemplateListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
   const colourTemplates = useMemo(() => (templates ?? []).filter(isSpreadColourTemplate), [templates])
+  // The cue editor's Values grid (show-cue-editing plan §3.3): the desk resolves with `write: false`
+  // and each head's literal lands in the cue's own rows, as a focused Look layer's land in its draft.
+  const editorContext = useEditorContext()
+  const cueStoreRaw = useCueRowStore()
+  const cueStore = editorContext.kind === 'cue' ? cueStoreRaw : null
   const disabledReason =
-    scope?.kind === 'output'
+    editorContext.kind === 'cue' && cueStoreRaw?.readOnly
+      ? 'This cue is read-only here — unlock the show to edit its values'
+      : scope?.kind === 'output'
       ? 'Output is a read of the cook — switch to Local to spread values onto these heads'
       : focusedTemplate != null
         ? 'This layer applies a palette — switch to Local to spread values onto these heads'
@@ -160,6 +169,20 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
   const layerStore = scope?.kind === 'layer' ? lookStore : null
   const setLookValue = layerStore?.setValue
   const lookName = layerStore?.lookName
+
+  const landInCue = useCallback(
+    (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
+      if (cueStore == null) return
+      const written = answer.written ?? []
+      const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
+      if (intent != null) {
+        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a cue`, { id: INTENT_TOAST })
+        return
+      }
+      for (const write of written) cueStore.setValue('fixture', write.target.key, write.propertyName, write.value)
+    },
+    [cueStore],
+  )
 
   const landInLayer = useCallback(
     (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
@@ -214,7 +237,10 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         colourTemplates,
         send: (body) => spread({ ...body, projectId, fadeMs: getProgrammerFadeMs() }).unwrap(),
       }
-      if (setLookValue) {
+      if (cueStore) {
+        plan.write = false
+        plan.onAnswer = landInCue
+      } else if (setLookValue) {
         plan.write = false
         plan.onAnswer = landInLayer
       }
@@ -257,7 +283,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       }
     }
     return out
-  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, writers])
+  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, cueStore, landInCue, writers])
 
   const intent = plans.find((plan): plan is IntentSpreadPlan => plan.kind === 'intent')
   const labelLine: ReactNode =
@@ -271,7 +297,9 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       <EditorLabelLine subject={headsLine(intent.count, scopeLabel)} column={`${intent.label} marquee`} docked={docked} />
     )
   const footerNote: ReactNode =
-    setLookValue == null ? undefined : (
+    cueStore != null ? (
+      <span className="inline-flex items-center gap-1">resolved on the desk, written to {cueStore.cueLabel}’s own rows</span>
+    ) : setLookValue == null ? undefined : (
       <span className="inline-flex items-center gap-1">
         <Layers className="size-3" aria-hidden /> resolved on the desk, written to the layer’s draft
       </span>

@@ -185,6 +185,8 @@ internal object CueComposer {
         val fadeDurationMs: Long? = null,
         /** See [CueAssignmentResolver.Assignment.bundleRole]. */
         val bundleRole: CueAssignmentResolver.BundleRole? = null,
+        /** See [CueAssignmentResolver.Assignment.sourceTarget]: the winning row's own target. */
+        val sourceTarget: TargetRef? = null,
     )
 
     private data class Key(val targetKey: String, val propertyName: String)
@@ -386,6 +388,7 @@ internal object CueComposer {
                 // put on its own row, the way it deliberately discards the layer attribution.
                 fadeDurationMs = row.fadeDurationMs,
                 bundleRole = row.bundleRole,
+                sourceTarget = row.sourceTarget,
             )
         }
 
@@ -406,6 +409,7 @@ internal object CueComposer {
                 layerWinner = c.winner,
                 fadeDurationMs = c.fadeDurationMs,
                 bundleRole = c.bundleRole,
+                sourceTarget = c.sourceTarget,
             )
         }
         return FullCook(
@@ -649,6 +653,8 @@ internal object CueComposer {
          * intent is dropped whole, before it fans out.
          */
         val intent: TemplateIntent?,
+        /** The row's own target before expansion — see [CueAssignmentResolver.Assignment.sourceTarget]. */
+        val sourceTarget: TargetRef,
     ) {
         val isGroupOrigin: Boolean get() = groupKey != null
     }
@@ -719,7 +725,7 @@ internal object CueComposer {
                     logger.warn("cue {}: layer on '{}' — element '{}' missing — skipping", cueId, layer.source.name, elementKey)
                     continue
                 }
-                pending.add(Pending(element, row.propertyName, row.value, null, row.fadeDurationMs, intent))
+                pending.add(Pending(element, row.propertyName, row.value, null, row.fadeDurationMs, intent, TargetRef.Fixture(elementKey)))
                 continue
             }
             val rowTarget = row.target
@@ -741,7 +747,7 @@ internal object CueComposer {
                 for (e in layerFixtures) {
                     for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
                         if (!fanned.add(head.targetKey to e.groupKey)) continue
-                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent, e.sourceTarget))
                     }
                 }
             } else {
@@ -753,7 +759,7 @@ internal object CueComposer {
                     // layer on its parent exactly as an `elementKey` row does.
                     if (layerFixtures != null && !layerTargets.covers(e.fixture.targetKey)) continue
                     for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
-                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent))
+                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent, rowTarget))
                     }
                 }
             }
@@ -880,6 +886,7 @@ internal object CueComposer {
                 winner = CookWinner(layerIndex, layer.layerId, layer.source),
                 fadeDurationMs = p.fadeDurationMs,
                 bundleRole = bundleRoleOf(p.fixture, canonical),
+                sourceTarget = p.sourceTarget,
             )
         }
     }
@@ -909,7 +916,10 @@ internal object CueComposer {
      * Carries the group's *key* rather than the old boolean because the stomp overlap needs to name
      * it — an effect whose target is a group is matched on the group's own name.
      */
-    private class Expanded(val fixture: GroupableFixture, val groupKey: String?)
+    private class Expanded(val fixture: GroupableFixture, val groupKey: String?) {
+        /** The layer target this head came through, for a generic row: its group, else itself. */
+        val sourceTarget: TargetRef get() = groupKey?.let { TargetRef.Group(it) } ?: TargetRef.Fixture(fixture.targetKey)
+    }
 
     /**
      * A layer's own target set, expanded **once per layer** and shared by both halves of the cook.

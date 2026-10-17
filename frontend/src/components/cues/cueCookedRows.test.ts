@@ -34,6 +34,18 @@ describe('buildStaticRows', () => {
     expect(built.rows.get(lookRowKey('c', 'dimmer'))).toBeUndefined()
   })
 
+  it('puts a group row the cook landed on a member straight on that member', () => {
+    // The desk's cook expands a group row before it answers: `targetKey` is the head, and the
+    // group is the row's source.
+    const built = buildStaticRows(
+      [row({ targetType: 'group', targetKey: 'b', sourceTargetType: 'group', sourceTargetKey: 'Washes' })],
+      FIXTURES,
+      true,
+    )
+    expect(built.rows.get(lookRowKey('b', 'dimmer'))).toEqual({ kind: 'level', value: 128 })
+    expect(built.rows.get(lookRowKey('a', 'dimmer'))).toBeUndefined()
+  })
+
   it('lets a fixture row beat the group row it overlaps', () => {
     // The specificity the backend applies. If the display got this backwards, a cell would show
     // the group's value for a head the cue overrode.

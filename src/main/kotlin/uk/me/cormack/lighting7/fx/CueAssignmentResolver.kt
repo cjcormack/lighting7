@@ -89,6 +89,16 @@ class CueAssignmentResolver {
          * null and so takes no part in the rule.
          */
         val bundleRole: BundleRole? = null,
+        /**
+         * The row this value came from, **before group expansion**: the cue's own assignment's
+         * target, or the layer row's — a group own row's members all carry the group here, a cell
+         * row its cell. Null for a row built outside the cue's cook.
+         *
+         * Composition ignores it, like [layerWinner]. One consumer reads it, `GET /cues/{id}/cooked`,
+         * so the cue editor's Values grid can draw a group's own row on the group's row and write
+         * it back there (show-cue-editing plan §3.8) — [targetKey] names a member by then.
+         */
+        val sourceTarget: TargetRef? = null,
     )
 
     /** See [Assignment.bundleRole]. */

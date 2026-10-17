@@ -359,6 +359,15 @@ The cook step replaced all of it with **one rule for every category: later layer
 own rows win over all of them**. Across cues, HTP still governs intensity — which is the pairing an
 operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE` exists.
 
+**Own rows are edited in place** (show-cue-editing plan D2, session 5). The cue editor's Values grid
+draws a cue's cook — `GET /cues/{id}/cooked`, the same `buildCombinedCueLayerRows` the GO path runs —
+and an edit there writes one of the cue's own rows, which beats every layer by the rule above, so the
+cell shows what was typed; removing the own row lets the layer underneath win again. Each cooked row
+names the row it came from **before group expansion** (`sourceTargetType` / `sourceTargetKey`,
+`Assignment.sourceTarget`): a group's own row has become one row per member by the cook, and the grid
+draws and edits it on the group's row from this. The write is a stored PATCH of the whole
+`propertyAssignments` list and composes nothing: a live cue lands it on its next first hold (P2).
+
 ### Fade weight
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.

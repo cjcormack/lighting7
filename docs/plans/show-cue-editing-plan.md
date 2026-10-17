@@ -444,7 +444,7 @@ says palette). All of them have merged.
   one cue twice land on the right entry before the desk answers.
 - **Docs:** the frontend CLAUDE.md's §"Sheet kit" (the cue sheet), §"Cues, Stacks & Triggers".
 
-### Session 5 — the Values grid (frontend + cooked route)
+### Session 5 — the Values grid (frontend + cooked route) — done, `ec09327`
 
 - §3.3 and §4.1's Values: `CueRowStore`, the `cue` arm of `EditorContext` and `useCellWriters`, the
   scoped reads with their source edges, D14's rows, *Own only*, Spread with `write: false`, ⌫, Undo,

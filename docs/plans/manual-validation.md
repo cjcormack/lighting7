@@ -17,6 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
@@ -174,6 +175,34 @@ desk lacks:
    *Make current* is refused with its reason in all four, and nothing switches.
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-5`
+
+**What it proves**: *the Values grid writes the stored cue and nothing else* — venue-visit R2.5,
+show-cue-editing plan session 5 (D2, D10, P2, §10): a typed value over a Look-won cell becomes an own
+row, the rig does not move, and the cue's next GO lands it.
+
+**Why it is here**: the tests read the wire for a full editing pass and pin the PATCH; only the rig
+shows that a live cue edited this way leaves the stage alone until its next first hold, and that the
+value GO lands is the one the grid drew.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show unlocked, Q1 not live:
+
+1. **Over a Look.** Open Q1 in the cards view, Values tab. The Orbits' Dimmer cells carry the Scrim
+   Look's teal edge, its name on the hover. Select both, press Enter and type `80`: the cells take the
+   blue edge, the hover says *overrides Scrim · opaque…*, and the header's save state goes *Unsaved*
+   then *Saving… · Saved*, with a *Q1 · values saved* toast carrying Undo. **Nothing moves on the
+   rig.**
+2. **GO.** GO into Q1: the Orbits come up at 80 %, not at the Look's level.
+3. **Locked ⌫.** The GO locked the show. Select one Orbit's Dimmer cell in Q1's grid and press ⌫:
+   the *Unlock the show to edit?* question opens and the show does **not** go back a cue. Cancel it.
+4. **⌫ and Undo.** Unlock the show (the header's padlock). With Q1 live, select one Orbit's cell and
+   press ⌫: the cell goes back to the Look's teal and nothing moves on the rig. Press ⌘Z in the
+   editor: the own row is back; GO into Q1 again and both are at 80 %.
+5. **Two grids.** Unlocked, open Q2 too. Click a cell in Q1's grid, then one in Q2's: Q1's selection
+   dims. ⌫ now acts on Q2 only; click back in Q1 and it is Q1's.
 
 ---
 

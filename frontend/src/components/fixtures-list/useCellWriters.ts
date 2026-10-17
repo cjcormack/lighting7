@@ -9,6 +9,8 @@ import {
   serializePosition,
 } from '../../lib/programmerValue'
 import { lookRowKey, useLookRowStore } from '../programmer/LookRowStore'
+import { useCueRowStore, type CueRowStoreValue } from '../cues/editor/CueRowStore'
+import type { CueRowTargetType } from '../cues/editor/cueRowDraft'
 import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import type { PlannedWrite } from './rowModel'
 import type { ChannelRef, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '../../store/fixtures'
@@ -40,10 +42,11 @@ export interface CellWriters {
   ): void
   writeSetting(fixtureKey: string, propertyName: string, ref: ChannelRef, level: number): void
   /**
-   * Take a property out of Local — the marquee's Backspace. Live only: a Look layer's row draft
-   * has no removal (`LookRowStore` exposes `setValue` alone), so in that context this is a no-op
-   * and the container does not offer the key there. A no-op rather than a throw because the
-   * writers are one object serving every cell, and the gate belongs where the gesture is.
+   * Take a property out of Local — the marquee's Backspace. In a cue context it takes the cue's own
+   * row away (`CueRowStore.removeValue`). A Look layer's row draft has no removal (`LookRowStore`
+   * exposes `setValue` alone), so in that context this is a no-op and the container does not offer
+   * the key there. A no-op rather than a throw because the writers are one object serving every
+   * cell, and the gate belongs where the gesture is.
    */
   clearValue(fixtureKey: string, propertyName: string): void
 }
@@ -57,11 +60,12 @@ export interface CellWriters {
  * Routing: live → the **programmer** (Layer 2) at property level. Look contexts are a no-op or go
  * to the row draft: Look rows are property-name-keyed, which this channel-level layer doesn't
  * carry. Both a channel ref and a property name are passed so neither branch has to
- * reverse-engineer the other.
+ * reverse-engineer the other. A **cue** context (the cue editor's Values grid) goes to the cue's
+ * own rows in its `CueRowStore`, with no live fallback — see `cueCellWriters`.
  *
- * There was a third route until session 2b — `cueEdit.*`, for a cue being edited in place. A cue is
- * read-only now and edited by Include, so there is exactly one place values are set; the backend
- * protocol itself was deleted in the post-refactor sweep, so the route cannot come back by accident.
+ * There was a live route until session 2b — `cueEdit.*`, which put a cue being edited on stage. The
+ * backend protocol was deleted in the post-refactor sweep; the cue arm above writes the stored cue
+ * and never the rig (show-cue-editing plan P2), so it is not that route back.
  */
 /**
  * Dispatch one planned write to the matching writer. The single place that maps a
@@ -128,8 +132,15 @@ export function useCellWriters(): CellWriters {
   // unconditionally — a hook cannot be called behind the `ctx.kind` test below.
   const lookStore = useLookRowStore()
   const setLookValue = ctx.kind === 'lookLayer' ? lookStore?.setValue : undefined
+  // The cue editor's store (show-cue-editing plan §3.3). Null outside a cue editor.
+  const cueStore = useCueRowStore()
+  const inCue = ctx.kind === 'cue'
 
   return useMemo<CellWriters>(() => {
+    // **No live fallback.** A cue edit lands in the cue's own rows and nowhere else (P2): with no
+    // store above it — which no host mounts — the write is dropped rather than reaching the rig.
+    if (inCue) return cueStore ? cueCellWriters(cueStore, 'fixture') : NO_WRITERS
+
     const writeChannelValue = (
       fixtureKey: string,
       propertyName: string,
@@ -275,7 +286,65 @@ export function useCellWriters(): CellWriters {
         )
       },
     }
-  }, [lookStore, setLookValue])
+  }, [lookStore, setLookValue, inCue, cueStore])
+}
+
+const NO_WRITERS: CellWriters = {
+  writeSlider: () => {},
+  writeSetting: () => {},
+  writeColour: () => {},
+  writePosition: () => {},
+  clearValue: () => {},
+}
+
+/**
+ * Writers over one cue's **own rows**, all of whose targets are [targetType]: `fixture` for the
+ * grid's fixture and cell rows (an element key is a fixture-typed target), `group` for a group row,
+ * whose edit is the group's own row (show-cue-editing plan §4.1).
+ *
+ * The Look arm's rules, over a cue: a colour is stored as the components the write named (no wire
+ * sampling — a stored row must not bake in what the rig happens to show), and a single-axis nudge on
+ * an atomic `position` takes the other axis from the draft, else the **composed** cell — what GO
+ * would land — never the wire. Clear takes the own row away, so the layer under it shows again.
+ */
+export function cueCellWriters(store: CueRowStoreValue, targetType: CueRowTargetType): CellWriters {
+  const set = (key: string, propertyName: string, value: string) => store.setValue(targetType, key, propertyName, value)
+  const writeLevel = (key: string, propertyName: string, _ref: ChannelRef, value: number) =>
+    set(key, propertyName, serializeLevel(value))
+  return {
+    writeSlider: writeLevel,
+    writeSetting: writeLevel,
+    clearValue(key, propertyName) {
+      store.removeValue(targetType, key, propertyName)
+    },
+    writeColour(key, property, r, g, b, w, a, uv) {
+      if (property.type === 'whiteMix') {
+        const white = w ?? 0
+        set(key, property.name, serializeColour(Math.max(r, white), Math.max(g, white), Math.max(b, white)))
+        return
+      }
+      // A head with no white channel takes a white component as RGB, as the live arm folds it: the
+      // desk writes a stored colour verbatim per head and drops a white it has nowhere to send, so
+      // the picker's pure white (0,0,0 + w 255) would land black.
+      if (w !== undefined && w > 0 && !property.whiteChannel) {
+        set(key, property.name, serializeColour(Math.max(r, w), Math.max(g, w), Math.max(b, w), undefined, a, uv))
+        return
+      }
+      set(key, property.name, serializeColour(r, g, b, w, a, uv))
+    },
+    writePosition(key, _pan, _tilt, panValue, tiltValue, axisProperties) {
+      if (panValue === undefined && tiltValue === undefined) return
+      if (axisProperties) {
+        if (panValue !== undefined && axisProperties.pan) set(key, axisProperties.pan, serializeLevel(panValue))
+        if (tiltValue !== undefined && axisProperties.tilt) set(key, axisProperties.tilt, serializeLevel(tiltValue))
+        return
+      }
+      const stored = store.composedValue(targetType, key, 'position')
+      const parsed = stored ? parseProgrammerValue(stored) : null
+      const base = parsed?.kind === 'position' ? parsed : { pan: 128, tilt: 128 }
+      set(key, 'position', serializePosition(panValue ?? base.pan, tiltValue ?? base.tilt))
+    },
+  }
 }
 
 /** A committed Look row value, in canonical string form, or undefined. */

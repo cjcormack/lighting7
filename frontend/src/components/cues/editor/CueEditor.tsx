@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -7,7 +7,6 @@ import { InlineEditField } from '@/components/InlineEditField'
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
 import { TruncateStart } from '@/components/TruncateStart'
 import { SharedCueChip } from '@/components/runner/SharedCueChip'
-import { CueValueGrid } from '@/components/cues/CueValueGrid'
 import { CueEffectsReadout, CueLayersReadout } from '@/components/cues/CueDetailContent'
 import { useExpandedCue } from '@/components/cues/CueRowParts'
 import { CueSceneryEditorBody } from '@/components/scenery/CueSceneryEditor'
@@ -26,6 +25,8 @@ import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import type { Cue, CuePatchInput } from '@/api/cuesApi'
 import { cueEditorTabStore, type CueEditorTab } from './cueEditorTab'
 import { CueTab } from './CueTab'
+import { CueRowStoreProvider, useCueRowSaveState } from './CueRowStore'
+import { CueValuesGrid } from './CueValuesGrid'
 
 /** What mounts the editor: the open card, the cue sheet's bottom pane, or a sheet over a view. */
 export type CueEditorHost = 'card' | 'pane' | 'sheet'
@@ -59,11 +60,13 @@ const TAB_TRIGGER_CLASS = cn(
  *   — has no number or follow to write, and says why.
  * - **The tab is the window's**: an open editor keeps its own, and a new one opens on the tab this
  *   window chose last (`cueEditorTab.ts`).
- * - **Values, Looks and FX are read-outs** for now — the grid and the two tables are later sessions.
- *   Scenery, Events and Cue edit the cue's scenery, its events, and its notes, hooks and busk pads.
- * - **Locked, it reads and writes nothing** (§4.6): the header's fields are inert and the three
- *   editing tabs draw their read-outs. So does a cue the desk will not edit (`canEdit` false), with
- *   that reason. A header field half-typed when its host goes (a GO collapsing a live card) commits.
+ * - **Values edits the cue's own rows** (`CueValuesGrid` over this editor's `CueRowStore`); Looks and
+ *   FX are read-outs until their tables land. Scenery, Events and Cue edit the cue's scenery, its
+ *   events, and its notes, hooks and busk pads.
+ * - **Locked, it writes nothing** (§4.6): the header's fields and the Values grid are inert, and
+ *   Scenery, Events and Cue draw their read-outs. So does a cue the desk will not edit (`canEdit`
+ *   false), with that reason. A header field half-typed when its host goes (a GO collapsing a live
+ *   card) commits, and so does a pending Values edit.
  * - **It is a key region** (`data-key-region`, §4.5): a key pressed in it is never the cue sheet's.
  *
  * It sends no output: every write here is a stored cue or entry write (P2).
@@ -75,6 +78,7 @@ export function CueEditor({
   locked,
   host,
   tabRequest,
+  onRequestUnlock,
   className,
 }: {
   projectId: number
@@ -84,6 +88,11 @@ export function CueEditor({
   locked: boolean
   host: CueEditorHost
   tabRequest?: CueEditorTabRequest | null
+  /**
+   * Lift the show's lock — offered where the lock is the operator's. A Values edit refused by the
+   * lock then asks to unlock, as the cue action set's refused actions do.
+   */
+  onRequestUnlock?: () => void
   className?: string
 }) {
   const { cueData: cue, isFetching } = useExpandedCue(projectId, cueId, true, entryId)
@@ -103,9 +112,15 @@ export function CueEditor({
   useEffect(() => {
     if (tabRequest != null) setTab(tabRequest.tab)
   }, [tabRequest])
+  // The key region the Values grid's keys belong to (§4.5) — this editor's root, not another's.
+  const regionRef = useRef<HTMLDivElement | null>(null)
 
+  // Keyed by the cue: a host that moves one editor onto another cue (the right-hand sheet does)
+  // mints a fresh store, so neither a pending edit nor Undo can reach the next cue.
   return (
+    <CueRowStoreProvider key={cueId} projectId={projectId} cueId={cueId} entryId={entryId} readOnly={readOnly}>
     <div
+      ref={regionRef}
       className={cn('flex min-h-0 flex-col', className)}
       data-cue-editor={cueId}
       data-cue-editor-host={host}
@@ -128,8 +143,11 @@ export function CueEditor({
               <EditorTab value="cue" label="Cue" />
             </TabsList>
             <div className="min-h-0 flex-1 overflow-y-auto">
-              <TabsContent value="values" className="p-3">
-                <CueValueGrid projectId={projectId} cueId={cue.id} />
+              <TabsContent
+                value="values"
+                className={cn('flex min-h-0 flex-col', host === 'card' ? 'max-h-[32rem]' : 'h-full')}
+              >
+                <CueValuesGrid region={regionRef} readOnlyReason={readOnlyReason} onRequestUnlock={locked ? onRequestUnlock : undefined} />
               </TabsContent>
               <TabsContent value="looks" className="space-y-2 p-3">
                 <CueLayersReadout cue={cue} projectId={projectId} />
@@ -154,6 +172,7 @@ export function CueEditor({
         </>
       )}
     </div>
+    </CueRowStoreProvider>
   )
 }
 
@@ -305,6 +324,7 @@ function CueEditorHeader({ cue, projectId, readOnlyReason }: { cue: Cue; project
       </Select>
       <SharedCueChip places={places} entryId={entryId ?? -1} />
       <span className="flex-1" />
+      <CueValuesSaveState />
       <SaveStatusIndicator cueId={cue.id} />
     </div>
   )
@@ -352,4 +372,28 @@ function EventsTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId: nu
       </p>
     </div>
   )
+}
+
+/**
+ * The Values grid's save state, beside the per-cue `SaveStatusIndicator` (show-cue-editing plan
+ * D10): that pill already says *Saving…* and *Saved* for every PATCH of this cue, so this says the
+ * two things it cannot — an edit still waiting for its flush, and a save the desk refused.
+ */
+function CueValuesSaveState() {
+  const state = useCueRowSaveState()
+  if (state === 'dirty') {
+    return (
+      <span className="shrink-0 text-xs text-muted-foreground" data-cue-values-save="dirty" title="Values waiting to save">
+        Unsaved
+      </span>
+    )
+  }
+  if (state === 'error') {
+    return (
+      <span className="shrink-0 text-xs text-destructive" data-cue-values-save="error" title="The desk refused the last values save — edit again to retry">
+        Save failed
+      </span>
+    )
+  }
+  return null
 }
