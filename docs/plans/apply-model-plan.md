@@ -684,7 +684,7 @@ Each session is one PR (P1).
   Effects band do: no editor, pause or stop, its home the cue. It had listed the programmer's alone
   since fixture-fx-sheets D20. A script's effect stays out.
 
-### Session 8 — Into the cue editor (backend + frontend)
+### Session 8 — Into the cue editor (backend + frontend) — done, `2deb7fb0`
 
 - §3.6's `POST /cues/{id}/layers/press` on `LayerPress`. The replacement set, a per-fixture
   palette's targets and the press's arm are the programmer's today (§3.6's note); lift them beside
