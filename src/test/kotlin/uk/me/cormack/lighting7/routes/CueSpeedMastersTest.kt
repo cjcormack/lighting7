@@ -130,8 +130,8 @@ class CueSpeedMastersTest : RouteIntegrationTest() {
         tap(m.getValue(2), 60.0)
         manager.goToEntry(state, s, state.entryIdOf(q1))
         assertEquals(100.0, bpm(m.getValue(2)))
-        withTimeout(3_000) { while (bpm(m.getValue(2)) != 140.0) delay(10) }
-        assertEquals(q2, manager.getActiveCueId(s), "the follow fired Q2")
+        withTimeout(3_000) { while (manager.getActiveCueId(s) != q2) delay(10) }
+        assertEquals(140.0, bpm(m.getValue(2)), "the follow into Q2 set its tempo")
         assertEquals(q3, transaction(state.database) { DaoCue[q3].id.value })
     }
 
@@ -302,6 +302,65 @@ class CueSpeedMastersTest : RouteIntegrationTest() {
         assertTrue(built.success, built.result)
         val dawn = transaction(state.database) { DaoCue.find { (DaoCues.project eq projectId) and (DaoCues.name eq "Dawn") }.single().id.value }
         assertEquals(listOf(m.getValue(3) to 72.0), speedMastersOf(dawn))
+    }
+
+    @Test
+    fun `the tools name a master by its index, in a project that is not current too`() = runBlocking {
+        val m = masters()
+        val created = AiTools(state).executeTool(
+            "create_cue",
+            Json.parseToJsonElement("""{"name":"Q11","speedMasters":[{"masterIndex":2,"bpm":140}]}""").jsonObject,
+        )
+        assertTrue(created.success, created.result)
+        val q11 = Json.parseToJsonElement(created.result).jsonObject["cueId"].toString().toInt()
+        assertEquals(listOf(m.getValue(2) to 140.0), speedMastersOf(q11))
+
+        val refused = AiTools(state).executeTool(
+            "create_cue",
+            Json.parseToJsonElement("""{"name":"Q12","speedMasters":[{"masterIndex":9,"bpm":100},{"masterIndex":1,"speedMasterUuid":"${m[1]}","bpm":100},{"bpm":100}]}""").jsonObject,
+        )
+        assertTrue(!refused.success, refused.result)
+        for (problem in listOf("masterIndex names no speed master", "not both", "needs a master")) {
+            assertTrue(problem in refused.result, "$problem in ${refused.result}")
+        }
+
+        val (other, otherMasters) = transaction(state.database) {
+            val project = DaoProject.new { name = "Other"; description = "build target"; isCurrent = false }
+            project.id.value to ensureDefaultSpeedMasters(project).associate { it.masterIndex to it.uuid.toString() }
+        }
+        val built = SetupTools(state, AiTools(state)).executeTool(
+            "build_cue_stack",
+            Json.parseToJsonElement(
+                """{"projectId":$other,"stackName":"Act 1","cues":[{"number":"1","name":"Dusk","speedMasters":[{"masterIndex":3,"bpm":84}]}]}""",
+            ).jsonObject,
+            caller = "Tester",
+        )
+        assertTrue(built.success, built.result)
+        val dusk = transaction(state.database) { DaoCue.find { (DaoCues.project eq other) and (DaoCues.name eq "Dusk") }.single().id.value }
+        assertEquals(listOf(otherMasters.getValue(3) to 84.0), speedMastersOf(dusk))
+    }
+
+    @Test
+    fun `a PATCH naming a list on a cue that is not there is a 404, not a 400 about the list`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val response = client.patch("/api/rest/projects/$projectId/cues/99999") {
+            contentType(ContentType.Application.Json)
+            setBody("""{"speedMasters":[{"speedMasterUuid":"${java.util.UUID.randomUUID()}","bpm":120}]}""")
+        }
+        assertEquals(HttpStatusCode.NotFound, response.status, response.bodyAsText())
+    }
+
+    @Test
+    fun `a master already at the cue's tempo is left as it is`() = runBlocking {
+        val m = masters()
+        val s = stack("Act 1")
+        val q1 = cue("Q1", s, m.getValue(2) to 128.0)
+        tap(m.getValue(2), 128.0)
+        manager.goToEntry(state, s, state.entryIdOf(q1))
+        val master = state.show.speedMasterBank.masterStates().single { it.uuid.toString() == m[2] }
+        assertEquals(128.0, master.bpm)
+        assertEquals(SpeedMasterSource.TAP, master.source, "no write: the tap's tempo was already the cue's")
     }
 
     private fun speedMastersOf(cueId: Int): List<Pair<String, Double>> =

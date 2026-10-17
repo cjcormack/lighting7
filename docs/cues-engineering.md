@@ -480,7 +480,9 @@ one set. Unlike events it is state the cue **re-asserts**:
 - **A follower or a missing master is skipped, never fatal.** `fx/CueTempo.kt` writes each pair
   through `SpeedMasterBank.setBpm` as a `MANUAL` write; one the bank refuses as a follower
   (`SPEED_MASTER_FOLLOWER`) or does not know (deleted under the cue with `?force=true`, or an import
-  naming a master the archive lacked) is named in the log and passed over, and the GO goes on.
+  naming a master the archive lacked) is named in the log and passed over, and the GO goes on. A
+  master already at the pair's tempo is left alone, so a GO that changes nothing sends no
+  `speedMasters.changed` frame and leaves a tap's source as it was.
 
 The write is the cue's own: `POST /cues`, `PUT` and `PATCH /cues/{id}` take `speedMasters` as the
 whole list (a PATCH without it leaves it alone, a PUT without it clears it), every problem at once —
@@ -491,7 +493,10 @@ guard (`SpeedMasterUsage.cueTempos`, `cueTempoCount` on the 409), so deleting it
 `?force=true`. *Duplicate* and `POST /cues/{id}/copy` carry the list through `copyCueRecord`, and
 across projects each master is mapped by its index, as `copy_to_project`'s masters are — a pair whose
 index the target lacks is left out (logged; `copy_to_project` reports it under `unresolved`). The MCP
-tools `create_cue` and `build_cue_stack` take `speedMasters` in the same shape. It syncs embedded in
+tools `create_cue` and `build_cue_stack` take `speedMasters` in the same shape, or with a pair's
+master named by `masterIndex` (1 for master 1) instead of its uuid, which is how `build_cue_stack`
+names one in a project that is not current; `get_current_state` lists only the current project's
+uuids. It syncs embedded in
 `CueJson.speedMasters` on `formatVersion` 35 (`docs/sync-engineering.md` §"Version 35 — speed masters
 on a cue"). The cue editor's **Cue** tab edits it (`frontend/CLAUDE.md` §"The cue editor").
 

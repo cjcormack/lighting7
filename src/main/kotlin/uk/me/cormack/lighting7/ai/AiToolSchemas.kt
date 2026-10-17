@@ -666,14 +666,15 @@ internal val cueLayerSchema = buildJsonObject {
     })
 }
 
-/** One speed master a cue sets on GO: the master by uuid, and its BPM. */
+/** One speed master a cue sets on GO: the master by index or uuid, and its BPM. */
 internal val cueSpeedMasterItemSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        put("speedMasterUuid", buildJsonObject { put("type", "string"); put("description", "The master, by uuid — get_current_state's speed_masters lists them.") })
+        put("masterIndex", buildJsonObject { put("type", "integer"); put("description", "The master by its number in the project — 1 for Master 1. Works in any project; give this or speedMasterUuid.") })
+        put("speedMasterUuid", buildJsonObject { put("type", "string"); put("description", "The master by uuid — get_current_state's speed_masters lists the current project's.") })
         put("bpm", buildJsonObject { put("type", "number"); put("description", "The tempo it is set to, 20–300 BPM.") })
     })
-    put("required", buildJsonArray { add("speedMasterUuid"); add("bpm") })
+    put("required", buildJsonArray { add("bpm") })
 }
 
 internal const val CUE_SPEED_MASTERS_NOTE =

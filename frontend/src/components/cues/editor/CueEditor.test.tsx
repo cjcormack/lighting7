@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { Cue } from '@/api/cuesApi'
 import type { CueStackCueRow } from '@/api/cueStacksApi'
 
@@ -21,7 +21,7 @@ vi.mock('@/store/cues', () => ({
 }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
 vi.mock('@/store/effects', () => ({ useSetCueEventsMutation: () => [vi.fn()] }))
-const masters = [
+const masters: Array<Record<string, unknown>> = [
   { id: 1, uuid: 'm1', masterIndex: 1, name: 'House', bpm: 120, source: 'MANUAL', referenceCount: 0 },
   { id: 2, uuid: 'm2', masterIndex: 2, name: 'Chase', bpm: 96, source: 'MANUAL', referenceCount: 0 },
   { id: 3, uuid: 'm3', masterIndex: 3, name: 'Half', bpm: 48, source: 'MANUAL', referenceCount: 0, followNum: 1, followDen: 2, followTargetUuid: 'm2' },
@@ -303,6 +303,43 @@ describe('CueEditor', () => {
 
     fireEvent.click(within(section).getByRole('button', { name: 'Remove M1 · House' }))
     expect(patchCue).toHaveBeenLastCalledWith({ projectId: 1, cueId: 1, speedMasters: [{ speedMasterUuid: 'm2', bpm: 140 }] })
+  })
+
+  it('+ Master passes over a follower while another master is free', () => {
+    cueEditorTabStore.set('cue')
+    masters.push({ id: 4, uuid: 'm4', masterIndex: 4, name: 'Wash', bpm: 110, source: 'MANUAL', referenceCount: 0 })
+    try {
+      current = makeCue({ speedMasters: [{ speedMasterUuid: 'm1', bpm: 120 }, { speedMasterUuid: 'm2', bpm: 96 }] })
+      draw()
+      const section = document.querySelector('[data-cue-speed-masters="edit"]') as HTMLElement
+      fireEvent.click(within(section).getByRole('button', { name: /Master/ }))
+      expect(patchCue).toHaveBeenLastCalledWith(
+        expect.objectContaining({ speedMasters: expect.arrayContaining([{ speedMasterUuid: 'm4', bpm: 110 }]) }),
+      )
+    } finally {
+      masters.pop()
+    }
+  })
+
+  it('holds its rows over a refetch while a save is in flight, then settles on what the desk saved', async () => {
+    cueEditorTabStore.set('cue')
+    let resolve!: (cue: Cue) => void
+    patchCue.mockImplementationOnce(() => ({ unwrap: () => new Promise<Cue>((r) => (resolve = r)) }) as never)
+    current = makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }] })
+    const view = draw()
+    const section = () => document.querySelector('[data-cue-speed-masters="edit"]') as HTMLElement
+    fireEvent.click(within(section()).getByRole('button', { name: /Master/ }))
+    expect(section().querySelectorAll('[data-cue-speed-master-row]')).toHaveLength(2)
+
+    // A refetch of the list as it stood lands mid-save: the draft stays.
+    current = makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }] })
+    view.rerender(<CueEditor projectId={1} cueId={1} entryId={101} locked={false} host="card" />)
+    expect(section().querySelectorAll('[data-cue-speed-master-row]')).toHaveLength(2)
+
+    await act(async () => {
+      resolve(makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }, { speedMasterUuid: 'm1', bpm: 121 }] }))
+    })
+    expect(within(section()).getByRole('spinbutton', { name: 'M1 · House BPM' })).toHaveProperty('value', '121')
   })
 
   it('says a GO skips a follower or a deleted master', () => {

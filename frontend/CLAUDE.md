@@ -6011,11 +6011,11 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   (`editor/CueTab.tsx`).
 - **Speed masters** (`editor/CueSpeedMasters.tsx`, venue-visit plan S16, D20) are the masters the cue
   sets on every GO into it and every press of it — never a reload — each a row of master · BPM · ×
-  under *+ Master*, which adds the lowest master the cue does not set at its stored tempo. Every
-  gesture writes the **whole list** through the cue's own PATCH (`speedMasters`), the rows a draft
-  held over a refetch and put back on a refusal (which the middleware toasts) — the Events editor's
-  shape. A BPM commits on Enter, blur or a pause in typing, never as typed, and one outside 20–300
-  is not sent. The master list is the project's stored bank (`useSpeedMasterListQuery`), so it reads
+  under *+ Master*, which adds the lowest master the cue does not set at its stored tempo, a follower
+  only when no other is free. Every gesture writes the **whole list** through the cue's own PATCH
+  (`speedMasters`), the rows a draft held over a refetch, settled on the list the last save answered
+  and put back on a refusal (which the middleware toasts) — the Events editor's shape. A BPM commits
+  on Enter, blur or a pause in typing, never as typed, and one outside 20–300 is not sent. The master list is the project's stored bank (`useSpeedMasterListQuery`), so it reads
   on another project's cue too. A follower's row says *Follows M2 — skipped on GO* and a deleted
   master's *The master was deleted — skipped on GO* (the desk skips both); locked, the section is a
   list of *M2 · Chase · 128 bpm*. `buildCueInput` hands the list back, since a PUT clears it.

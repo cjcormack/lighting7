@@ -652,8 +652,11 @@ internal class VenueSetupTools(private val state: State) {
                     fadeCurve = c.fadeCurve
                     notes = c.notes
                     stomp = c.stomp
-                    speedMasters = mapCueSpeedMasters(c.speedMasters, source, target) { index, _ ->
-                        report.unresolved("speed master ${index ?: "(deleted)"} is not in project ${target.id.value}; its tempo is left out", by)
+                    speedMasters = c.speedMasters.mapNotNull { pair ->
+                        val index = sourceMasterIndex[UUID.fromString(pair.speedMasterUuid)]
+                        val mapped = index?.let { masterByIndex[it] }
+                        if (mapped == null) report.unresolved("speed master ${index ?: "(deleted)"} is not in project ${target.id.value}; its tempo is left out", by)
+                        mapped?.let { pair.copy(speedMasterUuid = it.toString()) }
                     }
                 }
                 placed.cue = cue
