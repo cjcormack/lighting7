@@ -158,7 +158,8 @@ import {
 } from '../components/stage3d/StageEditorPanel'
 import { StageEditorPickerPanel } from '../components/stage3d/StageEditorPickerPanel'
 import { StageFixtureControls } from '../components/stage3d/StageFixtureControlPanel'
-import { StageAimPanel, isAimable } from '../components/stage3d/StageAimControls'
+import { StageAimPanel, isAimable, type AimDraft, type PlanAimDoor } from '../components/stage3d/StageAimControls'
+import { createPlanAimClicks, floorUnder, houseFloorOf, type PlanPoint } from '../components/stage3d/planAim'
 import { useFixtureLookup } from '../hooks/useFixtureLookup'
 import type { EditPatchFormHandle } from '../components/patches/EditPatchForm'
 import type { EditStageRegionFormHandle } from '../components/stage/EditStageRegionForm'
@@ -549,6 +550,74 @@ export function Stage() {
     // on every selection change.
   }, [editingActive, projectId, applyBulk, clearSelection])
 
+  // Aiming on the Plan (venue-visit plan S13): armed from the aim controls, it puts this window on
+  // the Plan and a click there aims the selection's moving heads. A view-mode gesture on the live
+  // project and on a tablet or larger, where the aim panel docks; Edit, another camera, or a
+  // selection with nothing to aim disarms it.
+  const canPlanAim = !editingActive && isTabletOrLarger && aimableKeys.length > 0
+  const [planAimArmed, setPlanAimArmed] = useState(false)
+  const [planAimMarker, setPlanAimMarker] = useState<PlanPoint | null>(null)
+  // What the fixture sheet's popover held when it armed, for the docked panel that takes over.
+  const [planAimSeed, setPlanAimSeed] = useState<AimDraft | null>(null)
+  const [planAimClicks] = useState(createPlanAimClicks)
+  const planAimActive = planAimArmed && canPlanAim && camera === 'plan'
+  const armPlanAim = useCallback((draft: AimDraft) => {
+    setStageViewpoint('plan')
+    setPlanAimSeed(draft)
+    setPlanAimArmed(true)
+  }, [])
+  const disarmPlanAim = useCallback(() => {
+    setPlanAimArmed(false)
+    setPlanAimMarker(null)
+    setPlanAimSeed(null)
+  }, [])
+  useEffect(() => {
+    if (!canPlanAim) disarmPlanAim()
+  }, [canPlanAim, disarmPlanAim])
+  useEffect(() => {
+    disarmPlanAim()
+  }, [projectId, disarmPlanAim])
+  // Only on a move away: arming sets the Plan in the same gesture, and the camera may follow a
+  // render later.
+  useEffect(() => {
+    if (camera !== 'plan') disarmPlanAim()
+  }, [camera, disarmPlanAim])
+  // On the document, bubbling: after Radix's capture-phase Escape (an open select or popover closes
+  // first) and before the window's listeners, which the prevented default tells it was taken — the
+  // hand keeps what it holds.
+  useEffect(() => {
+    if (!planAimArmed) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return
+      e.preventDefault()
+      disarmPlanAim()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [planAimArmed, disarmPlanAim])
+  const stageWidth = projectData?.stageWidthM ?? DEFAULT_STAGE_DIMS.widthM
+  const stageDepth = projectData?.stageDepthM ?? DEFAULT_STAGE_DIMS.depthM
+  const houseFloorZ = useMemo(() => houseFloorOf(sceneElements ?? []), [sceneElements])
+  const planFloorAt = useCallback(
+    (p: PlanPoint) => floorUnder(p, { width: stageWidth, depth: stageDepth }, houseFloorZ),
+    [stageWidth, stageDepth, houseFloorZ],
+  )
+  const planAimDoor = useMemo<PlanAimDoor>(
+    () => ({
+      armed: planAimActive,
+      onArm: armPlanAim,
+      onDisarm: disarmPlanAim,
+      clicks: planAimClicks,
+      floorAt: planFloorAt,
+      onAimed: (p) => setPlanAimMarker({ x: p.x, y: p.y }),
+    }),
+    [planAimActive, armPlanAim, disarmPlanAim, planAimClicks, planFloorAt],
+  )
+  const planAimCanvas = useMemo(
+    () => (planAimActive ? { onPoint: planAimClicks.emit, marker: planAimMarker } : null),
+    [planAimActive, planAimClicks, planAimMarker],
+  )
+
   // Escape cancels placement mode.
   useEffect(() => {
     if (!placing) return
@@ -608,7 +677,8 @@ export function Stage() {
   )
   // Not while editing on a section: the edit layer holds the pointer there, and a pick would hand
   // it back to the scene mid-edit — the route and the canvas must agree on which one has it.
-  const canSit = hasSeats && !sectionEditing
+  // Not while aiming on the Plan: the seats would take the pointer the aim layer holds.
+  const canSit = hasSeats && !sectionEditing && !planAimActive
   const startSitting = useCallback(() => {
     if (!canSit) return
     if (!sceneLayers.seating) setSceneLayer('seating', true)
@@ -1009,8 +1079,11 @@ export function Stage() {
   // a bottom sheet, or the right-hand sheet held landscape — which `StageFixtureControls` decides by
   // the cell editor's form (fixture-fx-sheets plan D14). Requires exactly one selected object — live
   // controls for "5 fixtures" would be ambiguous about which one they were driving.
-  const showControlPanel = !editingActive && sel.count === 1 && selection?.kind === 'patch'
-  const showAimPanel = !editingActive && sel.count > 1 && isTabletOrLarger && aimableKeys.length > 0
+  // While aiming on the Plan the aim panel docks for one head too: the fixture sheet's *Aim…* popover
+  // would close at the first click on the canvas.
+  const showControlPanel = !editingActive && sel.count === 1 && selection?.kind === 'patch' && !planAimActive
+  const showAimPanel =
+    !editingActive && isTabletOrLarger && aimableKeys.length > 0 && (sel.count > 1 || planAimActive)
 
   const handleSelectionChange = (s: Selection, intent: SelectIntent = 'replace') => {
     selectOne(s, intent)
@@ -1354,6 +1427,7 @@ export function Stage() {
                 boxShadows={boxShadows}
                 workLights={workLights}
                 seatPicking={seatPicking}
+                planAim={planAimCanvas}
                 framingRef={framingRef}
                 editMode={editingActive}
                 selection={selection}
@@ -1449,12 +1523,15 @@ export function Stage() {
             patchKey={showControlPanel && selection?.kind === 'patch' ? selection.patchKey : null}
             projectId={projectId}
             canAim={project?.isCurrent ?? false}
+            onAimOnPlan={canPlanAim ? armPlanAim : undefined}
             onClose={() => clearSelection()}
           />
           {showAimPanel && (
             <StageAimPanel
               projectId={projectId}
               fixtureKeys={aimableKeys}
+              plan={planAimDoor}
+              seed={planAimSeed}
               onClose={() => clearSelection()}
             />
           )}

@@ -73,13 +73,15 @@ interface StageCameraRigProps {
   landing?: StageCameraLanding | null
   /** Where the orbit camera starts when nothing is stored — and what an eye with no pose seeds from. */
   defaultOrbit: OrbitPose
-  /** The rig, for the orthographic sections' planes and their fit. */
+  /** The rig, for the orthographic sections' planes and their fit (the Plan's beside [room]). */
   bounds: LightingBounds
   /**
    * The modelled venue and set, for how deep a section sees — never where its plane stands, which
    * is the rig's, so a section cuts the room (`stageCameras.ts`'s `orthoSection`).
    */
   beyond?: LightingBounds | null
+  /** The drawn rooms' footprint, which the Plan is fitted to beside the rig (venue-visit plan S13). */
+  room?: LightingBounds | null
   /**
    * Read and write this window's poses in `sessionStorage` (`lib/stageCameraPoses.ts`). The Stage
    * route's canvas does; the Positions panel's embedded plan does not — it is a second camera on
@@ -419,11 +421,12 @@ function OrthoRig({
   view,
   bounds,
   beyond = null,
+  room = null,
   controlsRef,
   handleRef,
   onSectionView,
 }: StageCameraRigProps & { view: OrthoCamera }) {
-  const section = useMemo(() => orthoSection(view, bounds, beyond), [view, bounds, beyond])
+  const section = useMemo(() => orthoSection(view, bounds, beyond, room), [view, bounds, beyond, room])
   const [camera] = useState(() => {
     const c = new OrthographicCamera(-1, 1, 1, -1, 0.01, section.far)
     // Before the controls are built: `OrbitControls` reads the camera's up once, at construction.

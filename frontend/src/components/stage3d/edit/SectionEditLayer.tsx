@@ -37,7 +37,15 @@ import {
   type SectionHit,
   type SectionScene,
 } from './sectionHits'
-import { metresPerPixel, offsetToSection, visibleSection, type SectionControls, type SectionViewStore } from './sectionView'
+import {
+  PAN_THRESHOLD_PX,
+  ZOOM_PER_WHEEL_NOTCH,
+  metresPerPixel,
+  offsetToSection,
+  visibleSection,
+  type SectionControls,
+  type SectionViewStore,
+} from './sectionView'
 import { useSectionDrag, useSectionPress, type SectionDragOptions } from './useSectionDrag'
 import { RegionSectionHandles, RiggingSectionHandles } from './SectionEditHandles'
 import { SectionGrid } from './SectionGrid'
@@ -45,14 +53,10 @@ import { SectionHud } from './SectionHud'
 import { AlignmentGuides } from './AlignmentGuides'
 import type { SnapGrid } from './useSnapGrid'
 
-/** Pointer travel that promotes a background press into a pan. */
-const PAN_THRESHOLD_PX = 4
 /** How close, in pixels, a drag must come to another object's row/column to snap. */
 const GUIDE_TOLERANCE_PX = 6
 /** How close a dragged fixture must come to a bar before it bolts onto it. */
 const PARENT_SNAP_PX = 12
-/** One wheel notch, or one press of the HUD's zoom buttons. */
-const ZOOM_PER_WHEEL_NOTCH = 1.15
 
 export interface SectionEditLayerProps {
   projectId: number

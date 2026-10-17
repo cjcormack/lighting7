@@ -72,7 +72,7 @@ describe('orthoSection — the three sections agree with the 2D plot’s convent
     // A hall reaching past the rig on every far side: 2 m lower, 5 m further upstage, 3 m further
     // stage right — and nearer on the camera's side, which must not move the plane.
     const venue: LightingBounds = { min: { x: -9, y: -20, z: -3 }, max: { x: 9, y: 14, z: 9 } }
-    for (const view of ['plan', 'front', 'side'] as const) {
+    for (const view of ['front', 'side'] as const) {
       const rigOnly = orthoSection(view, BOUNDS)
       const withVenue = orthoSection(view, BOUNDS, venue)
       close(withVenue.position, rigOnly.position)
@@ -80,12 +80,31 @@ describe('orthoSection — the three sections agree with the 2D plot’s convent
       expect(withVenue.width).toBe(rigOnly.width)
       expect(withVenue.height).toBe(rigOnly.height)
     }
+    // The venue's depth alone moves no plan fit; the room does (below).
+    const plan = orthoSection('plan', BOUNDS, venue)
+    close(plan.position, orthoSection('plan', BOUNDS).position)
+    expect(plan.width).toBe(orthoSection('plan', BOUNDS).width)
     expect(orthoSection('plan', BOUNDS, venue).far - orthoSection('plan', BOUNDS).far).toBeCloseTo(2, 9)
     expect(orthoSection('front', BOUNDS, venue).far - orthoSection('front', BOUNDS).far).toBeCloseTo(5, 9)
     expect(orthoSection('side', BOUNDS, venue).far - orthoSection('side', BOUNDS).far).toBeCloseTo(3, 9)
     // A venue inside the rig's bounds changes nothing.
     const inside: LightingBounds = { min: { x: -1, y: 0, z: 0 }, max: { x: 1, y: 1, z: 1 } }
     expect(orthoSection('front', BOUNDS, inside).far).toBe(orthoSection('front', BOUNDS).far)
+  })
+
+  it('fits the plan to the drawn room as well as the rig, so the house is on it to click (S13)', () => {
+    // The rig is x −6..6, y −17..9 — a hall 30 m wide reaching 12 m further into the house.
+    const venue: LightingBounds = { min: { x: -15, y: -29, z: -3 }, max: { x: 15, y: 14, z: 9 } }
+    const rigOnly = orthoSection('plan', BOUNDS)
+    const withVenue = orthoSection('plan', BOUNDS, null, venue)
+    const xs = { min: Math.min(BOUNDS.min.x, venue.min.x), max: Math.max(BOUNDS.max.x, venue.max.x) }
+    const ys = { min: Math.min(BOUNDS.min.y, venue.min.y), max: Math.max(BOUNDS.max.y, venue.max.y) }
+    expect(withVenue.width).toBeCloseTo(xs.max - xs.min + 2, 9)
+    expect(withVenue.height).toBeCloseTo(ys.max - ys.min + 2, 9)
+    expect(withVenue.width).toBeGreaterThan(rigOnly.width)
+    // Centred on the union: lighting Y is three's −z.
+    close(withVenue.position, [(xs.min + xs.max) / 2, rigOnly.position[1], -(ys.min + ys.max) / 2])
+    close(withVenue.target, [(xs.min + xs.max) / 2, rigOnly.target[1], -(ys.min + ys.max) / 2])
   })
 
   it('Side stands at +X — audience right, stage left — looking across, the house to the left', () => {
