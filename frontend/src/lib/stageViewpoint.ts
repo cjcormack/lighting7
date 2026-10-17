@@ -1,7 +1,17 @@
 import { useSyncExternalStore } from 'react'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 import { writeEyePose } from './stageCameraPoses'
-import { isVisSource, setVisSource, type VisSource } from '../hooks/useVisSource'
+import {
+  editTargetOptions,
+  isVisSource,
+  parseEditTargetOptions,
+  setVisSource,
+  showCueOnStage,
+  VIEW_OPTION_EDIT_CUE,
+  VIEW_OPTION_EDIT_ENTRY,
+  type EditTarget,
+  type VisSource,
+} from '../hooks/useVisSource'
 import {
   isWorkLights,
   setWorkLights,
@@ -209,9 +219,10 @@ export function setStageViewpoint(next: StageViewpoint): void {
 
 /**
  * The Stage view's other per-window fact: which layer of the lighting cascade it draws — **Source**,
- * Output · Output + Programmer · Programmer only · Next GO (`hooks/useVisSource.ts`). It rides
- * `viewOptions` beside the viewpoint (stage-view plan §3.2, session 3), so a hall screen can sit on
- * Row F showing what the next GO will look like.
+ * Output · Output + Programmer · Programmer only · Next GO · Cue in edit (`hooks/useVisSource.ts`).
+ * It rides `viewOptions` beside the viewpoint (stage-view plan §3.2, session 3), so a hall screen can
+ * sit on Row F showing what the next GO will look like. `edit` carries its cue beside it, as
+ * `editEntry` or `editCue` (show-cue-editing plan §3.7), and is applied only with one.
  */
 export const VIEW_OPTION_SOURCE = 'source'
 
@@ -219,7 +230,28 @@ export const VIEW_OPTION_SOURCE = 'source'
 export interface AppliedStageOptions {
   viewpoint?: StageViewpoint
   source?: VisSource
+  /** Set with `source: 'edit'`, the cue it draws. */
+  editTarget?: EditTarget
   workLights?: WorkLights
+}
+
+/**
+ * Apply [source] — `edit` only beside a target [get] names, since the source draws nothing without
+ * one. Answers what was applied, or null for nothing.
+ */
+function applySource(
+  source: string | null | undefined,
+  get: (key: string) => string | null | undefined,
+): { source: VisSource; editTarget?: EditTarget } | null {
+  if (!isVisSource(source)) return null
+  if (source !== 'edit') {
+    setVisSource(source)
+    return { source }
+  }
+  const target = parseEditTargetOptions(get)
+  if (target == null) return null
+  showCueOnStage(target)
+  return { source, editTarget: target }
 }
 
 /**
@@ -236,11 +268,8 @@ export function applyStageViewOptions(options: Readonly<Record<string, string>>)
     setStageViewpoint(viewpoint)
     applied.viewpoint = viewpoint
   }
-  const source = options[VIEW_OPTION_SOURCE]
-  if (isVisSource(source)) {
-    setVisSource(source)
-    applied.source = source
-  }
+  const source = applySource(options[VIEW_OPTION_SOURCE], (key) => options[key])
+  if (source != null) Object.assign(applied, source)
   const workLights = options[VIEW_OPTION_WORK_LIGHTS]
   if (isWorkLights(workLights)) {
     setWorkLights(workLights)
@@ -250,8 +279,8 @@ export function applyStageViewOptions(options: Readonly<Record<string, string>>)
 }
 
 /**
- * `?viewpoint=`, `?source=` and `?workLights=` on arrival — a Screens row's *Copy link* carries all
- * three: apply the values in their vocabularies, and answer the search with the parameters
+ * `?viewpoint=`, `?source=` (with `?editEntry=` or `?editCue=` under `edit`) and `?workLights=` on
+ * arrival — a Screens row's *Copy link* carries them: apply the values in their vocabularies, and answer the search with the parameters
  * stripped, so a reload keeps whatever the window has moved to since. Null when there is none, so
  * the caller writes nothing. A value outside its vocabulary is stripped and not applied, as a
  * frame's is.
@@ -262,18 +291,34 @@ export function consumeLaunchStageOptions(search: URLSearchParams): URLSearchPar
   const workLights = search.get(VIEW_OPTION_WORK_LIGHTS)
   if (viewpoint == null && source == null && workLights == null) return null
   if (isStageViewpoint(viewpoint)) setStageViewpoint(viewpoint)
-  if (isVisSource(source)) setVisSource(source)
+  applySource(source, (key) => search.get(key))
   if (isWorkLights(workLights)) setWorkLights(workLights)
   const next = new URLSearchParams(search)
   next.delete(VIEW_OPTION_VIEWPOINT)
   next.delete(VIEW_OPTION_SOURCE)
+  next.delete(VIEW_OPTION_EDIT_ENTRY)
+  next.delete(VIEW_OPTION_EDIT_CUE)
   next.delete(VIEW_OPTION_WORK_LIGHTS)
   return next
 }
 
-/** What the Stage view announces as its `viewOptions`: the viewpoint, the source and the work lights. */
-export function stageViewOptions(viewpoint: StageViewpoint, source: VisSource, workLights: WorkLights): Record<string, string> {
-  return { [VIEW_OPTION_VIEWPOINT]: viewpoint, [VIEW_OPTION_SOURCE]: source, [VIEW_OPTION_WORK_LIGHTS]: workLights }
+/**
+ * What the Stage view announces as its `viewOptions`: the viewpoint, the source and the work lights,
+ * and under `edit` its cue — `edit` with no target announces Output, which is what it draws.
+ */
+export function stageViewOptions(
+  viewpoint: StageViewpoint,
+  source: VisSource,
+  workLights: WorkLights,
+  editTarget: EditTarget | null = null,
+): Record<string, string> {
+  const shown = source === 'edit' && editTarget == null ? 'output' : source
+  return {
+    [VIEW_OPTION_VIEWPOINT]: viewpoint,
+    [VIEW_OPTION_SOURCE]: shown,
+    ...(shown === 'edit' && editTarget != null ? editTargetOptions(editTarget) : {}),
+    [VIEW_OPTION_WORK_LIGHTS]: workLights,
+  }
 }
 
 /** Test seam: the stores back to Orbit and nothing landed, with no listeners. */

@@ -14,12 +14,14 @@ const landed = () => ({ unwrap: () => Promise.resolve() })
 const patchCue = vi.fn(landed)
 const patchEntry = vi.fn(landed)
 let current: Cue
+let edited = false
 
 vi.mock('@/store/cues', () => ({
   usePatchProjectCueMutation: () => [patchCue],
   useProjectCueCookedQuery: () => ({ data: { cueId: 1, rows: [{}, {}, {}] } }),
 }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
+vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => edited }))
 vi.mock('@/store/effects', () => ({ useSetCueEventsMutation: () => [vi.fn()] }))
 const masters: Array<Record<string, unknown>> = [
   { id: 1, uuid: 'm1', masterIndex: 1, name: 'House', bpm: 120, source: 'MANUAL', referenceCount: 0 },
@@ -67,6 +69,7 @@ import { CueEditor } from './CueEditor'
 import { cueEditorTabStore } from './cueEditorTab'
 import { CueCardEditor } from '@/components/runner/CueCardEditor'
 import { CueEditorPane } from '@/components/runner/CueEditorPane'
+import { CueActionDialogsContext, type CueActionDialogOpeners } from '@/components/runner/cueActionDialogsContext'
 
 function makeCue(over: Partial<Cue> = {}): Cue {
   return {
@@ -111,6 +114,7 @@ function edit(label: string, value: string) {
 }
 
 beforeEach(() => {
+  edited = false
   current = makeCue()
   sessionStorage.clear()
   cueEditorTabStore.reset()
@@ -121,6 +125,50 @@ afterEach(() => {
 })
 
 describe('CueEditor', () => {
+  describe('Edited since GO (show-cue-editing plan D4)', () => {
+    const openers = (): CueActionDialogOpeners => ({
+      openRecord: vi.fn(),
+      openDelete: vi.fn(),
+      openUpdateStage: vi.fn(),
+      openUnlock: vi.fn(),
+    })
+    const drawUnder = (dialogs: CueActionDialogOpeners, over: Partial<React.ComponentProps<typeof CueEditor>> = {}) =>
+      render(
+        <CueActionDialogsContext.Provider value={dialogs}>
+          <CueEditor projectId={1} cueId={1} entryId={101} locked={false} host="card" {...over} />
+        </CueActionDialogsContext.Provider>,
+      )
+
+    it('draws the chip and Update stage… only while the desk marks the cue edited', () => {
+      drawUnder(openers())
+      expect(document.querySelector('[data-edited-since-go]')).toBeNull()
+      expect(screen.queryByRole('button', { name: /Update stage/ })).toBeNull()
+      cleanup()
+      edited = true
+      drawUnder(openers())
+      expect(document.querySelector('[data-cue-editor-header] [data-edited-since-go="1"]')?.textContent).toBe('Edited since GO')
+      expect(screen.getByRole('button', { name: /Update stage/ })).toBeTruthy()
+    })
+
+    it('Update stage… opens the one confirm, naming the cue', () => {
+      edited = true
+      const dialogs = openers()
+      drawUnder(dialogs)
+      fireEvent.click(screen.getByRole('button', { name: /Update stage/ }))
+      expect(dialogs.openUpdateStage).toHaveBeenCalledWith({ projectId: 1, cueId: 1, name: 'Q1 Tabs out' })
+    })
+
+    it('locked, asks to unlock rather than opening the confirm (§4.6)', () => {
+      edited = true
+      const dialogs = openers()
+      const unlock = vi.fn()
+      drawUnder(dialogs, { locked: true, onRequestUnlock: unlock })
+      fireEvent.click(screen.getByRole('button', { name: /Update stage/ }))
+      expect(dialogs.openUnlock).toHaveBeenCalledWith(unlock)
+      expect(dialogs.openUpdateStage).not.toHaveBeenCalled()
+    })
+  })
+
   it('writes the number and the follow to the entry, by its id, and nothing to the cue', () => {
     draw()
     edit('entry cue number', '14A')

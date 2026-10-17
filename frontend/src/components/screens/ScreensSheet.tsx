@@ -81,7 +81,7 @@ const ControlsContext = createContext<WindowViewControls>(NO_CONTROLS)
  * `screensSheetState`.
  *
  * One row per registry row: an editable name, *this window*, full screen or in a browser tab, a
- * view picker over the seven views, and a Full screen / Exit full screen button. Every write is a
+ * view picker over the views in `lib/windowViews.ts`, and a Full screen / Exit full screen button. Every write is a
  * `windows.*` command by **row id** — this window's included, so a rename of this tab goes out and
  * comes back like any other and there is one path, not two. The one thing read locally is this
  * window's own full-screen state, which `fullscreenchange` knows before the registry does.
@@ -505,7 +505,7 @@ function EnumOption({
         // 375px phone its last values were clipped. One line wherever it fits.
         className="h-auto min-h-7 min-w-0 flex-wrap justify-start gap-0.5 p-0.5"
       >
-        {option.values.map((v) => {
+        {[...option.values, ...(option.whileShown ?? []).filter((v) => v === value)].map((v) => {
           // The wire's spelling unless the descriptor says otherwise — the Chrome segment says
           // *App · Immersive* over `off` | `on` (busk-chrome plan D9). A wire spelling is
           // capitalised for the row; a descriptor's own label is drawn as written, so *This

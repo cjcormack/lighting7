@@ -80,7 +80,7 @@ a version of it is. Two gates carry it:
   nothing — `set-current` (opening the venue), the programmer's spread, aim and focus, arming and
   firing, and fixture commands, which act on the rig as it stands. Reads are open to both roles, so
   an operator can look at a venue. *Add venue* (`POST /projects` with `kind: VENUE`) calls
-  `requireAdmin()`. A **copy** into another project (`…/{looks|templates|scripts|cues}/{id}/copy`)
+  `requireAdmin()`. A **copy** into another project (`…/{looks|templates|scripts}/{id}/copy`)
   names its target in the body, so the target is judged too (`refusedCopyTarget`), and the FX
   definitions, stored in the live project under a path that names none, are refused an operator on a
   live venue (`refusedLiveVenueWrite`). The frontend withholds the draft, History and Publish from an

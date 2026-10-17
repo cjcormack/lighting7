@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.property.Colour
 import uk.me.cormack.lighting7.fixture.property.Slider
 import uk.me.cormack.lighting7.fixture.property.WhiteMix
@@ -38,10 +39,10 @@ class DmxWhiteMixColour(
             cold.value = levels.cold
         }
 
-    override fun fadeToColour(colour: Color, fadeMs: Long) {
+    override fun fadeToColour(colour: Color, fadeMs: Long, curve: EasingCurve) {
         val levels = mix.levelsFor(colour)
-        warm.fadeToValue(levels.warm, fadeMs)
-        cold.fadeToValue(levels.cold, fadeMs)
+        warm.fadeToValue(levels.warm, fadeMs, curve)
+        cold.fadeToValue(levels.cold, fadeMs, curve)
     }
 
     private inner class ComponentSlider(
@@ -56,9 +57,9 @@ class DmxWhiteMixColour(
                 this@DmxWhiteMixColour.value = with(current, newValue.toInt())
             }
 
-        override fun fadeToValue(value: UByte, fadeMs: Long) {
+        override fun fadeToValue(value: UByte, fadeMs: Long, curve: EasingCurve) {
             val current = this@DmxWhiteMixColour.value ?: Color.BLACK
-            fadeToColour(with(current, value.toInt()), fadeMs)
+            fadeToColour(with(current, value.toInt()), fadeMs, curve)
         }
     }
 }

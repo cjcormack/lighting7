@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fixture.property
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import java.awt.Color
 
 /**
@@ -54,8 +55,9 @@ interface Colour {
      *
      * @param colour Target colour to fade to
      * @param fadeMs Duration of the fade in milliseconds
+     * @param curve The fade's shape
      */
-    fun fadeToColour(colour: Color, fadeMs: Long)
+    fun fadeToColour(colour: Color, fadeMs: Long, curve: EasingCurve = EasingCurve.LINEAR)
 }
 
 /**

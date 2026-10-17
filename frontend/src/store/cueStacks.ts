@@ -502,6 +502,15 @@ export const cueStacksApi = restApi.injectEndpoints({
       }),
     }),
 
+    /**
+     * [previewCueLook] for a cue with no entry — composed as a loose press would land it, above
+     * every stack (show-cue-editing plan §3.7): the Stage view's *Cue in edit* for a loose cue, or
+     * one in several places opened from none. Same answer, same three limits.
+     */
+    previewLooseCue: build.query<PreviewCueResponse, { projectId: number; cueId: number }>({
+      query: ({ projectId, cueId }) => ({ url: `projects/${projectId}/cues/${cueId}/preview` }),
+    }),
+
     sortCueStackByCueNumber: build.mutation<
       SortByCueNumberResponse,
       { projectId: number; stackId: number }
@@ -676,6 +685,7 @@ export const {
   usePatchCueStackEntryMutation,
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
+  usePreviewLooseCueQuery,
   useSortCueStackByCueNumberMutation,
   useActivateProgramMutation,
   useDeactivateProgramMutation,

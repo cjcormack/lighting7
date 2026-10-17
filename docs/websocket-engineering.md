@@ -375,8 +375,10 @@ the previous one. A MIDI write stamps `{kind: "surface"}`.
 drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | `eye` | `plan` |
 `front` | `side`, stage-view plan session 1), a saved `stage_viewpoints` row by its uuid
 (session 2) or an unsaved seat, `seat:<seating uuid>:<seat id>` (session 3), and its `source` — the
-vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` (session 3; the Screens row
-offers Output and Next GO), and its `workLights` — `off` | `on` (stage-view menu plan D8; the
+vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` | `edit` (session 3; the Screens
+row offers Output and Next GO, and *Cue in edit* only while the window shows one) — under `edit` its
+cue rides beside it as `editEntry` or `editCue`, applied only with one (show-cue-editing plan §3.7) —
+and its `workLights` — `off` | `on` (stage-view menu plan D8; the
 Screens row's *Work lights · Off | On*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
@@ -670,7 +672,7 @@ payload-free, since one project has one rig).
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
 | `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
-| `cueHolds.state` | `projectId`, `cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}]}]` | What holds every live cue (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
+| `cueHolds.state` | `projectId`, `cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}], edited?}]` | What holds every live cue, and whether each is edited since GO (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
 happens is not obvious. The backend deliberately does **not** fire `paletteListChanged` /
@@ -725,6 +727,10 @@ inbound frame exists, `FU-AUTH-WS-PER-MESSAGE` does not fire and `TraceSampling.
 no row. A client reads `projectId` against its own project: another's frame is nothing live here.
 It is what the busk cue pad's and cue slot's two rings read (D11: solid while a `LOOSE` hold is
 among its holds, outline while only stacks hold it), and what "on stage" means to the client (`useCueRings`, which replaced `useActiveCueIds`).
+A held cue edited since it came on — a write to what *Update stage* sends of it, or a Look edit moving its effects — carries `edited: true`
+(show-cue-editing plan §3.5; sent only while true): the *Edited since GO* chip and *Update stage…*
+read it (`useCueEdited`). Its first hold and *Update stage* clear it; a Record or Update republish does not —
+`docs/cue-stacks-engineering.md` §"Edited since GO and Update stage".
 
 ### Channel — `ChannelSocket.kt`
 

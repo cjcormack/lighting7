@@ -9,7 +9,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.LayerStompSuppression
 import uk.me.cormack.lighting7.fx.buildCueApplyDataForCues
-import uk.me.cormack.lighting7.fx.buildCombinedCueLayerRows
+import uk.me.cormack.lighting7.fx.buildCombinedCueLayerCook
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoLook
@@ -75,7 +75,8 @@ internal fun republishForLookEdit(state: State, lookUuid: UUID): LookRepublishOu
  * every cue in [layeringCueIds] — the cues those layers belonged to, collected in the delete's own
  * transaction — composes differently now. Without this a live cue keeps transmitting the deleted
  * Look's values until it is re-fired. Its *rows* only, as for an edit: effects the cue spawned from
- * the Look at GO run until the cue stops, which is what an edit to a Look's effects does too.
+ * the Look at GO run on, and the cue is marked edited since GO, as an edit to a Look's effects
+ * marks it.
  *
  * The same body as an edit, because it is the same event as far as a cue is concerned: its layer
  * stack changed under it. Only the referencing query differs — the FK it searches no longer exists,
@@ -174,12 +175,14 @@ private fun republishForSourceEdit(
                 )
                 continue
             }
-            val cooked = buildCombinedCueLayerRows(state, cueId, applyData)
-            rebuilt[cueId] = cooked.rows
+            val cooked = buildCombinedCueLayerCook(state, cueId, applyData)
+            rebuilt[cueId] = cooked.values.rows
             // Carried per cue, and *always* — including when it is empty. An edit that deleted the
             // rows a stomping layer used to assert must shrink its suppression set too, and
             // `replaceAssignments` reads an absent entry as "this cook found no stomper".
-            rebuiltStomp[cueId] = cooked.stompSuppression
+            rebuiltStomp[cueId] = cooked.values.stompSuppression
+            // Its effects are not republished: an edit that moved them leaves it edited since GO.
+            state.show.cueStackManager.holds.markIfLayerEffectsMoved(cueId, cooked.effects)
         }
         if (rebuilt.isNotEmpty()) republished += engine.cueLayer.replaceAssignments(rebuilt, rebuiltStomp)
     }
@@ -206,6 +209,10 @@ private fun republishForSourceEdit(
     val affected = allReferencing()
     if (affected.isNotEmpty()) state.show.fixtures.cuesRecomposed(affected.toList())
 
+    // A held cue with no Layer 4 rows — one layering only an effect palette, say — is in no scan
+    // above, and its effects are as stale as any other's.
+    markRowlessCues(state, affected - scanned)
+
     logger.info(
         "{} {} {}: {} programmer layer key(s) refreshed, {} of {} active cue(s) republished, " +
             "{} cue(s) announced stale",
@@ -215,6 +222,17 @@ private fun republishForSourceEdit(
         programmerKeysRefreshed = programmerKeys.size,
         cuesRepublished = republished.toList(),
     )
+}
+
+/** Mark each of [cueIds] a hold has whose layer effects the edit moved ([uk.me.cormack.lighting7.fx.CueHolds.markIfLayerEffectsMoved]). */
+private fun markRowlessCues(state: State, cueIds: Set<Int>) {
+    val holds = state.show.cueStackManager.holds
+    val held = cueIds.filter(holds::isHeld)
+    if (held.isEmpty()) return
+    val applyDataByCue = transaction(state.database) { buildCueApplyDataForCues(held) }
+    for ((cueId, applyData) in applyDataByCue) {
+        holds.markIfLayerEffectsMoved(cueId, buildCombinedCueLayerCook(state, cueId, applyData).effects)
+    }
 }
 
 /**

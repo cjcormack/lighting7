@@ -24,7 +24,7 @@ keeps showing the pre-blind look while the operator builds a cue they cannot see
 sheet already solved this at cell granularity (`fixtures-list/ownership.ts::applyStagedValue`); the
 stage did not.
 
-`hooks/useVisSource.ts` holds the operator's choice of four:
+`hooks/useVisSource.ts` holds the operator's choice of five:
 
 | Source | What it draws |
 |---|---|
@@ -32,6 +32,7 @@ stage did not.
 | `outputProgrammer` | Output with the programmer laid over it. Identical to `output` unless Blind is on. |
 | `programmer` | Only what the programmer holds; every other channel reads 0. |
 | `nextGo` | The look the next GO would produce, over live output. |
+| `edit` | The cue open in a cue editor, as it is stored, over live output (§"The fifth source: Cue in edit"). |
 
 `programmer` is literal on purpose: an empty programmer shows an empty stage, and a fixture given
 intensity but no position sits at pan/tilt 0 rather than borrowing a position from the wire.
@@ -54,10 +55,11 @@ screen on Output are two facts, so the source rides `windows.viewOptions` as `so
 `viewpoint` under the Stage view (`stageViewOptions` in `lib/stageViewpoint.ts`), and the Screens
 sheet's Stage row draws a **Source** segment from `lib/windowViews.ts`'s `STAGE_SOURCE_OPTION` —
 *Output · Next GO*, the two `Screens.dc.html` §1 draws; a window on either programmer source shows
-neither lit, and the View menu still offers all four. The sheet stays generic: the segment is the
+neither lit, and the View menu still offers the other three. *Cue in edit* is in both only while the
+window already shows one (the descriptor's `whileShown`), since neither can name a cue. The sheet stays generic: the segment is the
 descriptor's `enum` kind. A Screens row's *Copy link* carries `source=`, which the Stage route applies
 on arrival and strips with `viewpoint=` (`consumeLaunchStageOptions`); `applyStageViewOptions` and
-that consumer ignore a value outside the four. A window with nothing of its own starts from the
+that consumer ignore a value outside the five, and `edit` without its cue. A window with nothing of its own starts from the
 legacy profile value, so a desk keeps the source it had across the change.
 
 The stored value is narrowed through `isVisSource` on read. A value written by a later build must
@@ -146,6 +148,49 @@ because an operator would otherwise read them as bugs; the last two it does not:
   deck's own scenery (the stack list's `cues[].scenery`, which does move) have held still for 250 ms.
   One cache entry, so a Stage canvas on Next GO beside the book recomposes with it — scenery and
   channels alike. See `docs/show-mode-engineering.md` §"Scenery in the cue table and the Prompt Book".
+
+### The fifth source: Cue in edit
+
+The cue editor's header has **Show on stage** (show-cue-editing plan D13, §3.7;
+`components/cues/editor/ShowOnStageButton.tsx`): it points **this window's** Stage view and
+Positions plan at the cue in that editor, through the `edit` source. The source draws the stored
+cue, which is the edit at most one flush behind, since the editor saves as it goes. It is lit while
+the window shows that cue. Another editor's press moves the window to its cue, and a press while lit
+puts the window back on Output. It works while the show is locked, because it writes nothing. It is
+withheld, with the reason, for a cue the editor reads as another project's: the Stage view draws only
+the show on the rig, and the preview routes are `withCurrentProject`.
+
+**The source carries its cue.** The window's **edit target** is an entry id, or a cue id for a cue
+opened from no entry (a loose one, or one in several places opened in the Cues table's sheet). It is
+a second `sessionStorage` store beside the source (`stage.editTarget`, `useEditTarget`), and
+`showCueOnStage` writes the target before the source, so no reader sees `edit` with the previous
+cue. Everywhere the source goes, the target goes with it, inside `viewOptions` and never beside it:
+`stageViewOptions` adds `editEntry` or `editCue` under `edit`, and announces `edit` with no target as
+the `output` it draws. `applyStageViewOptions` and `consumeLaunchStageOptions` apply `edit` only with
+a positive id beside it, an entry ahead of a cue. *Copy link* carries both (`windowSetupUrl`).
+
+**The channels are the desk's preview, as Next GO's are** (`hooks/useEditCuePreview.ts`), pushed
+into a `PushChannelSource` and overlaid on the wire:
+
+- **An entry** goes through `GET cue-stacks/{sid}/preview?entryId=`, composed in its stack's
+  context as a GO onto it would land it. Pointed at Q7 while Q1 is live in the same stack, the stage
+  draws Q7, because a GO onto Q7 lets Q1 go. The window carries only the entry id, so the stack is
+  found in the current project's stack list.
+- **A cue with no entry** goes through `GET cues/{id}/preview`, composed as stored, as a loose press
+  lands it on its first hold: above every stack and every earlier press, with nothing released. A
+  press of a cue already held keeps its published rows (*Edited since GO*), but the source draws the
+  stored edit, which is the point of it.
+
+The scenery is the preview's too, moving from where the stage is when the answer lands. The three
+limits are Next GO's: Layer 4 only (effects are not drawn), assertions only, no programmer. A target
+the show on the rig does not hold empties the source and the stage shows output. The View menu's
+status line says which case it is (`useEditCueStatus`).
+
+**It refetches after an edit, which Next GO does not.** `cueListChanged` names no cue, so every one
+asks again. A `cuesRecomposed` whose `cueIds` hold the cue asks again too, because a Look or palette
+under it has changed. Both are debounced at 300 ms (`EDIT_REFETCH_DEBOUNCE_MS`), so the frames of one
+editor flush ask once. `render_view` never draws this source: `stageRenderApi` refuses a request
+naming it, since it would read this window's target.
 
 ### Injection is at channel level
 
@@ -2483,7 +2528,8 @@ channels preview the blind programmer, so in Blind the Programmer source draws t
 flying in and Output draws it where the stage has it; and for **Next GO** the preview's `scenery`
 (the whole stage as it would resolve with the cue on deck, each element with `from` and the GO's
 duration), its moves started when the answer lands — so selecting Next GO draws Q2's tabs opening
-as the GO would open them. A frame with nothing staged comes back as itself, so a source switch
+as the GO would open them; and for **Cue in edit** its preview's `scenery`, likewise (§"The fifth
+source: Cue in edit"). A frame with nothing staged comes back as itself, so a source switch
 outside Blind rebuilds nothing. `Stage3D` reads the context itself, outside its canvas, so the
 capture root's bridge carries nothing new; a `render_view` draws every move landed. The Positions
 plan draws through the same provider (D16), so its drapes and Set pieces follow the window's source

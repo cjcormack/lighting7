@@ -136,6 +136,22 @@ export const cueHoldsWs: {
   frame: { projectId: number | null; cues: unknown[] }
 } = { callback: null, frame: { projectId: null, cues: [] } }
 
+/**
+ * The cue frames (`api/cuesWsApi.ts`): every subscriber kept, since the store's bridge and a hook
+ * both listen, so a test fires `cueListChanged` with `listChanged()` and `cuesRecomposed` with
+ * `recomposed(ids)`.
+ */
+export const cuesWs = (() => {
+  const list = new Set<() => void>()
+  const recomposed = new Set<(cueIds: number[]) => void>()
+  return {
+    list,
+    recomposed,
+    listChanged: () => list.forEach((fn) => fn()),
+    recomposedFor: (cueIds: number[]) => recomposed.forEach((fn) => fn(cueIds)),
+  }
+})()
+
 // Patch-list WS bridge callback captured from store/patches.ts, so a test can
 // fire a synthetic `patchListChanged` and assert on invalidation batching.
 export const patchesWs: { callback: null | (() => void) } = { callback: null }
@@ -683,6 +699,16 @@ export function lightingApiMock() {
           }
         },
         get: () => cueHoldsWs.frame,
+      },
+      cues: {
+        subscribe: (fn: () => void) => {
+          cuesWs.list.add(fn)
+          return { unsubscribe: () => cuesWs.list.delete(fn) }
+        },
+        subscribeRecomposed: (fn: (cueIds: number[]) => void) => {
+          cuesWs.recomposed.add(fn)
+          return { unsubscribe: () => cuesWs.recomposed.delete(fn) }
+        },
       },
       cueStacks: {
         subscribe: noopSub,

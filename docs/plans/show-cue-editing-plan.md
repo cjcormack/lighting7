@@ -201,10 +201,11 @@ effect across writes. No `formatVersion` change: the archive already carries eac
 ### 3.5 Edited since GO and Update stage (D4, D11)
 
 - **The mark.** R1's hold registry (`fx/CueHolds.kt`) gains `editedSinceGo: Set<cueId>`. A cue write
-  that changes rows, layers or effects of a held cue adds it; the cue's first hold, *Update stage*,
-  and `republishCueIfLive` (Record, Update) clear it. Look and palette contents edits do not set it,
-  since they republish. Scenery and events do not set it: scenery is drawn from the stored rows at
-  once, and events fire on GO only.
+  that changes what *Update stage* sends of a held cue — a row's value, an untimed layer or effect —
+  adds it, and so does a Look or palette edit that moves the effects a live cue layers; the cue's
+  first hold and *Update stage* clear it, and a Record or Update republish (`republishCueIfLive`)
+  leaves it (§11, 21–23, amending this bullet as first written). Scenery and events do not set it:
+  scenery is drawn from the stored rows at once, and events fire on GO only.
 - **The wire.** `cueHolds.state` (R1 §3.4) carries `edited: true` on a held cue. Outbound only, as
   that frame is.
 - **The route.** `POST /api/rest/projects/{id}/cues/{cid}/update-stage {dryRun?}` answers
@@ -495,7 +496,7 @@ says palette). All of them have merged.
 - **Docs:** the frontend CLAUDE.md's "The cue editor"; `fx-engineering.md` (a cue effect edited in
   draft).
 
-### Session 7 — Edited since GO and Update stage (backend + frontend)
+### Session 7 — Edited since GO and Update stage (backend + frontend) — done, `f378ee9`
 
 - §3.5: the mark on R1's holds, `cueHolds.state`'s `edited`, the route with its `dryRun`, the cue's
   own fade, the effect reconcile; the chip on the card, the row, the pane and the
@@ -515,7 +516,7 @@ says palette). All of them have merged.
 - **Docs:** `cue-stacks-engineering.md` §"Runtime", `websocket-engineering.md` (`cueHolds.state`),
   CLAUDE.md's cue endpoints.
 
-### Session 8 — Show on stage (frontend + preview)
+### Session 8 — Show on stage (frontend + preview) — done, `0a62d3c`
 
 - §3.7: the `edit` source, its announce keys, the Screens sheet's Source segment, the toggle in the
   header; the preview route for a cue with no entry (R1.2's takes only an `entryId`).
@@ -625,3 +626,15 @@ Answered by Chris, 2026-10-17, at venue-visit course check K3:
     *Open Look* goes there. Opening the Look in place over the cue was declined.
 19. **Can a Screens row point a window at the cue in edit?** Only while that window already shows
     one. A picker over every cue was declined.
+
+Answered by Chris, 2026-10-17, during session 7 (each amends §3.5):
+
+20. **Update stage and a cue's timed effects and layers?** Left to the next GO, whose timers re-arm
+    them (`FU-UPDATE-STAGE-TIMED`). Re-arming them on the press was declined.
+21. **Does a Record or Update republish clear the mark?** No: it moves the rows and not the effects,
+    so the mark stays until the first hold or *Update stage*. Clearing it there, and marking rows and
+    effects apart, were declined.
+22. **A Look or palette edit that moves its effects?** It marks every live cue layering it. Leaving
+    such cues unmarked, as §3.5 had it, was declined.
+23. **What raises the mark?** Only what *Update stage* sends: a row's value, an untimed layer, an
+    untimed effect. A row's own fade or move-in-dark and a timed layer or effect do not.

@@ -86,7 +86,7 @@ mutation**:
   retune the clock. Patching a rig you are not currently running is a real workflow and this is
   what keeps it working.
 
-**The copy routes are the ungated exception inside the first group.** `POST …/{id}/copy` on cues,
+**The copy routes are the ungated exception inside the first group.** `POST …/{id}/copy` on
 looks, palettes and scripts resolves its *source* with `withProject` (or `resolveProject`), not
 `withCurrentProject`: copying out of a library that is not the live show is the point of *Copy
 to…*, and the write only inserts rows into the target — nothing is applied to the running show, so

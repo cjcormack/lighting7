@@ -266,16 +266,3 @@ fun deleteCueEventsForPatches(patchIds: Collection<EntityID<Int>>): Int {
     if (patchIds.isEmpty()) return 0
     return DaoCueEvents.deleteWhere { DaoCueEvents.patch inList patchIds }
 }
-
-/** [from]'s events written onto [to] — a copied cue fires what its original fires. */
-fun copyCueEvents(from: DaoCue, to: DaoCue) {
-    for (row in cueEventsOf(from.id)) {
-        DaoCueEvent.new {
-            cue = to
-            patch = row.patch
-            trigger = row.trigger
-            offset = row.offset
-            sortOrder = row.sortOrder
-        }
-    }
-}

@@ -106,25 +106,3 @@ fun speedMasterRefsOf(project: DaoProject): List<SpeedMasterRef> =
 /** [project]'s masters, as [parseCueSpeedMasters] checks a list against them. Must run inside a transaction. */
 fun speedMastersOf(project: DaoProject): List<DaoSpeedMaster> =
     DaoSpeedMaster.find { DaoSpeedMasters.project eq project.id }.sortedBy { it.masterIndex }
-
-/**
- * [list] for a cue in [target], copied from one in [source]: within one project as it is, across
- * projects each master mapped by its index, as `copy_to_project`'s masters are (cue model plan
- * §3.8), the target's default bank seeded first if it has none. A pair whose master the target lacks is left out and passed to [unmapped] with the
- * master's index (null when the source no longer has it). Must run inside a transaction.
- */
-fun mapCueSpeedMasters(
-    list: List<CueSpeedMasterDto>,
-    source: DaoProject,
-    target: DaoProject,
-    unmapped: (index: Int?, CueSpeedMasterDto) -> Unit = { _, _ -> },
-): List<CueSpeedMasterDto> {
-    if (list.isEmpty() || source.id == target.id) return list
-    val sourceIndex = speedMastersOf(source).associate { it.uuid.toString() to it.masterIndex }
-    val targetByIndex = ensureDefaultSpeedMasters(target).associate { it.masterIndex to it.uuid.toString() }
-    return list.mapNotNull { pair ->
-        val index = sourceIndex[pair.speedMasterUuid]
-        val mapped = index?.let { targetByIndex[it] }
-        if (mapped == null) { unmapped(index, pair); null } else pair.copy(speedMasterUuid = mapped)
-    }
-}
