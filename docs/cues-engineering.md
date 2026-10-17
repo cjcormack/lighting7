@@ -159,7 +159,7 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/{projectId}/cues` | List all cues for a project, each with its `entries` |
+| GET | `/{projectId}/cues` | List all cues for a project, by name, each with its `entries` and `usedBy` — `{pads, slots, bindings}`, what else names it, the Cues table's *Used by* (cue model plan session 5). One cue's read leaves `usedBy` null |
 | POST | `/{projectId}/cues` | Create a new cue (current project only); without `cueStackId` it is loose |
 | GET | `/{projectId}/cues/{cueId}` | Get cue details; `?entryId=` picks the place the place fields describe |
 | PUT | `/{projectId}/cues/{cueId}` | Update a cue's content (current project only); its number and follow are the entry's |
@@ -230,9 +230,10 @@ effect of removing an entry or deleting a stack.
 - **Several at once:** `POST /cues/delete {cueIds, force?, dryRun?}` answers `{deleted, uses}`; any
   cue in use without `force` is 409 `CUE_IN_USE` and nothing is deleted. `dryRun` deletes nothing and
   lists the uses — what a confirm shows.
-- **The Show view's confirm** is `CueDeleteDialog` (frontend `components/cues/CueDeleteDialog.tsx`,
-  show-cue-editing plan session 3): a dry run lists each cue's uses, one confirm for several, then
-  `POST /cues/delete` with `force`; it says that a binding stays and reports its cue missing.
+- **The confirm** is `CueDeleteDialog` (frontend `components/cues/CueDeleteDialog.tsx`,
+  show-cue-editing plan session 3), from the cue action set on the Show view and the Cues table: a
+  dry run lists each cue's uses, one confirm for several, then `POST /cues/delete` with `force`; it
+  says that a binding stays and reports its cue missing.
 - **A stack delete leaves its cues** (`DELETE /cue-stacks/{id}`): its entries, anchors and set go,
   and it answers `{looseCueIds, deletedCueIds}`. `?deleteLooseCues=true` (D17) deletes, as a forced
   delete would, the cues it left in no stack — and only those; a cue another stack still holds stays.
@@ -482,8 +483,13 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 
 ### UI Components
 
-Cues are authored in the **Show** view (`/projects/:projectId/show`), not in a route of their
-own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
+Cues are authored and run in the **Show** view (`/projects/:projectId/show`); every cue is listed
+once, loose ones included, in the **Cues table** (`/projects/:projectId/cues`, `routes/Cues.tsx`,
+cue model plan session 5). `components/cues/CueForm.tsx` is gone.
+
+- `src/routes/Cues.tsx` + `src/components/cues/CueLibrarySheet.tsx` — the Cues table, read off
+  `GET /cues` (each cue's entries and `usedBy`); its bar is the cue action set
+  (`components/runner/CueActions.tsx`), and a loose cue opens `CueEditor` in a right-hand sheet
 
 - `src/routes/ShowPage.tsx` — the show: an ordered list of stacks, drilling into
   `/show/stacks/:stackId?cue=:cueId`
@@ -495,10 +501,11 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 - `src/components/cues/CopyCueDialog.tsx` — Copy to another project
 
 ### Navigation
-- Cues nav item in `ProjectSwitcher.tsx` (visible for all projects)
-- The Show card on a show's home (`routes/ProjectHome.tsx`), counting its stacks and the project's
-  cues once each (`NavItem.homeCount`)
-- Routes in `App.tsx`: `/projects/:projectId/cues` and `/cues` redirect
+- The Cues row in `navigation.ts`, a Library row after Looks (hidden in a venue)
+- On a show's home (`routes/ProjectHome.tsx`) the Show card counts its stacks and the Cues card the
+  project's cues once each (`NavItem.homeCount`)
+- Routes in `App.tsx`: `/projects/:projectId/cues` is the Cues table and bare `/cues` resolves the
+  current project's (`CuesRedirect`)
 
 ## MCP tools
 

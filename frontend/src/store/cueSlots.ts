@@ -34,8 +34,9 @@ export interface SwapCueSlotsRequest {
 
 // ─── WebSocket subscription ─────────────────────────────────────────────
 
+// The cue list counts each cue's slots (`usedBy`), so a slot change refreshes it too.
 lightingApi.cueSlots.subscribe(function () {
-  store.dispatch(restApi.util.invalidateTags(['CueSlotList']))
+  store.dispatch(restApi.util.invalidateTags(['CueSlotList', 'CueList']))
 })
 
 // ─── RTK Query endpoints ────────────────────────────────────────────────
@@ -85,6 +86,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
       },
       invalidatesTags: (_r, _e, { projectId }) => [
         { type: 'CueSlotList', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 
@@ -128,6 +130,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
       },
       invalidatesTags: (_r, _e, { projectId }) => [
         { type: 'CueSlotList', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 
@@ -151,6 +154,7 @@ export const cueSlotsApi = restApi.injectEndpoints({
       },
       invalidatesTags: (_r, _e, { projectId }) => [
         { type: 'CueSlotList', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
   }),

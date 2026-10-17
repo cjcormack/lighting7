@@ -25,6 +25,7 @@ import { ProjectFxLibrary, FxLibraryRedirect } from "./routes/FxLibrary";
 
 import { BuskRedirect, ProjectBusk } from "./routes/Busk";
 import { LooksRedirect, ProjectLooks } from "./routes/Looks";
+import { CuesRedirect, ProjectCues } from "./routes/Cues";
 import { TemplatesRedirect, ProjectTemplates } from "./routes/Templates";
 import { SpeedMastersRedirect, ProjectSpeedMasters } from "./routes/SpeedMasters";
 import ProjectHome, { ProjectHomeRedirect } from "./routes/ProjectHome";
@@ -204,6 +205,15 @@ function getAppRouter() {
           path: "looks",
           element: <LooksRedirect />,
         },
+        // The Cues table: every cue once, loose ones included (cue model plan §3.7).
+        {
+          path: "projects/:projectId/cues",
+          element: <ProjectCues />,
+        },
+        {
+          path: "cues",
+          element: <CuesRedirect />,
+        },
         // The palette library: **one route**, with the sticky in-page family filter that used to
         // live on `/looks`. Here a family really is an exact partition — a palette is in exactly
         // one — so `?family=` deep-links from Cmd+K land on a filtered view of one page.
@@ -234,10 +244,6 @@ function getAppRouter() {
         },
         // Legacy FX Cues routes — the view was folded into Program. Redirect to keep bookmarks alive.
         {
-          path: "projects/:projectId/cues",
-          element: <CuesLegacyRedirect />,
-        },
-        {
           path: "projects/:projectId/cues/all",
           element: <CuesLegacyRedirect />,
         },
@@ -248,10 +254,6 @@ function getAppRouter() {
         {
           path: "projects/:projectId/cues/stacks/:stackId",
           element: <CuesLegacyRedirect />,
-        },
-        {
-          path: "cues",
-          element: <ShowRedirect />,
         },
         {
           path: "projects/:projectId/settings",

@@ -288,6 +288,14 @@ describe('the hold menu', () => {
     expect(onInspect).toHaveBeenCalledTimes(1)
   })
 
+  it('offers View on a loose cue pad too — it opens the Cues table filtered to it', () => {
+    const onInspect = vi.fn()
+    draw({ ...cuePad, cue: { ...cuePad.cue!, entries: [] } }, { onInspect })
+    hold(screen.getByRole('button'))
+    fireEvent.click(screen.getByText('View'))
+    expect(onInspect).toHaveBeenCalledTimes(1)
+  })
+
   it('draws no menu while editing — there the pad is a drag handle', () => {
     draw(templatePad(), { editing: true })
     fireEvent.contextMenu(screen.getByTitle('Amber Key'))

@@ -241,6 +241,8 @@ export interface Cue {
   cueNumberAuto: boolean
   /** Every entry naming the cue, in show order. Optional: an older desk omits it. */
   entries?: CueEntryPlace[]
+  /** What else names the cue — its busk pads, cue slots and bindings. Only the project's cue list carries it. */
+  usedBy?: CueUsedBy
   notes: string | null
   /**
    * Cue-level stomp: firing this cue removes the effects running under it, rather than layering
@@ -280,6 +282,13 @@ export interface CueEntryPlace {
   cueNumberAuto: boolean
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
+}
+
+/** The cue list's *Used by*: what names a cue beside its entries (lighting7 cue model plan §3.7). */
+export interface CueUsedBy {
+  pads?: CueUses['pads']
+  slots?: CueUses['slots']
+  bindings?: CueUses['bindings']
 }
 
 /** Everything that names a cue — what a delete without force refuses over (`CUE_IN_USE`). */

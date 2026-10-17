@@ -55,7 +55,17 @@ data class CueUsesDto(
     val bindings: List<CueUseBindingDto> = emptyList(),
 ) {
     fun isUsed(): Boolean = entries.isNotEmpty() || pads.isNotEmpty() || slots.isNotEmpty() || anchors.isNotEmpty() || bindings.isNotEmpty()
+
+    fun usedBy() = CueUsedByDto(pads, slots, bindings)
 }
+
+/** What names a cue beside its entries and their anchors: the cue list's *Used by* (cue model plan §3.7). */
+@Serializable
+data class CueUsedByDto(
+    val pads: List<CueUsePadDto> = emptyList(),
+    val slots: List<CueUseSlotDto> = emptyList(),
+    val bindings: List<CueUseBindingDto> = emptyList(),
+)
 
 /** 409 `CUE_IN_USE`: the cues a delete without force would have taken in use, each with its uses. */
 @Serializable
@@ -89,10 +99,14 @@ internal fun cueInUseMessage(uses: List<CueUsesDto>): String =
  * What names each of [cues] of [project]: its entries (in show order), busk pads, cue slots, the
  * prompt-book anchors on its entries and the `FireCue` bindings to it. Must run inside a transaction.
  */
-internal fun cueUsesOf(project: DaoProject, cues: List<DaoCue>): Map<Int, CueUsesDto> {
+internal fun cueUsesOf(
+    project: DaoProject,
+    cues: List<DaoCue>,
+    /** Their entries, when the caller has already read them. */
+    slots: Map<Int, List<EntrySlot>> = entrySlotsOf(cues.map { it.id.value }),
+): Map<Int, CueUsesDto> {
     if (cues.isEmpty()) return emptyMap()
     val ids = cues.map { it.id.value }
-    val slots = entrySlotsOf(ids)
     val entryIds = slots.values.flatten().map { it.entry.id }
     val anchors = if (entryIds.isEmpty()) emptyList() else
         DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry inList entryIds }.toList()

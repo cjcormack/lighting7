@@ -17,7 +17,8 @@ import { useGetUniverseQuery } from '@/store/universes'
  * What a project's home counts on its section cards (navigation plan §5.1, P5), each from a query
  * the frontend already makes. The counts on cards that need the rig — Show, fixtures, groups,
  * universes, surface bindings — are read only on the rig, where the card draws them; off it the card
- * says why it is muted instead.
+ * says why it is muted instead. The Cues card is Library, stored data, so its count is read
+ * everywhere, as the Looks' is.
  *
  * Patches are counted raw, infrastructure included, because the Patch List lists them. A venue's
  * home draws no Show or Library card, so a venue reads none of their lists.
@@ -37,7 +38,7 @@ export function useHomeCounts(project: ProjectDetail): HomeCounts {
   const { data: riggings } = useRiggingListQuery(id)
   const { data: stacks } = useProjectCueStackListQuery(id, liveShow)
   // The cue list rather than `ProjectDetail.cueCount`: the list's tag is the one cue writes invalidate.
-  const { data: cues } = useProjectCueListQuery(id, liveShow)
+  const { data: cues } = useProjectCueListQuery(id, show)
   const { data: looks } = useLookListQuery({ projectId: id }, show)
   const { data: palettes } = useTemplateListQuery({ projectId: id }, show)
   const { data: speedMasters } = useSpeedMasterListQuery({ projectId: id }, show)
@@ -51,7 +52,7 @@ export function useHomeCounts(project: ProjectDetail): HomeCounts {
     regions: regions?.length,
     riggings: riggings?.length,
     stacks: project.isCurrent ? stacks?.filter((s) => s.type !== 'SEPARATOR').length : undefined,
-    cues: project.isCurrent ? cues?.length : undefined,
+    cues: cues?.length,
     looks: looks?.length,
     palettes: palettes?.length,
     speedMasters: speedMasters?.length,
