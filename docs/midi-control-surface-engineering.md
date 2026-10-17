@@ -67,6 +67,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │         ├─ Flash → L4 write on press, clear on release                   │
   │         ├─ Blackout / GrandMasterToggle / GrandMasterFader               │
   │         │    → GlobalScalerState                                         │
+  │         ├─ StackEffectSize → CueStackManager.setEffectSize               │
   │         └─ SetBank → ActiveBankState.setBank                             │
   │                                                                          │
   └─────────────────────────────────────────────────────────────────────────┘
@@ -140,7 +141,7 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
+| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `GrandMasterFader`, `StackEffectSize(stackId, stackUuid?)`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
 | `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `BindingTarget.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Fills `cueUuid` / `stackUuid` on create and update. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `SelectionWrites.kt` | The pure fan-out behind `SelectionProperty`: one programmer write per selected head, a group's members tagged with `sourceGroup`, heads without the property skipped, an empty selection → no writes. |
 | `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
@@ -361,6 +362,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `Blackout` | Button | `GlobalScalerState.toggleBlackout()` |
 | `GrandMasterToggle` | Button | `GlobalScalerState.toggleGrandMaster()` — to 0, and back to the last level above 0; LED lit while the level is above 0 |
 | `GrandMasterFader` | Continuous | `GlobalScalerState.setGrandMasterLevel` — 0..127 across 0–100 %. Health always `ok`. Fed back like a tempo control (`GrandMasterEntry`, not a `ContinuousEntry`: its value lives in the holder, not on a channel): the motor or ring follows the level whichever door moved it, a touched motor is spared and catches up on release, and the entry is what arms PICKUP |
+| `StackEffectSize(stackId, stackUuid?)` | Continuous | `CueStackManager.setEffectSize` — one cue stack's effect size (effects plan D10), 0..127 across 0–100 %. The stack is the uuid's, stamped on write from the int, through `CueStackManager.stackIdForUuid` — one read per show, kept until the show is rebuilt (a sync pull re-creates stacks under new ids and reloads), and a stack deleted is forgotten. A uuid this show does not hold moves nothing and feeds nothing back: the int is used only by a row written before uuids. Health is the stack buttons' `checkStack`. Fed back like the grand master (`StackSizeEntry`, resolved by the same rule at rebuild): the control follows the stack's size whichever door moved it, only the stacks whose size moved are resynced, and the entry arms PICKUP |
 | `SetBank(deviceTypeKey, bank)` | Button / bank-button | `ActiveBankState.setBank(deviceTypeKey, bank)` |
 | `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
 | `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
@@ -577,6 +579,7 @@ Parallel coroutines collect from:
 - `FlashStateTracker.changes` → flash LED on/off
 - `GlobalScalerState.blackoutEnabled.combine(grandMasterEnabled)` → scaler LEDs
 - `GlobalScalerState.grandMasterLevel` → grand-master faders (per show, re-armed with the scaler)
+- `StackEffectSizes.state` → stack effect-size faders (per show, re-armed the same way)
 - `ActiveBankState.changes` → bank-button LEDs + trigger full resync for affected device
 - `ControlSurfaceBindingService.bindingChanges` → rebuild index + resync every device
 - `DeskSelection.targets` → rebuild index (selection entries' channel sets) + resync every device
@@ -761,6 +764,7 @@ From `State.kt`:
 | `surfaceScaler.setGrandMaster` | `{ enabled }` — off is level 0, on the last level |
 | `surfaceScaler.state` | *(request scaler state)* |
 | `grandMaster.set` | `{ level }` — the grand master's level, 0–100 (`GrandMasterSocket.kt`) |
+| `stackEffectSize.set` | `{ stackId, size }` — a cue stack's effect size, 0–1 (`StackEffectSizeSocket.kt`) |
 | `surfaceLearn.begin` | `{ sessionId, targetContext }` |
 | `surfaceLearn.cancel` | `{ sessionId }` |
 | `surfaceLearn.commit` | `{ sessionId, bank?, target, takeoverPolicy? }` |
@@ -777,6 +781,7 @@ From `State.kt`:
 | `surfaceEncoderBank.state` | `{ properties: Map<deviceTypeKey, { propertyName, colourAxis? }> }` — one frame type: it is a StateFlow, so the subscription is snapshot and broadcast both, and there is no delta frame |
 | `surfaceScaler.state` | `{ blackoutEnabled, grandMasterEnabled }` |
 | `grandMaster.state` | `{ projectId, level }` — connect snapshot + broadcast (`GrandMasterSocket.kt`) |
+| `stackEffectSize.state` | `{ projectId, stacks: [{ stackId, size }] }` — every stack below full; connect snapshot + broadcast (`StackEffectSizeSocket.kt`) |
 | `surfacePickup.changed` | `{ displayKey, controlId, state, target }` |
 | `surfaceBank.bindingsChanged` | Broadcast on every binding mutation |
 | `surfaceLearn.captured` | Captured `ResolvedInput`; per-connection filtered via `ownedLearnSessions` |

@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
+import uk.me.cormack.lighting7.fx.StackEffectSizes
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -163,6 +164,16 @@ class SurfaceFeedbackPublisher(
      * button.
      */
     private val buskRefsProvider: ((projectId: Int) -> BuskRefs)? = null,
+    /**
+     * The live show's stack effect sizes, for `StackEffectSize` faders (effects plan D10). A
+     * provider because the sizes are per show, like [globalScalerStateProvider].
+     */
+    private val stackEffectSizesProvider: (() -> StackEffectSizes)? = null,
+    /**
+     * A stack uuid's id in the live show, for a `StackEffectSize` fader — the input path's own lookup
+     * (`CueStackManager.stackIdForUuid`), kept for the show's life, so a rebuild reads no row twice.
+     */
+    private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
@@ -280,6 +291,18 @@ class SurfaceFeedbackPublisher(
         val policy: BindingTakeoverPolicy,
     )
 
+    /**
+     * A control bound to a cue stack's effect size — [GrandMasterEntry]'s shape, its value in the
+     * show's [StackEffectSizes]. [stackId] is resolved at rebuild; null when the binding's stack is
+     * not in this project, which health already marks dead.
+     */
+    private data class StackSizeEntry(
+        val displayKey: String,
+        val control: ControlDescriptor,
+        val stackId: Int?,
+        val policy: BindingTakeoverPolicy,
+    )
+
     /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
@@ -313,12 +336,14 @@ class SurfaceFeedbackPublisher(
         val speedMasterEntries: List<SpeedMasterEntry>,
         /** Grand-master faders: a flat list, scanned per level change, for [speedMasterEntries]' reason. */
         val grandMasterEntries: List<GrandMasterEntry>,
+        /** Stack effect-size faders: likewise. */
+        val stackSizeEntries: List<StackSizeEntry>,
     ) {
         companion object {
             val EMPTY = Index(
                 emptyMap(), emptyMap(), emptyMap(), emptyMap(),
                 emptyList(), emptyList(), emptyList(), emptyList(), emptyList(),
-                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(), emptyList(),
+                emptyList(), emptyMap(), emptyList(), emptyMap(), emptyList(), emptyList(), emptyList(),
             )
         }
     }
@@ -352,6 +377,7 @@ class SurfaceFeedbackPublisher(
     private var scalerJob: Job? = null
     private var grandMasterJob: Job? = null
     private var speedMasterJob: Job? = null
+    private var stackSizeJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
     private var publisherScope: CoroutineScope? = null
@@ -405,6 +431,7 @@ class SurfaceFeedbackPublisher(
         }
         subscribeScaler(scope)
         subscribeSpeedMasters(scope)
+        subscribeStackSizes(scope)
         subscribeLocate(scope)
         subscribeProgrammerLayers(scope)
     }
@@ -493,6 +520,26 @@ class SurfaceFeedbackPublisher(
             .launchIn(scope)
     }
 
+    /** (Re)subscribe to the current show's stack effect sizes, per show like [subscribeScaler]. */
+    private fun subscribeStackSizes(scope: CoroutineScope) {
+        stackSizeJob?.cancel()
+        val sizes = try {
+            stackEffectSizesProvider?.invoke()
+        } catch (_: Exception) {
+            null
+        } ?: return
+        // Only the controls on a stack that moved: a fader dragged at frame rate must not re-send
+        // every other stack's control its unchanged value.
+        var last = sizes.state.value
+        stackSizeJob = sizes.state
+            .onEach { now ->
+                val moved = (last.keys + now.keys).filterTo(HashSet()) { last[it] != now[it] }
+                last = now
+                if (moved.isNotEmpty()) resyncStackSizeEntries(index.get().stackSizeEntries.filter { it.stackId in moved })
+            }
+            .launchIn(scope)
+    }
+
     /** (Re)subscribe to the current show's locate state, per show like [subscribeScaler]. */
     private fun subscribeLocate(scope: CoroutineScope) {
         locateJob?.cancel()
@@ -516,6 +563,8 @@ class SurfaceFeedbackPublisher(
         grandMasterJob = null
         speedMasterJob?.cancel()
         speedMasterJob = null
+        stackSizeJob?.cancel()
+        stackSizeJob = null
         locateJob?.cancel()
         locateJob = null
         layersJob?.cancel()
@@ -537,6 +586,7 @@ class SurfaceFeedbackPublisher(
         publisherScope?.let {
             subscribeScaler(it)
             subscribeSpeedMasters(it)
+            subscribeStackSizes(it)
             subscribeLocate(it)
             subscribeProgrammerLayers(it)
         }
@@ -807,6 +857,7 @@ class SurfaceFeedbackPublisher(
         val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
         val grandMasterEntries = mutableListOf<GrandMasterEntry>()
+        val stackSizeEntries = mutableListOf<StackSizeEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
         val recordRefs = RecordRefResolver(projectId)
@@ -841,6 +892,16 @@ class SurfaceFeedbackPublisher(
                         grandMasterEntries += GrandMasterEntry(
                             displayKey = displayKey,
                             control = control,
+                            policy = binding.takeoverPolicy ?: classDefault,
+                        )
+                    }
+                    (binding.target as? BindingTarget.StackEffectSize)?.let { stack ->
+                        stackSizeEntries += StackSizeEntry(
+                            displayKey = displayKey,
+                            control = control,
+                            // The input path's rule: a uuid that resolves to nothing here is no stack,
+                            // never the int beside it, which may name another one.
+                            stackId = stack.stackUuid?.let(::resolveStackUuid) ?: stack.stackId.takeIf { stack.stackUuid == null },
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
                     }
@@ -921,12 +982,21 @@ class SurfaceFeedbackPublisher(
                 buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
                 speedMasterEntries = speedMasterEntries,
                 grandMasterEntries = grandMasterEntries,
+                stackSizeEntries = stackSizeEntries,
             )
         )
         // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
         // the operator's first touch, rather than only after the first tempo change.
         resyncSpeedMasterEntries(speedMasterEntries)
         resyncGrandMasterEntries(grandMasterEntries)
+        resyncStackSizeEntries(stackSizeEntries)
+    }
+
+    private fun resolveStackUuid(stackUuid: String): Int? = try {
+        stackIdResolver?.invoke(stackUuid)
+    } catch (e: Exception) {
+        logger.debug("Stack uuid {} unresolved: {}", stackUuid, e.message)
+        null
     }
 
     /**
@@ -990,6 +1060,9 @@ class SurfaceFeedbackPublisher(
         resyncGrandMasterEntries(
             idx.grandMasterEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
+        resyncStackSizeEntries(
+            idx.stackSizeEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
+        )
         val entries = idx.continuousByDisplay[displayKey] ?: return
         for (entry in entries) {
             if (entry.control.controlId != controlId) continue
@@ -1031,6 +1104,7 @@ class SurfaceFeedbackPublisher(
         // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
         resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
+        resyncStackSizeEntries(idx.stackSizeEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
         for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
@@ -1256,6 +1330,18 @@ class SurfaceFeedbackPublisher(
         val level = runCatching { globalScalerStateProvider().grandMasterLevel.value }.getOrNull() ?: return
         val value7Bit = grandMasterLevelTo7Bit(level)
         for (entry in entries) {
+            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
+            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
+        }
+    }
+
+    /** Push each entry's stack's effect size onto its control, and record it for PICKUP. */
+    private fun resyncStackSizeEntries(entries: List<StackSizeEntry>) {
+        if (entries.isEmpty()) return
+        val sizes = runCatching { stackEffectSizesProvider?.invoke() }.getOrNull() ?: return
+        for (entry in entries) {
+            val stackId = entry.stackId ?: continue
+            val value7Bit = stackEffectSizeTo7Bit(sizes.of(stackId))
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

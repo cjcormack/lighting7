@@ -41,6 +41,7 @@ import {createEffectsWsApi, EffectsWsApi} from "./effectsApi";
 import {createVenueHoldWsApi, VenueHoldWsApi} from "./venueHoldApi";
 import {createCueHoldsWsApi, CueHoldsWsApi} from "./cueHoldsApi";
 import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
+import {createStackEffectSizeWsApi, StackEffectSizeWsApi} from "./stackEffectSizeApi";
 import {createRigSafetyWsApi, RigSafetyWsApi} from "./rigSafetyApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
@@ -84,6 +85,7 @@ interface LightingApi {
   venueHold: VenueHoldWsApi
   cueHolds: CueHoldsWsApi
   grandMaster: GrandMasterWsApi
+  stackEffectSize: StackEffectSizeWsApi
   rigSafety: RigSafetyWsApi
   stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
@@ -155,6 +157,7 @@ function createLightingApi(): LightingApi {
   const venueHoldWsApi = createVenueHoldWsApi(connection)
   const cueHoldsWsApi = createCueHoldsWsApi(connection)
   const grandMasterWsApi = createGrandMasterWsApi(connection)
+  const stackEffectSizeWsApi = createStackEffectSizeWsApi(connection)
   const rigSafetyWsApi = createRigSafetyWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
@@ -201,6 +204,7 @@ function createLightingApi(): LightingApi {
     venueHold: venueHoldWsApi,
     cueHolds: cueHoldsWsApi,
     grandMaster: grandMasterWsApi,
+    stackEffectSize: stackEffectSizeWsApi,
     rigSafety: rigSafetyWsApi,
     stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,

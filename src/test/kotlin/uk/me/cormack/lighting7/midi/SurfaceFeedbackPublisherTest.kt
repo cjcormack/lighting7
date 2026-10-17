@@ -36,6 +36,7 @@ import kotlin.test.assertTrue
 class SurfaceFeedbackPublisherTest {
 
     private val projectId = 7
+    private val stackUuid = "00000000-0000-4000-8000-000000000007"
     private val deviceTypeKey = "x-touch-compact-standard"
 
     private val xTouchHandle = MidiDeviceHandle(
@@ -78,6 +79,7 @@ class SurfaceFeedbackPublisherTest {
         val flashTracker = FlashStateTracker()
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
+        val stackSizes = uk.me.cormack.lighting7.fx.StackEffectSizes()
         val selection = DeskSelection { fixtures }
         val matcher: DeviceMatcher
         val recordingController = RecordingController(
@@ -119,6 +121,8 @@ class SurfaceFeedbackPublisherTest {
                 globalScalerStateProvider = { scaler },
                 speedMasterBankProvider = { speedMasters },
                 deskSelection = selection,
+                stackEffectSizesProvider = { stackSizes },
+                stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
             )
         }
 
@@ -305,6 +309,43 @@ class SurfaceFeedbackPublisherTest {
             assertTrue(motor().isEmpty(), "a touched motor is not driven: ${h.recordingController.feedback}")
             h.publisher.onTouch("x-touch-compact", "fader-1", down = false)
             assertEquals(32u.toUByte(), motor().last().value, "released: the motor catches up")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    /**
+     * A stack effect-size fader follows its stack's size and arms takeover from it, as the grand
+     * master's does; its stack is the one its uuid names, and another stack's move leaves it alone.
+     */
+    @Test
+    fun `a stack effect-size fader follows its stack's size and arms takeover`() = runBlocking {
+        val h = Harness(listOf(
+            binding(1, "fader-1", BindingTarget.StackEffectSize(stackId = 99, stackUuid = stackUuid)),
+            binding(2, "enc-1", BindingTarget.StackEffectSize(stackId = 99, stackUuid = stackUuid), policy = BindingTakeoverPolicy.PICKUP),
+        ))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun motor() = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 1 }
+            assertEquals(127u.toUByte(), motor().last().value, "attach: a stack's size starts at full")
+
+            h.stackSizes.set(7, 0.5)
+            yield()
+            assertEquals(64u.toUByte(), motor().last().value)
+            assertFalse(
+                h.publisher.acceptInboundFader("x-touch-compact", deviceTypeKey, "enc-1", 5u),
+                "a PICKUP control far from the size must not jump it",
+            )
+
+            h.recordingController.feedback.clear()
+            h.stackSizes.set(8, 0.1)
+            yield()
+            assertTrue(motor().all { it.value == 64u.toUByte() }, "another stack's size is not this fader's: ${motor()}")
         } finally {
             h.publisher.stop()
             scope.cancel()

@@ -1080,6 +1080,7 @@ internal fun deleteCueStackRows(
 ): DeletedCueStackRows {
     if (project.id == state.projectManager.currentProject.id) {
         state.show.cueStackManager.deactivateStack(stack.id.value, state)
+        state.show.cueStackManager.forgetStack(stack.id.value)
     }
     if (project.activeStackId == stack.id.value) {
         project.activeStackId = null

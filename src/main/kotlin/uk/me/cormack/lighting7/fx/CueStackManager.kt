@@ -7,6 +7,8 @@ import uk.me.cormack.lighting7.telemetry.Tracing
 
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
+import org.jetbrains.exposed.v1.core.and
+import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.*
@@ -44,7 +46,7 @@ private val logger = LoggerFactory.getLogger("CueStackManager")
  */
 class CueStackManager(
     private val fxEngine: FxEngine,
-    projectId: Int? = null,
+    private val projectId: Int? = null,
     /** Where the registry's frames go — `State.cueHoldsFrame`, which outlives this show. */
     holdsSink: MutableStateFlow<CueHolds.Frame> = MutableStateFlow(CueHolds.Frame.EMPTY),
     /** After every hold change: the surfaces' cue-pad LEDs. */
@@ -100,6 +102,53 @@ class CueStackManager(
 
     /** What holds each cue live — stacks and loose presses alike. See [CueHolds]. */
     val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged)
+
+    /**
+     * Each stack's effect size (effects plan D10): a runtime weight on the effects its cues run,
+     * 100 % at load. Per show, so a project switch drops it; a reload carries it (`ShowCarry`).
+     */
+    val effectSizes: StackEffectSizes = StackEffectSizes().also { fxEngine.stackEffectSizes = it }
+
+    /**
+     * Set [stackId]'s effect size, 0–1, and answer it as held. Every change re-sends provenance —
+     * coalesced there, and as a cue-fade-only update, since a size moves no programmer value — because
+     * any weight can change what is on stage: a setting effect paints from half weight up.
+     */
+    fun setEffectSize(stackId: Int, size: Double): Double {
+        val (before, after) = effectSizes.change(stackId, size)
+        if (before != after) fxEngine.provenance.emitUpdate(cueFadeOnly = true)
+        return after
+    }
+
+    /**
+     * Each stack uuid this show has resolved to its id, or to [NO_STACK]. Kept for the show's life:
+     * a stack's id is fixed while the show runs, and anything that re-creates the stacks (a sync
+     * pull) reloads, which builds a new manager.
+     */
+    private val stackIdsByUuid = ConcurrentHashMap<String, Int>()
+
+    /**
+     * [stackUuid]'s id among this show's stacks, or null — how a stack binding (a MIDI fader, its
+     * feedback) finds its stack. A fader moves at control rate, so the lookup is kept.
+     */
+    fun stackIdForUuid(database: org.jetbrains.exposed.v1.jdbc.Database, stackUuid: String): Int? {
+        val projectId = projectId ?: return null
+        val id = stackIdsByUuid.getOrPut(stackUuid) {
+            val uuid = runCatching { java.util.UUID.fromString(stackUuid) }.getOrNull()
+            uuid?.let {
+                transaction(database) {
+                    DaoCueStack.find { (DaoCueStacks.uuid eq it) and (DaoCueStacks.project eq projectId) }.firstOrNull()?.id?.value
+                }
+            } ?: NO_STACK
+        }
+        return id.takeIf { it != NO_STACK }
+    }
+
+    /** [stackId] is deleted: its effect size and its uuid's resolution go with it. */
+    fun forgetStack(stackId: Int) {
+        effectSizes.forget(stackId)
+        stackIdsByUuid.values.removeIf { it == stackId }
+    }
 
     enum class AdvanceDirection { FORWARD, BACKWARD }
 
@@ -513,3 +562,6 @@ class CueStackManager(
     // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `tmpl:`
     // resolve to the 50 Hz tick loop, where it opens a transaction.
 }
+
+/** [CueStackManager.stackIdForUuid]'s kept miss. */
+private const val NO_STACK = -1

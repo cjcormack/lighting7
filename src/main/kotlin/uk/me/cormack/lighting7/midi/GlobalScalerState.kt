@@ -227,6 +227,12 @@ fun grandMasterLevelOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() * GRAND
 fun grandMasterLevelTo7Bit(level: Double): UByte =
     (level / GRAND_MASTER_FULL * 127.0).roundToInt().coerceIn(0, 127).toUByte()
 
+/** A control's 0..127 as a stack effect size, 0–1 (effects plan D10). */
+fun stackEffectSizeOf7Bit(value7Bit: UByte): Double = value7Bit.toInt() / 127.0
+
+/** A stack effect size as a control's 0..127: [stackEffectSizeOf7Bit]'s inverse, rounded. */
+fun stackEffectSizeTo7Bit(size: Double): UByte = (size * 127.0).roundToInt().coerceIn(0, 127).toUByte()
+
 /** [value] scaled by [level] percent, rounded. */
 internal fun scaleLevel(value: UByte, level: Double): UByte =
     (value.toInt() * level / GRAND_MASTER_FULL).roundToInt().coerceIn(0, 255).toUByte()

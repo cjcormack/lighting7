@@ -30,7 +30,7 @@ internal const val CODE_VENUE_ADMIN_ONLY = "VENUE_ADMIN_ONLY"
  * - the project is a **venue** and the caller is an operator: 403 [CODE_VENUE_ADMIN_ONLY] for a
  *   stored write. Opening the venue (`set-current`) and the runtime gestures — the programmer's
  *   spread, aim and focus and its bare effect press, arming and firing, fixture commands (one or a bulk run), *Make rig safe*
- *   and its *Undo*, the grand master — are not stored
+ *   and its *Undo*, the grand master and a stack's effect size — are not stored
  *   and pass, so an operator can look at a venue and the programmer still works there (D11).
  *
  * It sits at the head of the subtree rather than inside `withProject`, which the plan names: every
@@ -83,6 +83,7 @@ internal fun projectWriteRefusal(kind: ProjectKind, isAdmin: Boolean, rest: List
 private fun isRuntimeGesture(rest: List<String>): Boolean = when (rest.firstOrNull()) {
     "set-current", "programmer", "effects", "grand-master", "commands", "rig-safe" -> true
     "patches" -> rest.size >= 3 && rest[2] in setOf("fire", "reload", "commands")
+    "cue-stacks" -> rest.getOrNull(2) == "effect-size"
     // *Run against* (venue plan session 6) lifts a show's hold for the session and stores nothing; on a
     // venue it is answered by the route (nothing to run against), not refused as a stored write.
     "venue" -> rest.getOrNull(1) == "run-against"
