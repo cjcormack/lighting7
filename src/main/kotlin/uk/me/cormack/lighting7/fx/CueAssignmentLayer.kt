@@ -174,6 +174,50 @@ class CueAssignmentLayer internal constructor(
     }
 
     /**
+     * *Update stage* (show-cue-editing plan §3.5): take live [cueId]'s Layer 4 to [assignments] over
+     * [fade] — every key the change moves, released ones included, ramps on the cue's own fade and
+     * curve, a 0 ms fade snapping. Unlike [replaceAssignments] a cue that published no rows yet is
+     * given them, at [seedWeight] when a crossfade is bringing it in, and a cue with rows keeps its
+     * crossfade weight. Empty [assignments] takes its rows away, the weight left for the crossfade as
+     * [replaceAssignments] leaves it.
+     *
+     * [held] is asked under the publish lock, which a release's row drop takes too, so rows are never
+     * published for a cue its last hold has let go. Answers whether it was held.
+     */
+    internal fun restageAssignments(
+        cueId: Int,
+        assignments: List<CueAssignmentResolver.Assignment>,
+        stompSuppression: LayerStompSuppression,
+        fade: TransmitFade,
+        held: () -> Boolean,
+        seedWeight: () -> Double?,
+    ): Boolean = publisher.locked {
+        if (!held()) return@locked false
+        val stompChanged = if (assignments.isEmpty()) {
+            val removed = cueAssignments.remove(cueId) != null
+            val stomp = cueStompSuppression.remove(cueId) != null
+            if (!removed) {
+                if (stomp) rebuildStompFlatLocked()
+                return@locked true
+            }
+            stomp
+        } else {
+            if (cueId !in cueAssignments) {
+                val weight = seedWeight()?.takeIf { it < 1.0 }
+                if (weight != null) cueFadeWeights[cueId] = weight.coerceAtLeast(0.0) else cueFadeWeights.remove(cueId)
+            }
+            cueAssignments[cueId] = assignments
+            setCueStompEntryLocked(cueId, stompSuppression)
+        }
+        if (stompChanged) rebuildStompFlatLocked()
+        republishAssignments(restage = fade)
+        true
+    }
+
+    /** [cueId]'s published Layer 4 rows, empty with none. */
+    fun assignmentsOf(cueId: Int): List<CueAssignmentResolver.Assignment> = publisher.locked { cueAssignments[cueId].orEmpty() }
+
+    /**
      * Update the crossfade weight for one or more cues atomically. Only cues present in
      * [cueAssignments] have an effect — unknown cue ids are ignored (silent no-op) because a
      * crossfade tick may fire during the tiny window between an outgoing cue's end-of-fade
@@ -418,7 +462,7 @@ class CueAssignmentLayer internal constructor(
      *   contributing has no business timing. `ProgrammerLayerStack` splits the same way, on the same
      *   arrival-versus-edit line.
      */
-    private fun republishAssignments(weightsOnly: Boolean = false, honourRowFades: Boolean = false) {
+    private fun republishAssignments(weightsOnly: Boolean = false, honourRowFades: Boolean = false, restage: TransmitFade? = null) {
         val before = layerResolver.current
         val weights = CueAssignmentResolver.FadeWeights(cueFadeWeights)
         if (cueAssignments.isEmpty()) {
@@ -433,7 +477,7 @@ class CueAssignmentLayer internal constructor(
         // `&& !weightsOnly` belongs here rather than to the callers: a weight tick is a republish
         // no caller describes as an arrival, and the guarantee that the two fade mechanisms never
         // compound on one key should not rest on every call site remembering it.
-        publisher.publishCueLayerToControllers(before, layerResolver.current, honourRowFades && !weightsOnly)
+        publisher.publishCueLayerToControllers(before, layerResolver.current, honourRowFades && !weightsOnly, restage)
         onLayerChanged(weightsOnly)
     }
 }

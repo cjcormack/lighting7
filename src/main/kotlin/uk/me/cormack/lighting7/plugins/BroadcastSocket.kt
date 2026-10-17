@@ -232,7 +232,8 @@ data class ProjectDetailsChangedOutMessage(val projectId: Int) : BroadcastOutMes
  * `StateFlow`-backed (`State.cueHoldsFrame`), so the subscription is the connect snapshot and every
  * change is a whole frame; the socket gains no operation, so `FU-AUTH-WS-PER-MESSAGE` does not fire
  * and `TraceSampling.WS_MESSAGES` needs no row. Pads, slots and the cues table draw D11's two looks
- * from it: a cue held loose is solid, one live only through a stack is an outline.
+ * from it: a cue held loose is solid, one live only through a stack is an outline. A cue edited
+ * since it came on carries `edited` (show-cue-editing plan §3.5), the *Edited since GO* chip.
  */
 @Serializable
 @SerialName("cueHolds.state")
@@ -244,7 +245,7 @@ data class CueHoldsStateOutMessage(
         fun of(frame: CueHolds.Frame) = CueHoldsStateOutMessage(
             projectId = frame.projectId,
             cues = frame.cues.map { cue ->
-                LiveCueHoldsDto(cue.cueId, cue.priority, cue.holds.map(CueHoldDto::of), cue.stackId)
+                LiveCueHoldsDto(cue.cueId, cue.priority, cue.holds.map(CueHoldDto::of), cue.stackId, cue.edited)
             },
         )
     }
@@ -252,10 +253,17 @@ data class CueHoldsStateOutMessage(
 
 /**
  * One live cue. [stackId] is its highest hold's stack, null when that hold is loose — the stack whose
- * effect size weighs its effects (effects plan D10).
+ * effect size weighs its effects (effects plan D10). [edited] while its stored rows, layers or effects
+ * differ from what came on with it, until *Update stage* or its next first hold.
  */
 @Serializable
-data class LiveCueHoldsDto(val cueId: Int, val priority: Int, val holds: List<CueHoldDto>, val stackId: Int? = null)
+data class LiveCueHoldsDto(
+    val cueId: Int,
+    val priority: Int,
+    val holds: List<CueHoldDto>,
+    val stackId: Int? = null,
+    val edited: Boolean = false,
+)
 
 /** One hold: `STACK` with its [stackId] and [entryId], or `LOOSE` with its press [seq] (newest on top). */
 @Serializable

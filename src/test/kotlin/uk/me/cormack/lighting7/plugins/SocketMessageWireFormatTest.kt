@@ -691,7 +691,9 @@ class SocketMessageWireFormatTest {
                         priority = CueHolds.loosePriority(2),
                         holds = listOf(CueHold.Stack(stackId = 4, entryId = 21), CueHold.Loose(seq = 2)),
                         stackId = null,
+                        edited = true,
                     ),
+                    CueHolds.LiveCue(cueId = 12, priority = 4_000_001, holds = listOf(CueHold.Stack(4, 22)), stackId = 4),
                 ),
             ),
         )
@@ -699,6 +701,9 @@ class SocketMessageWireFormatTest {
         assertTrue(encoded.contains(""""type":"cueHolds.state""""), encoded)
         assertTrue(encoded.contains("""{"kind":"STACK","stackId":4,"entryId":21}"""), encoded)
         assertTrue(encoded.contains("""{"kind":"LOOSE","seq":2}"""), encoded)
+        // Edited since GO (show-cue-editing plan §3.5) is sent only while true.
+        assertTrue(encoded.contains(""""edited":true"""), encoded)
+        assertEquals(1, Regex(""""edited"""").findAll(encoded).count(), encoded)
         assertEquals(out, assertIs<CueHoldsStateOutMessage>(json.decodeFromString<OutMessage>(encoded)))
     }
 

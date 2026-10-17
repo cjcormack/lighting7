@@ -3,6 +3,7 @@ import { Anchor } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useProjectCueQuery } from '@/store/cues'
 import { CueDetailContent } from '@/components/cues/CueDetailContent'
+import { EditedSinceGoChip } from '@/components/cues/EditedSinceGo'
 import { InlineEditField } from '@/components/InlineEditField'
 import { TruncateStart } from '@/components/TruncateStart'
 import { formatFadeText } from '@/lib/cueUtils'
@@ -272,6 +273,9 @@ export function CueCardBody({
               </div>
             )}
           </div>
+
+          {/* Edited since GO (show-cue-editing plan §4.4): under the identity; its Update stage is the ⋯ menu's. */}
+          <EditedSinceGoChip projectId={projectId} cueId={cue.id} className={cn('mx-3 mt-1', isCur ? 'self-center' : 'self-start')} />
 
           {afterIdentity}
 

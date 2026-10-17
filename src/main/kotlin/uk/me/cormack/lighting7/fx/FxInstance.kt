@@ -283,6 +283,20 @@ fun FxInstance.lookEffectSettings(): LookEffectSettings {
 }
 
 /**
+ * [lookEffectSettings] for asking whether two instances run one effect alike: master 1 spelled as
+ * [master1Uuid] whether stored as null or by its uuid, and only the master its timing reads — a beat
+ * effect's speed master, a wall-clock effect's rate master.
+ */
+fun FxInstance.comparableEffectSettings(master1Uuid: java.util.UUID?): LookEffectSettings {
+    val settings = lookEffectSettings()
+    return if (registrationTimingSource == TimingSource.BEAT) {
+        settings.copy(speedMasterUuid = settings.speedMasterUuid ?: master1Uuid, rateSpeedMasterUuid = null)
+    } else {
+        settings.copy(speedMasterUuid = null)
+    }
+}
+
+/**
  * The identity of one programmer-layer effect instance: which layer spawned it, which of the
  * Look's stored effects it realises, and on which target.
  *

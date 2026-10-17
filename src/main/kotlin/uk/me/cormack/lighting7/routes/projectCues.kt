@@ -180,6 +180,8 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
+            val held = state.show.cueStackManager.holds.isHeld(resource.cueId)
+            var stageChanged = false
             val speedMasters = checkCueSpeedMasters(state, project, resource.cueId, updatedData.speedMasters).getOrElse { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
                 return@withCurrentProject
@@ -187,6 +189,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
+                val stageBefore = if (held) cue.stageContent() else null
 
                 // Its number and follow are its entries' (cue model plan D2), written on the entry
                 // route: a cue in several stacks has one of each per stack.
@@ -205,11 +208,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.triggers,
                     updatedData.layers,
                 )
+                stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
+                if (stageChanged) state.show.cueStackManager.holds.markEdited(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 call.respond(cueDetails)
             } else {
@@ -266,9 +271,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
             }
 
+            val writesStage = (hasLayers || hasEffects || hasAssignments) && state.show.cueStackManager.holds.isHeld(resource.cueId)
+            var stageChanged = false
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
+                val stageBefore = if (writesStage) cue.stageContent() else null
 
                 // Scalar fields. Number and follow are the entry's, on the entry route.
                 if ("name" in body) cue.name = body["name"]!!.jsonPrimitive.content
@@ -280,11 +288,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
                 // Only the lists present are replaced; a null one is left alone.
                 writeCueChildren(cue, effects, assignments, triggers, layers)
+                stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)
             }
 
             if (cueDetails != null) {
+                if (stageChanged) state.show.cueStackManager.holds.markEdited(resource.cueId)
                 state.show.fixtures.cueListChanged()
                 state.show.fixtures.cueStackListChanged()
                 call.respond(cueDetails)
@@ -469,6 +479,32 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
+    // POST /{projectId}/cues/{cueId}/update-stage - Send a live cue's stored rows and effects to the
+    // stage over its own fade (show-cue-editing plan §3.5, D11); `dryRun` answers the counts alone.
+    // Both roles, as a GO is: it stores nothing.
+    post<UpdateStageCueResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot update the stage from project '${p.name}' - only the current project is on stage" },
+        ) { project ->
+            val request = call.receive<UpdateStageRequest>()
+            val exists = transaction(state.database) {
+                DaoCue.findById(resource.cueId)?.project?.id == project.id
+            }
+            if (!exists) {
+                call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+                return@withCurrentProject
+            }
+            val response = updateStage(state, resource.cueId, request.dryRun)
+            if (response == null) {
+                call.respond(HttpStatusCode.Conflict, ErrorResponse("The cue is not live: nothing holds it on stage", CODE_CUE_NOT_LIVE))
+            } else {
+                call.respond(response)
+            }
+        }
+    }
+
     // POST /{projectId}/cues/{cueId}/stop - Let a cue's loose hold go
     post<StopCueResource> { resource ->
         withCurrentProject(
@@ -527,6 +563,9 @@ data class ApplyCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/{cueId}/stop")
 data class StopCueResource(val parent: ProjectCuesResource, val cueId: Int)
+
+@Resource("/{cueId}/update-stage")
+data class UpdateStageCueResource(val parent: ProjectCuesResource, val cueId: Int)
 
 @Resource("/current-state")
 data class CueCurrentStateResource(val parent: ProjectCuesResource)

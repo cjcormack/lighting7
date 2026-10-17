@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group.property
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.AggregateColour
@@ -76,8 +77,8 @@ class GroupColour<T : GroupableFixture>(
      * @param colour Target colour to fade to
      * @param fadeMs Duration of the fade in milliseconds
      */
-    override fun fadeToColour(colour: Color, fadeMs: Long) {
-        memberColours.forEach { it.fadeToColour(colour, fadeMs) }
+    override fun fadeToColour(colour: Color, fadeMs: Long, curve: EasingCurve) {
+        memberColours.forEach { it.fadeToColour(colour, fadeMs, curve) }
     }
 
     /**

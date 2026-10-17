@@ -300,6 +300,74 @@ never persisted, never synced. A same-project reload carries the stacks' entries
 the loose cues in press order (`ShowCarry`), re-taking each loose hold without firing its events; a
 project switch starts empty.
 
+### Edited since GO and Update stage
+
+A stored cue edit sends nothing to the stage (show-cue-editing plan P2), so a held cue whose rows,
+layers or effects are written is **edited since GO**: the stage still shows it as it came on. The
+registry keeps the mark (`CueHolds.markEdited`, a set beside the holds) and `cueHolds.state` carries
+it as `edited: true`.
+
+- **What sets it**: the cue's `PUT` and `PATCH` when the write changes what *Update stage* would
+  send — `DaoCue.stageContent()`, its own rows' values and its untimed layers and ad-hoc effects,
+  compared across the write — and only while something holds the cue. A name, fade, notes, scenery
+  or events write does not, nor a row's own fade or move-in-dark, nor a timed layer or effect: Update
+  stage sends none of them (Chris's call, 2026-10-17, narrowing plan §3.5). **A Look or palette edit
+  that moves its effects** marks every live cue layering it (Chris's call, 2026-10-17, amending §3.5):
+  `republishForSourceEdit` republishes those cues' rows, never their effects, and
+  `CueHolds.markIfLayerEffectsMoved` compares what the cue's untimed layer effects cook to now with
+  what they cooked to as it came on or was last brought in line — a held cue with no rows of its
+  own included, which the row republish never visits. A values-only edit republishes and marks
+  nothing.
+- **What clears it**: the cue's first hold (it comes on as stored), its last release and *Update
+  stage*. A Record, an Update or the patch-edit tool's republish (`republishCueIfLive`) leaves it:
+  it moves the rows and not the effects (Chris's call, 2026-10-17, amending §3.5). Nor does a
+  Record or Update into a held cue set it: the effects it recorded are the programmer's instances,
+  still running, which an *Update stage* would start a second copy of.
+- **`POST /cues/{id}/update-stage {dryRun?}`** (`routes/cueUpdateStage.kt`) sends a live cue's stored
+  rows and effects to the stage and answers `{rows, effects: {edited, stopped, started}, fadeMs,
+  curve}`; `dryRun` answers the same and sends nothing, which is what the confirm words its fade
+  from. 409 `CUE_NOT_LIVE` when nothing holds the cue. One runs at a time.
+  - **Rows and effects come from one cook** (`buildCombinedCueLayerCook`, fired timed layers
+    included), so both read one version of every Look. The rows go through `CueHolds.restage` →
+    `CueAssignmentLayer.restageAssignments`, which asks under the publish lock whether a hold still
+    has the cue — a release's row drop takes that lock too — so no rows are left behind a cue a GO
+    took off meanwhile. Every key that moves ramps over the cue's own fade and curve, released keys
+    included, and a snap cue snaps. The ramp is a transmit-time fade (`TransmitFade`, the curve
+    threaded through `resetToFallback` to the controller's `ChannelChange`), so a cue with rows keeps
+    its crossfade weight, and one with none that a GO is still bringing in takes the weight that
+    crossfade has reached (`CueCrossfadeDriver.incomingWeight`). A GO's fade is not borrowed: a GO
+    between two entries of one cue moves nothing, the driver holds one fade per stack, and a loose cue
+    has no stack. `rows` counts the (head, property) keys whose value changes.
+  - **A key a running effect covers does not ramp**: the publish leaves it to the effect, whose tick
+    re-reads the base with no fade, so the base under an effect moves at once, and under an effect
+    the update starts the ramp is overwritten on the effect's first tick. A row's own fade has the
+    same limit; a ramp there needs a per-cue fade in the resolver rather than at transmit
+    (`FU-UPDATE-STAGE-EFFECT-RAMP`).
+  - **Effects** are reconciled against the running instances the cue's holds spawned, by stored
+    uuid, cue layer, target and property (`CueEffectKey`; `cueEffectInstances` builds what a first
+    hold would spawn, as `bringOn` does). A matched instance whose settings differ is edited in place
+    through `applyEffectUpdate`, no `targets`: id and phase kept, but a move between Seconds and a
+    master restarts its loop. One the in-place edit refuses is started afresh. An unmatched running
+    instance shrinks to nothing over the cue's fade. An unmatched stored effect grows from nothing
+    over it, at the cue's priority — **but only one the cue newly gained**: the registry keeps what
+    the cue's first hold spawned (`spawnedEffects`, updated by each Update stage), and an effect in it
+    with no running instance — an N-shot run out, one another cue's stomp removed — stays off. A
+    changed layer brings its Look's deferred effects in line the same way, head by head.
+  - **Settings compare with master 1 spelled once** (`comparableEffectSettings`): a stored null and
+    master 1's uuid are one master, and only the master an effect's timing reads is compared — so an
+    effect moved onto master 1 by uuid still matches its stored effect, here and in a later GO's P4
+    adoption (`CueHolds.continues`).
+  - **Compose order** is restamped only when the cue's untimed instances are out of its layer order,
+    and its timed and script-spawned instances then keep their order after them.
+  - **Not re-run**: events, scenery, stomp and the cue's speed-master tempos (a GO's, as events
+    are), and the cue's **timed** effects and layers — fired
+    things, whose timers keep what the last first hold armed; their next GO lands them (Chris's call,
+    2026-10-17). Their instances carry no stored uuid, which is how the reconcile leaves them. A
+    recurring timed layer's next fire re-cooks the rows as they were armed, as it did after a Record;
+    and an effect moved from timed to untimed starts beside the copy its timer already fired, which
+    runs on until the next GO (`FU-UPDATE-STAGE-TIMED`).
+  - Current project only and both roles, as a GO is: it stores nothing.
+
 ### Per-Stack State
 
 ```kotlin

@@ -169,6 +169,7 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | POST | `/{projectId}/cues/copy-from` | `{fromProjectId, cueIds, stackId?, after?, dryRun?}` — cues of any other project copied into this one (current project only), loose or each a new unnumbered entry in `stackId` (after `after`, else at the end). Answers `{copied: [{fromCueId, cueId, entryId?}], unresolved: [{problem, in}], stackId?, looksCopied, looksLinked, palettesCopied, palettesLinked}`, 201, or 200 for a `dryRun`, the same run rolled back. 400 for no cues, this project as the source, a separator, or an `after` not in the stack; 404 for an unknown project, cue or stack (§"Copying") |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
+| POST | `/{projectId}/cues/{cueId}/update-stage` | `{dryRun?}` — *Update stage*: a live cue's stored rows and untimed effects to the stage over the cue's own fade (current project only, both roles). Answers `{rows, effects: {edited, stopped, started}, fadeMs, curve}`; 409 `CUE_NOT_LIVE` for a cue nothing holds. See [cue stacks](cue-stacks-engineering.md#edited-since-go-and-update-stage) |
 | POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
 
 Writing the *programmer* into a cue lives outside this namespace, under

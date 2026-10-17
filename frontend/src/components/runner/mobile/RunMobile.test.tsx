@@ -9,6 +9,7 @@ import type { CueStack, CueStackCueRow } from '@/api/cueStacksApi'
  * view's Show tab, which mounts this same component.
  */
 
+vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => false }))
 vi.mock('@/store/cues', () => ({
   useProjectCueQuery: () => ({ data: { id: 1 } }),
 }))
