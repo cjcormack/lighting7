@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fixture.group.property
 
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.property.AggregateSlider
@@ -53,8 +54,8 @@ class GroupSlider<T : GroupableFixture>(
      * @param value Target value to fade to
      * @param fadeMs Duration of the fade in milliseconds
      */
-    override fun fadeToValue(value: UByte, fadeMs: Long) {
-        memberSliders.forEach { it.fadeToValue(value, fadeMs) }
+    override fun fadeToValue(value: UByte, fadeMs: Long, curve: EasingCurve) {
+        memberSliders.forEach { it.fadeToValue(value, fadeMs, curve) }
     }
 
     /**

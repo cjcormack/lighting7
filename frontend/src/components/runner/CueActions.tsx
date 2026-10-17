@@ -12,6 +12,7 @@ import {
   ListX,
   Loader2,
   MoreHorizontal,
+  RefreshCw,
   SquarePen,
   Trash2,
   Zap,
@@ -30,6 +31,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
 import { useDuplicateCueMutation } from '@/store/cues'
+import { useCueEdited } from '@/store/cueHolds'
 import {
   useAddCueToStackMutation,
   useMoveCueStackEntryMutation,
@@ -121,7 +123,8 @@ interface CueActionsProps {
  *   not order), then Includes and opens the programmer; nothing reaches the stage until Blind goes
  *   off, effects included (D7).
  * - **Load** Includes and stays; its title says whether that is live or blind. **Record…** opens the
- *   Record sheet on the cue. **Duplicate** is `POST /cues/{id}/duplicate`, the copy appended to the
+ *   Record sheet on the cue. In the ⋯ menu, **Update stage…** follows it while the one cue is edited
+ *   since GO (§4.4), opening its confirm. **Duplicate** is `POST /cues/{id}/duplicate`, the copy appended to the
  *   end of its stack (D12) and opened; over several rows, each in row order. **Remove from stack**
  *   deletes the entry and keeps the cue. **Delete…** is the D8 confirm, one for all the rows.
  *   **⋯** holds *Add to stack…*, *Move to stack…* — the entry whole, number, follow and anchor with
@@ -162,6 +165,7 @@ export function CueActions({
   const [duplicating, setDuplicating] = useState(false)
 
   const one = rows.length === 1 ? rows[0] : null
+  const edited = useCueEdited(projectId, one?.cueId ?? -1)
   const placed = rows.filter((r) => r.entryId != null && r.stackId != null)
   /** Locked with no way to unlock here: everything but Blind edit is off. */
   const lockedOut = locked && onRequestUnlock == null
@@ -341,6 +345,20 @@ export function CueActions({
       onSelect: guarded(() => one && dialogs.openRecord(projectId, one.cueId, one.name)),
       reason: reasons.record,
     },
+    ...(host === 'menu' && one != null && edited
+      ? [
+          {
+            key: 'update-stage',
+            label: 'Update stage…',
+            icon: <RefreshCw className="size-3.5" />,
+            title: 'Send this cue’s stored values and effects to the stage, over its own fade',
+            onSelect: guarded(() =>
+              dialogs.openUpdateStage({ projectId, cueId: one.cueId, name: one.cueNumber ? `Q${one.cueNumber} ${one.name}` : one.name }),
+            ),
+            reason: lockReason,
+          },
+        ]
+      : []),
   ]
   const stackActions: Action[] = [
     {

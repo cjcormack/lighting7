@@ -2021,10 +2021,11 @@ palette's effect does), and every change is the cue's whole `adHocEffects` list 
 `startingSpec`, the step effects' seeded lists, D16's one bar on the usage master — on the editor's
 own selection (one row as itself, several as one `selection` effect, its key the list's canonical
 JSON), and creates no instance; a second tap swaps the stored type. Nothing reaches the stage until
-the cue next comes on — its first hold spawns what the row then says — because a cue PATCH
-republishes nothing (`docs/cue-stacks-engineering.md`; *Update stage* is that plan's session 7). A
-reorder restates every `sortOrder`, and `writeCueChildren` keeps each effect's uuid by its key
-(target, property, type), which is how a later *Update stage* can tell an edited effect from a new one.
+the cue next comes on — its first hold spawns what the row then says — or *Update stage* sends it: a
+cue PATCH republishes nothing, and marks a held cue *edited since GO* when it changes an untimed
+effect (`docs/cue-stacks-engineering.md` §"Edited since GO and Update stage"). A reorder restates
+every `sortOrder`, and `writeCueChildren` keeps each effect's uuid by its key (target, property,
+type), which is how *Update stage* tells an edited effect from a new one.
 
 ### Look Delete Blocking
 

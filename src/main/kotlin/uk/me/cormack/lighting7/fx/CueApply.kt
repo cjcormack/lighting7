@@ -526,7 +526,20 @@ internal fun buildCombinedCueLayerRows(
      * publish at, else [applyData]'s own.
      */
     priority: Int? = null,
-): CookResult {
+): CookResult = buildCombinedCueLayerCook(state, cueId, applyData, firedTimedLayerIds, priority, withEffects = false).values
+
+/**
+ * [buildCombinedCueLayerRows] with its layers' effects from the same cook ([CueComposer.cookAll]),
+ * for a caller that compares or spawns them beside the rows. Fired timed layers' effects are in it.
+ */
+internal fun buildCombinedCueLayerCook(
+    state: State,
+    cueId: Int,
+    applyData: CueApplyData,
+    firedTimedLayerIds: Set<Int>? = null,
+    priority: Int? = null,
+    withEffects: Boolean = true,
+): CueComposer.FullCook {
     // A live cue composes at its holds' priority, whichever entry (or none) [applyData] was built from.
     // A cue whose last hold has gone while its rows still fade out keeps the priority they publish at.
     val live = priority
@@ -534,7 +547,7 @@ internal fun buildCombinedCueLayerRows(
         ?: state.show.fxEngine.cueLayer.publishedPriorityOf(cueId)
     val data = live?.let { applyData.copy(livePriority = it) } ?: applyData
     val cueOwn = buildCueAssignmentsForCue(state.show.fixtures, data)
-    return CueComposer.cook(
+    return CueComposer.cookAll(
         fixtures = state.show.fixtures,
         cueId = cueId,
         priority = cueDerivedPriority(data),
@@ -543,5 +556,6 @@ internal fun buildCombinedCueLayerRows(
         resolveLook = state.show.lookRegistry::snapshot,
         resolveTemplate = state.show.templateRegistry::snapshot,
         includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
+        withEffects = withEffects,
     )
 }

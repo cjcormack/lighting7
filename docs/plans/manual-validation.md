@@ -20,6 +20,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R2-7`](#fu-manual-venue-visit-r2-7) | a dimmer edited in Q4's Values grid while Q4 is live marks it *Edited since GO* and moves nothing, and *Update stage* fades the rig to the edit over Q4's own fade — an edited effect running on in phase — and clears the mark | Venue visit R2.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-6`](#fu-manual-venue-visit-r2-6) | Q1's Looks reordered and one switched off, and a Pulse added in draft on its FX tab, move nothing on the rig — the next GO into Q1 lands the new order, leaves the disabled Look off and runs the Pulse — while a locked ⌫ on either tab asks to unlock and never goes back a cue | Venue visit R2.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
@@ -284,6 +285,36 @@ desk lacks:
    *Make current* is refused with its reason in all four, and nothing switches.
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-7`
+
+**What it proves**: *Update stage is the one way a cue edit reaches a live stage* — venue-visit
+R2.7, show-cue-editing plan session 7 (D4, D11, §3.5, §10): an edit to a live cue is marked and sends
+nothing, and *Update stage* sends its rows over the cue's own fade and brings its effects in line.
+
+**Why it is here**: the tests read the controller's fade and the engine's instances; only the rig
+shows the fade on the cue's curve, an edited effect carrying on without a jump, and the chip on every
+window clearing together.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show running:
+
+1. **GO into Q4.** Note its fade (the editor's header) — give it 3 s if it snaps.
+2. **Edit its dimmer.** Unlock, open Q4, and on its Values tab set a dimmer it holds to a level well
+   away from where it is. **Nothing moves on the rig.** *Edited since GO* appears on the card's
+   header, on Q4's row in the table view, and on the phone card (a second window at phone width, Show
+   tab or Show view).
+3. **Update stage.** Press *Update stage…*: the confirm names Q4 and says *1 value change, over its
+   3.0s fade*. Press *Update stage*: **the dimmer fades to the new level over three seconds**, on the
+   cue's curve, and the chip goes on every window.
+4. **An effect.** On Q4's FX tab change a running effect's size, and remove another (or add one).
+   *Update stage*: the edited effect carries on **in phase**, the removed one fades out, an added one
+   fades in. No cannon fires and no scenery moves.
+5. **Locked.** Edit Q4 again, lock the show, and press *Update stage…*: it asks to unlock and sends
+   nothing.
+6. **Its next GO.** Edit Q4 once more and leave it: GO out of Q4 and back into it — the edit lands
+   and the chip goes.
 
 ---
 

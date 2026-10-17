@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
@@ -139,11 +140,15 @@ class CascadePublisher internal constructor(
      *
      * @param honourRowFades whether the winning rows' own `fadeDurationMs` may ramp this
      *   publish — see `CueAssignmentLayer.republishAssignments` for who may pass true.
+     * @param restage one fade for every key this publish moves, released keys included, in place
+     *   of the rows' own: *Update stage* taking a live cue to its new cook over the cue's fade
+     *   ([CueAssignmentLayer.restageAssignments]). Null for every other publish.
      */
     internal fun publishCueLayerToControllers(
         before: LayerResolver.CueLayerSnapshot,
         after: LayerResolver.CueLayerSnapshot,
         honourRowFades: Boolean,
+        restage: TransmitFade? = null,
     ) {
         val beforeIndex = before.index
         val afterIndex = after.index
@@ -182,13 +187,14 @@ class CascadePublisher internal constructor(
                 val fallback = layerResolver.fallbackFor(target, fixture, fixtureKey)
                 // A released key (`afterValue == null`) snaps: its fade belonged to the row that
                 // has just stopped contributing, and what it releases *to* is whatever sits
-                // underneath — not something that row gets to time.
-                val fadeMs = if (rowFades.isEmpty() || afterValue == null) {
-                    0L
-                } else {
-                    rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, propertyName)] ?: 0L
+                // underneath — not something that row gets to time. A restage times the whole
+                // cue, released keys with the rest.
+                val fadeMs = when {
+                    restage != null -> restage.durationMs
+                    rowFades.isEmpty() || afterValue == null -> 0L
+                    else -> rowFades[CueAssignmentResolver.Key.fixture(fixtureKey, propertyName)] ?: 0L
                 }
-                target.resetToFallback(fixture, fallback, fadeMs)
+                target.resetToFallback(fixture, fallback, fadeMs, restage?.curve ?: EasingCurve.LINEAR)
                 wrote = true
             } catch (e: Exception) {
                 throttle.log("layer4-publish-$fixtureKey.$propertyName", e) {
@@ -310,3 +316,6 @@ class CascadePublisher internal constructor(
         return target.isPropertyFullyParked(fixture, pm)
     }
 }
+
+/** One transmit-time ramp: how long every key it covers takes to arrive, and its shape. */
+internal data class TransmitFade(val durationMs: Long, val curve: EasingCurve)

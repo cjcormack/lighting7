@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.property.Colour
 import java.awt.Color
@@ -56,9 +57,9 @@ class DmxColour(
      * @param colour Target colour to fade to
      * @param fadeMs Duration of the fade in milliseconds
      */
-    override fun fadeToColour(colour: Color, fadeMs: Long) {
-        redSlider.fadeToValue(colour.red.toUByte(), fadeMs)
-        greenSlider.fadeToValue(colour.green.toUByte(), fadeMs)
-        blueSlider.fadeToValue(colour.blue.toUByte(), fadeMs)
+    override fun fadeToColour(colour: Color, fadeMs: Long, curve: EasingCurve) {
+        redSlider.fadeToValue(colour.red.toUByte(), fadeMs, curve)
+        greenSlider.fadeToValue(colour.green.toUByte(), fadeMs, curve)
+        blueSlider.fadeToValue(colour.blue.toUByte(), fadeMs, curve)
     }
 }

@@ -1,11 +1,16 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { RecordSheet } from '@/components/programmer/RecordSheet'
 import { CueDeleteDialog, type CueToDelete } from '@/components/cues/CueDeleteDialog'
+import { UpdateStageDialog, type UpdateStageTarget } from '@/components/cues/UpdateStageDialog'
 import { UnlockShowDialog } from './UnlockShowDialog'
+import { CueActionDialogsContext, useSharedCueActionDialogs, type CueActionDialogOpeners } from './cueActionDialogsContext'
+
+export type { CueActionDialogOpeners } from './cueActionDialogsContext'
 
 /**
- * The cue action set's three dialogs — the Record sheet, the delete confirm and the unlock
- * question — held **above the views**, so a host that unmounts cannot take one away mid-gesture.
+ * The cue action set's dialogs — the Record sheet, the delete confirm, *Update stage*'s confirm and
+ * the unlock question — held **above the views**, so a host that unmounts cannot take one away
+ * mid-gesture.
  *
  * The host is what goes: a card open only because it is live collapses on a GO from MIDI or another
  * window, a phone card moves on to the next cue, the cue sheet's bar empties with the selection —
@@ -17,21 +22,13 @@ interface CueActionDialogState {
   record: { projectId: number; cueId: number; name: string } | null
   /** Kept with null cues once closed, so the confirm stays mounted and animates shut. */
   remove: { projectId: number; cues: CueToDelete[] | null } | null
+  updateStage: UpdateStageTarget | null
   unlock: (() => void) | null
 }
 
-export interface CueActionDialogOpeners {
-  openRecord: (projectId: number, cueId: number, name: string) => void
-  openDelete: (projectId: number, cues: CueToDelete[]) => void
-  /** Ask to unlock; [onUnlock] lifts the lock when the operator says yes. */
-  openUnlock: (onUnlock: () => void) => void
-}
-
-const CueActionDialogsContext = createContext<CueActionDialogOpeners | null>(null)
-
 const noop = () => {}
 
-const CLOSED: CueActionDialogState = { record: null, remove: null, unlock: null }
+const CLOSED: CueActionDialogState = { record: null, remove: null, updateStage: null, unlock: null }
 
 function useDialogState(): [CueActionDialogState, CueActionDialogOpeners, (next: Partial<CueActionDialogState>) => void] {
   const [state, setState] = useState<CueActionDialogState>(CLOSED)
@@ -40,6 +37,7 @@ function useDialogState(): [CueActionDialogState, CueActionDialogOpeners, (next:
     () => ({
       openRecord: (projectId, cueId, name) => patch({ record: { projectId, cueId, name } }),
       openDelete: (projectId, cues) => patch({ remove: { projectId, cues } }),
+      openUpdateStage: (target) => patch({ updateStage: target }),
       // A function in state is read as an updater, so it is wrapped once more.
       openUnlock: (onUnlock) => setState((s) => ({ ...s, unlock: onUnlock })),
     }),
@@ -73,6 +71,9 @@ function CueActionDialogsView({
           onClose={() => patch({ remove: state.remove == null ? null : { ...state.remove, cues: null } })}
         />
       )}
+      {state.updateStage != null && (
+        <UpdateStageDialog target={state.updateStage} onClose={() => patch({ updateStage: null })} />
+      )}
       <UnlockShowDialog
         open={state.unlock != null}
         onOpenChange={(open) => !open && patch({ unlock: null })}
@@ -97,7 +98,7 @@ export function CueActionDialogsProvider({ children }: { children: ReactNode }) 
  * `local`; under the provider it is null and the dialogs are the provider's.
  */
 export function useCueActionDialogs(): CueActionDialogOpeners & { local: ReactNode } {
-  const shared = useContext(CueActionDialogsContext)
+  const shared = useSharedCueActionDialogs()
   const [state, openers, patch] = useDialogState()
   if (shared != null) return { ...shared, local: null }
   return { ...openers, local: <CueActionDialogsView state={state} patch={patch} /> }

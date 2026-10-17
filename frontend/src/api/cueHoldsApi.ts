@@ -26,6 +26,11 @@ export interface LiveCueHolds {
    * effects. Absent from a desk before effects plan session 5.
    */
   topStackId?: number | null
+  /**
+   * Its stored rows, layers or effects changed since it came on (show-cue-editing plan §3.5): the
+   * stage still shows it as it was, until *Update stage* or its next first hold. Sent only while true.
+   */
+  edited?: boolean
 }
 
 export interface CueHoldsState {
@@ -73,6 +78,7 @@ export function parseCueHoldsFrame(raw: unknown): CueHoldsState {
         priority: typeof cue.priority === 'number' ? cue.priority : 0,
         holds,
         topStackId: typeof cue.stackId === 'number' ? cue.stackId : null,
+        ...(cue.edited === true ? { edited: true } : {}),
       }]
     }),
   }

@@ -314,6 +314,18 @@ export interface DuplicateCueResponse {
   entryId?: number | null
 }
 
+/**
+ * `POST cues/{id}/update-stage`: what *Update stage* moved, or with `dryRun` would move — the
+ * (head, property) values whose level changes, and the cue's effects edited, stopped and started.
+ */
+export interface UpdateStageResponse {
+  rows: number
+  effects: { edited: number; stopped: number; started: number }
+  /** The cue's own fade and curve, which the values move over; 0 is a snap. */
+  fadeMs: number
+  curve: string
+}
+
 export interface DeleteCuesResponse {
   deleted: number[]
   uses: CueUses[]

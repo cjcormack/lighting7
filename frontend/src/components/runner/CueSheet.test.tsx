@@ -13,6 +13,7 @@ import type { CueStack, CueStackCueEntry, CueStackCueRow, CueStackMarkerRow } fr
  * PATCH per cue, and Spread on Fade spreads first→last.
  */
 const patchCue = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => false }))
 vi.mock('@/store/cues', () => ({ usePatchProjectCueMutation: () => [patchCue] }))
 const patchEntry = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))

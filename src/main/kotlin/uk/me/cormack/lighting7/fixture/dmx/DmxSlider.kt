@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
+import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.property.Slider
 
@@ -49,9 +50,10 @@ open class DmxSlider(
      *
      * @param value Target value to fade to (will be clamped to min/max range)
      * @param fadeMs Duration of the fade in milliseconds
+     * @param curve The fade's shape
      */
-    override fun fadeToValue(value: UByte, fadeMs: Long) {
+    override fun fadeToValue(value: UByte, fadeMs: Long, curve: EasingCurve) {
         val clamped = maxOf(min, minOf(value, max))
-        nonNullTransaction.setValue(universe, channelNo, clamped, fadeMs)
+        nonNullTransaction.setValue(universe, channelNo, clamped, fadeMs, curve)
     }
 }

@@ -7,6 +7,7 @@ import { InlineEditField } from '@/components/InlineEditField'
 import { SaveStatusIndicator } from '@/components/SaveStatusIndicator'
 import { TruncateStart } from '@/components/TruncateStart'
 import { SharedCueChip } from '@/components/runner/SharedCueChip'
+import { EditedSinceGoChip, UpdateStageButton } from '@/components/cues/EditedSinceGo'
 import { useExpandedCue } from '@/components/cues/CueRowParts'
 import { CueSceneryEditorBody } from '@/components/scenery/CueSceneryEditor'
 import { CueSceneryReadout } from '@/components/scenery/SceneryReadout'
@@ -72,8 +73,11 @@ const TAB_TRIGGER_CLASS = cn(
  *   false), with that reason. A header field half-typed when its host goes (a GO collapsing a live
  *   card) commits, and so does a pending Values edit.
  * - **It is a key region** (`data-key-region`, §4.5): a key pressed in it is never the cue sheet's.
+ * - **A live cue edited in place says so** (D4): the header's *Edited since GO* chip and *Update
+ *   stage…*, which asks to unlock while locked (§4.6).
  *
- * It sends no output: every write here is a stored cue or entry write (P2).
+ * It sends no output: every write here is a stored cue or entry write (P2). *Update stage* is the one
+ * exception, and it is a confirmed press of its own, never a write's side effect.
  */
 export function CueEditor({
   projectId,
@@ -137,7 +141,13 @@ export function CueEditor({
         </div>
       ) : (
         <>
-          <CueEditorHeader cue={cue} projectId={projectId} readOnlyReason={readOnlyReason} />
+          <CueEditorHeader
+            cue={cue}
+            projectId={projectId}
+            readOnlyReason={readOnlyReason}
+            locked={locked}
+            onRequestUnlock={onRequestUnlock}
+          />
           <Tabs value={tab} onValueChange={(v) => choose(v as CueEditorTab)} className="min-h-0 flex-1 gap-0">
             <TabsList className="h-9 w-full shrink-0 justify-start gap-0.5 overflow-x-auto rounded-none border-b bg-transparent p-0 px-3">
               <EditorTab value="values" label="Values" count={cooked?.rows.length} />
@@ -202,9 +212,23 @@ function EditorTab({ value, label, count }: { value: CueEditorTab; label: string
 
 /**
  * The header, one 40px chrome row: the entry's fields (the stack, this place's number and follow),
- * a rule, then the cue's (name, fade, curve), the shared chip and the save state.
+ * a rule, then the cue's (name, fade, curve), the shared chip, *Edited since GO* with *Update
+ * stage…*, and the save state.
  */
-function CueEditorHeader({ cue, projectId, readOnlyReason }: { cue: Cue; projectId: number; readOnlyReason: string | null }) {
+function CueEditorHeader({
+  cue,
+  projectId,
+  readOnlyReason,
+  locked: showLocked,
+  onRequestUnlock,
+}: {
+  cue: Cue
+  projectId: number
+  readOnlyReason: string | null
+  /** The show's lock — *Update stage* asks to unlock under it; another project's cue is never live here. */
+  locked: boolean
+  onRequestUnlock?: () => void
+}) {
   const [patchCue] = usePatchProjectCueMutation()
   const [patchEntry] = usePatchCueStackEntryMutation()
   const stackId = cue.cueStackId
@@ -338,6 +362,15 @@ function CueEditorHeader({ cue, projectId, readOnlyReason }: { cue: Cue; project
         </SelectContent>
       </Select>
       <SharedCueChip places={places} entryId={entryId ?? -1} />
+      <EditedSinceGoChip projectId={projectId} cueId={cue.id} />
+      <UpdateStageButton
+        projectId={projectId}
+        cueId={cue.id}
+        name={cue.cueNumber ? `Q${cue.cueNumber} ${cue.name}` : cue.name}
+        locked={showLocked}
+        onRequestUnlock={onRequestUnlock}
+        readOnlyReason={readOnlyReason}
+      />
       <span className="flex-1" />
       <CueValuesSaveState />
       <SaveStatusIndicator cueId={cue.id} />
