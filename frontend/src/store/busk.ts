@@ -303,8 +303,8 @@ function endBuskPageWrite(pageId: number, landed: boolean) {
   if (landed) settledAt.set(pageId, Date.now())
 }
 
-/** The library lists, whose rows carry each record's `buskPageCount`. */
-const BUSK_COUNT_TAGS: ('TemplateList' | 'LookList')[] = ['TemplateList', 'LookList']
+/** The lists whose rows count a record's pads: the libraries' `buskPageCount`, the cue list's `usedBy`. */
+const BUSK_COUNT_TAGS: ('TemplateList' | 'LookList' | 'CueList')[] = ['TemplateList', 'LookList', 'CueList']
 
 /**
  * Refresh the library rows' `buskPageCount`, but **only when the set of records on the page moved**.

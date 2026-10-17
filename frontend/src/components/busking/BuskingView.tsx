@@ -67,6 +67,7 @@ import { useBuskingState } from './useBuskingState'
 import { useSelectionVerbs } from './selectionVerbs'
 import type { PadBehaviour } from './padBehaviour'
 import { type EffectPresence } from './buskingTypes'
+import { cueOpenPath } from '@/lib/cuesTable'
 
 /**
  * The short-viewport fold, duplicated per site by convention — see the module note and
@@ -427,13 +428,8 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       onInspect: (pad) => {
         if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
-        else {
-          // A cue opens at its first entry; a loose cue has nowhere to open yet.
-          const first = pad.cue?.entries?.[0]
-          if (pad.cue != null && first != null) {
-            navigate(`/projects/${projectId}/show/stacks/${first.stackId}?cue=${pad.cue.id}`)
-          }
-        }
+        // A cue opens at its first entry; a loose cue in the Cues table, filtered to it.
+        else if (pad.cue != null) navigate(cueOpenPath(projectId, pad.cue))
       },
       // *Pick up* names the **record**, not the pad: what the hand holds is the template, Look or
       // cue, and placing it elsewhere makes a second pad rather than moving this one. (The MIDI

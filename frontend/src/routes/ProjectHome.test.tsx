@@ -233,10 +233,11 @@ describe('the sections', () => {
     expect(document.querySelector('[data-home-card="programmer-applied"]')).toBeNull()
   })
 
-  it('carry their counts: Show counts stacks and the project’s cues', () => {
+  it('carry their counts: Show counts its stacks, Cues the project’s cues', () => {
     drawHome(18)
     const count = (id: string) => document.querySelector(`[data-home-card="${id}"] [data-home-count]`)?.textContent
-    expect(count('program')).toBe('2 stacks · 35 cues')
+    expect(count('program')).toBe('2 stacks')
+    expect(count('cues')).toBe('35')
     expect(count('patches')).toBe('60')
     expect(count('templates')).toBe('31')
     expect(count('surfaces')).toBe('0')

@@ -14,7 +14,9 @@ A **Cue Stack** is a named, project-scoped entity that groups cues into an order
 Key behaviours:
 - A cue may be in any number of stacks, twice in one, or in none — a **loose** cue (cue model plan
   D1, D7). A stack's list names cues; it never owns them: removing an entry or deleting the stack
-  leaves the cue (`cues-engineering.md` §"Delete")
+  leaves the cue (`cues-engineering.md` §"Delete"). The Cues table (`/projects/:id/cues`, cue model
+  plan §3.7) lists every cue once from `GET /cues`, each with its entries and its `usedBy` — the busk
+  pads, cue slots and `FireCue` bindings naming it — which is where a loose cue is found
 - Activating a stack applies the first (or specified) cue's effects
 - Advancing steps through the list's cue entries in order, markers skipped
 - Deactivating removes all effects tagged with the stack's ID
@@ -842,7 +844,7 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 - `src/api/cueStacksWsApi.ts` — WebSocket subscription for `cueStackListChanged`
 - `src/api/lightingApi.ts` — Registers `cueStacks` WS API
 - `src/api/fxApi.ts` — `FxEffectState` includes `cueStackId`
-- `src/api/cuesApi.ts` — `Cue` interface includes `cueStackId`, `cueStackName`, `entryId`, `sortOrder`
+- `src/api/cuesApi.ts` — `Cue` interface includes `cueStackId`, `cueStackName`, `entryId`, `sortOrder` (the context entry's), `entries` (every place) and, on the project list only, `usedBy`
 
 ### State Management
 - `src/store/cueStacks.ts` — RTK Query endpoints with `CueStackList` tag, all CRUD + control mutations, and the marker mutations (`createMarkerEntry`, `renameMarkerEntry`, `deleteMarkerEntry`)

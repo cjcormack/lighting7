@@ -21,7 +21,7 @@ put anything durable in `testing-engineering.md`.
 
 | Test | Seen failing | Rate | Suspected cause |
 |---|---|---|---|
-| `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance…" (`routes`) | local, `claude/vv-att.1` on `abf3c83` (a full `check --rerun-tasks`); "the follow fired Q2 expected:<2> but was:<1>" at line 134 | 1 in 4 runs | Suspected, not traced: the test waits for the follow's BPM to land, then reads the active cue, and the two can be momentarily out of step |
+| `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance each set the cue's masters, and a tap wins until the next cue" | local, the routes package run on R1.5's merge of `main` (S16 at 8236eb9): `the follow fired Q2 expected:<2> but was:<1>` | 1 of 4 runs (3 passes running the class alone) | Suspected, not traced: the test waits for master 2 to read 140 BPM, then asserts the active cue. If the auto-advance's GO sets Q2's masters before the stack's active cue moves to Q2, the wait ends early. Waiting on the active cue as well would close it |
 
 ## Fixed
 

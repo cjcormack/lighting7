@@ -19,7 +19,8 @@ export interface RecordCuePickerProps {
  * *New cue* to offer.
  *
  * A filter over one radio list rather than a stack select then a cue select: the operator knows the
- * cue, not where it lives, and after R1.4 "where it lives" may be nowhere or several places.
+ * cue, not where it lives, and "where it lives" may be nowhere (*Loose*) or several places, each
+ * of which the row names.
  */
 export function RecordCuePicker({ projectId, value, onChange, disabled }: RecordCuePickerProps) {
   const { data: cues, isLoading } = useProjectCueListQuery(projectId)
@@ -63,17 +64,22 @@ export function RecordCuePicker({ projectId, value, onChange, disabled }: Record
               className="size-3.5 shrink-0 self-center"
             />
             <span className="min-w-0 flex-1 truncate">{row.name}</span>
-            {(row.number != null || row.stackName != null) && (
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {row.number != null && (
-                  <span className={cn('tabular-nums', row.numberAuto && AUTO_CUE_NUMBER_CLASS)}>
-                    {row.number}
-                  </span>
-                )}
-                {row.number != null && row.stackName != null && ' · '}
-                {row.stackName}
-              </span>
-            )}
+            <span className="max-w-[60%] shrink-0 truncate text-xs text-muted-foreground" data-picker-places>
+              {row.places.length === 0
+                ? 'Loose'
+                : row.places.map((place, i) => (
+                    <span key={i}>
+                      {i > 0 && ', '}
+                      {place.number != null && (
+                        <span className={cn('tabular-nums', place.numberAuto && AUTO_CUE_NUMBER_CLASS)}>
+                          {place.number}
+                        </span>
+                      )}
+                      {place.number != null && ' · '}
+                      {place.stackName}
+                    </span>
+                  ))}
+            </span>
           </label>
         ))}
         {shown.length === 0 && (
