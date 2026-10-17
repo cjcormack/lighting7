@@ -82,7 +82,7 @@ export function useSelectionPair(): { targets: CueTarget[]; families: AttributeF
 }
 
 /**
- * The three writes, as plain functions rather than hooks.
+ * The writes, as plain functions rather than hooks.
  *
  * There is nothing to subscribe to and no cache to patch optimistically: `selection.state` is the
  * acknowledgement, so a write is a socket send and the frame that comes back is what moves every
@@ -107,6 +107,17 @@ export function setDeskSelection(
   families: readonly AttributeFamily[] | null = null,
 ): void {
   lightingApi.selection.set([...targets], families)
+}
+
+/**
+ * Re-mask the desk selection, `null` for every attribute (apply-model plan D3) — the family pill's
+ * write, the busk view's and (through the list's bridge, `useDeskSelectionBridge`'s `remask`) the
+ * programmer's. `selection.setFamilies` keeps the desk's own heads, so nothing here sends them
+ * back: a `set` would have sent the heads of the last frame heard, undoing a toggle of this
+ * window's own still on its way.
+ */
+export function setDeskSelectionFamilies(families: readonly AttributeFamily[] | null): void {
+  lightingApi.selection.setFamilies(families)
 }
 
 export function toggleDeskSelection(target: CueTarget): void {

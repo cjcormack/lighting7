@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
@@ -114,6 +115,39 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-R3-4`
+
+**What it proves**: *one mask* — venue-visit R3.4, apply-model plan session 4 (§4.4, D3): the
+selection's family pill is the mask's picker on the programmer and on the busk view, every change a
+`selection.setFamilies` that keeps the heads, and Record, Record Look, Include, Make layer and Update open on
+that mask without ever writing it back.
+
+**Why it is here**: the tests drive the popover, the draft and each write against mocks; nothing
+opened the popover on the desk's two screens and the iPad, watched the other screen's pill and
+marquee follow, or pressed a palette under a mask picked this way.
+
+**Test**, on the dev rig with the programmer on one screen and the busk view (Split) on the other,
+both following the desk, and a Colour and a Position palette:
+
+1. **Pick on busk.** Select Hex 1–4 on the rig band: the pill reads *All*. Open it, switch *All
+   attributes* off (all four ticked, nothing changes), untick Intensity, Position and Beam: the pill
+   reads *Colour* on both screens, and the programmer's rows stay selected.
+2. **The mask holds.** Row C's strip offers only colour palettes now; tap the Colour palette: it
+   lands on Hex 1–4. Press a Position palette's busk pad: refused, naming both families.
+3. **Clear it.** Untick Colour too: nothing is written, the popover says *Pick at least one attribute.
+   The selection stays Colour.* Switch *All attributes* on: both pills read *All*.
+4. **Marquee and rows.** Drag a marquee over the Position column of Hex 1–2 on the programmer: both
+   pills read *Position*, and the busk popover's draft follows. Click a row: both read *All*.
+5. **Into a sheet.** Pick *Colour* on the programmer's pill, then open Record: it opens with Colour
+   ticked. Tick Beam there: the pills still read *Colour*. Close and open Record Look, Include, Make
+   layer and Update in turn: each opens on *Colour*.
+6. **On the iPad.** Open the pill in Pads focus and pick *Intensity*: the popover is reachable, the
+   toggles take a finger, and the desk screens' pills follow.
+7. **Unlinked.** Unlink the busk window and pick *Position* there: the programmer's pill stays as it
+   was, and a press on that busk window carries Position.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-NAV-4`
 
 **What it proves**: *a show's home and its one set of actions on a real desk* — venue-visit Nav.4,
@@ -142,6 +176,8 @@ desk lacks:
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
 
+---
+
 ## `FU-MANUAL-VENUE-VISIT-R2-5`
 
 **What it proves**: *the Values grid writes the stored cue and nothing else* — venue-visit R2.5,
@@ -167,6 +203,8 @@ value GO lands is the one the grid drew.
    editor: the own row is back; GO into Q1 again and both are at 80 %.
 5. **Two grids.** Unlocked, open Q2 too. Click a cell in Q1's grid, then one in Q2's: Q1's selection
    dims. ⌫ now acts on Q2 only; click back in Q1 and it is Q1's.
+
+---
 
 ## `FU-MANUAL-VENUE-VISIT-R3-2`
 

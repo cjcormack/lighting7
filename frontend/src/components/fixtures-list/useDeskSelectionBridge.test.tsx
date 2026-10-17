@@ -27,10 +27,12 @@ let deskTargets: CueTarget[] = []
 let deskFamilies: AttributeFamily[] | null = null
 let deskSource: SelectionSource | null = null
 const setDeskSelection = vi.fn()
+const setDeskSelectionFamilies = vi.fn()
 
 vi.mock('@/store/selection', () => ({
   useDeskSelectionSnapshot: () => ({ targets: deskTargets, families: deskFamilies, source: deskSource }),
   setDeskSelection: (t: CueTarget[], f: AttributeFamily[] | null) => setDeskSelection(t, f),
+  setDeskSelectionFamilies: (f: AttributeFamily[] | null) => setDeskSelectionFamilies(f),
 }))
 
 const { useDeskSelectionBridge } = await import('./useDeskSelectionBridge')
@@ -146,6 +148,7 @@ beforeEach(() => {
   deskFamilies = null
   deskSource = null
   setDeskSelection.mockClear()
+  setDeskSelectionFamilies.mockClear()
 })
 
 describe('selectedRowTargets', () => {
@@ -452,5 +455,71 @@ describe('useDeskSelectionBridge', () => {
     expect([...state.ids]).toEqual(['group:Front wash'])
     select(['fixture:par-9'])
     expect(setDeskSelection).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-9' }], null)
+  })
+
+  /**
+   * The family pill's write (apply-model plan D3): `remask` sends `selection.setFamilies` — the mask
+   * alone, the desk keeping its heads — and records the frame the desk will answer with on the echo
+   * FIFO, so the echo is acknowledged rather than read back through `rowIdsForTargets`; a marquee
+   * whose columns no longer say the mask drops to its rows, muted.
+   */
+  describe('remask', () => {
+    const remaskOf = (hook: ReturnType<typeof drive>['hook']) => hook.result.current!
+
+    it('sends the mask alone and never the heads, so a filtered list cannot narrow the desk', () => {
+      const { hook, select, frame, filter } = drive()
+      select(['group:Front wash', 'fixture:par-9'])
+      frame([{ type: 'group', key: 'Front wash' }, { type: 'fixture', key: 'par-9' }])
+      setDeskSelection.mockClear()
+      filter([rows[1]!])
+      act(() => remaskOf(hook)(['BEAM']))
+      expect(setDeskSelectionFamilies).toHaveBeenCalledWith(['BEAM'])
+      expect(setDeskSelection).not.toHaveBeenCalled()
+    })
+
+    it('knows its echo when a row publish was still on its way — the desk applies that first', () => {
+      const { hook, setSelection, select, frame } = drive()
+      select(['fixture:par-9'])
+      // The row publish has not come back: the desk's frame still holds nothing.
+      act(() => remaskOf(hook)(['BEAM']))
+      frame([{ type: 'fixture', key: 'par-9' }])
+      frame([{ type: 'fixture', key: 'par-9' }], ['BEAM'])
+      expect(setSelection).not.toHaveBeenCalled()
+    })
+
+    it('leaves the rows alone when its echo lands — a fixture shown under two groups stays one row', () => {
+      // Two rows for one head: an echo read back through `rowIdsForTargets` would select both.
+      const twice: Row[] = [
+        { kind: 'fixture', id: 'member:A:par-1', fixture: fixture('par-1') } as unknown as Row,
+        { kind: 'fixture', id: 'member:B:par-1', fixture: fixture('par-1') } as unknown as Row,
+      ]
+      const { hook, setSelection, state, select, filter, frame } = drive()
+      filter(twice)
+      select(['member:A:par-1'])
+      frame([{ type: 'fixture', key: 'par-1' }])
+      act(() => remaskOf(hook)(['COLOUR']))
+      frame([{ type: 'fixture', key: 'par-1' }], ['COLOUR'])
+      expect(setSelection).not.toHaveBeenCalled()
+      expect([...state.ids]).toEqual(['member:A:par-1'])
+    })
+
+    it('drops a marquee whose columns no longer say the mask to its rows, publishing nothing over it', () => {
+      const { hook, setSelection, marquee, frame, render } = drive()
+      marquee(COLOUR_ON_PAR_9)
+      frame([{ type: 'fixture', key: 'par-9' }], ['COLOUR'])
+      setDeskSelection.mockClear()
+      act(() => remaskOf(hook)(['COLOUR', 'POSITION']))
+      expect(setSelection).toHaveBeenCalledWith(['fixture:par-9'])
+      expect(setDeskSelectionFamilies).toHaveBeenCalledWith(['POSITION', 'COLOUR'])
+      render()
+      frame([{ type: 'fixture', key: 'par-9' }], ['POSITION', 'COLOUR'])
+      // The drop's publish was muted and the echo was ours: nothing more went out or came in.
+      expect(setDeskSelection).not.toHaveBeenCalled()
+      expect(setSelection).toHaveBeenCalledTimes(1)
+    })
+
+    it('is offered only while the list bridges', () => {
+      expect(drive([], false).hook.result.current).toBeNull()
+    })
   })
 })

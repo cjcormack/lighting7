@@ -57,8 +57,8 @@ export function maskValueKey(value: MaskValue): string {
 
 /**
  * A live-writing host's draft of a stored mask, for a picker whose every change is written at once
- * (a layer's popover in `LookStack`; the apply-model plan's session 4 mounts the selection bar's
- * family pill the same way). The stored side folds "all four" to none and cannot hold "none", so a
+ * (a layer's popover in `LookStack`, and the selection's family pill, `SelectionMaskPill`, which
+ * writes the selection's mask the same way). The stored side folds "all four" to none and cannot hold "none", so a
  * picker fed straight from it would switch *All attributes* back on the moment the operator switched
  * it off. The draft holds the picker's own state, writes only a change to the folded mask and never
  * an empty one, and follows the stored mask when it moves to something the draft does not say — a
@@ -213,8 +213,9 @@ export interface MaskPickerProps {
  * The mask as a form field: a label, [MaskToggles], and a sentence saying what is masked. Every
  * sheet that takes a mask mounts this — Record, Record Look (the busk Spread sheet's *Save as
  * Look…* included), Include, Make layer, Update — and a layer's popover in `LookStack`, through
- * [useMaskDraft]. Each holds a [MaskValue], starts at `null`, sends [maskToWire] and refuses to act
- * while [maskIsEmpty].
+ * [useMaskDraft]. Each holds a [MaskValue], opens on the selection's mask (`useWindowMaskReader`;
+ * `LookStack`'s on the layer's own), sends [maskToWire] and refuses to act while [maskIsEmpty]. A
+ * change there is the sheet's own and never moves the selection.
  */
 export function MaskPicker({ value, onChange, counts, hint }: MaskPickerProps) {
   const families = normaliseFamilies(value)

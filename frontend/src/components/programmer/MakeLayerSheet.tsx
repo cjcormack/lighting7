@@ -19,7 +19,8 @@ import { serializePropertyMask } from '@/lib/attributeFamily'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { programmerAddLayer, programmerClearEntry } from '@/store/programmer'
 import { selectTargetKeys } from '@/store/selectionSlice'
-import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 
 /**
@@ -61,6 +62,10 @@ export function MakeLayerSheet({
 
   const [name, setName] = useState('')
   const [mask, setMask] = useState<MaskValue>(null)
+  // The selection's mask, read once on open (apply-model plan D3), and kept: the sheet opened on it,
+  // so only a move away from it is an unsaved change. A change here never moves the selection.
+  const readSelectionMask = useWindowMaskReader()
+  const [openingMask, setOpeningMask] = useState<MaskValue>(null)
   const [partial, setPartial] = useState<string | null>(null)
 
   const openedRef = useRef(false)
@@ -72,10 +77,12 @@ export function MakeLayerSheet({
     if (openedRef.current) return
     openedRef.current = true
     setName('')
-    setMask(null)
+    const opening = readSelectionMask()
+    setMask(opening)
+    setOpeningMask(opening)
     setPartial(null)
     reset()
-  }, [open, reset])
+  }, [open, reset, readSelectionMask])
 
   // The selection is what makes a Look reusable — "Warm Amber" over four named heads rather than
   // over whatever the programmer happened to be holding. Without one there is nothing to promote.
@@ -126,7 +133,7 @@ export function MakeLayerSheet({
     <Sheet
       open={open}
       onOpenChange={(next) => !isLoading && onOpenChange(next)}
-      unsavedChanges={name.trim() !== '' || mask != null}
+      unsavedChanges={name.trim() !== '' || maskValueKey(mask) !== maskValueKey(openingMask)}
     >
       <SheetContent className="flex flex-col sm:max-w-md">
         <SheetHeader>

@@ -34,6 +34,7 @@ import type {
   RecordSource,
 } from '@/store/programmerOps'
 import { MaskPicker, describeSkips, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
@@ -126,6 +127,10 @@ export function RecordLookSheet({
   const [mode, setMode] = useState<RecordMode>(targetLookId ? 'MERGE' : 'CREATE')
   const [source, setSource] = useState<RecordSource>('TOUCHED')
   const [mask, setMask] = useState<MaskValue>(null)
+  // The window's mask, read once on open (apply-model plan D3, `useWindowMaskReader`): the desk's
+  // while following; once unlinked, the marquee on the programmer and the tab's own copy elsewhere
+  // (the busk Spread tab, `/looks`). A change here is the sheet's own.
+  const readSelectionMask = useWindowMaskReader()
   const [selectedOnly, setSelectedOnly] = useState(true)
   const [effectIds, setEffectIds] = useState<number[]>([])
   const [includeScenery, setIncludeScenery] = useState(true)
@@ -147,7 +152,7 @@ export function RecordLookSheet({
     openedRef.current = true
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
-    setMask(null)
+    setMask(readSelectionMask())
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
@@ -163,7 +168,7 @@ export function RecordLookSheet({
     setNotes('')
     setResult(null)
     reset()
-  }, [open, targetLookId, reset])
+  }, [open, targetLookId, reset, readSelectionMask])
 
   const creating = mode === 'CREATE'
   const canSubmit = (creating ? name.trim() !== '' : lookId !== '') && !maskIsEmpty(mask)

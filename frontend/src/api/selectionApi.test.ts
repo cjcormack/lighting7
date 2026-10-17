@@ -47,6 +47,19 @@ describe('createSelectionWsApi', () => {
     expect(sent).toEqual([{ type: 'selection.subselect', mode: 'ODD' }])
   })
 
+  it('sends a mask-only write as the folded families and no heads — the desk keeps its own', () => {
+    const { conn, sent } = fakeWsConnection()
+    const api = createSelectionWsApi(conn)
+    api.setFamilies(['COLOUR', 'POSITION'])
+    api.setFamilies(['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'])
+    api.setFamilies(null)
+    expect(sent).toEqual([
+      { type: 'selection.setFamilies', families: ['POSITION', 'COLOUR'] },
+      { type: 'selection.setFamilies' },
+      { type: 'selection.setFamilies' },
+    ])
+  })
+
   it('never puts a source on the wire — the desk stamps it', () => {
     const { conn, sent } = fakeWsConnection()
     createSelectionWsApi(conn).set([{ type: 'fixture', key: 'par-1' }], null)

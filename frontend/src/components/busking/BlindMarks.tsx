@@ -16,8 +16,8 @@ import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
  *
  * - [BlindPill] sits in the band's **state group beside the family pill** — the rig row in Split
  *   and Rig, the pad row in Pads, the compact strip and the short board's merged row off the desk
- *   board — the pill's own shape in the indicator's amber, drawn only while blind (D14's rule for
- *   the family pill: absent means nothing to say). It is the eye-off glyph plus the word, and
+ *   board — the pill's own shape in the indicator's amber, drawn only while blind (D14's rule, which
+ *   the family pill kept until it became the mask's picker: absent means nothing to say). It is the eye-off glyph plus the word, and
  *   **the word folds on a rung the host supplies** (`wordClass`: `RigBand`'s own
  *   `BLIND_WORD_CLASS` on the rig row, whose ladder has no slack for it; the Focus words' rung on
  *   the pad row and the compact rows, whose summaries absorb it), because both rows' fold ladders

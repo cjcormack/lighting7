@@ -173,6 +173,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
     toggleTarget,
     clearSelection,
     subselect,
+    setFamilies,
     programmerApplied,
   } = useBuskingState(projectId)
 
@@ -566,10 +567,10 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       // mode forces Split.
       dense={board === 'short' && !folded && !editing}
       // Pads on the desk board: the row carries the selection's verbs, summary and mask (D17).
-      pads={padRow && !folded ? { selectedTargets, families, verbs } : undefined}
+      pads={padRow && !folded ? { selectedTargets, families, onFamilies: setFamilies, verbs } : undefined}
       leading={
         merged ? (
-          <RigStripContent selectedTargets={selectedTargets} families={families} />
+          <RigStripContent selectedTargets={selectedTargets} families={families} onFamilies={setFamilies} />
         ) : undefined
       }
       // The desk while this window follows it, this window's own copy once unlinked — and
@@ -640,13 +641,19 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
             // merged page row instead (`merged`). On the desk board nothing is drawn here: the pad
             // row below is the body's top row (D17).
             !merged && !docked && (
-              <RigStrip selectedTargets={selectedTargets} families={families} controls={bandControls} />
+              <RigStrip
+                selectedTargets={selectedTargets}
+                families={families}
+                onFamilies={setFamilies}
+                controls={bandControls}
+              />
             )
           ) : (
             <RigBand
               projectId={projectId}
               selectedTargets={selectedTargets}
               families={families}
+              onFamilies={setFamilies}
               onToggle={toggleTarget}
               onClear={clearSelection}
               verbs={verbs}
