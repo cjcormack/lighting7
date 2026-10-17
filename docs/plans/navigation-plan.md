@@ -193,7 +193,7 @@ venue's hidden ids, so the row adds `cues` to both.)
   - An amber dot means it is held behind its venue (`venue.hold`).
   - Since venue-visit S6 a current show can also be dark by *Make rig safe*'s blackout, which is per
     project and runtime (`GlobalScalerStateHolder.safeBlackout`, `rigSafety.state`). The dot must not
-    read green then; the session picks its look.
+    read green then; session 3 drew it as a hollow ring.
   - A venue's tag goes beside the name when the current project is a venue.
 - **The pin chip.** A show on a venue gets one after the button: *TCH venue v7*, plus *held* or
   *v8 published* in the banner's colours. Clicking it opens the show's home.
@@ -261,13 +261,14 @@ venue's hidden ids, so the row adds `cues` to both.)
   - **Venue.**
     - *On TCH venue v7 · v8 published*, coloured as the behind banner is, with *Review update* and
       *Open venue*.
-    - On the rig and held, it gains *Run against v7…*. It reuses `VenueBehindBanner`'s actions,
-      not a copy.
-    - A standalone show reads *No venue* with *Attach to venue…* (`venue-attach-plan.md`).
+    - On the rig and held, it gains *Run against v7…*. It reuses `VenueBehindBanner`'s actions
+      (`VenueBehindActions`), not a copy.
+    - A standalone show reads *No venue* with *Attach to venue…* (`venue-attach-plan.md`), a
+      disabled slot until that plan's session 3.
   - **Sync.** *Synced · cjcormack/lighting7-tch-2026-sleeping-beauty · 2 min ago*, or *Not synced*,
-    with *Sync now* for an admin.
-  - **Live.** It appears only on the rig: the live cue per stack, Blind, and the held state, read
-    from `cueRunState` and the existing queries.
+    with *Sync now*. Session 4 shows the line to an admin only, as every cloud-sync route is (P2).
+  - **Live.** It appears only on the rig: the live cue per stack, each cue a press holds loose
+    (`cueHolds.state`), Blind, and the held state, read from `cueRunState` and the existing queries.
 - **Sections.** The registry's sections, minus Desk, are rendered as cards from the same `navItems`,
   so a new row reaches the home without a hand-picked card.
   - Each card is its row's icon, label and an optional count, from `NavItem.homeCount?: (data) =>
@@ -275,8 +276,8 @@ venue's hidden ids, so the row adds `cues` to both.)
     - patches 60, fixtures 57, groups 24, *2 stacks · 35 cues*, looks 9, palettes 31, speed masters 4,
       surfaces 0.
     - Since R1.4 a cue can sit in several stacks or in none, so a count of cues per stack counts a
-      shared cue twice and misses a loose one. Session 4 asks Chris whether Show counts stacks and
-      entries, with R1.5's Cues row counting distinct cues.
+      shared cue twice and misses a loose one. By Chris's call in session 4, Show counts the stacks
+      and the project's cues, each cue once.
   - Off the rig, the `needsRig` cards take D4's treatment.
 
 ### 5.2 A venue's home
@@ -318,7 +319,8 @@ venue's hidden ids, so the row adds `cues` to both.)
 - **The four places render from it:**
   - the Projects card's ⋮;
   - the home's ⋮;
-  - the switcher, which takes only the *rig* group;
+  - the switcher, which takes *Open* and *Make current* from the *rig* group (*Settings* left off a
+    row for room on a phone, by Chris's call in session 4);
   - ⌘K's **Project** group, for the viewed project.
 - **The ⌘K Project group:**
   - Its *Projects* list gains *Make <name> current* beside *Go to <name>*.
@@ -415,8 +417,8 @@ Each session is one PR (P1). All are frontend only (P5), but for session 3's two
 - Session 4 needs 3 (the switcher renders the rig group).
 - Session 5 needs 4.
 - Venue-visit S4 (palettes) may land before or after. Whichever lands second carries the label.
-- [`venue-attach-plan.md`](venue-attach-plan.md) session 3 puts *Attach to venue…* in session 4's
-  `projectActions`.
+- Session 4 put *Attach to venue…* in `projectActions` as a disabled slot (`ATTACH_NOT_BUILT`).
+  [`venue-attach-plan.md`](venue-attach-plan.md) session 3 makes it open its sheet.
 
 ## 9. Out of scope
 

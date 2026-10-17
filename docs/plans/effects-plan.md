@@ -30,7 +30,7 @@ below build on: the flag is `seconds` on the same four effect homes they extend 
 by `FxPicker`, the palette editor and the MCP tools — so session 6's "a Beam master takes a new beam
 effect by S15's default" needs only `usage` to gain `beam`. Nothing here changes timing. Sessions 1–3
 each bump `formatVersion`, each taking its number by venue-visit P5: S11 took 28, S15 29, session 1 30,
-S8 31, R1.3 32 and session 2 33.
+S8 31, R1.3 32, session 2 33 and session 3 34. Sessions 6 and 7 took none, and session 5 stores nothing.
 
 ### 1.1 The survey
 
@@ -61,19 +61,23 @@ Summarised from [`effects-design/survey.md`](effects-design/survey.md), where ea
 ### 1.2 Ours
 
 Read from `main` at `8182be4`, 2026-10-15. Since then session 1 has given every effect a size and made
-`intensityMultiplier` the envelope (§3.5), session 2 has shaped the spread, and R1.2 has put a GO on the
-hold registry, `fx/CueHolds.kt`; the three bullets that name the old code say so.
+`intensityMultiplier` the envelope (§3.5), session 2 has shaped the spread, session 3 has run one effect
+over a selection, sessions 6 and 7 have added beam and step effects, and R1.2 has put a GO on the hold
+registry, `fx/CueHolds.kt`; the bullets that name the old code say so.
 
 - **24 built-ins**, all `.fx.kts` (`src/main/resources/fx/`): eleven level effects, six colour, six
   position, one composite. Each takes literal parameters — `min`/`max`, a radius, a range, a colour
   list — and none declares a range or options (`FxFileLoader`'s `PARAM_KEYS` reads four keys).
+  (Sessions 6 and 7 made it 30: four `beam`, Slot Steps and Palette Steps.)
 - **The engine can already drive zoom.** `FxTargetFactory.resolve` turns any slider name into a
   `SliderTarget` and `requireOutputTypeMatch` checks only the output type, so Sine Wave on `zoom`
   works through REST, a cue or the AI. The picker never offers it: `compatibleEffectsFor`
   (`frontend/src/lib/fxTargetProperties.ts`) matches `compatibleProperties`, every level built-in
-  declares `[dimmer, uv]`, and the New definition form writes `[dimmer]`.
+  declares `[dimmer, uv]`, and the New definition form writes `[dimmer]`. (Session 6's Beam family
+  offers each beam built-in where a head has its property; a level effect still is not offered there.)
 - **A setting takes raw bytes.** `SettingTarget` writes the byte, always overriding; there is no
-  slot-aware output (`FxOutput` is Slider, Colour or Position).
+  slot-aware output (`FxOutput` is Slider, Colour or Position). (Session 7 added `FxOutput.Steps`, which
+  every target resolves per head, `fx/StepList.kt`.)
 - **No size.** `FxInstance.intensityMultiplier` exists and nothing sets it; the engine scales the raw
   output by it (`FxEngine.calculateEffectOutput`), which is why it once dropped an `OVERRIDE` effect
   to 0. (Session 1 replaced this with `FxInstance.weight`.)
@@ -88,7 +92,8 @@ hold registry, `fx/CueHolds.kt`; the three bullets that name the old code say so
   starts the incoming at full (since R1.2, `activateEntry` through `CueHolds.bringOn` and `takeOff`); `CueCrossfadeDriver`'s doc says this "matches Eos / grandMA / Hog 4",
   which the manuals contradict.
 - **An effect targets one fixture or one group.** A Local effect over loose fixtures runs them in
-  unison; R3 left that to this plan (`FU-FX-SELECTION-DISTRIBUTION`).
+  unison; R3 left that to this plan (`FU-FX-SELECTION-DISTRIBUTION`). (Session 3 added
+  `FxTargetRef.SelectionRef`, one instance over an ordered list.)
 - **Effect rows store their fields as columns** — `look_effects`, `cue_ad_hoc_effects`, a palette's
   effect, the programmer's — and `LookEffectSpec` carries them, so a new field on an instance is a
   `formatVersion` bump. A new parameter of one effect is a key in `parameters` and is not.
@@ -188,7 +193,7 @@ The plan adds its own:
 |---|---|
 | `look_effects`, `cue_ad_hoc_effects`, a palette's effect, `LookEffectSpec`, the programmer's effects | `size` (double, default 1.0), `direction` (`FORWARD \| BACKWARD \| BOUNCE`, default `FORWARD`), `n_shot` (int, nullable) — session 1 |
 | the same | `spread` (double, default 1.0), `wings`, `blocks` (int, default 1), `groups` (int, default 0 — off) — session 2 (columns `spread`, `spread_wings`, `spread_blocks`, `spread_groups`: `GROUPS` is an SQLite keyword) |
-| `TargetRef` | a third kind, `selection`, for effects only: its key is the canonical JSON of the ordered `[{type, key}]` list — session 3 |
+| `EffectTargetRef`, beside `TargetRef` | a `Selection` arm, for effects only, stored as target type `selection` with the canonical JSON of the ordered `[{type, key}]` list as its key — session 3 (as built, a type of its own rather than a third `TargetRef` kind, so a value row cannot hold one) |
 | `speed_masters.usage` | gains `beam` — session 6 |
 
 Canonical JSON omits defaults, so a show that uses none of this exports byte for byte as before; the
@@ -224,7 +229,8 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 
 ### 3.4 Over a selection (D3)
 
-- `FxTargetRef.Selection(items)`: the expansion flattens the list in order. A fixture with the
+- `FxTargetRef.SelectionRef` (over `EffectTargetRef.Selection`'s items): the expansion
+  (`FxEngine.buildSelectionExpansion`) flattens the list in order. A fixture with the
   property is one member; a group contributes its members in its own sort order; a multi-head fixture
   whose heads hold the property contributes them by the instance's element mode. A head named twice
   is counted once, at its first place.
@@ -266,9 +272,11 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
 ### 3.6 Steps (D8)
 
 Both step effects emit a new output, `FxOutput.Steps(from, to, blend)` — two step indices and how far
-between them — and the **target** resolves it per head, which is what no output does today.
+between them — and the **target** resolves it per head, which is what no output does today. (As built,
+`FxOutput.Steps` also carries its `StepList`, `fx/StepList.kt`.)
 
-- **Palette Steps** (`category` by the palettes' family). Parameters: `palettes`, a list of value
+- **Palette Steps** (`category` by the palettes' family; as built, `category: palette`, and a stored
+  one carries its palettes' family, `paletteStepsShape`). Parameters: `palettes`, a list of value
   palette references (`tmpl:{uuid}`, generic, one family), and `fadeRatio` as Colour Cycle's. The
   target resolves each step's palette for its head through `TemplateResolver` — a position, whether
   centre-relative (`pos:`, venue-visit plan D3) or stored in degrees (`deg:`, P3), to that head's own
@@ -283,9 +291,10 @@ between them — and the **target** resolves it per head, which is what no outpu
 
 | Route or frame | Change |
 |---|---|
-| `POST /fx/add`, `PUT /fx/{id}`, `updateFx`, `POST /groups/{name}/fx` | gain `size`, `direction`, `nShot` (s1); `spread`, `wings`, `blocks`, `groups` (s2); a `targets` list (s3) |
+| `POST /fx/add`, `PUT /fx/{id}`, `updateFx`, `POST /groups/{name}/fx` | gain `size`, `direction`, `nShot` (s1); `spread`, `wings`, `blocks`, `groups` (s2); a `targets` list on `POST /fx/add` (s3), and on `PUT /fx/{id}` and `updateFx` for the apply-model plan's split (its session 2) |
 | Look, cue and palette effect DTOs, `ActiveEffect` | the same fields |
-| `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5); `cueRunStateChanged` carries `effectSize` |
+| `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5) |
+| a stack-size state frame and its set frame | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 20), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush`. Not on `cueRunStateChanged`, which a fader drag would flood |
 | MIDI `BindingTarget.StackEffectSize {stackUuid}` | new fader target (s5) |
 | MCP effect schemas (`AiToolSchemas`) | gain each field as its session lands |
 
@@ -431,12 +440,13 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 ### Session 5 — A stack's effect size (backend + frontend)
 
 - §4.3 and the wire (§3.7): a runtime per-stack value in `CueStackManager` weighting that stack's
-  effects (P3's `stackSize`), REST, `cueRunStateChanged`, the MIDI target with its health and
-  feedback; dropped on a project switch.
-- **Ask Chris first** which stack's size weighs a cue two stacks hold, or a stack and a press. Since
-  R1.2 such a cue is one set of instances, tagged with its first hold's stack (`FxInstance.cueStackId`,
-  never retagged). Two readings: the highest hold's stack, 100 % under a loose hold; or the product
-  over its stack holds.
+  effects (P3's `stackSize`, multiplied into `FxInstance.weight`), REST, its own state and set
+  frames (§3.7), the MIDI target with its health and feedback; dropped on a project switch and
+  carried across a reload by `show/ShowCarry.kt`, beside the standbys.
+- **A cue two stacks hold, or a stack and a press, is weighed by its highest hold's stack** (§11,
+  21): the stack whose hold is on top, 100 % under a loose hold. Since R1.2 such a cue is one set of
+  instances, tagged with its first hold's stack (`FxInstance.cueStackId`, null when a loose hold came
+  first, `CueHolds.tagged`), so the weight follows the top hold rather than that tag.
 - The slider on the Show view's stack row and `RunMobile`; `lib/surfaceDrop.ts` and the binding
   picker.
 - **Tests:** 50 % halves each of the stack's effects' weight and no other stack's; a fader moves it;
@@ -470,7 +480,8 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - **Docs:** `fx-engineering.md`, `fixtures-engineering.md` (settings as effect targets).
 
 Order: 1, 2, 3, 4, 5, 6, 7. Session 3 is ahead of R3's session 2 (D12); 4 needs 1's weight; 5 needs
-4's envelope composition; 6 and 7 are independent of the rest after 1.
+4's envelope composition; 6 and 7 are independent of the rest after 1. They are running 1, 2,
+3, 6, 7, then 4 and 5.
 
 ## 9. Explicitly out of scope
 
@@ -494,6 +505,8 @@ In [`followups.md`](followups.md), when the session that creates them lands:
 - `FU-FX-BEAM-ANY-SLIDER` (session 6): a level effect is not offered on a beam slider without a beam
   built-in of its own. Trigger: an operator wants to breathe prism or a fixture's own speed channel.
 - `FU-FX-SPLIT-DUPLICATE` (session 2): `SPLIT` and `EDGES_IN` give the same offsets. Ready.
+- `FU-FX-STEPS-COLOUR-WHEEL` (session 7, recorded): colour Palette Steps skip a head whose colour is a
+  wheel. Trigger: an operator steps colour palettes over a group holding a colour-wheel head.
 
 ## 11. Questions
 
@@ -535,3 +548,10 @@ Answered in session 4, 2026-10-16:
     effect, the old Release order, and the engine work now (`FU-FX-VALUE-FADE-UNDER-EFFECT`) were
     declined.
 19. **Does P4 continue a paused instance or an N-shot?** Neither: the incoming cue starts its own.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K3:
+
+20. **How does a stack's size travel over WS?** Its own `StateFlow`-backed frame, as the grand
+    master's does. Riding `cueRunStateChanged`, which a fader drag would flood, was declined.
+21. **Whose size weighs a cue two stacks hold, or a stack and a press?** The highest hold's stack's,
+    100 % under a loose hold. The product over its stack holds was declined.

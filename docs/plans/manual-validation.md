@@ -387,7 +387,7 @@ Show view's cards and confirms against a real show, or watched the stage while t
 
 **Test**, on a scratch copy of a show with two stacks:
 
-1. **Share.** On a card of stack A, *Add to stack…* → B. Both cards show *in 2 stacks*; rename the cue
+1. **Share.** On a card of stack A, ⋯ → *Add to stack…* → B (R2.3 put it under the action strip's ⋯). Both cards show *in 2 stacks*; rename the cue
    on one and read the new name on the other. Give it a number in B: A's number does not change.
 2. **Remove the live entry.** GO stack A onto the shared cue, then *Remove from stack* on that card.
    Nothing on stage moves and A reads the next cue on deck; GO, and the following cue comes in.
@@ -425,9 +425,8 @@ desks on this build:
    two, in the **same** order, and a third sync on each changes nothing.
 5. **A drag is one file.** Drag a cue to another place in a stack on A and sync: the commit changes
    one `cueStackEntries/` file.
-6. **Clean up.** Drop the scratch copy. Since R1.4 *Remove from stack* leaves a cue loose and no UI
-   deletes one yet, so on a real show delete the two test cues with `DELETE /cues/{id}?force=true`
-   (without `force` a cue still in a stack is refused, `CUE_IN_USE`).
+6. **Clean up.** Drop the scratch copy, or on a real show *Delete…* the two test cues from their
+   cards (R2.3's confirm). *Remove from stack* alone leaves a cue loose, since R1.4.
 
 ---
 
@@ -569,7 +568,7 @@ of two stacks stepped off the cue, or read the two rings on a desk screen.
 session 3 (sync `formatVersion` 32) the archive wrote a cue from one entry only, so a push dropped the
 second and a pull deleted it; on a build with session 3 a repo may stay attached:
 
-1. **One cue in two stacks.** On a card of the first stack, *Add to stack…* → the second (R1.4 shares
+1. **One cue in two stacks.** On a card of the first stack, ⋯ → *Add to stack…* → the second (R1.4 shares
    a cue from the Show view): the cue is listed in both stacks, each card showing *in 2 stacks*. This
    step is also step 1 of [`FU-MANUAL-VENUE-VISIT-R1-4`](#fu-manual-venue-visit-r1-4), so the two run
    well together.
