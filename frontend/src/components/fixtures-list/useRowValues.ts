@@ -6,7 +6,7 @@ import {
   subscribeToChannels,
 } from '../../hooks/usePropertyValues'
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolutionChannels, resolutionPropertyNames } from './columns'
+import { resolutionChannels, resolutionPropertyNames, resolveCell } from './columns'
 import { resolveTargetCells, rowWriteTargets } from './rowModel'
 import type { CellResolution, ColumnKey } from './columns'
 import type { Row } from './rowModel'
@@ -113,6 +113,18 @@ export function buildRowCells(row: Row, visibleColumns: readonly ColumnKey[]): R
     if (resolutions.length > 0) cells.push({ col, resolutions, targetKeys, keys })
   }
   return cells
+}
+
+/**
+ * The cells a row draws in the cue editor's Values grid: [buildRowCells]'s, less a group row's
+ * columns that its members take only on their cells. A group row there edits the group's **own**
+ * row, written against a member's own properties (`writeGroupRow`), so a column reached only
+ * through the members' elements would draw a cell whose commit lands nowhere.
+ */
+export function buildCueRowCells(row: Row, visibleColumns: readonly ColumnKey[]): RowCell[] {
+  const cells = buildRowCells(row, visibleColumns)
+  if (row.kind !== 'group') return cells
+  return cells.filter((cell) => row.members.some((member) => resolveCell(member.properties, cell.col) != null))
 }
 
 /**

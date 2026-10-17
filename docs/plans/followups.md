@@ -153,6 +153,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
+| [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -2979,6 +2980,19 @@ the copy in `routes/projectCues.kt`, Record CREATE into a stack, and MCP `add_cu
 predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
 renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
 includes the shared cue itself.
+
+### `FU-CUE-ROW-TIMING`
+
+**The cue editor's Values grid cannot set an own row's fade or move-in-dark** · Trigger ·
+Show-cue-editing plan session 5 (venue-visit R2.5), 2026-10-16
+
+The Values grid (`components/cues/editor/CueValuesGrid.tsx`) writes a cue's own rows' **values**, and
+its flush keeps every row's `fadeDurationMs`, `moveInDark` and `sortOrder` as they are
+(`applyCueRowEntries`); a row it creates has neither. Record and the MCP tools still set both.
+Deliberately out of the session (plan §8). **Trigger**: an operator needs a per-row fade or a
+move-in-dark set from the Show view rather than by re-recording. **Then**: the two as fields in the
+cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
+cell), written through the same `CueRowStore` flush as a third kind of draft entry.
 
 ## Completed
 

@@ -53,6 +53,7 @@ export function CueEditorPane({
   cueId,
   entryId,
   locked,
+  onRequestUnlock,
   tabRequest,
   columnRef,
   sheetRef,
@@ -62,6 +63,8 @@ export function CueEditorPane({
   cueId: number
   entryId: number
   locked: boolean
+  /** Lift the lock, where it is the operator's — the editor's refused edits ask to. */
+  onRequestUnlock?: () => void
   tabRequest?: CueEditorTabRequest | null
   /** The whole column — half of it is the default and a snap point. */
   columnRef: RefObject<HTMLElement | null>
@@ -156,6 +159,7 @@ export function CueEditorPane({
           cueId={cueId}
           entryId={entryId}
           locked={locked}
+          onRequestUnlock={onRequestUnlock}
           host="pane"
           tabRequest={tabRequest}
           className="min-h-0 flex-1"

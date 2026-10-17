@@ -91,6 +91,7 @@ object TraceSampling {
             "resumeFx",
             "selection.clear",
             "selection.set",
+            "selection.setFamilies",
             "selection.subselect",
             "selection.toggle",
             "surfaceBank.set",

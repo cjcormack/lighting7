@@ -19,7 +19,8 @@ import { useBuskingSelection } from './useBuskingSelection'
  * pad that a tap then failed to clear.
  */
 export function useBuskingState(projectId: number) {
-  const { selectedTargets, families, toggleTarget, clearSelection, subselect } = useBuskingSelection(projectId)
+  const { selectedTargets, families, toggleTarget, clearSelection, subselect, setFamilies } =
+    useBuskingSelection(projectId)
   // The **resolved** stack, not the layer list: the pads ask about coverage and the desk has
   // already answered, so this view never subscribes to the layers themselves.
   const { data: programmerApplied } = useProgrammerAppliedQuery()
@@ -42,6 +43,8 @@ export function useBuskingState(projectId: number) {
     clearSelection,
     /** The Cells chip's write: one desk op while following, the mirror over the tab's copy when not. */
     subselect,
+    /** The family pill's write: the mask, the targets kept (apply-model plan D3). */
+    setFamilies,
     programmerApplied,
   }
 }

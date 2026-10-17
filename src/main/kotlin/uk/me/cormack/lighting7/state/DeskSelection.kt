@@ -60,7 +60,8 @@ data class SelectionSource(
  * targets means nothing and clearing the selection must clear it, so the two travel as one
  * [Snapshot] and one frame. The rule that keeps them one fact: [set] replaces the whole fact
  * (targets *and* families — an absent mask is every attribute), [toggle] edits the heads and
- * keeps the mask, [clear] drops both, [prune] keeps both. So a marquee publishes both halves; a
+ * keeps the mask, [setFamilies] edits the mask and keeps the heads, [clear] drops both, [prune]
+ * keeps both. So a marquee publishes both halves; a
  * tap on the busk band or an X-Touch select button adds a head under whatever mask is standing;
  * a `SelectTarget(REPLACE)` button replaces the heads and, having no column axis to speak with,
  * clears the mask by passing none.
@@ -146,6 +147,20 @@ class DeskSelection(
     fun set(targets: List<CueTargetDto>, families: Set<PropertyMaskGroup>? = null, source: SelectionSource? = null) {
         val next = Snapshot(targets.distinct(), normalise(families), source)
         _state.update { current -> if (current == next) current else next }
+    }
+
+    /**
+     * Replace the mask and keep the heads (apply-model plan D3) — the selection's family pill. A
+     * mask-only write rather than a [set] that sends the heads back, because the heads a client
+     * would send are the last ones it heard of: a toggle of its own still on its way would be undone
+     * by them. [source] becomes the mover; an empty or complete [families] is every attribute; a
+     * write that changes nothing emits nothing.
+     */
+    fun setFamilies(families: Set<PropertyMaskGroup>?, source: SelectionSource? = null) {
+        _state.update { current ->
+            val next = current.copy(families = normalise(families), source = source)
+            if (current == next) current else next
+        }
     }
 
     /** Nothing selected, no mask, no mover — the snapshot a project switch also lands on. */

@@ -55,6 +55,18 @@ data class SelectionToggleInMessage(
     val sourceName: String? = null,
 ) : SelectionInMessage()
 
+/**
+ * Replace the mask and keep the heads — the family pill's write (apply-model plan D3). [families]
+ * absent or empty is every attribute; a name outside `PropertyMaskGroup` is dropped, as on
+ * `selection.set`. The mover is stamped as for any write.
+ */
+@Serializable
+@SerialName("selection.setFamilies")
+data class SelectionSetFamiliesInMessage(
+    val families: List<String>? = null,
+    val sourceName: String? = null,
+) : SelectionInMessage()
+
 /** Nothing selected, no mask, no mover. */
 @Serializable
 @SerialName("selection.clear")
@@ -104,6 +116,10 @@ suspend fun handleSelection(scope: SocketScope, message: SelectionInMessage) {
             scope.selectionSource(message.sourceName),
         )
         is SelectionToggleInMessage -> selection.toggle(message.target, scope.selectionSource(message.sourceName))
+        is SelectionSetFamiliesInMessage -> selection.setFamilies(
+            parseMaskGroupsLenient(message.families),
+            scope.selectionSource(message.sourceName),
+        )
         is SelectionClearInMessage -> selection.clear()
         is SelectionSubselectInMessage -> {
             val mode = SubselectMode.byName(message.mode)

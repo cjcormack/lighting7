@@ -118,6 +118,13 @@ class SelectionSocketTest : RouteIntegrationTest() {
             assertEquals(listOf("COLOUR"), toggled.families, "toggle keeps the mask")
             assertEquals(SelectionSource.window("Screen 1"), toggled.source, "the socket's name is remembered")
 
+            // The family pill: the mask alone, the heads kept, the mover stamped.
+            sendSerialized<InMessage>(SelectionSetFamiliesInMessage(families = listOf("position", "colour", "bogus")))
+            val remasked = awaitOfType<SelectionStateOutMessage>()
+            assertEquals(listOf(hex1, hex2, wash), remasked.targets, "setFamilies keeps the heads")
+            assertEquals(listOf("POSITION", "COLOUR"), remasked.families)
+            assertEquals(SelectionSource.window("Screen 1"), remasked.source)
+
             // A replace with no mask is every attribute.
             sendSerialized<InMessage>(SelectionSetInMessage(listOf(hex2)))
             val replaced = awaitOfType<SelectionStateOutMessage>()

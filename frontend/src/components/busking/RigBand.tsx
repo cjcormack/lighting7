@@ -1,7 +1,6 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { useDraggable, useDroppable } from '@dnd-kit/core'
 import { ChevronDown, ChevronLeft, ChevronRight, Grid2x2, GripVertical, MoreHorizontal, X } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -27,7 +26,7 @@ import { DeskChip } from '@/components/desk/DeskChip'
 import { BlindPill } from './BlindMarks'
 import { HandPlaceStrip } from '@/components/hand/HandTarget'
 import { registerDragOverlay } from '@/components/dnd/dragOverlayRegistry'
-import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { targetKey } from '@/lib/targetKey'
 import { cn } from '@/lib/utils'
 import type { CueTarget } from '@/api/cuesApi'
@@ -73,6 +72,7 @@ import { RigEditProvider, useRigEdit } from './RigEditProvider'
 import { PAGE_MIN_HEIGHT_PX, RIG_MIN_HEIGHT_PX, RigHandle, clampRigHeight, lineEdges } from './RigHandle'
 import { RigDropSlot, RigTile, type TileLookup } from './RigTile'
 import { BuskFixtureSheet, BuskFixtureSheetContext, type BuskSheetTarget } from './BuskFixtureSheet'
+import { BuskFamilyPill } from './BuskFamilyPill'
 import { buskReleaseTargets, summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
 import { ReleaseTargetsButton } from '@/components/fixtureSheet/ReleaseTargetsButton'
 import { useReleaseTargets, type ReleaseTarget } from '@/components/fixtureSheet/useRelease'
@@ -168,6 +168,8 @@ export interface RigBandProps {
   selectedTargets: Map<string, BuskingTarget>
   /** The selection's attribute mask, drawn as a pill beside the summary. Null is every attribute. */
   families: AttributeFamily[] | null
+  /** The mask's write, the targets kept — the family pill's picker (apply-model plan D3, `BuskFamilyPill`). */
+  onFamilies: (families: AttributeFamily[] | null) => void
   onToggle: (target: CueTarget) => void
   onClear: () => void
   /** *Spread…* · Locate · Highlight — the host's one instance, drawn on this row in Split and Rig. */
@@ -240,7 +242,7 @@ export interface RigBandProps {
  * **The numbers are the app's, measured in the browser on 2026-09-21 (evening), re-measured on
  * 2026-09-23 for the link badge** (desk-follow plan D8) **and on 2026-10-08 for *Release n***
  * (fixture-fx-sheets plan D18), at the desk's control sizes, with a one-family pill drawn (~60; the
- * row has to hold when a mask is set) and **the badge drawn** (21, plus a gap: a following window
+ * row has to hold when a mask is set — unmasked, the mask's picker reads *All*, narrower) and **the badge drawn** (21, plus a gap: a following window
  * always shows it, and Pads and Rig always follow). Unlinked, the chip takes the badge's place and
  * folds and truncates on its own; its floor is 35, which the 15px of slack at the floor covers.
  * Worded, the row is 1078px — the verbs group 679 (`RIG` 17, Cells 107, the steps 58, the five
@@ -368,6 +370,7 @@ function RigBandBody({
   projectId,
   selectedTargets,
   families,
+  onFamilies,
   onToggle,
   onClear,
   verbs,
@@ -640,7 +643,7 @@ function RigBandBody({
               {summary}
             </span>
           )}
-          <FamilyPill families={families} />
+          <BuskFamilyPill families={families} onChange={onFamilies} selected={selectedTargets.size > 0} marker="data-rig-family" />
           <BlindPill wordClass={COMPACT_FOCUS_WORD_CLASS} />
           {!editing && <DeskChip showSubject forcedBy={focus === 'rig' ? 'rig' : undefined} />}
           {!editing && (
@@ -698,7 +701,7 @@ function RigBandBody({
             )}
           </div>
           <div data-rig-row-state className={cn('flex min-w-0 flex-1 items-center gap-2', SECOND_ROW_CLASS)}>
-            <FamilyPill families={families} />
+            <BuskFamilyPill families={families} onChange={onFamilies} selected={selectedTargets.size > 0} marker="data-rig-family" />
             {/* Blind, beside the mask and drawn on the same terms — only while it holds
                 (`BlindMarks.tsx`): the pads' own row is where a press that reaches nothing is made. */}
             <BlindPill wordClass={BLIND_WORD_CLASS} />
@@ -842,20 +845,6 @@ function RigBandBody({
 function rigRecordOf(held: HeldRecord): RigPaletteRecord | null {
   void held
   return null
-}
-
-/** The selection's attribute mask, drawn only while one is set (D14): absent for a plain selection. */
-function FamilyPill({ families }: { families: AttributeFamily[] | null }) {
-  if (families == null || families.length === 0) return null
-  return (
-    <Badge
-      variant="outline"
-      data-rig-family
-      className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-    >
-      {formatFamilyList(families, ' · ')}
-    </Badge>
-  )
 }
 
 // ─── The Cells menu and the steps ────────────────────────────────────────

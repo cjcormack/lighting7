@@ -27,7 +27,12 @@ vi.mock('@/components/cues/CueRowParts', () => ({
   CueTargetChip: () => <div />,
   useExpandedCue: () => ({ cueData: current, targets: [], isFetching: false }),
 }))
-vi.mock('@/components/cues/CueValueGrid', () => ({ CueValueGrid: () => <div data-testid="values" /> }))
+vi.mock('./CueValuesGrid', () => ({ CueValuesGrid: () => <div data-testid="values" /> }))
+// The Values grid's store is pinned in `CueValuesGrid.test.tsx`; here it is the provider alone.
+vi.mock('./CueRowStore', () => ({
+  CueRowStoreProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useCueRowSaveState: () => 'clean',
+}))
 vi.mock('@/components/cues/CueDetailContent', () => ({
   CueLayersReadout: () => <div data-testid="looks" />,
   CueEffectsReadout: () => <div data-testid="fx" />,

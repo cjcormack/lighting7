@@ -50,7 +50,18 @@ export interface CellState {
    * - `untargeted` — the row's fixture is outside the layer's `targets`.
    */
   tone?: 'inert' | 'untargeted'
+  /**
+   * The cue editor's Values grid only (show-cue-editing plan D2): where the composed value came
+   * from — one of the cue's own rows, the Look layer that won it, or several across the row.
+   */
+  source?: CueCellStateSource
 }
+
+/** See [CellState.source]. `overrides` names the Look an own value sits over, where one is known. */
+export type CueCellStateSource =
+  | { kind: 'own'; overrides?: string; group?: string }
+  | { kind: 'layer'; name: string | null }
+  | { kind: 'mixed' }
 
 export type RowCellStates = Partial<Record<ColumnKey, CellState>>
 

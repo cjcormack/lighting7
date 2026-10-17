@@ -3,20 +3,13 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
 /**
  * `kind: 'live'` writes go to Layer 4 (direct stage).
  *
- * **There is no `cue` arm.** A cue is read-only and edited by Include, so that there is exactly one
- * place values are set (D2 of the desk-simplification plan). Session 2a made that true and left the
- * arm in place, because 2b — the Run/Show merge — was where it would be decided whether an unlocked
- * cue row got editable cells back. It did not: giving a cue row cells would reopen the question D2
- * settled and make a cue and the programmer two places again. So the arm, its four session
- * helpers, `api/cueEditWsApi.ts` and the fifteen `kind === 'cue'` branches across five hooks were
- * removed in 2b.
- *
- * The `409 CUE_EDIT_SESSION_OPEN` handling outlived the arm for a while, on the argument that the
- * backend protocol was still live and another client could hold a session. Backend sweep item D1
- * retired the whole `cueEdit.*` family — the fifteen socket messages, all four 409 guards and
- * `GET /perf/cueedit-histogram` — so nothing can open one and that response can no longer arrive.
- * The client's `force` senders, both "do it anyway" buttons and the Diagnostics histogram panel
- * went with it. Update's remaining 409, `INCLUDE_TARGET_GONE`, is unrelated and still live.
+ * **The `cue` arm writes the stored cue, never the rig** (show-cue-editing plan P2; its own paragraph
+ * below). It is not the arm the Run/Show merge (session 2b) removed, which wrote a cue *live* through
+ * a `cueEdit.*` session on the rig and made a cue and the programmer two places to set a value on
+ * stage. That arm, its four session helpers, `api/cueEditWsApi.ts` and the fifteen branches it fed
+ * went in 2b, and backend sweep item D1 retired the whole `cueEdit.*` family — the socket messages,
+ * the `409 CUE_EDIT_SESSION_OPEN` guards and `GET /perf/cueedit-histogram` — so it cannot come back
+ * by accident. Update's remaining 409, `INCLUDE_TARGET_GONE`, is unrelated and still live.
  *
  * There was a `kind: 'look'` arm, whose writes reached neither: they landed in `LookDraftContext`,
  * because the library's Look editor worked against a *synthetic fixture* built from
@@ -31,10 +24,18 @@ import { createContext, useContext, useMemo, type ReactNode } from 'react'
  * which stack line is focused and the Look says what gets written. A focused **template** layer has
  * no arm here on purpose: a template is one family of intents, and projecting its generic row onto
  * every targeted row would silently convert it to a per-fixture one on the first edit.
+ *
+ * **`kind: 'cue'` writes the stored cue**: the cue editor's Values grid (show-cue-editing plan
+ * §3.3, session 5) lands set, colour, position and clear in its `CueRowStore`, which PATCHes the cue's
+ * own rows and sends nothing to the stage (P2) — a live cue lands the edit on its next first hold.
+ * `useCellWriters` has **no live fallback** on this arm: a write with no store goes nowhere. `entryId`
+ * names the place the editor was opened from; the Values grid reads nothing of it yet, and it is in
+ * the memo keys so a host that does is told when it moves.
  */
 export type EditorContextValue =
   | { kind: 'live' }
   | { kind: 'lookLayer'; layerId: number; lookId: number }
+  | { kind: 'cue'; cueId: number; entryId?: number | null }
 
 const defaultValue: EditorContextValue = { kind: 'live' }
 
@@ -52,10 +53,12 @@ export function EditorContextProvider({
   const kind = value.kind
   const lookId = value.kind === 'lookLayer' ? value.lookId : null
   const layerId = value.kind === 'lookLayer' ? value.layerId : null
+  const cueId = value.kind === 'cue' ? value.cueId : null
+  const entryId = value.kind === 'cue' ? (value.entryId ?? null) : null
   // `value` is deliberately not a dependency: depending on it is exactly the
-  // per-render rebroadcast this memo exists to absorb.
+  // per-render rebroadcast this memo exists to absorb. The keys are every field of every arm.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const stable = useMemo(() => value, [kind, lookId, layerId])
+  const stable = useMemo(() => value, [kind, lookId, layerId, cueId, entryId])
   return <EditorContext.Provider value={stable}>{children}</EditorContext.Provider>
 }
 

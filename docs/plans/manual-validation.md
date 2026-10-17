@@ -16,7 +16,9 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-3`](#fu-manual-venue-visit-nav-3) | the app bar's switcher names the show on the rig and reads its state — amber while held, a hollow ring under *Make rig safe*'s blackout — and its confirmation counts the incoming show's parks, which hold their levels through the switch | Venue visit Nav.3, 2026-10-16 |
@@ -145,6 +147,41 @@ and a phone.
    the band wraps under its sentence, each status line's buttons wrap under its words on a phone, and
    a show's buttons wrap under its name there.
 
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-4`
+
+**What it proves**: *one mask* — venue-visit R3.4, apply-model plan session 4 (§4.4, D3): the
+selection's family pill is the mask's picker on the programmer and on the busk view, every change a
+`selection.setFamilies` that keeps the heads, and Record, Record Look, Include, Make layer and Update open on
+that mask without ever writing it back.
+
+**Why it is here**: the tests drive the popover, the draft and each write against mocks; nothing
+opened the popover on the desk's two screens and the iPad, watched the other screen's pill and
+marquee follow, or pressed a palette under a mask picked this way.
+
+**Test**, on the dev rig with the programmer on one screen and the busk view (Split) on the other,
+both following the desk, and a Colour and a Position palette:
+
+1. **Pick on busk.** Select Hex 1–4 on the rig band: the pill reads *All*. Open it, switch *All
+   attributes* off (all four ticked, nothing changes), untick Intensity, Position and Beam: the pill
+   reads *Colour* on both screens, and the programmer's rows stay selected.
+2. **The mask holds.** Row C's strip offers only colour palettes now; tap the Colour palette: it
+   lands on Hex 1–4. Press a Position palette's busk pad: refused, naming both families.
+3. **Clear it.** Untick Colour too: nothing is written, the popover says *Pick at least one attribute.
+   The selection stays Colour.* Switch *All attributes* on: both pills read *All*.
+4. **Marquee and rows.** Drag a marquee over the Position column of Hex 1–2 on the programmer: both
+   pills read *Position*, and the busk popover's draft follows. Click a row: both read *All*.
+5. **Into a sheet.** Pick *Colour* on the programmer's pill, then open Record: it opens with Colour
+   ticked. Tick Beam there: the pills still read *Colour*. Close and open Record Look, Include, Make
+   layer and Update in turn: each opens on *Colour*.
+6. **On the iPad.** Open the pill in Pads focus and pick *Intensity*: the popover is reachable, the
+   toggles take a finger, and the desk screens' pills follow.
+7. **Unlinked.** Unlink the busk window and pick *Position* there: the programmer's pill stays as it
+   was, and a press on that busk window carries Position.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-NAV-4`
 
 **What it proves**: *a show's home and its one set of actions on a real desk* — venue-visit Nav.4,
@@ -172,6 +209,36 @@ desk lacks:
    *Make current* is refused with its reason in all four, and nothing switches.
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-5`
+
+**What it proves**: *the Values grid writes the stored cue and nothing else* — venue-visit R2.5,
+show-cue-editing plan session 5 (D2, D10, P2, §10): a typed value over a Look-won cell becomes an own
+row, the rig does not move, and the cue's next GO lands it.
+
+**Why it is here**: the tests read the wire for a full editing pass and pin the PATCH; only the rig
+shows that a live cue edited this way leaves the stage alone until its next first hold, and that the
+value GO lands is the one the grid drew.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show unlocked, Q1 not live:
+
+1. **Over a Look.** Open Q1 in the cards view, Values tab. The Orbits' Dimmer cells carry the Scrim
+   Look's teal edge, its name on the hover. Select both, press Enter and type `80`: the cells take the
+   blue edge, the hover says *overrides Scrim · opaque…*, and the header's save state goes *Unsaved*
+   then *Saving… · Saved*, with a *Q1 · values saved* toast carrying Undo. **Nothing moves on the
+   rig.**
+2. **GO.** GO into Q1: the Orbits come up at 80 %, not at the Look's level.
+3. **Locked ⌫.** The GO locked the show. Select one Orbit's Dimmer cell in Q1's grid and press ⌫:
+   the *Unlock the show to edit?* question opens and the show does **not** go back a cue. Cancel it.
+4. **⌫ and Undo.** Unlock the show (the header's padlock). With Q1 live, select one Orbit's cell and
+   press ⌫: the cell goes back to the Look's teal and nothing moves on the rig. Press ⌘Z in the
+   editor: the own row is back; GO into Q1 again and both are at 80 %.
+5. **Two grids.** Unlocked, open Q2 too. Click a cell in Q1's grid, then one in Q2's: Q1's selection
+   dims. ⌫ now acts on Q2 only; click back in Q1 and it is Q1's.
+
+---
 
 ## `FU-MANUAL-VENUE-VISIT-R3-2`
 

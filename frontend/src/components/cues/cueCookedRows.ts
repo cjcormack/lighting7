@@ -57,6 +57,14 @@ export function buildStaticRows(
         put(row.targetKey, row, staged)
         continue
       }
+      // The desk's cook names the **member** a group's row landed on (`targetType` says only that it
+      // came through a group; `sourceTargetKey` names the group, show-cue-editing plan §3.8), so a
+      // key that is a head is put straight on it. A group's name is expanded, the shape this read
+      // was first written for.
+      if ((fixtures ?? []).some((fixture) => fixture.key === row.targetKey) || row.sourceTargetType === 'group') {
+        put(row.targetKey, row, staged)
+        continue
+      }
       for (const fixture of fixtures ?? []) {
         if (fixture.groups.includes(row.targetKey)) put(fixture.key, row, staged)
       }

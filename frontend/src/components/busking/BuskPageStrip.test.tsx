@@ -78,7 +78,7 @@ function verbs() {
 
 function padsOf(v: SelectionVerbs, families: PadRowSelection['families'] = null): PadRowSelection {
   const target: BuskingTarget = { type: 'fixture', key: 'par-1', fixture: par }
-  return { selectedTargets: new Map([['fixture:par-1', target]]), families, verbs: v }
+  return { selectedTargets: new Map([['fixture:par-1', target]]), families, onFamilies: () => {}, verbs: v }
 }
 
 function draw(props: Partial<BuskPageStripProps> = {}) {
@@ -229,15 +229,26 @@ describe('the pad row', () => {
     expect(document.querySelector('[data-pad-summary]')).toBeNull()
   })
 
-  it('draws the family pill only while a mask is set, and only in Pads', () => {
+  it('draws the family pill over the selection in Pads — the mask, or All with none — and never in Split', () => {
     draw({ pads: padsOf(verbs().v, ['COLOUR', 'POSITION']) })
     expect(document.querySelector('[data-pad-family]')).toHaveTextContent('Colour · Position')
     cleanup()
     draw({ pads: padsOf(verbs().v, null) })
-    expect(document.querySelector('[data-pad-family]')).toBeNull()
+    expect(document.querySelector('[data-pad-family]')).toHaveTextContent('All')
     cleanup()
     draw()
     expect(document.querySelector('[data-pad-family]')).toBeNull()
+  })
+
+  it('draws the family pill as the mask’s picker in Pads when handed the write, reading All with no mask (apply-model plan D3)', () => {
+    const onFamilies = vi.fn()
+    draw({ pads: { ...padsOf(verbs().v, null), onFamilies } })
+    const pill = screen.getByRole('button', { name: 'All' })
+    expect(pill).toHaveAttribute('data-pad-family')
+    fireEvent.click(pill)
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    fireEvent.click(screen.getByLabelText('Intensity'))
+    expect(onFamilies).toHaveBeenCalledWith(['POSITION', 'COLOUR', 'BEAM'])
   })
 
   it('marks the page in every shape — the link badge while paged with the desk, *Page: Own* while not — beside the tabs (desk-follow D7, D9)', () => {

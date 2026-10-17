@@ -12,7 +12,7 @@
  * Applied as an `::after` overlay so it layers over whatever `ownershipCellClass` produced without
  * either one having to know about the other.
  */
-export function cellSelectionClass(selected: boolean, gutter = true): string {
+export function cellSelectionClass(selected: boolean, gutter = true, dimmed = false): string {
   // A fill plus a 2px **foreground** outline. The outline is not a seventh colour in the ownership
   // vocabulary — it is the theme's text colour, white on the dark desk and near-black on light —
   // which is exactly why it can sit beside all six rings without being read as one of them. It
@@ -31,5 +31,10 @@ export function cellSelectionClass(selected: boolean, gutter = true): string {
   // than passed in: a stringly-typed styling parameter is one nothing can check.
   const base = 'after:pointer-events-none after:absolute after:rounded-sm after:bg-primary/25 after:ring-2 after:ring-inset after:ring-foreground/90'
   if (!selected) return ''
-  return gutter ? `after:inset-0 ${base}` : `after:inset-0.5 ${base}`
+  // Dimmed: a grid that is not the key region (show-cue-editing plan §4.5) keeps its selection on
+  // screen, quieter, so the operator can see which of two grids the next key reaches.
+  const look = dimmed
+    ? 'after:pointer-events-none after:absolute after:rounded-sm after:bg-primary/10 after:ring-1 after:ring-inset after:ring-foreground/40'
+    : base
+  return gutter ? `after:inset-0 ${look}` : `after:inset-0.5 ${look}`
 }

@@ -391,6 +391,14 @@ export interface CookedRow {
    */
   layerId?: number | null
   layerSource?: LayerSource | null
+  /**
+   * The own row's or layer row's **own** target, before group expansion (show-cue-editing plan
+   * §3.8): a group own row's members all carry the group here, while [targetKey] names the head and
+   * [targetType] says only that the value arrived through a group. Absent from a desk that predates
+   * session 5, where a reader takes the head as its own source.
+   */
+  sourceTargetType?: 'fixture' | 'group' | null
+  sourceTargetKey?: string | null
 }
 
 export interface CueCookedResponse {

@@ -572,6 +572,7 @@ export function lightingApiMock() {
         },
         set: () => {},
         toggle: () => {},
+        setFamilies: () => {},
         clear: () => {},
         subselect: () => {},
       },

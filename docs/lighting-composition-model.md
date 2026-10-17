@@ -359,6 +359,15 @@ The cook step replaced all of it with **one rule for every category: later layer
 own rows win over all of them**. Across cues, HTP still governs intensity — which is the pairing an
 operator is most likely to be surprised by, and why `FU-MANUAL-LAYER-PRECEDENCE` exists.
 
+**Own rows are edited in place** (show-cue-editing plan D2, session 5). The cue editor's Values grid
+draws a cue's cook — `GET /cues/{id}/cooked`, the same `buildCombinedCueLayerRows` the GO path runs —
+and an edit there writes one of the cue's own rows, which beats every layer by the rule above, so the
+cell shows what was typed; removing the own row lets the layer underneath win again. Each cooked row
+names the row it came from **before group expansion** (`sourceTargetType` / `sourceTargetKey`,
+`Assignment.sourceTarget`): a group's own row has become one row per member by the cook, and the grid
+draws and edits it on the group's row from this. The write is a stored PATCH of the whole
+`propertyAssignments` list and composes nothing: a live cue lands it on its next first hold (P2).
+
 ### Fade weight
 
 Each active cue has a fade weight in `[0, 1]` tracking its crossfade progress. During a cue transition, outgoing cues fade `1 → 0` and incoming cues fade `0 → 1` over the cue fade time. The weight feeds both the crossfade interpolation for `LTP` categories and the scaled `max` for `HTP` categories.
@@ -750,6 +759,19 @@ comes **off** rather than widening; pressing twice still means off. One limit wo
 `propertyMask` to its **rows**, not to its effects (a pre-existing property of the mask, not of the
 press), so a Look's *effect* in a skipped family still runs — it is still named in
 `skippedFamilies`, which is the honest report.
+
+**There is one mask, the selection's, and every surface reads it** (apply-model plan D3). It is set
+three ways: a marquee publishes its heads and names its columns and a rows-only click publishes its
+heads and clears the mask, each a `selection.set` of the whole fact, and the selection's **family
+pill is its picker** — the programmer's row C while the window follows the desk, and every busk row
+that carries the selection — an *All attributes* switch over the four families, whose write is
+`selection.setFamilies`: the mask alone, the desk keeping its heads. A window that has unlinked masks its own copy instead (the busk tab's), or, on the
+programmer, keeps the marquee's columns as its only mask. The sheets that take a mask — Record,
+Record Look, Include, Make layer and Update — **open on it**, and stay editable there: a sheet's
+change is that write's own and never moves the selection, so narrowing one Record never narrows the
+next press. On the desk this added one write, `selection.setFamilies` (`DeskSelection.setFamilies`,
+the mask replaced and the heads kept); the press doors already read `families`, and the record
+routes already took a `mask`.
 
 > **The library has no order and no groups.** Palettes and Looks list by name, and nothing but a
 > create assigns a position, because there is no position to assign. `template_groups`,
