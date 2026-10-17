@@ -443,6 +443,8 @@ internal fun buildCueAssignmentsForCue(
             // Per member, not off the reference fixture: whether a slider shares its channel with the
             // colour is a fact about each member's class, and a mixed group may disagree.
             bundleRole = bundleRoleOf(fixture, canonical),
+            // The stored row's own target, group or fixture, whichever member this copy landed on.
+            sourceTarget = target,
         )
 
         // Until session 4 a per-fixture branch sat here: a value of `ref:{uuid}` had to be resolved

@@ -325,8 +325,8 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
 once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
-chains reach R3.8: Cue editor (R2.5–R2.6, two deep with R2.5 in flight) and Apply (R3.5–R3.7, three).
-They are level now, so keep both moving.
+chains reach R3.8: Cue editor (R2.6, one deep since R2.5 merged) and Apply (R3.5–R3.7, three).
+Apply is the longer again, so keep it moving.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
@@ -337,14 +337,14 @@ K2 (2026-10-16) took out R1.3, R4.2, Nav.1 and R1.4 and folded the Cues lane. R1
 editor lane and R1.5. R4.3 (PR #176), R3.1 and Nav.2 were in flight as it ran.
 
 K3 (2026-10-17) took out R3.1, R4.3, Nav.2, R2.3, R4.6, R3.3, Nav.3, R2.4, R3.2, R4.7, Nav.4 and R3.4,
-and every need they met. R2.5 (#190), Nav.5 (#191) and R4.4 (#192) were in flight as it ran. Three
-lanes have not started: Cue library, Programmer and Venue attach. Each can start now.
+and every need they met. R2.5 (#190), Nav.5 (#191) and R4.4 (#192) were in flight as it ran. All three
+merged before K3 did, and are out of the lanes. Three lanes have not started: Cue library,
+Programmer and Venue attach. Each can start now.
 
-**Cue editor.** R2.5 is in flight (#190).
+**Cue editor.**
 
 | Session | From other lanes |
 |---|---|
-| R2.5 The Values grid | — |
 | R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
@@ -365,11 +365,10 @@ lanes have not started: Cue library, Programmer and Venue attach. Each can start
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Effects.** R4.4 is in flight (#192).
+**Effects.**
 
 | Session | From other lanes |
 |---|---|
-| R4.4 Fading by size | — |
 | R4.5 A stack's effect size | — |
 
 **Apply.** R3.5 and R2.6 both change `AddLayerSheet`: R3.5 moves the programmer's door and R3.8 the
@@ -382,12 +381,11 @@ cue editor's, so either order works (the apply plan's §5).
 | R3.7 The busk side sheets | — |
 | R3.8 Into the cue editor | R2.6 |
 
-**Navigation.** Nav.5 is in flight (#191). Nav.4 ran ahead of S14, which stays unclaimed.
+**Navigation.** Nav.4 and Nav.5 ran ahead of S14, the lane's last session, which stays unclaimed.
 
 | Session | From other lanes |
 |---|---|
 | S14 Applied tables | — |
-| Nav.5 A venue's home | — |
 
 **Venue attach.** Not started. Nav.4 has merged, so Att.3 hangs off its project actions.
 

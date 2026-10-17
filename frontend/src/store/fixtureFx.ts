@@ -230,9 +230,14 @@ export interface ActiveEffect {
   programmerOwned: boolean
   /**
    * The envelope, 0–1: the runtime factor of the effect's weight a fade moves, beside [size]
-   * (effects plan P3). 1 until the cue fades move it.
+   * (effects plan P3), as it stood when the desk sent the list.
    */
   intensityMultiplier: number
+  /**
+   * Let go on a fade and shrinking to nothing (the desk's `FxInstance.leaving`): nobody's, so not
+   * Local and not recordable, and gone at 0. Absent from a desk before effects plan session 4.
+   */
+  leaving?: boolean
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid: string | null
   /** Wall-clock rate master (null → unscaled); only WALL_CLOCK effects read it. */

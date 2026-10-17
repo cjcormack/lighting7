@@ -172,18 +172,48 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
-        EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
         val before = controller().changesTo(1).size
 
         release("fixture", "hex-1", fadeMs = 1_500)
-        // Stopped first, the effect no longer covers the dimmer when the values publish, so the
-        // release reaches it as a ramp. Released first, the publish skipped the covered key and the
-        // effect's removal then reset it with no fade.
+        // Over a value the Release takes, the effect is stopped first (effects plan D13, split by
+        // what is under it), so it no longer covers the dimmer when the values publish and the
+        // release reaches it as a ramp.
+        assertNull(engine.getEffect(effect.id))
         val changes = controller().changesTo(1).drop(before)
         assertTrue(
             changes.any { it.newValue == 0u.toUByte() && it.fadeMs == 1_500L },
             "the dimmer under the stopped effect fades at the release's time, got $changes",
         )
+    }
+
+    @Test
+    fun `a local effect over no released value shrinks over the release's time`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        engine.sweepsLeaving = false
+        val effect = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+
+        val answer = release("fixture", "hex-1", fadeMs = 1_500)
+        // Effects plan D13: nothing the Release takes is under it, so it shrinks to nothing over the
+        // programmer fade and the engine removes it at 0.
+        assertEquals(1, answer.effects)
+        assertTrue(effect.leaving, "let go, not stopped")
+        assertEquals(1_500L, effect.envelope.durationMs)
+        assertEquals(1, engine.retireFinishedLeaving(effect.envelope.startMs + 1_500))
+        assertNull(engine.getEffect(effect.id), "and removed at 0")
+    }
+
+    @Test
+    fun `at no fade a Release stops its local effects at once`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
+        val effectId = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true).id
+
+        release("fixture", "hex-1")
+
+        assertNull(state.show.fxEngine.getEffect(effectId))
     }
 
     @Test

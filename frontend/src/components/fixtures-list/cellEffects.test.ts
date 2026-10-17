@@ -20,6 +20,10 @@ describe('isLocalEffect', () => {
     expect(isLocalEffect(effect({ programmerLayerId: 3 }))).toBe(false)
     expect(isLocalEffect(effect({ cueId: 3 }))).toBe(false)
   })
+
+  it('leaves an effect a fade is taking off — it is nobody\'s', () => {
+    expect(isLocalEffect(effect({ leaving: true }))).toBe(false)
+  })
 })
 
 describe('effectsToStop', () => {

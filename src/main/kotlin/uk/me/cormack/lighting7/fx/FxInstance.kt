@@ -312,6 +312,16 @@ data class ProgrammerLayerEffectKey(
     private val hash: Int = (layerId * 31 + effect.hashCode()) * 31 + targetKey.hashCode()
 
     override fun hashCode(): Int = hash
+
+    companion object {
+        /**
+         * The key for [effect] on [targetKey] — without the entry's row [EffectEntry.uuid], which is
+         * no part of the identity: a palette save recreates its effect row under a new uuid, and an
+         * unchanged effect must keep its running instance.
+         */
+        fun of(layerId: Int, effect: EffectEntry, targetKey: String) =
+            ProgrammerLayerEffectKey(layerId, effect.copy(uuid = null), targetKey)
+    }
 }
 
 /**
@@ -449,6 +459,11 @@ class FxInstance internal constructor(
      * instance — the swap's read-copy-publish cannot lose it.
      */
     internal val dynamicsRef: AtomicReference<FxDynamics>,
+    /**
+     * The cell the [envelope] lives in, shared across `FxEngine.updateEffect`'s swap as
+     * [dynamicsRef] is, so a fade or a retirement racing the swap reaches both instances.
+     */
+    private val envelopeRef: AtomicReference<EffectEnvelope> = AtomicReference(EffectEnvelope.FULL),
 ) {
     constructor(
         effect: Effect,
@@ -459,6 +474,9 @@ class FxInstance internal constructor(
         effect, target, timing, blendMode,
         AtomicReference(FxDynamics(stepTiming = effect.defaultStepTiming)),
     )
+
+    /** [envelopeRef], for the swap that shares it. */
+    internal val envelopeCell: AtomicReference<EffectEnvelope> get() = envelopeRef
 
     init {
         // The only place every spawn path meets: routes, scripts, programmer Include, cue and
@@ -581,6 +599,14 @@ class FxInstance internal constructor(
     /** If this effect was applied as part of a cue, the cue ID. Null otherwise. */
     var cueId: Int? = null
 
+    /**
+     * The stored effect row a cue's layer spawned this from — a Look effect's or a palette effect's
+     * uuid — or null for anything else. What a GO matches a continuing effect on (effects plan P4):
+     * the incoming cue keeps an outgoing cue's instance running the same row on the same target,
+     * phase intact, rather than fading one out and another in.
+     */
+    var layerEffectUuid: java.util.UUID? = null
+
     /** If this effect belongs to a cue stack, the stack ID. Null otherwise. */
     var cueStackId: Int? = null
 
@@ -613,10 +639,12 @@ class FxInstance internal constructor(
      * operator's: stopping it would either be undone by the next recook or quietly edit a library
      * record. Include's ad-hoc children *are* local — they are the operator's busk being written
      * back, which is why [programmerOrigin] does not exclude one.
+     *
+     * A [leaving] instance is nobody's: a release has already let it go, and only its fade holds it.
      */
     val isLocalEffect: Boolean
         get() = FxEngine.isProgrammerFxPriority(priority) &&
-            source == null && programmerLayerEffectKey == null && cueId == null
+            source == null && programmerLayerEffectKey == null && cueId == null && !leaving
 
     /**
      * Composition priority. Effects with lower priority compose first; higher priority effects
@@ -676,16 +704,60 @@ class FxInstance internal constructor(
         set(value) { updateDynamics { it.copy(elementFilter = value) } }
 
     /**
-     * The **envelope** (effects plan §3.1): the runtime part of the effect's weight, 0.0–1.0, which a
-     * fade moves — session 4's GO, stack stop and programmer gestures (§3.5). Never stored or
-     * recorded: Record takes the row's own [FxDynamics.size].
-     *
-     * It no longer scales the effect's raw output. That scaling is what once dropped an `OVERRIDE`
-     * effect to 0 on a fade; the envelope is now one factor of [weight], applied after the blend
-     * (P3). Nothing in this session moves it from 1.0.
+     * The **envelope** (effects plan §3.1, §3.5) as it stands — a level, or a fade from one level to
+     * another on the clock ([EffectEnvelope]). A live instance's envelope changes only by
+     * compare-and-set through [updateEnvelope], so a cue brought back on and the engine retiring the
+     * same instance cannot both win.
      */
-    @Volatile
-    var intensityMultiplier: Double = 1.0
+    val envelope: EffectEnvelope get() = envelopeRef.get()
+
+    /**
+     * Replace the envelope with [transform] of the current one, unless the instance has been
+     * retired ([EffectEnvelope.RETIRED]). False when it had been: the engine has let it go, and
+     * nothing may bring it back. [transform] may run more than once under contention; keep it pure.
+     */
+    internal fun updateEnvelope(transform: (EffectEnvelope) -> EffectEnvelope): Boolean {
+        while (true) {
+            val current = envelopeRef.get()
+            if (current === EffectEnvelope.RETIRED) return false
+            if (envelopeRef.compareAndSet(current, transform(current))) return true
+        }
+    }
+
+    /**
+     * Set the envelope of an instance not yet in the engine — a spawn's starting ramp, a split's copy
+     * taking its parent's. Not for a live instance: a fade there goes through [updateEnvelope].
+     */
+    internal fun carryEnvelope(envelope: EffectEnvelope) = envelopeRef.set(envelope)
+
+    /**
+     * Mark this instance retired if its envelope is still [expected] — the engine's half of the
+     * race [updateEnvelope] guards. True when this call retired it.
+     */
+    internal fun retire(expected: EffectEnvelope): Boolean =
+        expected !== EffectEnvelope.RETIRED && envelopeRef.compareAndSet(expected, EffectEnvelope.RETIRED)
+
+    /**
+     * True while the instance is on its way out: its owner let it go on a fade, and it is removed
+     * once its envelope reaches 0 ([FxEngine.retireFinishedLeaving]). It belongs to nothing meanwhile
+     * — no recook, Release or carry counts it — though a cue brought back on mid-fade reclaims its
+     * own.
+     */
+    val leaving: Boolean get() = envelopeRef.get().leaving
+
+    /**
+     * The envelope's level now, 0.0–1.0: the runtime part of the effect's weight, which a fade moves —
+     * a cue's GO (D1) and the programmer's press, release and Clear (D13). Never stored or recorded:
+     * Record takes the row's own [FxDynamics.size].
+     *
+     * It does not scale the effect's raw output. That scaling is what once dropped an `OVERRIDE`
+     * effect to 0 on a fade; the envelope is one factor of [weight], applied after the blend (P3).
+     * Setting it holds the level still, cancelling any fade and a leaving mark — but never a
+     * retirement.
+     */
+    var intensityMultiplier: Double
+        get() = envelopeRef.get().let { if (it.isConstant) it.to else it.at(System.currentTimeMillis()) }
+        set(value) { updateEnvelope { EffectEnvelope.constant(value) } }
 
     /**
      * The weight P3 applies after the blend on this pass: [FxDynamics.size] × [intensityMultiplier],

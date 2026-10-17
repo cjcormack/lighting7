@@ -4,12 +4,14 @@ import { MemoryRouter, Route, Routes } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectDetail, ProjectSummary } from '@/api/projectApi'
 import type { VenueHoldState } from '@/api/venueHoldApi'
+import type { VenueHistory } from '@/api/venueApi'
 
 /**
- * One set of project actions, four places (navigation plan §6, P3; §8 Session 4): the Projects
- * card's ⋮, the home's ⋮ and ⌘K's Project group offer the same set for one project, and a show whose
- * venue version is not on this desk offers no working *Make current* in any of the four — the
- * switcher included.
+ * One set of project actions, four places (navigation plan §6, P3; §8 Sessions 4 and 5): the
+ * Projects card's ⋮, the home's ⋮ and ⌘K's Project group offer the same set for one project — a
+ * venue's too, to an admin and an operator — and a show whose venue version is not on this desk
+ * offers no working *Make current* in any of the four, the switcher included. ⌘K's *History* and
+ * *Publish vN…* for a viewed venue carry their reasons and open the sheets the band opens.
  */
 
 let projects: ProjectSummary[] = []
@@ -17,6 +19,7 @@ let isAdmin = true
 const looseHolds = { projectId: null, cues: [] }
 const looseCueList: { id: number; name: string }[] = []
 let hold: VenueHoldState = { projectId: null, held: false, pinned: null, installed: null, runAgainst: false }
+let venueHistory: VenueHistory | undefined
 
 const detailOf = (p: ProjectSummary): ProjectDetail => ({
   ...p,
@@ -50,7 +53,11 @@ vi.mock('@/store/auth', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/auth')>()),
   useAuthStatusQuery: () => ({ data: { user: { role: isAdmin ? 'ADMIN' : 'OPERATOR' } } }),
 }))
-vi.mock('@/store/venues', () => ({ useVenueHistoryQuery: () => ({ data: undefined }) }))
+vi.mock('@/store/venues', () => ({
+  useVenueHistoryQuery: (_id: number, opts?: { skip?: boolean }) => ({ data: opts?.skip ? undefined : venueHistory }),
+  useVenueHistory: () => ({ data: isAdmin ? venueHistory : undefined }),
+  useDiscardVenueDraftMutation: () => [vi.fn(), { isLoading: false }],
+}))
 vi.mock('@/store/cloudSync', () => ({ useCloudSyncConfigsQuery: () => ({ data: {} }) }))
 vi.mock('@/store/oauthGithub', () => ({ useOauthGithubIdentityQuery: () => ({ data: undefined }) }))
 vi.mock('@/store/venueHold', () => ({ useVenueHold: () => hold, useRunVenueAgainstMutation: () => [vi.fn(), { isLoading: false }] }))
@@ -89,8 +96,12 @@ vi.mock('@/components/venue/ExtractVenueSheet', () => ({ ExtractVenueSheet: () =
 vi.mock('@/components/venue/VenueUpdateSheet', () => ({ VenueUpdateSheet: () => null }))
 vi.mock('@/components/venue/DetachVenueDialog', () => ({ DetachVenueDialog: () => null }))
 vi.mock('@/components/venue/RunAgainstDialog', () => ({ RunAgainstDialog: () => null }))
-vi.mock('@/components/venue/VenueHistorySheet', () => ({ VenueHistorySheet: () => null }))
-vi.mock('@/components/venue/PublishVenueSheet', () => ({ PublishVenueSheet: () => null }))
+vi.mock('@/components/venue/VenueHistorySheet', () => ({
+  VenueHistorySheet: ({ open }: { open: boolean }) => (open ? <div data-testid="history-sheet" /> : null),
+}))
+vi.mock('@/components/venue/PublishVenueSheet', () => ({
+  PublishVenueSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="publish-sheet" /> : null),
+}))
 
 // cmdk measures its list; jsdom has no ResizeObserver.
 globalThis.ResizeObserver ??= class {
@@ -126,6 +137,7 @@ beforeEach(() => {
   isAdmin = true
   hold = { projectId: null, held: false, pinned: null, installed: null, runAgainst: false }
   projects = [ON_THE_RIG, STANDALONE, BEHIND, MISSING, VENUE]
+  venueHistory = { venueId: 16, name: 'TCH venue', installed: 8, draft: { changes: 3, outputChanges: 1 }, versions: [] }
 })
 afterEach(cleanup)
 
@@ -207,6 +219,56 @@ describe('the card, the home’s ⋮ and ⌘K offer the same set', () => {
     expect(card).not.toContain('export')
     expect(homeIds(BEHIND)).toEqual(card)
     expect(paletteIds(BEHIND)).toEqual(card)
+  })
+
+  it.each([
+    ['to an admin', true, ['make-current', 'settings', 'clone', 'export', 'history', 'publish', 'delete']],
+    ['to an operator', false, ['make-current', 'settings']],
+  ])('for a venue, %s', (_, admin, expected) => {
+    isAdmin = admin
+    const card = cardIds(VENUE)
+    expect(card).toEqual(expected)
+    expect(homeIds(VENUE)).toEqual(card)
+    expect(paletteIds(VENUE)).toEqual(card)
+  })
+})
+
+describe('⌘K’s History and Publish for a viewed venue', () => {
+  const item = (dialog: HTMLElement, id: string) => dialog.querySelector(`[data-project-action="${id}"]`) as HTMLElement
+
+  it('carry their reasons while the history reads, and with nothing to publish', () => {
+    venueHistory = undefined
+    viewed = VENUE.id
+    let dialog = openPalette()
+    expect(item(dialog, 'history').getAttribute('aria-disabled')).toBe('true')
+    expect(item(dialog, 'history').textContent).toContain('Reading the history…')
+    expect(item(dialog, 'publish').textContent).toContain('Reading the draft…')
+    cleanup()
+
+    venueHistory = { venueId: 16, name: 'TCH venue', installed: 8, draft: { changes: 0, outputChanges: 0 }, versions: [] }
+    dialog = openPalette()
+    expect(item(dialog, 'publish').textContent).toContain('Publish v9…')
+    expect(item(dialog, 'publish').getAttribute('aria-disabled')).toBe('true')
+    expect(item(dialog, 'publish').textContent).toContain('Nothing to publish')
+  })
+
+  it('open the sheets the band and the home open', () => {
+    viewed = VENUE.id
+    fireEvent.click(item(openPalette(), 'history'))
+    expect(screen.getByTestId('history-sheet')).toBeInTheDocument()
+    cleanup()
+    const dialog = openPalette()
+    expect(item(dialog, 'publish').getAttribute('aria-disabled')).toBe('false')
+    fireEvent.click(item(dialog, 'publish'))
+    expect(screen.getByTestId('publish-sheet')).toBeInTheDocument()
+  })
+
+  it('are not offered to an operator', () => {
+    isAdmin = false
+    viewed = VENUE.id
+    const dialog = openPalette()
+    expect(item(dialog, 'history')).toBeNull()
+    expect(item(dialog, 'publish')).toBeNull()
   })
 })
 

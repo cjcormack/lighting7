@@ -55,6 +55,11 @@ export function useFocusedTemplateLayer(): FocusedTemplateLayerValue | null {
   return useContext(FocusedTemplateLayerContext)
 }
 
+/** No focused palette layer below here — `NoProgrammerScope`'s twin, for its reason. */
+export function NoFocusedTemplateLayer({ children }: { children: ReactNode }) {
+  return <FocusedTemplateLayerContext.Provider value={null}>{children}</FocusedTemplateLayerContext.Provider>
+}
+
 export function FocusedTemplateLayerProvider({
   projectId,
   children,

@@ -74,6 +74,8 @@ internal fun captureCurrentState(state: State): CapturedState {
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
 
     for (effect in activeEffects) {
+        // A leaving instance is on its way off the stage: whatever held it has let it go.
+        if (effect.leaving) continue
         val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
 

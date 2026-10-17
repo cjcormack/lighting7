@@ -32,7 +32,8 @@ export function VenueBand({ projectId }: { projectId: number | undefined }) {
       aria-label="Venue mode"
       className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-teal-600/30 bg-teal-500/10 px-3 py-1.5 text-sm sm:px-4"
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2">
+      {/* A basis rather than flex-1, so where the buttons do not fit beside the sentence they wrap under it rather than squeeze it to a word a line. */}
+      <span className="flex min-w-0 flex-[1_1_18rem] items-center gap-2">
         {canEdit ? (
           <PencilLine className="size-4 shrink-0 text-teal-700 dark:text-teal-300" />
         ) : (
@@ -53,7 +54,8 @@ export function VenueBand({ projectId }: { projectId: number | undefined }) {
         )}
       </span>
       {canEdit && history && (
-        <span className="flex shrink-0 items-center gap-2">
+        // Wraps rather than widening the page: on a phone the chip and two buttons are wider than it.
+        <span className="flex min-w-0 max-w-full flex-wrap items-center gap-2">
           <span
             className={cn(
               'inline-flex h-6 items-center gap-1 rounded-full border px-2 text-xs font-medium tabular-nums',

@@ -1,16 +1,19 @@
-import type { ProjectSummary } from '../api/projectApi'
+import type { ProjectSummary, VenueSummary } from '../api/projectApi'
 import type { VenueHoldState } from '../api/venueHoldApi'
+import type { VenueHistory } from '../api/venueApi'
 import type { CueStack, CueStackCueRow } from '../api/cueStacksApi'
 import { cueRowById, isCueRow } from '../api/cueStacksApi'
 import type { CueHoldsState } from '../api/cueHoldsApi'
 import type { SyncConfig } from '../store/cloudSync'
 import { formatRepoUrl } from './formatRepoUrl'
-import { pinChipOf } from './projectSwitch'
+import { pinChipOf, type PinChip } from './projectSwitch'
+import { changesPhrase, publishedDate } from './venue'
 import { behindBanner, behindTone, type BehindBanner, type BehindTone } from './venueHold'
 
 /**
- * A show's home's status block, in words (navigation plan §5.1). Pure, so the lines are pinned by
- * `projectHome.test.ts`; `routes/ProjectHome.tsx` draws them.
+ * A project home's status block, in words (navigation plan §5.1, §5.2): a show's and a venue's.
+ * Pure, so the lines are pinned by `projectHome.test.ts`; `routes/ProjectHome.tsx` and
+ * `components/projectHome/VenueHome.tsx` draw them.
  */
 
 /** The Venue line: the pin and how it stands, coloured as the behind banner is, or null for a standalone show. */
@@ -86,4 +89,77 @@ export function syncLineOf(config: SyncConfig | undefined, now: number): string 
   const repo = formatRepoUrl(config.repoUrl) ?? config.repoUrl
   const when = config.lastSyncedAt ? agoOf(config.lastSyncedAt, now) : 'never synced'
   return `Synced · ${repo} · ${when}`
+}
+
+/**
+ * A venue's Version line (§5.2): `v8 · 14 Oct 2026 · “re-patched LX2”`. An admin's comes from the
+ * venue's history, which carries the note; an operator's — the history route is an admin's — from
+ * the project list's `venueSummary`, which carries the version and its date but no note.
+ */
+export function venueVersionLineOf(
+  history: Pick<VenueHistory, 'installed' | 'versions'> | null | undefined,
+  summary: Pick<VenueSummary, 'version' | 'publishedAt'> | null | undefined,
+): string {
+  const number = history ? history.installed : summary?.version
+  if (number == null) return 'Nothing published yet'
+  const version = history?.versions.find((v) => v.number === number)
+  const at = version?.publishedAt ?? (history ? null : summary?.publishedAt)
+  const note = version?.note?.trim()
+  return [`v${number}`, at ? publishedDate(at) : null, note ? `“${note}”` : null].filter((p) => p != null).join(' · ')
+}
+
+/** How loud the Draft line is: the band's chip colours — red-amber when a change would change output. */
+export type DraftTone = 'none' | 'drawing' | 'output'
+
+/**
+ * A venue's Draft line (§5.2), read from the history the band reads, so the two count alike:
+ * `Draft: 3 changes (1 changes output)` — the second count is how many of them change output.
+ */
+export function draftLineOf(history: Pick<VenueHistory, 'installed' | 'draft'>): { text: string; tone: DraftTone } {
+  const { changes, outputChanges } = history.draft
+  const output = outputChanges > 0 ? ` (${outputChanges} ${outputChanges === 1 ? 'changes' : 'change'} output)` : ''
+  const unpublished = history.installed == null && changes > 0 ? ', unpublished' : ''
+  return {
+    text: `Draft: ${changesPhrase(changes)}${output}${unpublished}`,
+    tone: changes === 0 ? 'none' : outputChanges > 0 ? 'output' : 'drawing',
+  }
+}
+
+/** A show on a venue, as the venue's home lists it: its pin and how it stands. */
+export interface VenueShowRow {
+  id: number
+  name: string
+  version: number
+  isCurrent: boolean
+  /** The pin chip's status (`held`, `v8 published`, `not on this desk`), or null when it is up to date. */
+  status: string | null
+  tone: PinChip['tone']
+  /** The project, for its actions. */
+  project: ProjectSummary
+}
+
+/**
+ * The shows pinned to venue [venueId], by name, from the project list — which says how far behind
+ * each is, where the history's `shows` names only the version. An operator reads it too.
+ */
+export function venueShowsOf(
+  venueId: number,
+  projects: readonly ProjectSummary[] | undefined,
+  hold: VenueHoldState,
+): VenueShowRow[] {
+  return (projects ?? [])
+    .filter((p) => p.kind !== 'VENUE' && p.kind !== 'VENUE_VERSION' && p.venue?.id === venueId)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((p) => {
+      const chip = pinChipOf(p, hold)
+      return {
+        id: p.id,
+        name: p.name,
+        version: p.venue!.version,
+        isCurrent: p.isCurrent,
+        status: chip?.status ?? null,
+        tone: chip?.tone ?? 'none',
+        project: p,
+      }
+    })
 }

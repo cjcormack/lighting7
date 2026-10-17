@@ -242,3 +242,19 @@ export const {
   useApplyCueMutation,
   useStopCueMutation,
 } = cuesApi
+
+/**
+ * The cue as the desk holds it **now**, read past the cache — what a whole-list write builds on.
+ *
+ * `cueListChanged`, the frame a cue PATCH from another client or an MCP tool fires, invalidates
+ * only `CueList`, so a cached `projectCue` can hold a list someone else has since rewritten; a
+ * PATCH built on it would put their rows back as this client last saw them. The cue editor's
+ * `CueRowStore` reads through this at every flush and Undo instead. A plain function over the store,
+ * not a lazy hook, because a flush also runs as the editor unmounts. The fresh answer lands in the
+ * cache entry the editor already holds.
+ */
+export function fetchLatestCue(args: { projectId: number; cueId: number; entryId?: number | null }): Promise<Cue> {
+  return store
+    .dispatch(cuesApi.endpoints.projectCue.initiate(args, { forceRefetch: true, subscribe: false }))
+    .unwrap()
+}

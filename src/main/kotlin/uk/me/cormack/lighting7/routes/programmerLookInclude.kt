@@ -133,7 +133,7 @@ private fun spawnIncludedLookEffects(
     if (stored.isEmpty()) return IncludedLookFx(0, 0, 0, emptySet())
 
     val engine = state.show.fxEngine
-    val running = engine.getActiveEffects()
+    val running = engine.getActiveEffects().filterNot { it.leaving }
     val spawning = ArrayList<FxInstance>()
     val covered = LinkedHashSet<String>()
     var alreadyRunning = 0

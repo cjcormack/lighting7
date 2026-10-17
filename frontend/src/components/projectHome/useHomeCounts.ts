@@ -19,11 +19,15 @@ import { useGetUniverseQuery } from '@/store/universes'
  * universes, surface bindings — are read only on the rig, where the card draws them; off it the card
  * says why it is muted instead.
  *
- * Patches are counted raw, infrastructure included, because the Patch List lists them.
+ * Patches are counted raw, infrastructure included, because the Patch List lists them. A venue's
+ * home draws no Show or Library card, so a venue reads none of their lists.
  */
 export function useHomeCounts(project: ProjectDetail): HomeCounts {
   const id = project.id
   const live = { skip: !project.isCurrent }
+  const isVenue = project.kind === 'VENUE'
+  const show = { skip: isVenue }
+  const liveShow = { skip: isVenue || !project.isCurrent }
   const { data: patches } = usePatchListQuery(id)
   const { data: fixtures } = useVisibleFixtureListQuery(live)
   const { data: groups } = useGroupListQuery(undefined, live)
@@ -31,12 +35,12 @@ export function useHomeCounts(project: ProjectDetail): HomeCounts {
   const { data: surfaceBindings } = useSurfaceBindingsQuery(id, live)
   const { data: regions } = useStageRegionListQuery(id)
   const { data: riggings } = useRiggingListQuery(id)
-  const { data: stacks } = useProjectCueStackListQuery(id, live)
+  const { data: stacks } = useProjectCueStackListQuery(id, liveShow)
   // The cue list rather than `ProjectDetail.cueCount`: the list's tag is the one cue writes invalidate.
-  const { data: cues } = useProjectCueListQuery(id, live)
-  const { data: looks } = useLookListQuery({ projectId: id })
-  const { data: palettes } = useTemplateListQuery({ projectId: id })
-  const { data: speedMasters } = useSpeedMasterListQuery({ projectId: id })
+  const { data: cues } = useProjectCueListQuery(id, liveShow)
+  const { data: looks } = useLookListQuery({ projectId: id }, show)
+  const { data: palettes } = useTemplateListQuery({ projectId: id }, show)
+  const { data: speedMasters } = useSpeedMasterListQuery({ projectId: id }, show)
 
   return {
     patches: patches?.length,

@@ -2,9 +2,20 @@ import { describe, expect, it } from 'vitest'
 import type { CueStack } from '../api/cueStacksApi'
 import type { VenueHoldState } from '../api/venueHoldApi'
 import type { SyncConfig } from '../store/cloudSync'
-import { agoOf, liveCuesOf, looseCuesOf, syncLineOf, venueLineOf } from './projectHome'
+import type { ProjectSummary } from '../api/projectApi'
+import type { VenueHistory } from '../api/venueApi'
+import {
+  agoOf,
+  draftLineOf,
+  liveCuesOf,
+  looseCuesOf,
+  syncLineOf,
+  venueLineOf,
+  venueShowsOf,
+  venueVersionLineOf,
+} from './projectHome'
 
-/** A show's home's status lines (navigation plan §5.1), in words. */
+/** A project home's status lines (navigation plan §5.1, §5.2), in words. */
 
 const idle: VenueHoldState = { projectId: null, held: false, pinned: null, installed: null, runAgainst: false }
 const venue = (installed: number, behind: 'NONE' | 'DRAWING' | 'OUTPUT' = installed > 7 ? 'OUTPUT' : 'NONE') => ({
@@ -130,5 +141,84 @@ describe('the loose cues', () => {
       ],
     }
     expect(looseCuesOf(holds, [{ id: 1, name: 'Opening' }, { id: 2, name: 'Storm' }])).toEqual(['Storm', 'a cue'])
+  })
+})
+
+describe('a venue’s Version line', () => {
+  const history: Pick<VenueHistory, 'installed' | 'versions'> = {
+    installed: 8,
+    versions: [
+      { number: 8, note: 're-patched LX2', publishedAt: '2026-10-14T12:00:00.000Z', snapshotProjectId: 90 },
+      { number: 7, note: 'first rig', publishedAt: '2026-10-01T10:00:00.000Z', snapshotProjectId: 80 },
+    ],
+  }
+
+  it('reads the installed version, its date and its note from the history', () => {
+    expect(venueVersionLineOf(history, { version: 7 })).toBe('v8 · 14 Oct 2026 · “re-patched LX2”')
+  })
+
+  it('reads the version and its date from the list’s summary without the history, which has the note', () => {
+    expect(venueVersionLineOf(null, { version: 8, publishedAt: '2026-10-14T12:00:00.000Z' })).toBe('v8 · 14 Oct 2026')
+  })
+
+  it('says nothing is published before v1', () => {
+    expect(venueVersionLineOf({ installed: null, versions: [] }, null)).toBe('Nothing published yet')
+    expect(venueVersionLineOf(null, { version: null })).toBe('Nothing published yet')
+    expect(venueVersionLineOf(null, undefined)).toBe('Nothing published yet')
+  })
+})
+
+describe('a venue’s Draft line', () => {
+  it('counts the changes and how many of them change output', () => {
+    expect(draftLineOf({ installed: 8, draft: { changes: 3, outputChanges: 1 } })).toEqual({
+      text: 'Draft: 3 changes (1 changes output)',
+      tone: 'output',
+    })
+    expect(draftLineOf({ installed: 8, draft: { changes: 5, outputChanges: 2 } }).text).toBe('Draft: 5 changes (2 change output)')
+  })
+
+  it('is amber with drawing changes only, and quiet with none', () => {
+    expect(draftLineOf({ installed: 8, draft: { changes: 1, outputChanges: 0 } })).toEqual({ text: 'Draft: 1 change', tone: 'drawing' })
+    expect(draftLineOf({ installed: 8, draft: { changes: 0, outputChanges: 0 } })).toEqual({ text: 'Draft: no changes', tone: 'none' })
+  })
+
+  it('says a draft before v1 is unpublished', () => {
+    expect(draftLineOf({ installed: null, draft: { changes: 6, outputChanges: 6 } }).text).toBe(
+      'Draft: 6 changes (6 change output), unpublished',
+    )
+  })
+})
+
+describe('the shows on a venue', () => {
+  const project = (id: number, name: string, extra: Partial<ProjectSummary> = {}): ProjectSummary => ({
+    id,
+    name,
+    description: null,
+    isCurrent: false,
+    kind: 'SHOW',
+    ...extra,
+  })
+  const projects = [
+    project(26, 'TCH Test', { venue: venue(8) }),
+    project(18, 'Sleeping Beauty', { isCurrent: true, venue: venue(8) }),
+    project(30, 'Panto', { venue: { ...venue(8), version: 8, behind: 'NONE' } }),
+    project(41, 'Next year', { venue: { ...venue(8), version: 9 } }),
+    project(1, 'Default'),
+    project(50, 'Elsewhere', { venue: { ...venue(3), id: 60, name: 'Annex' } }),
+    project(16, 'TCH venue', { kind: 'VENUE' }),
+  ]
+  const held: VenueHoldState = { projectId: 18, held: true, pinned: 7, installed: 8, runAgainst: false }
+
+  it('lists the shows pinned to it, by name, each with its pin and how it stands', () => {
+    expect(venueShowsOf(16, projects, held).map(({ project: _p, ...row }) => row)).toEqual([
+      { id: 41, name: 'Next year', version: 9, isCurrent: false, status: 'not on this desk', tone: 'missing' },
+      { id: 30, name: 'Panto', version: 8, isCurrent: false, status: null, tone: 'none' },
+      { id: 18, name: 'Sleeping Beauty', version: 7, isCurrent: true, status: 'held', tone: 'held' },
+      { id: 26, name: 'TCH Test', version: 7, isCurrent: false, status: 'v8 published', tone: 'output' },
+    ])
+  })
+
+  it('lists nothing before the list loads', () => {
+    expect(venueShowsOf(16, undefined, idle)).toEqual([])
   })
 })

@@ -351,7 +351,14 @@ export function CueCardEditor({
             hosts cannot drift. Two cards can be open, each with its own. */}
         {expanded && (
           <div className="border-t bg-background">
-            <CueEditor projectId={projectId} cueId={cue.id} entryId={cue.entryId} locked={locked} host="card" />
+            <CueEditor
+              projectId={projectId}
+              cueId={cue.id}
+              entryId={cue.entryId}
+              locked={locked}
+              host="card"
+              onRequestUnlock={onRequestUnlock}
+            />
           </div>
         )}
       </div>

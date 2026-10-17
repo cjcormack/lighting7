@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
@@ -1197,7 +1198,7 @@ object ProgrammerHandler {
         }
 
         val engine = state.show.fxEngine
-        val stop = ArrayList<Long>()
+        val stop = ArrayList<FxInstance>()
         val partial = ArrayList<TargetClearedPartialDto>()
         for (effect in engine.getActiveEffects()) {
             if (!effect.isLocalEffect) continue
@@ -1206,7 +1207,7 @@ object ProgrammerHandler {
             val painted = engine.fixtureKeysCoveredBy(effect)
             val overlap = painted.count { it in headKeys }
             when {
-                exact || (painted.isNotEmpty() && overlap == painted.size) -> stop += effect.id
+                exact || (painted.isNotEmpty() && overlap == painted.size) -> stop += effect
                 overlap > 0 -> partial += TargetClearedPartialDto(
                     effectId = effect.id,
                     effectType = effect.effectTypeId,
@@ -1219,10 +1220,14 @@ object ProgrammerHandler {
         // Effects first, then the values — `clearProgrammerCompletely`'s order, for its reason. A
         // running effect covers its keys, so a values publish made under it skips them; removing
         // the effect afterwards would then put the layer below back with no fade, half the Release
-        // fading and the other half snapping. Stopped first, its keys reset to the programmer value
-        // still there, and the one values publish below ramps every key at [fadeMs].
-        val stopped = engine.removeEffects(stop)
-        val release = engine.programmer.releaseFixtures(heads, footprint, message.fadeMs ?: 0)
+        // fading and the other half snapping. So one over a value this Release takes is stopped
+        // first and that value ramps; the rest shrink over the fade (effects plan D13).
+        val fadeMs = message.fadeMs ?: 0
+        val store = state.show.programmerStore
+        val stopped = engine.releaseEffects(stop, fadeMs) { key, property ->
+            store.slotsFor(key, property).any { it.owner != ProgrammerOwner.LAYERS }
+        }
+        val release = engine.programmer.releaseFixtures(heads, footprint, fadeMs)
         for ((fixtureKey, propertyName, owner) in release.releasedSlots) {
             if (owner == ProgrammerOwner.LOCATE) state.show.locateManager.pruneWrite(fixtureKey, propertyName)
         }

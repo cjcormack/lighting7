@@ -750,11 +750,38 @@ effects plan's P2); the editor only writes the three fields.
   At weight 0 nothing is written. A size outside 0–1 is refused at every write boundary
   (`EffectSpecCoercion.Strict.sizeProblem`); a stored one is clamped with a warn. Size stops at
   100 % (`FU-FX-SIZE-OVER-100`).
-- **The envelope** is `FxInstance.intensityMultiplier`, the runtime factor of the weight a fade
-  moves — the effects plan's session 4 (§3.5), and session 5's stack size multiplies in beside it.
-  It **no longer scales the effect's raw output**: `FxOutput.scaled()` is gone, and with it the
-  scaling that dropped an `OVERRIDE` effect to 0. Nothing in session 1 moves it from 1; it is never
-  stored and never recorded.
+- **The envelope** is the runtime factor of the weight a fade moves (effects plan §3.5, session 4),
+  and session 5's stack size multiplies in beside it. It **does not scale the effect's raw output**:
+  `FxOutput.scaled()` is gone, and with it the scaling that dropped an `OVERRIDE` effect to 0. It is
+  `FxInstance.envelope`, an immutable `EffectEnvelope` (`fx/EffectEnvelope.kt`) — a level, or a ramp
+  from one level to another over a duration on an `EasingCurve`, read on the clock wherever the weight
+  is read (`intensityMultiplier` is its level now; setting that holds a level). A fade is one value,
+  so it needs no loop of its own, an edit's swap (`updateEffect`) and a split's copies carry it by
+  carrying the object, and every change is one compare-and-set (`FxInstance.updateEnvelope`). What
+  moves it:
+  - **a cue's GO** (D1): the hold registry ramps an arriving cue's new effects `0 → 1` and a leaving
+    cue's `→ 0` over the cue's fade and curve, and an effect the two cues share runs on untouched
+    (P4; never a paused instance or an N-shot, which the incoming cue starts afresh) —
+    `docs/cue-stacks-engineering.md` §"Holds" and §"Crossfade";
+  - **the programmer** (D13): a layer added or removed (a press with `fadeMs`, `programmer.removeLayer`,
+    a cue Include's layers), `programmer.clearTarget`'s local effects and Clear's band, over the
+    programmer fade — split by what is under each (`FxEngine.releaseEffects`, Chris's call): an
+    effect over a programmer value the same gesture moves lands or goes at once, so that value ramps,
+    since a key an effect covers never fades and the value under a shrinking effect would snap
+    (`FU-FX-VALUE-FADE-UNDER-EFFECT`). Include's own effects land at full;
+  - **Blind**: leaving it grows the band from nothing over the Blind fade, by the same split (entering
+    holds it at once).
+
+  An instance let go on a fade is **leaving** (`FxInstance.leaving`): no cue, layer, Release, Record,
+  Include or reload carry counts it any more, and the 50 Hz wall-clock pass removes it once its ramp
+  reaches 0 (`FxEngine.retireFinishedLeaving`, run before that pass's early returns, so a paused
+  effect ends on time). A fade of 0 removes it at once. A leaving instance a cue takes back mid-fade
+  (`FxEngine.reclaimEffects`) is held where it stood and faded on from there; one the engine has
+  already retired (`EffectEnvelope.RETIRED`) cannot be taken back, which is what keeps the two from
+  racing. An edit's swap shares the envelope cell with the instance it replaces, as it shares the
+  dynamics, so a fade or a retirement racing the swap reaches both; a retired instance an edit swapped
+  in is removed by the next sweep. The envelope is never stored and never recorded: Record takes the
+  row's own size.
 - **Direction** (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, applied to each member's phase after the
   spread (§3.3 step 6, `EffectDirection.apply`): Backward is `1 − p`, kept inside `[0, 1)` so an
   effect indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on
@@ -887,8 +914,10 @@ suppression map, so a Blind toggle landing mid-pass cannot pair an empty map wit
 held instance keeps its phase and skips only its apply: a beat effect's phase is its master's tick,
 a wall-clock effect's clock — including a beat effect on *Seconds*, which runs on that loop —
 advances on every pass before anything is applied, and a stateful effect is still computed. Leaving
-Blind paints it on the next tick, in step with what it started beside; the Blind fade does not fade
-it. Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
+Blind lands it in step with what it started beside, growing from nothing over the Blind fade like a
+press — or at full at once over a value the programmer holds (effects plan §3.5;
+`ProgrammerWriter.setBlind` ramps the band's envelopes before the gate opens, so no pass paints one
+at full first). Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
 with reason `BLIND`.
 
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
@@ -1006,8 +1035,9 @@ replace the whole value atomically, so `updateEffect`'s multi-field changes are 
 The cell is shared across `updateEffect`'s instance swap, which is what makes a pause/resume
 racing a swap unlosable. Everything else on `FxInstance` is either immutable, written only
 before the instance is published to the engine (`timingSource`), an independent `@Volatile`
-scalar with no cross-field coupling (`intensityMultiplier` — the envelope, §"Size, direction and
-N-shot" — `priority`, the master slots, `accumulatedScaledMs`, `spent`), tick-loop-owned plain fields
+scalar with no cross-field coupling (`priority`, the master slots, `accumulatedScaledMs`, `spent`),
+one immutable value behind an `AtomicReference` changed only by compare-and-set (the envelope,
+§"Size, direction and N-shot"), tick-loop-owned plain fields
 (the N-shot anchors and per-pass flags), or tick-written diagnostics (`lastPhase`, stored once per
 pass).
 
@@ -1924,12 +1954,20 @@ A cue is an ordered stack of **Look layers** plus its own local values and ad-ho
 
 ### FxInstance.cueId
 
-Each `FxInstance` has an optional `cueId: Int?` field (default `null`). When a cue is applied, all effects it creates are tagged with the cue's database ID. This enables:
+Each `FxInstance` has an optional `cueId: Int?` field (default `null`). When a cue comes on (its first
+hold, `fx/CueHolds.kt`), every effect it creates is tagged with the cue's database ID. This enables:
 
-- **Cue replacement**: When applying a new cue, all effects with any non-null `cueId` are removed first, then the new cue's effects are created with the new `cueId`.
+- **Taking a cue off**: its last hold going removes its effects by `cueId` — never by stack — or, on
+  a GO with a fade, sets them shrinking to nothing (leaving) for the engine to remove at 0. A cue
+  brought back on before that finds its own leaving instances by `cueId` and takes them back.
 - **Identification**: Effects created by a cue can be distinguished from manually applied effects (which have `cueId = null`).
 
-The `cueId` is preserved across atomic swaps in `FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue association.
+A layer's effect also carries `layerEffectUuid`, the stored Look or palette effect row it realises:
+what a GO matches a continuing effect on (effects plan P4), so the incoming cue adopts the outgoing
+cue's instance — retagged to the incoming cue, id and phase kept — instead of fading one out and
+another in. The `cueId`, `layerEffectUuid` and envelope are preserved across atomic swaps in
+`FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue association or its
+fade.
 
 ### Layers
 

@@ -7,12 +7,17 @@ import type { VenueHoldState } from '@/api/venueHoldApi'
 import type { CueStack } from '@/api/cueStacksApi'
 import type { CueHoldsState } from '@/api/cueHoldsApi'
 import type { HomeCounts } from '@/navigation'
+import type { VenueHistory } from '@/api/venueApi'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
 /**
  * A show's home (navigation plan §5.1, §8 Session 4): its sections are the sidebar's for the same
  * project, a held show offers *Review update* and *Run against*, the status block reads the venue,
  * sync and what is live, and off the rig the cards that need it are muted with D4's dot.
+ *
+ * A venue's home (§5.2, §8 Session 5): its version, its draft — counted as the band counts it — and
+ * its sync, an admin's; the shows on it, each opened and made current from the list; and the
+ * sidebar's sections for a venue, which have no Library.
  */
 
 let projects: ProjectSummary[] = []
@@ -24,6 +29,9 @@ let blind = false
 let looseHolds: CueHoldsState = { projectId: null, cues: [] }
 let looseCueList: { id: number; name: string }[] = []
 const syncRun = vi.fn()
+let venueHistory: VenueHistory | undefined
+let listLoaded = true
+const syncNowArgs: unknown[][] = []
 
 const detailOf = (p: ProjectSummary): ProjectDetail => ({
   ...p,
@@ -38,7 +46,7 @@ const detailOf = (p: ProjectSummary): ProjectDetail => ({
 
 vi.mock('@/store/projects', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/projects')>()),
-  useProjectListQuery: () => ({ data: projects, isLoading: false, refetch: vi.fn() }),
+  useProjectListQuery: () => ({ data: listLoaded ? projects : undefined, isLoading: !listLoaded, refetch: vi.fn() }),
   useProjectQuery: (id: number) => {
     const p = projects.find((x) => x.id === id)
     return { data: p ? detailOf(p) : undefined, isLoading: false, error: undefined }
@@ -50,7 +58,17 @@ vi.mock('@/store/auth', async (importOriginal) => ({
   useAuthStatusQuery: () => ({ data: { user: { role: isAdmin ? 'ADMIN' : 'OPERATOR' } } }),
 }))
 vi.mock('@/store/oauthGithub', () => ({ useOAuthReauthState: () => ({ reauthRequired: false }) }))
-vi.mock('@/store/venues', () => ({ useVenueHistoryQuery: () => ({ data: undefined }) }))
+vi.mock('@/store/venues', () => {
+  // History is an admin's (the route answers an operator 403), as the band's hook says.
+  const admin = () => isAdmin
+  const isVenue = (id: number | undefined) => projects.find((p) => p.id === id)?.kind === 'VENUE'
+  return {
+    useVenueHistoryQuery: (_id: number, opts?: { skip?: boolean }) => ({ data: opts?.skip ? undefined : venueHistory }),
+    useVenueHistory: (id: number | undefined) => ({ data: isVenue(id) && admin() ? venueHistory : undefined }),
+    useVenueMode: (id: number | undefined) => ({ isVenue: isVenue(id), canEdit: isVenue(id) && admin() }),
+    useDiscardVenueDraftMutation: () => [vi.fn(), { isLoading: false }],
+  }
+})
 vi.mock('@/store/venueHold', () => ({ useVenueHold: () => hold, useRunVenueAgainstMutation: () => [vi.fn(), { isLoading: false }] }))
 vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: looseCueList }) }))
 vi.mock('@/store/cueHolds', () => ({ useCueHolds: () => looseHolds }))
@@ -58,7 +76,7 @@ vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => blind }))
 vi.mock('@/components/projectHome/useHomeCounts', () => ({ useHomeCounts: () => counts }))
 vi.mock('@/components/cloudSync/useSyncNow', () => ({
-  useSyncNow: () => ({
+  useSyncNow: (...args: unknown[]) => (syncNowArgs.push(args), {
     config: {
       synced: true,
       repoUrl: 'https://github.com/cjcormack/lighting7-tch-show.git',
@@ -70,8 +88,16 @@ vi.mock('@/components/cloudSync/useSyncNow', () => ({
     enabled: true,
   }),
 }))
-vi.mock('@/ProjectSwitchConfirmDialog', () => ({ default: () => null }))
-vi.mock('@/components/projectHome/VenueOverview', () => ({ VenueOverview: () => <div data-testid="venue-overview" /> }))
+vi.mock('@/ProjectSwitchConfirmDialog', () => ({
+  default: ({ project }: { project: { name: string } | null }) =>
+    project ? <div data-testid="switch-confirm">{project.name}</div> : null,
+}))
+vi.mock('@/components/venue/VenueHistorySheet', () => ({
+  VenueHistorySheet: ({ open }: { open: boolean }) => (open ? <div data-testid="history-sheet" /> : null),
+}))
+vi.mock('@/components/venue/PublishVenueSheet', () => ({
+  PublishVenueSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="publish-sheet" /> : null),
+}))
 vi.mock('@/components/venue/VenueUpdateSheet', () => ({
   VenueUpdateSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="update-sheet" /> : null),
 }))
@@ -81,6 +107,7 @@ vi.mock('@/components/venue/RunAgainstDialog', () => ({
 
 const { default: ProjectHome } = await import('./ProjectHome')
 const { default: ProjectSwitcher } = await import('@/ProjectSwitcher')
+const { VenueBand } = await import('@/components/venue/VenueBand')
 
 const show = (id: number, name: string, extra: Partial<ProjectSummary> = {}): ProjectSummary => ({
   id,
@@ -97,6 +124,24 @@ const SLEEPING_BEAUTY = show(18, 'Sleeping Beauty', {
   venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 7, installed: 8, behind: 'OUTPUT' },
 })
 const DEFAULT = show(1, 'Default')
+const TCH_TEST = show(26, 'TCH Test', { venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 7, installed: 8, behind: 'OUTPUT' } })
+// Pinned to a version the venue here has not got: the version, not the venue, is missing.
+const NEXT_YEAR = show(41, 'Next year', { venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 9, installed: 8 } })
+const TCH_VENUE = show(16, 'TCH venue', {
+  kind: 'VENUE',
+  venueSummary: { version: 8, publishedAt: '2026-10-14T12:00:00.000Z', shows: 3, behind: 2 },
+})
+const HISTORY: VenueHistory = {
+  venueId: 16,
+  name: 'TCH venue',
+  installed: 8,
+  draft: { changes: 3, outputChanges: 1 },
+  versions: [
+    { number: 8, note: 're-patched LX2', publishedAt: '2026-10-14T12:00:00.000Z', snapshotProjectId: 90 },
+    { number: 7, note: 'first rig', publishedAt: '2026-10-01T10:00:00.000Z', snapshotProjectId: 80 },
+  ],
+  shows: [],
+}
 
 function Where() {
   return <div data-testid="where">{useLocation().pathname}</div>
@@ -124,8 +169,11 @@ beforeEach(() => {
   stacks = []
   looseHolds = { projectId: null, cues: [] }
   looseCueList = []
-  projects = [SLEEPING_BEAUTY, DEFAULT, show(16, 'TCH venue', { kind: 'VENUE' })]
+  projects = [SLEEPING_BEAUTY, DEFAULT, TCH_VENUE, TCH_TEST, NEXT_YEAR]
+  venueHistory = HISTORY
+  listLoaded = true
   syncRun.mockClear()
+  syncNowArgs.length = 0
 })
 afterEach(cleanup)
 
@@ -310,5 +358,155 @@ describe('the status block', () => {
     looseCueList = [{ id: 70, name: 'Storm' }]
     drawHome(18)
     expect(document.querySelector('[data-status-row="live"]')!.textContent).not.toContain('No cue live')
+  })
+})
+
+describe('a venue’s home', () => {
+  const status = (fact: string) => document.querySelector(`[data-status-row="${fact}"]`) as HTMLElement | null
+
+  it('has no Library section, and its sections are the sidebar’s for the same venue', () => {
+    for (const [onRig, admin] of [
+      [false, true],
+      [false, false],
+      [true, true],
+    ] as const) {
+      isAdmin = admin
+      projects = projects.map((p) => (p.id === 16 ? { ...p, isCurrent: onRig } : { ...p, isCurrent: false }))
+      const sidebar = sidebarRows(16)
+      const home = homeRows(16)
+      expect(home).toEqual(sidebar)
+      expect(new Set(home.map(([section]) => section))).toEqual(new Set(['run', 'rig', 'project']))
+      expect(home.filter(([section]) => section === 'run').map(([, label]) => label)).toEqual(['Programmer', 'Stage'])
+    }
+  })
+
+  it('reads its version, its draft and its sync to an admin, with History, Publish and Discard', () => {
+    drawHome(16)
+    expect(document.querySelector('[data-project-home]')!.getAttribute('data-project-home')).toBe('venue')
+    expect(status('version')!.querySelector('[data-venue-version]')!.textContent).toBe('v8 · 14 Oct 2026 · “re-patched LX2”')
+    expect(status('draft')!.querySelector('[data-venue-draft]')!.textContent).toBe('Draft: 3 changes (1 changes output)')
+    expect(status('sync')!.textContent).toContain('Synced · cjcormack/lighting7-tch-show')
+    expect(syncNowArgs.at(-1)).toEqual([16, { isVenue: true }])
+    expect(within(status('draft')!).getByRole('button', { name: 'Discard' })).toBeInTheDocument()
+
+    fireEvent.click(within(status('version')!).getByRole('button', { name: 'History' }))
+    expect(screen.getByTestId('history-sheet')).toBeInTheDocument()
+    fireEvent.click(within(status('draft')!).getByRole('button', { name: 'Publish v9…' }))
+    expect(screen.getByTestId('publish-sheet')).toBeInTheDocument()
+  })
+
+  it('counts the draft as the band does', () => {
+    render(
+      <MemoryRouter initialEntries={['/projects/16']}>
+        <VenueBand projectId={16} />
+      </MemoryRouter>,
+    )
+    const band = screen.getByRole('status', { name: 'Venue mode' }).textContent!
+    cleanup()
+    for (const draft of [
+      { changes: 3, outputChanges: 1 },
+      { changes: 1, outputChanges: 0 },
+    ]) {
+      venueHistory = { ...HISTORY, draft }
+      render(
+        <MemoryRouter initialEntries={['/projects/16']}>
+          <VenueBand projectId={16} />
+        </MemoryRouter>,
+      )
+      const chip = screen.getByRole('status', { name: 'Venue mode' }).textContent!.match(/Draft · (\d+ changes?)/)![1]
+      cleanup()
+      drawHome(16)
+      expect(status('draft')!.textContent).toContain(`Draft: ${chip}`)
+      cleanup()
+    }
+    expect(band).toContain('3 changes')
+  })
+
+  it('refuses Publish with nothing to publish, and offers no Discard', () => {
+    venueHistory = { ...HISTORY, draft: { changes: 0, outputChanges: 0 } }
+    drawHome(16)
+    const publish = within(status('draft')!).getByRole('button', { name: 'Publish v9…' }) as HTMLButtonElement
+    expect(publish.disabled).toBe(true)
+    expect(status('draft')!.querySelector('[data-publish-refusal]')!.textContent).toBe('Nothing to publish')
+    expect(within(status('draft')!).queryByRole('button', { name: 'Discard' })).toBeNull()
+  })
+
+  it('to an operator: the version from the list, and no draft, Publish, Discard or Sync line', () => {
+    isAdmin = false
+    drawHome(16)
+    expect(status('version')!.textContent).toContain('v8 · 14 Oct 2026')
+    expect(within(status('version')!).queryByRole('button', { name: 'History' })).toBeNull()
+    expect(status('draft')).toBeNull()
+    expect(status('sync')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Publish/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    // The shows are the operator's too.
+    expect(document.querySelectorAll('[data-venue-show]')).toHaveLength(3)
+  })
+
+  it('lists the shows on it with their pins, and opens one’s home', () => {
+    drawHome(16)
+    const rows = [...document.querySelectorAll('[data-venue-show]')]
+    expect(rows.map((r) => r.getAttribute('data-venue-show'))).toEqual(['41', '18', '26'])
+    const held = document.querySelector('[data-venue-show="18"]') as HTMLElement
+    expect(held.textContent).toContain('on v7')
+    expect(held.querySelector('[data-venue-show-status]')!.textContent).toBe('held')
+    expect(within(held).queryByRole('button', { name: 'Make current' })).toBeNull()
+    const behind = document.querySelector('[data-venue-show="26"]') as HTMLElement
+    expect(behind.querySelector('[data-venue-show-status="output"]')!.textContent).toBe('v8 published')
+    fireEvent.click(within(behind).getByRole('button', { name: 'Open' }))
+    expect(screen.getByTestId('where').textContent).toBe('/projects/26')
+  })
+
+  it('makes a show current through the confirmation', () => {
+    drawHome(16)
+    const behind = document.querySelector('[data-venue-show="26"]') as HTMLElement
+    expect(screen.queryByTestId('switch-confirm')).toBeNull()
+    fireEvent.click(within(behind).getByRole('button', { name: 'Make current' }))
+    expect(screen.getByTestId('switch-confirm').textContent).toBe('TCH Test')
+  })
+
+  it('offers no working Make current for a show whose venue version is not here', () => {
+    drawHome(16)
+    const missing = document.querySelector('[data-venue-show="41"]') as HTMLElement
+    expect(missing.querySelector('[data-venue-show-status="missing"]')!.textContent).toBe('not on this desk')
+    expect(within(missing).queryByRole('button', { name: 'Make current' })).toBeNull()
+    const refusal = missing.querySelector('[data-venue-show-refusal="make-current"]')!
+    expect(refusal.textContent).toBe('Version not here')
+    expect(refusal.getAttribute('title')).toBe('Its venue, TCH venue v9, isn’t on this desk')
+    fireEvent.click(refusal)
+    expect(screen.queryByTestId('switch-confirm')).toBeNull()
+  })
+
+  it('says it is reading, not that nothing is published or no show is on it, before the reads land', () => {
+    listLoaded = false
+    venueHistory = undefined
+    drawHome(16)
+    expect(status('version')!.querySelector('[data-venue-version]')!.textContent).toBe('Reading…')
+    const shows = document.querySelector('[data-venue-shows]') as HTMLElement
+    expect(shows.textContent).toContain('Reading…')
+    expect(shows.textContent).not.toContain('No show is on this venue')
+  })
+
+  it('closes an open Discard when another window empties the draft, and does not reopen it when it refills', () => {
+    // A fresh element each time: React skips a rerender of the identical one.
+    const tree = () => (
+      <TooltipProvider>
+        <MemoryRouter initialEntries={['/projects/16']}>
+          <Routes>
+            <Route path="/projects/:projectId" element={<ProjectHome />} />
+          </Routes>
+        </MemoryRouter>
+      </TooltipProvider>
+    )
+    const { rerender } = render(tree())
+    fireEvent.click(within(status('draft')!).getByRole('button', { name: 'Discard' }))
+    expect(screen.getByText('Discard the draft?')).toBeInTheDocument()
+    venueHistory = { ...HISTORY, draft: { changes: 0, outputChanges: 0 } }
+    rerender(tree())
+    expect(screen.queryByText('Discard the draft?')).toBeNull()
+    venueHistory = { ...HISTORY, draft: { changes: 1, outputChanges: 0 } }
+    rerender(tree())
+    expect(screen.queryByText('Discard the draft?')).toBeNull()
   })
 })

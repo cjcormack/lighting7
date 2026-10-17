@@ -207,7 +207,8 @@ class RigBriefing(private val state: State) {
                                 (if (dyn.blocks != 1) ", blocks=${dyn.blocks}" else "") +
                                 (if (dyn.groups != 0) ", groups=${dyn.groups}" else "")
                         } +
-                        (effect.cueId?.let { ", cueId=$it" } ?: "") + ")")
+                        (effect.cueId?.let { ", cueId=$it" } ?: "") +
+                        (if (effect.leaving) ", leaving" else "") + ")")
             }
         } else {
             sb.appendLine("No active effects.")

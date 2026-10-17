@@ -255,7 +255,9 @@ and spread are `FxDynamics` fields, edited in place as the distribution is today
   fade: its rows snap on and off (`CueHolds.takeLoose`, `dropLoose`), and so do its effects.
 - **A stack stop** fades its effects over the time it fades its values.
 - **The programmer** (D13): a layer added or removed by a press, a release (`clearTarget`,
-  `clearEntry` on an effect) and Clear move the envelope over the programmer fade.
+  `clearEntry` on an effect) and Clear move the envelope over the programmer fade — except an effect
+  over a programmer value the same gesture moves, which lands or goes at once so that value ramps
+  (§11, question 18).
 - **Blind** holds programmer effects (R2.1, `fx/BlindHold.kt`): the envelope stays 1 while held, and
   leaving Blind fades them in over the Blind fade, like a press. This replaces R2.1's "the Blind fade
   does not fade an effect" in `fx-engineering.md`, `lighting-composition-model.md` §Blind and
@@ -292,7 +294,7 @@ between them — and the **target** resolves it per head, which is what no outpu
 | `POST /fx/add`, `PUT /fx/{id}`, `updateFx`, `POST /groups/{name}/fx` | gain `size`, `direction`, `nShot` (s1); `spread`, `wings`, `blocks`, `groups` (s2); a `targets` list on `POST /fx/add` (s3), and on `PUT /fx/{id}` and `updateFx` for the apply-model plan's split (its session 2) |
 | Look, cue and palette effect DTOs, `ActiveEffect` | the same fields |
 | `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5) |
-| a stack-size state frame and its set frame | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 17), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush`. Not on `cueRunStateChanged`, which a fader drag would flood |
+| a stack-size state frame and its set frame | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 20), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush`. Not on `cueRunStateChanged`, which a fader drag would flood |
 | MIDI `BindingTarget.StackEffectSize {stackUuid}` | new fader target (s5) |
 | MCP effect schemas (`AiToolSchemas`) | gain each field as its session lands |
 
@@ -407,7 +409,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   back as one.
 - **Docs:** `fx-engineering.md` §"FX Targets", `lighting-composition-model.md`.
 
-### Session 4 — Fading by size (backend)
+### Session 4 — Fading by size (backend) — done, `56cc395`
 
 - §3.5 on the hold registry, as R1.2 shipped it. Today `CueHolds.bringOn` spawns a cue's effects at
   full whatever its `Arrival` (which governs rows only), `takeOff` removes them whatever its
@@ -418,9 +420,9 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   - On `FADE_IN`, `bringOn` spawns the effects at envelope 0; on `FADE_OUT`, `takeOff` leaves them for
     the driver, which ticks each side's envelope beside its weight and removes the outgoing effects at
     0. The manager's gate widens to rows or effects.
-  - `cancel` and `forgetOutgoing` treat effects as they treat rows. **Ask Chris first** what a cue
-    brought back on mid-fade does: keep its fading instances, envelope back to 1, or remove and
-    respawn them (`afterRegister` calls `forgetOutgoing`, then `bringOn`).
+  - `cancel` and `forgetOutgoing` treat effects as they treat rows. A cue brought back on mid-fade
+    keeps its fading instances and takes the envelope back to 1 — at once on a snap, from where it
+    stands over the new hold's fade (§11, question 17).
   - A stack stop releases with `Departure.SNAP`, so its effects snap as its values do.
   - P4's continuing match; the programmer's press, release and Clear at the programmer fade; Blind.
 - Replace the "effects always snap" text: `CueStackManager`'s KDoc and its `useCrossfade` comment,
@@ -442,7 +444,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
   frames (§3.7), the MIDI target with its health and feedback; dropped on a project switch and
   carried across a reload by `show/ShowCarry.kt`, beside the standbys.
 - **A cue two stacks hold, or a stack and a press, is weighed by its highest hold's stack** (§11,
-  18): the stack whose hold is on top, 100 % under a loose hold. Since R1.2 such a cue is one set of
+  21): the stack whose hold is on top, 100 % under a loose hold. Since R1.2 such a cue is one set of
   instances, tagged with its first hold's stack (`FxInstance.cueStackId`, null when a loose hold came
   first, `CueHolds.tagged`), so the weight follows the top hold rather than that tag.
 - The slider on the Show view's stack row and `RunMobile`; `lib/surfaceDrop.ts` and the binding
@@ -536,9 +538,20 @@ Answered by Chris, 2026-10-15, in five rounds:
 16. **Palettes cannot hold wheel slots; how do steps reach wheels?** By slot name (D8). Palette steps
     without wheels, and opening the palette vocabulary to slots, were declined.
 
+Answered in session 4, 2026-10-16:
+
+17. **What does a cue brought back on mid-fade do?** Keeps its fading instances, phase intact, and
+    takes the envelope back to 1. Removing and respawning them was declined.
+18. **A programmer gesture moves a value and fades the effect over it; which fades?** Split by what is
+    under the effect: one over a value the gesture moves lands or goes at once so the value ramps,
+    since a key an effect covers never fades; the rest fade. Accepting the snap under a fading
+    effect, the old Release order, and the engine work now (`FU-FX-VALUE-FADE-UNDER-EFFECT`) were
+    declined.
+19. **Does P4 continue a paused instance or an N-shot?** Neither: the incoming cue starts its own.
+
 Answered by Chris, 2026-10-17, at venue-visit course check K3:
 
-17. **How does a stack's size travel over WS?** Its own `StateFlow`-backed frame, as the grand
+20. **How does a stack's size travel over WS?** Its own `StateFlow`-backed frame, as the grand
     master's does. Riding `cueRunStateChanged`, which a fader drag would flood, was declined.
-18. **Whose size weighs a cue two stacks hold, or a stack and a press?** The highest hold's stack's,
+21. **Whose size weighs a cue two stacks hold, or a stack and a press?** The highest hold's stack's,
     100 % under a loose hold. The product over its stack holds was declined.

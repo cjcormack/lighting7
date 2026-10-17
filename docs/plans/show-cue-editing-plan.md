@@ -230,8 +230,9 @@ effect across writes. No `formatVersion` change: the archive already carries eac
 - **How.** The tick keeps advancing a held instance's phase and skips its apply while
   `programmerStore.blind`, so leaving Blind lands it mid-phase, in step with the effects it was
   started beside. The suppression rule (`fx/EffectSuppression.kt`) is unchanged.
-- **Leaving Blind** paints them on the next tick; the Blind fade does not fade an effect (effect-
-  covered channels snap, `docs/lighting-composition-model.md` §Fades).
+- **Leaving Blind** grows them from nothing over the Blind fade, like a press (effects plan §3.5,
+  session 4); one over a value the programmer holds, and every one on a 0 s Blind fade, paints on
+  the next tick at full (`docs/lighting-composition-model.md` §Fades).
 - **Reporters.** The busk band's `BLIND` pill, the Show glyph's dot and `ProgrammerIndicator` say
   *values and effects held*; the FX tray and the programmer's FX band mark a held instance *held ·
   Blind*. `programmer.keyStack` lists a held programmer effect as `heldBack` with the reason.
@@ -448,7 +449,7 @@ says palette). All of them have merged.
   one cue twice land on the right entry before the desk answers.
 - **Docs:** the frontend CLAUDE.md's §"Sheet kit" (the cue sheet), §"Cues, Stacks & Triggers".
 
-### Session 5 — the Values grid (frontend + cooked route)
+### Session 5 — the Values grid (frontend + cooked route) — done, `ec09327`
 
 - §3.3 and §4.1's Values: `CueRowStore`, the `cue` arm of `EditorContext` and `useCellWriters`, the
   scoped reads with their source edges, D14's rows, *Own only*, Spread with `write: false`, ⌫, Undo,
@@ -467,8 +468,8 @@ says palette). All of them have merged.
   picker in draft (D17); a Look's effects read-only.
 - **What is there.** The two tabs draw `CueLayersReadout` and `CueEffectsReadout`
   (`CueDetailContent.tsx`) inside `CueEditor`; this session replaces them there, and the phone card
-  and the Prompt Book keep them (D9). Session 5 (PR #190) builds `CueRowStore` over own rows alone:
-  if it lands so, this session gives the store its layers and effects lists, each flushed whole
+  and the Prompt Book keep them (D9). Session 5 (`ec09327`) built `CueRowStore` over own rows alone,
+  so this session gives the store its layers and effects lists, each flushed whole
   from the latest cue with its own Undo step (§3.3).
 - **The add doors.** `AddLayerSheet` (`LayerPicker`) is the shared picker, with its timing fields on
   for a cue (`allowTiming`); it takes one `preselectedTarget`, so it learns to take the Values

@@ -76,6 +76,12 @@ data class EffectEntry(
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
+    /**
+     * The stored row's uuid — a Look effect's or a palette effect's — or null for one built from no
+     * row: what a GO matches a continuing effect on (effects plan P4, [FxInstance.layerEffectUuid]).
+     * Not source identity in the sense above: [ProgrammerLayerEffectKey.of] leaves it out.
+     */
+    val uuid: UUID? = null,
 ) {
     val isDeferred: Boolean get() = target == null
 }
@@ -342,6 +348,7 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
         wings = wings,
         blocks = blocks,
         groups = groups,
+        uuid = uuid,
     )
 }
 

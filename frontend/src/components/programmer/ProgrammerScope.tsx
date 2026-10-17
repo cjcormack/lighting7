@@ -68,6 +68,20 @@ export function useProgrammerScopeActions(): ProgrammerScopeActions | null {
 }
 
 /**
+ * No programmer scope below here, whatever is above — for a grid that is not the programmer's but
+ * may be mounted inside it: the cue editor's Values grid, opened over the programmer from its FX
+ * band's *on Q12* (show-cue-editing plan P2). Without it that grid would read the programmer's
+ * Output or layer scope — dimmed columns, Spread refused — for edits that never reach the rig.
+ */
+export function NoProgrammerScope({ children }: { children: ReactNode }) {
+  return (
+    <ScopeActionsContext.Provider value={null}>
+      <ScopeValueContext.Provider value={null}>{children}</ScopeValueContext.Provider>
+    </ScopeActionsContext.Provider>
+  )
+}
+
+/**
  * Owns the scope for one programmer page.
  *
  * **Deliberately not persisted.** `usePersistentState` would mean landing on the page focused on a

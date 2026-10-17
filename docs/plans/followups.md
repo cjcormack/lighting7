@@ -38,6 +38,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
+| [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
+| [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the effect over it to fade together on a programmer gesture |
 | [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
 | [`FU-FX-STEPS-COLOUR-WHEEL`](#fu-fx-steps-colour-wheel) | Trigger | FX | an operator steps colour palettes over a group holding a colour-wheel head |
@@ -153,6 +155,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
+| [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -486,6 +489,44 @@ declined *amplitude 0–200 %* of the plan's Question 2.
 
 **Trigger**: an operator wants an effect bigger than it was written and the effect's own parameters
 (a radius, a range) are not the way they want to reach it.
+
+---
+
+### `FU-FX-PRESS-FADE-CLIENT`
+
+**The press doors' programmer fade, from the client** · Ready · effects plan session 4 (D13), 2026-10-16
+
+Session 4 taught the desk to grow a press's effects from nothing and shrink a release's over the
+programmer fade: `POST /busk/pads/{id}/press`, `/palettes/{id}/toggle` and `/looks/{id}/toggle` take an
+optional `fadeMs`, which `ProgrammerLayerStack.toggle` hands its recook (values and effects alike). The
+client does not send it yet — `pressBuskPad`, `toggleTemplate` and `toggleLook` in `frontend/src/store/`
+send no fade, so a press still lands as it always has: each row's own fade on, a snap off, effects at
+once. Release, Clear and Blind already fade effects, since the client sends their fade.
+
+To pick up: send `getProgrammerFadeMs()` (`lib/programmerFade.ts`) on the three mutations, as
+`useRelease` does. Decide first whether a non-zero programmer fade should also override a Look row's
+own fade on the way on — the desk's rule today when `fadeMs > 0` (`recook`'s "a caller-supplied fade
+covers every key") — or whether the client should send it only for effect records.
+
+---
+
+### `FU-FX-VALUE-FADE-UNDER-EFFECT`
+
+**A programmer value fading under a fading effect** · Trigger · effects plan session 4 (D13), 2026-10-16
+
+A key an effect covers never fades: the tick's reset pass writes the layer below there every pass
+with no fade (`FxEngine.resetOne` → `LayerResolver.fallbackFor`), and the programmer's values fade
+only as a controller ramp, which that write overrides. A cue's rows escape this because their fade is
+a weight inside `fallbackFor`. So when one programmer gesture both moves a value and fades the effect
+over it — a Release, Clear, a press or leaving Blind at a fade — one half would snap. Chris chose to
+split by what is under the effect (`FxEngine.releaseEffects`): an effect over a value the gesture
+moves lands or goes at once and the value ramps; the rest fade.
+
+To do both, the programmer's own release and arrival would need a weight inside `fallbackFor`, as the
+cue layer has, so the reset pass reads a value part-way through its fade.
+
+**Trigger**: an operator wants a busked effect and the value under it to fade out (or in) together on
+one gesture.
 
 ---
 
@@ -2979,6 +3020,19 @@ the copy in `routes/projectCues.kt`, Record CREATE into a stack, and MCP `add_cu
 predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
 renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
 includes the shared cue itself.
+
+### `FU-CUE-ROW-TIMING`
+
+**The cue editor's Values grid cannot set an own row's fade or move-in-dark** · Trigger ·
+Show-cue-editing plan session 5 (venue-visit R2.5), 2026-10-16
+
+The Values grid (`components/cues/editor/CueValuesGrid.tsx`) writes a cue's own rows' **values**, and
+its flush keeps every row's `fadeDurationMs`, `moveInDark` and `sortOrder` as they are
+(`applyCueRowEntries`); a row it creates has neither. Record and the MCP tools still set both.
+Deliberately out of the session (plan §8). **Trigger**: an operator needs a per-row fade or a
+move-in-dark set from the Show view rather than by re-recording. **Then**: the two as fields in the
+cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
+cell), written through the same `CueRowStore` flush as a third kind of draft entry.
 
 ## Completed
 

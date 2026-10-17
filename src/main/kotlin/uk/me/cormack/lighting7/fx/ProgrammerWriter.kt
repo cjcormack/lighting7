@@ -27,6 +27,12 @@ class ProgrammerWriter internal constructor(
     private val fixtures: Fixtures,
     private val programmerStore: ProgrammerStore,
     private val publisher: CascadePublisher,
+    /**
+     * Leaving Blind with a fade (effects plan §3.5): the engine grows the programmer band's effects,
+     * which Blind held, from nothing over that fade. Called before the gate opens, so no pass paints
+     * one at full first.
+     */
+    private val onBlindLifting: (fadeMs: Long) -> Unit = {},
     /** Provenance hook — programmer moves change provenance winners. */
     private val onProgrammerChanged: () -> Unit,
 ) {
@@ -426,9 +432,13 @@ class ProgrammerWriter internal constructor(
      * on stage: entering blind releases programmer-held properties to the layers below;
      * exiting restores the staged values. The stored programmer state is untouched either
      * way. [fadeMs] rides the same publish plumbing as clears (snap in half (a)).
+     *
+     * The programmer's effects follow (effects plan §3.5): Blind holds them at once, as it holds
+     * the band, and leaving Blind grows them from nothing over [fadeMs], like a press.
      */
     fun setBlind(blind: Boolean, fadeMs: Long = 0) {
         if (programmerStore.blind == blind) return
+        if (!blind) onBlindLifting(fadeMs)
         programmerStore.blind = blind
 
         val keys = HashSet(programmerStore.activeKeys())
