@@ -132,10 +132,11 @@ describe('SpeedMasterDetailSheet', () => {
       data: {
         error: 'in use',
         code: 'SPEED_MASTER_IN_USE',
-        referenceCount: 4,
+        referenceCount: 6,
         lookEffectCount: 1,
         cueAdHocEffectCount: 2,
         cueLayerCount: 0,
+        cueTempoCount: 2,
         cueIds: [84, 91],
         followerNames: ['Chase'],
       },
@@ -151,6 +152,7 @@ describe('SpeedMasterDetailSheet', () => {
     expect(dialog).toHaveTextContent('M5 · Slow Wash')
     expect(dialog).toHaveTextContent('1 look effect')
     expect(dialog).toHaveTextContent('2 cue effects')
+    expect(dialog).toHaveTextContent('2 cues setting its tempo')
     expect(dialog).toHaveTextContent('cues 84, 91')
     expect(dialog).toHaveTextContent('followed by Chase')
 

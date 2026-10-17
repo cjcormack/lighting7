@@ -11,7 +11,7 @@ import { resetDeskFollowStores } from '@/lib/deskFollow'
  */
 const store = {
   stacks: [] as { id: number; name: string; type: string }[] | undefined,
-  cues: [] as { id: number; name: string; cueNumber: string | null; cueStackName: string | null; cueType: string }[],
+  cues: [] as { id: number; name: string; entries: { stackName: string; cueNumber: string | null }[]; cueType: string }[],
 }
 const record = vi.fn((_: unknown) => Promise.resolve({ data: undefined }))
 const createStack = vi.fn((body: { name: string }) => Promise.resolve({ data: { id: 77, name: body.name } }))
@@ -50,8 +50,9 @@ beforeEach(() => {
     { id: 5, name: 'Act 2', type: 'STANDARD' },
   ]
   store.cues = [
-    { id: 11, name: 'Storm', cueNumber: '7', cueStackName: 'Act 1', cueType: 'STANDARD' },
-    { id: 12, name: 'Bows', cueNumber: '30', cueStackName: 'Act 2', cueType: 'STANDARD' },
+    { id: 11, name: 'Storm', entries: [{ stackName: 'Act 1', cueNumber: '7' }], cueType: 'STANDARD' },
+    { id: 12, name: 'Bows', entries: [{ stackName: 'Act 2', cueNumber: '30' }], cueType: 'STANDARD' },
+    { id: 13, name: 'Wash', entries: [], cueType: 'STANDARD' },
   ]
 })
 
@@ -64,11 +65,34 @@ function openStackSelect() {
 }
 
 describe('New stack…', () => {
-  it('is the last item of the stack select', () => {
+  it('follows the stacks in the stack select, with No stack last', () => {
     render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
     openStackSelect()
     const options = screen.getAllByRole('option').map((o) => o.textContent)
-    expect(options).toEqual(['Act 1', 'Act 2', 'New stack…'])
+    expect(options).toEqual(['Act 1', 'Act 2', 'New stack…', 'No stack'])
+  })
+
+  it('records a loose cue with No stack — no stack named, none made (cue model plan §10, 19)', async () => {
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    openStackSelect()
+    fireEvent.click(screen.getByRole('option', { name: 'No stack' }))
+    expect(screen.getByText('In no stack — find it in the Cues table.')).toBeTruthy()
+    // A number is an entry's: a cue in no stack has none to take.
+    expect(screen.queryByLabelText('Cue #')).toBeNull()
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(createStack).not.toHaveBeenCalled()
+    expect(record.mock.calls[0][0]).toMatchObject({ mode: 'CREATE', cueStackId: undefined, cueNumber: undefined })
+  })
+
+  it('sends no number typed before No stack was chosen', async () => {
+    render(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
+    fireEvent.change(screen.getByLabelText('Cue #'), { target: { value: '14' } })
+    openStackSelect()
+    fireEvent.click(screen.getByRole('option', { name: 'No stack' }))
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    expect(record.mock.calls[0][0]).toMatchObject({ cueStackId: undefined, cueNumber: undefined })
   })
 
   it('asks for a name and makes the stack only when Record is pressed', async () => {
@@ -149,6 +173,7 @@ describe('An existing cue…', () => {
     expect(within(picker).getAllByRole('radio').map((r) => r.closest('label')!.textContent)).toEqual([
       'BowsQ30 · Act 2',
       'StormQ7 · Act 1',
+      'WashLoose',
     ])
     expect(recordButton()).toBeDisabled()
   })

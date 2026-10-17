@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.models.DaoShowOverride
 import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.facetElement
+import uk.me.cormack.lighting7.models.detachedFrom
 import uk.me.cormack.lighting7.models.isVenueBound
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
@@ -44,6 +45,7 @@ import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.LookEffectJson
 import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
+import uk.me.cormack.lighting7.sync.dto.CueSpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
@@ -95,7 +97,8 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  *
  * ```
  * /formatVersion.json
- * /project.json                  -- v24: `kind`, and a show's pin (`venueUuid`, `venueVersion`, `venueRepo`)
+ * /project.json                  -- v24: `kind`, and a show's pin (`venueUuid`, `venueVersion`, `venueRepo`);
+ *                                    a standalone show's origin (`detachedFromVenueUuid`, `detachedFromVersion`)
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
@@ -185,6 +188,7 @@ class ProjectExporter(private val state: State) {
                 InstallsJson.serializer(),
                 InstallsJson(installs = installs),
             )
+            val origin = project.detachedFrom()
             writeJson(
                 targetDir.resolve("project.json"),
                 ProjectJson.serializer(),
@@ -205,6 +209,9 @@ class ProjectExporter(private val state: State) {
                     venueRepo = project.venueUuid?.takeIf { project.isVenueBound }?.let { venueUuid ->
                         project.venueRepo ?: VenuePins.venueOf(venueUuid)?.let { VenuePins.repoHintOf(it.id.value) }
                     },
+                    // A standalone show's origin (venue-attach plan D1), both or neither.
+                    detachedFromVenueUuid = origin?.first?.toString(),
+                    detachedFromVersion = origin?.second,
                 ),
             )
             var count = 3
@@ -265,6 +272,7 @@ class ProjectExporter(private val state: State) {
                     stomp = c.stomp,
                     scenery = cueSceneryOf(c.id).map { it.toJson() },
                     events = cueEventsOf(c.id).map { it.toJson() },
+                    speedMasters = c.speedMasters.map { CueSpeedMasterJson(it.speedMasterUuid, it.bpm) },
                 )
             }
 

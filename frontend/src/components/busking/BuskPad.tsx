@@ -287,10 +287,7 @@ export function BuskPadButton({
           Pick up
         </ContextMenuItem>
         <ContextMenuSeparator />
-        <ContextMenuItem
-          onSelect={onInspect}
-          disabled={pad.kind === 'CUE' && (pad.cue?.entries?.length ?? 0) === 0}
-        >
+        <ContextMenuItem onSelect={onInspect}>
           <Eye className="mr-2 size-4" />
           View
         </ContextMenuItem>

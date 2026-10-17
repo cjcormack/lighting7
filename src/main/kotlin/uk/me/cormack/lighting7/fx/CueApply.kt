@@ -62,6 +62,8 @@ internal data class CueApplyData(
     val goEvents: List<EffectsService.CueEventFire> = emptyList(),
     /** How a skipped event announces the cue: `Q5`, or its name when unnumbered. */
     val cueLabel: String = cueName,
+    /** The masters the cue sets on GO (venue-visit plan S16), filled by [buildCueGoData] alone, as [goEvents] are. */
+    val goSpeedMasters: List<CueSpeedMasterDto> = emptyList(),
     /**
      * The priority the cue composes at while it is live — its highest hold's ([CueHolds]). Null for
      * a build no hold has stamped yet, which composes at its placement's ([cueDerivedPriority]).
@@ -115,6 +117,7 @@ internal fun buildCueApplyData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyD
 internal fun buildCueGoData(cue: DaoCue, entry: DaoCueStackEntry?): CueApplyData = buildCueApplyData(cue, entry).copy(
     goEvents = cueEventsOf(cue.id).map { EffectsService.CueEventFire(it.patch.key, it.trigger, it.offset.toMillis()) },
     cueLabel = entry?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } ?: cue.name,
+    goSpeedMasters = cue.speedMasters,
 )
 
 /**

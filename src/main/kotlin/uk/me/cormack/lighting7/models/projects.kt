@@ -6,6 +6,7 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.core.java.javaUUID
 import org.jetbrains.exposed.v1.core.eq
+import java.util.UUID
 
 /**
  * Projects table - the base columns are defined here.
@@ -53,10 +54,31 @@ object DaoProjects: IntIdTable("projects") {
      * (`venue/VenuePins.kt`'s `repoHintOf`). Null for a standalone show, a venue and a version.
      */
     val venueRepo = varchar("venue_repo", 300).nullable()
+    /**
+     * Where a standalone show came from (venue-attach plan D1, §4.3): the venue it was detached from,
+     * by the venue project's uuid, and the version it was pinned to then. Written by Detach in the
+     * transaction that clears the pin, kept by a clone, cleared by Extract (and, from Att.2, by
+     * Attach). An attach reads it as the origin of its three-way match. Both or neither; null for a
+     * show never on a venue, one detached before this was recorded, a venue and a version. Portable:
+     * `project.json`'s `detachedFromVenueUuid` and `detachedFromVersion`.
+     */
+    val detachedFromVenueUuid = javaUUID("detached_from_venue_uuid").nullable()
+    val detachedFromVersion = integer("detached_from_version").nullable()
 }
 
 /** Whether this is a show **on a venue** (venue plan §3.1): one with a pin. */
 val DaoProject.isVenueBound: Boolean get() = kind == ProjectKind.SHOW && venueUuid != null
+
+/**
+ * A standalone show's origin (venue-attach plan D1): the venue uuid and version it was detached
+ * from, or null when it records none — and for a show on a venue, a venue and a version.
+ */
+fun DaoProject.detachedFrom(): Pair<UUID, Int>? {
+    if (kind != ProjectKind.SHOW || isVenueBound) return null
+    val uuid = detachedFromVenueUuid ?: return null
+    val version = detachedFromVersion ?: return null
+    return uuid to version
+}
 
 /** A project's kind (venue plan §3.1). See [DaoProjects.kind]. */
 enum class ProjectKind { SHOW, VENUE, VENUE_VERSION }
@@ -76,6 +98,8 @@ class DaoProject(id: EntityID<Int>) : IntEntity(id) {
     var venueUuid by DaoProjects.venueUuid
     var venueVersion by DaoProjects.venueVersion
     var venueRepo by DaoProjects.venueRepo
+    var detachedFromVenueUuid by DaoProjects.detachedFromVenueUuid
+    var detachedFromVersion by DaoProjects.detachedFromVersion
 
     val scripts by DaoScript referrersOn DaoScripts.project
     val looks by DaoLook referrersOn DaoLooks.project

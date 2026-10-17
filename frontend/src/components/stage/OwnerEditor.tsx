@@ -48,17 +48,38 @@ export function OwnerEditor({
 /**
  * The cue editor in a right-hand sheet — the host for a cue opened from outside the Show view. It
  * is opened by cue, not by place: a cue in one stack edits that entry's number and follow, one in
- * several says they are each place's. The show-editing lock is the Show view's, so it does not
- * reach here.
+ * several says they are each place's, and a loose one that it has neither. The show-editing lock
+ * does not reach the Stage view's; the Cues table, which honours it, hands it in.
  */
-function CueEditorSheet({ projectId, cueId, onOpenChange }: { projectId: number; cueId: number | null; onOpenChange: (open: boolean) => void }) {
+export function CueEditorSheet({
+  projectId,
+  cueId,
+  onOpenChange,
+  locked = false,
+  onRequestUnlock,
+}: {
+  projectId: number
+  cueId: number | null
+  onOpenChange: (open: boolean) => void
+  locked?: boolean
+  onRequestUnlock?: () => void
+}) {
   return (
     <Sheet open={cueId != null} onOpenChange={onOpenChange}>
       <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-2xl" aria-describedby={undefined}>
         <SheetHeader className="border-b pr-12">
           <SheetTitle>Cue</SheetTitle>
         </SheetHeader>
-        {cueId != null && <CueEditor projectId={projectId} cueId={cueId} locked={false} host="sheet" className="min-h-0 flex-1" />}
+        {cueId != null && (
+          <CueEditor
+            projectId={projectId}
+            cueId={cueId}
+            locked={locked}
+            onRequestUnlock={onRequestUnlock}
+            host="sheet"
+            className="min-h-0 flex-1"
+          />
+        )}
       </SheetContent>
     </Sheet>
   )

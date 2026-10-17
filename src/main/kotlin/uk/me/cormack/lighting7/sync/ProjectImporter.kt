@@ -10,6 +10,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.models.ProjectKind
+import uk.me.cormack.lighting7.models.CueSpeedMasterDto
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
 import uk.me.cormack.lighting7.models.DaoBuskPad
@@ -195,6 +196,10 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // reason — a v33 reader would store a target it cannot spawn, and every cue holding one would skip
 // that effect; MIN stays at 5 because nothing older uses the value. Imported as stored: a key that
 // does not parse is refused where the effect spawns, not here.
+// v35 added `speedMasters` to `CueJson` (venue-visit plan S16): the masters a cue sets on GO, each a
+// master's uuid and a BPM. SUPPORTED moved for v14's reason — a v34 reader would import every cue
+// without them and write them away on its next push; MIN stays at 5 because a missing list sets
+// nothing. Imported as stored: a uuid the archive's masters lack is skipped at GO, not here.
 //
 // v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
 // `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
@@ -282,7 +287,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 34
+internal const val SUPPORTED_FORMAT_VERSION = 35
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -432,6 +437,9 @@ class ProjectImporter(private val state: State) {
                 venueUuid = pin?.venueUuid
                 venueVersion = pin?.version
                 venueRepo = pin?.hint
+                val origin = originOf(projectJson, targetKind, pin)
+                detachedFromVenueUuid = origin?.first
+                detachedFromVersion = origin?.second
             }
 
             val clashes = populateProject(sourceDir, project, format.formatVersion)
@@ -578,6 +586,9 @@ class ProjectImporter(private val state: State) {
             project.venueUuid = pin?.venueUuid
             project.venueVersion = pin?.version
             project.venueRepo = pin?.hint
+            val origin = originOf(projectJson, project.kind, pin)
+            project.detachedFromVenueUuid = origin?.first
+            project.detachedFromVersion = origin?.second
 
             val clashes = populateProject(sourceDir, project, format.formatVersion)
 
@@ -643,6 +654,18 @@ class ProjectImporter(private val state: State) {
             ?: throw ImportError.invalidArchive("project.json names venue $venueUuid but no venueVersion")
         if (version < 1) throw ImportError.invalidArchive("project.json's venueVersion must be at least 1: $version")
         return Pin(uuid, version, projectJson.venueRepo?.takeIf { it.isNotBlank() })
+    }
+
+    /**
+     * A standalone show's origin as an archive states it (venue-attach plan D1), or null — for a show
+     * on a venue, a venue, a version, and an archive naming none. Both fields or neither; a half or an
+     * unparseable one reads as none rather than failing the import: the origin only steers an attach.
+     */
+    private fun originOf(projectJson: ProjectJson, kind: ProjectKind, pin: Pin?): Pair<UUID, Int>? {
+        if (kind != ProjectKind.SHOW || pin != null) return null
+        val uuid = projectJson.detachedFromVenueUuid?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return null
+        val version = projectJson.detachedFromVersion?.takeIf { it >= 1 } ?: return null
+        return uuid to version
     }
 
     /** Refuse (409 `VENUE_MISSING`) a pin whose snapshot is not on this desk. Inside a transaction. */
@@ -1328,6 +1351,7 @@ class ProjectImporter(private val state: State) {
             fadeCurve = c.fadeCurve
             notes = c.notes
             stomp = c.stomp
+            speedMasters = c.speedMasters.map { CueSpeedMasterDto(it.speedMasterUuid, it.bpm) }
             this.uuid = uuid
         }
         if (place != null && stack != null) {

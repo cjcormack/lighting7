@@ -25,6 +25,8 @@ export function describeSpeedMasterInUse(summary: SpeedMasterInUseResponse): str
     parts.push(`${summary.cueAdHocEffectCount} cue effect${summary.cueAdHocEffectCount === 1 ? '' : 's'}`)
   }
   if (summary.cueLayerCount > 0) parts.push(`${summary.cueLayerCount} cue layer${summary.cueLayerCount === 1 ? '' : 's'}`)
+  const tempos = summary.cueTempoCount ?? 0
+  if (tempos > 0) parts.push(`${tempos} cue${tempos === 1 ? '' : 's'} setting its tempo`)
   if (parts.length === 0 && counted > 0) parts.push(`${counted} reference${counted === 1 ? '' : 's'}`)
   let text = parts.join(' · ')
   if (summary.cueIds.length > 0) text += ` (cues ${summary.cueIds.join(', ')})`

@@ -14,13 +14,22 @@ import {
 } from './windowViews'
 
 /**
- * The eight views one window can put on another: the four live views in `ViewSwitcher` order, the
- * Stage view, the applied tables, then the two libraries. Matching is segment-aware, so the legacy `/program` and the
+ * The nine views one window can put on another: the four live views in `ViewSwitcher` order, the
+ * Stage view, the applied tables, then the three libraries. Matching is segment-aware, so the legacy `/program` and the
  * old `/fx` never answer for a view.
  */
 describe('WINDOW_VIEWS', () => {
-  it('is the four live views in ViewSwitcher order, then Stage, the applied tables, then Looks and Palettes', () => {
-    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'applied', 'looks', 'templates'])
+  it('is the four live views in ViewSwitcher order, then Stage, the applied tables, then Looks, Cues and Palettes', () => {
+    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'applied', 'looks', 'cues', 'templates'])
+  })
+
+  it('names the Cues table by its route, a library: stored data, no options, no rig (cue model plan §3.7)', () => {
+    const cues = WINDOW_VIEWS.find((v) => v.id === 'cues')!
+    expect(windowViewOf('/projects/1/cues')?.id).toBe('cues')
+    expect(windowViewLabel('/projects/1/cues')).toBe('Cues')
+    expect(cues.options).toBeUndefined()
+    expect(cues.needsRig).toBeUndefined()
+    expect(windowViewOf('/projects/1/cue-stacks')).toBeNull()
   })
 
   it('names the applied tables under the programmer — the longer segment wins — with their table as the one option (venue-visit plan S14)', () => {

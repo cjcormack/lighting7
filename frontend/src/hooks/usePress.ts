@@ -4,7 +4,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
-import { useLookRowStore } from '@/components/programmer/LookRowStore'
+import { useLookRowStore, type LookRowStoreValue } from '@/components/programmer/LookRowStore'
 import { landValuesInLook } from '@/components/programmer/landValuesInLook'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import type { AttributeFamily } from '@/lib/attributeFamily'
@@ -91,6 +91,13 @@ export function useWindowPress(projectId: number, options: PressOptions = {}): P
   return usePress(projectId, useWindowPressPair(), options)
 }
 
+/** The focused Look layer's draft a press from this door lands in, or null when it lands on the programmer. */
+export function usePressLook(options: PressOptions = {}): LookRowStoreValue | null {
+  const scope = useProgrammerScope()
+  const lookStore = useLookRowStore()
+  return options.scope !== 'programmer' && scope?.kind === 'layer' ? lookStore : null
+}
+
 /**
  * One press, whatever it is pressed from (apply-model plan §4.1).
  *
@@ -126,9 +133,7 @@ export function useWindowPress(projectId: number, options: PressOptions = {}): P
  * the grid is pointed at — the fixture sheet, a cue slot — passes `scope: 'programmer'`.
  */
 export function usePress(projectId: number, pair: PressPair, options: PressOptions = {}): Press {
-  const scope = useProgrammerScope()
-  const lookStore = useLookRowStore()
-  const look = options.scope !== 'programmer' && scope?.kind === 'layer' ? lookStore : null
+  const look = usePressLook(options)
 
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()

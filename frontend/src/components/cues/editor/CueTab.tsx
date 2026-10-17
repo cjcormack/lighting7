@@ -8,13 +8,15 @@ import { CueTriggerEditor } from '@/components/cues/CueTriggerEditor'
 import { TriggerSummary } from '@/components/cues/TriggerSummary'
 import { AddToBuskPageMenu } from '@/components/busking/AddToBuskPageMenu'
 import { EditorLabel } from '@/components/editor/EditorLabel'
+import { CueSpeedMasters } from './CueSpeedMasters'
 import { usePatchProjectCueMutation } from '@/store/cues'
-import type { Cue, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
+import type { Cue, CueSpeedMaster, CueTrigger, CueTriggerDetail } from '@/api/cuesApi'
 
 /**
- * The editor's **Cue** tab: the cue's notes, its script hooks and the busk-page append — what the
- * header's name, number, fade, curve and follow leave (show-cue-editing plan D15). Every field
- * writes the cue as it is left; locked, the tab is a read-out (§4.6).
+ * The editor's **Cue** tab: the cue's notes, the speed masters it sets on GO, its script hooks and
+ * the busk-page append — what the header's name, number, fade, curve and follow leave
+ * (show-cue-editing plan D15). Every field writes the cue as it is left; locked, the tab is a
+ * read-out (§4.6).
  */
 export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId: number; locked: boolean; idBase: string }) {
   const [patchCue] = usePatchProjectCueMutation()
@@ -43,6 +45,11 @@ export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId
     [cue.id, patchCue, projectId],
   )
   const triggers = cue.triggers
+  const writeSpeedMasters = useCallback(
+    async (next: CueSpeedMaster[]) =>
+      (await patchCue({ projectId, cueId: cue.id, speedMasters: next }).unwrap()).speedMasters ?? next,
+    [cue.id, patchCue, projectId],
+  )
 
   const handleHookConfirm = (t: CueTrigger) => {
     if (editingHook?.kind === 'add') {
@@ -81,6 +88,14 @@ export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId
           />
         )}
       </div>
+
+      <CueSpeedMasters
+        projectId={projectId}
+        speedMasters={cue.speedMasters ?? NO_SPEED_MASTERS}
+        locked={locked}
+        idBase={idBase}
+        onSave={writeSpeedMasters}
+      />
 
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
@@ -143,6 +158,8 @@ export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId
     </div>
   )
 }
+
+const NO_SPEED_MASTERS: CueSpeedMaster[] = []
 
 function stripScriptName(t: CueTriggerDetail): CueTrigger {
   const { scriptName: _scriptName, ...rest } = t

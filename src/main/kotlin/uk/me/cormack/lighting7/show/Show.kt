@@ -394,9 +394,9 @@ class Show(
      *
      * Rebuilt, in order: the effects the operator ran by hand (a cue's or a programmer layer's come
      * back with their owner; one on a target the reload removed is dropped); each stack's live entry,
-     * GO'd again without its events (a GO into a cue, not this) — its auto-advance timer starting
-     * again from now — and each armed standby re-armed; each loose hold taken again in press order,
-     * its events unfired; the programmer's layers and values, from the
+     * GO'd again without its events or its speed masters (a GO into a cue, not this: a tap since
+     * wins) — its auto-advance timer starting again from now — and each armed standby re-armed; each
+     * loose hold taken again in press order, its events unfired and its masters unset; the programmer's layers and values, from the
      * store [ShowCarry] handed over. Then every patched property is published from what now composes
      * it — so a property nothing drives any more (its cue changed, its stack's cue is gone) releases
      * to its base, as it would have had the change been made live — and every channel no fixture
@@ -431,7 +431,7 @@ class Show(
             }
 
             for ((stackId, entryId) in carry.liveEntries) {
-                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false) }
+                runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false, setTempo = false) }
                     .onFailure { logger.warn("Reload could not bring back entry {} on stack {}: {}", entryId, stackId, it.message) }
             }
             // After the GOs, which consume a stack's standby. An entry the reload removed is refused.
@@ -441,7 +441,7 @@ class Show(
             }
             // The loose holds, after the stacks and in press order, so the newest is on top again.
             for (cueId in carry.looseCues) {
-                runCatching { cueStackManager.holds.takeLooseCue(state, cueId, fireEvents = false) }
+                runCatching { cueStackManager.holds.takeLooseCue(state, cueId, fireEvents = false, setTempo = false) }
                     .onFailure { logger.warn("Reload could not bring back loose cue {}: {}", cueId, it.message) }
             }
 

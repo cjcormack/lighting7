@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   Anchor,
   Braces,
+  Clapperboard,
   Sparkles,
   LayoutGrid,
   Layers,
@@ -147,14 +148,6 @@ export interface HomeCounts {
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`
 
-/**
- * Show's card: its stacks, and the project's cues once each — a cue can sit in several stacks or in
- * none, so a count per stack would count a shared cue twice and miss a loose one.
- */
-function stacksAndCues(c: HomeCounts): string | undefined {
-  if (c.stacks == null) return undefined
-  return c.cues == null ? plural(c.stacks, "stack") : `${plural(c.stacks, "stack")} · ${plural(c.cues, "cue")}`
-}
 
 /** The Applied row's [NavItem.needsRig], which each table's ⌘K item shares. */
 const APPLIED_NEEDS_RIG = "The applied tables list what the programmer holds on the rig that's live"
@@ -224,7 +217,7 @@ export const navItems: NavItem[] = [
     needsRig: "Show runs its cues on the rig that's live",
     pathMatch: "/show",
     section: "run",
-    homeCount: stacksAndCues,
+    homeCount: (c) => (c.stacks == null ? undefined : plural(c.stacks, "stack")),
     hiddenInVenue: true,
   },
   {
@@ -340,6 +333,19 @@ export const navItems: NavItem[] = [
     pathMatch: "/looks",
     section: "library",
     homeCount: (c) => c.looks,
+    hiddenInVenue: true,
+  },
+  {
+    id: "cues",
+    // Every cue once (cue model plan §3.7, D13): a cue is a project record a stack only names, so it
+    // may sit in several stacks or in none, and this is where a loose one is found. Stored data, so
+    // no `needsRig`; Show counts its stacks and this row the cues, each once.
+    label: "Cues",
+    icon: Clapperboard,
+    path: (p) => `/projects/${p}/cues`,
+    pathMatch: "/cues",
+    section: "library",
+    homeCount: (c) => c.cues,
     hiddenInVenue: true,
   },
   {

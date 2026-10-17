@@ -63,9 +63,13 @@ export type {
   BindingHealth,
 } from "../api/surfacesApi"
 
+// The cue list counts each cue's `FireCue` bindings (`usedBy`), so a binding change refreshes it too.
 lightingApi.surfaces.subscribeBindingsChanged((event) => {
   store.dispatch(
-    restApi.util.invalidateTags([{ type: 'SurfaceBinding', id: event.projectId }]),
+    restApi.util.invalidateTags([
+      { type: 'SurfaceBinding', id: event.projectId },
+      { type: 'CueList', id: event.projectId },
+    ]),
   )
 })
 
@@ -133,6 +137,7 @@ export const surfacesApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 
@@ -147,6 +152,7 @@ export const surfacesApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 
@@ -167,6 +173,7 @@ export const surfacesApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 
@@ -180,6 +187,7 @@ export const surfacesApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { projectId }) => [
         { type: 'SurfaceBinding', id: projectId },
+        { type: 'CueList', id: projectId },
       ],
     }),
 

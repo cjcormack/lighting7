@@ -119,6 +119,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
           effect={editing}
           anchorRef={editAnchor}
           onClose={() => setEditingId(null)}
+          onFollow={setEditingId}
           onStop={(effect) => {
             stopEffect(effect)
             setEditingId(null)

@@ -94,7 +94,9 @@ import java.util.UUID
  * a link to a removed record. Nothing may be left pointing into a snapshot.
  *
  * **Then** the show's hides and overrides go, and the pin, its repo hint and the stage size (read from
- * the version until now) are written onto the show. **A show that is behind detaches at its pin** —
+ * the version until now) are written onto the show. The pin becomes the show's **origin**
+ * (`detachedFromVenueUuid` + `detachedFromVersion`, venue-attach plan D1), so an attach can later
+ * match it three ways (`venue/VenueAttachPairing.kt`). **A show that is behind detaches at its pin** —
  * what it runs — not at the installed version: an update has decisions only an Update can ask, and
  * the answer names how far behind it was, so the confirm can say the hall has moved on.
  *
@@ -316,6 +318,8 @@ class VenueDetach(private val state: State) {
         show.stageWidthM = snapshot.stageWidthM
         show.stageDepthM = snapshot.stageDepthM
         show.stageHeightM = snapshot.stageHeightM
+        show.detachedFromVenueUuid = layer.venueUuid
+        show.detachedFromVersion = layer.version
         show.venueUuid = null
         show.venueVersion = null
         show.venueRepo = null
@@ -329,6 +333,7 @@ class VenueDetach(private val state: State) {
             version = layer.version,
             installed = behind.installed,
             behind = behind.behind,
+            detachedFrom = DetachedFromDto(layer.venueUuid.toString(), layer.version, layer.venueProjectId.value, layer.venueName),
             copied = DetachRowsDto(
                 universes = universes.map { "${it.subnet}:${it.universe}" },
                 patches = patches.map { it.key },
@@ -467,6 +472,8 @@ data class DetachResultDto(
     val installed: Int? = null,
     /** How far behind the pin was: the venue's later changes do not come with it. */
     val behind: VenueBehind = VenueBehind.NONE,
+    /** The origin the show now records: the venue and the version it was flattened at. */
+    val detachedFrom: DetachedFromDto,
     val copied: DetachRowsDto,
     /** The venue patches whose overrides were written into the copy, as `key: facet, facet`. */
     val overridesApplied: List<String>,
@@ -482,4 +489,16 @@ data class DetachResultDto(
     val machineOverridesCopied: Int,
     /** Scene images copied into the show's store (a dry run: that would be). */
     val imagesCopied: Int,
+)
+
+/**
+ * Where a standalone show was detached from (venue-attach plan D1): the venue by its uuid, and its
+ * project id and name when it is on this desk, and the version the show was pinned to.
+ */
+@Serializable
+data class DetachedFromDto(
+    val venueUuid: String,
+    val version: Int,
+    val venueId: Int? = null,
+    val venueName: String? = null,
 )

@@ -792,16 +792,42 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The programmer rail's *Edit…* and `FxSheet`'s chips open the same editor in `EditorSurface`
-  (`FxEditorPopover`), and ⌘K *Apply FX* and the rail's `+ Effect` open the picker and the editor in
-  a sheet (`FxAddSheet`, whose Done closes it; both start **one effect over the selection** — the
-  rail the programmer's rows in grid order (`selectRowTargets`, published by the list beside its
-  flattened keys), ⌘K's *On the selection* this window's pair — one row being that fixture, cell or
-  group alone, several an `FxTarget` of type `selection` sent as `POST /fx/add`'s `targets`
-  (`components/fx/selectionEffectTarget.ts`, effects plan D3); in a focused Look layer the effect is absorbed into the
-  Look once the session ends — closed or unmounted — by the id the create answered, after the editor
-  lands its held move). The popover is bounded by the room Radix measures beside its anchor and
-  scrolls inside it. `ActiveEffectSheet`,
+  The programmer rail's *Edit…*, the applied FX table's, `FxSheet`'s chips and a cell popup's
+  Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), which **follows the
+  selection** (apply-model plan D5, §4.5): with every head the effect paints selected, or none, a
+  move edits it in place; with **some** of a Local effect's heads selected it says *Hex 1–2 of Hex
+  1–4*, **holds** the edit (`FxEditor`'s `hold`), and *Apply to Hex 1–2* sends it once over REST —
+  `PUT /fx/{id}` with those heads as `targets` (`useUpdateFxMutation`) — and the desk splits them off,
+  each where it was, answering the copies (`EffectSplitResponse`, put into the running list at once).
+  The editor then follows the edited copies: the host reads the first by id (`onFollow`) and every
+  later move goes to each (`alsoIds`), and pause and × act on each too. *Edit all 4* sends what is held
+  to the whole effect in place. A held edit is never the live floor's: if the selection moves off the
+  subset it is dropped and the editor redrawn from the effect, rather than landing on every head. A
+  close ends the session, so a copy opened again later is edited alone; the editor stays where its row
+  was though the split took that row away (a remembered anchor); and while the split is on its way the
+  editor is inert and a close keeps it closed.
+  The split goes over REST because the `updateFx` frame answers one only as `fxChanged` REMOVED and
+  ADDED, which names no copy to follow. A palette layer's effect (plan P5), a cue's and a manual one
+  never offer a split. Which heads the selection covers is the client's reading, for the words alone
+  (`components/fx/effectSplit.ts`, over the cell batch or the window's pair); the split is the
+  desk's, from the heads named. ⌘K *Apply FX* and the rail's `+ Effect` open the one picker's
+  **effects arm** (`ApplyPicker`, `library="effects"`): `FxPicker` on the **bare effect press**
+  (its `press` prop — a tap is `POST /programmer/effects` with the door's pair, one Local effect over
+  it, the desk first taking those heads off every other Local effect of its family), above the
+  effect palettes that fit, the editor opening in the panel and its Done coming back to the list.
+  The two doors read one pair, `useWindowEffectPair` (`components/fx/selectionEffectTarget.ts`):
+  the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
+  kept a group so its effect is one group effect with its distribution, the desk's while following,
+  else the busk view's copy — and the mask a press from this window carries. **On the programmer
+  ⌘K's *On the selection* opens the rail's `+ Effect`** (`programmer/addEffectDoor.ts`, the rail
+  registering its door while mounted): the palette lives in `Layout`, outside the programmer's
+  marquee store and scope, so a picker of its own there could read neither the marquee's mask nor a
+  focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
+  and per-group items press that one target with no mask. In a focused Look layer the bare effect starts
+  on `/fx/add` alone and is absorbed into the Look once the panel's session ends — closed or
+  unmounted — by the id the create answered, after the editor lands its held move: the press's
+  replacement would take heads off other Local effects, which a press into a Look must not do. The
+  popover is bounded by the room Radix measures beside its anchor and scrolls inside it. `ActiveEffectSheet`,
   `AddEditFxSheet` and (session 5) `EffectParameterForm` are deleted. A refused write comes back as
   `fxError`, toasted keyed per effect (`store/fixtureFx.ts`).
 - **A pad's running effect** (§3.3, D20; session 5): an instance a **programmer** palette layer
@@ -921,8 +947,8 @@ offline and on a parked row, the picker and the inline editor in the tray — an
 the two hosts. Session 3's list is `FxPicker.test.tsx` (a tap starts a programmer-owned effect; a
 second tap is one `updateFx` and no add), `FxEditor.test.tsx` (a drag at most one frame per 50 ms
 with the release landing, Revert's snapshot, Around as `ADDITIVE` + 128 with the centre hidden and
-read back, Within as `MULTIPLY`) `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect) and `FxAddSheet.test.tsx` (the layer
-absorb, once, after the editor's flush).
+read back, Within as `MULTIPLY`) and `store/fixtureFxErrors.test.ts` (`fxError` keyed per effect);
+the layer absorb, once, is `ApplyPicker.test.tsx`'s effects arm.
 
 Session 4's list is `HeadsGroups.test.tsx` — the pick resets when the target changes, a run selects,
 *All* on a group sends one group write, a subset sends member writes carrying the group, no raw channel
@@ -1274,17 +1300,20 @@ over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a 
 a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
 its hint says held scenery goes back whole, which the mask never narrows.
 
-**Record writes into any cue, or into a stack it makes** (S10). The stack select's last item, after a
-separator, is ***New stack…***: a required name field appears under it, and the stack is created
-(`loop: false`, appended to the show order) only when Record is pressed, so a cancelled sheet leaves
-nothing behind; once made it is the selection, so a failed Record is retried into it. A show with no
-stack opens on it. Merge, Replace and Remove are offered from every Record, not only from a cue row,
+**Record writes into any cue, or into a stack it makes, or into none** (S10; cue model plan §10,
+19). After the stacks and a separator the stack select offers ***New stack…***: a required name
+field appears under it, and the stack is created (`loop: false`, appended to the show order) only
+when Record is pressed, so a cancelled sheet leaves nothing behind; once made it is the selection, so
+a failed Record is retried into it. A show with no stack opens on it. Its last item is ***No stack***,
+which sends no `cueStackId`: the new cue is loose, and the sheet says it is found in the Cues table
+(§"The Cues table"). Merge, Replace and Remove are offered from every Record, not only from a cue row,
 and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
-(`cuePickerRows` — markers left out, `Q12 · Act 1` from whatever the `GET /cues` row carries). The
-programmer Record menu's *An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until
-S10 it opened the sheet with only *New cue* to offer. **It reads no stack beyond what the list row
-says** — `CuePickerSource.cueStackName` and `cueNumber` are null for a loose or shared cue — so a row
-naming no stack is still a cue, labelled by its name, and a shared cue is one row because it is one cue.
+(`cuePickerRows` — markers left out). The programmer Record menu's *An existing cue…* opens on Merge
+with it (`RecordPreset.existingCue`); until S10 it opened the sheet with only *New cue* to offer.
+**A row names every place its cue sits**, from the list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or
+*Loose* — the list the Cues table reads, so a loose cue is still a cue, labelled by its name, and a
+shared cue is one row because it is one cue. The filter matches the name or any place's number or
+stack.
 
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
@@ -2853,8 +2882,12 @@ that turns that into a route, and every door calls it: the palette strip, the on
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour tab), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
-which carries its bank's solo siblings. The effect door — ⌘K *Apply FX* and the picker's Effects
-section — is session 6's, on the desk's `POST /programmer/effects`.
+which carries its bank's solo siblings. The **bare effect** is the one source `usePress` does not
+take: ⌘K *Apply FX*, the rail's *+ Effect*, a band's *+ Effect …* and the picker's Effects section
+press it through `FxPicker`'s `press` arm, `POST /programmer/effects` with the door's pair (one Local
+effect over the selection; the desk takes those heads off the family's other Local effects), or, in a
+focused Look, `/fx/add` then `absorb-effects` (§3.2 rule 6) — see §FX in the fixture sheet's
+paragraphs.
 
 - **The gestures**, the same on every chip and pad (D1, D8): **tap** is the press — a layer that
   *tracks* the record (`/palettes/{id}/toggle`, `/looks/{id}/toggle`), or off the pressed heads when
@@ -2989,7 +3022,7 @@ under the operator's hand on the second press.
 one picker every library door opens: on every family the selection fits from `All · n` and the rail's
 *+ Palette*, on one family from a popup band's *All …*, on the Looks from the rail's *+ Look*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · Effects
-(effect palettes; session 6 adds bare effects) · **Outside the mask** — what the heads could take but
+(the effect palettes, and *Effect…*, the way to the bare effects) · **Outside the mask** — what the heads could take but
 the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
 **still pressable**, since the mask is tested on the on arm only and a lit one must come off. Built
 from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and
@@ -3006,7 +3039,16 @@ desk — the rail mounts it only while open, since its pair is a marquee subscri
 it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
 a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
 `@container` is not an ancestor and a container class there would match nothing, silently.
-`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm and the Look's own fixtures.
+**The effects arm** (`library="effects"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
+rail's *+ Effect* and a band's *+ Effect …* open, and the palettes' *Effect…* switches to (with a way
+back): `FxPicker` over the pair on the bare effect press, opening on the door's family and preferring
+its property (`property`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
+the **effect palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
+Look the effect starts on `/fx/add` and the arm absorbs it when the panel closes or unmounts, once —
+unless the editor's × stopped it. It sizes to its list (up to the same 540px), where the palettes and
+Looks hold their height so a search never moves the panel under the pointer.
+`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm, the Look's own fixtures and the
+effects arm's press and absorb.
 
 **Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
 / Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
@@ -3588,7 +3630,9 @@ sheet kit, each on the route it always had** (`../docs/plans/completed/library-s
 the boards are `../docs/plans/library-sheets-design/`, where the plan won on behaviour and the
 boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
 it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited in the cell (3), and
-**Scripts and the FX Library** (4). The rules, which every one of the five keeps:
+**Scripts and the FX Library** (4). The rules, which every one of the five keeps (the Cues table,
+a sixth library since the cue model plan's session 5, keeps them too but for its bar, which is the
+cue action set — §"The Cues table"):
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
   view key: a second view has to earn one. The record editors stay — they are what a row *opens*.
@@ -4037,10 +4081,21 @@ each was:
   would close the sheet with it. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists and the cue editor's Values grid draw the
   editor bare (R2 P2), and a slider cell whose property no value palette can carry (`paletteCarries`,
-  the closed `TEMPLATE_PROPERTIES` vocabulary) has no band. A setting cell (gobo, prism) has none
-  because `SettingCell` is not wrapped — prism is in that vocabulary.
-  The Effects band below the editor is session 6's. `PaletteBands.test.tsx` pins the offer per
-  cell, the press and the bare arm.
+  the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
+  (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
+  carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
+  Effects band** (`EffectsBand`, session 6; `ColourEditor` draws it itself under the cell, not in
+  the busk Colour tab): the effects on this property that paint one of the heads, **lit** — a tap
+  opens `FxEditorPopover` beside the chip over the cell batch, so a Local effect on more heads than
+  these offers the split; a cue's is drawn but not opened — then the family's **effect palettes**
+  that fit, pressed through `usePress` as the Palettes band's are, and *+ Effect …*, the picker's
+  effects arm on this property under the cell's family. Its family is the property's group as the
+  press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's effect
+  palettes by the property the effect drives — a beam built-in's library property, Slot Steps' named
+  setting, Palette Steps' palettes' rows (`effectPaletteDrives`, given the library and palette list
+  through its `EffectFitContext`) — so a zoom cell is offered the Zoom Breathe palettes and a gobo cell
+  the Slot Steps of its gobo. `PaletteBands.test.tsx` pins the offer per cell, the press, the bare
+  arm and the Effects band's offer, lit chips and setting-cell popup.
 
 - **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
   session 2): one scene element's state wherever it is edited, built from the kit — an
@@ -4746,8 +4801,9 @@ meant to hide it narrow but the nearest `@container` is the whole workspace. The
 the key is what tells them apart. Only the layer *position* is written out beside the home badge;
 the other two details ride the badge's title.
 
-`+ Effect` follows the same rule as a value edit: focused layer → into that Look (via
-`POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the programmer band,
+`+ Effect` follows the same rule as a value edit: focused layer → into that Look (started on
+`/fx/add`, then `POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the
+bare effect press (`POST /programmer/effects`), one Local effect over the selection under its mask,
 which Record writes onto the cue; Output → disabled, naming the two places that can take one.
 **Make layer** promotes a Local selection into a named Look applied here — record-look, then
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
@@ -5291,7 +5347,10 @@ Palettes*, an `enum`) and no immersive. It is announced from `lib/appliedTables.
 store as `announcedViewOptions`' fifth argument, applied by `applyAppliedViewOptions`, and carried by
 `windowSetupUrl` as `table=`, which the route reads on arrival like any `?table=`.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
-which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
+which view; the three libraries still send the five-key frame. **The Cues table is a ninth entry**
+(cue model plan session 5), `cues` on `/cues` between Looks and Palettes, the sidebar's order: a
+library, so no options, no `needsRig`, and a command that puts a window on it keeps the window's own
+project. `windows.viewOptions {immersive}` is
 applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving
 on the Prompt Book is still ignored, on purpose: the frame is a statement about the view the sender
 was looking at. The Screens sheet draws a **Chrome** segment (*App · Immersive*, the descriptor's
@@ -5716,11 +5775,11 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
 
 #### The cue action set
 
-**One component, three hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
+**One component, four hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
 `components/runner/CueActions.tsx`): the card's strip directly under its collapsed row, the cue
-sheet's selection bar (after Set · Clear · Spread, before Deselect) and the phone card's ⋯ menu in
+sheet's selection bar (after Set · Clear · Spread, before Deselect), the phone card's ⋯ menu in
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
-Prompt Book's rail card). It takes the rows (a cue and the entry it was opened from, several from
+Prompt Book's rail card), and the Cues table's selection bar (`host="table"`, §"The Cues table"). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
 hands in nothing else. **Its Record sheet, delete confirm, Update stage confirm
 (`UpdateStageDialog`) and unlock question live above every host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
@@ -5741,8 +5800,8 @@ provider (a test drawing the set alone) the set draws them itself.
   opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
   (`components/cues/`): one confirm for every row, each cue's entries, pads, slots, anchors and
   bindings from `cueDeletePreview`'s dry run, then `POST /cues/delete` with `force`; it says a
-  surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). Built for the Cues
-  table (cue model plan session 5) to mount too. **⋯** is *Add to stack…*, *Move to stack…* —
+  surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). The Cues table's
+  multi-select *Delete…* is the same confirm. **⋯** is *Add to stack…*, *Move to stack…* —
   `useMoveCueStackEntryMutation`, the entry moved whole by the desk (Chris's call, 2026-10-16, over
   R1.4's add then remove, which dropped the number, follow and anchor) — and *Copy link*, the
   card's address with `?entry=`. On the phone's ⋯ menu *Update stage…* follows *Record…* while the
@@ -5757,7 +5816,7 @@ provider (a test drawing the set alone) the set draws them itself.
   menu is the editing chrome a phone has room for, and a locked action asks to unlock.
 - **Words fold to glyphs** on container rungs measured in the app (`FOLDS` in `CueActions.tsx`):
   the stack group first, then Load and Record, the split button last — the card's own `@container`
-  for the strip, the sheet bar's for the bar. The menu never folds.
+  for the strip, the sheet bar's for the bar, the Cues table bar's for the table. The menu never folds.
 - ***← Show*** (D16) is in the programmer's source box while the include target is the one this
   window made from the Show view: `lib/showInclude.ts` records `{projectId, cueId, entryId}` per tab
   on every Show-view Include, and the box draws the arrow only while `ProgrammerSummary.lastIncluded`
@@ -5952,8 +6011,9 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
 - **The header is one 40px chrome row** and draws the entry apart from the cue (P5): the stack, this
   place's number and follow — written to the entry by its id, `patchCueStackEntry` — then a rule,
   the cue's name, fade and curve (`patchProjectCue`), the shared chip from `Cue.entries`, and the
-  per-cue `SaveStatusIndicator`. A cue read with no context entry (loose, or in several places and
-  opened from none, as the sheet host can be) has no number or follow to write and says why. A
+  per-cue `SaveStatusIndicator`. A cue read with no context entry has no number or follow to write:
+  a loose one says *In no stack · no number or follow* in their place, and one in several places
+  opened from none (as the sheet host can be) keeps the fields, disabled, saying why. A
   header field half-typed when its host goes — a GO collapsing a live card — commits
   (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did. While the
   desk marks the cue edited since GO it draws the *Edited since GO* chip and *Update stage…* (§The
@@ -5966,7 +6026,18 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   (§The cue editor). The hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab,
   unlocked. **Scenery** is
   `CueSceneryEditor`'s body (`CueSceneryEditorBody`), **Events** `CueEventsEditor`, and **Cue** the
-  notes, script hooks (`CueTriggerEditor`) and the busk-page append (`editor/CueTab.tsx`).
+  notes, the speed masters, script hooks (`CueTriggerEditor`) and the busk-page append
+  (`editor/CueTab.tsx`).
+- **Speed masters** (`editor/CueSpeedMasters.tsx`, venue-visit plan S16, D20) are the masters the cue
+  sets on every GO into it and every press of it — never a reload — each a row of master · BPM · ×
+  under *+ Master*, which adds the lowest master the cue does not set at its stored tempo, a follower
+  only when no other is free. Every gesture writes the **whole list** through the cue's own PATCH
+  (`speedMasters`), the rows a draft held over a refetch, settled on the list the last save answered
+  and put back on a refusal (which the middleware toasts) — the Events editor's shape. A BPM commits
+  on Enter, blur or a pause in typing, never as typed, and one outside 20–300 is not sent. The master list is the project's stored bank (`useSpeedMasterListQuery`), so it reads
+  on another project's cue too. A follower's row says *Follows M2 — skipped on GO* and a deleted
+  master's *The master was deleted — skipped on GO* (the desk skips both); locked, the section is a
+  list of *M2 · Chase · 128 bpm*. `buildCueInput` hands the list back, since a PUT clears it.
 - **Locked, it reads** (§4.6): the header's fields are plain text, the curve inert, the Values,
   Looks and FX tables inert, and Scenery, Events and Cue draw their read-outs. A cue the desk will not edit (`canEdit` false) reads the same,
   saying it is another project's. Its field ids are its own (`useId`), so two editors of one cue
@@ -6011,6 +6082,37 @@ tab and the Prompt Book rail all open their cards collapsed. Consequences worth 
   that; `EditorContext.tsx`'s doc comment is the record of both. `INCLUDE_TARGET_GONE` is Update's
   own 409 and is unrelated — that one is live.
 
+#### The Cues table
+
+**Every cue once, as a library** (lighting7 cue model plan §3.7, D13, session 5): `/projects/:id/cues`
+(`routes/Cues.tsx`, `components/cues/CueLibrarySheet.tsx`, the model in `lib/cuesTable.ts`), the
+Library row after Looks. A cue is a project record a stack only names, so this is where a loose one
+is found — Record's *No stack* makes one.
+
+- **The rows are `GET /cues`**, which carries each cue's `entries` and `usedBy` (`{pads, slots,
+  bindings}`). *In* is a chip per entry, `Act 2 · Q14`, or *Loose*; *Used by* counts what else names
+  the cue, each named on the hover, and stays current because a pad, slot or binding write — and
+  `busk.layoutChanged`, the slot and binding frames — invalidates `CueList` too; Fade, Layers, FX, Scenery and Events are read-outs; the dot by the
+  name is D11's two looks from `cueHolds.state`. **Name and notes are the cells** (library-sheets
+  D5), `PATCH`ed on the cue.
+- **The view is the address**: `?q=` (name, notes, a place's stack or number), `?stack=`, `?show=`
+  for the *Loose · Shared · On a pad* chips (counted over the other filters), `?cue=` for one cue,
+  `?sort=` / `?dir=` — each written with `replace`; a `?cue=` naming a cue that has gone keeps its
+  chip, so the filter can be let go. Nothing is remembered beyond the address.
+- **The bar is the cue action set** (`host="table"`, its own `FOLDS` rungs) after the kit's Set ·
+  Clear over the name and notes cells, never verbs of the table's own. A row stands for the cue, so
+  it hands the set its entry only when it has exactly one (`actionRowOf`): Duplicate appends a copy
+  to that stack or makes a loose one, *Remove from stack* and *Move to stack…* are off whenever a
+  selected cue sits in several places (it is changed in its stack), and the table stays put after Duplicate rather than opening the
+  copy. *Delete…* is `CueDeleteDialog`.
+- **A row opens the cue at its first entry** on the Show view; a loose cue opens `CueEditor` in a
+  right-hand sheet (`stage/OwnerEditor`'s `CueEditorSheet`, which takes the lock from this host).
+  A loose cue's busk pad "open cue" lands here filtered to it (`cueOpenPath`), drawing *Only Storm ×*.
+- **It honours the show-editing lock while the show runs** (cue model plan §10, 20): `useEditLock`
+  with `ShowLockControl` in the header, the cells inert and every action but *Blind edit* asking to
+  unlock, the loose cue's editor read-only. Off the running project it reads only and draws no
+  action set — every one would act on the running show — and no row opens.
+
 #### The Show position
 
 **The way back to Show returns to the stack and the card this window last had open there**
@@ -6027,7 +6129,7 @@ pill (`ViewSwitcher`, through `useShowViewPath`, so a link drawn before the posi
 follows it), and the sidebar's Show entry with its ⌘K twin (`navigation.ts`'s `path`, which both
 call at the press, through `showViewPath`). **The rest deliberately do not**, because each names a
 place of its own: the Prompt Book's *Edit cue*, the cue table's read-outs and a busk cue pad's
-*View* (a stack and `?cue=`), ⌘K's *New Cue Stack* (the stack list), and the doors that land on
+*View* (its first entry's card by `?cue=&entry=`, or the Cues table filtered to a loose cue), ⌘K's *New Cue Stack* (the stack list), and the doors that land on
 bare `/show` and so on the live stack while one runs — a cue slot's *View*, and `windows.show`,
 another screen putting this one on the show — and the legacy `/program*` and `/run*` redirects, whose targets are frozen
 (§"What may live in `routes/`") and still carry their search string. Each of them writes the
@@ -6289,8 +6391,9 @@ modules export a page *and* one or two redirects, which reads like drift and is 
    `/projects/:id/patches` since the list shell (§List shell), and the module exports the page
    (`ProjectPatches`) and its bare-path redirect.
 3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
-   in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
-   all land on `/show`, `/fx` lands on `/busk` and `/templates` on `/palettes` (search kept, for the old
+   in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues/all`,
+   `/cues/standalone` and `/program` all land on `/show` (`/cues` itself names the Cues table again,
+   and bare `/cues` is `Cues.tsx`'s `CuesRedirect`, rule 1), `/fx` lands on `/busk` and `/templates` on `/palettes` (search kept, for the old
    `?family=` links); collecting them keeps `ShowPage.tsx` from
    accumulating four unrelated histories, and keeps `/program` out of `ProgrammerPage.tsx`, where
    it reproduced the `/program` vs `/programmer` confusion in the file layout.
@@ -6313,7 +6416,7 @@ path may quietly change where it lands.
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
 - **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer, with
   Applied as its child · Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
-  Channels), **Library** (Looks · Palettes · Effects · Speed Masters · Scripts), **Project**
+  Channels), **Library** (Looks · Cues · Palettes · Effects · Speed Masters · Scripts), **Project**
   (Settings · Surfaces · Sync) and **Desk** (Projects, then Install Settings and its tabs). A row's
   `section` is a `NavSection`, `NAV_SECTIONS` holds the labels, and the array is declared in section
   order — `navigation.test.ts` pins each section's ids whole, so the array *is* the sidebar. The
@@ -6340,7 +6443,7 @@ path may quietly change where it lands.
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
   pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
-  every **other** window × the eight views in `lib/windowViews.ts` (this window has the Navigation
+  every **other** window × the nine views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
   missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
   *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,
@@ -6825,13 +6928,14 @@ and it leads with status. A show's is below; a venue's follows it. The header (`
 sidebar's own rows for the same project less Desk, drawn as cards — never a hand-picked list, so a
 new row reaches the home by being in the registry. A card is the row's icon and label and its
 `NavItem.homeCount`, read from `useHomeCounts` (`components/projectHome/`), every count from a query
-the frontend already made (P5). **Show counts its stacks and the project's cues once each** — *2
-stacks · 35 cues*, the cue list's length — because a cue can sit in several stacks or in none, so
-a count per stack would count a shared cue twice and miss a loose one (Chris's call, 2026-10-16); the
-cues move to the Cues row when it lands. The cue list and not `ProjectDetail.cueCount`, because the
-list's tag is the one a cue write invalidates. Off the rig the `needsRig` cards take D4's treatment —
-muted, `OffRigDot`, *Needs the project on the rig* — and their counts (Show's, fixtures, groups,
-universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
+the frontend already made (P5). **Show counts its stacks, and the Cues card the project's cues once
+each** — *2 stacks* and *35*, the cue list's length — because a cue can sit in several stacks or in
+none, so a count per stack would count a shared cue twice and miss a loose one (Chris's call,
+2026-10-16; the cues moved to their own row with the Cues table, cue model plan session 5). The cue
+list and not `ProjectDetail.cueCount`, because the list's tag is the one a cue write invalidates; the
+Cues row is Library, so the list is read on and off the rig, as the Looks' is. Off the rig the
+`needsRig` cards take D4's treatment — muted, `OffRigDot`, *Needs the project on the rig* — and their
+counts (Show's, fixtures, groups, universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
 because the list shows them. A venue's home draws no Show or Library card, so it reads none of
 their lists. `ProjectHome.test.tsx` pins the sections against the rendered sidebar, the held show's
 *Review update* and *Run against*, the counts and the off-rig cards; `projectHome.test.ts` the

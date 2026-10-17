@@ -3,7 +3,8 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { CellResolution } from '../columns'
 import { chan, sliderProp } from '@/test/fixtureFactories'
-import { SliderCell, fromPct, toPct } from './SliderCell'
+import { SliderCell } from './SliderCell'
+import { fromPct, toPct } from '../../editor/cellPercent'
 
 /**
  * The level editor's field is in the cell's unit — a percent — with the byte on the read-out

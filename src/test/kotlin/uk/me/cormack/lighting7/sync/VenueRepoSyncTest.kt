@@ -38,6 +38,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -303,7 +304,8 @@ class VenueRepoSyncTest {
         val peek = tmp.resolve("peek")
         Git.cloneRepository().setURI(showUrl).setDirectory(peek.toFile()).call().close()
         val pushed = Files.readString(peek.resolve("project.json"))
-        assertFalse("venueUuid" in pushed || "venueVersion" in pushed, "no pin: $pushed")
+        assertFalse("\"venueUuid\"" in pushed || "\"venueVersion\"" in pushed, "no pin: $pushed")
+        assertTrue("detachedFromVenueUuid" in pushed && "detachedFromVersion" in pushed, "the origin travels: $pushed")
         assertFalse(Files.exists(peek.resolve("showHides")) || Files.exists(peek.resolve("showOverrides")), "no show layer")
 
         // The peer fast-forwards onto the standalone show: its rig is its own rows now, the same fixtures.
@@ -313,6 +315,7 @@ class VenueRepoSyncTest {
             assertEquals(null, show.venueUuid)
             assertEquals(null, show.venueVersion)
             assertTrue(DaoShowHide.find { DaoShowHides.project eq showB }.empty())
+            assertNotNull(show.detachedFromVenueUuid, "the peer takes the origin with the pin's clearing")
         }
         assertEquals(rigBefore, rig(b, showB))
 
@@ -365,6 +368,33 @@ class VenueRepoSyncTest {
         assertEquals(rigBefore, Fixtures().also { DbFixtureLoader.loadFixtures(showId, it, a.state.database) }.getChannelMappings())
         val pushed = Git.open(showBare.toFile()).use { JGitClient.readBlob(it.repository, "refs/heads/main", "project.json")!! }
         assertTrue("\"venueVersion\": 1" in pushed, "the merge commit carries the pin: $pushed")
+    }
+
+    @Test
+    fun `a detach on a show that already syncs keeps its origin through a merge with a peer's edit`() {
+        val (a, showId) = deskWithVenueOnRepo()
+        a.attach(showId, showUrl)
+        assertEquals(SyncOutcome.PUSHED, a.sync(showId).outcome)
+        val b = Desk("b")
+        b.importRepo(venueUrl)
+        val showB = b.importRepo(showUrl)
+        transaction(b.state.database) { DaoCueStack.new { project = DaoProject[showB]; name = "Peer's stack" } }
+        assertEquals(SyncOutcome.PUSHED, b.sync(showB).outcome)
+
+        // A detaches while B's edit is on the remote: the pin and the origin move together in the merge.
+        val pin = transaction(a.state.database) { DaoProject[showId].let { it.venueUuid!! to it.venueVersion!! } }
+        runBlocking { a.state.venueDetach.detach(showId, dryRun = false) }
+        val merged = a.sync(showId)
+        assertEquals(SyncOutcome.MERGED, merged.outcome, merged.message)
+        transaction(a.state.database) {
+            val show = DaoProject[showId]
+            assertEquals(null, show.venueUuid, "the merge kept this desk's cleared pin")
+            assertEquals(pin, show.detachedFromVenueUuid to show.detachedFromVersion, "and its origin")
+            assertTrue(show.cueStacks.any { it.name == "Peer's stack" }, "and took the peer's edit")
+        }
+        val pushed = Git.open(showBare.toFile()).use { JGitClient.readBlob(it.repository, "refs/heads/main", "project.json")!! }
+        assertTrue("\"detachedFromVersion\": ${pin.second}" in pushed, "the merge commit carries the origin: $pushed")
+        assertFalse("\"venueUuid\"" in pushed, pushed)
     }
 
     @Test

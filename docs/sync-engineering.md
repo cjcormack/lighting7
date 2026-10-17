@@ -57,7 +57,9 @@ lives directly under the export folder:
 ```
 formatVersion.json
 project.json                   # v24+: `kind` (absent = SHOW), and a show's pin — `venueUuid`,
-                               # `venueVersion`, `venueRepo` (a hint); see §"Version 24"
+                               # `venueVersion`, `venueRepo` (a hint); see §"Version 24"; a
+                               # standalone show's origin — `detachedFromVenueUuid`,
+                               # `detachedFromVersion` — where it was detached from (no version)
 installs.json                  # populated with the local install's identity (Phase 2)
 showHides/{uuid}.json          # v24+: a show on a venue's hides of venue records (recordKind,
                                # recordUuid)
@@ -247,7 +249,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 34`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 35`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -269,6 +271,14 @@ whole scrolling line) — but the same change widened `BuskBankJson.flow` (and t
 `SCROLL`, and a v12 reader imports an unknown flow as `WRAP` and writes that back on its next
 wipe-then-export push, re-flowing the bank for every peer. That is the degraded-record answer, so
 the writer bumped; `minReader` stays at 5 because every earlier archive still decodes.
+
+**A detached show's origin (venue-attach plan Att.1) took no bump, by the same question.** A v35
+reader ignores `detachedFromVenueUuid` and `detachedFromVersion` and imports the show as what it is, a
+standalone show, which loads, outputs and draws exactly as on a desk that reads them; its next push
+writes them away. What that loses is the origin alone, and a show with no origin is a valid state: every
+show detached before Att.1 is one, and an attach of one falls back to the no-origin rule (every venue
+record the show lacks comes in, each offered a hide in the review) rather than doing anything silently.
+So no record degrades, and the writer is still v35.
 
 **A master's `usage` gaining `beam` (effects plan session 6) took no bump, by the same question.**
 `usage` is a free string on the wire: an older reader imports `beam` verbatim, its bank routes
@@ -306,6 +316,20 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 35 — speed masters on a cue
+
+Venue-visit plan S16 (D20; `docs/cues-engineering.md` §"Speed masters on a cue"): `CueJson` gains
+`speedMasters` ([`CueSpeedMasterJson`]: `speedMasterUuid`, `bpm`), the masters the cue sets on every
+GO into it, in order. Empty is omitted, so a show whose cues set no tempo exports byte-for-byte as at
+v34 (only `formatVersion.json` says 35). The master is named by uuid, so `ExportUuidRemapper`
+re-points it on a clone with no change there. `SUPPORTED_FORMAT_VERSION = 35`;
+`MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since a missing list sets nothing. The writer's number
+moves by the sharp-edge rule: a v34 reader would import every cue without its tempos and its next
+wipe-then-export push would write them away for every peer. Imported as stored: a uuid the archive's
+masters lack is kept, and skipped at GO as a master deleted under the cue is. Stored as a JSON column
+on `cues` (`speed_masters`), not a table, so `SyncCoverageTest` gained no row. `RichProjectFixture`'s
+*open* cue sets master 1 and a follower.
 
 ### Version 34 — one effect over a selection
 
@@ -601,6 +625,15 @@ takes the remote's pin (none) when its own is the merge base's, `replaceFromWork
 show's rows and the empty pin and sweeps its hides and overrides, and the importer seeds no maps from
 a snapshot because the archive names none. A desk that never had the venue imports it as any
 standalone show (`VenueRepoSyncTest`). The venue's repo is not touched.
+
+**A detached show records its origin** (venue-attach plan D1, §4.3): `project.json` gains
+`detachedFromVenueUuid` and `detachedFromVersion`, the venue and the version it was detached from,
+both optional and omitted when absent, and written only for a standalone show (a pinned show's pin
+stands in their place, and an importer reads neither for one). `mergeProjectPin` merges them with the
+pin, as one value, since Detach writes both in one transaction. The venue uuid names a project outside
+the archive, so `ExportUuidRemapper` leaves it alone and a clone keeps it. An importer that finds only
+one of the two, or a uuid that does not parse, reads no origin rather than failing: the origin only
+steers an attach's matching.
 
 **What a loaded show does with a missing snapshot.** Every way in refuses one, and a venue a show
 pins refuses delete, so it takes a hand-edited database. Then `RigScope` still answers the show's own

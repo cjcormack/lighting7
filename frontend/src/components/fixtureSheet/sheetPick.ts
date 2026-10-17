@@ -1,5 +1,6 @@
 import type { ElementDescriptor, Fixture, PropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import { SUBSELECT_MODE_LABELS } from '@/lib/cellsSubSelection'
+import { elementFilterIncludes } from '@/components/fx/fxEditorModel'
 import { buildSheetRows, type SheetFamily, type SheetRow, type SheetRowGroup } from './sheetRows'
 
 /**
@@ -59,21 +60,6 @@ export const PICK_FILTER_LABELS: Record<PickFilter, string> = Object.fromEntries
   PICK_FILTERS.map((filter) => [filter, SUBSELECT_MODE_LABELS[filter]]),
 ) as Record<PickFilter, string>
 
-/** Whether head [index] of [total] is in a filter — the desk's `ElementFilter.includes`, clause for clause. */
-function filterIncludes(filter: Exclude<PickFilter, 'ALL' | 'INVERT'>, index: number, total: number): boolean {
-  const half = Math.floor((total + 1) / 2)
-  switch (filter) {
-    case 'ODD':
-      return index % 2 === 0
-    case 'EVEN':
-      return index % 2 === 1
-    case 'FIRST_HALF':
-      return index < half
-    case 'SECOND_HALF':
-      return index >= half
-  }
-}
-
 /**
  * A Cells-menu filter applied: Odd, Even and the halves are over every head — so they are exactly the
  * element filters an effect can start with (`elementFilterFor`) — and *Invert* is every head the pick
@@ -82,7 +68,7 @@ function filterIncludes(filter: Exclude<PickFilter, 'ALL' | 'INVERT'>, index: nu
 export function filterPick(pick: HeadPick, filter: PickFilter, all: readonly string[]): HeadPick {
   if (filter === 'ALL') return null
   if (filter === 'INVERT') return pick == null ? null : normalisePick(all.filter((k) => !pick.has(k)), all)
-  return normalisePick(all.filter((_, i) => filterIncludes(filter, i, all.length)), all)
+  return normalisePick(all.filter((_, i) => elementFilterIncludes(filter, i, all.length)), all)
 }
 
 /**
@@ -206,7 +192,7 @@ export function elementFilterFor(heads: readonly PickHead[], pick: HeadPick): 'O
   if (pick == null) return null
   const total = heads.length
   for (const name of ['ODD', 'EVEN', 'FIRST_HALF', 'SECOND_HALF'] as const) {
-    if (heads.every((h, i) => filterIncludes(name, i, total) === pick.has(h.key))) return name
+    if (heads.every((h, i) => elementFilterIncludes(name, i, total) === pick.has(h.key))) return name
   }
   return null
 }

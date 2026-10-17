@@ -84,6 +84,7 @@ import uk.me.cormack.lighting7.models.DaoPromptBookAnchor
 import uk.me.cormack.lighting7.models.DaoPromptBookAnnotation
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.CueSpeedMasterDto
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
@@ -97,11 +98,19 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
 import java.time.Duration
+import java.util.UUID
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 
 /** Name of the project [seedRichProject] creates. */
 const val RICH_PROJECT_NAME = "round-trip-rich"
+
+/**
+ * The venue the rich project records being detached from (venue-attach plan D1), and the version: a
+ * venue no desk holds, since the origin only steers an attach, and non-default so canonical JSON
+ * carries both. An extract of the rich project clears them, so `seedShowOnVenue`'s show has none.
+ */
+val RICH_PROJECT_DETACHED_FROM: Pair<UUID, Int> = UUID.fromString("5b0e6c1a-7f2d-4c3e-9a8b-1d2e3f4a5b6c") to 7
 
 /**
  * The scene images the fixture paints with (scrim plan session 1), made in code: a PNG with alpha
@@ -147,6 +156,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         stageWidthM = 12.0
         stageDepthM = 8.0
         stageHeightM = 6.0
+        detachedFromVenueUuid = RICH_PROJECT_DETACHED_FROM.first
+        detachedFromVersion = RICH_PROJECT_DETACHED_FROM.second
     }
 
     // 2 universes, 4 patches, 2 groups. The address is machine-local (Phase 2 cloud sync)
@@ -537,7 +548,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // 3 speed masters with every optional column set to a non-default value — master 1 is
     // the protected global master and would normally sit at its defaults, so the fixture
     // seeds masters 1 and 2 both off-default to keep the canonical-JSON round-trip honest.
-    DaoSpeedMaster.new {
+    val houseMaster = DaoSpeedMaster.new {
         this.project = project
         masterIndex = 1; name = "House Tempo"
         bpm = 128.0; source = SpeedMasterSource.TAP.name
@@ -733,6 +744,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         notes = "house to half, then go"
         stomp = true
         fadeCurve = "SINE_IN_OUT"
+        // v35: the masters it sets on GO — master 1, and a follower, which a GO skips.
+        speedMasters = listOf(CueSpeedMasterDto(houseMaster.uuid.toString(), 132.0), CueSpeedMasterDto(slowMaster.uuid.toString(), 96.5))
     }
     // Its place in show-1 is its entry's (cue model plan session 1): every optional entry field
     // set too — an explicit number and a follow.

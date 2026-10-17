@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
-import { LayoutGrid } from 'lucide-react'
+import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { templateLayerPresence } from '@/components/busking/lookPresence'
@@ -15,6 +15,11 @@ import { paletteFits, type PaletteFit } from '@/lib/paletteOffer'
 import { templatePropertyFor } from '@/lib/templateIntent'
 import { recentFirst } from '@/lib/templateRecents'
 import { cn } from '@/lib/utils'
+import { isCueEffect } from '@/components/fx/fxEditorModel'
+import { effectReaches } from '@/components/fx/effectSplit'
+import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
+import { useStopEffect } from '@/components/fx/useEffectControls'
+import { useActiveEffectsQuery, useEffectLibraryQuery } from '@/store/fixtureFx'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { useTemplateListQuery } from '@/store/templates'
 import { useVenueMode } from '@/store/venues'
@@ -25,8 +30,8 @@ import { EditorLabel } from './EditorLabel'
 /**
  * Can a value palette carry this property at all? Its rows are a closed vocabulary
  * (`TEMPLATE_PROPERTIES`), so a slider cell whose property is outside it — a speed, say — has no
- * Palettes band and nothing to save. A setting cell (gobo, prism) has none because `SettingCell` is
- * never wrapped in [PaletteBands]: a value palette cannot carry a slotted role (§4.3).
+ * Palettes band and nothing to save. A setting cell (gobo, prism) passes `palettes={false}` to
+ * [PaletteBands] whatever its property: a value palette cannot carry a slotted role (§4.3).
  */
 export function paletteCarries(property: string): boolean {
   return templatePropertyFor(property) != null
@@ -40,12 +45,15 @@ export function paletteCarries(property: string): boolean {
  *    the cell's family as the mask, then the family's value palettes that fit those heads, recent
  *    first and then by name, two rows of them, with *All …* for the family's whole picker.
  *  - **The editor**, unchanged: a drag or a typed value is a Local value, as it always was.
- *  - **Below**, the footer: *Save as palette…* from the cell's values, beside the family's own
- *    tools ([PaletteFooter]).
+ *  - **Below**, the Effects band ([EffectsBand]): the effects running on these heads, the family's
+ *    effect palettes and *+ Effect …*.
+ *  - **Then** the footer: *Save as palette…* from the cell's values, beside the family's own tools
+ *    ([PaletteFooter]).
  *
  * Drawn only where a press has a door: the programmer passes `projectId`, and the plain lists and
  * the cue editor's Values grid pass none — a band press there would reach the programmer (R2 P2), so
- * those cells get their editor alone. A cell whose property no palette can carry has no band either.
+ * those cells get their editor alone. A cell whose property no value palette can carry — a speed, a
+ * setting — has no Palettes band and no footer, and keeps its Effects band.
  */
 export function PaletteBands({
   projectId,
@@ -54,11 +62,12 @@ export function PaletteBands({
   targets,
   onSave,
   tools,
+  palettes = true,
   children,
 }: {
   projectId?: number
   family: AttributeFamily
-  /** The cell's property — a Beam cell is offered the Beam palettes that set it. */
+  /** The cell's property — a Beam cell is offered the Beam palettes, and the effects, that set it. */
   property: string
   /** The cell batch's heads, as a commit lands on them. */
   targets: readonly WriteTarget[]
@@ -66,24 +75,33 @@ export function PaletteBands({
   onSave?: () => void
   /** The family's own tools, after the save in the footer. */
   tools?: ReactNode
+  /**
+   * Draw the Palettes band and the footer — false for a setting cell (gobo, prism): a value palette
+   * cannot carry a slotted role, so its popup is the Effects band alone (§4.3, §11 question 11).
+   */
+  palettes?: boolean
   children: ReactNode
 }) {
   const pressTargets = useMemo(() => templateTargetsOf(targets), [targets])
   const emitters = useMemo(() => targetEmitters(targets), [targets])
   const families = useMemo(() => [family], [family])
-  if (projectId == null || !paletteCarries(property)) return <>{children}</>
+  if (projectId == null) return <>{children}</>
+  const carries = palettes && paletteCarries(property)
   return (
     <>
-      <PaletteBand
-        projectId={projectId}
-        family={family}
-        property={property}
-        targets={pressTargets}
-        families={families}
-        emitters={emitters}
-      />
+      {carries && (
+        <PaletteBand
+          projectId={projectId}
+          family={family}
+          property={property}
+          targets={pressTargets}
+          families={families}
+          emitters={emitters}
+        />
+      )}
       {children}
-      <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />
+      <EffectsBand projectId={projectId} family={family} property={property} targets={pressTargets} families={families} />
+      {carries && <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />}
     </>
   )
 }
@@ -99,7 +117,7 @@ export function PaletteBands({
  *
  * **The offer is the strip's** (`paletteFits`): the family, every emitter a palette names somewhere
  * in the heads — so a Shehds zone is offered the colour palettes its zone takes — and for a Beam cell
- * the palettes with a row for its property. Effect palettes are the Effects band's (session 6).
+ * the palettes with a row for its property. Effect palettes are the Effects band's.
  *
  * **Two rows, never a scroller**: the chips wrap and the band clips at two rows, so how many show is
  * the panel's width to say. *All · n* opens the one picker ([ApplyPicker]) on this family.
@@ -335,4 +353,205 @@ export function usePaletteSave(
       />
     ) : null,
   }
+}
+
+/**
+ * The Effects band (apply-model plan §4.3, D5): below the editor, what runs on the cell's heads and
+ * what can be started on them.
+ *
+ *  - **Running**: every effect on this property that paints one of the heads, lit. A tap opens the
+ *    live editor beside the chip ([FxEditorPopover]) over the cell batch, so a Local effect on more
+ *    heads than these offers the split — *Apply to Hex 1–2 · Edit all 4*; a palette layer's is
+ *    edited as its layer's (P5) and a cue's is read-only, its home being the cue.
+ *  - **The family's effect palettes** that fit the heads, filtered as the Palettes band filters
+ *    ([paletteFits]) — so a zoom cell is offered the Beam effect palettes that drive zoom, a gobo cell
+ *    the Slot Steps of its gobo — pressed through `usePress` onto the cell batch under the cell's
+ *    family, with the chip's gestures and ring.
+ *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="effects"`) on this
+ *    property: `FxPicker` on the family of the cell and the bare effect press, `POST
+ *    /programmer/effects` with the same pair, so a Pulse on a uv cell is masked as Colour (the
+ *    family the desk reads off the driven property). Under a focused Look it starts on `/fx/add` and
+ *    is absorbed into the Look instead.
+ */
+export function EffectsBand({
+  projectId,
+  family,
+  property,
+  targets,
+  families,
+  className,
+}: {
+  projectId: number
+  family: AttributeFamily
+  property: string
+  /** Where a press lands — fixtures by key, a cell by its element key. */
+  targets: readonly TemplateTarget[]
+  /** The press's mask. */
+  families: readonly AttributeFamily[] | null
+  className?: string
+}) {
+  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: library } = useEffectLibraryQuery()
+  const { data: active } = useActiveEffectsQuery()
+  const { data: applied } = useProgrammerAppliedQuery()
+  const { fixtures } = useFixtureLookup()
+  const stopEffect = useStopEffect()
+  const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
+  const { press, into } = usePress(projectId, pair)
+  const onGesture = useCallback(
+    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+    [press],
+  )
+  const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters: null, property }), [family, property])
+  const context = useMemo(() => ({ library, templates }), [library, templates])
+  const offered = useMemo(
+    () => recentFirst((templates ?? []).filter((t) => t.kind === 'effect' && paletteFits(t, fit, context))),
+    [templates, fit, context],
+  )
+  const running = useMemo(
+    () =>
+      (active ?? []).filter(
+        (e) => !e.leaving && sameProperty(e.propertyName, property) && effectReaches(e, targets, fixtures ?? []),
+      ),
+    [active, property, targets, fixtures],
+  )
+
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const editAnchor = useRef<HTMLElement | null>(null)
+  const editing = editingId != null ? (active ?? []).find((e) => e.id === editingId) ?? null : null
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerMounted, setPickerMounted] = useState(false)
+  const addRef = useRef<HTMLButtonElement>(null)
+  const label = FAMILY_LABELS[family].singular
+
+  return (
+    <div data-effects-band={family} className={cn('space-y-1.5', className)}>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <EditorLabel className="shrink-0">Effects</EditorLabel>
+        {into.kind === 'look' && (
+          <span className="min-w-0 truncate text-[10px] text-teal-700 dark:text-teal-300">into {into.lookName}</span>
+        )}
+        <Button
+          ref={addRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-[11px]"
+          aria-expanded={pickerOpen}
+          disabled={targets.length === 0}
+          title={`A library effect on these heads — Local, taking them off the ${label.toLowerCase()} effects they run`}
+          onClick={() => {
+            setPickerMounted(true)
+            setPickerOpen((wasOpen) => !wasOpen)
+          }}
+        >
+          <Plus className="size-3" />
+          Effect…
+        </Button>
+      </div>
+      {running.length > 0 && (
+        <div data-effects-band-running className="flex flex-wrap gap-1.5">
+          {running.map((effect) => {
+            const cue = isCueEffect(effect)
+            return (
+              <button
+                key={effect.id}
+                type="button"
+                data-band-effect={effect.id}
+                disabled={cue}
+                title={
+                  cue
+                    ? `${effect.effectType} — its cue’s; edit it in the cue`
+                    : `${effect.effectType} — running on these heads; click to edit`
+                }
+                onClick={(event) => {
+                  editAnchor.current = event.currentTarget
+                  setEditingId(effect.id)
+                }}
+                className={cn(
+                  'inline-flex h-7 items-center gap-1.5 rounded-md border border-violet-500/55 bg-violet-500/[0.08] px-2 text-xs hover:bg-violet-500/15 disabled:opacity-60',
+                  !effect.isRunning && 'opacity-60',
+                )}
+              >
+                <AudioWaveform className="size-3 shrink-0 text-violet-600 dark:text-violet-300" />
+                <span className="max-w-[9rem] truncate">{effect.effectType}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+      {offered.length > 0 && (
+        <div className="flex max-h-[62px] flex-wrap gap-1.5 overflow-hidden">
+          {offered.map((template) => {
+            const presence = into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id)
+            return (
+              <PalettePressButton
+                key={template.id}
+                projectId={projectId}
+                template={template}
+                into={into}
+                presence={presence}
+                hasTargets={targets.length > 0}
+                onGesture={onGesture}
+              >
+                {(handlers) => (
+                  <button
+                    type="button"
+                    data-band-effect-palette={template.id}
+                    {...handlers}
+                    title={templatePressTitle(template, into)}
+                    aria-pressed={presence !== 'none'}
+                    className={cn(
+                      'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs hover:bg-accent',
+                      padPresenceClass(presence),
+                    )}
+                  >
+                    <AudioWaveform className="size-3 shrink-0 text-muted-foreground" />
+                    <span className={cn('max-w-[9rem] truncate', presence !== 'none' && 'text-primary')}>{template.name}</span>
+                  </button>
+                )}
+              </PalettePressButton>
+            )
+          })}
+        </div>
+      )}
+      {running.length === 0 && offered.length === 0 && (
+        <p className="text-[10px] text-muted-foreground">Nothing running on these heads</p>
+      )}
+      {editing != null && (
+        <FxEditorPopover
+          effect={editing}
+          anchorRef={editAnchor}
+          selection={targets}
+          onClose={() => setEditingId(null)}
+          onFollow={setEditingId}
+          onStop={(effect) => {
+            stopEffect(effect)
+            setEditingId(null)
+          }}
+        />
+      )}
+      {pickerMounted && (
+        <ApplyPicker
+          projectId={projectId}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          anchorRef={addRef}
+          library="effects"
+          family={family}
+          property={property}
+          pair={pair}
+          fit={fit}
+          offerNew={false}
+        />
+      )}
+    </div>
+  )
+}
+
+/** An effect's property and a cell's are one where they name one thing — a colour is `rgbColour` or `colour`. */
+function sameProperty(effect: string, cell: string): boolean {
+  if (effect === cell) return true
+  const colour = (name: string) => name === 'rgbColour' || name === 'colour'
+  return colour(effect) && colour(cell)
 }

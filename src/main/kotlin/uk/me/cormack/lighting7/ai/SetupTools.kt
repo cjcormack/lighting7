@@ -1586,6 +1586,7 @@ class SetupTools(
         val place: PromptBookRectDto?,
         val scenery: List<SceneryWrite>,
         val events: List<CueEventWrite>,
+        val speedMasters: List<CueSpeedMasterDto>,
     )
 
     private fun buildCueStack(input: JsonObject, target: ToolProject): ToolExecutionResult {
@@ -1605,11 +1606,13 @@ class SetupTools(
             val pageCount: Int?,
             val elements: Map<UUID, SceneryElementInfo>,
             val patches: Map<Int, CueEventPatchInfo>,
+            val speedMasters: List<SpeedMasterRef>,
         )
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
             val elements = sceneryElementsOf(project)
             val patches = cueEventPatchesOf(project)
+            val masters = speedMasterRefsOf(project)
             if (stackId != null) {
                 val stack = DaoCueStack.findById(stackId)
                 val error = when {
@@ -1618,13 +1621,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.let { cueEntriesInOrder(it) }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, elements, patches)
+                Context(error, numbers, pageCount, elements, patches, masters)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches, masters)
             }
         }
         context.stackError?.let { problems += it }
@@ -1687,6 +1690,10 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot carry events: it is never gone to"
                 parseToolCueEventList(it, context.patches, "events", rowProblems)
             }.orEmpty()
+            val speedMasters = (row["speedMasters"] as? JsonArray)?.let {
+                if (marker) rowProblems += "a marker cannot set speed masters: it is never gone to"
+                parseCueSpeedMasters(it, context.speedMasters, emptyList(), "speedMasters", rowProblems, byIndex = true)
+            }.orEmpty()
             val place = row["at"]?.let { at ->
                 if (!target.isCurrent) {
                     // As the Prompt Book routes: only the current project's book is edited.
@@ -1700,7 +1707,7 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events, speedMasters)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1735,6 +1742,7 @@ class SetupTools(
                     notes = spec.notes
                     fadeDuration = spec.fade
                     fadeCurve = spec.fadeCurve
+                    speedMasters = spec.speedMasters
                 }
                 writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
                 replaceCueScenery(cue, spec.scenery)

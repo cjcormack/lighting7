@@ -95,6 +95,12 @@ class VenueDetachTest : RouteIntegrationTest() {
         assertFalse(result.bool("dryRun"))
         assertEquals(1, result["version"]!!.jsonPrimitive.int, "flattened at the pin")
         assertTrue(result.list("overridesApplied").single().contains("address"), "$result")
+        // The pin becomes the show's origin (venue-attach plan D1).
+        val venueUuid = transaction(state.database) { DaoProject[f.venueId].uuid.toString() }
+        val detachedFrom = result["detachedFrom"]!!.jsonObject
+        assertEquals(venueUuid, detachedFrom["venueUuid"]!!.jsonPrimitive.content)
+        assertEquals(1, detachedFrom["version"]!!.jsonPrimitive.int)
+        assertEquals(f.venueId, detachedFrom["venueId"]!!.jsonPrimitive.int)
 
         // The same fixtures on the same channels, in the same groups — read from the show's own rows now.
         assertEquals(rigBefore, loadedRig(f.showId))
@@ -147,6 +153,10 @@ class VenueDetachTest : RouteIntegrationTest() {
         assertTrue(state.venueVersions.history(f.venueId).shows.isEmpty(), "the venue no longer lists the show")
         val listed = client.get("/api/rest/projects/${f.showId}").obj()
         assertTrue(listed["venue"] == null || listed["venue"] is JsonNull, "a standalone show: $listed")
+        assertEquals(detachedFrom, listed["detachedFrom"], "the project's detail reads the origin")
+        val row = client.get("/api/rest/projects").let { TestJson.parseToJsonElement(it.bodyAsText()).jsonArray }
+            .map { it.jsonObject }.single { it["id"]!!.jsonPrimitive.int == f.showId }
+        assertEquals(detachedFrom, row["detachedFrom"], "and so does the project list")
         assertEquals(VenueBehind.NONE, ShowBehind.judge(state, f.showId).behind)
     }
 
@@ -168,6 +178,7 @@ class VenueDetachTest : RouteIntegrationTest() {
 
         transaction(state.database) {
             assertEquals(1, DaoProject[f.showId].venueVersion, "the pin stays")
+            assertNull(DaoProject[f.showId].detachedFromVenueUuid, "no origin is written by a dry run")
             assertEquals(1, DaoShowHide.find { DaoShowHides.project eq f.showId }.count())
             assertEquals(3, DaoShowOverride.find { DaoShowOverrides.project eq f.showId }.count())
         }

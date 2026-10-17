@@ -234,6 +234,7 @@ function CueEditorHeader({
   const stackId = cue.cueStackId
   const entryId = cue.entryId ?? null
   const locked = readOnlyReason != null
+  const loose = stackId == null && (cue.entries?.length ?? 0) === 0
   const entryReason = locked
     ? readOnlyReason
     : stackId != null && entryId != null
@@ -288,6 +289,11 @@ function CueEditorHeader({
   return (
     <div className={cn(CHROME_ROW_CLASS, 'gap-2 overflow-hidden bg-muted/20 text-xs')} data-cue-editor-header>
       {/* ── The entry's ── */}
+      {loose ? (
+        <span className="shrink-0 text-muted-foreground" data-cue-editor-entry="loose" title="It is in no stack, so it has no place to number or follow from">
+          In no stack · no number or follow
+        </span>
+      ) : (
       <div className="flex shrink-0 items-center gap-1.5" data-cue-editor-entry title={entryReason ?? undefined}>
         {cue.cueStackName && (
           <span className="max-w-[8rem] truncate text-muted-foreground" title={`In ${cue.cueStackName}`}>
@@ -318,6 +324,7 @@ function CueEditorHeader({
           className="w-16 font-mono"
         />
       </div>
+      )}
       <span aria-hidden className="h-5 w-px shrink-0 bg-border" />
       {/* ── The cue's ── */}
       <InlineEditField

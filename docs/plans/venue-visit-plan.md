@@ -217,30 +217,9 @@ Grouped by area. §4 gives the order.
 
 ### Cues
 
-**S16 — Speed masters on a cue.**
-- A cue can set masters' BPM when it runs: a list of master and BPM pairs.
-- **When it applies (D15, D20).** On every GO into one of the cue's entries, GO TO it, or GO BACK
-  onto it, even when another stack already holds the cue. It never tracks.
-- **It lands after the cue model plan's session 2** (holds, merged `595aced3`). It hooks
-  `CueStackManager.activateEntry`, which every GO, GO TO, GO BACK, auto-advance and re-fire passes
-  through, rather than the hold registry's first hold (`CueHolds.acquire`), where events fire: D20
-  fires where events don't. A reload's re-GO (`Show.resume`) sets no tempo, though it shares GO
-  BACK's `fireEvents = false`, so S16 needs its own flag (D15: a tap wins until the next cue).
-- **A loose press sets tempo too** (Chris, 2026-10-17, K3): a pad, a slot, `apply_cue`, MIDI
-  `FireCue` and the hand bring a cue on as a GO does since R1.2, so they re-assert its masters as a
-  GO does; GOs only was declined. A cue's loose press is `takeLooseCue` (`fx/CueHolds.kt`; R3.1 and
-  R3.3 changed palette and Look presses only). A reload calls that too (`Show.resume`,
-  `fireEvents = false`), and a reload sets no tempo, so the press needs the same flag there.
-- It's a field of the cue, not of its entries, so a shared cue sets the same tempo from every stack.
-- **Where it's edited.** The cue editor's **Cue** tab (`components/cues/editor/CueTab.tsx`, R2.4
-  `a4ab679`), which holds what the header leaves. Its three hosts get it at once: the card, the cue
-  sheet's pane (`CueEditorPane`) and `OwnerEditor`'s sheet. Cue properties is gone
-  (show-cue-editing plan D15).
-- **Copies carry it.** S16 adds the list to `copyCueRecord` (`routes/projectCuesHelpers.kt`), which
-  makes R2.3's *Duplicate* and the cross-project `POST /cues/{id}/copy`, and to `copy_to_project`'s
-  copier (`ai/VenueSetupTools.kt`), which R1.6 reuses. Across projects a master maps by index, as that
-  copier's masters do (cue model plan §3.8).
-- It's a portable cue field, so expect a `formatVersion` bump (P5).
+- ~~S16 — Speed masters on a cue (D15, D20)~~ — done, `8236eb9` (master and BPM pairs on the cue, set
+  by `activateEntry` and `takeLooseCue`, never by a reload; a follower or a deleted master is skipped
+  and logged; edited in the Cue tab; copies map a master by index; `formatVersion` 35).
 
 ### Course checks
 

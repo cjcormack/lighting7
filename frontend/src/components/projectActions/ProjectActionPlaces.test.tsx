@@ -77,7 +77,10 @@ vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: looseCue
 vi.mock('@/store/cueHolds', () => ({ useCueHolds: () => looseHolds }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => false }))
-vi.mock('@/components/fx/selectionEffectTarget', () => ({ useWindowSelectionTargets: () => [], effectTargetOf: () => null }))
+vi.mock('@/components/fx/selectionEffectTarget', () => ({
+  useWindowEffectPair: () => ({ targets: [], families: null }),
+  effectTargetOf: () => null,
+}))
 vi.mock('@/ProjectSwitcher', () => ({ useViewedProject: () => projects.find((p) => p.id === viewed) }))
 vi.mock('@/components/projectHome/useHomeCounts', () => ({ useHomeCounts: () => ({}) }))
 vi.mock('@/components/cloudSync/useSyncNow', () => ({

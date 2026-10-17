@@ -29,8 +29,9 @@ import {
 } from "@/navigation"
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
-import type { FxTarget } from "@/components/fx/FxPicker"
-import { effectTargetOf, useWindowSelectionTargets } from "@/components/fx/selectionEffectTarget"
+import type { PressPair } from "@/hooks/usePress"
+import { effectTargetOf, useWindowEffectPair } from "@/components/fx/selectionEffectTarget"
+import { openAddEffectDoor } from "@/components/programmer/addEffectDoor"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 import type { ProjectSummary } from "@/api/projectApi"
@@ -48,7 +49,8 @@ export interface ToggleState {
 }
 
 interface CommandPaletteProps {
-  onApplyFx?: (target: FxTarget) => void
+  /** *Apply FX*: the effects picker on this pair — the window's selection, or one fixture or group. */
+  onApplyFx?: (pair: PressPair) => void
   onParkChannelAtValue?: () => void
   onSetChannelValue?: () => void
   toggles?: ToggleState[]
@@ -171,10 +173,10 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
   // on the programmer, the desk's or the busk view's own elsewhere.
   const { pathname } = useLocation()
-  const windowSelection = useWindowSelectionTargets(pathname.includes("/programmer"))
+  const windowPair = useWindowEffectPair(pathname.includes("/programmer"))
   const selectionTarget = useMemo(
-    () => effectTargetOf(windowSelection, fixtures, groups),
-    [windowSelection, fixtures, groups],
+    () => effectTargetOf(windowPair.targets, fixtures, groups),
+    [windowPair.targets, fixtures, groups],
   )
   const selectionLabel =
     selectionTarget == null
@@ -609,7 +611,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   value={`On the selection ${selectionLabel}`}
                   keywords={["selection", "selected", "marquee"]}
                   onSelect={() => {
-                    if (onApplyFx) runAction(() => onApplyFx(selectionTarget))
+                    if (onApplyFx) runAction(() => openAddEffectDoor() || onApplyFx(windowPair))
                   }}
                   className={itemClassName}
                 >
@@ -626,7 +628,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     key={fixture.key}
                     fixture={fixture}
                     onSelect={() => {
-                      if (onApplyFx) runAction(() => onApplyFx({ type: "fixture", fixture }))
+                      if (onApplyFx) runAction(() => onApplyFx({ targets: [{ type: "fixture", key: fixture.key }], families: null }))
                     }}
                   />
                 ))}
@@ -639,7 +641,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                     key={group.name}
                     group={group}
                     onSelect={() => {
-                      if (onApplyFx) runAction(() => onApplyFx({ type: "group", group }))
+                      if (onApplyFx) runAction(() => onApplyFx({ targets: [{ type: "group", key: group.name }], families: null }))
                     }}
                   />
                 ))}

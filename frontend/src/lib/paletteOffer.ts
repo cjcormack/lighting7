@@ -1,6 +1,8 @@
 import type { TemplateSummary } from '@/api/templatesApi'
 import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { isPaletteSteps, isSlotSteps, parseStepList } from '@/lib/stepEffects'
 import { templatePropertyFor } from '@/lib/templateIntent'
+import type { EffectLibraryEntry } from '@/store/fixtureFx'
 
 /**
  * What the selected heads can take — the offer's half of palette compatibility (fx-templates D6).
@@ -16,22 +18,62 @@ export interface PaletteFit {
 }
 
 /**
- * Does this palette fit the heads? The strip's filter, the band's and the picker's, written once so
- * the three offer one set: the family, every emitter the palette names somewhere in the selection (a
- * **union**, as `targetEmitters` is built — the desk reports a head without it as a skip), and for a
- * Beam property the palette's own rows.
+ * What an **effect** palette's fit needs beyond the palette itself, to say which Beam property it
+ * drives: the effect library (a beam built-in's one property) and the palette list (Palette Steps'
+ * palettes). Without it an effect palette is not narrowed by property.
  */
-export function paletteFits(template: TemplateSummary, fit: PaletteFit): boolean {
+export interface EffectFitContext {
+  library?: readonly Pick<EffectLibraryEntry, 'name' | 'compatibleProperties'>[]
+  templates?: readonly TemplateSummary[]
+}
+
+/**
+ * Does this palette fit the heads? The strip's filter, the bands' and the picker's, written once so
+ * they offer one set: the family, every emitter the palette names somewhere in the selection (a
+ * **union**, as `targetEmitters` is built — the desk reports a head without it as a skip), and for a
+ * Beam property the property the palette sets — a value palette's own rows, an effect palette's
+ * driven property ([effectPaletteDrives]) — so a zoom cell is offered *Wide* and Zoom Breathe, a gobo
+ * cell the Slot Steps that steps its gobo.
+ */
+export function paletteFits(template: TemplateSummary, fit: PaletteFit, context: EffectFitContext = {}): boolean {
   if (template.family == null) return false
   if (fit.families != null && !fit.families.includes(template.family)) return false
   // `?? []`: a desk mid-upgrade serves rows without it, and absent means "names no emitter".
   if (fit.emitters != null && !(template.requiredEmitters ?? []).every((e) => fit.emitters!.includes(e))) return false
-  if (fit.property != null && template.family === 'BEAM' && template.kind === 'value') {
+  if (fit.property != null && template.family === 'BEAM') {
     const property = templatePropertyFor(fit.property)?.propertyName ?? fit.property
-    return (template.rows ?? []).some((row) => templatePropertyFor(row.propertyName)?.propertyName === property)
+    if (template.kind === 'value') {
+      return (template.rows ?? []).some((row) => templatePropertyFor(row.propertyName)?.propertyName === property)
+    }
+    const driven = effectPaletteDrives(template, context)
+    return driven == null || driven.some((name) => (templatePropertyFor(name)?.propertyName ?? name) === property)
   }
   return true
 }
+
+/**
+ * The properties an effect palette's effect drives, or null where the context cannot say: Slot
+ * Steps the setting it names, Palette Steps the properties its palettes' rows set, a library effect
+ * the properties it is compatible with.
+ */
+export function effectPaletteDrives(template: TemplateSummary, context: EffectFitContext): readonly string[] | null {
+  const effect = template.effect
+  if (effect == null) return null
+  if (isSlotSteps(effect.effectType)) return effect.propertyName ? [effect.propertyName] : []
+  if (isPaletteSteps(effect.effectType)) {
+    if (context.templates == null) return null
+    const named = new Set(parseStepList(effect.parameters?.palettes).map((ref) => ref.replace(/^tmpl:/, '')))
+    return context.templates
+      .filter((t) => named.has(t.uuid))
+      .flatMap((t) => (t.rows ?? []).map((row) => row.propertyName))
+  }
+  if (context.library == null) return null
+  const entry = context.library.find((e) => effectKey(e.name) === effectKey(effect.effectType))
+  return entry?.compatibleProperties ?? null
+}
+
+/** An effect's name as the library matches it: `Zoom Breathe` and `ZoomBreathe` are one. */
+const effectKey = (name: string) => name.replace(/[\s_]/g, '').toLowerCase()
 
 /**
  * Why the selection's mask leaves this palette out, or null when it is inside (or there is no mask).
