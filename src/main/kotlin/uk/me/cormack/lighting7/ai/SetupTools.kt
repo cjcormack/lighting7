@@ -67,8 +67,7 @@ import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.placeCueInStack
-import uk.me.cormack.lighting7.routes.announceCuePadsChanged
-import uk.me.cormack.lighting7.routes.cueIdsOfStack
+import uk.me.cormack.lighting7.routes.announceEntriesPlaced
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
 import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
@@ -1788,11 +1787,14 @@ class SetupTools(
                 anchors,
             )
         }
-        state.show.fixtures.cueListChanged()
-        state.show.fixtures.cueStackListChanged()
+        // Appended, so no entry already there changed place: nothing to restamp.
+        if (target.isCurrent) {
+            announceEntriesPlaced(state, built.stackId, emptyMap())
+        } else {
+            state.show.fixtures.cueListChanged()
+            state.show.fixtures.cueStackListChanged()
+        }
         if (built.anchors > 0) state.show.fixtures.promptBookChanged()
-        // A shared cue's pads show its new place, and an append can renumber the stack's auto entries.
-        if (target.isCurrent) announceCuePadsChanged(state, cueIdsOfStack(state, built.stackId))
 
         val sharedCount = built.cues.count { it.shared }
         return success(

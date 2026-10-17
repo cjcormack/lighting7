@@ -218,38 +218,10 @@ Grouped by area. §4 gives the order.
 - ~~S16 — Speed masters on a cue (D15, D20)~~ — done, `8236eb9` (master and BPM pairs on the cue, set
   by `activateEntry` and `takeLooseCue`, never by a reload; a follower or a deleted master is skipped
   and logged; edited in the Cue tab; copies map a master by index; `formatVersion` 35).
-
-**S17 — A stack's labels and next cue follow an insert.** R1.7's review found two gaps in the
-stack-list writes, both older than R1.7.
-- **Run state.** An insert or a reorder can change a live stack's next entry without sending
-  `cueRunStateChanged`. The runner and the Show view's NEXT pill keep the old next until something
-  else publishes (frontend `runnerSlice.ts`, `useShowTransport.ts`, which read `nextEntryId` from
-  the frame).
-  - `announceEntryAdded` (`routes/projectCueStacks.kt`) restamps holds and fires the list frames but
-    never `runState.publishRunState`. REST add-cue (`sortOrder` / `insertByNumber`) ends there, and so
-    do MCP `create_cue` and `add_cue_to_stack` with `after`, which can place an entry straight after
-    the live one.
-  - `POST .../cue-stacks/{id}/reorder` and `.../sort-by-cue-number` don't publish either.
-  - Nor, K5 found, do the other handlers that place an entry: `POST /cues` and Record CREATE into a
-    stack, each with a `sortOrder`; `POST /cues/{id}/duplicate`, which appends, so after a live last
-    entry; and `announceCuesCopied` (`routes/cueCopyFrom.kt`), where REST copy-from and MCP
-    `copy_cues` end, both taking `after`.
-  - Publish for an active stack, as `announceEntryMoved` and `afterEntriesRemoved`
-    (`routes/cueDelete.kt`) already do. One announce that every placing handler ends in is the likely
-    shape; `announceEntryAdded` is most of it.
-- **Pad labels.** Close `FU-BUSK-PAD-STALE-NUMBER`. R1.7 covered its MCP handlers. These still don't
-  call `announceCuePadsChanged`:
-  - reorder and sort-by-cue-number (`projectCueStacks.kt`);
-  - `POST /cues` into a stack (`projectCues.kt`);
-  - Record CREATE into a stack (`performProgrammerRecord`, `routes/programmerSurface.kt`).
-
-  Each should announce the stack's cues (`cueIdsOfStack`), as REST add-cue does. Then move the item
-  to `followups.md`'s Completed.
-- **Tests:** a stack live on Q5, a cue added after Q5 → one `cueRunStateChanged` with the new
-  `nextEntryId`; the same for a reorder that moves the next; `busk.layoutChanged` naming a page with
-  a pad for one of the stack's cues after each of the four handlers.
-- **Shape:** backend only, no frontend change, no `formatVersion`. Operator check: none needed beyond
-  a note in the session's PR.
+- ~~S17 — A stack's labels and next cue follow an insert~~ — done, `97d4876` (every handler that places,
+  reorders or sorts a cue entry ends in `announceEntriesPlaced`, which publishes an active stack's run
+  state and announces its cues' pads; the stack PUT publishes on a loop change and a cue delete
+  re-reads the pads it renumbered; `FU-BUSK-PAD-STALE-NUMBER` closed).
 
 ### Course checks
 

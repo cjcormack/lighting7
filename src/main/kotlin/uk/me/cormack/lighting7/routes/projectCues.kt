@@ -140,9 +140,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
                 return@withCurrentProject
             }
-            state.show.cueStackManager.holds.restampEntries(priorities)
-            state.show.fixtures.cueListChanged()
-            state.show.fixtures.cueStackListChanged()
+            if (cueStackId != null) {
+                announceEntriesPlaced(state, cueStackId, priorities)
+            } else {
+                state.show.fixtures.cueListChanged()
+                state.show.fixtures.cueStackListChanged()
+            }
             call.respond(HttpStatusCode.Created, cueDetails)
         }
     }
@@ -392,10 +395,12 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 )
                 return@withCurrentProject
             }
-            state.show.cueStackManager.holds.restampEntries(priorities)
-            state.show.fixtures.cueListChanged()
-            state.show.fixtures.cueStackListChanged()
-            response.stackId?.let { announceCuePadsChanged(state, cueIdsOfStack(state, it)) }
+            if (response.stackId != null) {
+                announceEntriesPlaced(state, response.stackId, priorities)
+            } else {
+                state.show.fixtures.cueListChanged()
+                state.show.fixtures.cueStackListChanged()
+            }
             call.respond(HttpStatusCode.Created, response)
         }
     }
