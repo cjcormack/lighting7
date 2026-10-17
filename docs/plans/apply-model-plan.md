@@ -497,7 +497,7 @@ Each session is one PR (P1).
   `remask`, so the echo is known as its own. Every sheet opens on the selection's mask wherever it
   is opened from, Show's and the Prompt Book's Record and Update included — D3 as written.
 
-### Session 5 — The palette popup and the one picker (frontend)
+### Session 5 — The palette popup and the one picker (frontend) — done, `293db483`
 
 - §4.3's `PaletteBands` on the colour, slider and position editors; *Save as palette* for every family.
 - §4.2's `ApplyPicker`, replacing `TemplatePicker` and the add-layer sheet's source and target steps
