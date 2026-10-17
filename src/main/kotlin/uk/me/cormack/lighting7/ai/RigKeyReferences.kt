@@ -37,8 +37,8 @@ import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
-import uk.me.cormack.lighting7.models.DaoCueStackEntry
-import uk.me.cormack.lighting7.models.DaoCueStackEntries
+import uk.me.cormack.lighting7.models.entrySlotsOf
+import uk.me.cormack.lighting7.models.placeLabel
 
 /**
  * Where a project's own stored records name a fixture by key or a group by name — cue rows, ad-hoc
@@ -176,12 +176,11 @@ internal object RigKeyReferences {
         val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
         if (cues.isNotEmpty()) {
             val ids = cues.keys.toList()
-            // A cue's number is its entry's when it has exactly one; a shared or loose cue is named
-            // alone (the cue model plan's session 7 lists every place). Read for every cue at once.
-            val entryOf = DaoCueStackEntry.find { DaoCueStackEntries.cue inList ids }.toList()
-                .groupBy { it.cueId!! }.mapValues { (_, e) -> e.singleOrNull() }
+            // A cue is named with every place it has — `Dawn (Act 1 Q14, Act 2 Q3)` — read for every cue at once.
+            val places = entrySlotsOf(ids)
             fun cueUser(id: Int) = cues.getValue(id).let { cue ->
-                User("CUE", id, entryOf[id]?.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it ${cue.name}" } ?: cue.name)
+                val where = places[id].orEmpty().joinToString { it.placeLabel() }
+                User("CUE", id, if (where.isEmpty()) cue.name else "${cue.name} ($where)")
             }
             fun touch(id: Int) { touched.cues += id }
             DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList ids }.forEach { row ->

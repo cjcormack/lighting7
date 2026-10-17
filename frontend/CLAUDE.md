@@ -803,7 +803,10 @@ Release folds to its glyph and the scope line drops the fade.
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
   The programmer rail's *Edit…*, the applied FX table's, `FxSheet`'s chips and a cell popup's
-  Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), which **follows the
+  Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), and the busk Effects tab
+  draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
+  popover hosts, so the two cannot split two ways; the copies a split follows (`SplitSession`) are
+  the host's to hold, since the tab's editor moves to the first copy's row. It **follows the
   selection** (apply-model plan D5, §4.5): with every head the effect paints selected, or none, a
   move edits it in place; with **some** of a Local effect's heads selected it says *Hex 1–2 of Hex
   1–4*, **holds** the edit (`FxEditor`'s `hold`), and *Apply to Hex 1–2* sends it once over REST —
@@ -819,8 +822,9 @@ Release folds to its glyph and the scope line drops the fade.
   The split goes over REST because the `updateFx` frame answers one only as `fxChanged` REMOVED and
   ADDED, which names no copy to follow. A palette layer's effect (plan P5), a cue's and a manual one
   never offer a split. Which heads the selection covers is the client's reading, for the words alone
-  (`components/fx/effectSplit.ts`, over the cell batch or the window's pair); the split is the
-  desk's, from the heads named. ⌘K *Apply FX* and the rail's `+ Effect` open the one picker's
+  (`components/fx/effectSplit.ts`, over the cell batch, the busk pair or the window's pair); the
+  split is the desk's, from the heads named. ⌘K *Apply FX*, the rail's `+ Effect` and the busk
+  Effects tab's *+ Effect…* open the one picker's
   **effects arm** (`ApplyPicker`, `library="effects"`): `FxPicker` on the **bare effect press**
   (its `press` prop — a tap is `POST /programmer/effects` with the door's pair, one Local effect over
   it, the desk first taking those heads off every other Local effect of its family), above the
@@ -1759,8 +1763,8 @@ drawing crosses on whatever page the operator went to next.
 **Each window gives the busk view its own shape, and the shape is three per-tab facts**
 (busk-further plan D5–D7, `lib/buskWindow.ts`): `busk.focus` (`split` · `pads` · `rig`),
 `busk.rigHeight` (how tall the split draws the rig region, in px — `null` until the window chooses,
-drawn then as the surface's default whole lines) and `busk.sheet` (`none` · `speed` · `colour` ·
-`spread` · `effects` · `show`, where `none` is the fold). They sit on `buskPageFollow.ts`'s model and **beside** it —
+drawn then as the surface's default whole lines) and `busk.sheet` (`none` · `level` · `colour` ·
+`position` · `beam` · `spread` · `effects` · `speed` · `show`, where `none` is the fold). They sit on `buskPageFollow.ts`'s model and **beside** it —
 per-tab `sessionStorage` through `createSyncStore`, never `localStorage`, never the desk's — and
 nothing here reads the selection's follow flag or the page's. The reason is the reason focus
 exists: two screens at one desk showing two shapes of one view, pressed onto one selection.
@@ -1893,41 +1897,71 @@ so a MIDI `{sheet: 'toggle'}` **and the fold's chevron** unfold onto the tab the
 both through `toggleBuskSheet`, the one reader of that memory (a glyph on the fold names its own tab). **Speed is `BuskSpeedRail`**
 inside the sheet — filling the width the sheet is dragged to since 2026-09-21, where it was a fixed
 288px column, and drawing no heading or caption (the usage badge's sentence is on the badge's own
-title) — **Colour is `ColourSheet`** and **Spread is `SpreadSheet`** (both below). **None of the three
-draws a heading**: the tab strip names the tab, the rig band's row carries the mask (the family
+title) — **Colour is `ColourSheet`**, **Spread is `SpreadSheet`** and **Level, Position and Beam are
+`FamilySheets.tsx`'s** (all below). **None of them draws a heading**: the tab strip names the tab, the rig band's row carries the mask (the family
 pill and the desk chip), and what is selected is the lit tiles — or, in Pads, the summary in the
-row's gap. **Colour and Spread keep their verbs in a static footer** under the
-tab's one scroller, the save first on both (*Save as palette…* / *Save as Look…*), so the two tabs
+row's gap. **Colour, Spread and the family tabs keep their verbs in a static footer** under the
+tab's one scroller, the save first on each (*Save as palette…* / *Save as Look…*), so the tabs
 put their save in one place; the Colour footer is its own `@container` and *Pick* and *Spread…* fold
 to icons below `FOOTER_WORDS` (340px — `ColourEditor`'s, applied on the docked host alone), since
 at the sheet's 320px default the worded three wrapped. The Spread footer also carries **Live** beside **Apply** — with its word at every width,
 since *Save as Look… · Live · Apply* fits the floor — and while Live is on Apply reads *Send again*
 and stays pressable, the un-deduped resend. Their pickers are fluid (`ColourEditor`), taking the sheet's
 width, and their picker rows are padded to the knob's half-width — a tab body scrolls, a scroller
-clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All five have landed, and `LIVE_SHEET_TABS` stays the one list rather than
+clips at its edge, and a knob at 0% hung 14px past the square and was cut off at the 12px gutter. All eight have landed, and `LIVE_SHEET_TABS` stays the one list rather than
 collapsing into the sheet vocabulary: Show landed exactly the way Colour and Spread did, Effects the
-way Show did, and a sixth tab would too — **hidden** there until its session — adding a tab to that
+way Show did, Level, Position and Beam the way Effects did, and a ninth tab would too — **hidden**
+there until its session — adding a tab to that
 list lights it in the strip, the fold's glyph row, the Screens sheet's Sheet segment and the
 toggle's memory at once — because a tab with an empty state is a promise the desk cannot keep, and
 a fact naming a hidden tab draws the fold.
 
-**Effects is the fifth tab, between Spread and Show** (fixture-fx-sheets plan D20, session 5;
-`components/busking/EffectsSheet.tsx`, `BuskProgrammer.dc.html`). It lists what the programmer runs
-on the busk selection — a pad's effect and the operator's own, never a cue's (`effectsOnSelection`:
-on a selected fixture or its heads, a cell or its fixture, a group or its members, and any group
-those fixtures are in) — under *Running on 4 heads · 2 effects*, in the tray's two-line rows, and a
-row's name opens `FxEditor` under it. **A pad's effect is edited as the running instance only**:
-the row and the editor say ***edited*** while the instance differs from the palette list's summary
-DTO, read once for every row, and the editor's footer is **Update palette** and **Reset to
-palette** (§The fixture sheet's *A pad's running effect*). A pad's row has pause and no stop — the
-pad releases it; stopping the instance alone would leave the layer to respawn it — and the operator's
-own keeps both. It is in the docked sheet and the overlay form (*Colour · Spread · Effects · Show*),
-its glyph the effect wave. `EffectsSheet.test.tsx` pins the reach and the mark, `SideSheet.test.tsx`
-and `buskWindow.test.ts` that it is in every place `LIVE_SHEET_TABS` reaches — the docked strip, the
-overlay strip, the fold, the Screens sheet's Sheet segment (`ScreensSheet.test.tsx`) and the MIDI
-`{sheet: 'toggle'}` memory.
+**Level, Position and Beam are the family tabs beside Colour** (apply-model plan §4.5, D10, session
+7; `components/busking/FamilySheets.tsx`): each is the per-property popup's body over the busk
+selection pair — the family's Palettes band, the editor, the Effects band, and *Save as palette…* in
+the static footer — the same `PaletteBand`, `EffectsBand` and `PaletteFooter` a cell's popup draws
+(§The editor kit). **A tab is not one cell, so each names its property**: Level is the dimmer;
+Position is pan and tilt as one; Beam is one Beam level — zoom, focus, iris or frost — picked from
+those the selection carries (a *Beam property* row, drawn when there are two or more, zoom first),
+and its band, its level and its Effects band all mean that property, as a Beam cell's popup does.
+**The editors are the fixture sheet's pick controls** (`LevelControl` from
+`fixtureSheet/PropertyRow.tsx`; `PickPositionControls`, the pick row's pad, hollow dots and axes,
+from `PickPropertyRow.tsx`; and `writePickPosition`), not a third copy of the level slider or the XY
+pad, and they **write Local and only that**: a drag at once, a typed value at the programmer
+fade. `familyHeads.ts` plans the writes — a group as one group entry where every member carries the
+property itself, else each member's own entry (or its cells', for a bar whose dimmer lives on its
+cells) carrying the group; a fixture its own head, else its cells; a cell itself; a head reached twice
+written once, a group entry falling back to member entries over a member already reached — and a
+head without the property is left out, the tab saying how many (`headsWithout`). **A band chip is a press** through `usePress` with the busk pair under its mask and
+`scope: 'programmer'`, so a programmer pointed at a focused Look layer elsewhere does not redirect it;
+*+ Effect …* is the picker's effects arm on the tab's property over the same pair.
+`FamilySheets.test.tsx` pins the press per tab, the XY pad's `setPosition` and the Beam property row.
 
-**Show is the fourth tab, and it is why the busk view has no `ShowBar`** (busk-chrome plan D1–D6,
+**Effects is between Spread and Speed** (fixture-fx-sheets plan D20, session 5; apply-model plan
+§4.5, session 7; `components/busking/EffectsSheet.tsx`, `BuskProgrammer.dc.html`). It lists what runs
+on the busk selection — a pad's effect and the operator's own, and a cue's drawn **read-only** (no
+editor, pause or stop; its home is the cue), never a script's (`effectsOnSelection`: on a selected
+fixture or its heads, a cell or its fixture, a group or its members, and any group those fixtures are
+in) — under *Running on 4 heads · 2 effects*, in the tray's two-line rows, and a row's name opens the
+live editor under it: **`SplitFxEditor`, the FX popover's own**, over the busk pair's targets, so with
+part of a Local effect selected it says *Spot 1 of Spot 1–4*, holds the edit and offers *Apply to
+Spot 1* (`PUT /fx/{id}` with those heads as `targets`, the row following the edited copy) and *Edit
+all 4* (§The fixture sheet's FX paragraph). **+ Effect…** in the header opens the one picker's effects
+arm (`ApplyPicker`, `library="effects"`, `scope: 'programmer'`) on the busk pair — a group kept one
+group effect, its distribution intact — so a bare library effect lands Local, taking those heads off
+the effects of its family they run; there is no second effect picker. **A pad's effect is edited as
+the running instance only**: the row and the editor say ***edited*** while the instance differs from
+the palette list's summary DTO, read once for every row, and the editor's footer is **Update palette**
+and **Reset to palette** (§The fixture sheet's *A pad's running effect*); it offers no split
+(apply-model plan P5). A pad's row has pause and no stop — the pad releases it; stopping the instance
+alone would leave the layer to respawn it — and the operator's own keeps both. It is in the docked
+sheet and the overlay form, its glyph the effect wave. `EffectsSheet.test.tsx` pins the reach, the
+mark, the read-only cue row, *+ Effect…*'s pair and a subset edit sending `targets`;
+`SideSheet.test.tsx` and `buskWindow.test.ts` that each of the four tabs is in every place
+`LIVE_SHEET_TABS` reaches — the docked strip, the overlay strip, the fold, the Screens sheet's Sheet
+segment (`ScreensSheet.test.tsx`) and the MIDI `{sheet: 'toggle'}` memory.
+
+**Show is the last tab, and it is why the busk view has no `ShowBar`** (busk-chrome plan D1–D6,
 `ShowTab.dc.html`; `components/busking/ShowTab.tsx`). It mounts **`RunMobile`** — the phone runner
 Show swaps to below 600px, one component and not a copy — over the transport `routes/Busk.tsx`
 already holds through `useShowBarProps`, whose whole result the route threads down as `show`
@@ -1944,17 +1978,20 @@ Colour and Spread keep their verbs; the grand master is the app header's panel (
 keys on the busk view** (D5): Space on a focused pad presses the pad, and a key that also fired GO
 would be two effects from one press on a live rig — GO is the footer, a MIDI `go` binding, or the
 Show view one pill away; `Busk.test.tsx` and `ShowTab.test.tsx` both pin that `useTransportKeys`
-is never called. **The tab strip folds its words to glyphs below 460px of sheet** (D3's 400 until
-the fifth tab: five worded tabs measure 378px, 455 of sheet with the mode toggle, the chevron and
-the gutters, so at 400 the last was clipped — `BUSK_TAB_WORDS_FROM`, `tabWordClass(open, 460)`;
-the rail's three tabs keep 400): the strip's **unpadded wrapper** is the `@container` —
-`SheetPage.Header`'s convention, since a size query measures the content box and the row's own
-`px-3` would fire the fold 24px early — every tab keeps its glyph, and below the rung only the
-*open* tab keeps its word (`tabWordClass`), so the 320 floor holds with five tabs, the mode toggle
-and the chevron on one row. The overlay strip
-takes the same rule and the same wrapper: three worded tabs are ~291px, which overran the
-right-hand form while it was 288 and ran under the sheet primitive's close cross. **That form is
-320 now**, the sheet's own floor: the Show tab's strip — name, list, programmer chip, tempo chip —
+is never called. **The tab strip is glyphs, and only the open tab gains its word, from 380px of
+sheet** (apply-model plan session 7; `buskTabWordClass` in
+`components/sheet/sidePanel.ts`; the rail's three tabs keep `tabWordClass`'s 400). Eight worded tabs
+want ~610px of strip, past the panel's 480 ceiling, so the five-tab rule — every word from 460, the
+open one's always — went with the eighth tab: a closed tab is its glyph at every width, named by its
+`aria-label` and its `title`, and below the rung so is the open one, marked by its fill. The docked
+glyphs are **26px** (`px-1.5`): at the 320 floor the eight take 222px of the 244 the mode toggle and
+the chevron leave the group, and at 380 the widest word, *Position*, makes them 275 of 304 —
+measured in headless Chromium against the built stylesheet. The strip's **unpadded wrapper** is the
+`@container` — `SheetPage.Header`'s convention, since a size query measures the content box and the
+row's own `px-3` would fire the rung 24px early. The overlay strip takes the same rule and the same
+wrapper with 32px glyphs (`px-2`): its seven are 236px, inside the right-hand form's 260 clear of the
+sheet primitive's close cross, and an upright phone's bottom sheet is wide enough for the open word
+(297 of 320 at 380). **That form is 320**, the sheet's own floor: the Show tab's strip — name, list, programmer chip, tempo chip —
 fits at 320 with the stack name shrunk to its minimum (`RunMobile` makes the name the one
 item that gives). **The fold shows the live cue number under the Show glyph** (D4) — green, an
 em-dash with nothing on stage — from the **server** cursor (`transport.serverActiveCueId`, which
@@ -1966,12 +2003,11 @@ something to open it for. A mark only, `aria-hidden`, never a control — the wo
 and the fold button's accessible names (*Show — programmer blind, values and effects held*,
 `BLIND_NAME_SUFFIX`), because an `sr-only` span inside
 those buttons was silent on the fold, whose `aria-label` wins the name, and *became* the name in the
-strip below 460px of sheet, where a non-open tab's word is `display: none`; the pill on the band
+strip wherever the tab's word is `display: none`; the pill on the band
 (§The rig) is the louder half of the same answer.
 Off the desk board the sheet is `SideSheetOverlay` — a bottom sheet on an upright phone, a
 right-hand sheet where the viewport is short, through `useEditorForm`'s forms — opened from
-the page strip's *Sheet* button onto Colour, carrying **Colour · Spread · Effects · Show** and **still no
-Speed tab** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the Show
+the page strip's *Sheet* button onto Colour, carrying **every tab but Speed** (D6): Speed was withheld there because the ShowBar had the tempo chip, and the Show
 tab's strip carries that chip now, so the reason is met by the tab that replaced the bar. The
 library still replaces the whole region while editing.
 
@@ -1983,9 +2019,10 @@ strip, whose chevron was `p-1` and whose tab glyphs were `p-1.5`, against the ra
 40px header and 40px strip cells. The module states each once (`SIDE_PANEL_BODY_CLASS`,
 `_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`, `_ENTER_CLASS`), `sheetFrame.ts`'s
 model — a surface that wants to differ says so at its own import. **Both headers are tab strips
-since the editor kit's session 4**, and the fold their words take is the module's too:
-`tabWordClass`, moved there from the busk sheet when the rail took Stack · Colour · Spread (§The
-rail's tabs), so the two strips fold by one rule. **There is no
+since the editor kit's session 4**, and the folds their words take are the module's too:
+`tabWordClass` for the rail's Stack · Colour · Spread (§The rail's tabs), moved there from the busk
+sheet when the rail took a strip, and `buskTabWordClass` beside it for the busk sheet's eight tabs,
+so neither strip states its fold itself. **There is no
 `SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so both
 surfaces take `CHROME_ROW_CLASS` from `sheetFrame.ts` and a panel-specific name for it would have
 been the one measurement stated twice — the drift both modules exist to close. The overlay form's
@@ -2016,8 +2053,8 @@ written in) that a panel may raise for itself, each with its own key and default
 **A panel's floor is set by its header, and the sheet's is 320.** Three labelled tabs, the mode
 toggle and the fold chevron inside the chrome row's 12px gutters measured 304px when the floor was
 set, so at the shared 260 that row overflowed by 38 and put *both buttons outside the panel* —
-reported from an iPad. The strip holds five tabs now, and 320 still holds only because of the D3
-fold: below 460px of sheet every tab but the open one is its glyph (§Focus and the side sheet).
+reported from an iPad. The strip holds eight tabs now, and 320 still holds only because each is a
+26px glyph with no word below 380px of sheet (§Focus and the side sheet).
 The rail's header is two short labels with badges and fits at 240, which is why the floor is
 per-panel rather than one number raised for everyone. 320 and not 304 because a minimum sitting on
 the exact fit clips again the moment anything joins the row, which is how this broke: the row
@@ -2102,7 +2139,8 @@ selection → write-targets planning (`planColourWrites` — a group as a group 
 element key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
 cells; it is about the busk selection, not the editor), the rig order Pick reads in, the Spread
 hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
-typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, the Palettes band, the footer — is
+typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, the Palettes and Effects
+bands (at the foot of the scroller, under the picker, where Recent sat), the footer — is
 `components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
 `programmer.setColour` per selected target, which is what a palette's *Apply as values* does and what the
 programmer's colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no
@@ -2111,7 +2149,8 @@ over the sheet's targets, family Colour) is the route to something trackable. **
 not consulted**: the desk's mask gates presses, not value writes, so the sheet does not refuse under
 a Position marquee — the rig band's family pill, one row up, is where the mask is read (the tab's
 own header said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A
-Palettes band chip is a press and goes through `usePress` under the busk pair's mask like any other. The
+band chip is a press and goes through `usePress` under the busk pair's mask like any other, with
+`scope: 'programmer'` — Local, whatever the grid is pointed at — as the family tabs' do. The
 writes go through `components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of
 `BuskSpeedRail` and made generic over the value: dedupe on an equality, a 50 ms floor, a deferred
 value sent when the floor lifts, the release bypassing both. **A group is one group write only
@@ -2889,11 +2928,13 @@ A press is *source × selection pair → scope*: a palette or a Look, the target
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
 that turns that into a route, and every door calls it: the palette strip, the one picker
 (`ApplyPicker`, from `All · n`, a band's *All …* and the rail's *+ Look* / *+ Palette*), the popup's
-Palettes bands (the programmer's colour, level and position editors, and the busk Colour tab), a busk
+Palettes bands (the programmer's colour, level and position editors, and the busk Colour, Level,
+Position and Beam tabs), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
 which carries its bank's solo siblings. The **bare effect** is the one source `usePress` does not
-take: ⌘K *Apply FX*, the rail's *+ Effect*, a band's *+ Effect …* and the picker's Effects section
+take: ⌘K *Apply FX*, the rail's *+ Effect*, a band's *+ Effect …*, the busk Effects tab's
+*+ Effect…* and the picker's Effects section
 press it through `FxPicker`'s `press` arm, `POST /programmer/effects` with the door's pair (one Local
 effect over the selection; the desk takes those heads off the family's other Local effects), or, in a
 focused Look, `/fx/add` then `absorb-effects` (§3.2 rule 6) — see §FX in the fixture sheet's
@@ -4072,7 +4113,9 @@ each was:
 - **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-property popup (apply-model
   plan §4.3, D4; session 5): the family's palettes **round** a value cell's editor, in every form it
   has. `SliderCell` and `PositionCell` wrap their controls in it; `ColourEditor` draws its
-  `PaletteBand` itself. **Above**, the Palettes band: a header — *Palettes*, the cell's family as a
+  `PaletteBand` itself; and the busk side sheet's family tabs dock the bands round their editors
+  (`busking/FamilySheets.tsx`, §Focus and the side sheet), passing the busk pair and
+  `scope: 'programmer'`, which both bands and `PaletteFooter`'s `className` take for a docked host. **Above**, the Palettes band: a header — *Palettes*, the cell's family as a
   badge (the mask a press carries, §3.2 rule 5), the heads it lands on (a fixture by name, a cell
   by its element key, which is what the press sends), *All · n* — then the family's **value**
   palettes that fit the heads, recent first and then by name (`recentFirst` in
@@ -4097,8 +4140,9 @@ each was:
   the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
   (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
   carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
-  Effects band** (`EffectsBand`, session 6; `ColourEditor` draws it itself under the cell, not in
-  the busk Colour tab): the effects on this property that paint one of the heads, **lit** — a tap
+  Effects band** (`EffectsBand`, session 6; `ColourEditor` draws it itself, under the cell's editor
+  and docked under the Palettes band in the busk Colour tab): the effects on this property that
+  paint one of the heads, **lit** — a tap
   opens `FxEditorPopover` beside the chip over the cell batch, so a Local effect on more heads than
   these offers the split; a cue's is drawn but not opened — then the family's **effect palettes**
   that fit, pressed through `usePress` as the Palettes band's are, and *+ Effect …*, the picker's
@@ -4831,8 +4875,9 @@ with `LAYERS n · FX n` its face; **Colour** and **Spread** are the busk
 sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
 `RailSpreadTab.tsx`) — a long busk over one marquee with the grid uncovered, where a cell's popover
 is the quick form. The strip is the header row itself, the mode toggle and the chevron after it; a
-second tab row was declined. Its words fold by the busk sheet's rule, `tabWordClass`, which lives in
-`components/sheet/sidePanel.ts` now as the panels' shared chrome: the strip's unpadded wrapper is the
+second tab row was declined. Its words fold by `tabWordClass`, which lives in
+`components/sheet/sidePanel.ts` as the panels' shared chrome (the busk sheet's eight tabs take
+`buskTabWordClass` beside it): the strip's unpadded wrapper is the
 `@container`, and below 400px of strip only the open tab keeps its word — every width the rail has,
 the strip being the rail less its toggle and chevron — while the Stack tab folds to the collapsed
 strip's glyph-and-count pairs (layers and effects; scenery's count is the band's own label there,

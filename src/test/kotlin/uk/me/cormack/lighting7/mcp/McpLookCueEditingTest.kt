@@ -3,14 +3,18 @@ package uk.me.cormack.lighting7.mcp
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
+import uk.me.cormack.lighting7.ai.RigBriefing
 import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
@@ -24,6 +28,7 @@ import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.UserRole
+import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.FixturesChangeListener
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.seedVenueReadyShow
@@ -423,5 +428,211 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
             assertEquals("true", result["isError"]!!.jsonPrimitive.content, "$name: $result")
             assertTrue("Only an admin can change a venue" in result.toString(), "$name: $result")
         }
+    }
+
+    // ─── A cue's places: entries (cue model plan §3.10) ─────────────────
+
+    private fun stack(name: String): Int = ok("create_cue_stack", """{"name":"$name"}""")["stackId"]!!.jsonPrimitive.int
+
+    private fun JsonObject.int(field: String): Int = this[field]!!.jsonPrimitive.int
+
+    private fun JsonObject.text(field: String): String? = this[field]?.jsonPrimitive?.content
+
+    @Test
+    fun `create_cue places the cue in a stack with its number and after, or leaves it loose`() {
+        val act1 = stack("Act 1")
+        val preset = ok("create_cue", """{"name":"Preset","stackId":$act1,"number":"1"}""")["entry"]!!.jsonObject
+        assertEquals("1", preset.text("number"))
+        assertEquals(act1, preset.int("stackId"))
+        ok("create_cue", """{"name":"Dawn","stackId":$act1,"number":"3"}""")
+        ok("create_cue", """{"name":"Morning","stackId":$act1,"number":"2","after":{"number":"1"}}""")
+        val loose = ok("create_cue", """{"name":"Spare"}""")
+        assertNull(loose["entry"], "no stack, no entry: a loose cue")
+
+        refused("create_cue", """{"name":"Clash","stackId":$act1,"number":"2"}""", "already used")
+        refused("create_cue", """{"name":"Nowhere","number":"9"}""", "give stackId")
+        refused("create_cue", """{"name":"Lost","stackId":$act1,"after":{"number":"99"}}""", "no cue numbered '99'")
+        refused("create_cue", """{"name":"True","stackId":$act1,"number":true}""", "number must be the cue number")
+        transaction(state.database) {
+            assertEquals(listOf("Preset", "Morning", "Dawn"), entriesOf(DaoCueStack[act1]).map { it.displayName })
+            assertEquals(listOf("1", "2", "3"), entriesOf(DaoCueStack[act1]).map { it.cueNumber })
+            assertTrue(entriesOfCue(DaoCue[loose.int("cueId")]).isEmpty())
+            assertTrue(DaoCue.find { DaoCues.name inList listOf("Clash", "Nowhere", "Lost") }.empty(), "a refused placement writes no cue")
+        }
+    }
+
+    @Test
+    fun `a cue shared into two stacks, and twice into one, is addressed by number and by entryId`() {
+        patchRig()
+        val up = look("Up", foh1("dmx:255"))
+        val act1 = stack("Act 1")
+        val act2 = stack("Act 2")
+        val created = ok("create_cue", """{"name":"Dawn","layers":[{"lookId":$up}],"stackId":$act1,"number":"14"}""")
+        val dawn = created.int("cueId")
+        val first = created["entry"]!!.jsonObject.int("entryId")
+        val shared = ok("add_cue_to_stack", """{"stackId":$act2,"cueId":$dawn,"number":"3"}""")
+        assertEquals(act2, shared.int("stackId"))
+        assertEquals("3", shared.text("number"))
+        val second = ok("add_cue_to_stack", """{"stackId":$act1,"cueId":$dawn,"number":"20","after":{"entryId":$first}}""").int("entryId")
+        refused("add_cue_to_stack", """{"stackId":$act1,"cueId":$dawn,"sortOrder":0}""", "sortOrder is gone")
+        refused("add_cue_to_stack", """{"stackId":$act2,"cueId":$dawn,"number":"3"}""", "already used")
+
+        // GO to its second place in Act 1 by number, then arm its first by entryId.
+        assertEquals(second, ok("activate_cue_stack", """{"stackId":$act1,"number":"20"}""").int("entryId"))
+        val armed = ok("set_standby", """{"stackId":$act1,"entryId":$first}""")
+        assertEquals(first, armed.int("standbyEntryId"))
+        assertEquals(first, armed.int("nextEntryId"))
+        assertEquals(second, armed.int("activeEntryId"))
+        refused("activate_cue_stack", """{"stackId":$act1,"cueId":$dawn}""", "not by cueId")
+        refused("set_standby", """{"stackId":$act1,"number":"99"}""", "no cue numbered '99'")
+        refused("set_standby", """{"stackId":$act1,"entryId":$first,"number":"14"}""", "not both")
+
+        val now = ok("get_current_state", """{"include":["cues","cue_run","cue_holds"]}""")
+        val places = now["cues"]!!.jsonArray.map { it.jsonObject }.single { it.int("id") == dawn }["entries"]!!.jsonArray
+            .map { it.jsonObject.int("stackId") to it.jsonObject.text("number") }
+        assertEquals(setOf(act1 to "14", act1 to "20", act2 to "3"), places.toSet())
+        val run = now["cueRun"]!!.jsonArray.map { it.jsonObject }.single { it.int("stackId") == act1 }
+        assertEquals(second, run.int("activeEntryId"))
+        assertEquals(first, run.int("standbyEntryId"))
+        val hold = now["cueHolds"]!!.jsonArray.map { it.jsonObject }.single { it.int("cueId") == dawn }["holds"]!!.jsonArray.single().jsonObject
+        assertEquals("STACK", hold.text("kind"))
+        assertEquals(second, hold.int("entryId"))
+
+        // Removing a place never deletes the cue; its last place leaves it loose.
+        val removed = call("remove_cue_from_stack", """{"stackId":$act2,"number":"3"}""")
+        assertTrue(removed.success, removed.result)
+        assertFalse(removed.json()["cueLeftLoose"]!!.jsonPrimitive.boolean)
+        assertTrue("keeps its 2 other place(s)" in removed.description, removed.description)
+        val only = cue("""{"name":"Only","stackId":$act2,"number":"1"}""")
+        assertTrue(ok("remove_cue_from_stack", """{"stackId":$act2,"number":"1"}""")["cueLeftLoose"]!!.jsonPrimitive.boolean)
+        refused("remove_cue_from_stack", """{"stackId":$act2}""", "name the entry")
+        transaction(state.database) {
+            assertEquals(2, entriesOfCue(DaoCue[dawn]).size)
+            assertNotNull(DaoCue.findById(only), "a removed cue stays, loose")
+        }
+        ok("deactivate_cue_stack", """{"stackId":$act1}""")
+    }
+
+    @Test
+    fun `move_cue_to_stack moves an entry whole, its number, follow and anchor with it`() {
+        val act1 = stack("Act 1")
+        val act2 = stack("Act 2")
+        transaction(state.database) {
+            DaoPromptBook.new {
+                project = DaoProject.findById(projectId)!!
+                scriptHash = "b".repeat(64)
+                pageCount = 4
+            }
+        }
+        val built = ok(
+            "build_cue_stack",
+            """{"stackId":$act1,"cues":[{"number":"5","name":"Storm","followSeconds":2,"at":{"pdfPage":2,"y":0.5}},{"number":"6","name":"Calm"}]}""",
+        )
+        val storm = built["cues"]!!.jsonArray[0].jsonObject.int("entryId")
+        cue("""{"name":"Clash","stackId":$act2,"number":"6"}""")
+        refused("move_cue_to_stack", """{"stackId":$act1,"number":"6","toStackId":$act2}""", "already used")
+        refused("move_cue_to_stack", """{"stackId":$act1,"number":"5","toStackId":$act1}""", "already in that stack")
+
+        val moved = ok("move_cue_to_stack", """{"stackId":$act1,"number":"5","toStackId":$act2}""")
+        val entry = moved["entry"]!!.jsonObject
+        assertEquals(storm, entry.int("entryId"), "the same entry")
+        assertEquals(act2, entry.int("stackId"))
+        assertEquals("5", entry.text("number"))
+        assertTrue(entry["autoAdvance"]!!.jsonPrimitive.boolean)
+        assertEquals(2000L, entry["autoAdvanceDelayMs"]!!.jsonPrimitive.long)
+        assertTrue(moved["anchored"]!!.jsonPrimitive.boolean)
+        transaction(state.database) {
+            assertEquals(storm, DaoPromptBookAnchor.all().single().entryId, "the anchor stays on the entry")
+            assertEquals(listOf("Calm"), entriesOf(DaoCueStack[act1]).map { it.displayName })
+            assertEquals(listOf("Clash", "Storm"), entriesOf(DaoCueStack[act2]).map { it.displayName })
+        }
+    }
+
+    @Test
+    fun `delete_cues names every use without force, writes nothing on a dry run, and deletes with force`() {
+        val act1 = stack("Act 1")
+        val act2 = stack("Act 2")
+        val used = cue("""{"name":"Used","stackId":$act1,"number":"1"}""")
+        ok("add_cue_to_stack", """{"stackId":$act2,"cueId":$used}""")
+        val spare = cue("""{"name":"Spare"}""")
+        transaction(state.database) {
+            val project = DaoProject[projectId]
+            val page = DaoBuskPage.new { this.project = project; name = "Page 1"; sortOrder = 0 }
+            val column = DaoBuskColumn.new { this.page = page; row = 0; sortOrder = 0; width = 12 }
+            val bank = DaoBuskBank.new { this.column = column; sortOrder = 0; name = "Bank"; solo = false; flow = BuskFlow.WRAP.name }
+            DaoBuskPad.new { this.bank = bank; sortOrder = 0; cue = DaoCue[used] }
+            DaoCueSlot.new { this.project = project; this.page = 0; slotIndex = 2; cue = DaoCue[used] }
+        }
+
+        val inUse = refused("delete_cues", """{"cueIds":[$spare,$used]}""", "In use").json()
+        assertEquals("CUE_IN_USE", inUse.text("code"))
+        val uses = inUse["uses"]!!.jsonArray.single().jsonObject
+        assertEquals(used, uses.int("cueId"))
+        assertEquals(setOf(act1, act2), uses["entries"]!!.jsonArray.map { it.jsonObject.int("stackId") }.toSet())
+        assertEquals(1, uses["pads"]!!.jsonArray.size)
+        assertEquals(1, uses["slots"]!!.jsonArray.size)
+
+        val dry = ok("delete_cues", """{"cueIds":[$spare,$used],"dryRun":true}""")
+        assertTrue(dry["deleted"]!!.jsonArray.isEmpty())
+        assertEquals(1, dry["uses"]!!.jsonArray.size)
+        refused("delete_cues", """{"cueIds":[$spare,999999]}""", "no cue 999999")
+        transaction(state.database) { assertNotNull(DaoCue.findById(spare), "a refusal and a dry run delete nothing") }
+
+        ok("delete_cues", """{"cueIds":[$spare,$used],"force":true}""")
+        transaction(state.database) {
+            assertNull(DaoCue.findById(used))
+            assertNull(DaoCue.findById(spare))
+            assertTrue(DaoCueStackEntry.find { DaoCueStackEntries.stack inList listOf(act1, act2) }.empty())
+            assertTrue(DaoBuskPad.find { DaoBuskPads.cue eq used }.empty())
+            assertTrue(DaoCueSlot.find { DaoCueSlots.cue eq used }.empty())
+        }
+    }
+
+    @Test
+    fun `build_cue_stack shares a cue a row names, and describe_rig reads every place`() {
+        val act1 = stack("Act 1")
+        val dawn = cue("""{"name":"Dawn","stackId":$act1,"number":"14"}""")
+        cue("""{"name":"Spare"}""")
+        refused("build_cue_stack", """{"stackName":"Act 2","cues":[{"cueId":$dawn,"fadeSeconds":3}]}""", "would change the cue in every place")
+        refused("build_cue_stack", """{"stackName":"Act 2","cues":[{"cueId":999999}]}""", "no cue 999999")
+
+        // A row built from one template may carry empty fields beside cueId: they change nothing.
+        val built = ok(
+            "build_cue_stack",
+            """{"stackName":"Act 2","cues":[{"number":"1","name":"Prologue"},{"cueId":$dawn,"number":"3","followSeconds":1,"layers":[],"notes":"","marker":false}]}""",
+        )
+        val row = built["cues"]!!.jsonArray[1].jsonObject
+        assertEquals(dawn, row.int("cueId"))
+        assertTrue(row["shared"]!!.jsonPrimitive.boolean)
+        assertEquals("3", row.text("number"))
+        assertNull(row["marker"], "a cue row is no marker")
+        assertNull(built["cues"]!!.jsonArray[0].jsonObject["marker"])
+        transaction(state.database) {
+            assertEquals(2, entriesOfCue(DaoCue[dawn]).size)
+            assertEquals(1, DaoCue.find { DaoCues.name eq "Dawn" }.count(), "shared, not copied")
+        }
+
+        val rig = RigBriefing(state).describeRig()
+        assertTrue("**Dawn** (id=$dawn" in rig && "— in: Act 1 Q14, Act 2 Q3" in rig, rig)
+        assertTrue(Regex("""\*\*Spare\*\* \(id=\d+.*\) — loose""").containsMatchIn(rig), rig)
+        assertTrue("delete_cues" in RigBriefing(state).keyConcepts())
+    }
+
+    @Test
+    fun `include_into_programmer names the entry it is included from`() {
+        patchRig()
+        val up = look("Up", foh1("dmx:200"))
+        val act1 = stack("Act 1")
+        val act2 = stack("Act 2")
+        val dawn = cue("""{"name":"Dawn","layers":[{"lookId":$up}],"stackId":$act1,"number":"14"}""")
+        val there = ok("add_cue_to_stack", """{"stackId":$act2,"cueId":$dawn,"number":"3"}""").int("entryId")
+
+        assertEquals(there, ok("include_into_programmer", """{"cueId":$dawn,"stackId":$act2,"number":"3"}""").int("entryId"))
+        assertEquals(there, state.show.programmerStore.lastIncludedTarget?.entryId)
+        refused("include_into_programmer", """{"lookId":$up,"entryId":$there}""", "give cueId too")
+        refused("include_into_programmer", """{"cueId":$dawn,"number":"3"}""", "give stackId too")
+        refused("include_into_programmer", """{"cueId":$dawn,"entryId":"$there"}""", "entryId must be an integer")
+        refused("include_into_programmer", """{"cueId":$dawn,"entryId":$there,"stackId":$act1}""", "not stack $act1")
+        ok("clear_programmer", "{}")
     }
 }

@@ -341,25 +341,13 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot delete cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val request = call.receive<DeleteCuesRequest>()
-            val ids = request.cueIds.distinct()
-            var refused: List<CueUsesDto>? = null
-            val outcome = transaction(state.database) {
-                val cues = ids.mapNotNull { id -> DaoCue.findById(id)?.takeIf { it.project.id == project.id } }
-                if (cues.size != ids.size) return@transaction null
-                val uses = cueUsesOf(project, cues).values.filter { it.isUsed() }.sortedBy { ids.indexOf(it.cueId) }
-                when {
-                    request.dryRun -> DeleteCuesResponse(emptyList(), uses) to CueDeletion.NONE
-                    uses.isNotEmpty() && !request.force -> { refused = uses; null }
-                    else -> DeleteCuesResponse(ids, uses) to deleteCues(state, project, cues)
-                }
-            }
-            val refusedUses = refused
-            when {
-                refusedUses != null -> call.respond(HttpStatusCode.Conflict, CueInUseResponse(cueInUseMessage(refusedUses), uses = refusedUses))
-                outcome == null -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
-                else -> {
-                    afterCuesDeleted(state, outcome.second)
-                    call.respond(outcome.first)
+            when (val outcome = transaction(state.database) { deleteCuesChecked(state, project, request) }) {
+                is DeleteCuesOutcome.InUse ->
+                    call.respond(HttpStatusCode.Conflict, CueInUseResponse(cueInUseMessage(outcome.uses), uses = outcome.uses))
+                is DeleteCuesOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
+                is DeleteCuesOutcome.Done -> {
+                    afterCuesDeleted(state, outcome.deletion)
+                    call.respond(outcome.response)
                 }
             }
         }
@@ -433,17 +421,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 is CopyCuesOutcome.Refused -> call.respond(outcome.status, ErrorResponse(outcome.message))
                 is CopyCuesOutcome.Copied -> {
                     val response = outcome.response
-                    if (!request.dryRun) {
-                        state.show.cueStackManager.holds.restampEntries(priorities)
-                        val fixtures = state.show.fixtures
-                        if (response.looksCopied.isNotEmpty()) fixtures.lookListChanged()
-                        if (response.palettesCopied.isNotEmpty()) fixtures.templateListChanged()
-                        fixtures.cueListChanged()
-                        if (response.stackId != null) {
-                            fixtures.cueStackListChanged()
-                            announceCuePadsChanged(state, cueIdsOfStack(state, response.stackId))
-                        }
-                    }
+                    if (!request.dryRun) announceCuesCopied(state, response, priorities, live = true)
                     call.respond(if (request.dryRun) HttpStatusCode.OK else HttpStatusCode.Created, response)
                 }
             }

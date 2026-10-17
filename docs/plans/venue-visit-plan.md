@@ -331,7 +331,7 @@ still not started: the next free slot runs S13, ahead of R2.8 (Chris, 2026-10-17
 | Session | From other lanes |
 |---|---|
 | R1.6 Copy from another show | — |
-| R1.7 The MCP tools | — |
+| ~~R1.7 The MCP tools~~ — done, `f9f1a17b` | — |
 
 **Programmer.** Not started.
 

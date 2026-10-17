@@ -384,7 +384,7 @@ a state is (D2), and each place in a list is its own record.
   out, and the exporter writes them; the reader takes them as explicit, so a pull or a clone shows the
   labels this desk does, and a held number stops renumbering by itself from the first import on. A
   stack nothing holds writes no auto number at all. The exporter writes
-  entries from the rows themselves, never through the P4 bridge (`soleEntryOf`), so a shared or loose
+  entries from the rows themselves, never through a cue's "one" entry, so a shared or loose
   cue (session 4) already travels: several entries may name one cue, and a cue no entry names is loose.
 * `promptBookAnchors/` names the entry it marks (`entryUuid`) instead of a cue (D4).
 * One file per entry is the merge story: two desks adding to one stack add two records, a drag
