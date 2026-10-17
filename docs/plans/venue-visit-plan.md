@@ -156,8 +156,8 @@ The plan adds its own:
     docs, `followups.md` and its plan row, and `ProjectRoundTripTest` and `RichProjectFixture`;
   - never takes or changes a number `main` already has.
 
-  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34. Still to bump: S16, and possibly
-  venue-attach session 1.
+  Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34, S16 35. Venue-attach session 1
+  needed none (`e5b60d72`: an older reader loses only the origin).
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -278,9 +278,8 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
-once everything in its *From other lanes* column has merged. Run three or four lanes at once. Two
-chains reach R3.8: Cue editor (R2.6, one deep since R2.5 merged) and Apply (R3.5–R3.7, three).
-Apply is the longer again, so keep it moving.
+once everything in its *From other lanes* column has merged. Run three or four lanes at once. Every
+lane is two deep and none waits on another: R2.6 has merged, so R3.8 waits only for R3.7.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
@@ -295,20 +294,22 @@ and every need they met. R2.5 (#190), Nav.5 (#191) and R4.4 (#192) were in fligh
 merged before K3 did, and are out of the lanes. Three lanes have not started: Cue library,
 Programmer and Venue attach. Each can start now.
 
+K4 (2026-10-17) took out S14, R4.5, R3.5, R2.6, S16, R1.5, R3.6 and Att.1, and R3.8's need on R2.6. It
+folded the Effects lane and the Navigation lane, whose plans have no session left. R2.7 was finishing
+as it ran, with no branch pushed yet, and Att.2, R1.6 and R3.7 were about to start. Programmer has
+still not started.
+
 **Cue editor.**
 
 | Session | From other lanes |
 |---|---|
-| R2.6 The Looks and FX tables | — |
 | R2.7 Edited since GO and Update stage | — |
 | R2.8 Show on stage | — |
 
-**Cue library.** Not started; S16 and R1.5 can both start now.
+**Cue library.**
 
 | Session | From other lanes |
 |---|---|
-| S16 Speed masters on a cue | — |
-| R1.5 The Cues table | — |
 | R1.6 Copy from another show | — |
 | R1.7 The MCP tools | — |
 
@@ -319,33 +320,17 @@ Programmer and Venue attach. Each can start now.
 | S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Effects.**
+**Apply.**
 
 | Session | From other lanes |
 |---|---|
-| R4.5 A stack's effect size | — |
-
-**Apply.** R3.5 and R2.6 both change `AddLayerSheet`: R3.5 moves the programmer's door and R3.8 the
-cue editor's, so either order works (the apply plan's §5).
-
-| Session | From other lanes |
-|---|---|
-| R3.5 The palette popup and the one picker | — |
-| R3.6 Effects in the popup | — |
 | R3.7 The busk side sheets | — |
-| R3.8 Into the cue editor | R2.6 |
+| R3.8 Into the cue editor | — |
 
-**Navigation.** Nav.4 and Nav.5 ran ahead of S14, the lane's last session, which stays unclaimed.
-
-| Session | From other lanes |
-|---|---|
-| S14 Applied tables | — |
-
-**Venue attach.** Not started. Nav.4 has merged, so Att.3 hangs off its project actions.
+**Venue attach.**
 
 | Session | From other lanes |
 |---|---|
-| Att.1 The origin, and the pairing | — |
 | Att.2 The attach | — |
 | Att.3 The sheet | — |
 

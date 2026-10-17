@@ -15,6 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the rail's *+ Look* and *+ Palette* press onto the selection | Venue-visit R3.5, 2026-10-17 |
@@ -118,6 +120,54 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-5`
+
+**What it proves**: *a stack's effect size* — venue-visit R4.5, effects plan session 5 (D10): a
+runtime weight on the effects a stack's cues run, applied after the blend, moved from the Show view,
+the phone runner and a MIDI fader.
+
+**Why it is here**: the tests read weights off synthetic ticks; nothing has watched a half-size stack
+chase over a held level on real heads, or the X-Touch fader and its motor beside the slider.
+
+**Test**, on Sleeping Beauty, a cue in Act 1 running a dimmer chase over a wash held at 40 %:
+
+1. **The slider.** GO the cue: Act 1's row on the Show view shows *FX size* at 100 %. Drag it to 50 %:
+   the chase runs halfway between 40 % and its own output. At 0 % the wash sits at 40 %.
+2. **Only this stack.** Run an effect from a second stack's cue and busk one from a pad: both run whole
+   while Act 1 sits at 50 %. Press Act 1's cue on a busk pad as well: under the loose hold its chase
+   runs whole.
+3. **Other doors.** Bind `stackEffectSize` for Act 1 to an X-Touch fader: the motor follows the slider
+   and the fader moves it. On a phone the runner's row under the strip moves it too.
+4. **Reload and switch.** At 50 %, pull Sleeping Beauty from its repo with a change waiting: it stays
+   at 50 %. Switch to another show and back: it is at 100 %.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R4-4`
+
+**What it proves**: *fading effects by size* — venue-visit R4.4, effects plan session 4 (D13, P4): a
+cue's effects grow and shrink over its GO, an effect two cues share runs through, and the
+programmer's press and release fade effects at the programmer fade.
+
+**Why it is here**: the tests read envelopes off a test clock; only real heads show whether a
+size fade reads as a fade, and whether a continuing effect really never jumps.
+
+**Test**, on Sleeping Beauty:
+
+1. **A crossfade.** Q3 runs a Pulse chase, Q4 a Colour Cycle, both 3 s. GO from Q3 to Q4: the chase
+   shrinks to nothing over 3 s while the cycle grows from nothing, and the chase leaves the FX list
+   once it is gone.
+2. **Continuing.** Give Q4 the same Pulse on the same group as Q3. GO from Q3: the Pulse runs on in
+   phase, with no dip.
+3. **Effect-only and snaps.** GO from Q4 into a cue holding only an effect: it fades in over its
+   time. A stack's first GO, a 0 s cue, a press of a cue pad and a stack stop snap.
+4. **Back mid-fade.** GO from Q3 to Q4 and GO BACK halfway: Q3's chase grows back from where it stood.
+5. **The programmer.** The press routes take a fade the client does not send yet
+   (`FU-FX-PRESS-FADE-CLIENT`), so drive this one through the REST call: press an effect palette with
+   `fadeMs: 2000` and watch it grow; Clear and it shrinks.
 
 ---
 
