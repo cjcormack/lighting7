@@ -4,6 +4,7 @@ import { Pause, Play, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
+import type { UpdateFxRequest } from '@/api/fxApi'
 import { groupMemberFixtures } from '@/lib/fxTargetProperties'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useEffectLibraryQuery, useResetFxToTemplateMutation, type ActiveEffect } from '@/store/fixtureFx'
@@ -65,6 +66,8 @@ export function FxEditor({
   onDone,
   onStop,
   flushRef,
+  hold,
+  alsoIds,
   className,
 }: {
   effect: ActiveEffect
@@ -82,6 +85,17 @@ export function FxEditor({
    * or the absorb takes the instance away and the unmount's flush reaches nothing.
    */
   flushRef?: MutableRefObject<(() => void) | null>
+  /**
+   * Hold every write rather than send it — the split editor's arm while the selection covers some of
+   * the effect's heads, whose edit goes out once, with the heads it is for, on *Apply to …*. Told the
+   * whole request after each move, and null once Revert has put the draft back.
+   */
+  hold?: (request: UpdateFxRequest | null) => void
+  /**
+   * The other copies this edit is for — after a split, one instance per head the edit landed on, each
+   * keeping one phase offset, so every write is sent to each as well as to [effect].
+   */
+  alsoIds?: readonly number[]
   className?: string
 }) {
   const { data: library } = useEffectLibraryQuery()
@@ -127,14 +141,19 @@ export function FxEditor({
   // forgotten as sent, so the next push or release of the same value goes out rather than being
   // deduplicated against a frame the desk never saw.
   const resetRef = useRef<() => void>(() => {})
-  const send = useCallback((request: ReturnType<typeof updateRequestOf>) => {
+  const alsoRef = useRef(alsoIds)
+  alsoRef.current = alsoIds
+  const send = useCallback((request: UpdateFxRequest) => {
     if (!lightingApi.fx.updateFx(effect.id, request)) resetRef.current()
+    for (const id of alsoRef.current ?? []) lightingApi.fx.updateFx(id, request)
   }, [effect.id])
   const live = useLivePush(send, { equals: sameRequest })
   resetRef.current = live.reset
-  const latest = useRef<ReturnType<typeof updateRequestOf> | null>(null)
+  const latest = useRef<UpdateFxRequest | null>(null)
+  const holdRef = useRef(hold)
+  holdRef.current = hold
   const flushHeld = useCallback(() => {
-    if (touched.current && latest.current) live.flush(latest.current)
+    if (holdRef.current == null && touched.current && latest.current) live.flush(latest.current)
   }, [live])
   if (flushRef) flushRef.current = flushHeld
 
@@ -145,6 +164,13 @@ export function FxEditor({
       touched.current = true
       for (const field of fields) setFields.current.add(field)
       const request = updateRequestOf(next, setFields.current)
+      // A held write is never the floor's to land: Done, an unmount or a later move must not send
+      // to every head what the operator held for some of them.
+      if (holdRef.current != null) {
+        latest.current = null
+        holdRef.current(request)
+        return
+      }
       latest.current = request
       if (release) live.flush(request)
       else live.push(request)
@@ -159,12 +185,20 @@ export function FxEditor({
   liveRef.current = live
   useEffect(
     () => () => {
-      if (touched.current && latest.current) liveRef.current.flush(latest.current)
+      if (holdRef.current == null && touched.current && latest.current) liveRef.current.flush(latest.current)
     },
     [],
   )
 
   const revert = () => {
+    if (hold != null) {
+      setDraft(snapshot)
+      setFields.current.clear()
+      touched.current = false
+      latest.current = null
+      hold(null)
+      return
+    }
     const request = updateRequestOf(snapshot, setFields.current, master1Uuid)
     // A revert onto *Seconds* sends `seconds: true`, which clears both masters on the desk — so the
     // snapshot's (none) is what the rig holds. Otherwise a master the frame could not put back stays
@@ -182,7 +216,11 @@ export function FxEditor({
   }
 
   const togglePauseFx = useToggleFxPause()
-  const togglePause = () => togglePauseFx(effect)
+  // Pause and resume what the edit is for: after a split, every copy it follows.
+  const togglePause = () => {
+    togglePauseFx(effect)
+    for (const id of alsoIds ?? []) togglePauseFx({ ...effect, id })
+  }
 
   const set = (patch: Partial<FxDraft>, release = true) =>
     write(
@@ -288,7 +326,13 @@ export function FxEditor({
       )}
 
       <EditorFooter
-        note={spawning != null ? 'Live — this running instance only' : 'Live — each change lands as you make it'}
+        note={
+          hold != null
+            ? 'Held — Apply sends it to the selected heads'
+            : spawning != null
+              ? 'Live — this running instance only'
+              : 'Live — each change lands as you make it'
+        }
         // The template's two verbs need more than a 320px sheet has beside the note: they wrap
         // under it, together, rather than running past the editor's edge.
         className={spawning != null ? 'flex-wrap' : undefined}

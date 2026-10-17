@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { useParams } from 'react-router'
+import { toast } from 'sonner'
 import {
   ArrowDownUp,
   AudioWaveform,
@@ -47,6 +48,7 @@ import { ApplyPicker, type ApplyLibrary } from '@/components/press/ApplyPicker'
 import { useWindowPaletteFit, useWindowPressPair } from '@/hooks/usePress'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 import { ProgrammerFxList } from './ProgrammerFxList'
+import { registerAddEffectDoor } from './addEffectDoor'
 import { ProgrammerLookStack } from './ProgrammerLookStack'
 import { HandProgrammerLayerStrip } from '@/components/hand/HandLayerTargets'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
@@ -150,6 +152,18 @@ export function ProgrammerRail() {
   const [band, setBand] = useState<RailBand | null>(null)
   const addEffect = useProgrammerAddEffect()
   const closeAdd = useCallback(() => setAdding(null), [])
+  // ⌘K's *Apply FX → On the selection* lands here on the programmer (`addEffectDoor.ts`).
+  const addEffectRef = useRef(addEffect)
+  addEffectRef.current = addEffect
+  useEffect(
+    () =>
+      registerAddEffectDoor(() => {
+        const offer = addEffectRef.current
+        if (offer.disabled) toast.warning(offer.reason)
+        else setAdding('effect')
+      }),
+    [],
+  )
   // The body's enter animation. Computed **here**, not in `RailBodyFrame`: that frame is mounted
   // conditionally below, so a hook inside it sees every appearance as a first render and could
   // never tell "the operator expanded the rail" from "the view just loaded with it open".
@@ -271,7 +285,7 @@ export function ProgrammerRail() {
       {(adding === 'look' || adding === 'template') && (
         <RailApplyPicker projectId={projectId} library={adding === 'look' ? 'looks' : 'palettes'} onClose={closeAdd} />
       )}
-      <ProgrammerAddEffectSheet open={adding === 'effect'} offer={addEffect} onClose={closeAdd} />
+      <ProgrammerAddEffectSheet projectId={projectId} open={adding === 'effect'} offer={addEffect} onClose={closeAdd} />
     </>
   )
 }

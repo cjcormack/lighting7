@@ -60,7 +60,7 @@ const applied = vi.hoisted(() => ({ current: [] as unknown[] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied.current }) }))
 // The press's other routes; a palette never reaches them, but `usePress` holds them.
 // A refused absorb into a focused Look takes the effects it started off again.
-vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()], useEffectLibraryQuery: () => ({ data: [] }) }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],

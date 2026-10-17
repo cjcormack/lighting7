@@ -29,8 +29,9 @@ import { SpeedMasterOverviewPanel } from "./components/SpeedMasterOverviewPanel"
 import { DeskDndProvider } from "./components/dnd/DeskDndProvider"
 import { CueActionDialogsProvider } from "./components/runner/cueActionDialogs"
 import CommandPalette from "./components/CommandPalette"
-import { FxAddSheet } from "./components/fx/FxAddSheet"
-import type { FxTarget } from "./components/fx/FxPicker"
+import { ApplyPicker } from "./components/press/ApplyPicker"
+import type { PressPair } from "./hooks/usePress"
+import { useCurrentProjectQuery } from "./store/projects"
 import { ChannelValueDialog } from "./components/ChannelValueDialog"
 import { SyncNotifications } from "./components/cloudSync/SyncNotifications"
 import { SyncReauthBanner } from "./components/cloudSync/SyncReauthBanner"
@@ -78,7 +79,7 @@ export default function Layout() {
   const { open, toggle: toggleDrawer } = useSidebarOpen()
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false)
   const [selectedFixture, setSelectedFixture] = useState<string | null>(null)
-  const [applyFxTarget, setApplyFxTarget] = useState<FxTarget | null>(null)
+  const [applyFxPair, setApplyFxPair] = useState<PressPair | null>(null)
   const [channelDialogMode, setChannelDialogMode] = useState<"park" | "set" | null>(null)
   const { panels, byId } = useOverviewPanels()
   const location = useLocation()
@@ -355,7 +356,7 @@ export default function Layout() {
 
         {/* Command Palette */}
         <CommandPalette
-          onApplyFx={setApplyFxTarget}
+          onApplyFx={setApplyFxPair}
           onParkChannelAtValue={() => setChannelDialogMode("park")}
           onSetChannelValue={() => setChannelDialogMode("set")}
           toggles={[
@@ -382,12 +383,30 @@ export default function Layout() {
           mode={channelDialogMode ?? "set"}
         />
 
-        {/* Apply FX (⌘K): the picker and the live editor, starting a programmer effect (D10) */}
-        {applyFxTarget && (
-          <FxAddSheet target={applyFxTarget} open onClose={() => setApplyFxTarget(null)} />
-        )}
+        {/* Apply FX (⌘K): the one picker's effects arm, a bare effect pressed onto the pair — Local
+            on the current project, which the press route addresses (apply-model plan §3.4). */}
+        {applyFxPair && <ApplyFxPicker pair={applyFxPair} onClose={() => setApplyFxPair(null)} />}
       </div>
       </MobileDrawerContext.Provider>
     </TooltipProvider>
   )
 }
+
+/** ⌘K *Apply FX*'s picker, mounted only while open: it reads the current project and the fixture list. */
+function ApplyFxPicker({ pair, onClose }: { pair: PressPair; onClose: () => void }) {
+  const { data: current } = useCurrentProjectQuery()
+  if (current == null) return null
+  return (
+    <ApplyPicker
+      projectId={current.id}
+      open
+      onOpenChange={(next) => { if (!next) onClose() }}
+      library="effects"
+      pair={pair}
+      fit={EVERY_FIT}
+      offerNew={false}
+    />
+  )
+}
+
+const EVERY_FIT = { families: null, emitters: null } as const

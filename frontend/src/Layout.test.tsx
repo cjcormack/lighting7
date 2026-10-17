@@ -48,7 +48,7 @@ vi.mock('./components/CommandPalette', () => ({
     <div data-testid="palette-toggles">{(props.toggles ?? []).map((t) => t.label).join('|')}</div>
   ),
 }))
-vi.mock('./components/fx/FxAddSheet', () => ({ FxAddSheet: () => null }))
+vi.mock('./components/press/ApplyPicker', () => ({ ApplyPicker: () => null }))
 vi.mock('./components/ChannelValueDialog', () => ({ ChannelValueDialog: () => null }))
 vi.mock('./components/cloudSync/SyncNotifications', () => ({ SyncNotifications: () => null }))
 vi.mock('./components/cloudSync/SyncReauthBanner', () => ({ SyncReauthBanner: () => <div data-testid="banner-reauth" /> }))

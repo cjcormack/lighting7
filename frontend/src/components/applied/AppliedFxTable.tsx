@@ -211,6 +211,7 @@ export function AppliedFxTable({
           effect={editing}
           anchorRef={editAnchor}
           onClose={() => setEditingId(null)}
+          onFollow={setEditingId}
           onStop={(effect) => {
             controls.stop(effect)
             setEditingId(null)

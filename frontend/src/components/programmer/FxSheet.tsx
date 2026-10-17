@@ -333,6 +333,7 @@ export function FxSheet() {
         effect={editing}
         anchorRef={editAnchor}
         onClose={() => setEditingId(null)}
+        onFollow={setEditingId}
         onStop={(effect) => {
           stopEffect(effect)
           setEditingId(null)
