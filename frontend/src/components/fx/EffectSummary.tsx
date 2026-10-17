@@ -15,7 +15,7 @@ import { SpeedMasterChip } from './SpeedMasterChip'
 import type { EffectSummaryData } from './effectSummaryTypes'
 import { isOnSeconds } from '@/lib/effectTiming'
 import { effectTargetLabel, parseSelectionKey } from '@/lib/effectTargets'
-import { parseStepList } from '@/lib/stepEffects'
+import { parseStepList, slotLabel } from '@/lib/stepEffects'
 
 export interface EffectSummaryProps {
   /** Normalised effect data */
@@ -205,13 +205,6 @@ interface Swatch {
  * shows the colour the template *currently* holds — and names it on hover, because the whole reason
  * to reference one is that it has a name.
  */
-/** A stored slot name as words: `GOBO_3` reads *Gobo 3*, `Gobo 3` stays as it is. */
-function slotLabel(name: string): string {
-  if (!/^[A-Z0-9_]+$/.test(name)) return name
-  const words = name.toLowerCase().split('_').filter(Boolean).join(' ')
-  return words.charAt(0).toUpperCase() + words.slice(1)
-}
-
 function getCustomParams(
   effect: EffectSummaryData,
   colourTemplates: ColourTemplates,

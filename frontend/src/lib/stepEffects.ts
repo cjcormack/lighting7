@@ -149,6 +149,13 @@ export function parseStepList(value: string | null | undefined): string[] {
     .filter((entry) => entry.length > 0)
 }
 
+/** A stored slot name as words: `GOBO_3` reads *Gobo 3*, `Gobo 3` stays as it is. */
+export function slotLabel(name: string): string {
+  if (!/^[A-Z0-9_]+$/.test(name)) return name
+  const words = name.toLowerCase().split('_').filter(Boolean).join(' ')
+  return words.charAt(0).toUpperCase() + words.slice(1)
+}
+
 export function serializeStepList(entries: readonly string[]): string {
   return entries.join(',')
 }

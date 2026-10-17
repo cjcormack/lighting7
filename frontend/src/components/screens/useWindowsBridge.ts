@@ -15,6 +15,7 @@ import { WINDOW_VIEWS, announcedViewOptions, windowViewLabel, windowViewOf } fro
 import { applyBuskViewOptions, getBuskFocus, useBuskViewOptions } from '@/lib/buskWindow'
 import { VIEW_OPTION_IMMERSIVE, applyImmersiveViewOption, useImmersive } from '@/lib/immersive'
 import { applyStageViewOptions, stageViewOptions, useStageViewpoint } from '@/lib/stageViewpoint'
+import { VIEW_OPTION_APPLIED_TABLE, applyAppliedViewOptions, useAppliedTable } from '@/lib/appliedTables'
 import { useWorkLights } from '@/components/stage3d/scene/workLights'
 import { useVisSource } from '@/hooks/useVisSource'
 import { lightingApi } from '@/api/lightingApi'
@@ -97,11 +98,13 @@ export function useWindowsBridge(): void {
   const stageViewpoint = useStageViewpoint()
   const stageSource = useVisSource()
   const stageWorkLights = useWorkLights()
+  const appliedTable = useAppliedTable()
   const announced = announcedViewOptions(
     windowViewOf(view),
     buskOptions,
     immersive ? 'on' : 'off',
     stageViewOptions(stageViewpoint, stageSource, stageWorkLights),
+    { [VIEW_OPTION_APPLIED_TABLE]: appliedTable },
   )
   // A string key rather than the object: the hook mints a fresh map per render, and the effect
   // must re-run only when a value moves.
@@ -179,6 +182,7 @@ function applyViewOptionsFor(viewId: string, options: Readonly<Record<string, st
   if (view.options.some((option) => option.key === VIEW_OPTION_IMMERSIVE)) applyImmersiveViewOption(options)
   if (viewId === 'busk') applyBuskViewOptions(options)
   if (viewId === 'stage') applyStageViewOptions(options)
+  if (viewId === 'applied') applyAppliedViewOptions(options)
   return true
 }
 

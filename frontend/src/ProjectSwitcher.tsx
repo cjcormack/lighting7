@@ -242,6 +242,7 @@ export function NavItem({
         (attention || offRig) && collapsed && "relative"
       )}
       data-off-rig={offRig ? "" : undefined}
+      data-nav-child={indent ? "" : undefined}
     >
       <span className="flex-shrink-0">{icon}</span>
       {!collapsed && <span className="truncate">{label}</span>}

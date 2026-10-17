@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  APPLIED_TABLE_OPTION,
   IMMERSIVE_OPTION,
   PAGE_FOLLOWS_OPTION,
   STAGE_SOURCE_OPTION,
@@ -13,13 +14,29 @@ import {
 } from './windowViews'
 
 /**
- * The seven views one window can put on another: the four live views in `ViewSwitcher` order, the
- * Stage view, then the two libraries. Matching is segment-aware, so the legacy `/program` and the
+ * The eight views one window can put on another: the four live views in `ViewSwitcher` order, the
+ * Stage view, the applied tables, then the two libraries. Matching is segment-aware, so the legacy `/program` and the
  * old `/fx` never answer for a view.
  */
 describe('WINDOW_VIEWS', () => {
-  it('is the four live views in ViewSwitcher order, then Stage, then Looks and Palettes', () => {
-    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'templates'])
+  it('is the four live views in ViewSwitcher order, then Stage, the applied tables, then Looks and Palettes', () => {
+    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'applied', 'looks', 'templates'])
+  })
+
+  it('names the applied tables under the programmer — the longer segment wins — with their table as the one option (venue-visit plan S14)', () => {
+    expect(windowViewOf('/projects/1/programmer/applied')?.id).toBe('applied')
+    expect(windowViewOf('/projects/1/programmer')?.id).toBe('programmer')
+    expect(windowViewLabel('/projects/1/programmer/applied')).toBe('Applied')
+    const applied = WINDOW_VIEWS.find((v) => v.id === 'applied')!
+    expect(applied.needsRig).toBe(true)
+    expect(applied.options).toEqual([APPLIED_TABLE_OPTION])
+    expect(APPLIED_TABLE_OPTION).toEqual({
+      key: 'table',
+      label: 'Table',
+      kind: 'enum',
+      values: ['fx', 'looks', 'palettes'],
+      valueLabels: { fx: 'FX', looks: 'Looks', palettes: 'Palettes' },
+    })
   })
 
   it('names the palette library by its route and its label, keeping the stored word only in the id', () => {

@@ -29,7 +29,7 @@ import { handPickUp } from '@/store/hand'
 import { TimingBadge } from '@/components/cues/TimingBadge'
 import { AddBtn, RemoveBtn, Section } from './paneChrome'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Select,
   SelectContent,
@@ -740,7 +740,7 @@ function DenseLayerRow({
             </Badge>
           )}
           <EnableButton enabled={enabled} onToggle={() => handlers.onSetEnabled(index, !enabled)} />
-          <DenseLayerPopover layer={layer} index={index} handlers={handlers} />
+          <LayerSettingsPopover layer={layer} index={index} handlers={handlers} />
         </div>
       )}
     </SortableShell>
@@ -753,29 +753,46 @@ function DenseLayerRow({
  * two fields plus the three controls the wide row draws inline, so a layer is fully editable at
  * either density without a fork in what each control does.
  */
-function DenseLayerPopover({
+export function LayerSettingsPopover({
   layer,
   index,
   handlers,
+  open,
+  onOpenChange,
+  anchorOnly = false,
 }: {
   layer: LookStackLayer
   index: number
   handlers: LayerHandlers
+  /** Controlled by a host that opens it from elsewhere — an applied table's ⏎ or double click. */
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  /**
+   * Draw no button, only the point the popover opens at: a host with no room for the trigger opens
+   * it from a menu (an applied table's narrow row).
+   */
+  anchorOnly?: boolean
 }) {
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-6 shrink-0 text-muted-foreground"
-          aria-label="Layer settings"
-          title="Amount, blend, mask, stomp, detach and remove"
-        >
-          <SlidersHorizontal className="size-3.5" />
-        </Button>
-      </PopoverTrigger>
+    <Popover open={open} onOpenChange={onOpenChange}>
+      {anchorOnly ? (
+        <PopoverAnchor asChild>
+          <span className="size-0 shrink-0" />
+        </PopoverAnchor>
+      ) : (
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0 text-muted-foreground"
+            aria-label="Layer settings"
+            title="Amount, blend, mask, stomp, detach and remove"
+          >
+            <SlidersHorizontal className="size-3.5" />
+          </Button>
+        </PopoverTrigger>
+      )}
       <PopoverContent align="end" className="w-64 space-y-4">
         <div className="space-y-1.5">
           <Label className="text-xs">Amount</Label>
@@ -847,7 +864,7 @@ function DenseLayerPopover({
 }
 
 /** Enable / disable, as one glyph that says what it will do. Same control at both densities. */
-function EnableButton({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+export function EnableButton({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
   return (
     <Button
       type="button"

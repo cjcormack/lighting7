@@ -4859,6 +4859,51 @@ scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of hel
 the desk's `programmer.cleared` reply counts values and effects only, so the count is
 `programmer.sceneryState`'s (`useHeldSceneryCount`).
 
+### The applied tables
+
+**What the programmer runs and holds, full width** (venue-visit plan S14; Chris's calls of
+2026-10-17: one route with tabs, a child of the Programmer row, a row opening what the rail's row
+opens). `/projects/:id/programmer/applied?table=fx | looks | palettes` (`routes/ProgrammerApplied.tsx`
+behind `RigGate`, so off the rig it draws `NotOnRig`) draws **Applied FX**, **Applied Looks** and
+**Applied Palettes** on one shell, `components/applied/AppliedTableShell.tsx`: the library row (filter
+and chips), the selection bar with the table's verbs, `SheetTable`, the footer. The header carries
+`AppliedTableSwitcher` (`ViewSwitcher.tsx`), whose tabs replace rather than push.
+
+- **The rows are the rail's.** Applied FX is `fx/active`, one row per instance in the desk's order, as
+  `ProgrammerFxList` lists them: an effect over a selection one row (`lib/effectTargets.ts`), a split
+  edit a row per head copy, a step effect naming its palettes or slots. Applied Looks and Palettes are
+  `programmer.layerState` split by source kind, top wins, numbered by the place in the whole stack
+  (`layersOfKind`), with `useReplacementNotes`' *lost Hex 3–4 to Amber* as the Note.
+  `AppliedTables.test.tsx` renders the rail and the tables over one state and compares them.
+- **Applied FX reads the desk and computes nothing**: timing is *Seconds* or the master the instance
+  names, read off the live bank (a beat effect's null is M1); size, direction and runs are the
+  instance's fields, *spent* its `spent`; *held · Blind* is `isHeldByBlind`. Applied Palettes marks a
+  layer whose effect is spent: every instance it spawned reports `spent` (`layerEffectState`).
+- **Every cell is a read-out, and a row acts through the rail's actions and mutations.** An effect
+  row's menu is *Edit…* (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*
+  (`useToggleFxPause`, the editor's own), *Save as palette…* (`saveAsTemplateOffer`, the rail's gate)
+  and *Stop* (`useStopEffect`, the rail's). A layer row has the rail row's enable toggle and its
+  settings popover (`LayerSettingsPopover`: amount, blend, mask, stomp, *Detach*, *Remove*, *Pick up*)
+  plus *Edit look…* (`LookDetailSheet` in place) / *Edit palette…* (`/palettes?edit=`). The bar
+  carries the same verbs over a selection, a one-row verb disabled over several with the reason.
+  **⏎ and the name's double click open what the rail's row opens**: the live editor, or the
+  settings popover. Reorder stays in the rail.
+- **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480):
+  band 0 draws every column; band 1 (the 1180×820 iPad's 940) merges Timing with Speed, Size · Dir ·
+  Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2 and 3 (a 768 tablet's
+  528, a phone) put the property, or the stack position, in the name column and let the rest scroll
+  sideways under it, and a layer row's toggle and settings button move into its menu
+  (`anchorOnly`). Nothing is hidden. Each band's floor fits its width, measured on the desk; Applied
+  Palettes' Note scrolls in at 1180.
+- **The table is a per-window fact; a table's view is the address.** `lib/appliedTables.ts`'s
+  `applied.table` (`sessionStorage`) is what the Screens sheet's *Table* segment sets and the announce
+  carries; the route mirrors it into `?table=`, and a `?table=` arriving wins. Sort (`?sort=`,
+  `?dir=`), filter (`?q=`) and the chip (`?home=` on Applied FX, `?family=` on Applied Palettes) ride
+  the address with `replace` and are remembered per window and table, so a tab lands where it was
+  left and an address with no view takes the remembered one; scroll is remembered beside them and
+  kept out of the URL. A header press sorts ascending, descending, then back to the rail's order
+  (`SheetTable`'s `sort`); `SheetTable`'s `scroll` restores and reports the scroller.
+
 ### Speed Masters
 
 Named tempo buses. Effects subscribe to one by uuid rather than owning a speed, so
@@ -5239,6 +5284,12 @@ supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (
 `StageViewpointRowPicker` for `viewpoint`), so the sheet draws the cameras, saved views and seats
 without importing the Stage view or learning its vocabulary, and the scene queries load only when a
 Stage row is drawn. A key with no control reads its value as text.
+**The applied tables are an eighth entry** (venue-visit plan S14), `applied` on the segment
+`/programmer/applied` — between Stage and the libraries, `needsRig`, the longer segment winning over
+`/programmer` — carrying one option, `table` (`APPLIED_TABLE_OPTION`, *Table · FX | Looks |
+Palettes*, an `enum`) and no immersive. It is announced from `lib/appliedTables.ts`'s per-window
+store as `announcedViewOptions`' fifth argument, applied by `applyAppliedViewOptions`, and carried by
+`windowSetupUrl` as `table=`, which the route reads on arrival like any `?table=`.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
 which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
 applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving
@@ -6172,8 +6223,8 @@ path may quietly change where it lands.
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
-- **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer ·
-  Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
+- **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer, with
+  Applied as its child · Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
   Channels), **Library** (Looks · Palettes · Effects · Speed Masters · Scripts), **Project**
   (Settings · Surfaces · Sync) and **Desk** (Projects, then Install Settings and its tabs). A row's
   `section` is a `NavSection`, `NAV_SECTIONS` holds the labels, and the array is declared in section
@@ -6190,12 +6241,18 @@ path may quietly change where it lands.
   unique — `navigation.test.ts` pins it. `keywords` are extra words ⌘K matches a row on, each
   scored whole (*fx library* finds Effects). The Actions group's *Project Settings* and the Projects
   group's *View All Projects* went, being the Settings and Projects rows a second time.
+- **The applied tables are one sidebar row and three ⌘K items** (venue-visit plan S14, §The applied
+  tables). *Applied* is the Programmer row's child (`parent: "programmer"`, drawn indented and marked
+  `data-nav-child`), so a show's home — which lists each section's top rows — leaves it off (Chris,
+  2026-10-17, K3). ⌘K drops that row (`APPLIED_NAV_ID`) and lists `appliedTableNavItems` in its
+  place — *Applied FX*, *Applied Looks*, *Applied Palettes* — as `?table=` on the one route,
+  `pathMatch` the route's, the way the palette families are `?family=` on `/palettes`.
 - **The ⌘K window commands are actions, not `NavItem`s.** `useWindowCommands()` in
   `src/navigation.ts` builds ⌘K's *Screens* group from the windows registry the way
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
   pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
-  every **other** window × the seven views in `lib/windowViews.ts` (this window has the Navigation
+  every **other** window × the eight views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
   missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
   *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,
@@ -6494,8 +6551,8 @@ path may quietly change where it lands.
   opens General, which is the row the sidebar lights there. A new tab gets its row's predicate by
   being in the map; a tab with no row is always drawn.
 - **Off the rig, every row stays** (navigation plan D4, Nav.2). A row whose view reads or drives the
-  live show carries `needsRig` — the nine are Programmer, Show, Prompt Book, Busk, Stage, Fixtures,
-  Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
+  live show carries `needsRig` — the ten are Programmer, its Applied tables, Show, Prompt Book, Busk,
+  Stage, Fixtures, Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
   `NotOnRig` says (*The Stage view draws the rig that's live*). On a project that is not on the rig
   `filterNavItems` keeps those rows and marks them `offRig`, and three places draw the mark, all
   from that one answer:
