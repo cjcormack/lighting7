@@ -300,6 +300,9 @@ a one-line row here.
   and R4.4; Effects and Navigation folded; Att.2's, R1.6's and R3.7's bodies checked before they
   start; three operator checks filed and nine corrected; three questions answered by Chris; no manual
   check run).
+- ~~K5 — after nine more~~ — done, `e8e48998` (plans corrected for S13 and R3.8, S12's hosts and footer;
+  S17 added for R1.7's review; the Cue editor, Cue library, Apply and Venue attach lanes folded; no
+  operator check needed correcting; no question for Chris; no manual check run).
 
 ### Research and design — done
 
