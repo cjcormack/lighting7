@@ -72,6 +72,14 @@ function renderAt(path: string, navId = 'program') {
             </RigGate>
           }
         />
+        <Route
+          path="/projects/:projectId/programmer/applied"
+          element={
+            <RigGate navId="programmer-applied" to={(p, { search }) => `/projects/${p}/programmer/applied${search}`}>
+              <div>the view</div>
+            </RigGate>
+          }
+        />
         <Route path="*" element={null} />
       </Routes>
       <Where />
@@ -106,6 +114,17 @@ describe('RigGate', () => {
       "The Stage view draws the rig that's live, and Sleeping Beauty is on it now.",
     )
     expect(screen.getByRole('button', { name: 'Open Sleeping Beauty’s Stage' })).toBeTruthy()
+  })
+
+  it('draws NotOnRig for the applied tables off the rig, keeping the table in the address (venue-visit plan S14)', () => {
+    renderAt('/projects/3/programmer/applied?table=looks')
+    expect(screen.queryByText('the view')).toBeNull()
+    expect(document.querySelector('[data-not-on-rig] p')?.textContent).toBe(
+      "The applied tables list what the programmer holds on the rig that's live, and Sleeping Beauty is on it now.",
+    )
+    expect(screen.getByTestId('where').textContent).toBe('/projects/3/programmer/applied?table=looks')
+    fireEvent.click(screen.getByRole('button', { name: 'Open Sleeping Beauty’s Applied' }))
+    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer/applied?table=looks')
   })
 
   it('never says active', () => {

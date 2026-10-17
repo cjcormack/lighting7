@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef, useState } from 'react'
+import { memo, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router'
 import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -12,9 +12,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SpeedMasterChip } from '@/components/fx/SpeedMasterChip'
 import { getBeatDivisionLabel, secondsLabel } from '@/components/fx/fxConstants'
-import { useActiveEffectsQuery, useEffectLibraryQuery, useRemoveFxMutation } from '@/store/fixtureFx'
-import { useRemoveGroupFxMutation } from '@/store/groups'
-import { useProgrammerLayersQuery } from '@/store/programmer'
+import { useActiveEffectsQuery, useEffectLibraryQuery } from '@/store/fixtureFx'
+import { useProgrammerLayersQuery, type ProgrammerLayer } from '@/store/programmer'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
 import { familyForEffectCategory } from '@/lib/attributeFamily'
@@ -23,6 +22,7 @@ import { useTemplateListQuery } from '@/store/templates'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { findEffectEntry } from '../busking/buskingTypes'
 import { FxEditorPopover } from '../fx/FxEditorPopover'
+import { useStopEffect } from '../fx/useEffectControls'
 import { HeldBlindMark } from '../fx/HeldBlindMark'
 import { NewTemplateFromEffectSheet } from './NewTemplateFromEffectSheet'
 import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
@@ -69,8 +69,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   // One read for the band, not one per row: Blind holds every programmer effect (show-cue-editing
   // plan D7), and each held row says so.
   const blind = useProgrammerBlind()
-  const [removeFx] = useRemoveFxMutation()
-  const [removeGroupFx] = useRemoveGroupFxMutation()
+  const stopEffect = useStopEffect()
   /** The editor and the save sheet mount once, at the list, rather than one pair per row. */
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState<ActiveEffect | null>(null)
@@ -82,23 +81,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   const editing = editingId != null ? running.find((e) => e.id === editingId) ?? null : null
   // Named from the same broadcast the stack rail draws, so a row cannot claim a layer the list
   // beside it does not show.
-  const layerHomes = useMemo(
-    () =>
-      new Map((layers ?? []).map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }])),
-    [layers],
-  )
-
-  // Same shape `FxSheet`'s chip uses, including the `.catch`: `errorToastMiddleware` reports the
-  // failure, and this only stops the unhandled rejection.
-  const stopEffect = useCallback(
-    (effect: ActiveEffect) => {
-      const request = effect.isGroupTarget
-        ? removeGroupFx({ id: effect.id, groupName: effect.targetKey })
-        : removeFx({ id: effect.id, fixtureKey: effect.targetKey })
-      request.unwrap().catch(() => {})
-    },
-    [removeFx, removeGroupFx],
-  )
+  const layerHomes = useMemo(() => layerHomesOf(layers ?? []), [layers])
 
   return (
     <div className="flex flex-col">
@@ -151,6 +134,13 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
   )
 })
 
+/** Each layer's name and its place in the stack, which an effect's home names it by. */
+export function layerHomesOf(
+  layers: readonly ProgrammerLayer[],
+): ReadonlyMap<number, { name: string; position: number }> {
+  return new Map(layers.map((l, i) => [l.layerId, { name: l.source.name, position: i + 1 }]))
+}
+
 /**
  * Whether this effect can become a template, and why not when it cannot.
  *
@@ -165,7 +155,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
  * Returns a reason rather than false, because the item is **shown disabled** in both cases. A menu
  * that silently loses an entry teaches nobody why.
  */
-function saveAsTemplateOffer(
+export function saveAsTemplateOffer(
   effect: ActiveEffect,
   library: EffectLibraryEntry[] | undefined,
   templates: TemplateSummary[] | undefined,
@@ -213,7 +203,7 @@ function saveAsTemplateOffer(
  * that Look runs it too) or **on the cue** (this once, belonging to nothing else) or loose in the
  * programmer band, which is what a busked effect is until something records it.
  */
-function homeOf(
+export function homeOf(
   effect: ActiveEffect,
   layerHomes: ReadonlyMap<number, { name: string; position: number }>,
 ): { label: string; detail?: string } {

@@ -42,6 +42,7 @@ import { useProjectListQuery } from "./store/projects"
 import { useGetUniverseQuery } from "./store/universes"
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, familySlug } from "./lib/attributeFamily"
 import type { DeskWindow } from "./api/windowsApi"
+import { APPLIED_TABLES, APPLIED_TABLE_LABELS } from "./lib/appliedTables"
 import { WINDOW_VIEWS, projectIdOfPath, windowViewOf, windowViewPath, windowViewProject } from "./lib/windowViews"
 import { showViewPath } from "./lib/showPosition"
 import { BUSK_FOCUSES, VIEW_OPTION_PAGE_FOLLOWS, setBuskFocus, useBuskFocus, type BuskFocus } from "./lib/buskWindow"
@@ -155,6 +156,12 @@ function stacksAndCues(c: HomeCounts): string | undefined {
   return c.cues == null ? plural(c.stacks, "stack") : `${plural(c.stacks, "stack")} · ${plural(c.cues, "cue")}`
 }
 
+/** The Applied row's [NavItem.needsRig], which each table's ⌘K item shares. */
+const APPLIED_NEEDS_RIG = "The applied tables list what the programmer holds on the rig that's live"
+
+/** The Applied row's id: the sidebar draws it, ⌘K lists the three tables in its place. */
+export const APPLIED_NAV_ID = "programmer-applied"
+
 /** The Channels row's [NavItem.needsRig], which each universe's ⌘K item shares. */
 const CHANNELS_NEEDS_RIG = "Channels shows what the rig that's live is sending"
 
@@ -187,6 +194,19 @@ export const navItems: NavItem[] = [
     needsRig: "The Programmer writes to the rig that's live",
     pathMatch: "/programmer",
     section: "run",
+  },
+  {
+    // The applied tables (venue-visit plan S14): the programmer's effects, Looks and palettes at full
+    // width, one route with a tab per table. A child of the Programmer row, so a show's home leaves
+    // it off (Chris, 2026-10-17, K3). ⌘K offers the three tables instead (`appliedTableNavItems`).
+    id: APPLIED_NAV_ID,
+    label: "Applied",
+    icon: TableProperties,
+    path: (p) => `/projects/${p}/programmer/applied`,
+    needsRig: APPLIED_NEEDS_RIG,
+    pathMatch: "/programmer/applied",
+    section: "run",
+    parent: "programmer",
   },
   {
     // `id` stays "program" — it is the stable handle, and `navigation.test.ts` looks entries up by
@@ -538,6 +558,21 @@ export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family)
 export function useTemplateFamilyNavItems(): NavItem[] {
   return templateFamilyNavItems
 }
+
+/**
+ * The three applied tables (venue-visit plan S14), ⌘K only — the sidebar has one *Applied* row.
+ * `?table=` on one route, `pathMatch` the route's, as [templateFamilyNavItems] are `?family=`.
+ */
+export const appliedTableNavItems: NavItem[] = APPLIED_TABLES.map((table) => ({
+  id: `programmer-applied-${table}`,
+  label: APPLIED_TABLE_LABELS[table],
+  icon: TableProperties,
+  path: (p: number) => `/projects/${p}/programmer/applied?table=${table}`,
+  needsRig: APPLIED_NEEDS_RIG,
+  pathMatch: "/programmer/applied",
+  section: "run" as const,
+  parent: "programmer",
+}))
 
 /**
  * Whether admin-only nav items should be offered.

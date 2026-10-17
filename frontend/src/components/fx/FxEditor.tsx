@@ -6,16 +6,9 @@ import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { groupMemberFixtures } from '@/lib/fxTargetProperties'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import {
-  useEffectLibraryQuery,
-  usePauseFxMutation,
-  useResetFxToTemplateMutation,
-  useResumeFxMutation,
-  type ActiveEffect,
-} from '@/store/fixtureFx'
+import { useEffectLibraryQuery, useResetFxToTemplateMutation, type ActiveEffect } from '@/store/fixtureFx'
 import { useSaveTemplateMutation } from '@/store/templates'
 import type { TemplateSummary } from '@/api/templatesApi'
-import { usePauseGroupFxMutation, useResumeGroupFxMutation } from '@/store/groups'
 import { useMaster1Uuid } from '@/store/speedMasters'
 import { useIsDeskConnected } from '@/store/status'
 import type { Fixture, SettingPropertyDescriptor } from '@/store/fixtures'
@@ -26,6 +19,7 @@ import { findEffectEntry } from '../busking/buskingTypes'
 import { detectExtendedChannels } from './colourUtils'
 import { FxEffectFields } from './FxEffectFields'
 import { useSpawningTemplate } from './useSpawningTemplate'
+import { useToggleFxPause } from './useEffectControls'
 import {
   defaultParameters,
   differsFromTemplate,
@@ -187,18 +181,8 @@ export function FxEditor({
     live.flush(request)
   }
 
-  const [pauseFx] = usePauseFxMutation()
-  const [resumeFx] = useResumeFxMutation()
-  const [pauseGroupFx] = usePauseGroupFxMutation()
-  const [resumeGroupFx] = useResumeGroupFxMutation()
-  const togglePause = () => {
-    const request = effect.isGroupTarget
-      ? (effect.isRunning ? pauseGroupFx : resumeGroupFx)({ id: effect.id, groupName: effect.targetKey })
-      : (effect.isRunning ? pauseFx : resumeFx)({ id: effect.id, fixtureKey: effect.targetKey })
-    request.unwrap().catch(() => {
-      // Reported by errorToastMiddleware.
-    })
-  }
+  const togglePauseFx = useToggleFxPause()
+  const togglePause = () => togglePauseFx(effect)
 
   const set = (patch: Partial<FxDraft>, release = true) =>
     write(
