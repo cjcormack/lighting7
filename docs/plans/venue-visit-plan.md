@@ -21,6 +21,10 @@
 > and R1.4). K2 corrected the plans for the shared cue, recorded R1.4's known gaps with the sessions
 > that own them (and one as `FU-BUSK-PAD-STALE-NUMBER`), and folded the Cues lane.
 >
+> **Checked 2026-10-17 (K5).** Nine sessions had merged since K4, and with them the four R plans that
+> still had sessions. K5 added S17 for two stack-write gaps R1.7's review found, and left S12 and S17
+> to run.
+>
 > A one-page copy for human readers is
 > [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
 > <https://claude.ai/artifact/GXeetYDiTwUhE4Wxvo3MRF> (the checked-in file is the authority).
@@ -206,13 +210,17 @@ Grouped by area. §4 gives the order.
   selection that is one group is in that group's own member order, as a spread over one already is
   since S7.
 - Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
-- `SpreadPanel` has three hosts: row C's popover, the rail's Spread tab and, since R2.5, the cue
-  editor's Values grid. A focused Look layer and the Values grid resolve with `write: false` into the
-  row being edited, so there a head's current position is that row's, not the stage's; the sketch
-  says which a fan reads.
-- The position cell's popup has no *Spread…*. Since R3.5 (`293db483`) it sits in `PaletteBands`,
-  whose footer `tools` slot (apply-model §4.3's *Spread…*, *Pick*, *Aim…*) no cell fills yet; the
-  colour editor's own *Spread…* seeds the rail's tab.
+- `SpreadPanel` has four hosts that spread an intent: row C's popover, the rail's Spread tab, the
+  busk view's Spread tab (`busking/SpreadSheet.tsx`) and, since R2.5, the cue editor's Values grid
+  (its selection bar's `SpreadPopover`). A focused Look layer and the Values grid resolve with
+  `write: false` into the row being edited, so there a head's current position is that row's, not
+  the stage's; the sketch says which a fan reads. The patch list, the DMX sheet, the cue table and
+  the palette sheet host it with raw plans of their own, which a fan leaves alone.
+- The position cell's popup has no *Spread…*. It goes in `PaletteBands`' footer `tools` slot
+  (apply-model §4.3's *Spread…*, *Pick*, *Aim…*), beside the *Aim…* S13 put there
+  (`PositionAimTool`, `07f5de4`); the colour editor's own *Spread…* seeds the rail's tab. Since R3.8
+  (`2deb7fb0`) the footer is drawn only in the programmer: the cue editor's cells draw the bands and
+  no footer, so in the Values grid a fan opens from the selection bar, not from a cell.
 - Start with a one-board sketch of the panel. No separate design session.
 
 ### Effects
@@ -224,6 +232,38 @@ Grouped by area. §4 gives the order.
 - ~~S16 — Speed masters on a cue (D15, D20)~~ — done, `8236eb9` (master and BPM pairs on the cue, set
   by `activateEntry` and `takeLooseCue`, never by a reload; a follower or a deleted master is skipped
   and logged; edited in the Cue tab; copies map a master by index; `formatVersion` 35).
+
+**S17 — A stack's labels and next cue follow an insert.** R1.7's review found two gaps in the
+stack-list writes, both older than R1.7.
+- **Run state.** An insert or a reorder can change a live stack's next entry without sending
+  `cueRunStateChanged`. The runner and the Show view's NEXT pill keep the old next until something
+  else publishes (frontend `runnerSlice.ts`, `useShowTransport.ts`, which read `nextEntryId` from
+  the frame).
+  - `announceEntryAdded` (`routes/projectCueStacks.kt`) restamps holds and fires the list frames but
+    never `runState.publishRunState`. REST add-cue (`sortOrder` / `insertByNumber`) ends there, and so
+    do MCP `create_cue` and `add_cue_to_stack` with `after`, which can place an entry straight after
+    the live one.
+  - `POST .../cue-stacks/{id}/reorder` and `.../sort-by-cue-number` don't publish either.
+  - Nor, K5 found, do the other handlers that place an entry: `POST /cues` and Record CREATE into a
+    stack, each with a `sortOrder`; `POST /cues/{id}/duplicate`, which appends, so after a live last
+    entry; and `announceCuesCopied` (`routes/cueCopyFrom.kt`), where REST copy-from and MCP
+    `copy_cues` end, both taking `after`.
+  - Publish for an active stack, as `announceEntryMoved` and `afterEntriesRemoved`
+    (`routes/cueDelete.kt`) already do. One announce that every placing handler ends in is the likely
+    shape; `announceEntryAdded` is most of it.
+- **Pad labels.** Close `FU-BUSK-PAD-STALE-NUMBER`. R1.7 covered its MCP handlers. These still don't
+  call `announceCuePadsChanged`:
+  - reorder and sort-by-cue-number (`projectCueStacks.kt`);
+  - `POST /cues` into a stack (`projectCues.kt`);
+  - Record CREATE into a stack (`performProgrammerRecord`, `routes/programmerSurface.kt`).
+
+  Each should announce the stack's cues (`cueIdsOfStack`), as REST add-cue does. Then move the item
+  to `followups.md`'s Completed.
+- **Tests:** a stack live on Q5, a cue added after Q5 → one `cueRunStateChanged` with the new
+  `nextEntryId`; the same for a reorder that moves the next; `busk.layoutChanged` naming a page with
+  a pad for one of the stack's cues after each of the four handlers.
+- **Shape:** backend only, no frontend change, no `formatVersion`. Operator check: none needed beyond
+  a note in the session's PR.
 
 ### Course checks
 
@@ -287,8 +327,8 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
 
 **Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
 that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
-once everything in its *From other lanes* column has merged. Run three or four lanes at once. Every
-lane is two deep and none waits on another: R2.6 has merged, so R3.8 waits only for R3.7.
+once everything in its *From other lanes* column has merged. Two lanes remain, one session each, and
+neither waits on the other, so both can run at once.
 Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
@@ -308,40 +348,25 @@ folded the Effects lane and the Navigation lane, whose plans have no session lef
 as it ran, with no branch pushed yet, and Att.2, R1.6 and R3.7 were about to start. Programmer has
 still not started: the next free slot runs S13, ahead of R2.8 (Chris, 2026-10-17, K4).
 
-**Cue editor.**
+K5 (2026-10-17) took out R2.7, R1.6, R2.8, Att.2, R3.7, R1.7, S13, Att.3 and R3.8, all merged before
+it started, and folded the Cue editor, Cue library, Apply and Venue attach lanes, whose plans have no
+session left. R1.7's *Mark R1.7 done* struck its row through here, where P1 rule 7 says a session never
+writes; K5 took the row out with the rest. R2.8 and S13 ran on branches outside `claude/vv-<id>`
+(`claude/eager-feynman-ip5jkc`, `claude/modest-franklin-e1usdh`), so neither showed as a claim, and
+R2.8 ran ahead of S13 rather than behind it. K5 added S17 as a lane of its own. It shares no file with
+S12, and nothing was in flight, so it can start at once. The next check closes the plan.
+
+**Programmer.**
 
 | Session | From other lanes |
 |---|---|
-| R2.7 Edited since GO and Update stage | — |
-| R2.8 Show on stage | — |
-
-**Cue library.**
-
-| Session | From other lanes |
-|---|---|
-| R1.6 Copy from another show | — |
-| ~~R1.7 The MCP tools~~ — done, `f9f1a17b` | — |
-
-**Programmer.** Not started.
-
-| Session | From other lanes |
-|---|---|
-| S13 Aim from the plan | — |
 | S12 Fan | — |
 
-**Apply.**
+**Stack writes.**
 
 | Session | From other lanes |
 |---|---|
-| R3.7 The busk side sheets | — |
-| R3.8 Into the cue editor | — |
-
-**Venue attach.**
-
-| Session | From other lanes |
-|---|---|
-| Att.2 The attach | — |
-| Att.3 The sheet | — |
+| S17 A stack's labels and next cue follow an insert | — |
 
 ## 5. Not in this plan
 
