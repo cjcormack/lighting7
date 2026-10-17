@@ -612,7 +612,7 @@ Each session is one PR (P1).
   hold their height; and it opens over the cell's popup, its own lit row the feedback while it is open
   (Chris's calls during session 6's review).
 
-### Session 7 — The busk side sheets (frontend)
+### Session 7 — The busk side sheets (frontend) — done, `c1a12a83`
 
 - §4.5's tabs and the Effects tab's add and split.
 - **The tab list.** `LIVE_SHEET_TABS` and the `BuskSheet` vocabulary in `lib/buskWindow.ts` (today
