@@ -5947,7 +5947,18 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   (§The cue editor). The hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab,
   unlocked. **Scenery** is
   `CueSceneryEditor`'s body (`CueSceneryEditorBody`), **Events** `CueEventsEditor`, and **Cue** the
-  notes, script hooks (`CueTriggerEditor`) and the busk-page append (`editor/CueTab.tsx`).
+  notes, the speed masters, script hooks (`CueTriggerEditor`) and the busk-page append
+  (`editor/CueTab.tsx`).
+- **Speed masters** (`editor/CueSpeedMasters.tsx`, venue-visit plan S16, D20) are the masters the cue
+  sets on every GO into it and every press of it — never a reload — each a row of master · BPM · ×
+  under *+ Master*, which adds the lowest master the cue does not set at its stored tempo. Every
+  gesture writes the **whole list** through the cue's own PATCH (`speedMasters`), the rows a draft
+  held over a refetch and put back on a refusal (which the middleware toasts) — the Events editor's
+  shape. A BPM commits on Enter, blur or a pause in typing, never as typed, and one outside 20–300
+  is not sent. The master list is the project's stored bank (`useSpeedMasterListQuery`), so it reads
+  on another project's cue too. A follower's row says *Follows M2 — skipped on GO* and a deleted
+  master's *The master was deleted — skipped on GO* (the desk skips both); locked, the section is a
+  list of *M2 · Chase · 128 bpm*. `buildCueInput` hands the list back, since a PUT clears it.
 - **Locked, it reads** (§4.6): the header's fields are plain text, the curve inert, the Values,
   Looks and FX tables inert, and Scenery, Events and Cue draw their read-outs. A cue the desk will not edit (`canEdit` false) reads the same,
   saying it is another project's. Its field ids are its own (`useId`), so two editors of one cue

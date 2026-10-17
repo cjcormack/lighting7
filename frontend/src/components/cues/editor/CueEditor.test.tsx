@@ -21,6 +21,12 @@ vi.mock('@/store/cues', () => ({
 }))
 vi.mock('@/store/cueStacks', () => ({ usePatchCueStackEntryMutation: () => [patchEntry] }))
 vi.mock('@/store/effects', () => ({ useSetCueEventsMutation: () => [vi.fn()] }))
+const masters = [
+  { id: 1, uuid: 'm1', masterIndex: 1, name: 'House', bpm: 120, source: 'MANUAL', referenceCount: 0 },
+  { id: 2, uuid: 'm2', masterIndex: 2, name: 'Chase', bpm: 96, source: 'MANUAL', referenceCount: 0 },
+  { id: 3, uuid: 'm3', masterIndex: 3, name: 'Half', bpm: 48, source: 'MANUAL', referenceCount: 0, followNum: 1, followDen: 2, followTargetUuid: 'm2' },
+]
+vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: masters }) }))
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/components/cues/CueRowParts', () => ({
   CueStatePip: () => <div data-testid="pip" />,
@@ -260,6 +266,66 @@ describe('CueEditor', () => {
     expect(screen.queryByTestId('busk-append')).toBeNull()
   })
 
+  it.each(['card', 'pane', 'sheet'] as const)('the Cue tab adds a master, sets its BPM and removes a row in the %s host', (host) => {
+    cueEditorTabStore.set('cue')
+    current = makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }] })
+    draw({ host })
+    const section = document.querySelector('[data-cue-speed-masters="edit"]') as HTMLElement
+    expect(section).not.toBeNull()
+
+    // + Master adds the first master the cue does not set, at its stored tempo, and saves the whole list.
+    fireEvent.click(within(section).getByRole('button', { name: /Master/ }))
+    expect(patchCue).toHaveBeenLastCalledWith({
+      projectId: 1,
+      cueId: 1,
+      speedMasters: [
+        { speedMasterUuid: 'm2', bpm: 128 },
+        { speedMasterUuid: 'm1', bpm: 120 },
+      ],
+    })
+
+    // A BPM commits on Enter; one outside 20–300 is never sent.
+    const bpm = within(section).getByRole('spinbutton', { name: 'M2 · Chase BPM' })
+    fireEvent.focus(bpm)
+    fireEvent.change(bpm, { target: { value: '500' } })
+    fireEvent.keyDown(bpm, { key: 'Enter' })
+    expect(patchCue).toHaveBeenCalledTimes(1)
+    fireEvent.change(bpm, { target: { value: '140' } })
+    fireEvent.keyDown(bpm, { key: 'Enter' })
+    expect(patchCue).toHaveBeenLastCalledWith({
+      projectId: 1,
+      cueId: 1,
+      speedMasters: [
+        { speedMasterUuid: 'm2', bpm: 140 },
+        { speedMasterUuid: 'm1', bpm: 120 },
+      ],
+    })
+
+    fireEvent.click(within(section).getByRole('button', { name: 'Remove M1 · House' }))
+    expect(patchCue).toHaveBeenLastCalledWith({ projectId: 1, cueId: 1, speedMasters: [{ speedMasterUuid: 'm2', bpm: 140 }] })
+  })
+
+  it('says a GO skips a follower or a deleted master', () => {
+    cueEditorTabStore.set('cue')
+    current = makeCue({ speedMasters: [{ speedMasterUuid: 'm3', bpm: 100 }, { speedMasterUuid: 'gone', bpm: 90 }] })
+    draw()
+    expect(screen.getByText('Follows M2 — skipped on GO')).toBeTruthy()
+    expect(screen.getByText('The master was deleted — skipped on GO')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Remove Deleted master' })).toBeTruthy()
+  })
+
+  it('locked, the Cue tab reads the masters and edits none', () => {
+    cueEditorTabStore.set('cue')
+    current = makeCue({ speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }, { speedMasterUuid: 'm1', bpm: 92.5 }] })
+    draw({ locked: true })
+    const section = document.querySelector('[data-cue-speed-masters="read"]') as HTMLElement
+    expect(within(section).getByText('M2 · Chase')).toBeTruthy()
+    expect(within(section).getByText('128 bpm')).toBeTruthy()
+    expect(within(section).getByText('92.5 bpm')).toBeTruthy()
+    expect(within(section).queryByRole('button')).toBeNull()
+    expect(within(section).queryByRole('spinbutton')).toBeNull()
+  })
+
   it('the card and the table pane mount this one editor', () => {
     const row: CueStackCueRow = {
       id: 1,
@@ -291,6 +357,11 @@ describe('CueEditor', () => {
       expect(editor.getAttribute('data-cue-editor')).toBe('1')
       expect(editor.querySelector('[data-cue-editor-header]')).not.toBeNull()
       expect(within(editor as HTMLElement).getAllByRole('tab')).toHaveLength(6)
+    }
+    // Both hosts' Cue tab carries the speed masters.
+    for (const editor of editors) {
+      fireEvent.mouseDown(within(editor as HTMLElement).getByRole('tab', { name: /^Cue$/ }))
+      expect(editor.querySelector('[data-cue-speed-masters="edit"]')).not.toBeNull()
     }
   })
 })
