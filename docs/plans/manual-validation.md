@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
@@ -121,6 +122,45 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-7`
+
+**What it proves**: *the busk side sheets* — venue-visit R3.7, apply-model plan session 7 (§4.5,
+D10): the busk sheet's tabs are Level · Colour · Position · Beam · Spread · Effects · Speed · Show,
+each family tab the per-property popup's body over the busk selection, and the Effects tab starts a
+library effect on the selection and splits off the selected heads of a running one.
+
+**Why it is here**: the tests pin each tab's requests, the strip's classes and the split's wiring
+against mocks, and the strip's widths were measured in headless Chromium with a Linux font; nobody
+has pressed a tab on the busk screen, read the strip in Safari's own font at the sheet's floor, or
+watched a split from the tab land on a running chase.
+
+**Test**, on the dev rig with the busk view on a desk screen and on the iPad (portrait and landscape),
+four hexes in a group, two movers with zoom and iris, a programmer pointed at a focused Look layer on
+another window, an Intensity palette *Full*, a Beam palette *Wide* and a running chase on the hexes:
+
+1. **The strip.** Drag the sheet to its narrowest: eight glyphs, the mode toggle and the fold chevron
+   on one row with nothing clipped, each glyph naming its tab on hover. Widen it past 380: the open
+   tab gains its word, and only that one.
+2. **Level.** Select the hex group on the rig band, open Level: *Full* in the Palettes band lights the
+   group's dimmers at full as a layer (the rail's stack shows it, **not** the focused Look), the slider
+   moves all four live, and *Save as palette…* opens on Intensity.
+3. **Colour.** The picker at the top, then the Palettes band and the Effects band at the foot; *+
+   Effect…* there starts a colour effect on the selection.
+4. **Position.** Select the two movers, open Position: a drag on the pad moves both, each on its own
+   range, the hollow dot marking the second; Pan and Tilt typed land at the programmer fade.
+5. **Beam.** With the movers selected, a *Zoom · Iris* row: *Wide* is offered under Zoom and not
+   under Iris; the level moves the property picked.
+6. **The Effects tab.** Select Hex 1–2 of the hexes the chase runs on, open Effects: the chase's row,
+   and a cue's effect on those heads drawn with no controls. Open the chase: *Hex 1–2 of Hex 1–4*.
+   Drag Max — nothing moves — then *Apply to Hex 1–2*: they take it **at the phase they had**, Hex 3–4
+   run on, no head jumps, and a second drag moves both Hex 1 and Hex 2. *+ Effect…* with Hex 1–4
+   selected starts one Pulse over them and takes them off the chase.
+7. **The iPad.** Repeat 2, 4 and 6 in the overlay — the bottom sheet upright and the right-hand sheet
+   in landscape: the overlay's *Sheet* button opens onto Colour, its strip carries every tab but Speed
+   with no tab under the close cross, and each tab presses as on the desk.
 
 ---
 

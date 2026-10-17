@@ -501,8 +501,8 @@ function EnumOption({
         disabled={disabledReason != null}
         aria-label={`${option.name ?? option.label} on ${rowName}`}
         // **Wraps inside its pill** where the row is narrower than its values, rather than running
-        // off the sheet: the busk Sheet segment holds six since the Effects tab (fixture-fx-sheets
-        // plan D20), and at a 375px phone *Show* was clipped. One line wherever it fits.
+        // off the sheet: the busk Sheet segment holds nine — the fold and eight tabs — and at a
+        // 375px phone its last values were clipped. One line wherever it fits.
         className="h-auto min-h-7 min-w-0 flex-wrap justify-start gap-0.5 p-0.5"
       >
         {option.values.map((v) => {

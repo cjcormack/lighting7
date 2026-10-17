@@ -202,12 +202,34 @@ describe('the sheet is one fact', () => {
     expect(getBuskSheet()).toBe('spread')
   })
 
-  it('still gates the memory on the live list, so a sixth tab could land hidden the way the third to fifth did', () => {
+  it('still gates the memory on the live list, so a ninth tab could land hidden the way the third to eighth did', () => {
     expect(isLiveSheetTab('show')).toBe(true)
     expect(isLiveSheetTab('effects')).toBe(true)
     expect(isLiveSheetTab('cheese')).toBe(false)
-    expect(LIVE_SHEET_TABS).toEqual(['speed', 'colour', 'spread', 'effects', 'show'])
+    expect(LIVE_SHEET_TABS).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show'])
   })
+
+  for (const tab of ['level', 'position', 'beam'] as const) {
+    it(`remembers ${tab} once it has been open, arriving by ?sheet= and announced (apply-model plan D10)`, () => {
+      applyBuskArrival({ focus: null, sheet: tab })
+      expect(getBuskSheet()).toBe(tab)
+      act(() => toggleBuskSheet())
+      expect(getBuskSheet()).toBe('none')
+      act(() => {
+        applyBuskViewOptions({ sheet: 'toggle' })
+      })
+      expect(getBuskSheet()).toBe(tab)
+      // The Screens sheet sets it by name, and the fact survives as this tab's own.
+      act(() => {
+        applyBuskViewOptions({ sheet: 'none' })
+      })
+      act(() => {
+        applyBuskViewOptions({ sheet: tab })
+      })
+      expect(getBuskSheet()).toBe(tab)
+      expect(window.sessionStorage.getItem('busk.sheet')).toBe(JSON.stringify(tab))
+    })
+  }
 
   it('remembers Effects once it has been open — the MIDI {sheet} toggle unfolds back onto it (fixture-fx-sheets D20)', () => {
     applyBuskArrival({ focus: null, sheet: 'effects' })

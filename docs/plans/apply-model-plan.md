@@ -603,7 +603,7 @@ Each session is one PR (P1).
   session 6); a cue's is drawn but not opened, its home being the cue. `paletteFits` narrows a Beam
   cell's effect palettes by the property the effect drives, as it narrows value palettes by their rows.
   The colour editor draws the band only in the programmer's cell: the busk Colour tab's effects are its
-  Effects tab's (session 7).
+  Effects tab's (session 7). *(Session 7 drew it in the Colour tab too — see its decisions.)*
 - **⌘K on the programmer opens the rail's *+ Effect*** (decided during session 6): the palette is
   mounted outside the programmer's marquee store and scope, so a picker of its own there could read
   neither the window's mask nor a focused Look layer. Elsewhere ⌘K opens its own picker on the window's
@@ -647,6 +647,37 @@ Each session is one PR (P1).
   - The Effects tab's add uses the busk selection.
 - **Docs:** the frontend CLAUDE.md's busk section, whose §"Focus and the side sheet" lists
   `busk.sheet`'s values and the overlay's tabs (`docs/desk-screens.md` names none).
+- The strip is glyphs and **only the open tab gains its word, from 380px of sheet** (decided during
+  session 7): eight worded tabs want ~610px, past the panel's 480 ceiling, so no rung could word them
+  all. `SHEET_MIN_WIDTH` stays 320 with 26px docked glyphs (`px-1.5`): the eight take 222px of the
+  group's 244 there, and 275 of 304 at 380 with *Position* open; the overlay's 32px glyphs are 236 of
+  the right-hand form's 260, and 297 of 320 in a bottom sheet at 380 — measured in headless Chromium
+  against the built stylesheet (`buskTabWordClass` in `sheet/sidePanel.ts`; the
+  rail keeps `tabWordClass`'s 400). The overlay's *Sheet* button still opens Colour
+  (`OVERLAY_SHEET_TAB`), not the first tab, which is now Level.
+- **Which property a tab acts on** (decided during session 7): Level the dimmer — a head with none,
+  a dimmerless colour head included, is left out and the tab says how many; Position pan and tilt as one;
+  Beam **one** Beam level picked from those the selection carries (zoom, focus, iris, frost; a row
+  of them when there are two or more), its Palettes band, level and Effects band all meaning that
+  property, as a Beam cell's popup does.
+- **The editors are the fixture sheet's pick controls** (decided during session 7): `LevelControl`,
+  the pick row's pad, dots and axes (lifted out of `PositionPickRow` as `PickPositionControls`) and
+  `writePickPosition`, rather than `SliderCell`'s slider or `PositionCell`'s private `XyPad`. They write Local, a group as
+  one group entry where every member carries the property, else each member's own entry carrying the
+  group (`busking/familyHeads.ts`), a head reached twice written once.
+- **The Colour tab draws the Effects band** (decided during session 7): `ColourSheet` passes
+  `effects`, and the docked `ColourEditor` draws it under the Palettes band at the foot of the
+  scroller, so all four family tabs carry both bands. The bands take a `scope`, and every busk tab
+  passes `'programmer'`, so a band press, *+ Effect …* and the picker's *Effect…* pad land on the busk
+  pair in Local whatever another window's grid is pointed at.
+- **The split session is the host's** (decided during session 7): `SplitEditor` left
+  `FxEditorPopover` as `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the popover hosts
+  and the Effects tab draws inline, and the copies a split follows (`SplitSession`) are held by the
+  host rather than the editor: the tab draws the editor under the edited effect's row, and a split
+  moves it to the first copy's.
+- **The Effects tab lists a cue's effect, read-only** (decided during session 7), as §3.4 and the
+  Effects band do: no editor, pause or stop, its home the cue. It had listed the programmer's alone
+  since fixture-fx-sheets D20. A script's effect stays out.
 
 ### Session 8 — Into the cue editor (backend + frontend)
 
