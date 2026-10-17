@@ -385,7 +385,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     if (stack.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
                     stack
                 }
-                val copy = copyCueRecord(source, project, "${source.name} (copy)".take(DUPLICATE_NAME_MAX))
+                val copy = CueCopier(project, project).copyCue(source, "${source.name} (copy)".take(DUPLICATE_NAME_MAX))
                 // At the end, unnumbered, so it takes the next auto number and nothing else moves.
                 val entry = stack?.let { placeCueInStack(it, copy) }
                 if (stack != null) priorities = stackEntryPriorities(stack)
@@ -412,62 +412,41 @@ internal fun Route.routeApiRestProjectCues(state: State) {
         }
     }
 
-    // POST /{projectId}/cues/{cueId}/copy - Copy cue to another project
-    post<CopyCueResource> { resource ->
-        val sourceProject = state.resolveProject(resource.parent.projectId)
-        if (sourceProject == null) {
-            call.respond(HttpStatusCode.NotFound, ErrorResponse("Source project not found"))
-            return@post
-        }
-
-        val request = call.receive<CopyCueRequest>()
-        if (refusedCopyTarget(state, request.targetProjectId)) return@post
-
-        val result = transaction(state.database) {
-            val sourceCue = DaoCue.findById(resource.cueId)
-                ?: return@transaction null to "Cue not found"
-
-            if (sourceCue.project.id != sourceProject.id) {
-                return@transaction null to "Cue does not belong to specified project"
+    // POST /{projectId}/cues/copy-from - Copy cues from another project into this one, loose or into
+    // a stack (cue model plan §3.8, D9, D18)
+    post<CopyCuesFromResource> { resource ->
+        withCurrentProject(
+            state,
+            resource.parent.projectId,
+            { p -> "Cannot copy cues into project '${p.name}' - only the current project can be modified" },
+        ) { project ->
+            val request = call.receive<CopyCuesFromRequest>()
+            var priorities = emptyMap<Int, Int>()
+            val outcome = transaction(state.database) {
+                copyCuesFrom(state, project, request).also { outcome ->
+                    if (outcome is CopyCuesOutcome.Copied && !request.dryRun) outcome.response.stackId
+                        ?.let { priorities = stackEntryPriorities(DaoCueStack[it]) }
+                    if (outcome !is CopyCuesOutcome.Copied || request.dryRun) rollback()
+                }
             }
-
-            val targetProject = DaoProject.findById(request.targetProjectId)
-                ?: return@transaction null to "Target project not found"
-
-            // Cue names are not unique, so a name collision in the target project is fine —
-            // the copy simply lands alongside the existing cue.
-            val cueName = request.newName ?: sourceCue.name
-
-            // Every cue must live in a stack. A cross-project copy lands in the target project's
-            // "Unsorted" stack (created on demand); the operator can move it afterwards.
-            val targetStack = getOrCreateUnsortedStack(targetProject)
-            val newCue = copyCueRecord(sourceCue, targetProject, cueName)
-
-            // Appended to the target's "Unsorted" stack. The copy carries no cue number, so it
-            // picks one up from where it landed.
-            placeCueInStack(targetStack, newCue)
-
-            CopyCueResponse(
-                cueId = newCue.id.value,
-                cueName = newCue.name,
-                targetProjectId = targetProject.id.value,
-                targetProjectName = targetProject.name,
-                message = "Cue copied successfully"
-            ) to null
-        }
-
-        val (response, error) = result
-        if (response != null) {
-            state.show.fixtures.cueListChanged()
-            state.show.fixtures.cueStackListChanged()
-            call.respond(HttpStatusCode.Created, response)
-        } else {
-            val statusCode = when (error) {
-                "Cue not found", "Target project not found" -> HttpStatusCode.NotFound
-                "Cue does not belong to specified project" -> HttpStatusCode.BadRequest
-                else -> HttpStatusCode.Conflict
+            when (outcome) {
+                is CopyCuesOutcome.Refused -> call.respond(outcome.status, ErrorResponse(outcome.message))
+                is CopyCuesOutcome.Copied -> {
+                    val response = outcome.response
+                    if (!request.dryRun) {
+                        state.show.cueStackManager.holds.restampEntries(priorities)
+                        val fixtures = state.show.fixtures
+                        if (response.looksCopied.isNotEmpty()) fixtures.lookListChanged()
+                        if (response.palettesCopied.isNotEmpty()) fixtures.templateListChanged()
+                        fixtures.cueListChanged()
+                        if (response.stackId != null) {
+                            fixtures.cueStackListChanged()
+                            announceCuePadsChanged(state, cueIdsOfStack(state, response.stackId))
+                        }
+                    }
+                    call.respond(if (request.dryRun) HttpStatusCode.OK else HttpStatusCode.Created, response)
+                }
             }
-            call.respond(statusCode, ErrorResponse(error ?: "Unknown error"))
         }
     }
 
@@ -573,8 +552,8 @@ data class ProjectCueResource(
 @Resource("/delete")
 data class DeleteCuesResource(val parent: ProjectCuesResource)
 
-@Resource("/{cueId}/copy")
-data class CopyCueResource(val parent: ProjectCuesResource, val cueId: Int)
+@Resource("/copy-from")
+data class CopyCuesFromResource(val parent: ProjectCuesResource)
 
 @Resource("/{cueId}/duplicate")
 data class DuplicateCueResource(val parent: ProjectCuesResource, val cueId: Int)
@@ -698,21 +677,6 @@ data class DuplicateCueResponse(val cueId: Int, val name: String, val stackId: I
 private const val DUPLICATE_NAME_MAX = 255
 
 @Serializable
-data class CopyCueRequest(
-    val targetProjectId: Int,
-    val newName: String? = null,
-)
-
-@Serializable
-data class CopyCueResponse(
-    val cueId: Int,
-    val cueName: String,
-    val targetProjectId: Int,
-    val targetProjectName: String,
-    val message: String,
-)
-
-@Serializable
 data class ApplyCueResponse(
     val effectCount: Int,
     val cueName: String,
@@ -737,22 +701,3 @@ data class StopCueResponse(
     val removedCount: Int,
     val cueId: Int,
 )
-
-/**
- * Returns the project's "Unsorted" cue stack, creating it (appended to the end of the show order)
- * if it doesn't exist yet. Only the REST cross-project copy lands a cue here, until the cue model
- * plan's session 6 replaces that copy. Must be called inside a transaction.
- */
-internal fun getOrCreateUnsortedStack(project: DaoProject): DaoCueStack =
-    DaoCueStack.find {
-        (DaoCueStacks.project eq project.id) and
-            (DaoCueStacks.name eq "Unsorted") and
-            (DaoCueStacks.type eq CueStackType.STACK.name)
-    }.firstOrNull() ?: DaoCueStack.new {
-        name = "Unsorted"
-        this.project = project
-        loop = false
-        type = CueStackType.STACK.name
-        sortOrder = (project.cueStacks.maxOfOrNull { it.sortOrder } ?: -1) + 1
-    }
-

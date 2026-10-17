@@ -11,6 +11,8 @@ import type {
   DeleteCuesRequest,
   DeleteCuesResponse,
   DuplicateCueResponse,
+  CopyCuesFromRequest,
+  CopyCuesFromResponse,
   UpdateStageResponse,
 } from '../api/cuesApi'
 
@@ -189,9 +191,27 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
-    // `copyCue` stood here, fired by a `CopyCueDialog` that was deleted before this sweep;
-    // copying a cue between projects is `cloneProject` or an export/import today. The route
-    // remains server-side.
+    /**
+     * *Copy from another show…*: cues of `fromProjectId` copied into this project, each loose or a
+     * new entry at the end of `stackId`. A dry run writes nothing and invalidates nothing.
+     */
+    copyCuesFrom: build.mutation<CopyCuesFromResponse, { projectId: number } & CopyCuesFromRequest>({
+      query: ({ projectId, ...body }) => ({
+        url: `projects/${projectId}/cues/copy-from`,
+        method: 'POST',
+        body: body satisfies CopyCuesFromRequest,
+      }),
+      invalidatesTags: (result, _error, { projectId, dryRun }) =>
+        result == null || dryRun
+          ? []
+          : [
+              { type: 'CueList', id: projectId },
+              'CueList',
+              { type: 'CueStackList', id: projectId },
+              'LookList',
+              'TemplateList',
+            ],
+    }),
 
     applyCue: build.mutation<
       ApplyCueResponse,
@@ -253,6 +273,7 @@ export const {
   useCueDeletePreviewQuery,
   useDeleteCuesMutation,
   useDuplicateCueMutation,
+  useCopyCuesFromMutation,
   useApplyCueMutation,
   useStopCueMutation,
   useUpdateCueStageMutation,

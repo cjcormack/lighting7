@@ -763,7 +763,8 @@ and Look lists (`sceneryOwnersChanged`) —
 and the Look list's and busk pads' `LookDto`
 carries a summary, `scenery: [{elementUuid, elementName, state}]` (`@EncodeDefault(ALWAYS)`, one
 batched query per list, `lookScenerySummariesFor`), for the Looks sheet's Scenery column. Deleting an element sweeps its changes; deleting a
-cue, stack or Look sweeps its own; a same-project cue or Look copy carries them.
+cue, stack or Look sweeps its own; a cue or Look copy carries them — one into another project those whose element
+resolves there (`docs/cues-engineering.md` §"Copying").
 
 **Record, Include and Update** (scenery-programmer plan session 3, D7, D8;
 `routes/programmerSceneryRecord.kt`). Record (`POST /programmer/record`, `record-look`, the AI's

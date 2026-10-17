@@ -14,7 +14,6 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.inList
-import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
@@ -27,7 +26,6 @@ import uk.me.cormack.lighting7.state.State
 import java.time.Duration
 import uk.me.cormack.lighting7.models.asDuration
 
-private val logger = LoggerFactory.getLogger("projectCues")
 
 // ─── State capture ──────────────────────────────────────────────────────
 
@@ -969,108 +967,4 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
     entry.cueNumber = next
     entry.cueNumberAuto = false
     renumberAutoEntries(stack, cueEntryIds(stack))
-}
-
-/**
- * A new cue in [targetProject] holding everything [source] holds — its fade, notes, layers, own
- * rows, effects, script hooks and speed masters (across projects each master by its index), and,
- * within one project, its scenery and events — named [name] and in no stack. The duplicate and the
- * cross-project copy both make one. Must run inside a transaction.
- *
- * **Both referent columns** of a layer are copied, not just `look`: copying `look` alone once
- * landed every template layer naming neither record, a row that breaks `DaoCueLayers`'
- * exactly-one invariant and threw at GO.
- */
-internal fun copyCueRecord(source: DaoCue, targetProject: DaoProject, name: String): DaoCue {
-    val copy = DaoCue.new {
-        this.name = name
-        project = targetProject
-        fadeDuration = source.fadeDuration
-        fadeCurve = source.fadeCurve
-        notes = source.notes
-        stomp = source.stomp
-        speedMasters = mapCueSpeedMasters(source.speedMasters, source.project, targetProject) { index, _ ->
-            logger.info("Copy of cue '{}': project {} has no speed master {}; its tempo is left out", source.name, targetProject.id.value, index ?: "(deleted)")
-        }
-    }
-    for (layer in source.layers) {
-        DaoCueLayer.new {
-            cue = copy
-            look = layer.look
-            template = layer.template
-            sortOrder = layer.sortOrder
-            enabled = layer.enabled
-            targets = layer.targets
-            propertyMask = layer.propertyMask
-            blendMode = layer.blendMode
-            amount = layer.amount
-            stomp = layer.stomp
-            speedMasterUuid = layer.speedMasterUuid
-            rateSpeedMasterUuid = layer.rateSpeedMasterUuid
-            delay = layer.delay
-            interval = layer.interval
-            randomWindow = layer.randomWindow
-        }
-    }
-    for (assignment in source.propertyAssignments) {
-        DaoCuePropertyAssignment.new {
-            cue = copy
-            targetType = assignment.targetType
-            targetKey = assignment.targetKey
-            propertyName = assignment.propertyName
-            value = assignment.value
-            fadeDuration = assignment.fadeDuration
-            sortOrder = assignment.sortOrder
-            moveInDark = assignment.moveInDark
-        }
-    }
-    for (effect in source.adHocEffects) {
-        DaoCueAdHocEffect.new {
-            cue = copy
-            targetType = effect.targetType
-            targetKey = effect.targetKey
-            effectType = effect.effectType
-            category = effect.category
-            propertyName = effect.propertyName
-            beatDivision = effect.beatDivision
-            blendMode = effect.blendMode
-            distribution = effect.distribution
-            phaseOffset = effect.phaseOffset
-            elementMode = effect.elementMode
-            elementFilter = effect.elementFilter
-            stepTiming = effect.stepTiming
-            parameters = effect.parameters
-            delay = effect.delay
-            interval = effect.interval
-            randomWindow = effect.randomWindow
-            sortOrder = effect.sortOrder
-            speedMasterUuid = effect.speedMasterUuid
-            rateSpeedMasterUuid = effect.rateSpeedMasterUuid
-            seconds = effect.seconds
-            size = effect.size
-            direction = effect.direction
-            nShot = effect.nShot
-            spread = effect.spread
-            wings = effect.wings
-            blocks = effect.blocks
-            groups = effect.groups
-        }
-    }
-    for (trigger in source.triggers) {
-        DaoCueTrigger.new {
-            cue = copy
-            triggerType = trigger.triggerType
-            delay = trigger.delay
-            interval = trigger.interval
-            randomWindow = trigger.randomWindow
-            script = trigger.script
-            sortOrder = trigger.sortOrder
-        }
-    }
-    // A scene element and a patch are a project's own, so scenery and events copy only within one.
-    if (targetProject.id == source.project.id) {
-        copyCueScenery(source, copy)
-        copyCueEvents(source, copy)
-    }
-    return copy
 }

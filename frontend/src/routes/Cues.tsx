@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
-import { X } from 'lucide-react'
+import { Copy, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
 import { useProjectCueListQuery } from '../store/cues'
@@ -8,7 +9,9 @@ import { useProjectCueStackListQuery, useProjectProgramStateQuery } from '../sto
 import { useEditLock } from '../hooks/useEditLock'
 import { Breadcrumbs } from '../components/Breadcrumbs'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
+import { CopyFromShowSheet } from '../components/cues/CopyFromShowSheet'
 import { CueLibrarySheet } from '../components/cues/CueLibrarySheet'
+import { useCueActionDialogs } from '../components/runner/cueActionDialogs'
 import { ShowLockControl } from '../components/runner/ShowLockControl'
 import { LibraryRow, PartitionChips } from '../components/sheet/LibraryRow'
 import { SheetPage } from '../components/sheet/SheetPage'
@@ -48,6 +51,9 @@ const ALL_STACKS = 'all'
  * - **The show-editing lock holds while the show runs** (§10, 20), as on the cue sheet: the lock
  *   control is in the header, locked the cells are inert and the actions ask to unlock. Another
  *   project's cues read only, with no actions.
+ * - **Copy from another show…** is the library row's verb (§3.8, §10, 22): it copies another
+ *   project's cues into this one, so it is drawn on the current project alone and, locked, asks to
+ *   unlock first.
  */
 export function ProjectCues() {
   const { projectId } = useParams()
@@ -75,6 +81,13 @@ export function ProjectCues() {
   const counts = useMemo(() => showCounts(narrowed), [narrowed])
   const runnable = useMemo(() => (stacks ?? []).filter((s) => s.type === 'STACK'), [stacks])
   const onlyCue = view.cue != null ? library.find((c) => c.id === view.cue) : undefined
+
+  const [copyOpen, setCopyOpen] = useState(false)
+  const dialogs = useCueActionDialogs()
+  // A GO that re-locks the show takes the copy away with the rest of the editing.
+  useEffect(() => {
+    if (editLock.locked) setCopyOpen(false)
+  }, [editLock.locked])
 
   /** The loose cue whose editor is open in the sheet, re-read from the list by id. */
   const [sheetCueId, setSheetCueId] = useState<number | null>(null)
@@ -114,6 +127,10 @@ export function ProjectCues() {
       : null
   const onRequestUnlock = editLock.lockRelevant ? editLock.toggleLock : undefined
   const looseCount = library.filter(isLoose).length
+  const openCopy = () => {
+    if (!editLock.locked) setCopyOpen(true)
+    else if (onRequestUnlock != null) dialogs.openUnlock(onRequestUnlock)
+  }
 
   return (
     <SheetPage>
@@ -173,13 +190,31 @@ export function ProjectCues() {
             />
           </div>
         }
+        create={
+          isCurrentProject ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              disabled={editLock.locked && onRequestUnlock == null}
+              title={editLock.locked ? LOCKED_REASON : "Copy another project's cues into this one"}
+              aria-label="Copy from another show…"
+              onClick={openCopy}
+            >
+              <Copy className="size-3.5" />
+              <span className="hidden sm:inline">Copy from another show…</span>
+            </Button>
+          ) : undefined
+        }
       />
       {/* Any press or key in the body counts as editing, so the idle re-lock does not fire mid-edit. */}
       <div className="flex min-h-0 flex-1 flex-col" onPointerDownCapture={editLock.noteEdit} onKeyDownCapture={editLock.noteEdit}>
         {cuesLoading ? (
           <SheetPage.Empty loading />
         ) : library.length === 0 ? (
-          <SheetPage.Empty>No cues yet. Record the programmer into a cue — in a stack or in none.</SheetPage.Empty>
+          <SheetPage.Empty>
+            No cues yet. Record the programmer into a cue — in a stack or in none — or copy them from another show.
+          </SheetPage.Empty>
         ) : shown.length === 0 ? (
           <SheetPage.Empty>No cues match the filter.</SheetPage.Empty>
         ) : (
@@ -215,6 +250,13 @@ export function ProjectCues() {
         locked={editLock.locked}
         onRequestUnlock={onRequestUnlock}
       />
+      {isCurrentProject && copyOpen && (
+        // Work in the copy is editing too: its events bubble here through the portal.
+        <div className="contents" onPointerDownCapture={editLock.noteEdit} onKeyDownCapture={editLock.noteEdit}>
+          <CopyFromShowSheet projectId={projectIdNum} open onOpenChange={setCopyOpen} />
+        </div>
+      )}
+      {dialogs.local}
     </SheetPage>
   )
 }

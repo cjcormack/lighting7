@@ -61,6 +61,9 @@ vi.mock('@/components/stage/OwnerEditor', () => ({
     cueId == null ? null : <div data-testid="cue-sheet" data-locked={locked}>{cueId}</div>,
 }))
 vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: () => null }))
+vi.mock('@/components/cues/CopyFromShowSheet', () => ({
+  CopyFromShowSheet: ({ projectId }: { projectId: number }) => <div data-testid="copy-sheet">{projectId}</div>,
+}))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 vi.mock('@tanstack/react-virtual', () => ({
@@ -325,6 +328,18 @@ describe('the show-editing lock while the show runs', () => {
     await waitFor(() => expect(duplicateCue).toHaveBeenCalledTimes(2))
   })
 
+  it('asks to unlock before Copy from another show…, then opens it', async () => {
+    running = true
+    renderAt('/projects/1/cues')
+    fireEvent.click(screen.getByRole('button', { name: 'Copy from another show…' }))
+    const ask = await screen.findByRole('alertdialog')
+    expect(screen.queryByTestId('copy-sheet')).toBeNull()
+    fireEvent.click(within(ask).getByRole('button', { name: /Unlock/ }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lock the show' })).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'Copy from another show…' }))
+    expect(screen.getByTestId('copy-sheet').textContent).toBe('1')
+  })
+
   it('opens a loose cue’s editor locked', () => {
     running = true
     renderAt('/projects/1/cues')
@@ -339,5 +354,6 @@ describe('the show-editing lock while the show runs', () => {
     expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
     expect(screen.getByText(/Panto’s cues — make it the current project to edit/)).toBeInTheDocument()
     expect(row(1).querySelector('[data-row-open]')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Copy from another show…' })).toBeNull()
   })
 })

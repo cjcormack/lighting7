@@ -6112,6 +6112,16 @@ is found — Record's *No stack* makes one.
   with `ShowLockControl` in the header, the cells inert and every action but *Blind edit* asking to
   unlock, the loose cue's editor read-only. Off the running project it reads only and draws no
   action set — every one would act on the running show — and no row opens.
+- ***Copy from another show…* is the library row's verb** (cue model plan §3.8, §10, 22), in
+  `LibraryRow`'s create slot, drawn on the current project only: `CopyFromShowSheet`
+  (`components/cues/`), mounted while open, picks the source project (any other, shows before
+  venues), its cues (a multi-select over its `GET /cues`, filtered by name or place), then where they
+  go — *No stack* or a stack, at its end — and runs `POST /cues/copy-from` as a **dry run** for its
+  review: the cues, the Looks and palettes copied or linked by name, and what will not resolve, each
+  with the records that hold it. *Copy n cues* sends the same request without `dryRun`. The mapping
+  is the desk's alone. Locked it asks to unlock first (the action set's `UnlockShowDialog`, through
+  `useCueActionDialogs`), and a GO that re-locks closes it. A copied cue whose fixture the rig lacks
+  reads as missing in its editor (`AssignmentHealth`).
 
 #### The Show position
 

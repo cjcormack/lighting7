@@ -242,7 +242,7 @@ class CueSpeedMastersTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `Duplicate, the cross-project copy and copy_to_project carry the list, a master mapped by index`() = testApplication {
+    fun `Duplicate, the copy from another show and copy_to_project carry the list, a master mapped by index`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val m = masters()
@@ -250,24 +250,36 @@ class CueSpeedMastersTest : RouteIntegrationTest() {
         val q1 = cue("Q1", s, m.getValue(2) to 128.0, m.getValue(4) to 64.0)
         val (other, otherMasters) = transaction(state.database) {
             val project = DaoProject.new { name = "Other"; description = "copy target"; isCurrent = false }
-            // Three masters only: the copy has nowhere to put master 4's tempo.
+            // Three masters only: a copy into it has nowhere to put master 4's tempo.
             project.id.value to listOf(1, 2, 3).associateWith { i -> DaoSpeedMaster.new { this.project = project; masterIndex = i; name = "Other $i" }.uuid.toString() }
         }
-
+        // And a fifth master there, which a copy back into this project (four masters) has nowhere to put.
+        val (otherQ, other5) = transaction(state.database) {
+            val project = DaoProject[other]
+            val fifth = DaoSpeedMaster.new { this.project = project; masterIndex = 5; name = "Other 5" }.uuid.toString()
+            DaoCue.new {
+                this.project = project; name = "Other Q"
+                speedMasters = listOf(CueSpeedMasterDto(otherMasters.getValue(2), 96.0), CueSpeedMasterDto(fifth, 70.0))
+            }.id.value to fifth
+        }
         val dup = client.post("/api/rest/projects/$projectId/cues/$q1/duplicate") { contentType(ContentType.Application.Json); setBody(DuplicateCueRequest(s)) }
         val dupId = dup.body<DuplicateCueResponse>().cueId
         assertEquals(listOf(m.getValue(2) to 128.0, m.getValue(4) to 64.0), speedMastersOf(dupId))
 
-        val copied = client.post("/api/rest/projects/$projectId/cues/$q1/copy") { contentType(ContentType.Application.Json); setBody(CopyCueRequest(other)) }
+        val copied = client.post("/api/rest/projects/$projectId/cues/copy-from") {
+            contentType(ContentType.Application.Json); setBody(CopyCuesFromRequest(fromProjectId = other, cueIds = listOf(otherQ)))
+        }
         assertEquals(HttpStatusCode.Created, copied.status, copied.bodyAsText())
-        assertEquals(listOf(otherMasters.getValue(2) to 128.0), speedMastersOf(copied.body<CopyCueResponse>().cueId))
+        val copy = copied.body<CopyCuesFromResponse>()
+        assertEquals(listOf(m.getValue(2) to 96.0), speedMastersOf(copy.copied.single().cueId))
+        assertTrue(copy.unresolved.any { "speed master 5 is not in '${transaction(state.database) { DaoProject[projectId].name }}'" in it.problem }, "$copy (not $other5)")
 
         val tools = SetupTools(state, AiTools(state))
         val result = runBlocking {
             tools.executeTool("copy_to_project", Json.parseToJsonElement("""{"fromProjectId":$projectId,"toProjectId":$other,"cueStacks":[$s]}""").jsonObject, caller = "Tester")
         }
         assertTrue(result.success, result.result)
-        assertTrue("speed master 4 is not in project $other" in result.result, result.result)
+        assertTrue("speed master 4 is not in 'Other'" in result.result, result.result)
         val copiedQ1 = transaction(state.database) {
             DaoCue.find { (DaoCues.project eq other) and (DaoCues.name eq "Q1") }.toList().maxBy { it.id.value }.id.value
         }
