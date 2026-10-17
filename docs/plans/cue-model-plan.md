@@ -301,16 +301,31 @@ and the rule-3 sentence naming `/cues` change with it.
   right-hand sheet, as `stage/OwnerEditor` opens a cue (R2.4, `a4ab679`); with no entry it says
   the cue has no number or follow.
 
+Built by session 5 (`a410c6c5`): the bar is `CueActions` as its fourth host, so a multi-select
+carries the set's *Duplicate*, *Delete…*, *Add to stack…*, *Move to stack…* and *Remove from stack*,
+and no verb of the table's own. The library row draws no create verb. Another project's table reads
+only and draws no action set. *Copy from another show…* is session 6's.
+
 ### 3.8 Copy from another show (D9)
 
 `POST /api/rest/projects/{id}/cues/copy-from {fromProjectId, cueIds, stackId?, after?, dryRun?}`,
-into the project in the path. It reuses `copy_to_project`'s copier
-(`ai/VenueSetupTools.kt:332-700`), cut down to cues:
+into the project in the path. It reuses `copy_to_project`'s copier, cut down to cues. That copier's
+cue half is inline in the tool's private `copy` (`ai/VenueSetupTools.kt`), beside a second
+field-by-field cue copy in `copyCueRecord`, so the session lifts one cross-project cue copier that
+`copy_to_project` calls too:
 
 - Looks and templates link by name, else are copied. Speed masters map by index, scripts by name.
+  Since S16 (`8236eb9`) that includes the cue's own `speedMasters` list. `copy_to_project` maps the
+  list, the layers' and the effects' masters against one read of the target's bank and reports each
+  one the target lacks. `mapCueSpeedMasters`, which `copyCueRecord` calls, seeds the target's default
+  bank first and only logs, which is why `a3949db3` moved `copy_to_project` off it. One slip to leave
+  behind: `copy_to_project`'s layer and effect message names a master as its index plus one, but
+  `masterIndex` is 1-based, as its cue-tempo message has it.
 - **Venue records match by uuid first.** Two shows on one venue share its records' uuids across
   versions, so a cue event's patch or a scenery element resolves even when the shows pin different
   versions. A show's own patch maps by key and fixture type, and its own element by name.
+  `copy_to_project` matches neither by uuid today: a cue event's patch goes by key and fixture type,
+  a scenery element by name.
 - **Fixture and group targets** are checked against the target's effective rig
   (`RigScope.of(target)`) and listed as unresolved. The rows are kept, and `AssignmentHealth` marks
   them, as an Update's dead references are.
@@ -391,6 +406,10 @@ Session 4 (`2d82cea0`) already made `create_cue` loose, `add_cue_to_stack` share
 too) and `delete_cue_stacks` leave its cues and count them (`cuesLeftLoose`, its description too).
 What those rows still need is `create_cue`'s `stackId`, and `add_cue_to_stack`'s `number` and
 `after` (it takes `sortOrder`) and an answer naming the entry.
+
+S16 (`8236eb9`, `a3949db3`) gave `create_cue` and `build_cue_stack` a `speedMasters` list, each
+master by `masterIndex` or uuid (`cueSpeedMasterItemSchema`); no row above changes for it. R4.5
+(`98a226a6`) added no tool, so a stack's effect size has none and this table adds none.
 
 ## 4. UX
 
@@ -564,12 +583,31 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   copy, from the `copyCueRecord` helper the duplicate and the old copy share. That helper copies
   scenery and events only within one project, and a layer's Look and palette, an effect's
   parameters and every layer's and effect's speed-master uuids as they are, so the copy maps all
-  five (§3.8; the masters by index).
+  five (§3.8; the masters by index). Since S16 it also maps the cue's own speed masters by index,
+  through `mapCueSpeedMasters`, which logs a dropped one and reports nothing; the copy reports it.
+- **`FU-CUE-COPY-ROUTE` closes here.** S16's review (`a3949db3`) filed it against the REST copy:
+  delete the route, `CopyCueRequest` / `CopyCueResponse` and their tests (`CueRoutesTest`,
+  `CueLayerSourceInvariantTest`, the copy step in `CueSpeedMastersTest`), and move the item to
+  Completed. `unresolved` names every speed master the target lacks, as `copy_to_project`'s does.
+- **Placing a copy in a stack** does what Duplicate's handler does: `placeCueInStack`, the holds
+  restamped from `stackEntryPriorities`, `cueListChanged` and `cueStackListChanged`, and
+  `announceCuePadsChanged` over the stack's cues, so a neighbour's relabelled auto number reaches its
+  pad (`FU-BUSK-PAD-STALE-NUMBER` lists the handlers that miss it).
+- **Where the dialog opens.** Session 5's bar is `CueActions`, which acts on the shown project's
+  cues, and another project's table draws no action set; the library row has no create verb (§3.7).
+  So the multi-select §3.7 names has no row to start from: the source cues are another project's.
+  **Ask Chris** whether *Copy from another show…* is the library row's verb on the current project's
+  table, opening a dialog that picks the source project and its cues, or a *Copy here…* verb over a
+  selection on another project's read-only table, the other libraries' *Copy to…* reversed
+  (`CopyToProjectSheet`). Either honours the show-editing lock while the show runs, as the table's
+  bar does (§10, 20).
 - **Tests:** two shows on one venue at different versions: a cue event on a venue patch and a
   scenery row on a venue element both resolve by uuid; a show's own patch resolves by key; a
   standalone source resolves by key and name alone (D18); an unresolved fixture is kept and marked;
-  a dry run writes nothing.
-- **Docs:** `cues-engineering.md` §"Copying", `fixtures-engineering.md` §"Shows on a venue".
+  a speed master the target lacks is reported; a dry run writes nothing.
+- **Docs:** `cues-engineering.md` gains §"Copying"; its REST table's `/cues/{cueId}/copy` row, the
+  `CopyCueDialog` line under UI Components (that dialog is already gone) and §"Speed masters on a
+  cue"'s sentence on the REST copy go. `fixtures-engineering.md` §"Shows on a venue".
 
 ### Session 7 — the MCP tools (backend)
 
@@ -578,8 +616,15 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **`soleEntryOf`'s last callers**, which name a cue's number only while it has one entry: the
   briefing's cue list (`RigBriefing.kt`), `mark_up_prompt_book` (`soleEntryOfCueId`, so it refuses a
   shared or loose cue) and `RigKeyReferences`' cue label (its own `singleOrNull`). Each lists every
-  entry or takes one from its caller, and the function goes. The MCP stack tools' `entryInStack`
-  bridge (the first entry of the cue in that stack) gives way to `entryId` or `number` (§3.10).
+  entry or takes one from its caller, and the function goes. Two tests call it too
+  (`testsupport/CueEntries.kt`, `CueApplyDataBuilderTest`), and the exporter's v32 comment names it.
+  The MCP stack tools' `entryInStack` bridge (the first entry of the cue in that stack, in
+  `activate_cue_stack` and `set_standby`) gives way to `entryId` or `number` (§3.10). The function
+  stays: Record CREATE's answer (`programmerSurface.kt`) and Update's preview labels
+  (`programmerUpdate.kt`) take their stack from the caller and call it.
+- **Stale words.** `record_cue`'s description still says CREATE makes a cue "in a stack", though
+  `cueStackId` has been optional since session 4. `add_cue_to_stack` and `build_cue_stack` are two of
+  the handlers `FU-BUSK-PAD-STALE-NUMBER` lists as not announcing a relabelled pad.
 - **`include_into_programmer` names an entry**, so an AI include sets the target's `entryId` as the
   Show view's does.
 - **No MCP tool moves an entry.** Since R2 session 3 the UI's *Move to stack…* moves the entry

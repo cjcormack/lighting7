@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
@@ -58,7 +59,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-S3`](#fu-manual-venue-s3) | Extract on a clone of project 9 outputs the same channels on the same nodes as project 9, and a show's hide and key rules hold on the hall's rig | Venue S3, 2026-10-11 |
 | [`FU-MANUAL-VENUE-S1`](#fu-manual-venue-s1) | project 9 loads, patches, focuses and syncs as it did before the rig scope — the check to run before anything is extracted | Venue S1, 2026-10-11 |
 | [`FU-MANUAL-SCRIM-ESTIMATES`](#fu-manual-scrim-estimates) | the scrim plan's estimates read right on the desk's own GPU — the nets' thread share, the threads' wrap and glow and muslin's τ, judged by eye on SwiftShader and kept — and a far-side seat flags a gauze where the centre seat does not | Scrim S6, 2026-10-10 |
-| [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update template, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
+| [`FU-MANUAL-FIXTURE-FX-SHEETS`](#fu-manual-fixture-fx-sheets) | the fixture sheet says who drives each value, clears it, and edits effects live on the rig — a hand-set position over an orbiting Circle, a cue Pulse held back and let go in phase, four heads of a bar, a group row, the busk Effects tab's *edited* and Update palette, and the phone's bottom sheet on an iPhone | Fixture and FX sheets S2–S6, 2026-10-08 |
 | [`FU-MANUAL-SCENERY-DEVICES`](#fu-manual-scenery-devices) | scenery's whole round trip — held, recorded, edited in the cue table and the book, called on GO — works on an iPhone, an iPad and the desk, by touch where touch is all there is | Scenery programmer S5, 2026-10-07 |
 | [`FU-MANUAL-STAGE-LIGHT-BUDGET`](#fu-manual-stage-light-budget) | the surface shader's light budget and the haze governor's thresholds hold a real frame rate in Safari on the Mac and an iPad — the numbers the stage-view plan's §10 left open, now with every beam raymarched and the haze split at up to eight cloths | Stage view S3 · S6, 2026-09-30; scrim S5, 2026-10-10 |
 | [`FU-MANUAL-STAGE-HALL-DATA`](#fu-manual-stage-hall-data) | the Commemoration Hall's stored rig and scene agree with the room — P5's balcony and Revolution fixes, and a stage house tall enough for the LX bars | Stage view S6, 2026-09-30 |
@@ -123,6 +124,27 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-R1-5`
+
+**What it proves**: *the Cues table* — venue-visit R1.5, cue model plan session 5: every cue once,
+loose ones included, its places, live state and uses, and the action set over a selection.
+
+**Why it is here**: the tests render the table over stubbed lists; only a running desk shows the live
+dot following real holds, the lock while the show runs, and *Used by* naming real pads and bindings.
+
+**Test**, on Sleeping Beauty:
+
+1. **Loose.** Record a cue with *No stack*: it is under *Loose*. *Add to stack…* it into Act 1 and
+   read its *In* chip.
+2. **The dot.** GO Act 1 and press a cue's busk pad: the stack's cue reads an outline, the pressed
+   one solid.
+3. **The lock.** Start the show: the cells and actions ask to unlock, and *Blind edit* works.
+4. **From a pad.** A loose cue's busk pad *View* lands on the table filtered to it.
+5. **Delete.** Select two cues, one on a pad and one bound to an X-Touch button, and *Delete…*: the
+   confirm lists the pad and the binding.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-R4-5`
 
 **What it proves**: *a stack's effect size* — venue-visit R4.5, effects plan session 5 (D10): a
@@ -183,8 +205,8 @@ a real sync pull leaving a tapped tempo alone mid-show.
 
 **Test**, on Sleeping Beauty, with an effect running on M2 and one on M1:
 
-1. **Authoring.** In a cue's Cue tab — on its card, in the cue sheet's pane and from the fixture
-   sheet's *on Q12* — add M2 at 96 and M1 at 140. Give the next cue M2 at 128. Lock the show: the tab
+1. **Authoring.** In a cue's Cue tab — on its card, in the cue sheet's pane, from the fixture
+   sheet's *on Q12* and from a loose cue's sheet in the Cues table — add M2 at 96 and M1 at 140. Give the next cue M2 at 128. Lock the show: the tab
    reads both rows and offers nothing.
 2. **GO, GO BACK, GO TO.** GO into the first cue: the strip reads M2 96 and M1 140 and the effects
    slow and speed to match. GO: M2 reads 128, M1 stays 140. GO BACK: M2 is 96 again. GO TO the second
@@ -194,7 +216,8 @@ a real sync pull leaving a tapped tempo alone mid-show.
 4. **Shared and pressed.** *Add to stack…* the first cue into a second stack and GO it there while
    the first stack still holds it: M2 goes back to 96. Put the cue on a busk pad and press it: the
    same.
-5. **Followers and a reload.** Make M3 follow M2 at ½ and add it to a cue: the GO goes, M3 keeps
+5. **Followers and a reload.** Make M3 follow M2 at ½ and pick it in a cue's master row (*+ Master* passes over a follower while
+   another master is free): the GO goes, M3 keeps
    following, and the row says it is skipped. Tap M2, then pull Sleeping Beauty from its repo with a
    change waiting: the show carries across and M2 keeps the tap.
 
@@ -480,9 +503,10 @@ them off at the phase they had.
 on synthetic ticks, and the route tests read the instances. Nothing watched a split on real heads at
 a real tempo, where a jump of one head out of a chase is what an operator would see.
 
-**Test**, on Sleeping Beauty. Until session 6 (R3.6) gives these a door in the UI, drive them from a
-terminal with `curl` against `http://localhost:8413/api/rest` (signed in; the bodies are in
-CLAUDE.md's FX REST endpoints), and watch the stage and the programmer's FX list:
+**Test**, on Sleeping Beauty. Drive them from the doors R3.6 built — a cell's Effects band or the
+rail's *+ Effect* for the press, the live editor's *Apply to …* for the split — or with `curl` against
+`http://localhost:8413/api/rest` (signed in; the bodies are in CLAUDE.md's FX REST endpoints), and
+watch the stage and the programmer's FX list:
 
 1. **The press.** `POST /projects/{id}/programmer/effects` with `Pulse` on `dimmer` over four hexes
    by fixture: one effect in the FX list, a four-step chase in the order sent, on the master tagged
@@ -620,7 +644,7 @@ Show view's cards and confirms against a real show, or watched the stage while t
    on one and read the new name on the other. Give it a number in B: A's number does not change.
 2. **Remove the live entry.** GO stack A onto the shared cue, then *Remove from stack* on that card.
    Nothing on stage moves and A reads the next cue on deck; GO, and the following cue comes in.
-3. **Delete a stack.** Delete B with *Also delete* left unticked: its cues are still in A (or loose).
+3. **Delete a stack.** Delete B with *Also delete* left unticked: its cues are still in A, and those only B held read *Loose* in the Cues table.
    Delete a stack again with it ticked: the confirm lists the pads and slots of the cues it would take.
 4. **Delete a cue in use.** Put a cue on a busk pad, then *Delete…* it from its card (R2.3's confirm,
    on the dry run): it names the stack entry and the pad; confirmed, both are gone and the pad's page
@@ -837,7 +861,7 @@ pointing at the copy, the desk itself stopped or on another port):
    entry, marker and anchor counts, and `<copy>.pre-cue-model-<utc>.db` sits beside it.
 3. **Same lists.** Every stack noted lists the same cues in the same order with the same numbers
    (auto numbers unchanged, explicit ones unchanged), the same follows, and its markers where they
-   were. GO through a few cues; standby and GO TO work from the cue table.
+   were. GO through a few cues; standby and GO TO work from the stack's table (Show › Table).
 4. **Same book.** The prompt book's cue anchors sit where they did. A marker's anchor is kept but
    not drawn: since R1.4 the book reads anchors by entry, but lists only cue entries' anchors, and no
    session plans to draw a marker's. So check it on the copy instead: `sqlite3 <copy> "SELECT a.label, e.label FROM prompt_book_anchors a JOIN
@@ -1494,7 +1518,7 @@ Where something reads wrong, change the value with its GLSL twin and test (`scri
 **What it proves**: *the fixture sheet answers Chris's six problems on the rig* — a row says who
 drives it and what is held back underneath, × lets the value go, a typed value lands, an effect added
 over a set position orbits it and is edited live, a head pick and a group's *All* write what they
-say, the busk view's pad effects carry *edited* and Update template, and a phone gets the sheet.
+say, the busk view's pad effects carry *edited* and Update palette, and a phone gets the sheet.
 
 **Why it is here**: the fixture-fx-sheets plan's six sessions were driven in a browser
 (`docs/plans/completed/fixture-fx-sheets-plan.md` §9 lists these five checks, one per session that changed
@@ -1506,7 +1530,7 @@ the tray's place, the landscape side form and the keyboard's bite against an emu
 `visualViewport`; the inset itself is 0 in an emulator.
 
 **Test**, on the rig with Spot 3 (a mover), the 12-pixel bar, *Front wash*, a cue with a Pulse on a
-dimmer, a position template pad and a Circle effect-template pad:
+dimmer, a position palette pad and a Circle effect-palette pad:
 
 1. **Session 2 — the sheet.** Set Spot 3's position on the sheet: the row reads *Programmer*. Fire the
    cue with the Pulse and set that dimmer by hand: the row carries the amber dot, the chip's stack
@@ -1517,8 +1541,8 @@ dimmer, a position template pad and a Circle effect-template pad:
 3. **Session 4 — heads and groups.** Pick heads 1–4 of the 12-pixel bar and set a colour: only those
    four change. On *Front wash*'s *All*, Record writes a group row.
 4. **Session 5 — the Busk and Programmer views.** Press the Circle pad after the position pad: it
-   orbits. In the busk Effects tab, widen it: *edited*. Press the pad off and on: the template's size
-   returns. Widen again and choose Update template: the next press keeps it.
+   orbits. In the busk Effects tab, widen it: *edited*. Press the pad off and on: the palette's size
+   returns. Widen again and choose Update palette: the next press keeps it.
 5. **Session 6 — the phone.** On an iPhone, tap a fixture in the Stage view: the bottom sheet opens at
    half with the tray above the home indicator. Drag the grabber to full and down to the peek (header
    and tray); tap another fixture through the peek and the sheet moves onto it; tap empty stage and it
