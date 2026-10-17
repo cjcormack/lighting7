@@ -378,7 +378,7 @@ In one transaction, in this order (the review is the same, rolled back):
 
 Each session is one PR (P1).
 
-### Session 1 — The origin, and the pairing
+### Session 1 — The origin, and the pairing — done, `e5b60d72`
 
 - §4.3: the `detachedFrom` columns, Detach writing them, the DTO, Clone, Extract clearing them, and the
   sync field.
