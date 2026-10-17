@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
@@ -112,6 +113,39 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-NAV-5`
+
+**What it proves**: *a venue's home on a real desk* — venue-visit Nav.5, navigation plan session 5
+(§5.2): the home reads the venue as History and the band do, an admin publishes and discards from it,
+and the shows on the venue are opened and made current from it.
+
+**Why it is here**: the tests pin the lines, the list and the actions against stubbed state; only a
+desk shows the draft line moving as the venue is edited in another window, a *Sync now* against the
+venue's real repo, a switch made from the list landing on the rig, and the home's folds on the iPad
+and a phone.
+
+**Test**, on TCH venue (v8), with Sleeping Beauty (on the rig, held) and TCH Test on v7:
+
+1. **Version and draft.** As an admin the Version line reads *v8 · 14 Oct 2026* and the note,
+   clamped to two lines with the whole of it on the hover; *History* opens the sheet the band opens.
+   The Draft line reads *Draft: no changes* with *Publish v9…* refused (*Nothing to publish*). Re-address
+   a patch in the Patch List: the line reads *Draft: 1 change (1 changes output)* and the band's chip
+   *1 change since v8*, *Publish v9…* opens the Publish sheet, and *Discard* puts the patch back.
+2. **Sync.** *Sync now* on the venue's line syncs its repo and toasts the versions it fetched.
+3. **Shows.** The list reads Sleeping Beauty *on v7 · held* with the green dot and *Open* only, and
+   TCH Test *on v7 · v8 published* with *Open* and *Make current*. *Make current* asks *Put TCH Test
+   on the rig?*, naming its parks and the hold; *Open* goes to TCH Test's home.
+4. **Operator.** Signed in as an operator, the home has the Version line without *History*, the
+   shows, and no Draft, *Publish*, *Discard* or Sync line; the ⋮ and ⌘K offer *Make current* and
+   *Settings*.
+5. **⌘K.** Viewing the venue as an admin, ⌘K's Project group has *History* and *Publish v9…* with
+   its reason, and each opens its sheet.
+6. **Folds.** The home on the iPad in both orientations and on a phone: no page scrolls sideways,
+   the band wraps under its sentence, each status line's buttons wrap under its words on a phone, and
+   a show's buttons wrap under its name there.
 
 ---
 

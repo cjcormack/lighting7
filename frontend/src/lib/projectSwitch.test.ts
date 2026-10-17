@@ -12,6 +12,7 @@ import {
   switcherDetailOf,
   switcherGroupsOf,
   switcherOrderOf,
+  venueMissing,
 } from './projectSwitch'
 
 /** Navigation plan §4: the switcher's words, its order and the one confirmation's lines. */
@@ -110,6 +111,18 @@ describe('the menu', () => {
     const missing = show(40, 'Old show', { venue: { uuid: 'x', id: null, name: null, version: 3 } })
     expect(makeCurrentRefusal(missing)).toBe('Its venue, v3, isn’t on this desk')
     expect(makeCurrentRefusal(projects[4])).toBeNull()
+  })
+
+  it('refuses it too for a show pinned past its venue’s newest version, and its chip says so', () => {
+    const ahead = show(41, 'Next show', { venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 9, installed: 8 } })
+    expect(venueMissing(ahead)).toBe(true)
+    expect(makeCurrentRefusal(ahead)).toBe('Its venue, TCH venue v9, isn’t on this desk')
+    expect(pinChipOf(ahead, NOT_HELD)).toEqual({ label: 'TCH venue v9', status: 'not on this desk', tone: 'missing' })
+    // A venue here that holds no version yet has none to load.
+    expect(venueMissing(show(43, 'Early', { venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 1, installed: null } }))).toBe(true)
+    // Installed and pinned alike, or the pin behind it, is here.
+    expect(venueMissing(show(42, 'Same', { venue: { uuid: 'v', id: 16, name: 'TCH venue', version: 8, installed: 8 } }))).toBe(false)
+    expect(venueMissing(projects[4])).toBe(false)
   })
 })
 

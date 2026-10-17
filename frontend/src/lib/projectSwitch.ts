@@ -52,9 +52,16 @@ export function rigDotOf(
   return 'sending'
 }
 
-/** A show whose pinned venue version is not on this desk (`VENUE_MISSING`): it cannot be made current. */
+/**
+ * A show whose pinned venue version is not on this desk (`VENUE_MISSING`): it cannot be made
+ * current. The venue is not here at all, or it is and holds no version, or its newest version is
+ * older than the pin — the desk's `VenuePins.isMissing`, as far as the list can tell (a gap below
+ * the newest version is the desk's to refuse).
+ */
 export function venueMissing(project: Pick<ProjectSummary, 'venue'>): boolean {
-  return project.venue != null && project.venue.id == null
+  const venue = project.venue
+  if (venue == null) return false
+  return venue.id == null || venue.installed == null || venue.version > venue.installed
 }
 
 /** Why [project] cannot be made current, or null when it can (§4.2). */
@@ -78,7 +85,7 @@ export function pinChipOf(project: Pick<ProjectSummary, 'id' | 'venue'>, hold: V
   const venue = project.venue
   if (venue == null) return null
   const label = `${venue.name ?? 'Venue'} v${venue.version}`
-  if (venue.id == null) return { label, status: 'not on this desk', tone: 'missing' }
+  if (venueMissing(project)) return { label, status: 'not on this desk', tone: 'missing' }
   if (hold.held && hold.projectId === project.id) return { label, status: 'held', tone: 'held' }
   if (venue.installed != null && venue.installed > venue.version) {
     return { label, status: `v${venue.installed} published`, tone: venue.behind === 'OUTPUT' ? 'output' : 'drawing' }

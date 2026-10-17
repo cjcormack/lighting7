@@ -222,7 +222,8 @@ venue's hidden ids, so the row adds `cues` to both.)
 - **Search.** The search box filters by name. Typing and then Enter opens the first match's home,
   and ⌥Enter makes it current.
 - **Make current** is shown on every project but the current one, to both roles, as Activate is
-  today. A `VENUE_MISSING` show's row shows the reason instead (`ProjectDto.venue.id == null`).
+  today. A `VENUE_MISSING` show's row shows the reason instead (`venueMissing`: the venue isn't here, or
+  holds no version at or above the pin).
 - **The footer.**
   - *New show…* opens `CreateProjectDialog`.
   - *All projects…* goes to `/projects`.
@@ -395,7 +396,7 @@ Each session is one PR (P1). All are frontend only (P5), but for session 3's two
   - A held show's home offers *Review update* and *Run against*.
 - **Docs:** the frontend CLAUDE.md, replacing the overview's paragraph.
 
-### Session 5 — A venue's home
+### Session 5 — A venue's home — done, `500b1e7`
 
 - §5.2: the venue's status block, History and Publish from the home, the shows on it, and its
   sections.

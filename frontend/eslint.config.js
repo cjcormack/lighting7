@@ -134,7 +134,6 @@ export default [
       "src/components/programmer/LookRowStore.tsx",
       "src/components/programmer/ProgrammerAddEffect.tsx",
       "src/components/programmer/useLocalFamilyCounts.ts",
-      "src/components/projectHome/VenueOverview.tsx",
       "src/components/projectHome/useHomeCounts.ts",
       "src/components/surfaces/BindingTargetPicker.tsx",
       "src/components/surfaces/SurfaceInspector.tsx",

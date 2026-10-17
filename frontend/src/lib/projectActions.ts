@@ -91,11 +91,13 @@ export function projectActions(
   const isVenue = project.kind === 'VENUE'
   const isShow = !isVenue
   const venue = project.venue ?? null
-  const venueHere = isShow && venue != null && venue.id != null
-  const behindTo = venueHere && venue.installed != null && venue.installed > venue.version ? venue.installed : null
-  const standalone = isShow && venue == null
   const refusal = makeCurrentRefusal(project)
   const missing = isShow && venueMissing(project)
+  // A venue the desk holds at the pinned version: what Update and Detach work on (the desk refuses
+  // both, `VENUE_MISSING`, for a pin it lacks).
+  const venueHere = isShow && venue != null && venue.id != null && !missing
+  const behindTo = venueHere && venue.installed != null && venue.installed > venue.version ? venue.installed : null
+  const standalone = isShow && venue == null
   const nextVersion = (venueHistory?.installed ?? 0) + 1
   const draftChanges = venueHistory?.draft.changes
 
@@ -112,7 +114,8 @@ export function projectActions(
   return [
     action('open', 'Open', 'rig', place === 'switcher' || place === 'palette', () => host.navigate(`/projects/${project.id}`)),
     action('make-current', 'Make current', 'rig', !project.isCurrent, () => host.open('make-current'), refusal, {
-      refusalLabel: refusal ? 'Venue not here' : undefined,
+      // The venue itself, or only the version the show is pinned to.
+      refusalLabel: refusal ? (venue?.id == null ? 'Venue not here' : 'Version not here') : undefined,
     }),
     action('settings', 'Settings', 'rig', true, () => host.navigate(`/projects/${project.id}/settings`)),
     // A clone of a show keeps its pin, so the desk refuses one whose venue version it lacks (VENUE_MISSING).
@@ -135,6 +138,20 @@ export function projectActions(
       destructive: true,
     }),
   ]
+}
+
+/**
+ * A project row's actions — the switcher's rows and the venue home's shows: the *rig* group less
+ * Settings, so *Open* and *Make current* (or its refusal). A row has room for two; Settings is a press
+ * away on the home, the sidebar and ⌘K.
+ */
+export function rigRowActions(
+  project: Pick<ProjectSummary, 'id' | 'name' | 'isCurrent' | 'kind' | 'venue'>,
+  ctx: Omit<ProjectActionContext, 'place'>,
+): ProjectAction[] {
+  return projectActions(project, { ...ctx, place: 'switcher' }).filter(
+    (a) => a.group === 'rig' && a.visible && a.id !== 'settings',
+  )
 }
 
 /** The visible actions, in their groups' order — what a ⋮ menu draws, a separator between groups. */
