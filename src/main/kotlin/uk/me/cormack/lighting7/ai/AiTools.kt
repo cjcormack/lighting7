@@ -1193,7 +1193,7 @@ class AiTools(private val state: State) {
         val speedMasters = input["speedMasters"]?.jsonArray?.let { items ->
             val problems = mutableListOf<String>()
             val parsed = transaction(state.database) {
-                parseCueSpeedMasters(items, speedMastersOf(project), emptyList(), "speedMasters", problems)
+                parseCueSpeedMasters(items, speedMasterRefsOf(project), emptyList(), "speedMasters", problems, byIndex = true)
             }
             if (problems.isNotEmpty()) return errorResult(problems.joinToString("; "))
             parsed

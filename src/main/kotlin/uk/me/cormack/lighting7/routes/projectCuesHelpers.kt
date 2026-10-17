@@ -489,8 +489,10 @@ internal fun checkCueSpeedMasters(
     if (items.isEmpty()) return Result.success(emptyList())
     val problems = mutableListOf<String>()
     val parsed = transaction(state.database) {
-        val kept = cueId?.let { DaoCue.findById(it) }?.takeIf { it.project.id == project.id }?.speedMasters.orEmpty()
-        parseCueSpeedMasters(items, speedMastersOf(project), kept.map { it.speedMasterUuid }, "speedMasters", problems)
+        val cue = cueId?.let { DaoCue.findById(it) }?.takeIf { it.project.id == project.id }
+        // No such cue: the write answers 404, not a 400 about its list.
+        if (cueId != null && cue == null) return@transaction emptyList()
+        parseCueSpeedMasters(items, speedMasterRefsOf(project), cue?.speedMasters.orEmpty().map { it.speedMasterUuid }, "speedMasters", problems)
     }
     return if (problems.isEmpty()) Result.success(parsed) else Result.failure(IllegalArgumentException(problems.joinToString("; ")))
 }

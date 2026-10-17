@@ -158,6 +158,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
+| [`FU-CUE-COPY-ROUTE`](#fu-cue-copy-route) | Blocked | Cues | cue model plan session 6 (venue-visit R1.6) |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
@@ -3068,6 +3069,24 @@ Deliberately out of the session (plan §8). **Trigger**: an operator needs a per
 move-in-dark set from the Show view rather than by re-recording. **Then**: the two as fields in the
 cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
 cell), written through the same `CueRowStore` flush as a third kind of draft entry.
+
+### `FU-CUE-COPY-ROUTE`
+
+**The REST cue copy drops what it cannot map, unreported** · Blocked · Venue-visit S16 review,
+2026-10-17
+
+`POST /cues/{id}/copy` (`routes/projectCues.kt`) copies one cue into another project through
+`copyCueRecord`. A speed master the target lacks by index is left out with only a log line
+(`mapCueSpeedMasters`), and `CopyCueResponse` has nowhere to say so, where `copy_to_project` reports
+it under `unresolved`. Its layers are worse: `look` and `template` are copied as they stand, so a
+layer copied across projects still names the source project's Look or palette. No client calls the
+route — the frontend's `CopyCueDialog` is gone — and only tests do. **Blocked on**: cue model plan
+session 6 (venue-visit R1.6), which removes it and `getOrCreateUnsortedStack` with it, and builds the
+cross-project copy on `copy_to_project`'s mapping. **Then**: delete the route, `CopyCueRequest` /
+`CopyCueResponse` and their tests (`CueRoutesTest`, `CueLayerSourceInvariantTest`, the copy step in
+`CueSpeedMastersTest`), and check the replacement reports every unmapped speed master as
+`copy_to_project` does. If R1.6 slips and the route is wanted sooner, fix both gaps instead: map a
+layer's Look and palette by name and add an `unresolved` list to the response.
 
 ## Completed
 

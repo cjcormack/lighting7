@@ -46,7 +46,8 @@ export function CueTab({ cue, projectId, locked, idBase }: { cue: Cue; projectId
   )
   const triggers = cue.triggers
   const writeSpeedMasters = useCallback(
-    (next: CueSpeedMaster[]) => patchCue({ projectId, cueId: cue.id, speedMasters: next }).unwrap(),
+    async (next: CueSpeedMaster[]) =>
+      (await patchCue({ projectId, cueId: cue.id, speedMasters: next }).unwrap()).speedMasters ?? next,
     [cue.id, patchCue, projectId],
   )
 

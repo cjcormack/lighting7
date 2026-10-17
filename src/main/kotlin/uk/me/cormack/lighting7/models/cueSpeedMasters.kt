@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.fx.MasterClock
 import java.util.UUID
@@ -30,36 +31,55 @@ data class CueSpeedMasterDto(
     val bpm: Double,
 )
 
-private val KEYS = setOf("speedMasterUuid", "bpm")
+private val REST_KEYS = setOf("speedMasterUuid", "bpm")
+private val TOOL_KEYS = setOf("speedMasterUuid", "masterIndex", "bpm")
+
+/** One of a project's masters as [parseCueSpeedMasters] checks a list against it. */
+data class SpeedMasterRef(val uuid: String, val index: Int, val name: String)
 
 /**
  * A whole list in the wire shape `[{speedMasterUuid, bpm}]`, checked against [masters] (the
  * project's), every problem at once. A uuid must name one of them, or one of [kept] — the uuids the
  * cue already stores, so a list that still names a master deleted under it can be re-saved and the
  * dead row removed. [bpm] is 20–300, a master's range, and a master may be named once. [where]
- * prefixes every message. Must run inside a transaction.
+ * prefixes every message. With [byIndex] (the MCP tools' shape) a row may name its master by
+ * `masterIndex` instead — 1 for Master 1 — which a tool building a project that is not current can
+ * know, where its uuids it cannot.
  */
 fun parseCueSpeedMasters(
     items: List<JsonElement>,
-    masters: List<DaoSpeedMaster>,
+    masters: List<SpeedMasterRef>,
     kept: Collection<String>,
     where: String,
     problems: MutableList<String>,
+    byIndex: Boolean = false,
 ): List<CueSpeedMasterDto> {
-    val byUuid = masters.associateBy { it.uuid.toString() }
+    val byUuid = masters.associateBy { it.uuid }
+    val indexed = masters.associateBy { it.index }
     val known = kept.toSet()
+    val keys = if (byIndex) TOOL_KEYS else REST_KEYS
     val out = mutableListOf<CueSpeedMasterDto>()
     val seen = mutableSetOf<String>()
     items.forEachIndexed { i, raw ->
         val at = "$where[$i]"
         val obj = raw as? JsonObject ?: run { problems += "$at must be an object"; return@forEachIndexed }
         for (key in obj.keys) {
-            if (key !in KEYS) problems += "$at: unknown field '$key' (known: ${KEYS.sorted().joinToString()})"
+            if (key !in keys) problems += "$at: unknown field '$key' (known: ${keys.sorted().joinToString()})"
         }
         val before = problems.size
         val ref = (obj["speedMasterUuid"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull?.trim()
+        val indexRaw = obj["masterIndex"]?.takeIf { byIndex && it !is JsonNull }
         val uuid = when {
-            ref.isNullOrEmpty() -> { problems += "$at.speedMasterUuid is required: a speed master's uuid"; null }
+            indexRaw != null && !ref.isNullOrEmpty() -> { problems += "$at: name the master by speedMasterUuid or masterIndex, not both"; null }
+            indexRaw != null -> {
+                val index = (indexRaw as? JsonPrimitive)?.takeIf { !it.isString }?.intOrNull
+                index?.let { indexed[it] }?.uuid
+                    ?: run { problems += "$at.masterIndex names no speed master in this project (it has ${masters.joinToString { "${it.index}" }})"; null }
+            }
+            ref.isNullOrEmpty() -> {
+                problems += if (byIndex) "$at needs a master: masterIndex (1 for Master 1) or speedMasterUuid" else "$at.speedMasterUuid is required: a speed master's uuid"
+                null
+            }
             runCatching { UUID.fromString(ref) }.isFailure -> { problems += "$at.speedMasterUuid '$ref' is not a uuid"; null }
             else -> UUID.fromString(ref).toString().takeIf { it in byUuid || it in known }
                 ?: run { problems += "$at.speedMasterUuid names no speed master in this project"; null }
@@ -78,6 +98,10 @@ fun parseCueSpeedMasters(
     }
     return out
 }
+
+/** [project]'s masters as [parseCueSpeedMasters] checks a list against them, by index. Must run inside a transaction. */
+fun speedMasterRefsOf(project: DaoProject): List<SpeedMasterRef> =
+    speedMastersOf(project).map { SpeedMasterRef(it.uuid.toString(), it.masterIndex, it.name) }
 
 /** [project]'s masters, as [parseCueSpeedMasters] checks a list against them. Must run inside a transaction. */
 fun speedMastersOf(project: DaoProject): List<DaoSpeedMaster> =

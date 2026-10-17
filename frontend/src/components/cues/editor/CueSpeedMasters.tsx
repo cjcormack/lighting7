@@ -30,9 +30,9 @@ function skipReason(master: SpeedMaster | undefined, byUuid: Map<string, SpeedMa
  * The Cue tab's **Speed masters** (venue-visit plan S16, D20): the masters this cue sets on every GO
  * into it and every press of it, each a master and a BPM. Every gesture saves the **whole list**
  * through the cue's PATCH; the rows are a draft held here, so a refetch landing while a save is in
- * flight, or while a BPM is being typed, cannot put an older list back under the operator. A refusal
- * is toasted by the error middleware and the rows go back to what the desk holds. Locked, the tab
- * reads.
+ * flight cannot put an older list back under the operator, and the last save's answer is what they
+ * settle on. A refusal is toasted by the error middleware and the rows go back to what the desk
+ * holds. Locked, the tab reads.
  */
 export function CueSpeedMasters({
   projectId,
@@ -45,7 +45,7 @@ export function CueSpeedMasters({
   speedMasters: readonly CueSpeedMaster[]
   locked: boolean
   idBase: string
-  onSave: (next: CueSpeedMaster[]) => Promise<unknown>
+  onSave: (next: CueSpeedMaster[]) => Promise<CueSpeedMaster[]>
 }) {
   const { data: masters } = useSpeedMasterListQuery({ projectId })
   const byUuid = useMemo(() => new Map((masters ?? []).map((m) => [m.uuid, m])), [masters])
@@ -53,9 +53,8 @@ export function CueSpeedMasters({
 
   const [rows, setRows] = useState<CueSpeedMaster[]>(() => [...speedMasters])
   const pending = useRef(0)
-  const editingBpm = useRef(false)
   useEffect(() => {
-    if (pending.current > 0 || editingBpm.current) return
+    if (pending.current > 0) return
     setRows([...speedMasters])
   }, [speedMasters])
 
@@ -63,11 +62,16 @@ export function CueSpeedMasters({
     (next: CueSpeedMaster[]) => {
       setRows(next)
       pending.current++
-      onSave(next)
-        .catch(() => setRows([...speedMasters]))
-        .finally(() => {
+      onSave(next).then(
+        (saved) => {
           pending.current--
-        })
+          if (pending.current === 0) setRows([...saved])
+        },
+        () => {
+          pending.current--
+          setRows([...speedMasters])
+        },
+      )
     },
     [onSave, speedMasters],
   )
@@ -93,7 +97,9 @@ export function CueSpeedMasters({
   }
 
   const used = new Set(rows.map((r) => r.speedMasterUuid))
-  const firstFree = sorted.find((m) => !used.has(m.uuid))
+  // A follower is skipped on GO, so one is offered only when nothing else is free.
+  const free = sorted.filter((m) => !used.has(m.uuid))
+  const firstFree = free.find((m) => m.followNum == null) ?? free[0]
   const add = () => {
     if (firstFree == null) return
     save([...rows, { speedMasterUuid: firstFree.uuid, bpm: clampBpm(Math.round(firstFree.bpm)) }])
@@ -157,9 +163,6 @@ export function CueSpeedMasters({
                     bpm={row.bpm}
                     label={`${masterLabel(master)} BPM`}
                     onCommit={(bpm) => update(index, { bpm })}
-                    onEditing={(editing) => {
-                      editingBpm.current = editing
-                    }}
                   />
                   <Button
                     type="button"
@@ -200,13 +203,11 @@ function BpmField({
   bpm,
   label,
   onCommit,
-  onEditing,
 }: {
   id: string
   bpm: number
   label: string
   onCommit: (bpm: number) => void
-  onEditing: (editing: boolean) => void
 }) {
   const [text, setText] = useState(formatBpm(bpm))
   const focused = useRef(false)
@@ -236,12 +237,10 @@ function BpmField({
         className="h-8 pr-9 font-mono text-xs [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         onFocus={() => {
           focused.current = true
-          onEditing(true)
         }}
         onChange={(e) => setText(e.target.value)}
         onBlur={() => {
           focused.current = false
-          onEditing(false)
           commit()
           setText(formatBpm(bpm))
         }}

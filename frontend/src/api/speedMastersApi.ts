@@ -98,6 +98,8 @@ export interface SpeedMasterInUseResponse {
   /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
   cueLayerCount: number
   cueIds: number[]
+  /** Cues that set this master's tempo on GO. Optional because a desk that predates it sends none. */
+  cueTempoCount?: number
   /**
    * The masters that follow this one, by name — a reference like any other (they are counted in
    * `referenceCount`), and the one an operator can act on directly: "unlink Movement, then delete".
