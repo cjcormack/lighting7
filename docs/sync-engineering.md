@@ -247,7 +247,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 34`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 35`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -306,6 +306,20 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 35 — speed masters on a cue
+
+Venue-visit plan S16 (D20; `docs/cues-engineering.md` §"Speed masters on a cue"): `CueJson` gains
+`speedMasters` ([`CueSpeedMasterJson`]: `speedMasterUuid`, `bpm`), the masters the cue sets on every
+GO into it, in order. Empty is omitted, so a show whose cues set no tempo exports byte-for-byte as at
+v34 (only `formatVersion.json` says 35). The master is named by uuid, so `ExportUuidRemapper`
+re-points it on a clone with no change there. `SUPPORTED_FORMAT_VERSION = 35`;
+`MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since a missing list sets nothing. The writer's number
+moves by the sharp-edge rule: a v34 reader would import every cue without its tempos and its next
+wipe-then-export push would write them away for every peer. Imported as stored: a uuid the archive's
+masters lack is kept, and skipped at GO as a master deleted under the cue is. Stored as a JSON column
+on `cues` (`speed_masters`), not a table, so `SyncCoverageTest` gained no row. `RichProjectFixture`'s
+*open* cue sets master 1 and a follower.
 
 ### Version 34 — one effect over a selection
 

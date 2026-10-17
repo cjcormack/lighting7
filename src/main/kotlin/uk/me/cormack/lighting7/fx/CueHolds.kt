@@ -68,6 +68,9 @@ class CueHolds internal constructor(
     /** Called after every change, outside [lock]: the surfaces' cue-pad LEDs re-read [looseHeld]. */
     private val onChanged: () -> Unit,
 ) {
+    /** The bank a press sets the cue's speed masters on ([takeLooseCue]). */
+    internal val speedMasters: SpeedMasterBank get() = fxEngine.speedMasters
+
     /**
      * How an acquire's contribution arrives: at full now, or from nothing over the GO's fade — its
      * rows at weight 0 for the caller's crossfade to raise, its effects' envelopes on a ramp of
@@ -788,19 +791,23 @@ internal data class LoosePress(val cueName: String, val acquired: CueHolds.Acqui
 /**
  * Take a loose hold on cue [cueId] — every loose door's one path (`/cues/{id}/apply`, `apply_cue`, a
  * busk cue pad, `FireCue`, a reload's carry). Built as a GO builds it, with no entry: its events fire
- * under its name and its timers start (cue model plan §3.4). Null when the cue does not exist; the
- * caller has already checked it is the current project's.
+ * under its name, its timers start (cue model plan §3.4) and it sets its speed masters. Null when the
+ * cue does not exist; the caller has already checked it is the current project's.
  */
 internal fun CueHolds.takeLooseCue(
     state: State,
     cueId: Int,
     fireEvents: Boolean = true,
     scope: CoroutineScope = kotlinx.coroutines.GlobalScope,
+    setTempo: Boolean = true,
 ): LoosePress? {
     val data = org.jetbrains.exposed.v1.jdbc.transactions.transaction(state.database) {
         uk.me.cormack.lighting7.models.DaoCue.findById(cueId)?.let { buildCueGoData(it, null) }
     } ?: return null
-    return LoosePress(data.cueName, takeLoose(state, data, scope, fireEvents))
+    val press = LoosePress(data.cueName, takeLoose(state, data, scope, fireEvents))
+    // A press brings the cue on as a GO does, so it sets its masters as a GO does (S16); a reload does not.
+    if (setTempo) speedMasters.setCueTempos(data.cueLabel, data.goSpeedMasters)
+    return press
 }
 
 /**

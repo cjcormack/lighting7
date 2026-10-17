@@ -666,6 +666,19 @@ internal val cueLayerSchema = buildJsonObject {
     })
 }
 
+/** One speed master a cue sets on GO: the master by uuid, and its BPM. */
+internal val cueSpeedMasterItemSchema = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("speedMasterUuid", buildJsonObject { put("type", "string"); put("description", "The master, by uuid — get_current_state's speed_masters lists them.") })
+        put("bpm", buildJsonObject { put("type", "number"); put("description", "The tempo it is set to, 20–300 BPM.") })
+    })
+    put("required", buildJsonArray { add("speedMasterUuid"); add("bpm") })
+}
+
+internal const val CUE_SPEED_MASTERS_NOTE =
+    "Speed masters this cue sets as it comes on: on every GO into it (GO TO and GO BACK included, and when another stack already holds it) and every apply_cue or pad press, never on a reload. A tap or set_bpm afterwards wins until the next cue that sets that master; it never tracks. A master that follows another is skipped at GO, as it refuses set_bpm."
+
 /** One cue event in the tools' shape: a fixture by key, its trigger, an offset from GO. */
 internal val cueEventItemSchema = buildJsonObject {
     put("type", "object")
@@ -708,6 +721,11 @@ internal val createCueTool = ToolDef(
                 put("type", "array")
                 put("items", cueEventItemSchema)
                 put("description", CUE_EVENTS_NOTE)
+            })
+            put("speedMasters", buildJsonObject {
+                put("type", "array")
+                put("items", cueSpeedMasterItemSchema)
+                put("description", CUE_SPEED_MASTERS_NOTE)
             })
         })
         put("required", buildJsonArray { add("name") })

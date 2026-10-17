@@ -65,8 +65,7 @@ interface CueDetailContentProps {
  *
  * **The read-out the phone card and the Prompt Book draw**: `RunMobileCueCard` and
  * `PromptBookCueCard` reach it through `CueCardBody`. The desktop card and the cue sheet's pane mount
- * `CueEditor` instead (show-cue-editing plan §4.2), whose Looks and FX tabs draw this file's
- * `CueLayersReadout` and `CueEffectsReadout`, so a layer or an effect reads the same in both.
+ * `CueEditor` instead (show-cue-editing plan §4.2), whose Looks and FX tabs edit what this reads.
  */
 export const CueDetailContent = memo(function CueDetailContent({
   cue,
@@ -188,9 +187,8 @@ export const CueDetailContent = memo(function CueDetailContent({
 
 /**
  * A cue's layer stack, read-only — the same `LayerRow` the programmer draws, top of the array last.
- * The read surface's Layers section and the cue editor's Looks tab both draw it.
  */
-export function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projectId: number; enabled?: boolean }) {
+function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projectId: number; enabled?: boolean }) {
   const { data: looks } = useLookListQuery({ projectId }, { skip: !enabled })
   // The template library, for the same reason the Look library is here: a layer row says what it
   // applies, and since fx-templates a template's badge also says *which kind* it holds. One cached
@@ -224,8 +222,8 @@ export function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue;
   )
 }
 
-/** A cue's own effects, read-only, each with its fire timing. The Effects section and the FX tab. */
-export function CueEffectsReadout({ cue, enabled = true }: { cue: Cue; enabled?: boolean }) {
+/** A cue's own effects, read-only, each with its fire timing. */
+function CueEffectsReadout({ cue, enabled = true }: { cue: Cue; enabled?: boolean }) {
   const { data: library } = useEffectLibraryQuery(undefined, { skip: !enabled })
   const adHocEffects = cue.adHocEffects
   if (adHocEffects.length === 0) return <p className="text-[11px] text-muted-foreground">None.</p>

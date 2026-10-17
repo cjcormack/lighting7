@@ -145,6 +145,7 @@ import { store } from '@/store'
 import { lightingApi } from '@/api/lightingApi'
 import { CueRowStoreProvider } from './CueRowStore'
 import { CueValuesGrid } from './CueValuesGrid'
+import { CueValuesViewProvider } from './CueValuesView'
 import { useCellWriters } from '@/components/fixtures-list/useCellWriters'
 import { useMarqueeSpreadPlans } from '@/components/fixtures-list/SpreadPopover'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
@@ -215,10 +216,12 @@ function Editor({
   const ref = useRef<HTMLDivElement | null>(null)
   return (
     <CueRowStoreProvider projectId={1} cueId={cueId} readOnly={readOnly}>
-      <div ref={ref} data-key-region data-testid={`editor-${cueId}`} style={{ height: 600 }}>
-        <CueValuesGrid region={ref} readOnlyReason={readOnly ? 'Locked' : null} onRequestUnlock={onRequestUnlock} />
-        {children}
-      </div>
+      <CueValuesViewProvider>
+        <div ref={ref} data-key-region data-testid={`editor-${cueId}`} style={{ height: 600 }}>
+          <CueValuesGrid region={ref} readOnlyReason={readOnly ? 'Locked' : null} onRequestUnlock={onRequestUnlock} />
+          {children}
+        </div>
+      </CueValuesViewProvider>
     </CueRowStoreProvider>
   )
 }

@@ -395,6 +395,7 @@ internal fun DaoCue.toCueDetails(
         scenery = cueSceneryOf(this.id).map { it.toDto() },
         trackedScenery = entry?.let(::trackedSceneryAt).orEmpty(),
         events = cueEventsOf(this.id).map { it.toDto() },
+        speedMasters = this.speedMasters,
         entries = slots.map { it.toPlaceDto() },
     )
 }
@@ -474,6 +475,25 @@ internal fun resolveLayerSourceRecords(source: LayerSource): ResolvedLayerSource
  */
 internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
     look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
+
+/**
+ * A cue write's speed-master list, checked against [project]'s masters and the ones cue [cueId]
+ * already names (null for a new cue) — every problem in one failure, its message the 400's.
+ */
+internal fun checkCueSpeedMasters(
+    state: State,
+    project: DaoProject,
+    cueId: Int?,
+    items: List<JsonElement>,
+): Result<List<CueSpeedMasterDto>> {
+    if (items.isEmpty()) return Result.success(emptyList())
+    val problems = mutableListOf<String>()
+    val parsed = transaction(state.database) {
+        val kept = cueId?.let { DaoCue.findById(it) }?.takeIf { it.project.id == project.id }?.speedMasters.orEmpty()
+        parseCueSpeedMasters(items, speedMastersOf(project), kept.map { it.speedMasterUuid }, "speedMasters", problems)
+    }
+    return if (problems.isEmpty()) Result.success(parsed) else Result.failure(IllegalArgumentException(problems.joinToString("; ")))
+}
 
 /**
  * Reject an unrecognised `blendMode` / `distribution` / `elementMode` / `elementFilter` before it
@@ -935,9 +955,9 @@ internal fun setEntryNumber(entry: DaoCueStackEntry, incoming: String?) {
 
 /**
  * A new cue in [targetProject] holding everything [source] holds — its fade, notes, layers, own
- * rows, effects and script hooks, and, within one project, its scenery and events — named [name]
- * and in no stack. The duplicate and the cross-project copy both make one. Must run inside a
- * transaction.
+ * rows, effects, script hooks and speed masters (across projects each master by its index), and,
+ * within one project, its scenery and events — named [name] and in no stack. The duplicate and the
+ * cross-project copy both make one. Must run inside a transaction.
  *
  * **Both referent columns** of a layer are copied, not just `look`: copying `look` alone once
  * landed every template layer naming neither record, a row that breaks `DaoCueLayers`'
@@ -951,6 +971,9 @@ internal fun copyCueRecord(source: DaoCue, targetProject: DaoProject, name: Stri
         fadeCurve = source.fadeCurve
         notes = source.notes
         stomp = source.stomp
+        speedMasters = mapCueSpeedMasters(source.speedMasters, source.project, targetProject) { index, _ ->
+            logger.info("Copy of cue '{}': project {} has no speed master {}; its tempo is left out", source.name, targetProject.id.value, index ?: "(deleted)")
+        }
     }
     for (layer in source.layers) {
         DaoCueLayer.new {

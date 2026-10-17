@@ -10,7 +10,6 @@ import { SpreadPopover, type SpreadColumn } from '@/components/fixtures-list/Spr
 import { COLUMN_DEFS, cellFamilies, resolutionPropertyNames, resolveCell } from '@/components/fixtures-list/columns'
 import {
   batchForTargets,
-  buildRows,
   clampCommitToResolution,
   commitMatchesResolution,
   expandSelectionToTargets,
@@ -28,28 +27,22 @@ import {
 import { buildCueRowCells } from '@/components/fixtures-list/useRowValues'
 import { applyPlannedWrite, cueCellWriters, useCellWriters } from '@/components/fixtures-list/useCellWriters'
 import { EditorContextProvider } from '@/components/programmer/EditorContext'
-import { NoProgrammerScope } from '@/components/programmer/ProgrammerScope'
-import { NoLookRowStore } from '@/components/programmer/LookRowStore'
-import { NoFocusedTemplateLayer } from '@/components/programmer/FocusedTemplateLayer'
-import { RailTabClaimContext } from '@/components/programmer/railTab'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { orderedSelectedCells, type CellActionCopy, type CellKeyboardPermission } from '@/components/sheet/cellEntry'
-import { arrowStepTarget, listSelectionIntentFor, type ListSelectIntent } from '@/components/sheet/listSelectionModel'
-import { stepCellSelection, useCellSelection, type CellSelection } from '@/components/sheet/useCellSelection'
-import { useLocalListSelection } from '@/components/sheet/useLocalListSelection'
+import { arrowStepTarget, listSelectionIntentFor } from '@/components/sheet/listSelectionModel'
+import { stepCellSelection, type CellSelection } from '@/components/sheet/useCellSelection'
 import { useCellEditorRequests } from '@/components/sheet/useCellEditorRequests'
 import { useSheetKeyboard, type SheetCellKeys, type SheetKeyRefusal, type SheetRowKeys } from '@/components/sheet/useSheetKeyboard'
 import { useCueActionDialogs } from '@/components/runner/cueActionDialogs'
 import { useActiveKeyRegion } from '@/components/sheet/keyRegion'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
-import { useFixtureLookup } from '@/hooks/useFixtureLookup'
-import { useVisibleFixtureListQuery } from '@/store/fixtures'
-import { useGroupListQuery } from '@/store/groups'
 import type { CellRef } from '@/components/sheet/cellSelectionModel'
 import type { ColumnKey } from '@/components/fixtures-list/columns'
 import type { CueTarget } from '@/api/cuesApi'
 import { useCueRowStore, type CueRowStoreValue } from './CueRowStore'
+import { useCueValuesView, type CueValuesView } from './CueValuesView'
+import { CueEditorIsolation } from './editorIsolation'
 
 type CueCellRef = CellRef<ColumnKey>
 
@@ -70,7 +63,8 @@ const ALL_COLUMNS: readonly ColumnKey[] = COLUMN_DEFS.map((d) => d.key)
  * - **It sends nothing** (P2). The grid mounts none of the surfaces that reach the rig or the desk —
  *   no desk-selection bridge, no Release, Locate or Highlight, no palette strip, no effect sweep on
  *   ⌫, no live writer: its `EditorContext` is the `cue` arm, whose writers land in the store and
- *   have no live fallback, and its selection is this component's own state.
+ *   have no live fallback, and its rows and selection are the editor's (`CueValuesView`), never the
+ *   desk's. It draws nothing outside a `CueRowStoreProvider` and a `CueValuesViewProvider`.
  * - **Keys are the region's** (§4.5): the editor root is a key region, and this grid's listener
  *   hears a key only while that region holds focus or took the last press. A grid that is not the
  *   region draws its selection dimmed.
@@ -90,90 +84,50 @@ export function CueValuesGrid({
   onRequestUnlock?: () => void
 }) {
   const store = useCueRowStore()
-  if (store == null) return null
-  // The editor can open over the programmer — its FX band's *on Q12* opens it in a sheet portalled
-  // from there, and React context flows through a portal — so the programmer's scope, focused
-  // layers and rail-tab claim are cleared here: none of them is this grid's, and each would dim its
-  // columns, refuse its Spread or send its colour double click to the rail (P2).
+  const view = useCueValuesView()
+  if (store == null || view == null) return null
+  // The programmer's scope, focused layers and rail-tab claim would dim this grid's columns, refuse
+  // its Spread or send its colour double click to the rail (P2): `CueEditorIsolation` clears them.
   return (
-    <NoProgrammerScope>
-      <NoLookRowStore>
-        <NoFocusedTemplateLayer>
-          <RailTabClaimContext.Provider value={null}>
-            <EditorContextProvider value={{ kind: 'cue', cueId: store.cueId }}>
-              <CueValuesGridBody store={store} region={region} readOnlyReason={readOnlyReason} onRequestUnlock={onRequestUnlock} />
-            </EditorContextProvider>
-          </RailTabClaimContext.Provider>
-        </NoFocusedTemplateLayer>
-      </NoLookRowStore>
-    </NoProgrammerScope>
+    <CueEditorIsolation>
+      <EditorContextProvider value={{ kind: 'cue', cueId: store.cueId }}>
+        <CueValuesGridBody store={store} view={view} region={region} readOnlyReason={readOnlyReason} onRequestUnlock={onRequestUnlock} />
+      </EditorContextProvider>
+    </CueEditorIsolation>
   )
 }
 
 function CueValuesGridBody({
   store,
+  view,
   region,
   readOnlyReason,
   onRequestUnlock,
 }: {
   store: CueRowStoreValue
+  view: CueValuesView
   region: RefObject<HTMLElement | null>
   readOnlyReason: string | null
   onRequestUnlock?: () => void
 }) {
-  const { fixtures: allFixtures } = useFixtureLookup()
-  const { data: visibleFixtures } = useVisibleFixtureListQuery()
-  const { data: groups } = useGroupListQuery()
-  const [wholeRig, setWholeRig] = useState(false)
-  const [ownOnly, setOwnOnly] = useState(false)
-  const [added, setAdded] = useState<ReadonlySet<string>>(new Set())
-  const [addedGroups, setAddedGroups] = useState<ReadonlySet<string>>(new Set())
-  const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set())
-  const [expandToggled, setExpandToggled] = useState<ReadonlySet<string>>(new Set())
+  const {
+    rows,
+    wholeRig,
+    setWholeRig,
+    ownOnly,
+    setOwnOnly,
+    addTarget,
+    toggleGroupExpanded,
+    toggleFixtureExpanded,
+    rowSelection,
+    cellSelection,
+    selectCells,
+    selectRow,
+    setRows,
+    clearByLadder,
+    rowById,
+  } = view
   const [pickerOpen, setPickerOpen] = useState(false)
-
-  // ── The rows (D14) ─────────────────────────────────────────────────────────────────────────────
-  const rows = useMemo<Row[]>(() => {
-    const fixtures = allFixtures ?? []
-    const visible = new Set((visibleFixtures ?? []).map((f) => f.key))
-    const holds = (key: string) => store.heads.has(key)
-    const ownHolds = (key: string) => store.ownTargets.has(key)
-    const elementKeysOf = (f: (typeof fixtures)[number]) => (f.elements ?? []).map((e) => e.key)
-    const held = (f: (typeof fixtures)[number]) => holds(f.key) || elementKeysOf(f).some(holds)
-    const ownHeld = (f: (typeof fixtures)[number]) => ownHolds(f.key) || elementKeysOf(f).some(ownHolds)
-    const shown = fixtures.filter((f) =>
-      ownOnly ? ownHeld(f) : held(f) || added.has(f.key) || (wholeRig && visible.has(f.key)),
-    )
-    // Cells under a multi-head fixture where the cue holds them; the operator's toggle flips that.
-    const expandedFixtures = new Set<string>()
-    for (const f of shown) {
-      const auto = elementKeysOf(f).some(holds)
-      if (auto !== expandToggled.has(f.key)) expandedFixtures.add(f.key)
-    }
-    const groupNames = new Set([...store.ownGroups, ...(ownOnly ? [] : addedGroups)])
-    const groupSummaries = (groups ?? []).filter((g) => groupNames.has(g.name))
-    // A group row's members are the ones the rig shows — never an infrastructure fixture.
-    const groupRows = buildRows({
-      fixtures: visibleFixtures ?? [],
-      groups: groupSummaries,
-      expandedGroups,
-      expandedFixtures,
-      textFilter: '',
-    }).filter((row) => row.kind === 'group' || (row.kind !== 'divider' && row.parentGroup !== undefined))
-    const fixtureRows = buildRows({
-      fixtures: shown,
-      groups: [],
-      expandedGroups: new Set(),
-      expandedFixtures,
-      textFilter: '',
-      groupByGroups: false,
-    })
-    if (groupRows.length > 0 && fixtureRows.length > 0) {
-      return [...groupRows, { kind: 'divider', id: 'divider:cue-fixtures', label: 'Fixtures' }, ...fixtureRows]
-    }
-    return [...groupRows, ...fixtureRows]
-  }, [allFixtures, visibleFixtures, groups, store.heads, store.ownTargets, store.ownGroups, ownOnly, wholeRig, added, addedGroups, expandedGroups, expandToggled])
-
   const visibleColumns = useMemo(() => {
     const taken = new Set<ColumnKey>()
     for (const row of rows) {
@@ -182,51 +136,12 @@ function CueValuesGridBody({
     }
     return ALL_COLUMNS.filter((col) => taken.has(col))
   }, [rows])
-
-  // ── One selection, two shapes — local state, never the desk's (P2) ─────────────────────────────
   const selectableOrder = useMemo(() => rows.filter((row) => row.kind !== 'divider').map((row) => row.id), [rows])
-  const visibleRowIds = useMemo(() => new Set(rows.map((row) => row.id)), [rows])
-  const rowSelection = useLocalListSelection(selectableOrder)
-  const cellSelection = useCellSelection<ColumnKey>(visibleRowIds)
   const { count: cellCount, clear: clearCells, isSelected: isCellSelected } = cellSelection
   const rowCountRef = useRef(rowSelection.count)
   rowCountRef.current = rowSelection.count
-  const { select: selectRowRaw, selectAll: selectAllRaw, setSelection: setRowsRaw, clear: clearRows } = rowSelection
-  const selectCells = useCallback(
-    (hits: readonly CueCellRef[], intent: ListSelectIntent) => {
-      if (hits.length > 0 && rowCountRef.current > 0) clearRows()
-      cellSelection.select(hits, intent)
-    },
-    [cellSelection, clearRows],
-  )
+  const { selectAll: selectAllRaw, clear: clearRows } = rowSelection
   const tableCellSelection = useMemo<CellSelection<ColumnKey>>(() => ({ ...cellSelection, select: selectCells }), [cellSelection, selectCells])
-  const selectRow = useCallback(
-    (id: RowId, intent?: ListSelectIntent) => {
-      clearCells()
-      selectRowRaw(id, intent)
-    },
-    [clearCells, selectRowRaw],
-  )
-  const setRows = useCallback(
-    (ids: readonly RowId[]) => {
-      clearCells()
-      setRowsRaw(ids)
-    },
-    [clearCells, setRowsRaw],
-  )
-  /** Escape's ladder — cells, then rows — answering whether it cleared anything. */
-  const clearByLadder = useCallback(() => {
-    if (cellCount > 0) {
-      clearCells()
-      return true
-    }
-    if (rowSelection.count > 0) {
-      clearRows()
-      return true
-    }
-    return false
-  }, [cellCount, clearCells, clearRows, rowSelection.count])
-  const rowById = useMemo(() => new Map(rows.map((row) => [row.id, row])), [rows])
 
   // ── Writes ─────────────────────────────────────────────────────────────────────────────────────
   const writers = useCellWriters()
@@ -422,27 +337,26 @@ function CueValuesGridBody({
 
   // ── Rows' gestures ─────────────────────────────────────────────────────────────────────────────
   const onRowClick = useCallback((id: RowId, e: React.MouseEvent) => selectRow(id, listSelectionIntentFor(e)), [selectRow])
-  const onToggleExpand = useCallback((row: GroupRow | FixtureRow) => {
-    const toggle = (prev: ReadonlySet<string>, key: string) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    }
-    if (row.kind === 'group') setExpandedGroups((prev) => toggle(prev, row.name))
-    else setExpandToggled((prev) => toggle(prev, row.fixture.key))
-  }, [])
+  const onToggleExpand = useCallback(
+    (row: GroupRow | FixtureRow) => {
+      if (row.kind === 'group') toggleGroupExpanded(row.name)
+      else toggleFixtureExpanded(row.fixture.key)
+    },
+    [toggleGroupExpanded, toggleFixtureExpanded],
+  )
   const onBeginCellEdit = useCallback(
     (row: Row, col: ColumnKey) => {
       if (row.kind !== 'divider') selectCells([{ rowId: row.id, col }], 'replace')
     },
     [selectCells],
   )
-  const onAdd = useCallback((target: CueTarget) => {
-    if (target.type === 'group') setAddedGroups((prev) => new Set(prev).add(target.key))
-    else setAdded((prev) => new Set(prev).add(target.key))
-    setPickerOpen(false)
-  }, [])
+  const onAdd = useCallback(
+    (target: CueTarget) => {
+      addTarget(target)
+      setPickerOpen(false)
+    },
+    [addTarget],
+  )
 
   const setRef = useRef<HTMLButtonElement | null>(null)
   const [marqueeDragging, setMarqueeDragging] = useState(false)

@@ -64,8 +64,8 @@ export function LegacyCueStacksRedirect() {
 }
 
 /**
- * Back-compat for the removed FX Cues view. `/cues`, `/cues/all`, `/cues/standalone` →
- * `/show`; `/cues/stacks/:stackId` → `/show/stacks/:stackId`.
+ * Back-compat for the removed FX Cues view. `/cues/all`, `/cues/standalone` → `/show`;
+ * `/cues/stacks/:stackId` → `/show/stacks/:stackId`.
  */
 export function CuesLegacyRedirect() {
   const { projectId, stackId } = useParams()

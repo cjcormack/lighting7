@@ -74,6 +74,13 @@ carries no tempo.
 Masters are persisted per project (`speed_masters` table, portable in sync — the stored bpm
 is the *starting* tempo; live changes write through with a 750 ms trailing debounce).
 
+**A cue can set masters' tempo** (venue-visit plan S16, D20): a cue's `speedMasters` list is written
+to the bank as `MANUAL` tempo writes on every GO into one of its entries and every loose press of it,
+never on a reload's re-GO (`fx/CueTempo.kt`, `docs/cues-engineering.md` §"Speed masters on a cue").
+A tap or a typed tempo afterwards wins until the next cue that sets that master; a follower is
+skipped, as it refuses every tempo write. A master a cue names is a use for the delete guard
+(`cueTempoCount`).
+
 ### Usage routing and follow (time signature)
 
 Two nullable per-master settings, added for the busk view (see
@@ -2025,6 +2032,20 @@ above a static value regardless of layer order. See `lighting-composition-model.
 
 Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_effects`
 table. At apply time these are converted directly to `FxInstance`s tagged with the cue id.
+
+**A cue effect is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
+edits the stored row, never an instance. Its fields are the live editor's (`FxEffectFields`) over a
+draft of the stored effect (`cueEffectDraftOf` / `withCueEffectDraft` in the frontend's
+`fxEditorModel.ts`, so Seconds, size, direction, runs and the spread's shape round-trip as a
+palette's effect does), and every change is the cue's whole `adHocEffects` list on its `PATCH`.
+*+ Effect* runs the picker in draft: a tap stores the effect with the picker's starting spec —
+`startingSpec`, the step effects' seeded lists, D16's one bar on the usage master — on the editor's
+own selection (one row as itself, several as one `selection` effect, its key the list's canonical
+JSON), and creates no instance; a second tap swaps the stored type. Nothing reaches the stage until
+the cue next comes on — its first hold spawns what the row then says — because a cue PATCH
+republishes nothing (`docs/cue-stacks-engineering.md`; *Update stage* is that plan's session 7). A
+reorder restates every `sortOrder`, and `writeCueChildren` keeps each effect's uuid by its key
+(target, property, type), which is how a later *Update stage* can tell an edited effect from a new one.
 
 ### Look Delete Blocking
 

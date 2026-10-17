@@ -607,6 +607,48 @@ export function withTemplateDraft<E extends TemplateEffectFields>(
   }
 }
 
+// ─── A cue's stored effect (show-cue-editing plan §4.1, D17) ──────────────────────────────────
+
+/**
+ * The fields of a cue's ad-hoc effect the draft speaks — `CueAdHocEffect`'s, structurally: a
+ * template's, plus the three a target answers (step timing, element mode, the head filter).
+ */
+export interface CueEffectFields extends TemplateEffectFields {
+  phaseOffset: number
+  stepTiming?: boolean | null
+  elementMode?: string | null
+  elementFilter?: string | null
+}
+
+/**
+ * A cue's stored effect as the editor's draft: [templateDraftOf]'s reading — Seconds, size,
+ * direction, runs and the spread's shape as stored — with the target's three fields read too, each
+ * absent at its default.
+ */
+export function cueEffectDraftOf(effect: CueEffectFields, timingSource?: string | null): FxDraft {
+  return {
+    ...templateDraftOf(effect, timingSource),
+    stepTiming: effect.stepTiming ?? false,
+    elementMode: effect.elementMode ?? 'PER_FIXTURE',
+    elementFilter: effect.elementFilter ?? 'ALL',
+  }
+}
+
+/**
+ * [effect] with the draft written back, every field a cue stores: [withTemplateDraft]'s, and the
+ * target's three on its rule — said where the draft moved off the default or the effect already
+ * said it, so an effect that never named an element mode saves as it was stored. Everything else on
+ * the effect (its target, its fire timing, its uuid) is kept.
+ */
+export function withCueEffectDraft<E extends CueEffectFields>(effect: E, draft: FxDraft): E {
+  return {
+    ...withTemplateDraft(effect, draft),
+    ...(draft.stepTiming || effect.stepTiming != null ? { stepTiming: draft.stepTiming } : {}),
+    ...(draft.elementMode !== 'PER_FIXTURE' || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
+    ...(draft.elementFilter !== 'ALL' || effect.elementFilter != null ? { elementFilter: draft.elementFilter } : {}),
+  }
+}
+
 /**
  * **A cue's effect is read-only in the tray** (Fx board, *Open*; fixture-fx-sheets session 5): it
  * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put

@@ -461,7 +461,7 @@ says palette). All of them have merged.
 - **Docs:** the frontend CLAUDE.md (a section, "The cue editor"), `lighting-composition-model.md`
   (own rows edited in place).
 
-### Session 6 — the Looks and FX tables (frontend)
+### Session 6 — the Looks and FX tables (frontend) — done, `639fe8c`
 
 - §4.1's Looks and FX: the cue host for `LookStack` with `onSetTargets`, the add-layer pickers,
   *Open Look*; the FX table, `cueEffectDraftOf` / `withCueEffectDraft`, the cue timing fields, the

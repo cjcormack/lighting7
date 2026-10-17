@@ -159,7 +159,7 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/{projectId}/cues` | List all cues for a project, each with its `entries` |
+| GET | `/{projectId}/cues` | List all cues for a project, by name, each with its `entries` and `usedBy` — `{pads, slots, bindings}`, what else names it, the Cues table's *Used by* (cue model plan session 5). One cue's read leaves `usedBy` null |
 | POST | `/{projectId}/cues` | Create a new cue (current project only); without `cueStackId` it is loose |
 | GET | `/{projectId}/cues/{cueId}` | Get cue details; `?entryId=` picks the place the place fields describe |
 | PUT | `/{projectId}/cues/{cueId}` | Update a cue's content (current project only); its number and follow are the entry's |
@@ -230,9 +230,10 @@ effect of removing an entry or deleting a stack.
 - **Several at once:** `POST /cues/delete {cueIds, force?, dryRun?}` answers `{deleted, uses}`; any
   cue in use without `force` is 409 `CUE_IN_USE` and nothing is deleted. `dryRun` deletes nothing and
   lists the uses — what a confirm shows.
-- **The Show view's confirm** is `CueDeleteDialog` (frontend `components/cues/CueDeleteDialog.tsx`,
-  show-cue-editing plan session 3): a dry run lists each cue's uses, one confirm for several, then
-  `POST /cues/delete` with `force`; it says that a binding stays and reports its cue missing.
+- **The confirm** is `CueDeleteDialog` (frontend `components/cues/CueDeleteDialog.tsx`,
+  show-cue-editing plan session 3), from the cue action set on the Show view and the Cues table: a
+  dry run lists each cue's uses, one confirm for several, then `POST /cues/delete` with `force`; it
+  says that a binding stays and reports its cue missing.
 - **A stack delete leaves its cues** (`DELETE /cue-stacks/{id}`): its entries, anchors and set go,
   and it answers `{looseCueIds, deletedCueIds}`. `?deleteLooseCues=true` (D17) deletes, as a forced
   delete would, the cues it left in no stack — and only those; a cue another stack still holds stays.
@@ -456,6 +457,44 @@ The MCP tools author them too — `create_cue` and `build_cue_stack` take `event
 (`[{fixture, trigger, offsetSeconds?}]`, the fixture by key or name) and `set_cue_events` replaces
 one cue's list. No tool arms or fires (`docs/mcp-engineering.md`).
 
+## Speed masters on a cue
+
+**A cue may set speed masters' tempo as it comes on** (venue-visit plan S16, D15, D20): a list of
+`{speedMasterUuid, bpm}` pairs, `CueDetails.speedMasters`, stored as a JSON column on the cue
+(`cues.speed_masters`, `models/cueSpeedMasters.kt`). It is the cue's, not its entries', so a shared
+cue sets the same tempo from every stack, and it never tracks: a later cue sets nothing an earlier
+one set. Unlike events it is state the cue **re-asserts**:
+
+- **Every GO into one of its entries sets it** — GO, GO TO, GO BACK, auto-advance and a re-fire, and
+  a GO into a cue another stack already holds live. The hook is `CueStackManager.activateEntry`,
+  which every one of those passes through, never the first-hold path where events fire
+  (`CueHolds.acquire`). `buildCueGoData` alone carries the list (`CueApplyData.goSpeedMasters`), as it
+  alone carries events, so a preview, a republish or a cook sets nothing.
+- **Every loose press sets it too** — a busk pad, a cue slot, `POST /cues/{id}/apply`, the AI's
+  `apply_cue`, MIDI `FireCue` and the hand — through `takeLooseCue`, since a press brings the cue on
+  as a GO does.
+- **A reload sets none.** `Show.resume` re-GOes each stack's live entry and re-presses each loose
+  hold with `setTempo = false` beside `fireEvents = false`: the flag is its own, because a GO BACK
+  fires no events and still sets tempo. So a tap since the cue went (D15: a tap wins until the next
+  cue that sets that master) survives a sync pull or a venue Update.
+- **A follower or a missing master is skipped, never fatal.** `fx/CueTempo.kt` writes each pair
+  through `SpeedMasterBank.setBpm` as a `MANUAL` write; one the bank refuses as a follower
+  (`SPEED_MASTER_FOLLOWER`) or does not know (deleted under the cue with `?force=true`, or an import
+  naming a master the archive lacked) is named in the log and passed over, and the GO goes on.
+
+The write is the cue's own: `POST /cues`, `PUT` and `PATCH /cues/{id}` take `speedMasters` as the
+whole list (a PATCH without it leaves it alone, a PUT without it clears it), every problem at once —
+a uuid naming no master of the project, a BPM outside 20–300, a master named twice. A uuid the cue
+already names is accepted even when its master has gone, so a list can be re-saved with the dead row
+still in it, or with it removed. A master a cue names counts as a use for the speed master's delete
+guard (`SpeedMasterUsage.cueTempos`, `cueTempoCount` on the 409), so deleting it is refused until
+`?force=true`. *Duplicate* and `POST /cues/{id}/copy` carry the list through `copyCueRecord`, and
+across projects each master is mapped by its index, as `copy_to_project`'s masters are — a pair whose
+index the target lacks is left out (logged; `copy_to_project` reports it under `unresolved`). The MCP
+tools `create_cue` and `build_cue_stack` take `speedMasters` in the same shape. It syncs embedded in
+`CueJson.speedMasters` on `formatVersion` 35 (`docs/sync-engineering.md` §"Version 35 — speed masters
+on a cue"). The cue editor's **Cue** tab edits it (`frontend/CLAUDE.md` §"The cue editor").
+
 ## WebSocket Notifications
 
 When cues are created, updated, or deleted, a `cueListChanged` message is broadcast to all connected WebSocket clients:
@@ -482,8 +521,13 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 
 ### UI Components
 
-Cues are authored in the **Show** view (`/projects/:projectId/show`), not in a route of their
-own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
+Cues are authored and run in the **Show** view (`/projects/:projectId/show`); every cue is listed
+once, loose ones included, in the **Cues table** (`/projects/:projectId/cues`, `routes/Cues.tsx`,
+cue model plan session 5). `components/cues/CueForm.tsx` is gone.
+
+- `src/routes/Cues.tsx` + `src/components/cues/CueLibrarySheet.tsx` — the Cues table, read off
+  `GET /cues` (each cue's entries and `usedBy`); its bar is the cue action set
+  (`components/runner/CueActions.tsx`), and a loose cue opens `CueEditor` in a right-hand sheet
 
 - `src/routes/ShowPage.tsx` — the show: an ordered list of stacks, drilling into
   `/show/stacks/:stackId?cue=:cueId`
@@ -495,10 +539,11 @@ own — `routes/Cues.tsx` and `components/cues/CueForm.tsx` are both gone.
 - `src/components/cues/CopyCueDialog.tsx` — Copy to another project
 
 ### Navigation
-- Cues nav item in `ProjectSwitcher.tsx` (visible for all projects)
-- The Show card on a show's home (`routes/ProjectHome.tsx`), counting its stacks and the project's
-  cues once each (`NavItem.homeCount`)
-- Routes in `App.tsx`: `/projects/:projectId/cues` and `/cues` redirect
+- The Cues row in `navigation.ts`, a Library row after Looks (hidden in a venue)
+- On a show's home (`routes/ProjectHome.tsx`) the Show card counts its stacks and the Cues card the
+  project's cues once each (`NavItem.homeCount`)
+- Routes in `App.tsx`: `/projects/:projectId/cues` is the Cues table and bare `/cues` resolves the
+  current project's (`CuesRedirect`)
 
 ## MCP tools
 

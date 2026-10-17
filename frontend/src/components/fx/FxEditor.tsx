@@ -5,19 +5,15 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
-import { groupMemberFixtures } from '@/lib/fxTargetProperties'
-import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useEffectLibraryQuery, useResetFxToTemplateMutation, type ActiveEffect } from '@/store/fixtureFx'
 import { useSaveTemplateMutation } from '@/store/templates'
 import type { TemplateSummary } from '@/api/templatesApi'
 import { useMaster1Uuid } from '@/store/speedMasters'
 import { useIsDeskConnected } from '@/store/status'
-import type { Fixture, SettingPropertyDescriptor } from '@/store/fixtures'
 import { EditorReadout } from '../editor/EditorReadout'
 import { EditorFooter } from '../editor/EditorFooter'
 import { useLivePush } from '../editor/useLivePush'
 import { findEffectEntry } from '../busking/buskingTypes'
-import { detectExtendedChannels } from './colourUtils'
 import { FxEffectFields } from './FxEffectFields'
 import { useSpawningTemplate } from './useSpawningTemplate'
 import { useToggleFxPause } from './useEffectControls'
@@ -28,14 +24,11 @@ import {
   withTemplateDraft,
   OPTIONAL_FIELDS,
   sameRequest,
-  selectionHeadCount,
-  spreadHeadCount,
   updateRequestOf,
   type FxDraft,
-  type FxScope,
   type OptionalField,
 } from './fxEditorModel'
-import { selectionFixtures, selectionItems, selectionUnits, spreadsOverMembers } from '@/lib/effectTargets'
+import { useEffectScope } from './useEffectScope'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
@@ -100,39 +93,20 @@ export function FxEditor({
 }) {
   const { data: library } = useEffectLibraryQuery()
   const entry = useMemo(() => findEffectEntry(library, effect.effectType), [library, effect.effectType])
-  const { fixtures, fixtureByKey } = useFixtureLookup()
   const connected = useIsDeskConnected()
   const master1Uuid = useMaster1Uuid()
 
-  const selection = selectionItems(effect)
-  const targetFixtures = useMemo((): Fixture[] => {
-    if (selection != null) return selectionFixtures(selection, fixtures)
-    if (effect.isGroupTarget) return groupMemberFixtures(fixtures, effect.targetKey)
-    const fixture = fixtureByKey.get(effect.targetKey)
-    return fixture ? [fixture] : []
-  }, [selection, effect.isGroupTarget, effect.targetKey, fixtures, fixtureByKey])
-
-  const scope = useMemo((): FxScope => {
-    const multiElement = targetFixtures.some((f) => (f.elements?.length ?? 0) > 1)
-    if (spreadsOverMembers(effect)) return { heads: true, elementMode: multiElement, elementFilter: multiElement }
-    const heads = targetFixtures.some((f) => (f.elementGroupProperties?.length ?? 0) > 0)
-    return { heads, elementMode: false, elementFilter: heads }
-  }, [effect, targetFixtures])
-
-  const extendedChannels = useMemo(
-    () => (entry?.category === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.properties ?? [])) : undefined),
-    [entry, targetFixtures],
-  )
-  const settingProperty = useMemo(() => {
-    for (const fixture of targetFixtures) {
-      const p = fixture.properties?.find((d) => d.name === effect.propertyName && d.type === 'setting')
-      if (p) return p as SettingPropertyDescriptor
-    }
-    return undefined
-  }, [targetFixtures, effect.propertyName])
-
   const [snapshot] = useState(() => draftOf(effect))
   const [draft, setDraft] = useState<FxDraft>(snapshot)
+  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
+  // mode the draft now says narrow them.
+  const { scope: spreadScope, extendedChannels, settingProperty } = useEffectScope({
+    target: effect,
+    propertyName: effect.propertyName,
+    entry,
+    elementMode: draft.elementMode,
+    elementFilter: draft.elementFilter,
+  })
   const touched = useRef(false)
   /** The optional fields the operator has set — `updateRequestOf` sends only those. */
   const setFields = useRef(new Set<OptionalField>())
@@ -230,19 +204,6 @@ export function FxEditor({
     )
   const setParam = (name: string, value: string, release: boolean) =>
     write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)
-
-  // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
-  // mode the draft now says narrow them.
-  const spreadScope = useMemo(
-    (): FxScope => ({
-      ...scope,
-      headCount:
-        selection != null
-          ? selectionHeadCount(selectionUnits(selection, fixtures), effect.propertyName, draft.elementMode, draft.elementFilter)
-          : spreadHeadCount(targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter),
-    }),
-    [scope, selection, fixtures, targetFixtures, effect.isGroupTarget, effect.propertyName, draft.elementMode, draft.elementFilter],
-  )
 
   const readOnly = !connected
   const name = entry?.name ?? effect.effectType

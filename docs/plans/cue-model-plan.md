@@ -520,7 +520,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   cue endpoints. MCP `delete_cue_stacks` ("with all their cues") and `add_cue_to_stack` ("moved")
   describe the old behaviour until session 7.
 
-### Session 5 — the Cues table (frontend + backend)
+### Session 5 — the Cues table (frontend + backend) — done, `a410c6c5`
 
 - §3.7, with the list endpoint gaining *Used by*; each cue's entries it has carried since session 4
   (`CueDetails.entries`). `RecordCuePicker`

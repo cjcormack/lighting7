@@ -1075,11 +1075,10 @@ the sentence as its `precedenceNote` paragraph (it was `LayersPane` that said so
 deleted that pane). The dense density *reverses only the rendering*: the order badge and every
 index a handler receives are still the array's, which is `sortOrder` ascending.
 A layer's `sortOrder` is authoritative, not its array position: two layers sharing one leaves the
-tie to insertion order in the cook step. Nothing renumbers client-side today — the programmer
-stack asks the server to move a layer and takes the order back — so a client-side reorder would
-have to restate every `sortOrder`, not just the two it moved. `lib/cueUtils.ts` kept two unused
-helpers (`reorderCueLayers`, `densifyCueLayerOrder`) saying exactly that; they were deleted, and
-the rule lives here instead.
+tie to insertion order in the cook step. The programmer stack asks the server to move a layer and
+takes the order back; the cue editor's Looks tab reorders client-side and so restates **every**
+`sortOrder`, not just the two it moved (`components/cues/editor/cueListEdits.ts`'s `restated`, the
+rule the deleted `reorderCueLayers` / `densifyCueLayerOrder` stated).
 
 **Layer order does not govern the value/effect boundary**, and per-layer `stomp` is the escape
 hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect* beats a higher
@@ -1189,8 +1188,9 @@ FX library page has no project, and there the row simply offers nothing and stil
 the one component that draws both — that sharing is the point rather than a saving, because a
 cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index-based on
 purpose**: the rows render a list and the operator acts on a position in it, so translating
-index → whatever addresses a layer in that world is the host's job. The cue's host PATCHes
-whole arrays through `buildCueInput`; `ProgrammerLookStack`'s maps index → `layerId` and sends
+index → whatever addresses a layer in that world is the host's job. The cue's host — the cue
+editor's Looks tab — PATCHes the whole `layers` array, built from the cue as the desk holds it
+(§The cue editor); `ProgrammerLookStack`'s maps index → `layerId` and sends
 `programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer`. Adding is the rail's *+ Look* /
 *+ Palette*, which press onto the selection through `ApplyPicker` (§"Applying to a selection"). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
@@ -1300,17 +1300,20 @@ over, so a change re-fetches the checklist under it (keyed on `maskValueKey`, a 
 a request counter, the operator's unticks kept across it, nothing asked while nothing is ticked), and
 its hint says held scenery goes back whole, which the mask never narrows.
 
-**Record writes into any cue, or into a stack it makes** (S10). The stack select's last item, after a
-separator, is ***New stack…***: a required name field appears under it, and the stack is created
-(`loop: false`, appended to the show order) only when Record is pressed, so a cancelled sheet leaves
-nothing behind; once made it is the selection, so a failed Record is retried into it. A show with no
-stack opens on it. Merge, Replace and Remove are offered from every Record, not only from a cue row,
+**Record writes into any cue, or into a stack it makes, or into none** (S10; cue model plan §10,
+19). After the stacks and a separator the stack select offers ***New stack…***: a required name
+field appears under it, and the stack is created (`loop: false`, appended to the show order) only
+when Record is pressed, so a cancelled sheet leaves nothing behind; once made it is the selection, so
+a failed Record is retried into it. A show with no stack opens on it. Its last item is ***No stack***,
+which sends no `cueStackId`: the new cue is loose, and the sheet says it is found in the Cues table
+(§"The Cues table"). Merge, Replace and Remove are offered from every Record, not only from a cue row,
 and each draws `RecordCuePicker`: one filterable radio list of **every cue, flat and by name**
-(`cuePickerRows` — markers left out, `Q12 · Act 1` from whatever the `GET /cues` row carries). The
-programmer Record menu's *An existing cue…* opens on Merge with it (`RecordPreset.existingCue`); until
-S10 it opened the sheet with only *New cue* to offer. **It reads no stack beyond what the list row
-says** — `CuePickerSource.cueStackName` and `cueNumber` are null for a loose or shared cue — so a row
-naming no stack is still a cue, labelled by its name, and a shared cue is one row because it is one cue.
+(`cuePickerRows` — markers left out). The programmer Record menu's *An existing cue…* opens on Merge
+with it (`RecordPreset.existingCue`); until S10 it opened the sheet with only *New cue* to offer.
+**A row names every place its cue sits**, from the list's `entries` — `Q7 · Act 1, Q14 · Act 2`, or
+*Loose* — the list the Cues table reads, so a loose cue is still a cue, labelled by its name, and a
+shared cue is one row because it is one cue. The filter matches the name or any place's number or
+stack.
 
 **Provenance names the winning layer.** `ProvenanceEntry` gained `layerId` and `layerSource` —
 the resolved referent, `kind` + `id` + `name` — which `useRowOwnership` aggregates into
@@ -3627,7 +3630,9 @@ sheet kit, each on the route it always had** (`../docs/plans/completed/library-s
 the boards are `../docs/plans/library-sheets-design/`, where the plan won on behaviour and the
 boards on layout and copy). Four sessions built it: the kit's library half with **Speed Masters** on
 it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited in the cell (3), and
-**Scripts and the FX Library** (4). The rules, which every one of the five keeps:
+**Scripts and the FX Library** (4). The rules, which every one of the five keeps (the Cues table,
+a sixth library since the cue model plan's session 5, keeps them too but for its bar, which is the
+cue action set — §"The Cues table"):
 
 - **The sheet replaces the list, on the same route** (D1). No Cards · Table switcher and no sticky
   view key: a second view has to earn one. The record editors stay — they are what a row *opens*.
@@ -5342,7 +5347,10 @@ Palettes*, an `enum`) and no immersive. It is announced from `lib/appliedTables.
 store as `announcedViewOptions`' fifth argument, applied by `applyAppliedViewOptions`, and carried by
 `windowSetupUrl` as `table=`, which the route reads on arrival like any `?table=`.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
-which view; the two libraries still send the five-key frame. `windows.viewOptions {immersive}` is
+which view; the three libraries still send the five-key frame. **The Cues table is a ninth entry**
+(cue model plan session 5), `cues` on `/cues` between Looks and Palettes, the sidebar's order: a
+library, so no options, no `needsRig`, and a command that puts a window on it keeps the window's own
+project. `windows.viewOptions {immersive}` is
 applied on any of the four through the same per-view gate as the busk keys — a Show frame arriving
 on the Prompt Book is still ignored, on purpose: the frame is a statement about the view the sender
 was looking at. The Screens sheet draws a **Chrome** segment (*App · Immersive*, the descriptor's
@@ -5630,9 +5638,12 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
 - **Undo is one step**, the exact inverse of the last save that landed: the rows it changed put back
   as they were, every other row as the desk holds it now — from the *Q1 · values saved* toast or ⌘Z
   with the editor holding the keys (a text field keeps its own ⌘Z). Pending edits to those rows are
-  dropped with it; a refused save leaves the previous Undo standing. The
-  header's `CueValuesSaveState`, beside `SaveStatusIndicator` (which already says *Saving… · Saved*
-  for the PATCH), says *Unsaved* while a flush waits and *Save failed* when the desk refused one.
+  dropped with it; a refused save leaves the previous Undo standing. **One flush is one PATCH** for
+  everything pending — the rows, and the Looks and FX tabs' lists — so one Undo puts back each list
+  that save wrote (the toast names them: *Q1 · values and looks saved*); a list gesture still
+  pending lands after the Undo, on what it put back. The header's `CueValuesSaveState`, beside
+  `SaveStatusIndicator` (which already says *Saving… · Saved* for the PATCH), says *Unsaved* while
+  a flush waits and *Save failed* when the desk refused one, for all three tabs.
 - **The writers** (`useCellWriters`' cue branch, `cueCellWriters`): set, colour, position and clear
   land in the store and **nowhere else — no live fallback**, so a cue context with no store drops the
   write. A colour stores the components the write named (no wire sampling); a single-axis nudge on an
@@ -5667,7 +5678,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   hover's Info, Locate and Add-to-targets are withheld in the cue context), no palette strip, no
   `useClearCellEffects`, no live writer, no `projectId` on the table (so no Palettes band on any cell,
   no appearance leaves); the source chip is never drawn (its stack is a `programmer.keyStack` request).
-  Its selection is `useLocalListSelection` and `useCellSelection`, this component's own.
+  Its selection is `useLocalListSelection` and `useCellSelection`, held by the editor (below), never
+  the desk's.
   `CueValuesGrid.test.tsx` runs a full pass — set, colour, position, Spread, ⌫, Undo — over the real
   `lightingApi` on a fake socket and asserts no `programmer.*`, `channels.*` or `fx.*` frame left it.
 - **Read-only** — locked, or another project's cue: the cells are inert, Set · Clear · Spread are
@@ -5693,17 +5705,64 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   its pane, each take keys only in their own region, and a grid that is not the region draws its
   selection dimmed (`FixturesTable`'s `selectionDimmed`, `cellSelectionClass`'s third argument). The
   programmer's page mounts no region and is unchanged.
+- **The Values selection is the editor's** (`CueValuesView.tsx`, mounted under `CueRowStoreProvider`):
+  the grid's rows, *Own only* / *Whole rig* / *+ Fixtures…* and its row and cell selection live
+  there, so a tab switch keeps them and the Looks and FX tabs act on `selectionTargets` — the rows a
+  marquee covers, else the selected rows, through `selectedRowTargets` (a group row as its group, a
+  cell by its element key). Local state, never the desk's selection (P2).
+- **The Looks tab** (`CueLooksTab.tsx`, session 6, §4.1, D3): `LookStack` at its wide density over
+  the cue's layers, a layer edited as a layer and never as a Look. Each gesture — reorder, remove,
+  enable, amount, blend, mask, stomp, targets — is one `CueRowStore.editLayers` write: the edit
+  applied to the cue's `layers` as the desk holds it (`fetchLatestCue`), its layer found there by the
+  drawn layer's read-only `id` (`cueListEdits.ts`'s `indexOfDrawn`: another client may have moved the
+  list, and a layer the desk no longer holds is left alone), every `sortOrder` restated from its
+  place, the whole list written (never `propertyAssignments`), so the desk pairs each layer with its
+  stored one and keeps its uuid (§3.4). A disabled layer is stored. The tab draws each gesture at
+  once and keeps drawing it while any list write waits (`CueRowStore.listsBusy`), until the cue has
+  been read again — so a refetch between two writes never draws a removed layer back. *+ Look* and
+  *+ Palette* open `AddLayerSheet` (`LayerPicker`, timing on) on the Values selection
+  (`defaultTargets`, which skips its target step; empty asks); a row's **Targets** is
+  `LayerHandlers.onSetTargets`, a new optional member only this host passes, refused with the reason
+  while nothing is selected (`targetsRefusal`); **Open** (`onOpenSource`) leaves for
+  `/looks?edit={id}` — the Looks route opens that Look's sheet, the palettes route's rule — or
+  `/palettes?edit=` for a palette layer (`hooks/useEditParam.ts`, both routes'). The hand's *Place
+  here* strip stays under it, unlocked, and places through the tab: on the Values selection, through
+  the store's writes (`HandCueLayerStrip`'s `host`), its Undo the store's.
+- **The FX tab** (`CueEffectsTab.tsx`, session 6, §4.1, D17): one row per stored effect — target
+  (`effectTargetLabel`, a selection by its items), effect, property, speed (*Seconds* and its cycle,
+  or the cycle on its master, S15), size, direction and runs (`effectDynamicsParts`, `runsWord`) and
+  its fire timing — reorderable by its grip. A row opens `FxEffectFields` over the stored effect
+  through `cueEffectDraftOf` / `withCueEffectDraft` (`fxEditorModel.ts`: `templateDraftOf`'s reading,
+  so Seconds, size, direction, runs and the spread's shape carry, plus step timing, element mode and
+  the head filter), its `FxScope` from the effect's target through `useEffectScope` — `FxEditor`'s
+  derivation, lifted to be shared — with the cue's *Delay · Interval · Random* (`TimingFields`)
+  under it. The editor opens once the effect library has (a wall-clock effect's Seconds is read from
+  it), and its draft is its own, seeded on open and again after an Undo (`CueRowStore.undoSeq`). A
+  drag's moves coalesce on the store's flush (400 ms, 2 s), a release, reorder or add saves at once,
+  and every gesture finds its effect in the desk's list by `uuid` (`indexOfDrawn`), which the store
+  strips before the PATCH. The sortable's attributes sit on the grip, never the row, so a click in
+  a locked row leaves the key guards (below) to answer ⌫. **+ Effect**
+  opens `FxPicker` **in draft** (`draft={{current, onPick}}`) over `effectTargetOf(selection)` — one
+  row as itself, several as one `selection` effect keyed by the list's canonical JSON
+  (`selectionKeyOf`): a tap appends the effect with the picker's starting spec and D16's master and
+  runs nothing (no `fx.add`, no active-effects read); a second tap swaps it in place. Each enabled
+  Look layer's **deferred** effects are listed under *From <Look>*, read-only.
+- **Locked, both tabs read** (§4.6): `LookStack`'s `readOnly` draws the rows' badges with no drag,
+  the FX rows have no grip, × or editor writes, and the add buttons are disabled with the reason.
+  `useRefusedEditKeys` (`editorIsolation.tsx`) claims a ⌫ or Enter pressed while the editor holds
+  the keys — not on a focused control or field — and asks to unlock, as the Values grid's refused
+  keys do. `CueEditorIsolation` clears the programmer's scope, focused layers and rail-tab claim
+  above both tabs, for the grid's reason.
 - **Not yet**: a row's own fade and move-in-dark are kept on every write but not edited here
-  (`FU-CUE-ROW-TIMING`); *Edited since GO* and *Update stage* are session 7, the Looks and FX tables
-  session 6.
+  (`FU-CUE-ROW-TIMING`); *Edited since GO* and *Update stage* are session 7.
 
 #### The cue action set
 
-**One component, three hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
+**One component, four hosts** (show-cue-editing plan §5, D6, D8, D9, D12, D16;
 `components/runner/CueActions.tsx`): the card's strip directly under its collapsed row, the cue
-sheet's selection bar (after Set · Clear · Spread, before Deselect) and the phone card's ⋯ menu in
+sheet's selection bar (after Set · Clear · Spread, before Deselect), the phone card's ⋯ menu in
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
-Prompt Book's rail card). It takes the rows (a cue and the entry it was opened from, several from
+Prompt Book's rail card), and the Cues table's selection bar (`host="table"`, §"The Cues table"). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
 hands in nothing else. **Its Record sheet, delete confirm and unlock question live above every
 host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
@@ -5724,8 +5783,8 @@ provider (a test drawing the set alone) the set draws them itself.
   opened by its entry. **Remove from stack** deletes the entry. **Delete…** is `CueDeleteDialog`
   (`components/cues/`): one confirm for every row, each cue's entries, pads, slots, anchors and
   bindings from `cueDeletePreview`'s dry run, then `POST /cues/delete` with `force`; it says a
-  surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). Built for the Cues
-  table (cue model plan session 5) to mount too. **⋯** is *Add to stack…*, *Move to stack…* —
+  surface binding stays and reports its cue missing (`FU-CUE-BINDING-SWEEP`). The Cues table's
+  multi-select *Delete…* is the same confirm. **⋯** is *Add to stack…*, *Move to stack…* —
   `useMoveCueStackEntryMutation`, the entry moved whole by the desk (Chris's call, 2026-10-16, over
   R1.4's add then remove, which dropped the number, follow and anchor) — and *Copy link*, the
   card's address with `?entry=`.
@@ -5739,7 +5798,7 @@ provider (a test drawing the set alone) the set draws them itself.
   menu is the editing chrome a phone has room for, and a locked action asks to unlock.
 - **Words fold to glyphs** on container rungs measured in the app (`FOLDS` in `CueActions.tsx`):
   the stack group first, then Load and Record, the split button last — the card's own `@container`
-  for the strip, the sheet bar's for the bar. The menu never folds.
+  for the strip, the sheet bar's for the bar, the Cues table bar's for the table. The menu never folds.
 - ***← Show*** (D16) is in the programmer's source box while the include target is the one this
   window made from the Show view: `lib/showInclude.ts` records `{projectId, cueId, entryId}` per tab
   on every Show-view Include, and the box draws the arrow only while `ProgrammerSummary.lastIncluded`
@@ -5934,8 +5993,9 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
 - **The header is one 40px chrome row** and draws the entry apart from the cue (P5): the stack, this
   place's number and follow — written to the entry by its id, `patchCueStackEntry` — then a rule,
   the cue's name, fade and curve (`patchProjectCue`), the shared chip from `Cue.entries`, and the
-  per-cue `SaveStatusIndicator`. A cue read with no context entry (loose, or in several places and
-  opened from none, as the sheet host can be) has no number or follow to write and says why. A
+  per-cue `SaveStatusIndicator`. A cue read with no context entry has no number or follow to write:
+  a loose one says *In no stack · no number or follow* in their place, and one in several places
+  opened from none (as the sheet host can be) keeps the fields, disabled, saying why. A
   header field half-typed when its host goes — a GO collapsing a live card — commits
   (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did.
   *Edited since GO*, *Update stage…* and *Show on stage* are sessions 7 and 8, and draw nothing yet.
@@ -5943,20 +6003,31 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
   (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and
   a host may ask for a tab (`tabRequest`, the sheet's Layers and FX read-outs).
-- **Values is the cue's own rows, edited in place** (§The cue editor); **Looks and FX are
-  read-outs for now** — `CueDetailContent`'s `CueLayersReadout` and `CueEffectsReadout`, the two
-  tables session 6's. The hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab,
+- **Values is the cue's own rows, Looks its layers and FX its own effects, each edited in place**
+  (§The cue editor). The hand's *Place here* strip (`HandCueLayerStrip`) is in the Looks tab,
   unlocked. **Scenery** is
   `CueSceneryEditor`'s body (`CueSceneryEditorBody`), **Events** `CueEventsEditor`, and **Cue** the
-  notes, script hooks (`CueTriggerEditor`) and the busk-page append (`editor/CueTab.tsx`).
-- **Locked, it reads** (§4.6): the header's fields are plain text, the curve inert, and Scenery,
-  Events and Cue draw their read-outs. A cue the desk will not edit (`canEdit` false) reads the same,
+  notes, the speed masters, script hooks (`CueTriggerEditor`) and the busk-page append
+  (`editor/CueTab.tsx`).
+- **Speed masters** (`editor/CueSpeedMasters.tsx`, venue-visit plan S16, D20) are the masters the cue
+  sets on every GO into it and every press of it — never a reload — each a row of master · BPM · ×
+  under *+ Master*, which adds the lowest master the cue does not set at its stored tempo. Every
+  gesture writes the **whole list** through the cue's own PATCH (`speedMasters`), the rows a draft
+  held over a refetch and put back on a refusal (which the middleware toasts) — the Events editor's
+  shape. A BPM commits on Enter, blur or a pause in typing, never as typed, and one outside 20–300
+  is not sent. The master list is the project's stored bank (`useSpeedMasterListQuery`), so it reads
+  on another project's cue too. A follower's row says *Follows M2 — skipped on GO* and a deleted
+  master's *The master was deleted — skipped on GO* (the desk skips both); locked, the section is a
+  list of *M2 · Chase · 128 bpm*. `buildCueInput` hands the list back, since a PUT clears it.
+- **Locked, it reads** (§4.6): the header's fields are plain text, the curve inert, the Values,
+  Looks and FX tables inert, and Scenery, Events and Cue draw their read-outs. A cue the desk will not edit (`canEdit` false) reads the same,
   saying it is another project's. Its field ids are its own (`useId`), so two editors of one cue
   (a cue twice in a stack, a card under the fixture sheet's) do not share a field.
 - **It is a key region** (`data-key-region`, §4.5): the cue sheet's keyboard stands aside while it
   has the keys, and its Values grid hears them only then (§The cue editor).
 - **`CueDetailContent` stays the read-out** the phone card and the Prompt Book draw (`CueCardBody`),
-  its values through `CueValueGrid`, which reads a group-derived cooked row onto the member it names.
+  its values through `CueValueGrid`, which reads a group-derived cooked row onto the member it names,
+  its layers and effects as rows read-only (D9).
 
 *Edit in programmer*, which Includes the cue, is the cue action set's (§"The cue action set"), on
 the strip under the collapsed row. The card draws **no stage map**: the 2D
@@ -5992,6 +6063,37 @@ tab and the Prompt Book rail all open their cards collapsed. Consequences worth 
   that; `EditorContext.tsx`'s doc comment is the record of both. `INCLUDE_TARGET_GONE` is Update's
   own 409 and is unrelated — that one is live.
 
+#### The Cues table
+
+**Every cue once, as a library** (lighting7 cue model plan §3.7, D13, session 5): `/projects/:id/cues`
+(`routes/Cues.tsx`, `components/cues/CueLibrarySheet.tsx`, the model in `lib/cuesTable.ts`), the
+Library row after Looks. A cue is a project record a stack only names, so this is where a loose one
+is found — Record's *No stack* makes one.
+
+- **The rows are `GET /cues`**, which carries each cue's `entries` and `usedBy` (`{pads, slots,
+  bindings}`). *In* is a chip per entry, `Act 2 · Q14`, or *Loose*; *Used by* counts what else names
+  the cue, each named on the hover, and stays current because a pad, slot or binding write — and
+  `busk.layoutChanged`, the slot and binding frames — invalidates `CueList` too; Fade, Layers, FX, Scenery and Events are read-outs; the dot by the
+  name is D11's two looks from `cueHolds.state`. **Name and notes are the cells** (library-sheets
+  D5), `PATCH`ed on the cue.
+- **The view is the address**: `?q=` (name, notes, a place's stack or number), `?stack=`, `?show=`
+  for the *Loose · Shared · On a pad* chips (counted over the other filters), `?cue=` for one cue,
+  `?sort=` / `?dir=` — each written with `replace`; a `?cue=` naming a cue that has gone keeps its
+  chip, so the filter can be let go. Nothing is remembered beyond the address.
+- **The bar is the cue action set** (`host="table"`, its own `FOLDS` rungs) after the kit's Set ·
+  Clear over the name and notes cells, never verbs of the table's own. A row stands for the cue, so
+  it hands the set its entry only when it has exactly one (`actionRowOf`): Duplicate appends a copy
+  to that stack or makes a loose one, *Remove from stack* and *Move to stack…* are off whenever a
+  selected cue sits in several places (it is changed in its stack), and the table stays put after Duplicate rather than opening the
+  copy. *Delete…* is `CueDeleteDialog`.
+- **A row opens the cue at its first entry** on the Show view; a loose cue opens `CueEditor` in a
+  right-hand sheet (`stage/OwnerEditor`'s `CueEditorSheet`, which takes the lock from this host).
+  A loose cue's busk pad "open cue" lands here filtered to it (`cueOpenPath`), drawing *Only Storm ×*.
+- **It honours the show-editing lock while the show runs** (cue model plan §10, 20): `useEditLock`
+  with `ShowLockControl` in the header, the cells inert and every action but *Blind edit* asking to
+  unlock, the loose cue's editor read-only. Off the running project it reads only and draws no
+  action set — every one would act on the running show — and no row opens.
+
 #### The Show position
 
 **The way back to Show returns to the stack and the card this window last had open there**
@@ -6008,7 +6110,7 @@ pill (`ViewSwitcher`, through `useShowViewPath`, so a link drawn before the posi
 follows it), and the sidebar's Show entry with its ⌘K twin (`navigation.ts`'s `path`, which both
 call at the press, through `showViewPath`). **The rest deliberately do not**, because each names a
 place of its own: the Prompt Book's *Edit cue*, the cue table's read-outs and a busk cue pad's
-*View* (a stack and `?cue=`), ⌘K's *New Cue Stack* (the stack list), and the doors that land on
+*View* (its first entry's card by `?cue=&entry=`, or the Cues table filtered to a loose cue), ⌘K's *New Cue Stack* (the stack list), and the doors that land on
 bare `/show` and so on the live stack while one runs — a cue slot's *View*, and `windows.show`,
 another screen putting this one on the show — and the legacy `/program*` and `/run*` redirects, whose targets are frozen
 (§"What may live in `routes/`") and still carry their search string. Each of them writes the
@@ -6270,8 +6372,9 @@ modules export a page *and* one or two redirects, which reads like drift and is 
    `/projects/:id/patches` since the list shell (§List shell), and the module exports the page
    (`ProjectPatches`) and its bare-path redirect.
 3. **A redirect for a path that no longer names a view goes in `routes/legacyRedirects.tsx`**, not
-   in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues` and `/program`
-   all land on `/show`, `/fx` lands on `/busk` and `/templates` on `/palettes` (search kept, for the old
+   in whichever module happens to be its destination. `/run`, `/cue-stacks`, `/cues/all`,
+   `/cues/standalone` and `/program` all land on `/show` (`/cues` itself names the Cues table again,
+   and bare `/cues` is `Cues.tsx`'s `CuesRedirect`, rule 1), `/fx` lands on `/busk` and `/templates` on `/palettes` (search kept, for the old
    `?family=` links); collecting them keeps `ShowPage.tsx` from
    accumulating four unrelated histories, and keeps `/program` out of `ProgrammerPage.tsx`, where
    it reproduced the `/program` vs `/programmer` confusion in the file layout.
@@ -6294,7 +6397,7 @@ path may quietly change where it lands.
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
 - **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer, with
   Applied as its child · Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
-  Channels), **Library** (Looks · Palettes · Effects · Speed Masters · Scripts), **Project**
+  Channels), **Library** (Looks · Cues · Palettes · Effects · Speed Masters · Scripts), **Project**
   (Settings · Surfaces · Sync) and **Desk** (Projects, then Install Settings and its tabs). A row's
   `section` is a `NavSection`, `NAV_SECTIONS` holds the labels, and the array is declared in section
   order — `navigation.test.ts` pins each section's ids whole, so the array *is* the sidebar. The
@@ -6321,7 +6424,7 @@ path may quietly change where it lands.
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
   pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
-  every **other** window × the eight views in `lib/windowViews.ts` (this window has the Navigation
+  every **other** window × the nine views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
   missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
   *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,
@@ -6806,13 +6909,14 @@ and it leads with status. A show's is below; a venue's follows it. The header (`
 sidebar's own rows for the same project less Desk, drawn as cards — never a hand-picked list, so a
 new row reaches the home by being in the registry. A card is the row's icon and label and its
 `NavItem.homeCount`, read from `useHomeCounts` (`components/projectHome/`), every count from a query
-the frontend already made (P5). **Show counts its stacks and the project's cues once each** — *2
-stacks · 35 cues*, the cue list's length — because a cue can sit in several stacks or in none, so
-a count per stack would count a shared cue twice and miss a loose one (Chris's call, 2026-10-16); the
-cues move to the Cues row when it lands. The cue list and not `ProjectDetail.cueCount`, because the
-list's tag is the one a cue write invalidates. Off the rig the `needsRig` cards take D4's treatment —
-muted, `OffRigDot`, *Needs the project on the rig* — and their counts (Show's, fixtures, groups,
-universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
+the frontend already made (P5). **Show counts its stacks, and the Cues card the project's cues once
+each** — *2 stacks* and *35*, the cue list's length — because a cue can sit in several stacks or in
+none, so a count per stack would count a shared cue twice and miss a loose one (Chris's call,
+2026-10-16; the cues moved to their own row with the Cues table, cue model plan session 5). The cue
+list and not `ProjectDetail.cueCount`, because the list's tag is the one a cue write invalidates; the
+Cues row is Library, so the list is read on and off the rig, as the Looks' is. Off the rig the
+`needsRig` cards take D4's treatment — muted, `OffRigDot`, *Needs the project on the rig* — and their
+counts (Show's, fixtures, groups, universes, surface bindings) are not read. Patch List counts raw patches, infrastructure included,
 because the list shows them. A venue's home draws no Show or Library card, so it reads none of
 their lists. `ProjectHome.test.tsx` pins the sections against the rendered sidebar, the held show's
 *Review update* and *Run against*, the counts and the off-rig cards; `projectHome.test.ts` the

@@ -12,6 +12,8 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities'
 import {
   Ban,
+  Crosshair,
+  ExternalLink,
   Eye,
   Footprints,
   GripVertical,
@@ -118,6 +120,14 @@ export interface LayerHandlers {
    * detach into — and drawn only where it is passed.
    */
   onDetach?: (index: number) => void
+  /**
+   * Point this layer at the host's selection — the cue editor's Values selection
+   * (show-cue-editing plan §4.1). Optional: only a host with a selection of its own passes it, and
+   * only the wide row draws it. The host says why it is refused through `targetsRefusal`.
+   */
+  onSetTargets?: (index: number) => void
+  /** Open the layer's Look or palette in its library. Optional, the cue editor's *Open Look*. */
+  onOpenSource?: (index: number) => void
 }
 
 interface LookStackProps<T extends LookStackLayer> {
@@ -173,6 +183,12 @@ interface LookStackProps<T extends LookStackLayer> {
    * *lost Hex 3–4 to Amber* (apply-model plan §4.6), which the host reads from two frames.
    */
   noteFor?: (layer: T) => string | null
+  /** The wide list's header action, in place of the single Add — the cue editor's *+ Look · + Palette*. */
+  addActions?: React.ReactNode
+  /** Why [LayerHandlers.onSetTargets] does nothing now, drawn as its disabled title; null while it works. */
+  targetsRefusal?: string | null
+  /** Rows drawn read-only and not draggable (wide density) — a locked cue's Looks tab. */
+  readOnly?: boolean
 }
 
 /**
@@ -180,13 +196,10 @@ interface LookStackProps<T extends LookStackLayer> {
  * which is what the cue editor and the programmer actually share.
  *
  * That sharing is the point rather than a saving: a cue *is* a saved programmer stack, so a layer
- * list that looked different in the two places would be describing one structure twice. Today the
- * programmer renders this component at its `dense` density, and the cue editor
- * (`CueDetailContent`) renders the wide `LayerRow` directly and read-only, outside any stack —
- * so the wide *list* below (section chrome, Add, the precedence paragraph) has no production
- * caller and is kept as the general form the plan's follow-up names: if the cue editor ever wants
- * a stack again it is here, and if it wants the dense rows, promote `dense` to the default and
- * delete the other.
+ * list that looked different in the two places would be describing one structure twice. The
+ * programmer renders this component at its `dense` density, and the cue editor's Looks tab
+ * (`CueLooksTab`) at the wide one; the phone card's and the Prompt Book's read-out
+ * (`CueDetailContent`) renders the wide `LayerRow` directly and read-only, outside any stack.
  *
  * Editable here: order, enabled, amount, blend mode, property mask and stomp. A read-only row
  * (the Look editor's live preview, a cue's detail sheet) drops the amount field, the enable toggle
@@ -210,6 +223,9 @@ export function LookStack<T extends LookStackLayer>({
   keyFor,
   focusedIndex,
   noteFor,
+  addActions,
+  targetsRefusal,
+  readOnly = false,
   dense = false,
 }: LookStackProps<T>) {
   const sensors = useSensors(
@@ -277,8 +293,10 @@ export function LookStack<T extends LookStackLayer>({
               index={i}
               info={info}
               handlers={handlers}
-              sortable
+              sortable={!readOnly}
               showTargets
+              readOnly={readOnly}
+              targetsRefusal={targetsRefusal}
               focused={focusedIndex === i}
             />
           )
@@ -305,7 +323,7 @@ export function LookStack<T extends LookStackLayer>({
       title="Layers"
       icon={<Layers className="size-3.5" />}
       count={layers.length}
-      action={onAdd && <AddBtn label="Add" onClick={onAdd} />}
+      action={addActions ?? (onAdd && <AddBtn label="Add" onClick={onAdd} />)}
     >
       {layers.length === 0 ? (
         <p className="text-xs text-muted-foreground py-2">{emptyNote}</p>
@@ -403,6 +421,7 @@ export function LayerRow({
   showTargets,
   readOnly,
   focused,
+  targetsRefusal,
 }: {
   layer: LookStackLayer
   index: number
@@ -419,6 +438,8 @@ export function LayerRow({
   readOnly?: boolean
   /** The value grid is pointed at this layer. */
   focused?: boolean
+  /** Why *Targets* is refused now, or null — see [LayerHandlers.onSetTargets]. */
+  targetsRefusal?: string | null
 }) {
   const enabled = layer.enabled !== false
   // Resolved by `describeStackSource`: the layer's own `source.name` arrives with the read, so a row
@@ -557,6 +578,33 @@ export function LayerRow({
 
           <span className="flex-1" />
 
+          {!readOnly && handlers?.onSetTargets && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-6 shrink-0 gap-1 px-1.5 text-[10px]"
+              disabled={targetsRefusal != null}
+              title={targetsRefusal ?? 'Put this layer on the Values selection'}
+              onClick={() => handlers.onSetTargets?.(index)}
+            >
+              <Crosshair className="size-3" />
+              Targets
+            </Button>
+          )}
+          {handlers?.onOpenSource && layer.source != null && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-6 shrink-0 text-muted-foreground"
+              aria-label={`Open ${layer.source.name}`}
+              title={isTemplate ? 'Open this palette in the palette library' : 'Open this look in the Looks library — a change there changes every cue that layers it'}
+              onClick={() => handlers.onOpenSource?.(index)}
+            >
+              <ExternalLink className="size-3.5" />
+            </Button>
+          )}
           {!readOnly && (
             <AmountInput
               value={layer.amount ?? 1}

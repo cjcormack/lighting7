@@ -131,7 +131,7 @@ export function appliedSearch(table: AppliedTable, view: AppliedView): string {
 }
 
 /** A header press: ascending, then descending, then back to the rail's order. */
-export function nextSort(view: AppliedView, key: string): AppliedView {
+export function nextSort<V extends { sort: string | null; dir: SortDir }>(view: V, key: string): V {
   if (view.sort !== key) return { ...view, sort: key, dir: 'asc' }
   if (view.dir === 'asc') return { ...view, dir: 'desc' }
   return { ...view, sort: null, dir: 'asc' }

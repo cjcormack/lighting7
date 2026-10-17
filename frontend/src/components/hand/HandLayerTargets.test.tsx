@@ -287,6 +287,24 @@ describe('a cue’s stack', () => {
     expect(sent.layers[1]!.targets).toEqual([{ type: 'fixture', key: 'par-4' }])
   })
 
+  it('with a host — the cue editor’s Looks tab — places through the host on its targets, never its own PATCH', async () => {
+    const append = vi.fn((_layer: unknown) => Promise.resolve(true))
+    const undo = vi.fn()
+    const host = { targets: [{ type: 'group' as const, key: 'Front' }], append, undo }
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} host={host} />, hold('LOOK'), true)
+    await act(async () => {
+      screen.getByRole('button', { name: /Place “/ }).click()
+    })
+    await waitFor(() => expect(append).toHaveBeenCalledTimes(1))
+    expect(append.mock.calls[0]![0]).toMatchObject({ lookId: 8, targets: [{ type: 'group', key: 'Front' }], enabled: true })
+    expect(patches).toHaveLength(0)
+    await waitFor(() => expect(toasts).toHaveLength(1))
+    await act(async () => {
+      ;(toasts[0]![1].action as { onClick: () => void }).onClick()
+    })
+    expect(undo).toHaveBeenCalledTimes(1)
+  })
+
   it('draws nothing for a cue in the hand', async () => {
     await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('CUE'), false)
   })
