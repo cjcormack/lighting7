@@ -274,6 +274,17 @@ export function ProgrammerWorkspace({
     },
     [openTab],
   )
+  const frameRef = useRef<HTMLDivElement>(null)
+  const spreadFan = useCallback(() => {
+    // The tabs are drawn only where the rail docks: not in overlay mode, nor in push mode's narrow
+    // arm, which hides their strip (`RailTabs` reads the same zero box). A collapsed rail draws no
+    // strip yet, and `openTab` expands it.
+    const strip = frameRef.current?.querySelector('[data-rail-tabs]')
+    if (overlayMode || (strip != null && strip.getBoundingClientRect().height === 0)) return false
+    setSpreadSeed((prev) => ({ fan: true, key: (prev?.key ?? 0) + 1 }))
+    openTab('spread')
+    return true
+  }, [openTab, overlayMode])
   const consumeFocusRequest = useCallback(() => setFocusRequest(null), [])
   const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
 
@@ -309,8 +320,9 @@ export function ProgrammerWorkspace({
       focusColour: (seed: string) => setFocusRequest((prev) => ({ tab: 'colour', seed, key: (prev?.key ?? 0) + 1 })),
       focusSpread: () => setFocusRequest((prev) => ({ tab: 'spread', seed: '', key: (prev?.key ?? 0) + 1 })),
       spreadFrom,
+      spreadFan,
     }),
-    [railTab, spreadFrom],
+    [railTab, spreadFrom, spreadFan],
   )
   const geometry = useMemo<RailGeometry>(
     () => ({ width, resizing, onResizeStart }),
@@ -322,7 +334,7 @@ export function ProgrammerWorkspace({
     // rail to know which tab it is drawing. The marquee travels the other way, through
     // `ProgrammerPage`'s marquee store.
     <RailTabClaimContext.Provider value={claim}>
-      <div className="@container flex min-h-0 flex-1 flex-col">
+      <div ref={frameRef} className="@container flex min-h-0 flex-1 flex-col">
         {/* `relative` is the overlay's containing block. `select-none` while resizing keeps the
             drag from painting a text selection across the grid it crosses. */}
         {/* `@max-[704px]:flex-col` is the whole of the phone arm's layout: the same two children,

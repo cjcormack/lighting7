@@ -93,6 +93,30 @@ class SpreadPlanTest {
         assertTrue(SpreadPlan.positions(0, DistributionStrategy.LINEAR).isEmpty())
     }
 
+    private fun fan(n: Int, curve: SpreadCurve = SpreadCurve.LINE, parts: Int = 1) =
+        SpreadPlan.fanWeights(n, DistributionStrategy.LINEAR, curve, parts).map { Math.round(it * 1000.0) / 1000.0 }
+
+    @Test
+    fun `a LINE fan is symmetric about the middle of the order`() {
+        assertEquals(listOf(-1.0, -0.667, -0.333, 0.0, 0.333, 0.667, 1.0), fan(7))
+        // Even: no head on the middle, so the two around it move by a step each way.
+        assertEquals(listOf(-1.0, -0.6, -0.2, 0.2, 0.6, 1.0), fan(6))
+        assertEquals(listOf(-1.0, 1.0), fan(2))
+    }
+
+    @Test
+    fun `a fan of one head, or a part of one head, has nothing to fan`() {
+        assertEquals(listOf(0.0), fan(1))
+        assertEquals(listOf(0.0), fan(1, SpreadCurve.MIRROR))
+        assertEquals(listOf(-1.0, 1.0, 0.0), fan(3, parts = 2))
+    }
+
+    @Test
+    fun `parts are each their own fan, and other curves read against the midline`() {
+        assertEquals(listOf(-1.0, -0.333, 0.333, 1.0, -1.0, -0.333, 0.333, 1.0), fan(8, parts = 2))
+        assertEquals(listOf(1.0, -1.0, 1.0), fan(3, SpreadCurve.MIRROR))
+    }
+
     @Test
     fun `curves and over parse by name, case-insensitively`() {
         assertEquals(SpreadCurve.WINGS, SpreadCurve.byName("wings"))

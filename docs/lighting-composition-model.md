@@ -979,6 +979,23 @@ cell that carries it (venue-visit plan S1, §"A press is per target"): `written[
 a cell's element key the request never named, and the fixture no longer appears in `skipped`. A cell
 named beside its parent is dropped, the parent covering it.
 
+**A fan is a spread about each head's own position** (venue-visit plan S12). `mode: FAN`, Position
+only, takes no endpoints but an amount per axis (`fan: {pan?, tilt?}`, the outer heads' offset in
+centre steps, an absent axis not fanned) and moves each head from where it starts by the amount
+times `2t − 1` (`SpreadPlan.fanWeights`), `t` the same fraction under the same curve, order, parts
+and over — so under `LINE` the fan is symmetric about the middle of the order, a lone group's member
+order included, and a run of one head stays put. A head starts from the request's `base` (a
+`pan,tilt` literal per head: the row a `write: false` host is editing, or the anchor an earlier
+answer gave), else from **Local's own value** for it, axis by axis as output arbitrates it — the
+newest of the position entry, the axis's own property entry and its sideband channel — which a fade
+in flight, a position effect or Blind leave the output short of, else from what the desk is sending
+now. A `write: false` request skips Local: its rows are another context's, so a head they lack starts
+from the stage. The answer's `base` says where each head started, so a client holds the gesture's anchor and a
+Live drag never fans a fan; `clamped` names the heads held at the end of travel. The sum goes
+through the same `TemplateResolver`, an axis not fanned resolving to its base exactly. The surface's
+`SelectionFan` encoder is the same resolve over the desk selection, owner `surface`, with the desk
+holding its anchor and the rig order for the gesture (`docs/midi-control-surface-engineering.md`).
+
 ### Applied state is resolved by the desk
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk

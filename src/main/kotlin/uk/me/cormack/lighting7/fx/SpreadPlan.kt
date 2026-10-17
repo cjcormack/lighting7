@@ -97,13 +97,9 @@ object SpreadPlan {
     fun fractions(count: Int, order: DistributionStrategy, curve: SpreadCurve, parts: Int): DoubleArray {
         require(parts >= 1) { "parts must be at least 1" }
         if (count == 0) return DoubleArray(0)
-        val runs = parts.coerceAtMost(count)
-        val base = count / runs
-        val extra = count % runs
         val out = DoubleArray(count)
         var at = 0
-        repeat(runs) { i ->
-            val size = base + if (i < extra) 1 else 0
+        for (size in runSizes(count, parts)) {
             if (curve == SpreadCurve.WINGS) {
                 wings(size, order).copyInto(out, at)
             } else {
@@ -113,6 +109,31 @@ object SpreadPlan {
             at += size
         }
         return out
+    }
+
+    /**
+     * A **fan**'s weights (venue-visit plan S12): `2t − 1` for each [fractions] `t`, so the amount
+     * times a head's weight is its offset from its own position. Under [SpreadCurve.LINE] the fan is
+     * symmetric about the middle of each run — the middle head of an odd run stays put, the ends move
+     * by the whole amount in opposite directions — and every other curve and order keeps its shape,
+     * read against that midline. A run of one head has no fan, so it weighs 0 whatever the curve.
+     */
+    fun fanWeights(count: Int, order: DistributionStrategy, curve: SpreadCurve, parts: Int): DoubleArray {
+        val t = fractions(count, order, curve, parts)
+        val out = DoubleArray(count) { 2.0 * t[it] - 1.0 }
+        var at = 0
+        for (size in runSizes(count, parts)) {
+            if (size == 1) out[at] = 0.0
+            at += size
+        }
+        return out
+    }
+
+    /** The sizes of the [parts] contiguous runs [count] heads are cut into, the first runs one longer when it does not divide. */
+    private fun runSizes(count: Int, parts: Int): List<Int> {
+        if (count == 0) return emptyList()
+        val runs = parts.coerceAtMost(count)
+        return List(runs) { i -> count / runs + if (i < count % runs) 1 else 0 }
     }
 
     /**

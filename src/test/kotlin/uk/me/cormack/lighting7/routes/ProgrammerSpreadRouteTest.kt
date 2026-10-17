@@ -16,6 +16,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoFixturePatch
@@ -381,6 +383,131 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         assertEquals(CODE_SPREAD_NEEDS_SELECTION, empty.body<ErrorResponse>().code)
         val mask = client.post(SpreadRequest(targets = listOf(fixture("hex-1")), families = listOf("WIBBLE"), property = "dimmer", from = "pct:0", to = "pct:1"))
         assertEquals(HttpStatusCode.BadRequest, mask.status)
+    }
+
+    // ─── Fan: an amount around each head's own position (venue-visit plan S12) ─
+
+    private val movers = listOf("spot-1", "spot-2", "mac-1")
+
+    /** What the desk is sending a head's pan and tilt now. */
+    private fun stagePosition(key: String): String {
+        val head = state.show.fixtures.untypedGroupableFixture(key) as uk.me.cormack.lighting7.fixture.trait.WithPosition
+        val pan = head.pan as uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+        val tilt = head.tilt as uk.me.cormack.lighting7.fixture.dmx.DmxSlider
+        val controller = state.show.fixtures.controllerOrNull(pan.universe)!!
+        return "${controller.getValue(pan.channelNo)},${controller.getValue(tilt.channelNo)}"
+    }
+
+    private fun fan(pan: Int? = null, tilt: Int? = null, base: Map<String, String>? = null, write: Boolean = true, targets: List<CueTargetDto> = movers.map(::fixture)) =
+        SpreadRequest(
+            targets = targets,
+            property = "position",
+            mode = "FAN",
+            fan = SpreadFanDto(pan, tilt),
+            base = base?.map { (key, value) -> SpreadBaseDto(fixture(key), value) },
+            write = write,
+        )
+
+    @Test
+    fun `a fan moves each head from its own base, symmetric about the middle of the order`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        val out = client.run(fan(pan = 30, base = mapOf("spot-1" to "128,100", "spot-2" to "60,100", "mac-1" to "200,40")))
+        assertEquals(movers, out.written.map { it.target.key })
+        // −30, 0, +30 on pan; tilt is not fanned, so each keeps its own.
+        assertEquals(listOf("98,100", "60,100", "230,40"), out.written.map { it.value })
+        assertEquals(listOf("128,100", "60,100", "200,40"), out.base.map { it.value }, "the base each head started from")
+        assertTrue(out.clamped.isEmpty())
+        assertEquals(movers.map { it to "position" }.toSet(), entries())
+    }
+
+    @Test
+    fun `a head with no base given starts from Local's own value, not the stage Blind keeps it off`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        // Blind: Local holds the new position, the stage does not show it.
+        state.show.fxEngine.programmer.setBlind(true)
+        client.run(SpreadRequest(targets = movers.map(::fixture), property = "position", from = "pos:0,-20", to = "pos:0,-20"))
+        assertNotEquals("128,108", stagePosition("spot-2"), "Blind keeps Local off the stage")
+        val out = client.run(fan(tilt = 10))
+        assertEquals(listOf("128,108", "128,108", "128,108"), out.base.map { it.value })
+        assertEquals(listOf("128,98", "128,108", "128,118"), out.written.map { it.value })
+        // Sending the answer's base back fans the same heads from the same place, whatever Local now holds.
+        client.run(fan(tilt = 10))
+        val again = client.run(fan(tilt = 20, base = out.base.associate { it.target.key to it.value }, write = false))
+        assertEquals(listOf("128,88", "128,108", "128,128"), again.written.map { it.value })
+    }
+
+    @Test
+    fun `a head starts from Local as output arbitrates it — a newer pan entry wins over the position entry`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.run(SpreadRequest(targets = movers.map(::fixture), property = "position", from = "pos:-28,-28", to = "pos:-28,-28"))
+        val spot1 = state.show.fixtures.untypedGroupableFixture("spot-1")
+        state.show.fxEngine.programmer.writeProperties(
+            ProgrammerOwner.WEB,
+            listOf(ProgrammerWriter.PropertyWrite(spot1, "pan", CueAssignmentResolver.PropertyValue.Slider(150u))),
+        )
+        val out = client.run(fan(pan = 10, targets = listOf(fixture("spot-1"), fixture("spot-2"))))
+        assertEquals(listOf("150,100", "100,100"), out.base.map { it.value })
+    }
+
+    @Test
+    fun `under write false a head the request gives no base for starts from the stage, never from Local`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.run(SpreadRequest(targets = movers.map(::fixture), property = "position", from = "pos:0,-20", to = "pos:0,-20"))
+        val stage = stagePosition("spot-2")
+        val out = client.run(fan(pan = 10, base = mapOf("spot-1" to "90,90"), write = false, targets = listOf(fixture("spot-1"), fixture("spot-2"))))
+        assertEquals(listOf("90,90", stage), out.base.map { it.value })
+    }
+
+    @Test
+    fun `a head taken past its travel is held at the end and named`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        val out = client.run(fan(pan = 40, base = mapOf("spot-1" to "10,0", "spot-2" to "128,0", "mac-1" to "240,0"), write = false))
+        assertEquals(listOf("0,0", "128,0", "255,0"), out.written.map { it.value })
+        assertEquals(listOf("spot-1", "mac-1"), out.clamped.map { it.key })
+    }
+
+    @Test
+    fun `a fan over one group runs in its member order, and a head without position is skipped`() = testApplication {
+        seed()
+        LocateTestSupport.seedGroup(state, projectId, "movers", "mac-1", "spot-1", "hex-1", "spot-2")
+        state.show.fixtures.patchListChanged()
+        mountTestApp(state)
+        val client = jsonClient()
+        val out = client.run(
+            fan(pan = 20, base = movers.associateWith { "128,128" }, targets = listOf(group("movers")), write = false),
+        )
+        assertEquals(listOf("mac-1", "spot-1", "spot-2"), out.written.map { it.target.key })
+        assertEquals(listOf("108,128", "128,128", "148,128"), out.written.map { it.value })
+        assertEquals(listOf("hex-1"), out.skipped.map { it.target.key })
+    }
+
+    @Test
+    fun `a fan off Position, without an amount or with a bad base is refused`() = testApplication {
+        seed()
+        mountTestApp(state)
+        val client = jsonClient()
+        val cases = listOf(
+            SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", mode = "FAN", fan = SpreadFanDto(pan = 10)),
+            fan(),
+            fan(pan = 128),
+            fan(pan = 10, base = mapOf("spot-1" to "#ff0000")),
+            SpreadRequest(targets = listOf(fixture("spot-1")), property = "position", mode = "SIDEWAYS", fan = SpreadFanDto(pan = 10)),
+        )
+        for (bad in cases) {
+            val resp = client.post(bad)
+            assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+            assertEquals(CODE_SPREAD_INVALID, resp.body<ErrorResponse>().code, bad.toString())
+        }
     }
 
     // ─── A fixture whose colour lives on its cells (venue-visit plan S1) ─

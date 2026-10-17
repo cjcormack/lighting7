@@ -13,6 +13,7 @@ import {
 } from './SpreadPanel'
 import type { SpreadResponse } from '@/store/programmerOps'
 import { getSpreadOver, resetSpreadOverStore } from '@/lib/spreadOver'
+import { getSpreadFanPrefs, resetSpreadFanStore } from '@/lib/spreadFan'
 
 /**
  * The Spread panel (editor-kit plan D2–D7): one component in a popover host and a docked host. What
@@ -87,6 +88,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSpreadOverStore()
+  resetSpreadFanStore()
   window.sessionStorage.clear()
   cleanup()
   vi.clearAllMocks()
@@ -531,6 +533,207 @@ describe('the four kinds', () => {
     expect(lastBody()).toMatchObject({ property: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
     // Enter applied and closed the popover.
     expect(document.querySelector('[data-spread-panel]')).toBeNull()
+  })
+})
+
+describe('Fan (venue-visit plan S12)', () => {
+  const positionPlan = (over: Partial<IntentSpreadPlan> = {}) =>
+    intentPlan({
+      label: 'Position',
+      targets: [
+        { type: 'fixture', key: 'spot-1' },
+        { type: 'fixture', key: 'spot-2' },
+      ],
+      families: ['POSITION'],
+      initial: { family: 'POSITION' },
+      propertiesFor: () => [{ propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' }],
+      ...over,
+    })
+  const toFan = () => fireEvent.click(radio('Spread mode', 'Fan'))
+  const amount = (axis: 'Pan' | 'Tilt') => screen.getByRole('spinbutton', { name: `${axis} amount` })
+  const base = (key: string, value: string) => ({ target: { type: 'fixture' as const, key }, value })
+
+  it('offers Ends · Fan on Position alone, and Fan swaps From · To for an amount on the chosen axes', () => {
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    expect(screen.getByRole('spinbutton', { name: 'From pan' })).toBeTruthy()
+    toFan()
+    expect(screen.queryByRole('spinbutton', { name: 'From pan' })).toBeNull()
+    expect(screen.getByRole('slider', { name: 'Pan fan' })).toBeTruthy()
+    expect(screen.queryByRole('slider', { name: 'Tilt fan' })).toBeNull()
+    fireEvent.click(radio('Fan axes', 'Both'))
+    expect(screen.getByRole('slider', { name: 'Tilt fan' })).toBeTruthy()
+    // The curve pictures read against the midline, each head's own position.
+    expect(document.querySelector('[data-curve-picture="LINE"] [data-curve-midline]')).not.toBeNull()
+    expect(getSpreadFanPrefs()).toEqual({ mode: 'FAN', axes: 'BOTH' })
+    cleanup()
+    render(<SpreadPanel host="docked" plans={[intentPlan({ initial: { family: 'INTENSITY' } })]} />)
+    expect(screen.queryByRole('radiogroup', { name: 'Spread mode' })).toBeNull()
+  })
+
+  it('opens a fresh panel in the mode and axes it was last left in', () => {
+    const { unmount } = render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.click(radio('Fan axes', 'Tilt'))
+    unmount()
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    expect(radio('Spread mode', 'Fan')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Fan axes', 'Tilt')).toHaveAttribute('aria-checked', 'true')
+  })
+
+  it('sends a fan with no endpoints, holds the desk’s base as the anchor and sends it back', async () => {
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.change(amount('Pan'), { target: { value: '20' } })
+    apply()
+    expect(lastBody()).toMatchObject({ property: 'position', mode: 'FAN', fan: { pan: 20 } })
+    expect(lastBody()).not.toHaveProperty('from')
+    expect(lastBody()).not.toHaveProperty('to')
+    expect(lastBody()).not.toHaveProperty('base')
+    await answer({ written: [], base: [base('spot-1', '128,128'), base('spot-2', '60,90')], clamped: [{ type: 'fixture', key: 'spot-2' }] })
+    expect(document.querySelector('[data-fan-readout]')).toHaveTextContent('From where they are · 1 head at the end of travel')
+
+    fireEvent.change(amount('Pan'), { target: { value: '30' } })
+    apply()
+    expect(lastBody()).toMatchObject({ fan: { pan: 30 }, base: [base('spot-1', '128,128'), base('spot-2', '60,90')] })
+
+    // Re-read: no anchor and no fan — the next send reads the heads again.
+    fireEvent.click(screen.getByRole('button', { name: 'Re-read' }))
+    expect(screen.getByRole('slider', { name: 'Pan fan' })).toHaveAttribute('aria-valuenow', '0')
+    fireEvent.change(amount('Pan'), { target: { value: '5' } })
+    apply()
+    expect(lastBody()).toMatchObject({ fan: { pan: 5 } })
+    expect(lastBody()).not.toHaveProperty('base')
+  })
+
+  it('holds Live sends while the anchor is read, then sends the latest with it — never a fan of a fan', async () => {
+    vi.useFakeTimers()
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
+    const strip = screen.getByRole('slider', { name: 'Pan fan' })
+    fireEvent.keyDown(strip, { key: 'ArrowRight' })
+    expect(send).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(strip, { key: 'ArrowRight', shiftKey: true })
+    act(() => {
+      vi.advanceTimersByTime(60)
+    })
+    expect(send).toHaveBeenCalledTimes(1)
+    await answer({ written: [], base: [base('spot-1', '128,128'), base('spot-2', '128,128')] }, 0)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(lastBody()).toMatchObject({ fan: { pan: 9 }, base: [base('spot-1', '128,128'), base('spot-2', '128,128')] })
+  })
+
+  it('a host that edits rows starts the fan from them, and says how many heads came from the stage', async () => {
+    render(
+      <SpreadPanel
+        host="docked"
+        plans={[positionPlan({ write: false, fanBases: () => [base('spot-1', '100,100')], fanRowsLabel: 'the layer’s rows' })]}
+      />,
+    )
+    toFan()
+    fireEvent.change(amount('Pan'), { target: { value: '10' } })
+    apply()
+    expect(lastBody()).toMatchObject({ write: false, base: [base('spot-1', '100,100')] })
+    await answer({ written: [], base: [base('spot-1', '100,100'), base('spot-2', '128,128')] })
+    expect(document.querySelector('[data-fan-readout]')).toHaveTextContent('From the layer’s rows · 1 head from the stage')
+  })
+
+  it('sends no fan at 0 before one is set — so turning Fan on with Live writes nothing', () => {
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
+    toFan()
+    fireEvent.click(radio('Fan axes', 'Both'))
+    expect(send).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Send again' }))
+    expect(send).not.toHaveBeenCalled()
+  })
+
+  it('an answer with no base is no anchor: the next send reads the heads again rather than send `base: []`', async () => {
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.change(amount('Pan'), { target: { value: '10' } })
+    apply()
+    await answer({ skippedFamilies: ['POSITION'] })
+    fireEvent.change(amount('Pan'), { target: { value: '12' } })
+    apply()
+    expect(lastBody()).not.toHaveProperty('base')
+  })
+
+  it('a new scope over the same heads drops the anchor, so the layer’s rows are read', async () => {
+    const { rerender } = render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.change(amount('Pan'), { target: { value: '10' } })
+    apply()
+    await answer({ written: [], base: [base('spot-1', '128,128'), base('spot-2', '128,128')] })
+    rerender(
+      <SpreadPanel
+        host="docked"
+        plans={[positionPlan({ write: false, fanScope: 'layer:4', fanBases: () => [base('spot-1', '90,90')], fanRowsLabel: 'the layer’s rows' })]}
+      />,
+    )
+    expect(screen.getByRole('slider', { name: 'Pan fan' })).toHaveAttribute('aria-valuenow', '0')
+    fireEvent.change(amount('Pan'), { target: { value: '12' } })
+    apply()
+    expect(lastBody()).toMatchObject({ write: false, base: [base('spot-1', '90,90')] })
+  })
+
+  it('a send waiting on the first answer still lands after the popover closes', async () => {
+    render(<SpreadPanel host="popover" plans={[positionPlan()]} />)
+    open()
+    toFan()
+    fireEvent.click(screen.getByRole('switch', { name: 'Live — apply as I adjust' }))
+    fireEvent.change(amount('Pan'), { target: { value: '10' } })
+    expect(send).toHaveBeenCalledTimes(1)
+    // The release: Send again while the first is in flight waits for its anchor; then Escape closes.
+    fireEvent.change(amount('Pan'), { target: { value: '40' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Send again' }))
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
+    expect(send).toHaveBeenCalledTimes(1)
+    await answer({ written: [], base: [base('spot-1', '128,128'), base('spot-2', '128,128')] }, 0)
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(lastBody()).toMatchObject({ fan: { pan: 40 }, base: [base('spot-1', '128,128'), base('spot-2', '128,128')] })
+  })
+
+  it('a send waiting on a first send that failed is sent instead of being lost', async () => {
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    fireEvent.change(amount('Pan'), { target: { value: '10' } })
+    apply()
+    fireEvent.change(amount('Pan'), { target: { value: '30' } })
+    apply()
+    expect(send).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      pending[0].reject(new Error('503'))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(send).toHaveBeenCalledTimes(2)
+    expect(lastBody()).toMatchObject({ fan: { pan: 30 } })
+    expect(lastBody()).not.toHaveProperty('base')
+  })
+
+  it('drags from the amount as it stands, ⇧ a quarter as far, and a double click is no fan', () => {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 255 } as DOMRect)
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    const strip = screen.getByRole('slider', { name: 'Pan fan' })
+    fireEvent.pointerDown(strip, { clientX: 100, pointerId: 1 })
+    fireEvent.pointerMove(strip, { clientX: 120, pointerId: 1 })
+    expect(strip).toHaveAttribute('aria-valuenow', '20')
+    fireEvent.pointerMove(strip, { clientX: 160, pointerId: 1, shiftKey: true })
+    expect(strip).toHaveAttribute('aria-valuenow', '30')
+    fireEvent.pointerUp(strip, { pointerId: 1 })
+    fireEvent.doubleClick(strip)
+    expect(strip).toHaveAttribute('aria-valuenow', '0')
+  })
+
+  it('a fan seed opens the popover on Position, in Fan, and is spent', () => {
+    const onSeedConsumed = vi.fn()
+    const plan = positionPlan({ families: ['INTENSITY', 'POSITION'], initial: undefined, mask: ['POSITION'] })
+    render(<SpreadPanel host="popover" plans={[plan]} seed={{ fan: true, key: 1 }} onSeedConsumed={onSeedConsumed} />)
+    expect(document.querySelector('[data-spread-panel]')).not.toBeNull()
+    expect(radio('Spread mode', 'Fan')).toHaveAttribute('aria-checked', 'true')
+    expect(onSeedConsumed).toHaveBeenCalled()
   })
 })
 

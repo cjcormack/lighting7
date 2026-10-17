@@ -25,7 +25,7 @@ import {
   type RecordBindingOptions,
   type RecordOption,
 } from "./recordOptions"
-import type { BindingTarget, TakeoverPolicy } from "@/store/surfaces"
+import type { BindingTarget, FanAxis, TakeoverPolicy } from "@/store/surfaces"
 import type { CueTarget } from "@/api/cuesApi"
 import { SUBSELECT_MODES, type SubselectMode } from "@/api/selectionApi"
 import { useDeskWindows } from "@/store/windows"
@@ -80,6 +80,7 @@ const CONTINUOUS_KINDS: TargetKind[] = [
   "fixtureProperty",
   "groupProperty",
   "selectionProperty",
+  "selectionFan",
   "speedMasterBpm",
   "grandMasterFader",
   "stackEffectSize",
@@ -119,6 +120,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   fixtureProperty: "Fixture property",
   groupProperty: "Group property",
   selectionProperty: "Selection — property",
+  selectionFan: "Selection — fan",
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
   cueStackPause: "Cue stack — Pause",
@@ -441,6 +443,27 @@ function TargetBody({
         )}
         <p className="text-xs text-muted-foreground">
           Writes this property on every selected target. With nothing selected the move is dropped.
+        </p>
+      </div>
+    )
+  }
+  if (kind === "selectionFan" && value.type === "selectionFan") {
+    return (
+      <div className="space-y-2">
+        <div className="space-y-1.5">
+          <Label className="text-xs">Axis</Label>
+          <Select value={value.axis} onValueChange={(axis) => onChange({ ...value, axis: axis as FanAxis })}>
+            <SelectTrigger aria-label="Fan axis"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PAN">Pan</SelectItem>
+              <SelectItem value="TILT">Tilt</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Fans every selected head about its own position: turn one way to fan out, back to fan in. A
+          new selection, or anything else moving a selected head, starts the fan again from where the
+          heads are. With nothing selected the turn is dropped.
         </p>
       </div>
     )
@@ -982,6 +1005,8 @@ function defaultForKind(
     // of these start somewhere the desk can already dispatch.
     case "selectionProperty":
       return { type: "selectionProperty", propertyName: "dimmer" }
+    case "selectionFan":
+      return { type: "selectionFan", axis: "PAN" }
     case "encoderBankSet":
       return { type: "encoderBankSet", propertyName: "dimmer" }
     case "selectTarget":

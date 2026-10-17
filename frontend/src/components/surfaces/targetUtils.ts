@@ -114,6 +114,8 @@ export function describeTarget(target: BindingTarget): string {
     // writes colour on whatever is selected".
     case "selectionProperty":
       return `Sel · ${target.propertyName}${axisSuffix(target.colourAxis)}`
+    case "selectionFan":
+      return `Sel · fan ${target.axis === "PAN" ? "pan" : "tilt"}`
     case "selectTarget":
       return `${target.mode === "replace" ? "Select only" : "Select"} ${target.target.key}`
     case "clearSelection":

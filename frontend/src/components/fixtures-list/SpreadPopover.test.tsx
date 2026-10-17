@@ -28,7 +28,14 @@ const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('../programmer/FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => focusedTemplate.current }))
 const scopeState = vi.hoisted(() => ({ current: null as null | { kind: 'output' | 'local' } | { kind: 'layer'; layerId: number } }))
 vi.mock('../programmer/ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.current }))
-const lookStore = vi.hoisted(() => ({ current: null as null | { setValue: (targetKey: string, propertyName: string, value: string) => void; lookName?: string } }))
+const lookStore = vi.hoisted(() => ({
+  current: null as null | {
+    setValue: (targetKey: string, propertyName: string, value: string) => void
+    lookName?: string
+    draft?: { get: (targetKey: string, propertyName: string) => string | undefined }
+    serverRows?: Map<string, unknown>
+  },
+}))
 vi.mock('../programmer/LookRowStore', () => ({ useLookRowStore: () => lookStore.current, lookRowKey: (t: string, p: string) => `${t}|${p}` }))
 // The desk's mask, distinguishable from the marquee's so the test can see which one a request carries.
 const deskMask = vi.hoisted(() => ({ current: ['POSITION'] as string[] | null }))
@@ -49,8 +56,9 @@ vi.mock('../../lib/programmerFade', () => ({ getProgrammerFadeMs: () => 0 }))
 
 import { SpreadPopover, isIntentString, spreadColumnsForTargets, type SpreadColumn } from './SpreadPopover'
 import { buildRows, expandSelectionToTargets, spreadTargetsFor, wholeGroupOf, type Row } from './rowModel'
-import { chan, colourProp, groupSummary, makeFixture, makePixelBar, sliderProp } from '@/test/fixtureFactories'
+import { chan, colourProp, groupSummary, makeFixture, makePixelBar, positionProp, sliderProp } from '@/test/fixtureFactories'
 import { resetSpreadOverStore } from '@/lib/spreadOver'
+import { resetSpreadFanStore } from '@/lib/spreadFan'
 
 const rgb = (n: number) => colourProp('rgbColour', chan(n), chan(n + 1), chan(n + 2))
 const rgbw = (n: number) => colourProp('rgbColour', chan(n), chan(n + 1), chan(n + 2), { whiteChannel: chan(n + 3) })
@@ -113,6 +121,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetSpreadOverStore()
+  resetSpreadFanStore()
   window.sessionStorage.clear()
   cleanup()
   vi.clearAllMocks()
@@ -258,6 +267,33 @@ describe('the scope arm (D6)', () => {
     expect(setValue).toHaveBeenNthCalledWith(1, 'par-1', 'dimmer', '0')
     expect(setValue).toHaveBeenNthCalledWith(2, 'par-2', 'dimmer', '255')
     expect(toast.error).not.toHaveBeenCalled()
+  })
+
+  it('a fan in a focused Look layer starts from the layer’s own positions, and says so (venue-visit plan S12)', async () => {
+    const spots = [
+      makeFixture('spot-1', [positionProp('position', chan(50), chan(51))]),
+      makeFixture('spot-2', [positionProp('position', chan(60), chan(61))]),
+    ]
+    const rows = buildRows({ fixtures: spots, groups: [], expandedGroups: new Set(), expandedFixtures: new Set(), textFilter: '' })
+    scopeState.current = { kind: 'layer', layerId: 3 }
+    lookStore.current = {
+      setValue: vi.fn(),
+      lookName: 'Warm Wash',
+      draft: { get: (key, property) => (key === 'spot-1' && property === 'position' ? '100,90' : undefined) },
+      serverRows: new Map(),
+    }
+    draw([{ col: 'position', targets: expandSelectionToTargets(rows, new Set(['fixture:spot-1', 'fixture:spot-2'])) }], { scopeLabel: 'Warm Wash' })
+    open()
+    fireEvent.click(radio('Spread mode', 'Fan'))
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Pan amount' }), { target: { value: '10' } })
+    apply()
+    expect(lastRequest()).toMatchObject({
+      mode: 'FAN',
+      write: false,
+      fan: { pan: 10 },
+      base: [{ target: { type: 'fixture', key: 'spot-1' }, value: '100,90' }],
+    })
+    expect(lastRequest()).not.toHaveProperty('from')
   })
 
   it('refuses an intent-shaped answer from an older desk rather than landing it in a Look row', async () => {

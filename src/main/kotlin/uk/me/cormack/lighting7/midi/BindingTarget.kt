@@ -22,7 +22,7 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
- *   - **Selection-relative** ([SelectionProperty], [SelectTarget], [ClearSelection],
+ *   - **Selection-relative** ([SelectionProperty], [SelectionFan], [SelectTarget], [ClearSelection],
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
  *     See `docs/plans/completed/midi-surface-plan.md` §D3.
@@ -216,6 +216,17 @@ sealed class BindingTarget {
         val propertyName: String,
         val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
+
+    /**
+     * **Fan** the selection's positions on [axis] (venue-visit plan S12): a turn moves the fan's
+     * amount on that axis, two centre steps a 7-bit step, and each selected head is written at its
+     * own position plus its share of the amount, through the Spread panel's own resolve. The desk
+     * holds the anchor ([SelectionFan]) and the ring shows the amount, 64 its 0. An empty selection
+     * drops the turn, as [SelectionProperty] does.
+     */
+    @Serializable
+    @SerialName("selectionFan")
+    data class SelectionFan(val axis: FanAxis) : BindingTarget()
 
     /** How a [SelectTarget] press changes the desk selection. */
     @Serializable

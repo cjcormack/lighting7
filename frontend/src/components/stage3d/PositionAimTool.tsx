@@ -48,8 +48,10 @@ export function PositionAimTool({ projectId, targets }: { projectId: number; tar
       disabled={refusal != null}
       title={refusal ?? 'Aim these heads at a point on the stage'}
     >
-      <Crosshair className="mr-1 size-3.5" />
-      Aim…
+      {/* Its word on the name alone: at the popup's 288px the footer folds Aim… and Spread… to
+          their icons and keeps Save as palette…'s, the colour footer's rule (venue-visit plan S12). */}
+      <Crosshair className="size-3.5" />
+      <span className="sr-only">Aim…</span>
     </Button>
   )
   if (refusal != null) return trigger

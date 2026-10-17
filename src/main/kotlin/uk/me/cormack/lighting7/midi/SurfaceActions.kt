@@ -135,6 +135,9 @@ interface SurfaceActions {
      */
     fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis? = null)
 
+    /** One turn of a fan encoder on [axis] over the desk selection — see [SelectionFan]. */
+    fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte)
+
     /** Toggle [target] in, or replace the selection with it, per [mode]. */
     fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode)
 
@@ -434,6 +437,8 @@ class DefaultSurfaceActions(
         if (writes.isEmpty()) return
         fxEngine.programmer.writeProperties(ProgrammerOwner.SURFACE, writes)
     }
+
+    override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) = state.selectionFan.turn(axis, midiValue7Bit)
 
     override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
         when (mode) {

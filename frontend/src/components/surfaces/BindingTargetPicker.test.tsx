@@ -218,6 +218,15 @@ describe('BindingTargetPicker record targets', () => {
     expect(onChange).toHaveBeenLastCalledWith({ type: 'stackEffectSize', stackId: 9, stackUuid: null })
   })
 
+  it('offers the selection fan on a fader, with its axis', () => {
+    const onChange = renderPicker(true, { type: 'selectionFan', axis: 'PAN' })
+    expect(screen.getByText('Selection — fan')).toBeInTheDocument()
+    expect(screen.getByText(/about its own position/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('combobox', { name: 'Fan axis' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Tilt' }))
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'selectionFan', axis: 'TILT' })
+  })
+
   it('does not offer a record kind on a fader', () => {
     // Every one is a press, and a fader has no press — `refuseWrongKind` would refuse the row.
     renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })

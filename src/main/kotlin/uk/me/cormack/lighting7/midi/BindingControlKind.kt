@@ -44,6 +44,7 @@ fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
     is BindingTarget.FixtureProperty,
     is BindingTarget.GroupProperty,
     is BindingTarget.SelectionProperty,
+    is BindingTarget.SelectionFan,
     is BindingTarget.SpeedMasterBpm,
     BindingTarget.GrandMasterFader,
     is BindingTarget.StackEffectSize,

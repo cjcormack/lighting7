@@ -41,6 +41,12 @@ export interface RailTabClaim {
   focusSpread: () => void
   /** A colour editor's *Spread…*: open the Spread tab with From set to this RGB (`SpreadSeed`'s shape). */
   spreadFrom: (from: { r: number; g: number; b: number }) => void
+  /**
+   * A position cell's *Spread…*: open the Spread tab on Position, in Fan, at no fan (venue-visit plan
+   * S12). False where the rail draws no tabs — overlay mode, or push mode's narrow arm — and the
+   * caller opens row C's popover instead.
+   */
+  spreadFan: () => boolean
 }
 
 export const RailTabClaimContext = createContext<RailTabClaim | null>(null)

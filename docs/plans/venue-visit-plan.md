@@ -203,25 +203,11 @@ Grouped by area. §4 gives the order.
   aims only while armed and Edit wins; head height on the region under the click, else the deck or
   the house floor, or a typed Z; the Plan always fits the drawn room; *Aim…* in the position cell's
   footer; by Chris's calls of 2026-10-17).
-
-**S12 — Fan in and fan out.**
-- Spread gains a relative mode: a fan amount around each head's current position.
-- It works pan-only, tilt-only or both, symmetric about the selection's centre in rig order. A
-  selection that is one group is in that group's own member order, as a spread over one already is
-  since S7.
-- Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
-- `SpreadPanel` has four hosts that spread an intent: row C's popover, the rail's Spread tab, the
-  busk view's Spread tab (`busking/SpreadSheet.tsx`) and, since R2.5, the cue editor's Values grid
-  (its selection bar's `SpreadPopover`). A focused Look layer and the Values grid resolve with
-  `write: false` into the row being edited, so there a head's current position is that row's, not
-  the stage's; the sketch says which a fan reads. The patch list, the DMX sheet, the cue table and
-  the palette sheet host it with raw plans of their own, which a fan leaves alone.
-- The position cell's popup has no *Spread…*. It goes in `PaletteBands`' footer `tools` slot
-  (apply-model §4.3's *Spread…*, *Pick*, *Aim…*), beside the *Aim…* S13 put there
-  (`PositionAimTool`, `07f5de4`); the colour editor's own *Spread…* seeds the rail's tab. Since R3.8
-  (`2deb7fb0`) the footer is drawn only in the programmer: the cue editor's cells draw the bands and
-  no footer, so in the Values grid a fan opens from the selection bar, not from a cell.
-- Start with a one-board sketch of the panel. No separate design session.
+- ~~S12 — Fan in and fan out~~ — done, `2741d70` (Spread's *Ends · Fan* on Position, an amount per
+  axis about each head's own position, symmetric about the middle of the order, resolved on the desk
+  with the panel holding the gesture's anchor; the rows being edited are a Look layer's and the
+  Values grid's start; a `SelectionFan` encoder target; *Spread…* after *Aim…*; nine calls decided
+  with Chris on 2026-10-17, `venue-visit-design/Fan.dc.html`).
 
 ### Effects
 

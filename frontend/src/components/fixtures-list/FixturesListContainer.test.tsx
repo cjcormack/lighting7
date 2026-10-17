@@ -486,7 +486,7 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
  */
 describe('FixturesListContainer with the rail Colour tab open', () => {
   function claim(tab: RailTabClaim['tab']): RailTabClaim {
-    return { tab, focusColour: vi.fn(), focusSpread: vi.fn(), spreadFrom: vi.fn() }
+    return { tab, focusColour: vi.fn(), focusSpread: vi.fn(), spreadFrom: vi.fn(), spreadFan: vi.fn() }
   }
   function drawWith(rail: RailTabClaim) {
     programmerScope.value = { kind: 'local' }

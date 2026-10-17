@@ -365,8 +365,9 @@ export interface SpreadRequest {
   families?: PropertyMaskGroup[]
   /** A `TemplateProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
   property: string
-  from: string
-  to: string
+  /** The two endpoint intents; absent on a fan, which has none. */
+  from?: string
+  to?: string
   curve?: SpreadCurve
   order?: SpreadOrder
   parts?: number
@@ -381,6 +382,25 @@ export interface SpreadRequest {
    * that carried `write: true` (plan §6). `SpreadPanel.spreadRequestOf` is the one builder.
    */
   write?: boolean
+  /**
+   * `FAN` is Spread's relative mode (venue-visit plan S12), Position only: an amount around each
+   * head's own position. Absent is `ENDS`, from → to — and absent whenever it is, for `write`'s
+   * reason.
+   */
+  mode?: 'FAN'
+  /** `FAN`: the outer heads' offset per axis, in centre steps; an absent axis is not fanned. */
+  fan?: { pan?: number; tilt?: number }
+  /**
+   * `FAN`: where each head starts, a `"pan,tilt"` literal — the desk's own `base` answer sent back
+   * for the rest of the gesture, or the row being edited. A head absent here is read by the desk.
+   */
+  base?: SpreadBase[]
+}
+
+/** One head's starting position for a fan: the head and its `"pan,tilt"` literal. */
+export interface SpreadBase {
+  target: CueTarget
+  value: string
 }
 
 /**
@@ -410,6 +430,10 @@ export interface SpreadResponse {
   skipped?: SpreadSkip[]
   /** The property's family, when the mask kept it out — then nothing was written. */
   skippedFamilies?: string[]
+  /** `FAN`: where each head started — the gesture's anchor, sent back with the next request. */
+  base?: SpreadBase[]
+  /** `FAN`: the heads the fan took past the end of their travel, held at it. */
+  clamped?: CueTarget[]
 }
 
 /**

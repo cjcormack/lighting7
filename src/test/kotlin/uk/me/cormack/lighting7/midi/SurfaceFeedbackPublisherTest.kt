@@ -80,6 +80,7 @@ class SurfaceFeedbackPublisherTest {
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
         val stackSizes = uk.me.cormack.lighting7.fx.StackEffectSizes()
+        val fan = FakeFanRing()
         val selection = DeskSelection { fixtures }
         val matcher: DeviceMatcher
         val recordingController = RecordingController(
@@ -123,6 +124,7 @@ class SurfaceFeedbackPublisherTest {
                 deskSelection = selection,
                 stackEffectSizesProvider = { stackSizes },
                 stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
+                selectionFan = fan,
             )
         }
 
@@ -352,6 +354,46 @@ class SurfaceFeedbackPublisherTest {
         }
     }
 
+    /** A fan the test sets by hand: [SelectionFan]'s ring half without a desk behind it. */
+    private class FakeFanRing : FanRing {
+        var pan = 0
+        private val stamps = kotlinx.coroutines.flow.MutableStateFlow(SelectionFan.Shown(SelectionFan.Amounts(), 0))
+        override val shown: kotlinx.coroutines.flow.StateFlow<SelectionFan.Shown> = stamps
+        override fun amountFor(axis: FanAxis) = if (axis == FanAxis.PAN) pan else 0
+
+        fun set(amount: Int) {
+            pan = amount
+            stamps.value = SelectionFan.Shown(SelectionFan.Amounts(pan = amount), stamps.value.stamp + 1)
+        }
+    }
+
+    /** A fan control shows the fan's amount on its axis, 64 at no fan, re-fed on every move (venue-visit plan S12). */
+    @Test
+    fun `a fan control shows the amount on its axis, centred at no fan`() = runBlocking {
+        val h = Harness(listOf(binding(1, "fader-1", BindingTarget.SelectionFan(FanAxis.PAN))))
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun motor() = h.recordingController.feedback
+                .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 1 }
+            assertEquals(64u.toUByte(), motor().last().value, "attach: no fan sits at the centre")
+
+            h.fan.set(40)
+            yield()
+            assertEquals(84u.toUByte(), motor().last().value)
+
+            h.recordingController.feedback.clear()
+            h.fan.set(40)
+            yield()
+            assertEquals(84u.toUByte(), motor().last().value, "an equal amount written again is still re-fed")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
     /**
      * Pins the deliberate v1 cut: every other LED entry reflects a steady boolean the
      * publisher can read back, and a tap has no "on" state to hold. If tap LEDs are added
@@ -438,6 +480,7 @@ class SurfaceFeedbackPublisherTest {
                 override fun cueStackPause(stackId: Int, stackUuid: String?) {}
                 override fun fireCue(cueId: Int, cueUuid: String?) {}
                 override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {}
+                override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) {}
                 override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {}
                 override fun clearSelection() {}
                 override fun locateSelection() {}

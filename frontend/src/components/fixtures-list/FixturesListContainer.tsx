@@ -15,6 +15,7 @@ import { useProgrammerScope } from '../programmer/ProgrammerScope'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
 import { useRailTabClaim } from '../programmer/railTab'
+import { PositionFanContext } from './cells/PositionSpreadTool'
 import { usePublishMarquee, type MarqueeSnapshot } from './marqueeContext'
 import {
   cellActionCopy,
@@ -1001,6 +1002,12 @@ export function FixturesListContainer({
     [railClaim],
   )
   const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
+  // A position cell's *Spread…*: the rail's Spread tab in Fan where the rail docks its tabs, else
+  // row C's popover in Fan — the colour hand-over's fallback (venue-visit plan S12).
+  const onFanFromPosition = useCallback(() => {
+    if (railClaim?.spreadFan()) return
+    setSpreadSeed((prev) => ({ fan: true, key: (prev?.key ?? 0) + 1 }))
+  }, [railClaim])
   const routeProjectId = projectId != null ? Number(projectId) : undefined
 
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
@@ -1542,6 +1549,7 @@ export function FixturesListContainer({
               : 'No fixtures match your filter'}
         </SheetPage.Empty>
       ) : (
+        <PositionFanContext.Provider value={onFanFromPosition}>
         <FixturesTable
           rows={rows}
           visibleColumns={visibleColumns}
@@ -1584,6 +1592,7 @@ export function FixturesListContainer({
           onMarqueeDragChange={setMarqueeDragging}
           onBackgroundClick={clearByLadder}
         />
+        </PositionFanContext.Provider>
       )}
 
       {renderFooter?.({ fixtureCount, groupCount, selectedCount: locateTargets.length })}
