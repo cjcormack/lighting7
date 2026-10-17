@@ -2784,6 +2784,12 @@ as a publish does for a running show); one not live opens held next time, as any
 Either role, as Detach; a venue and a version are refused by the write guard, and an admin's on a venue,
 or a show already on one, is 409 `NOT_A_STANDALONE_SHOW`. **Sync.** No `formatVersion` change: the attach
 writes hides, overrides, releases and the pin, which sync already carries, and clears the origin.
+**The sheet** is the frontend's `AttachVenueSheet` (frontend CLAUDE.md §"The app bar and the switcher"):
+it reads the review again with the answers so far after every answer, because an answer can retire
+another decision — an identity taken as the venue's retires the group decisions its members made — or
+take an answer off one, and drops an answer the desk refuses on either count (`No decision '…' in this
+attach`, `'…' does not answer '…'`, both sentences pinned here). A dry run sends *Re-address mine*
+without a start, so the desk picks the free one it suggests; the attach sends that suggestion.
 `VenueAttachTest` checks P2's round trip — detach, then attach at the same version: the effective rig,
 the parks, the hides, overrides and releases, and the output from one programmer state, all as before —
 and each blocker, overlap, rename and refusal; `VenueAttachPairingTest` pins the pairing's cases.

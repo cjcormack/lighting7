@@ -263,6 +263,10 @@ class VenueAttachTest : RouteIntegrationTest() {
         val bad = refusal { attach(h, decisions = listOf(UpdateDecisionAnswer("overlap:nope", UpdateAnswer.KEEP_BOTH))) }
         assertEquals(VenueAttachPairing.CODE_ATTACH_INVALID, bad.code)
         assertEquals(HttpStatusCode.BadRequest, bad.status)
+        // The attach sheet reads both sentences to drop an answer the desk no longer takes (`staleAnswerIdOf`).
+        assertEquals("No decision 'overlap:nope' in this attach", bad.message)
+        val untaken = refusal { attach(h, dryRun = true, decisions = listOf(UpdateDecisionAnswer(overlap.id, UpdateAnswer.KEEP_MINE))) }
+        assertTrue(untaken.message!!.startsWith("'KEEP_MINE' does not answer '${overlap.id}': it takes "), untaken.message)
 
         val done = attach(h, decisions = listOf(UpdateDecisionAnswer(overlap.id, UpdateAnswer.READDRESS_MINE, startChannel = 20)))
         assertTrue(done.overlaps.single().decided)

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { ProjectSummary } from '../api/projectApi'
 import {
-  ATTACH_NOT_BUILT,
   menuGroupsOf,
   projectActions,
   type ProjectActionContext,
@@ -111,8 +110,14 @@ describe('who sees what (§6)', () => {
     expect(actionOf(show(), ctx(), 'delete').enabled).toBe(true)
   })
 
-  it('attach is a slot until the venue-attach plan builds it', () => {
-    expect(actionOf(show(), ctx(), 'attach')).toMatchObject({ visible: true, enabled: false, reason: ATTACH_NOT_BUILT })
+  it('attach is offered on a standalone show, enabled, and opens its sheet', () => {
+    host.open.mockClear()
+    const attach = actionOf(show(), ctx(), 'attach')
+    expect(attach).toMatchObject({ visible: true, enabled: true, reason: null, label: 'Attach to venue…' })
+    attach.run()
+    expect(host.open).toHaveBeenCalledWith('attach')
+    expect(actionOf(onVenue(8), ctx(), 'attach').visible).toBe(false)
+    expect(actionOf(venue, ctx(), 'attach').visible).toBe(false)
   })
 
   it('scripts is no project action: the Library section has it', () => {

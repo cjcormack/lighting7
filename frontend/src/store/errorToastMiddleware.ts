@@ -52,6 +52,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'extractVenue', // src/components/venue/ExtractVenueSheet.tsx
   'detachVenue', // src/components/venue/DetachVenueDialog.tsx
   'replaceSeatingFromPreset', // src/components/venue/SeatingPresetCard.tsx
+  // A refused attach (an overlap left open, a blocker, a version gone) is drawn in its review sheet,
+  // which keeps the answers for the retry.
+  'attachVenue', // src/components/venue/AttachVenueSheet.tsx
   'recordProgrammer', // src/components/programmer/RecordSheet.tsx
   'recordLook', // src/components/programmer/RecordLookSheet.tsx
   'includeIntoProgrammer', // src/components/programmer/IncludeSheet.tsx

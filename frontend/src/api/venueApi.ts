@@ -209,6 +209,121 @@ export interface DetachedFrom {
   venueName?: string | null
 }
 
+/** What attach pairs, hides and lists: the six hideable kinds, universes, parks and the stage. */
+export type AttachKind = 'UNIVERSE' | 'PATCH' | 'RIGGING' | 'REGION' | 'ELEMENT' | 'VIEWPOINT' | 'GROUP' | 'PARK' | 'STAGE'
+
+/** A record the attach review names: a patch's key, a universe's `subnet:universe`. */
+export interface AttachRecord {
+  uuid: string
+  name: string
+  key?: string | null
+}
+
+/**
+ * One line of the attach review. `reason` is the line's code: `CHANGE`, `ADDITION`, `KEPT`; a hide's
+ * `KEPT` / `REMOVED_SINCE_ORIGIN` / `KEY_CLASH` / `ANSWERED` / `RELEASE`; an incoming record's
+ * `NO_ORIGIN` / `ADDED_SINCE_ORIGIN` / `HIDE_REFUSED` / `UNIVERSE`; a blocker's `KEY_CLASH` /
+ * `HEAD_CLASH` / `RENAME_TAKEN`.
+ */
+export interface AttachItem {
+  kind: AttachKind
+  show?: AttachRecord | null
+  venue?: AttachRecord | null
+  detail: string
+  reason?: string | null
+}
+
+/** A facet the show's patch differs in, written as an override of the venue's. */
+export interface AttachOverride {
+  venue: AttachRecord
+  facet: 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA'
+  value?: Record<string, unknown> | null
+  base?: Record<string, unknown> | null
+  venueValue?: Record<string, unknown> | null
+  drift?: boolean
+  /** The drift's decision. */
+  decisionId?: string | null
+  dormant?: boolean
+}
+
+/** Who names a key: `CUE | LOOK | TEMPLATE | BINDING | SCRIPT`. */
+export interface AttachUsedBy {
+  kind: string
+  id: number
+  name: string
+}
+
+/** What *Take venue's* renames: the show's references move from `from` to `to`. */
+export interface AttachRename {
+  kind: AttachKind
+  from: string
+  to: string
+  show: AttachRecord
+  venue: AttachRecord
+  usedBy?: AttachUsedBy[]
+}
+
+/** `IDENTITY` (D2), `HALL` and `GROUP` (D3), `DRIFT` — each `KEEP_MINE | TAKE_VENUES` — and `HIDE`. */
+export type AttachDecisionKind = 'IDENTITY' | 'HALL' | 'GROUP' | 'DRIFT' | 'HIDE'
+
+/** A choice the review offers, with its default applied unless answered. */
+export interface AttachDecision {
+  id: string
+  kind: AttachDecisionKind
+  recordKind: AttachKind
+  show?: AttachRecord | null
+  venue: AttachRecord
+  message: string
+  answers: UpdateAnswer[]
+  /** The answer in force: the operator's, else the default. */
+  answer: UpdateAnswer
+  decided?: boolean
+  bothChanged?: boolean
+  rename?: AttachRename | null
+}
+
+/** The origin a detached show recorded, and whether the review used it. */
+export interface AttachOrigin {
+  venueUuid: string
+  version: number
+  status: 'USED' | 'MISSING' | 'OTHER_VENUE'
+  detail: string
+}
+
+/**
+ * `GET /projects/{id}/venue/attach?venue=&to=` — the review, the attach rolled back on the desk — and
+ * what `POST` did (venue-attach plan §4.1).
+ */
+export interface AttachReview {
+  projectId: number
+  venueId: number
+  venueName: string
+  from?: number | null
+  to: number
+  installed: number
+  behind?: VenueBehind
+  /** The show is live and attaches behind on output: it runs against v`to` rather than going dark. */
+  runAgainst?: boolean
+  origin?: AttachOrigin | null
+  output?: AttachItem[]
+  drawing?: AttachItem[]
+  inherited?: Partial<Record<AttachKind, number>>
+  overrides?: AttachOverride[]
+  kept?: AttachItem[]
+  hides?: AttachItem[]
+  additions?: AttachItem[]
+  incoming?: AttachItem[]
+  renames?: AttachRename[]
+  decisions?: AttachDecision[]
+  /** Address overlaps the attach introduces (P8); one unanswered refuses it. */
+  overlaps?: UpdateDecision[]
+  blockers?: AttachItem[]
+  deadReferences?: DeadReference[]
+  notes?: string[]
+  dryRun?: boolean
+  applied?: boolean
+}
+
 /** `POST /projects/{id}/detach` — what a detach did, or with `dryRun` would do (venue plan D9, session 7). */
 export interface DetachResult {
   dryRun: boolean

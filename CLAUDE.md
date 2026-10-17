@@ -348,7 +348,7 @@ it (the version is never written), unparking a show's re-park brings the venue's
 change is output for the hold unless the show parks or releases that channel, and a park in a venue is
 an admin's (`parkError VENUE_ADMIN_ONLY`). `docs/fixtures-engineering.md` §"Venue parks". The Projects page (session 7) draws a
 Venues row (each venue's card, an admin's *Extract a venue…*) over the Shows, each show card with its
-venue badge, and a show's menu carries *Update venue* and *Detach*. `docs/fixtures-engineering.md`
+venue badge, and a show's menu carries *Update venue* and *Detach*, a standalone show's *Attach to venue…*. `docs/fixtures-engineering.md`
 §"Shows on a venue".
 
 ### Property System

@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
@@ -128,6 +129,28 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-ATT-3`
+
+**What it proves**: *Attach to venue…*'s sheet — venue-visit Att.3, venue-attach plan session 3 — on
+the screens it is used on, and a real attach through it.
+
+**Why it is here**: the sheet was checked in a desktop browser and at phone width against a cloud desk
+with no rig attached; a desk screen, the iPad's touch targets and a show running real cues were not.
+
+**Test**, on a trial venue, with the two desk screens and the iPad:
+
+1. **Desk screens.** On a show detached from the venue, open *Attach to venue…* from its card: the
+   venue the show left is first and marked *Detached from here*, the line says *Using vN, the version
+   … left*, and the review reads at the screen's width with the footer's *Attach* in reach.
+2. **iPad.** Open it from the home's *No venue · Attach to venue…* line: every answer button (*Keep
+   mine*, *Take venue's*, *Hide in this show*, an overlap's four) is a comfortable touch target, the
+   review scrolls under the header and footer, and a press re-reads the review.
+3. **End to end.** With the show running a cue, attach it at the installed version: the progress
+   shows, the sheet closes on the show's home with *On <venue> vN*, and no channel moves. Then detach
+   it again and attach at the older version: the sheet says it runs against that version, and it does.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-ATT-2`
 
 **What it proves**: *Attach to venue…* — venue-visit Att.2, venue-attach plan session 2: Detach in
@@ -137,7 +160,7 @@ reverse, whose round trip changes nothing (P2).
 controllers; only the rig shows that a reload across the attach, with real cues live and real fades,
 moves no channel.
 
-**Test**, on a trial venue with a show running a cue (the attach sheet is Att.3, so through REST or
+**Test**, on a trial venue with a show running a cue (through *Attach to venue…*'s sheet, REST or
 `attach_to_venue`):
 
 1. **Round trip.** Detach the running show, then attach it back at the same version: no channel moves,
