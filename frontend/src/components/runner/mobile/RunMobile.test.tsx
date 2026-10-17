@@ -19,6 +19,7 @@ vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, 
 vi.mock('../../SpeedMasters', () => ({ SpeedMastersChip: () => null }))
 vi.mock('../StackPickerSheet', () => ({ StackPickerSheet: () => null }))
 vi.mock('../MobileCueListSheet', () => ({ MobileCueListSheet: () => null }))
+vi.mock('../StackEffectSizeControl', () => ({ MobileStackEffectSize: () => null }))
 
 import { RunMobile, type RunnerDisplayState } from './RunMobile'
 

@@ -437,7 +437,7 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 - **Docs:** `fx-engineering.md` §"Cue Integration" and §"Size, direction and N-shot",
   `cue-stacks-engineering.md` §"Holds", `lighting-composition-model.md`, and R2.1's Blind text (§3.5).
 
-### Session 5 — A stack's effect size (backend + frontend)
+### Session 5 — A stack's effect size (backend + frontend) — done, `98a226a`
 
 - §4.3 and the wire (§3.7): a runtime per-stack value in `CueStackManager` weighting that stack's
   effects (P3's `stackSize`, multiplied into `FxInstance.weight`), REST, its own state and set

@@ -38,6 +38,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
+| [`FU-FX-KEYSTACK-STACK-SIZE`](#fu-fx-keystack-stack-size) | Trigger | FX | an operator misreads a property's stack under a stack below full |
 | [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
 | [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the effect over it to fade together on a programmer gesture |
 | [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
@@ -489,6 +490,24 @@ declined *amplitude 0–200 %* of the plan's Question 2.
 
 **Trigger**: an operator wants an effect bigger than it was written and the effect's own parameters
 (a radius, a range) are not the way they want to reach it.
+
+---
+
+### `FU-FX-KEYSTACK-STACK-SIZE`
+
+**The stack's effect size in `programmer.keyStack`** · Trigger · effects plan session 5 (D10), 2026-10-17
+
+A cue effect's weight is `size × envelope × stackSize` (`FxEngine.weightOf`), and the tick and
+provenance read all three. `programmer.keyStack`'s effect layers (`ProvenanceService`) still report
+the instance's own size and name `FxInstance.cueStackId`, the stack of the cue's **first** hold — so
+under a stack at 50 %, or a cue held by two stacks, the layer stack reads a weight and a stack that
+are not the ones on stage. What reaches the stage is right; only the reading is off.
+
+The fix is two fields on a keyStack effect layer: the weighing stack (`weighingStackOf`) and its
+size, drawn beside the effect's own size by `LayerStack`.
+
+**Trigger**: an operator reads a property's stack while a stack is below full, or a shared cue is
+live, and is misled by it.
 
 ---
 

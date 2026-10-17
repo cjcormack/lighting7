@@ -257,6 +257,7 @@ class SurfaceInputRouter(
             is BindingTarget.SpeedMasterBpm ->
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             BindingTarget.GrandMasterFader -> actions.writeGrandMaster(value7Bit)
+            is BindingTarget.StackEffectSize -> actions.writeStackEffectSize(target.stackId, target.stackUuid, value7Bit)
             is BindingTarget.SelectionProperty ->
                 actions.writeSelectionProperty(target.propertyName, value7Bit, target.colourAxis)
             is BindingTarget.Strip -> logger.warn(
@@ -329,6 +330,10 @@ class SurfaceInputRouter(
             )
             BindingTarget.GrandMasterFader -> logger.debug(
                 "Ignoring button press on binding {} → grand-master fader (continuous target)",
+                binding.id,
+            )
+            is BindingTarget.StackEffectSize -> logger.debug(
+                "Ignoring button press on binding {} → stack effect size (continuous target)",
                 binding.id,
             )
             is BindingTarget.Flash -> {

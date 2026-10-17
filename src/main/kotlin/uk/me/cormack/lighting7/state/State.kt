@@ -951,6 +951,8 @@ class State(val config: ApplicationConfig) {
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
             buskRefsProvider = ::buildBuskRefs,
+            stackEffectSizesProvider = { show.cueStackManager.effectSizes },
+            stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
             latencyTracker = midiLatencyTracker,
         )
     }

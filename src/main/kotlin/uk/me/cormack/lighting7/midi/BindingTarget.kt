@@ -15,9 +15,9 @@ import uk.me.cormack.lighting7.state.SubselectMode
  * lives in a `type` field set by [SerialName] on each subtype.
  *
  * Targets fall into three rough families:
- *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm], [GrandMasterFader]) —
- *     fader / encoder movements map to a Layer 2 property write (Phase 3), a tempo write or the
- *     grand master's level.
+ *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm], [GrandMasterFader],
+ *     [StackEffectSize]) — fader / encoder movements map to a Layer 2 property write (Phase 3), a
+ *     tempo write, the grand master's level or a cue stack's effect size.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
  *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
@@ -146,6 +146,14 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("grandMasterFader")
     data object GrandMasterFader : BindingTarget()
+
+    /**
+     * Set a cue stack's effect size (effects plan D10) from a fader / encoder: 0..127 across
+     * 0–100 %. [stackUuid] wins over [stackId] when set, as on the stack buttons above.
+     */
+    @Serializable
+    @SerialName("stackEffectSize")
+    data class StackEffectSize(val stackId: Int, val stackUuid: String? = null) : BindingTarget()
 
     /**
      * Switch the active bank for the given device on press. Device-side bank buttons

@@ -112,6 +112,13 @@ interface SurfaceActions {
     fun writeGrandMaster(midiValue7Bit: UByte)
 
     /**
+     * Set a cue stack's effect size from a continuous control, 0..127 across 0–100 %, the stack
+     * resolved as the stack buttons resolve theirs. A default so a test double that does not care
+     * about stack sizes need not say so.
+     */
+    fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
+
+    /**
      * Set a speed master's tempo from a continuous control, scaling 0..127 across
      * [minBpm]..[maxBpm]. [masterUuid] null → master 1.
      */
@@ -358,6 +365,15 @@ class DefaultSurfaceActions(
 
     override fun writeGrandMaster(midiValue7Bit: UByte) =
         globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
+
+    override fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
+        val resolved = resolveFaderStackId(stackId, stackUuid) ?: return
+        cueStackManager.setEffectSize(resolved, stackEffectSizeOf7Bit(midiValue7Bit))
+    }
+
+    /** A stack button's rule — the uuid wins, the int only without one — through the show's kept lookup. */
+    private fun resolveFaderStackId(stackId: Int, stackUuid: String?): Int? =
+        if (stackUuid == null) stackId else cueStackManager.stackIdForUuid(state.database, stackUuid)
 
     /**
      * Uuid first, and never the int when a uuid is present: a binding cloned from another project

@@ -225,6 +225,8 @@ export interface ActiveEffect {
   /** The programmer layer that spawned it. Null for an effect the operator busked directly. */
   programmerLayerId: number | null
   cueId: number | null
+  /** The stack whose GO spawned it (its cue's first hold), when a stack's did. */
+  cueStackId?: number | null
   timingSource: string
   /** True when the effect sits in the programmer's priority band. */
   programmerOwned: boolean

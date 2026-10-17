@@ -5449,6 +5449,24 @@ master leaves it.
 - **The surfaces picker offers `grandMasterFader`** as a continuous target (`lib/surfaceDrop.ts`,
   the binding picker, a *GM fader* chip on the library's Desk row).
 
+### A stack's FX size
+
+**Each cue stack has a runtime effect size, 0–100 %, and the desk owns it** (lighting7 effects plan
+D10; `docs/fx-engineering.md` §"Size, direction and N-shot" there): a weight on the effects that
+stack's cues run, applied after the blend as an effect's own size is. `api/stackEffectSizeApi.ts`
+reads `stackEffectSize.state` (every stack below full; absent is 100 %) and sends
+`stackEffectSize.set`; `store/stackEffectSize.ts` is form 3, `useStackEffectSize(stackId)`
+narrowed to one stack. `components/runner/StackEffectSizeControl.tsx` is the *FX size* slider, 0–1
+on the wire and a percent on screen, amber below full: on the Show view's stack row (from
+`@[480px]` of the overview) and, as `MobileStackEffectSize`, a row under the phone runner's top
+strip — drawn below full, and at full only while an effect runs whose cue this stack weighs
+(`cueHolds.state`'s `stackId`, the cue's highest hold's stack, read only at full). A runtime gesture, so it works while the show is
+locked, as GO does; it greys only offline, and a press inside it never drills the row. It writes
+through `useLiveFader` (`components/editor/`), the grand master fader's drag-and-settle lifted out
+so the two cannot differ. A project switch starts every stack at full and a reload keeps it. The MIDI
+`stackEffectSize` target is mirrored in `lib/surfaceDrop.ts`, the binding picker (*Cue stack — FX
+size*) and an *FX size* chip on each stack's library row.
+
 ### Make rig safe and Quit desk
 
 **The end of the night** (venue-visit plan S6, D9, D13, D14, D18, D19; lighting7

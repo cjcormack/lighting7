@@ -48,6 +48,7 @@ import {
 } from '@/store/cueStacks'
 import { CueStackForm } from '@/components/cues/CueStackForm'
 import { DeleteStackDialog } from './DeleteStackDialog'
+import { StackEffectSizeControl } from './StackEffectSizeControl'
 import { InlineEditField } from '@/components/InlineEditField'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
 import { isCueRow, type CueStack, type CueStackInput } from '@/api/cueStacksApi'
@@ -151,6 +152,11 @@ function SortableStackEntry({
       <span className="hidden @[560px]:block text-xs text-muted-foreground shrink-0">
         {cueCount} cues &middot; {stack.loop ? 'Loop' : 'Sequential'}
       </span>
+      <StackEffectSizeControl
+        stackId={stack.id}
+        stackName={stack.name}
+        className="hidden @[480px]:flex shrink-0"
+      />
       {stack.loop && (
         <Badge variant="outline" className="hidden @[560px]:inline-flex text-xs px-1.5 py-0 gap-1">
           <RotateCcw className="size-2.5" />

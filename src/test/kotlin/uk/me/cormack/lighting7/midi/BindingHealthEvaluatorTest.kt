@@ -172,6 +172,14 @@ class BindingHealthEvaluatorTest {
         assertIs<AssignmentHealth.MissingStack>(
             BindingHealthEvaluator.evaluate(BindingTarget.CueStackPause(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
         )
+        // A stack's effect-size fader is judged by its stack, as the stack buttons are.
+        assertEquals(
+            AssignmentHealth.Ok,
+            BindingHealthEvaluator.evaluate(BindingTarget.StackEffectSize(stackId = 999, stackUuid = liveStack.toString()), ctx),
+        )
+        assertIs<AssignmentHealth.MissingStack>(
+            BindingHealthEvaluator.evaluate(BindingTarget.StackEffectSize(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
+        )
     }
 
     @Test
