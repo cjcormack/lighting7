@@ -4,9 +4,11 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.jdbc.select
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.midi.encodePayload
+import uk.me.cormack.lighting7.models.DaoBuskRigRows
 import uk.me.cormack.lighting7.models.DaoBuskRigTile
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
@@ -104,7 +106,11 @@ internal object RigKeyReferences {
         if (fixtures.isEmpty() && groups.isEmpty()) return touched
         walk(project, touched) { _, type, key -> renamed(type, key, fixtures, groups, patchedKeys) }
         if (renamedPatchIds.isNotEmpty()) {
-            DaoBuskRigTile.find { (DaoBuskRigTiles.patch inList renamedPatchIds.toList()) and DaoBuskRigTiles.elementKey.isNotNull() }
+            // A venue patch's tiles are every show's on that version: only this project's rows are rewritten.
+            val rows = DaoBuskRigRows.select(DaoBuskRigRows.id).where { DaoBuskRigRows.project eq project.id }.map { it[DaoBuskRigRows.id] }
+            DaoBuskRigTile.find {
+                (DaoBuskRigTiles.patch inList renamedPatchIds.toList()) and DaoBuskRigTiles.elementKey.isNotNull() and (DaoBuskRigTiles.row inList rows)
+            }
                 .forEach { tile ->
                     val next = tile.elementKey?.let { renamed(TargetRef.Fixture.TYPE, it, fixtures, emptyMap(), patchedKeys) } ?: return@forEach
                     tile.elementKey = next

@@ -179,6 +179,15 @@ class VenueHoldService(private val state: State) {
     }
 
     /**
+     * Run [projectId] against [pinned] with [installed] from its next load: an attach that puts the
+     * running show behind on output (venue-attach plan §4.4), as [refreshCurrent] does for a publish —
+     * recorded before the reload, whose loader [judge]s it, since a standalone show had no hold to lift.
+     */
+    fun runAgainstOnLoad(projectId: Int, pinned: Int, installed: Int) {
+        synchronized(lock) { runAgainst = RunAgainst(projectId, pinned, installed) }
+    }
+
+    /**
      * Why an arm, a fire or a fixture command is refused now (409 [CODE_VENUE_HOLD]), or null. The
      * current show's: the arm and the cannons are only ever the current project's.
      */

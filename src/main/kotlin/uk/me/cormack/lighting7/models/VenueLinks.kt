@@ -29,7 +29,8 @@ import java.util.UUID
  *
  * Extract (`venue/VenueExtract.kt`) calls [repointAll]; Update (`venue/VenueUpdate.kt`) and Detach
  * (`venue/VenueDetach.kt`) re-point link by link through [ALL], in the same order, so each can drop a
- * link's unmatched rows as that link needs.
+ * link's unmatched rows as that link needs. Attach (`venue/VenueAttach.kt`) re-points by row id
+ * ([Link.repointByIds]), skipping the two ownership links.
  * `docs/fixtures-engineering.md` §"The rig scope" has the rule.
  */
 object VenueLinks {
@@ -108,6 +109,28 @@ object VenueLinks {
                 moved++
             }
             return Repointed(moved, unmatched)
+        }
+
+        /**
+         * Whether this link is how a row belongs to its parent — a placement's patch, a member's group —
+         * rather than a reference to another record.
+         */
+        val isOwnership: Boolean get() = owner.column.table == column.table && owner.column.name == column.name
+
+        /**
+         * For the rows [owner] owns in [project], move this link from each row id in [ids]' keys to the
+         * row id it maps to: Attach's form (venue-attach plan §4.2), whose pairs are by row, since a pair
+         * made by key has two uuids. Answers how many rows moved. Inside the caller's transaction.
+         */
+        fun repointByIds(project: EntityID<Int>, ids: Map<Int, Int>): Int {
+            if (ids.isEmpty()) return 0
+            val rows = table.select(table.id, column)
+                .where { owner.ownedBy(project) and (column inList ids.keys.map { EntityID(it, target) }) }
+                .map { it[table.id].value to it[column]!!.value }
+            for ((rowId, targetId) in rows) {
+                table.update({ table.id eq rowId }) { it[column] = EntityID(ids.getValue(targetId), target) }
+            }
+            return rows.size
         }
     }
 

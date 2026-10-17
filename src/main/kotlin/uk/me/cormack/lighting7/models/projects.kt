@@ -57,8 +57,8 @@ object DaoProjects: IntIdTable("projects") {
     /**
      * Where a standalone show came from (venue-attach plan D1, §4.3): the venue it was detached from,
      * by the venue project's uuid, and the version it was pinned to then. Written by Detach in the
-     * transaction that clears the pin, kept by a clone, cleared by Extract (and, from Att.2, by
-     * Attach). An attach reads it as the origin of its three-way match. Both or neither; null for a
+     * transaction that clears the pin, kept by a clone, cleared by Extract and by Attach. An attach
+     * reads it as the origin of its three-way match. Both or neither; null for a
      * show never on a venue, one detached before this was recorded, a venue and a version. Portable:
      * `project.json`'s `detachedFromVenueUuid` and `detachedFromVersion`.
      */

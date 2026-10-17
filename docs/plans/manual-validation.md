@@ -16,6 +16,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
@@ -164,6 +165,26 @@ another window, an Intensity palette *Full*, a Beam palette *Wide* and a running
 7. **The iPad.** Repeat 2, 4 and 6 in the overlay — the bottom sheet upright and the right-hand sheet
    in landscape: the overlay's *Sheet* button opens onto Colour, its strip carries every tab but Speed
    with no tab under the close cross, and each tab presses as on the desk.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-ATT-2`
+
+**What it proves**: *Attach to venue…* — venue-visit Att.2, venue-attach plan session 2: Detach in
+reverse, whose round trip changes nothing (P2).
+
+**Why it is here**: `VenueAttachTest` composes the output of a fixed programmer state on mock
+controllers; only the rig shows that a reload across the attach, with real cues live and real fades,
+moves no channel.
+
+**Test**, on a trial venue with a show running a cue (the attach sheet is Att.3, so through REST or
+`attach_to_venue`):
+
+1. **Round trip.** Detach the running show, then attach it back at the same version: no channel moves,
+   and the Patch list, the hides and the parks are what they were before the detach.
+2. **Behind.** Publish a version that re-addresses a unit the show drives, detach the show again and
+   attach it at the older version while it runs: it keeps running (*Run against*), nothing blacks out,
+   and it opens held the next time it is opened.
 
 ---
 
