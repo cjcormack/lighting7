@@ -541,7 +541,7 @@ Each session is one PR (P1).
   during session 5): a press carries neither, and the toggle routes take neither. Recorded as
   `FU-PRESS-LAYER-MASTER`; a cue layer keeps them in the cue's sheet.
 
-### Session 6 — Effects in the popup (frontend)
+### Session 6 — Effects in the popup (frontend) — done, `e8217314`
 
 - The Effects band (§4.3); *+ Effect*, ⌘K *Apply FX* and `ApplyPicker`'s Effects section on
   `POST /programmer/effects`.
