@@ -442,8 +442,14 @@ Each session is one PR (P1).
 - **Docs:** `docs/fixtures-engineering.md` §"Detach" (the origin); `docs/sync-engineering.md` (the
   field).
 
-### Session 2 — The attach
+### Session 2 — The attach — done, `2fed1b9`
 
+- **As built**, decided with Chris in review (2026-10-17): a show park on a universe paired with a venue
+  universe of another number moves to the venue's number (`AttachWrites.parksMoved`); dead references,
+  Update's too, read everything `RigKeyReferences` reads, bindings and scripts included
+  (`FU-VENUE-UPDATE-BINDINGS` closed); *Remove mine* on a patch kept by *Keep mine* also lifts the hide
+  of the venue's counterpart; a live show's renamed fixtures keep today's rename behaviour on the reload,
+  which the review's `notes` say. The review carries P8's overlaps as `overlaps`, beside `decisions`.
 - §4.1–4.2, 4.4.
   - `venue/VenueAttach.kt`, which applies the plan in one transaction, with the review as the run
     rolled back. It writes the `AttachPlan` Att.1's pairing answers (`e5b60d72`, §4.2 step 1), and

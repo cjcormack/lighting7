@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
@@ -124,6 +125,26 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-ATT-2`
+
+**What it proves**: *Attach to venue…* — venue-visit Att.2, venue-attach plan session 2: Detach in
+reverse, whose round trip changes nothing (P2).
+
+**Why it is here**: `VenueAttachTest` composes the output of a fixed programmer state on mock
+controllers; only the rig shows that a reload across the attach, with real cues live and real fades,
+moves no channel.
+
+**Test**, on a trial venue with a show running a cue (the attach sheet is Att.3, so through REST or
+`attach_to_venue`):
+
+1. **Round trip.** Detach the running show, then attach it back at the same version: no channel moves,
+   and the Patch list, the hides and the parks are what they were before the detach.
+2. **Behind.** Publish a version that re-addresses a unit the show drives, detach the show again and
+   attach it at the older version while it runs: it keeps running (*Run against*), nothing blacks out,
+   and it opens held the next time it is opened.
 
 ---
 

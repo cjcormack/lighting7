@@ -797,6 +797,36 @@ internal val extractVenueTool = ToolDef(
     },
 )
 
+internal val attachToVenueTool = ToolDef(
+    name = "attach_to_venue",
+    description = "Put a standalone show onto a venue version — Detach in reverse. The show's records that are the venue's records go (the show reads the venue's), " +
+        "what it changed becomes what a show on a venue holds (facet overrides of venue fixtures, hidden venue records, released venue parks), and what is only the show's stays its own. " +
+        "Records pair by identity, then by key (fixture key, universe number, name); a show detached from this venue is matched three ways against the version it left, so its changes and the venue's are told apart. " +
+        "Run it with dryRun first: the answer is the review — output and drawing changes, what is inherited, overridden, kept, hidden, brought in and renamed, the choices it offers (`decisions`, each with a default) " +
+        "and the address `overlaps` it introduces, which must be answered — then send the same call with decisions and without dryRun. Blockers refuse it (ATTACH_BLOCKED) until the show changes. " +
+        "Either role may attach. Attaching the current project reloads it — the rig holds its levels and the live cues, programmer and hand-run effects come back, except the programmer's values and effects on a fixture the attach renames, which name its old key — so that needs reloadLiveShow.",
+    inputSchema = objectSchema(required = listOf("projectId", "venueId")) {
+        prop("projectId", "integer", "The standalone show to attach (list_projects). Not a venue, and not a show already on one.")
+        prop("venueId", "integer", "The venue to attach it to (list_venues).")
+        prop("version", "integer", "The version to attach to; absent is the venue's installed version. An older one leaves the show behind, as any show on it is.")
+        put("decisions", buildJsonObject {
+            put("type", "array")
+            put("description", "Answers by id, as the review lists them: a decision's `answers`, an overlap's KEEP_BOTH | READDRESS_MINE (with an optional startChannel) | HIDE_VENUES | REMOVE_MINE. An unanswered decision takes its default; an unanswered overlap refuses the attach.")
+            put("items", buildJsonObject {
+                put("type", "object")
+                put("properties", buildJsonObject {
+                    put("id", buildJsonObject { put("type", "string") })
+                    put("answer", buildJsonObject { put("type", "string") })
+                    put("startChannel", buildJsonObject { put("type", "integer") })
+                })
+                put("required", buildJsonArray { add("id"); add("answer") })
+            })
+        })
+        prop("dryRun", "boolean", "Answer the review and keep nothing. Default false.")
+        prop("reloadLiveShow", "boolean", "Required to attach the current project: it reloads. Only when the operator has said the desk is free.")
+    },
+)
+
 internal val publishVenueTool = ToolDef(
     name = "publish_venue",
     description = "Publish a venue's draft — its own rows, as edited with the setup tools and projectId = the venue's id — as its next version, with a note saying what changed. " +
@@ -857,6 +887,7 @@ internal val setupToolDefs: List<ToolDef> = listOf(
     switchProjectTool,
     listVenuesTool,
     extractVenueTool,
+    attachToVenueTool,
     publishVenueTool,
     copyToProjectTool,
     deleteCueStacksTool,

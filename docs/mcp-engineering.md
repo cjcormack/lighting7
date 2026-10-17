@@ -437,7 +437,7 @@ readers below (`list_projects`, `list_venues`, `list_fixture_types`, `get_patch`
 ### Show-setup tools
 
 `ai/SetupTools.kt` (schemas in `ai/SetupToolSchemas.kt`; the venue and cross-project ones in
-`ai/VenueSetupTools.kt`) adds twenty-one tools that **build** a show
+`ai/VenueSetupTools.kt`) adds twenty-five tools that **build** a show
 rather than run one — and one, `render_view`, that looks at the result — for four jobs: a project and patch from another console's patch export, the
 Stage view (stage, regions, riggings, fixture placement) from plots or photos, the venue and set
 around it (the scene document) from photos or a video frame, and the show's cue stacks and
@@ -448,6 +448,7 @@ prompt-book markup from a script and lighting notes.
 | `list_projects` / `create_project` / `switch_project` | Projects. `list_projects` carries a show's `venue` (`id`, `name`, pinned `version`, `installed`, `behind` when not `NONE`) and a venue's `installedVersion`. `create_project` seeds speed masters as the REST create does and does not switch unless `switchTo`; with `venueId` it is the REST create's show on a venue — pinned to the installed version (`VENUE_NOTHING_PUBLISHED` before v1), the stage size the venue's (stage fields refused beside it) — and `seatingPreset` names one of that version's Preset seating blocks by name, copied in through `SeatingPresets.copyOnCreate` (`SEATING_PRESET_UNKNOWN` names what it offers). `switch_project` is `ProjectManager.switchProject` — a blackout — and says so in its description; a show whose pinned venue version is not on the desk is refused with `"code": "VENUE_MISSING"` (venue plan session 4), as the set-current route refuses it |
 | `list_venues` | Every venue: its installed version and note, what that version holds (elements, viewpoints, patches, universes, riggings, groups, Fixed seating — the draft's before v1), `hasRig`, its seating presets, `unpublishedChanges` (the draft against the installed version, `VenueVersions.draftChanges`, read outside the listing's transaction since it exports) and every show on it with its pinned version and `behind`. Read-only, both roles — the Projects page's venue cards are anyone's |
 | `extract_venue` | `VenueExtract.extract`, as `POST …/venue/extract` calls it: `{fromProjectId, name, include?, dryRun?}`, `publishedBy` the caller's display name. **Admin only** (`McpProtocol.VENUE_ADMIN_TOOLS`). Extracting the **current** project reloads it — the route switches to it again — so the tool refuses that unless `reloadLiveShow: true`, the description saying when that is safe; a dry run never needs it |
+| `attach_to_venue` | `VenueAttach.attach`, as `POST …/venue/attach` calls it: `{projectId, venueId, version?, decisions?, dryRun?}`, answering the same `AttachReviewDto` — so `dryRun` is the review, and the decisions and overlaps it lists are answered by id on the next call. **Both roles** and no remote-access gate: a stored write to the show, as Detach is; `projectId` is project-scoped and a stored write (`PROJECT_SCOPED_TOOLS`, `VENUE_STORED_WRITE_TOOLS`), so an operator naming a venue is refused as over REST. Attaching the **current** project reloads it (`afterAttach`, shared with the route: *Run against* first when it lands behind on output), so it takes `extract_venue`'s `reloadLiveShow` rule; a dry run never needs it |
 | `publish_venue` | `VenueVersions.publish` with a note, as `POST /venues/{id}/publish` calls it, then `venueHold.refreshCurrent()` so a live show the publish leaves behind runs on rather than blacking out. Answers the version and the venue's shows, and says each takes it only when the operator updates it — **no tool runs Update**, whose review and decisions are the operator's. Admin only |
 | `copy_to_project` | Show content between two projects, neither switched to (below) |
 | `delete_cue_stacks` | Stacks by id — `deleteCueStackRows`, shared with the REST delete, so the entries, their anchors and the stack's set go as there and the cues stay; the answer counts `cuesLeftLoose`. A running stack is refused rather than deactivated under the operator; `dryRun` answers what would go; `projectId` |
@@ -627,7 +628,7 @@ palettes, park) and `aim_fixtures` when it is told to `saveAsPalette`. Tools tha
 it stands — apply, GO, aim, tempo, and the programmer's set, clear, Blind and palette apply — and the
 reads pass. A venue version needs no rule: it is never
 live, `list_projects` leaves versions out, and `switch_project` and every `projectId` answer one as
-not found.
+not found — but `attach_to_venue`, which refuses a version, as a venue, `NOT_A_STANDALONE_SHOW`.
 
 ### Tools on a show on a venue
 

@@ -486,6 +486,11 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.venue.VenueDetach(this)
     }
 
+    /** *Attach to venue…* (venue-attach plan session 2): `venue/VenueAttach.kt`. */
+    val venueAttach: uk.me.cormack.lighting7.venue.VenueAttach by lazy {
+        uk.me.cormack.lighting7.venue.VenueAttach(this)
+    }
+
     /**
      * Cloud-sync engine. Shared by route handlers and [autoSyncScheduler] so a single
      * per-project mutex serialises manual `Sync now` clicks against periodic auto-sync

@@ -127,6 +127,7 @@ class SetupTools(
             switchProjectTool.name -> switchProject(input)
             listVenuesTool.name -> venues.listVenues()
             extractVenueTool.name -> venues.extractVenue(input, caller)
+            attachToVenueTool.name -> venues.attachToVenue(input)
             publishVenueTool.name -> venues.publishVenue(input, caller)
             copyToProjectTool.name -> venues.copyToProject(input)
             deleteCueStacksTool.name -> venues.deleteCueStacks(input)
