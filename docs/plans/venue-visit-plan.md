@@ -266,6 +266,11 @@ a one-line row here.
 - ~~K3 — after twelve more~~ — done, `d9cb8382` (plans corrected for R3.1–R3.4, R4.3, R4.6, R4.7,
   R2.3, R2.4 and Nav.2–Nav.4; R1.6's and Att.3's needs met; nine questions answered by Chris, in
   the plans' question lists; no manual check run).
+- ~~K4 — after eight more~~ — done, `71388bad`, `f026cc10`, `d25ffaae`, `1a1acf9b`, `b6f1ec21`,
+  `bb1ccd3e` (plans corrected for S14, R4.5, R3.5, R2.6, S16, R1.5, R3.6 and Att.1, and for R2.5, Nav.5
+  and R4.4; Effects and Navigation folded; Att.2's, R1.6's and R3.7's bodies checked before they
+  start; three operator checks filed and nine corrected; three questions answered by Chris; no manual
+  check run).
 
 ### Research and design — done
 
