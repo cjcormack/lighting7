@@ -27,8 +27,8 @@ class ControllerTransaction(controllers: List<DmxController>) {
         checkNotNull(universeState[universe]).valuesToSet[channelNo] = channelChange
     }
 
-    fun setValue(universe: Universe, channelNo: Int, channelValue: UByte, fadeMs: Long = 0L) {
-        setValue(universe, channelNo, ChannelChange(channelValue, fadeMs))
+    fun setValue(universe: Universe, channelNo: Int, channelValue: UByte, fadeMs: Long = 0L, curve: EasingCurve = EasingCurve.LINEAR) {
+        setValue(universe, channelNo, ChannelChange(channelValue, fadeMs, curve))
     }
 
     fun getValue(universe: Universe, channelNo: Int): UByte {

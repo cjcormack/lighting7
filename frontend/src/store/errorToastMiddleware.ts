@@ -37,6 +37,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // The rig's commit queue reports its own refusal **by code** (`rigWriteFailureMessage`) after
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
+  // Update stage's confirm draws a refused dry run (CUE_NOT_LIVE: the cue went off) and toasts a refused send itself.
+  'updateCueStage', // src/components/cues/UpdateStageDialog.tsx
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command
   // RIG_NOT_SAFE is an ordinary step in quitting — the confirm asks about it — and the rest it shows inline.
   'quitDesk', // src/components/rigSafety/QuitDeskDialog.tsx

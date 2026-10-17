@@ -11,6 +11,7 @@ import { usePatchCueStackEntryMutation } from '@/store/cueStacks'
 import type { CueEntryPatch } from '@/api/cueStacksApi'
 import type { CuePlace } from '@/lib/cuePlaces'
 import { SharedCueChip } from './SharedCueChip'
+import { EditedSinceGoChip } from '@/components/cues/EditedSinceGo'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { CUE_CURVE_OPTIONS, formatFadeDuration, parseFadeDuration, parseFollowDelay } from '@/lib/cueUtils'
 import { formatMs } from '@/lib/formatMs'
@@ -257,6 +258,7 @@ export function CueSheet({
                     {cueOf(row).name}
                   </span>
                   <SharedCueChip places={placesByCue?.get(cueOf(row).id)} entryId={cueOf(row).entryId} interactive={false} />
+                  <EditedSinceGoChip projectId={projectId} cueId={cueOf(row).id} />
                 </span>
               }
             />
@@ -507,7 +509,7 @@ export function CueSheet({
         },
       },
     ],
-    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, standbyEntryId, tracksScenery],
+    [activeEntryId, elementsByUuid, locationByCue, locked, onOpenBook, onRequestUnlock, patch, patchEntry, placesByCue, projectId, standbyEntryId, tracksScenery],
   )
 
   const copy = useCallback(

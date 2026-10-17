@@ -11,6 +11,7 @@ import type {
   DeleteCuesRequest,
   DeleteCuesResponse,
   DuplicateCueResponse,
+  UpdateStageResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -220,6 +221,19 @@ export const cuesApi = restApi.injectEndpoints({
       ],
     }),
 
+    /**
+     * *Update stage* (show-cue-editing plan §3.5, D11): a live cue's stored rows and effects to the
+     * stage over its own fade. `dryRun` answers the counts and sends nothing. Stores nothing, so it
+     * invalidates nothing: `cueHolds.state` clears the mark.
+     */
+    updateCueStage: build.mutation<UpdateStageResponse, { projectId: number; cueId: number; dryRun: boolean }>({
+      query: ({ projectId, cueId, dryRun }) => ({
+        url: `projects/${projectId}/cues/${cueId}/update-stage`,
+        method: 'POST',
+        body: { dryRun },
+      }),
+    }),
+
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
     // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
     // capture, plus the programmer overlay it used to miss, as one Record source among
@@ -241,6 +255,7 @@ export const {
   useDuplicateCueMutation,
   useApplyCueMutation,
   useStopCueMutation,
+  useUpdateCueStageMutation,
 } = cuesApi
 
 /**

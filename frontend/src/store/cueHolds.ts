@@ -61,3 +61,18 @@ export function useCueRings(projectId: number | undefined): Map<number, CueRing>
     return rings
   }, [holds])
 }
+
+/**
+ * Whether live [cueId] of [projectId] is edited since GO — the *Edited since GO* chip and *Update
+ * stage…* (show-cue-editing plan D4). Narrowed to the one answer, so a reader re-renders only when
+ * it moves, not on every hold the desk takes.
+ */
+export function useCueEdited(projectId: number | undefined, cueId: number): boolean {
+  const { edited } = useCueHoldsQuery(undefined, {
+    skip: projectId == null,
+    selectFromResult: ({ data }) => ({
+      edited: data != null && data.projectId === projectId && data.cues.some((c) => c.cueId === cueId && c.edited === true),
+    }),
+  })
+  return edited
+}

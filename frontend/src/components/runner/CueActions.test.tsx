@@ -20,6 +20,8 @@ const include = vi.fn()
 const blindOn = vi.fn()
 let preview: { uses: CueUses[] } | undefined
 let running = false
+let edited = false
+const updateStage = vi.fn()
 
 vi.mock('@/store/cues', () => ({
   useDuplicateCueMutation: () => [duplicateCue],
@@ -29,7 +31,9 @@ vi.mock('@/store/cues', () => ({
     isFetching: false,
     isError: false,
   }),
+  useUpdateCueStageMutation: () => [updateStage, { isLoading: false }],
 }))
+vi.mock('@/store/cueHolds', () => ({ useCueEdited: () => edited }))
 vi.mock('@/store/cueStacks', () => ({
   useAddCueToStackMutation: () => [addToStack],
   useMoveCueStackEntryMutation: () => [moveEntry],
@@ -80,6 +84,8 @@ function openMenu(trigger: HTMLElement) {
 
 beforeEach(() => {
   running = false
+  edited = false
+  updateStage.mockReturnValue(landed({ rows: 3, effects: { edited: 1, stopped: 1, started: 0 }, fadeMs: 2000, curve: 'LINEAR' }))
   preview = undefined
   duplicateCue.mockImplementation(({ cueId, stackId }) =>
     landed({ cueId: cueId + 50, name: 'copy', stackId, entryId: cueId + 150 }),
@@ -296,5 +302,46 @@ describe('CueActions', () => {
       'Move to stack…',
       'Copy link',
     ])
+  })
+
+  describe('Update stage… (show-cue-editing plan §4.4)', () => {
+    it('follows Record… in the menu while the cue is edited since GO, and not otherwise', async () => {
+      draw({ host: 'menu' })
+      openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+      expect((await screen.findAllByRole('menuitem')).map((el) => el.textContent)).not.toContain('Update stage…')
+      cleanup()
+
+      edited = true
+      draw({ host: 'menu' })
+      openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+      const items = (await screen.findAllByRole('menuitem')).map((el) => el.textContent)
+      expect(items.slice(items.indexOf('Record…'), items.indexOf('Record…') + 2)).toEqual(['Record…', 'Update stage…'])
+    })
+
+    it('opens one confirm naming the cue and the dry run’s counts, which sends one update-stage', async () => {
+      edited = true
+      draw({ host: 'menu' })
+      openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Update stage…' }))
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByText('Update stage to Q1 Opener?')).toBeTruthy()
+      await waitFor(() => expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('3 values change, over its 2.0s fade'))
+      expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('1 effect edited in place · 1 stopped')
+      expect(updateStage.mock.calls.map(([arg]) => arg)).toEqual([{ projectId: 1, cueId: 1, dryRun: true }])
+
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Update stage' }))
+      await waitFor(() => expect(updateStage).toHaveBeenCalledTimes(2))
+      expect(updateStage.mock.calls[1][0]).toEqual({ projectId: 1, cueId: 1, dryRun: false })
+    })
+
+    it('locked, asks to unlock and sends nothing', async () => {
+      edited = true
+      const unlock = vi.fn()
+      draw({ host: 'menu', locked: true, onRequestUnlock: unlock })
+      openMenu(screen.getByRole('button', { name: 'Cue actions' }))
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Update stage…' }))
+      expect(await screen.findByText('Unlock the show to edit?')).toBeTruthy()
+      expect(updateStage).not.toHaveBeenCalled()
+    })
   })
 })

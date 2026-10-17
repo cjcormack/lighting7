@@ -158,6 +158,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
 | [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
+| [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
+| [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
 | [`FU-CUE-COPY-ROUTE`](#fu-cue-copy-route) | Blocked | Cues | cue model plan session 6 (venue-visit R1.6) |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
 
@@ -3069,6 +3071,38 @@ Deliberately out of the session (plan §8). **Trigger**: an operator needs a per
 move-in-dark set from the Show view rather than by re-recording. **Then**: the two as fields in the
 cell editor's read-out area for an own row (a fade in seconds, a move-in-dark switch on a position
 cell), written through the same `CueRowStore` flush as a third kind of draft entry.
+
+### `FU-UPDATE-STAGE-TIMED`
+
+**Update stage leaves a cue's timed effects and timed layers to its next GO** · Trigger ·
+Show-cue-editing plan session 7 (venue-visit R2.7), 2026-10-17
+
+*Update stage* (`routes/cueUpdateStage.kt`) brings a live cue's rows and its untimed effects in line
+with the stored cue, and leaves what `CueTriggerManager` fires on a delay or an interval as the cue's
+last first hold armed it (Chris's call, 2026-10-17): the timers hold the cue data they were armed
+with, so an edited or removed timed effect keeps firing as it was, a new one waits for the next GO,
+and a recurring timed layer's next fire re-cooks the rows from `TimedFireCook`'s armed copy — which
+undoes the Update stage's rows for that cue until its next GO. The last is not new: a Record or Update
+republish of the same cue has the same result. An effect moved from timed to untimed is started by
+Update stage beside the copy its timer already fired, untagged with its uuid, and the two run together
+until the next GO. **Trigger**: an operator edits a live cue's timed
+effect or timed layer and expects *Update stage* (or a Record) to send it. **Then**: let the timers
+read the cue from a per-cue holder *Update stage* and `republishCueIfLive` replace — the fired set
+kept for layers that survive, unfired delays keeping their start — rather than re-arming them, which
+would fire a delay again after the press.
+
+### `FU-UPDATE-STAGE-EFFECT-RAMP`
+
+**Update stage's ramp skips a key a running effect covers** · Trigger · Show-cue-editing plan
+session 7 (venue-visit R2.7), 2026-10-17
+
+*Update stage* ramps the cue's rows at transmit (`TransmitFade` through
+`publishCueLayerToControllers`), which leaves every key in `coveredByRunningEffects()` to the effect.
+The effect's tick resets such a key to its base with no fade each pass, so the base under a running
+effect moves at once, and under an effect the same press starts the ramp is overwritten on that
+effect's first tick. A row's own fade has the same limit. **Trigger**: an operator sees the base under
+a running effect jump on *Update stage* where they expected it to fade. **Then**: a per-cue ramp in
+the resolver — the base value interpolated where the tick reads it — rather than a transmit-time fade.
 
 ### `FU-CUE-COPY-ROUTE`
 

@@ -49,7 +49,7 @@ vi.mock('@/store/cueStacks', () => ({
     ],
   }),
 }))
-vi.mock('@/store/cueHolds', () => ({ useCueRings: () => new Map([[3, 'loose']]) }))
+vi.mock('@/store/cueHolds', () => ({ useCueRings: () => new Map([[3, 'loose']]), useCueEdited: () => false }))
 vi.mock('@/store/programmer', () => ({
   programmerBlindOn: vi.fn(),
   useProgrammerSummaryQuery: () => ({ data: { blind: false } }),

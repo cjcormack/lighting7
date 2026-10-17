@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.telemetry.Tracing
@@ -49,6 +50,12 @@ sealed interface CueHold {
  * - A cue's priority is its **highest** hold's. A stack hold is `stackBand + entry position`
  *   ([cueDerivedPriority]); a loose hold is [LOOSE_BAND] `+ seq`, above every stack, newest on top
  *   (D10).
+ *
+ * - A held cue is **edited since GO** ([markEdited], show-cue-editing plan §3.5) when a write
+ *   changes what *Update stage* sends of it, or a Look or palette it layers moves its effects
+ *   ([markIfLayerEffectsMoved]): the stage still shows what it was when it came on. Its first hold,
+ *   *Update stage* ([clearEdited]) and its last release clear the mark; a Record or Update republish
+ *   does not, since it moves the rows alone.
  *
  * The [lock] guards the bookkeeping and nothing else: the engine work runs outside it. A stack delete
  * stops its stack from inside its own transaction, and the pool is one SQLite connection — a lock
@@ -112,10 +119,10 @@ class CueHolds internal constructor(
 
     /**
      * One live cue as the wire carries it: its [holds] in the order taken, the [priority] it composes
-     * at, and [stackId] — the stack of its highest hold, null when that is loose (provenance's "which
-     * stack").
+     * at, [stackId] — the stack of its highest hold, null when that is loose (provenance's "which
+     * stack") — and whether it is [edited] since it came on.
      */
-    data class LiveCue(val cueId: Int, val priority: Int, val holds: List<CueHold>, val stackId: Int?) {
+    data class LiveCue(val cueId: Int, val priority: Int, val holds: List<CueHold>, val stackId: Int?, val edited: Boolean = false) {
         val looseHeld: Boolean get() = holds.any { it is CueHold.Loose }
     }
 
@@ -133,6 +140,22 @@ class CueHolds internal constructor(
 
     private val lock = Any()
     private val live = HashMap<Int, Live>()
+
+    /** The held cues edited since they came on — a subset of [live]'s keys. */
+    private val editedSinceGo = HashSet<Int>()
+
+    /**
+     * What each held cue's untimed effects were when it came on or was last brought in line, by
+     * [CueEffectKey]: *Update stage* starts only an effect that is not here, so one that ran out its
+     * N-shot or that a stomp took off stays off.
+     */
+    private val spawnedEffects = HashMap<Int, Set<CueEffectKey>>()
+
+    /**
+     * What each held cue's untimed layer effects cooked to at the same moments, as their Looks and
+     * palettes held them — so an edit to one of those that moves its effects marks the cue.
+     */
+    private val cookedLayerEffects = HashMap<Int, Set<LayerEffectKey>>()
     private var looseSeq = 0L
 
     @Volatile private var view: Map<Int, LiveCue> = emptyMap()
@@ -163,6 +186,34 @@ class CueHolds internal constructor(
     fun stackOf(cueId: Int): Int? = view[cueId]?.stackId
 
     fun holdsOf(cueId: Int): List<CueHold> = view[cueId]?.holds.orEmpty()
+
+    fun isEdited(cueId: Int): Boolean = view[cueId]?.edited == true
+
+    /** [cueId]'s [spawnedEffects], empty when nothing holds it. */
+    internal fun spawnedEffectsOf(cueId: Int): Set<CueEffectKey> = synchronized(lock) { spawnedEffects[cueId].orEmpty() }
+
+    /**
+     * Record what held [cueId]'s effects are now — [keys] spawned, its [layerEffects] cooked to —
+     * after *Update stage* brought them in line.
+     */
+    internal fun setSpawnedEffects(cueId: Int, keys: Set<CueEffectKey>, layerEffects: List<CookedLayerEffect>) {
+        synchronized(lock) {
+            if (cueId !in live) return
+            spawnedEffects[cueId] = keys
+            cookedLayerEffects[cueId] = layerEffects.keys()
+        }
+    }
+
+    /**
+     * Mark held [cueId] edited since GO when its untimed layer effects now cook to [layerEffects]
+     * rather than what they cooked to as it came on or was last brought in line: a Look or palette
+     * it layers changed its effects, which its rows' republish does not move. Answers whether the
+     * mark is new.
+     */
+    internal fun markIfLayerEffectsMoved(cueId: Int, layerEffects: List<CookedLayerEffect>): Boolean {
+        val moved = synchronized(lock) { cookedLayerEffects[cueId]?.let { it != layerEffects.keys() } == true }
+        return moved && markEdited(cueId)
+    }
 
     fun snapshot(): List<LiveCue> = view.values.sortedBy { it.cueId }
 
@@ -231,6 +282,8 @@ class CueHolds internal constructor(
     private fun registerLocked(cueId: Int, hold: CueHold, holdPriority: Int): Pair<Boolean, Int> {
         val cue = live.getOrPut(cueId) { Live() }
         val first = cue.holds.isEmpty()
+        // Coming on lands the cue as stored, so whatever was edited is on stage now.
+        if (first) editedSinceGo.remove(cueId)
         cue.holds[hold] = holdPriority
         publishLocked()
         return first to cue.holds.values.max()
@@ -269,7 +322,7 @@ class CueHolds internal constructor(
                 runCatching { giveBack(adopted) }
                 runCatching { takeOff(state, cueId, Fade.SNAP) }
                 synchronized(lock) {
-                    live[cueId]?.let { cue -> cue.holds.remove(hold); if (cue.holds.isEmpty()) live.remove(cueId) }
+                    live[cueId]?.let { cue -> cue.holds.remove(hold); if (cue.holds.isEmpty()) forgetLocked(cueId) }
                     publishLocked()
                 }
                 throw e
@@ -303,7 +356,7 @@ class CueHolds internal constructor(
         val remaining = synchronized(lock) {
             val cue = live[cueId] ?: return Released.NOT_HELD
             if (cue.holds.remove(hold) == null) return Released.NOT_HELD
-            if (cue.holds.isEmpty()) live.remove(cueId)
+            if (cue.holds.isEmpty()) forgetLocked(cueId)
             publishLocked()
             cue.holds.values.maxOrNull()
         }
@@ -383,6 +436,24 @@ class CueHolds internal constructor(
     }
 
     /**
+     * Mark held [cueId] edited since GO: a write changed what *Update stage* sends of it, which
+     * reaches the stage on its next first hold or *Update stage*. A cue nothing holds is not marked.
+     * Answers whether the mark is new.
+     */
+    fun markEdited(cueId: Int): Boolean = synchronized(lock) {
+        if (cueId !in live || !editedSinceGo.add(cueId)) return false
+        publishLocked()
+        true
+    }
+
+    /** Clear [cueId]'s mark: *Update stage* has put what it holds on stage. */
+    fun clearEdited(cueId: Int) {
+        synchronized(lock) {
+            if (editedSinceGo.remove(cueId)) publishLocked()
+        }
+    }
+
+    /**
      * Restamp the stack holds on the entries in [entryPriorities] (`entryId → stackBand + position`),
      * after a write shifted positions — a reorder, an add, a sort, a delete or insert mid-list, a
      * marker. A live cue's priority is still its highest hold's, so a loose hold above keeps it there.
@@ -423,6 +494,9 @@ class CueHolds internal constructor(
     internal fun close() {
         synchronized(lock) {
             live.clear()
+            editedSinceGo.clear()
+            spawnedEffects.clear()
+            cookedLayerEffects.clear()
             publishLocked()
             closed = true
             if (sink.value === lastFrame) sink.value = Frame.EMPTY
@@ -508,42 +582,14 @@ class CueHolds internal constructor(
                 spawning += fresh.tagged(cueId, stackTag, priority)
                 ordered += fresh
             }
-            for ((layer, lookEffect, target) in cooked.effects) {
-                val spec = lookEffect.toEffectSpec()
-                val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, target, spec)
-                } catch (e: Exception) {
-                    logger.warn("cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}", cueId, layer.source.name, target.key, e.message)
-                    null
-                } ?: continue
-                val instance = EffectSpawner.createEffectInstanceOrNull(
-                    spec, fxTarget, state = state,
-                    context = "cue $cueId: layer on '${layer.source.name}'",
-                    overrideSpeedMasterUuid = layer.speedMasterUuid,
-                    overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
-                ) ?: continue
-                // The whole source, kind included: a template layer owns effects (D5), and
-                // `FxInstance.lookId` derives the Look-only id from it.
-                instance.source = layer.source
-                instance.cueLayerId = layer.layerId
-                instance.layerEffectUuid = lookEffect.uuid
-                arrive(instance, layer)
+            val fresh = cueEffectInstances(state, cueId, cooked.effects, immediateAdHoc)
+            synchronized(lock) {
+                if (cueId in live) {
+                    spawnedEffects[cueId] = fresh.mapTo(HashSet()) { it.first.cueEffectKey() }
+                    cookedLayerEffects[cueId] = cooked.effects.keys()
+                }
             }
-            for (adHoc in immediateAdHoc) {
-                val spec = adHoc.toLookEffectSpec()
-                val fxTarget = try {
-                    EffectSpawner.resolveTargetForCue(state, adHoc.target, spec)
-                } catch (e: Exception) {
-                    logger.warn("cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}", cueId, adHoc.targetKey, e.message)
-                    null
-                } ?: continue
-                val instance = EffectSpawner.createEffectInstanceOrNull(spec, fxTarget, state, "cue $cueId: ad-hoc effect on '${adHoc.targetKey}'")
-                    ?: continue
-                // Its own row's uuid: what a cue taken back matches its own instance on. No other
-                // cue holds that row, so an ad-hoc effect is never adopted across a GO.
-                instance.layerEffectUuid = adHoc.uuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
-                arrive(instance, layer = null)
-            }
+            for ((instance, layer) in fresh) arrive(instance, layer)
 
             // On a fade they arrive from nothing, set before the add so no pass paints them at full.
             if (fade.fades) {
@@ -599,6 +645,57 @@ class CueHolds internal constructor(
     }
 
     /**
+     * The instances a cue's untimed effects spawn — each cooked layer effect, then each ad-hoc one,
+     * in that order, with the layer it came from (null for an ad-hoc one) — built and not added.
+     * Each carries its stored effect's uuid in [FxInstance.layerEffectUuid]: a Look or palette
+     * effect's for a layer's, the cue's own row's for an ad-hoc one. What [bringOn] arrives and
+     * *Update stage* reconciles the running instances against. An unresolvable target is skipped.
+     */
+    internal fun cueEffectInstances(
+        state: State,
+        cueId: Int,
+        layerEffects: List<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
+        adHocEffects: List<CueAdHocEffectDto>,
+    ): List<Pair<FxInstance, CookLayer?>> = buildList {
+        for ((layer, lookEffect, target) in layerEffects) {
+            val spec = lookEffect.toEffectSpec()
+            val fxTarget = try {
+                EffectSpawner.resolveTargetForCue(state, target, spec)
+            } catch (e: Exception) {
+                logger.warn("cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}", cueId, layer.source.name, target.key, e.message)
+                null
+            } ?: continue
+            val instance = EffectSpawner.createEffectInstanceOrNull(
+                spec, fxTarget, state = state,
+                context = "cue $cueId: layer on '${layer.source.name}'",
+                overrideSpeedMasterUuid = layer.speedMasterUuid,
+                overrideRateSpeedMasterUuid = layer.rateSpeedMasterUuid,
+            ) ?: continue
+            // The whole source, kind included: a template layer owns effects (D5), and
+            // `FxInstance.lookId` derives the Look-only id from it.
+            instance.source = layer.source
+            instance.cueLayerId = layer.layerId
+            instance.layerEffectUuid = lookEffect.uuid
+            add(instance to layer)
+        }
+        for (adHoc in adHocEffects) {
+            val spec = adHoc.toLookEffectSpec()
+            val fxTarget = try {
+                EffectSpawner.resolveTargetForCue(state, adHoc.target, spec)
+            } catch (e: Exception) {
+                logger.warn("cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}", cueId, adHoc.targetKey, e.message)
+                null
+            } ?: continue
+            val instance = EffectSpawner.createEffectInstanceOrNull(spec, fxTarget, state, "cue $cueId: ad-hoc effect on '${adHoc.targetKey}'")
+                ?: continue
+            // Its own row's uuid: what a cue taken back matches its own instance on. No other
+            // cue holds that row, so an ad-hoc effect is never adopted across a GO.
+            instance.layerEffectUuid = adHoc.uuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            add(instance to null)
+        }
+    }
+
+    /**
      * [cueId]'s own instances still fading out from its last release, taken back rather than
      * respawned and held where they stand. One the engine retired in the instant its fade
      * reached 0 is gone, and the cook spawns that effect afresh.
@@ -618,7 +715,7 @@ class CueHolds internal constructor(
         layerEffectUuid != null && layerEffectUuid == fresh.layerEffectUuid &&
             target.targetRef == fresh.target.targetRef &&
             target.propertyName == fresh.target.propertyName &&
-            lookEffectSettings() == fresh.lookEffectSettings()
+            fxEngine.speedMasters.master1Uuid().let { comparableEffectSettings(it) == fresh.comparableEffectSettings(it) }
 
     /**
      * Whether another cue may take this instance over (P4): not a paused one — the
@@ -707,13 +804,37 @@ class CueHolds internal constructor(
         logger.warn("cue '{}' ({}): {} dead assignment(s): {}", data.cueName, data.cueId, dead.size, signature)
     }
 
-    private fun FxInstance.tagged(cueId: Int, stackTag: Int?, priority: Int): FxInstance = apply {
+    /**
+     * *Update stage*'s rows: [cueId]'s Layer 4 taken to [rows] over [fade] while a hold still has it
+     * — asked under the publish lock a release's row drop takes too — at the weight a crossfade is
+     * bringing it in at when it had none. Answers whether it was held.
+     */
+    internal fun restage(
+        cueId: Int,
+        rows: List<CueAssignmentResolver.Assignment>,
+        stompSuppression: LayerStompSuppression,
+        fade: TransmitFade,
+    ): Boolean = fxEngine.cueLayer.restageAssignments(
+        cueId, rows, stompSuppression, fade,
+        held = { isHeld(cueId) },
+        seedWeight = { crossfades.incomingWeight(cueId) },
+    )
+
+    internal fun FxInstance.tagged(cueId: Int, stackTag: Int?, priority: Int): FxInstance = apply {
         this.cueId = cueId
         this.cueStackId = stackTag
         this.priority = priority
     }
 
     // ─── The frame ───────────────────────────────────────────────────────────────────────────
+
+    /** Drop [cueId], its last hold gone, under [lock]. */
+    private fun forgetLocked(cueId: Int) {
+        live.remove(cueId)
+        editedSinceGo.remove(cueId)
+        spawnedEffects.remove(cueId)
+        cookedLayerEffects.remove(cueId)
+    }
 
     /** Rebuild [view] and the frame from [live]. Under [lock]. */
     private fun publishLocked() {
@@ -724,6 +845,7 @@ class CueHolds internal constructor(
                 priority = top?.value ?: 0,
                 holds = cue.holds.keys.toList(),
                 stackId = (top?.key as? CueHold.Stack)?.stackId,
+                edited = cueId in editedSinceGo,
             )
         }
         if (closed) return
@@ -820,3 +942,18 @@ internal fun CueHolds.toggleLooseCue(state: State, cueId: Int, scope: CoroutineS
     } else {
         takeLooseCue(state, cueId, scope = scope)?.let { true to it.acquired.effectCount }
     }
+
+/** One effect a cue runs: its stored effect's uuid, the layer it came through (none for an ad-hoc one), its target and property. */
+internal data class CueEffectKey(val uuid: java.util.UUID?, val layerId: Int?, val target: FxTargetRef, val propertyName: String)
+
+internal fun FxInstance.cueEffectKey() = CueEffectKey(layerEffectUuid, cueLayerId, target.targetRef, target.propertyName)
+
+/** One layer effect a cue's cook names: its layer, its stored effect and its target. */
+internal typealias CookedLayerEffect = Triple<CookLayer, EffectEntry, EffectTargetRef>
+
+/** A [CookedLayerEffect] by its layer's row id, so a change to the cue's own layer is not one to its Look. */
+internal data class LayerEffectKey(val layerId: Int, val effect: EffectEntry, val target: EffectTargetRef)
+
+/** The untimed ones of these, as keys: timed layers' effects are fired, never spawned on GO. */
+private fun List<CookedLayerEffect>.keys(): Set<LayerEffectKey> =
+    filter { (layer, _, _) -> !layer.isTimed }.mapTo(HashSet()) { (layer, effect, target) -> LayerEffectKey(layer.layerId, effect, target) }

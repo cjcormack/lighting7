@@ -577,6 +577,22 @@ internal data class CueHookKey(val triggerType: TriggerType, val scriptId: Int)
 
 internal val DaoCueTrigger.hookKey get() = CueHookKey(triggerType, script.id.value)
 
+/**
+ * What *Update stage* sends of a cue — its own rows' values, its untimed layers and its untimed
+ * effects, in their order — compared across a write to tell whether it leaves a held cue *Edited
+ * since GO* (show-cue-editing plan §3.5). A row's own fade and move-in-dark, a timed layer or effect,
+ * scenery and events are not in it: Update stage sends none of them.
+ */
+internal fun DaoCue.stageContent(): List<List<Any?>> = listOf(
+    propertyAssignmentsInOrder().map { it.toDto() }.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value) },
+    layersInOrder().mapNotNull { it.toDto() }
+        .filter { it.delayMs == null && it.intervalMs == null }
+        .map { it.copy(sortOrder = 0, randomWindowMs = null) },
+    adHocEffectsInOrder().map { it.toDto() }
+        .filter { it.delayMs == null && it.intervalMs == null }
+        .map { it.copy(sortOrder = 0, randomWindowMs = null) },
+)
+
 /** A cue's stored layers, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
 internal fun DaoCue.layersInOrder(): List<DaoCueLayer> = layers.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 

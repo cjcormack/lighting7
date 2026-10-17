@@ -5753,8 +5753,25 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   the keys — not on a focused control or field — and asks to unlock, as the Values grid's refused
   keys do. `CueEditorIsolation` clears the programmer's scope, focused layers and rail-tab claim
   above both tabs, for the grid's reason.
+- **Edited since GO and Update stage** (session 7, D4, D11, §3.5): these tabs' writes send nothing
+  to the stage, so the desk marks a held cue they changed in what Update stage sends — a row's
+  value, an untimed layer or effect, not a row's own fade or a timed one — and a live cue whose Look
+  or palette had its effects edited; a Record leaves the mark. It is `cueHolds.state`'s `edited`, read by
+  `useCueEdited` (`store/cueHolds.ts`, narrowed to the one answer). `EditedSinceGoChip`
+  (`components/cues/EditedSinceGo.tsx`) draws *Edited since GO* on the editor's header, the cue
+  sheet's Name cell and the phone card under its identity (`CueCardBody`), and nothing otherwise;
+  `UpdateStageButton` sits beside it in the header and `CueActions`' ⋯ menu has *Update stage…*
+  under *Record…*. Both open **one confirm per press**, `UpdateStageDialog`, held in
+  `CueActionDialogsProvider` beside Record and Delete since a GO can collapse the card that opened
+  it, and mounted only while open: it reads `POST /cues/{id}/update-stage {dryRun: true}` for the
+  counts and the cue's fade (`lib/updateStage.ts`'s `updateStageLines`: *3 values change, over its
+  2.0s fade · 1 effect edited in place · 1 stopped*), names the cue and what is not re-fired, and its *Update stage* sends
+  the one real request. Locked, both ask to unlock (§4.6), or are disabled with the reason where the
+  lock is not the operator's. It is REST, so the P2 no-frame tests are unchanged. The header reaches
+  the provider through `runner/cueActionDialogsContext.ts`, the openers alone, so the editor does not
+  import the dialogs; under no provider (a test) the button is not drawn.
 - **Not yet**: a row's own fade and move-in-dark are kept on every write but not edited here
-  (`FU-CUE-ROW-TIMING`); *Edited since GO* and *Update stage* are session 7.
+  (`FU-CUE-ROW-TIMING`).
 
 #### The cue action set
 
@@ -5764,8 +5781,8 @@ sheet's selection bar (after Set · Clear · Spread, before Deselect), the phone
 `CueCardBody`'s header (`actions`; `RunMobile` on the phone Show and the busk Show tab, and the
 Prompt Book's rail card), and the Cues table's selection bar (`host="table"`, §"The Cues table"). It takes the rows (a cue and the entry it was opened from, several from
 the sheet), the lock and `onRequestUnlock`, and reads the run state and the stacks itself, so a host
-hands in nothing else. **Its Record sheet, delete confirm and unlock question live above every
-host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
+hands in nothing else. **Its Record sheet, delete confirm, Update stage confirm
+(`UpdateStageDialog`) and unlock question live above every host** — `CueActionDialogsProvider` (`runner/cueActionDialogs.tsx`), mounted once in `Layout` around
 the routed page and **above its path-keyed error boundary** — because a host can go mid-gesture: a
 card open only because it is live collapses on a GO from MIDI or another window, and a GO into the
 next stack moves the Show view to that stack's path, which remounts everything under the boundary. Without a
@@ -5787,7 +5804,8 @@ provider (a test drawing the set alone) the set draws them itself.
   multi-select *Delete…* is the same confirm. **⋯** is *Add to stack…*, *Move to stack…* —
   `useMoveCueStackEntryMutation`, the entry moved whole by the desk (Chris's call, 2026-10-16, over
   R1.4's add then remove, which dropped the number, follow and anchor) — and *Copy link*, the
-  card's address with `?entry=`.
+  card's address with `?entry=`. On the phone's ⋯ menu *Update stage…* follows *Record…* while the
+  one cue is edited since GO (§The cue editor).
 - **Locked, only Blind edit works** (D8, §4.6): every other action — *Copy link* included, the
   plan's rule — opens `UnlockShowDialog` (`components/runner/`, lifted from the cue sheet, whose
   refused cell verbs open it too), or is disabled with the reason where the lock is not the
@@ -5997,8 +6015,9 @@ has no *Cue properties…*. Two cards can be open, each with its own editor.
   a loose one says *In no stack · no number or follow* in their place, and one in several places
   opened from none (as the sheet host can be) keeps the fields, disabled, saying why. A
   header field half-typed when its host goes — a GO collapsing a live card — commits
-  (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did.
-  *Edited since GO*, *Update stage…* and *Show on stage* are sessions 7 and 8, and draw nothing yet.
+  (`InlineEditField`'s `commitOnUnmount`), as the old properties pane's autosave did. While the
+  desk marks the cue edited since GO it draws the *Edited since GO* chip and *Update stage…* (§The
+  cue editor); *Show on stage* is session 8, and draws nothing yet.
 - **The tabs are *Values n · Looks n · FX n · Scenery n · Events n · Cue*.** Values counts the
   values a GO lands (`/cooked`'s rows). The tab is the window's, `sessionStorage cueEditor.tab`
   (`cueEditorTab.ts`): an open editor keeps its own, a new one opens on the window's last choice, and
