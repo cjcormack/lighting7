@@ -1,10 +1,10 @@
 // Generates `Fan.dc.html`, venue-visit plan S12's one board: Spread's relative mode.
 // `node gen-s12.mjs` in this directory rewrites it. Dark-only, in the editor-kit boards' vocabulary:
-// the stylesheet and the icon paths are read out of `../editor-kit-design/gen.mjs`, so the two never
+// the stylesheet and the icon paths are read out of `../../editor-kit-design/gen.mjs`, so the two never
 // drift, and every measurement is the shipped busk Spread tab's where a board and the tab disagree.
 import { readFileSync, writeFileSync } from 'node:fs'
 
-const kit = readFileSync(new URL('../editor-kit-design/gen.mjs', import.meta.url), 'utf8')
+const kit = readFileSync(new URL('../../editor-kit-design/gen.mjs', import.meta.url), 'utf8')
 const T = Function(`return ${/const T = (\{[\s\S]*?\n\})/.exec(kit)[1]}`)()
 const P = Function(`return ${/const P = (\{[\s\S]*?\n\})/.exec(kit)[1]}`)()
 // The kit's stylesheet is a template literal over `T`; evaluate it with the same tokens.

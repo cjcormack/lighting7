@@ -1,8 +1,9 @@
 # After the venue visit — what the first evening on the rig asked for
 
-> **Document status: AGREED, 2026-10-14.** Chris's notes from an evening programming a show on the
-> desk in the hall, with two rounds of questions answered the same day (§2). It is an umbrella plan
-> with two kinds of session:
+> **Document status: DONE, 2026-10-17 — all seventeen S sessions and the six R plans' 38 sessions
+> shipped; closed at course check K6.** Agreed 2026-10-14. Chris's notes from an evening programming
+> a show on the desk in the hall, with two rounds of questions answered the same day (§2). It is an
+> umbrella plan with two kinds of session:
 >
 > - **S sessions** land a change, one PR each.
 > - **R sessions** are research and design. Each one produces a new plan in `docs/plans/`, with a
@@ -24,6 +25,9 @@
 > **Checked 2026-10-17 (K5).** Nine sessions had merged since K4, and with them the four R plans that
 > still had sessions. K5 added S17 for two stack-write gaps R1.7's review found, and left S12 and S17
 > to run.
+>
+> **Closed 2026-10-17 (K6).** S12 and S17 merged, which emptied the last two lanes. K6 moved this plan
+> and the six R plans, with their design folders, to `docs/plans/completed/`.
 >
 > A one-page copy for human readers is
 > [`venue-visit-design/venue-visit.html`](venue-visit-design/venue-visit.html), with a live copy at
@@ -220,7 +224,7 @@ Grouped by area. §4 gives the order.
   and logged; edited in the Cue tab; copies map a master by index; `formatVersion` 35).
 - ~~S17 — A stack's labels and next cue follow an insert~~ — done, `97d4876` (every handler that places,
   reorders or sorts a cue entry ends in `announceEntriesPlaced`, which publishes an active stack's run
-  state and announces its cues' pads; the stack PUT publishes on a loop change and a cue delete
+  state and announces its cues' pads; the stack PUT publishes, since its loop decides what follows the last entry, and a cue delete
   re-reads the pads it renumbered; `FU-BUSK-PAD-STALE-NUMBER` closed).
 
 ### Course checks
@@ -277,7 +281,9 @@ Each produced a plan, which wins inside its scope. Their sessions are in §4.
 
 ## 4. Order
 
-Every session still to run, in **lanes** that run in parallel (P6). Session ids:
+**The plan is done.** Every session in this plan and the six R plans has merged, and no lane remains.
+§4 sorted them into **lanes** that ran in parallel (P6), and the paragraphs below record how each
+course check left the lanes. Session ids:
 
 - **S*n*** is this plan's.
 - **R1.*n*** is [`cue-model-plan.md`](cue-model-plan.md)'s session *n*, **R2.*n***
@@ -285,12 +291,6 @@ Every session still to run, in **lanes** that run in parallel (P6). Session ids:
   [`apply-model-plan.md`](apply-model-plan.md)'s and **R4.*n*** [`effects-plan.md`](effects-plan.md)'s.
 - **Nav.*n*** is [`navigation-plan.md`](navigation-plan.md)'s and **Att.*n***
   [`venue-attach-plan.md`](venue-attach-plan.md)'s.
-
-**Picking a session.** A lane runs its sessions in order. In a lane, the next session is the first
-that is neither done (its own plan marks it) nor claimed (a `claude/vv-<id>` branch or PR exists),
-once everything in its *From other lanes* column has merged. Two lanes remain, one session each, and
-neither waits on the other, so both can run at once.
-Course checks (§3) fall due by count and by event, not by place in a lane.
 
 K1 (2026-10-16) took out the sessions done since the lanes were drawn and the needs that have merged,
 folded the Rig and output lane (S6, S9 and S8 are done), and opened Apply next. R1.3 and R4.2 were in
@@ -317,17 +317,9 @@ writes; K5 took the row out with the rest. R2.8 and S13 ran on branches outside 
 R2.8 ran ahead of S13 rather than behind it. K5 added S17 as a lane of its own. It shares no file with
 S12, and nothing was in flight, so it can start at once. The next check closes the plan.
 
-**Programmer.**
-
-| Session | From other lanes |
-|---|---|
-| S12 Fan | — |
-
-**Stack writes.**
-
-| Session | From other lanes |
-|---|---|
-| S17 A stack's labels and next cue follow an insert | — |
+K6 (2026-10-17) took out S12 and S17, both merged before it started, and with them the Programmer and
+Stack writes lanes, the last two. Nothing was in flight, and no `claude/vv-` branch was left on the
+remote. K6 closed the plan.
 
 ## 5. Not in this plan
 

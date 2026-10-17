@@ -1,11 +1,13 @@
 # Editing a cue in the Show view — the programmer's tables, writing the stored cue
 
-> **Document status: AGREED, 2026-10-15.** This is design session R2 of
-> [`venue-visit-plan.md`](venue-visit-plan.md). It follows R1, [`cue-model-plan.md`](cue-model-plan.md),
-> and designs against that model: a cue is a shared project record, a stack is an ordered list of
-> entries, and delete is its own explicit operation. The questions asked and their answers are in
-> §11 and in the design record, [`show-cue-editing-design/INDEX.md`](show-cue-editing-design/INDEX.md),
-> beside the boards. A one-page copy for human readers is
+> **Document status: DONE — sessions 1–8 shipped 2026-10-15 to 2026-10-17, each session's heading
+> citing its commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-15. This is design
+> session R2 of [`venue-visit-plan.md`](venue-visit-plan.md). It follows R1,
+> [`cue-model-plan.md`](cue-model-plan.md), and designs against that model: a cue is a shared
+> project record, a stack is an ordered list of entries, and delete is its own explicit operation.
+> The questions asked and their answers are in §11 and in the design record,
+> [`show-cue-editing-design/INDEX.md`](show-cue-editing-design/INDEX.md), beside the boards. A
+> one-page copy for human readers is
 > [`show-cue-editing-design/show-cue-editing.html`](show-cue-editing-design/show-cue-editing.html),
 > with a live copy at <https://claude.ai/artifact/N3Acyq477Lj9i9r4p6YWzm> (the checked-in file is
 > the authority).
@@ -560,7 +562,7 @@ carries, and every other change is a route, a field on an answer or a per-window
 
 ## 9. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-CUE-ROW-TIMING`: editing an own row's fade and move-in-dark in the Values grid (session 5).
 - `FU-BLIND-FX-DRAWN`: the Stage view's programmer sources drawing a held programmer effect

@@ -211,17 +211,19 @@ it.
    mover still, the outer two moving furthest. Drag back to the middle: they meet on the spot again.
    Drag past the middle: the fan crosses. Close the popover and open it again: the amount reads 0, and
    a drag fans from where the heads now are.
-2. **Both axes and a group.** Choose *Both*, set Pan 20 and Tilt 10 and Apply. Select the movers'
+2. **Both axes and a group.** Switch *Live* off, choose *Both*, set Pan 20 and Tilt 10 and press
+   Apply. Select the movers'
    group alone and fan again: the fan runs in the group's member order as its sheet lists it, not rig
    order.
 3. **Anchor.** With Live on, drag fast back and forth for several seconds, then let go at 0: every
    mover is back on the spot, none walked off it. Move one mover from its Position cell, then press
    *Re-read* and fan: the fan starts from the moved mover's new position.
 4. **The busk tab and the cell.** On the busk view's Spread tab fan the selection's tilt; then on the
-   programmer open a mover's Position cell, press its *Spread…*: the rail's Spread tab opens on
-   Position, in Fan, at 0.
-5. **A Look layer.** Focus a Look layer holding positions for three of the movers and fan them: the
-   read-out says how many came from the stage, the layer's draft takes the fanned values, and the
+   programmer select the five movers' Position cells, open one and press *Spread…* (the waves icon after
+   *Aim…*'s crosshair): on a desk screen the rail's Spread tab opens on Position, in Fan, at 0; where
+   the rail draws no tabs, row C's popover opens instead.
+5. **A Look layer.** Focus a Look layer holding positions for three of the movers and fan all five: the
+   read-out says the fan starts from the layer's rows, two heads from the stage, the layer's draft takes the fanned values, and the
    stage follows only as the Look does.
 6. **The encoder.** Bind an X-Touch encoder to *Selection — fan* on Pan (the library's *Fan pan*
    chip). With the movers selected, turn it: they fan out and back with the ring, the ring's centre LED
@@ -2857,7 +2859,7 @@ mid-fade and confirm it joins part-way rather than replaying; then run an auto-a
 several cues with all sessions watching.
 
 **If a session lags or double-steps**, the levers are in `useShowTransport` /
-`applyServerRunState` — not in the backend, which sends one frame per transition by design.
+`applyServerRunState` — not in the backend, which sends one frame per transition, and one per stack-list write that can move the next, by design.
 
 ## `FU-MANUAL-EDITOR-INPROCESS`
 

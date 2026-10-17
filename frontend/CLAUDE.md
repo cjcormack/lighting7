@@ -1639,8 +1639,8 @@ departure from `reorderTemplates`: that route answers `void`, so a refetch is it
 what happened; this one answers the page as written, ids included.
 
 **`busk.layoutChanged {pageIds}` is keyed, and the bridge suppresses our own echo.** The frame fires
-for page CRUD, reorder, every layout write **including this client's**, and a record delete that took
-pads off a page; a page delete carries the deleted id *plus every survivor*, since their `sortOrder`
+for page CRUD, reorder, every layout write **including this client's**, a record delete that took
+pads off a page, and a stack-list write that moved the places or numbers of the cues a page's pads name; a page delete carries the deleted id *plus every survivor*, since their `sortOrder`
 moved. Invalidation is per page (`{type:'BuskPage', id: 'page-N'}` — prefixed, because the project
 id shares that tag type), so **a page id from another project matches nothing and is a silent
 no-op**: the frame needs no project lookup. A single-page frame is dropped while that page is saving
@@ -2189,9 +2189,9 @@ structured reply), the colour palettes an endpoint may name (`isSpreadColourTemp
 the Cells chip's own expansion, so the chip and the tab cannot count cells two ways), the Colour
 tab's seed hand-over, and *Save as Look…* in the footer's `save` slot. Everything else — the form,
 the endpoint editors, Curve · Order · Parts · Over, Live and Apply / Send again, the keyboard, the
-answer read for `skippedFamilies` alone — is the panel's, shared with the programmer's row C (§Sheet
+answer read for `skippedFamilies` (and in Fan for `base` and `clamped` too) — is the panel's, shared with the programmer's row C (§Sheet
 kit), and nothing changed to the eye when it moved. The tab sends two intents of one property's
-shape, a curve, an order, parts and an over-switch to `POST /programmer/spread`; the desk
+shape (in Fan, an amount per axis instead), a curve, an order, parts and an over-switch to `POST /programmer/spread`; the desk
 interpolates in the intent's own space, resolves one literal per head through the same
 `TemplateResolver` a palette's *Apply as values* uses, writes each into Local as an ordinary entry (so it rides
 `programmer.entryChanged`, Record captures it, Blind previews it, Clear releases it), and answers
@@ -2929,7 +2929,7 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 
 ### Applying to a selection
 
-**One press, whatever it is pressed from** (`../docs/plans/apply-model-plan.md` §4.1, session 3).
+**One press, whatever it is pressed from** (`../docs/plans/completed/apply-model-plan.md` §4.1, session 3).
 A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
 that turns that into a route, and every door calls it: the palette strip, the one picker
@@ -3251,9 +3251,9 @@ own `SpreadPanel` instance. Surface verbs come after Spread; Deselect is always 
 
 **Spread is one panel, four plan kinds, every host — and the desk resolves it on both sides**
 (editor-kit plan D1–D7, D15; `Spread.dc.html` is the layout authority, the busk tab wins on a
-measurement). The verb was *Fan* until session 3 of that plan, and "Fan" survives only in the desk
-survey as what other desks call it: the desk already called the route spread, a Look press
-"spreads" its rows, and nothing on either side called anything else fan but this one verb.
+measurement). The verb was *Fan* until session 3 of that plan: the desk already called the route spread and a
+Look press "spreads" its rows. Since venue-visit S12 "Fan" names Spread's relative mode on Position
+(below), never a second name for the verb.
 `components/editor/SpreadPanel.tsx` is the busk tab's body plus the old fan popover's surface,
 chooser and keyboard, hosted by the programmer's row C as a popover in the cell editor's three forms
 (`fixtures-list/SpreadPopover.tsx` builds its plans from the marquee), by the busk view as the
@@ -3346,7 +3346,7 @@ busk view. `useSheetKeyboard` is the kit's window listener and it is **capture-p
 enabled, and a name typed into a cue cell begins with a character — so the sheet claims the key
 first and the transport now stands aside from a key whose default is already prevented.
 
-**Fan is Spread's second mode on Position** (venue-visit plan S12, `venue-visit-design/Fan.dc.html`,
+**Fan is Spread's second mode on Position** (venue-visit plan S12, `../docs/plans/completed/venue-visit-design/Fan.dc.html`,
 decided with Chris 2026-10-17). A position plan draws *Ends · Fan* above the endpoints, and in Fan
 *Pan · Tilt · Both* beside it; *Ends* is From → To as before. "Fan" is a label inside Spread, not a
 second name for it: the editor kit retired Fan as a name for first → last, and this is the other
@@ -4184,8 +4184,8 @@ each was:
   in Fan at 0 and closes the cell's editor — no seed, since a fan starts where the heads are. The
   opener is the list container's (`PositionFanContext`): the rail's Spread tab through the claim's
   `spreadFan`, which answers false where the rail draws no tabs (overlay mode, push mode's narrow
-  arm), and then row C's popover, the colour hand-over's fallback. It is drawn only where that
-  context is provided, refused under two heads (a fan of one moves nothing), in Output and on a
+  arm), and then row C's popover, the colour hand-over's fallback. It is drawn only in the programmer,
+  the one list whose popup draws its footer, refused under two heads (a fan of one moves nothing), in Output and on a
   focused palette layer, and live in a focused Look layer, where the fan lands in the layer's draft. At the popup's 288px both fold to their icons, their words the buttons'
   names, and *Save as palette…* keeps its word: the colour footer's fold. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists draw the editor bare; the cue editor's
@@ -4969,8 +4969,9 @@ Six rules, each with a reason:
   should hear it. The plain lists mount no store, so they publish into nothing.
 - **A tab claims its own column's open gesture** (call 9). With Colour open, Enter, Set, a typed
   character and a double click on a Colour cell land in the tab — R focused, the character seeded —
-  and no popover opens; with Spread open, row C's Spread focuses the tab's From, and a colour cell's
-  *Spread…* seeds the tab rather than the popover. Every other column opens its popover. The claim
+  and no popover opens; with Spread open, row C's Spread focuses the tab's first field (From, or a fan's first
+  amount), a colour cell's *Spread…* seeds the tab rather than the popover, and a position cell's
+  opens it in Fan. Every other column opens its popover. The claim
   is `programmer/railTab.ts`'s `RailTabClaim`, which `ProgrammerWorkspace` provides around *both*
   its children, keyed on the drawn tab alone; the keyboard's branch is `useCellEditorRequests`'
   `intercept`, the double click's is `ColourCell`'s `onOpenChange`.

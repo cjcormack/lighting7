@@ -1,10 +1,12 @@
 # Effects — what a theatre and busking desk needs from them
 
-> **Document status: AGREED, 2026-10-15.** This is design session R4 of
-> [`venue-visit-plan.md`](venue-visit-plan.md): a survey of what ChamSys MagicQ, grandMA3, ETC Eos and
-> Hog 4 offer an operator in an effect, set against our 24 built-ins, and a plan for the gaps that
-> matter here. The questions asked and their answers are in §11. The survey, with every manual page
-> cited, is the design record's [`effects-design/survey.md`](effects-design/survey.md), beside
+> **Document status: DONE — sessions 1–7 shipped 2026-10-16 to 2026-10-17, each session's heading
+> citing its commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-15. This is design
+> session R4 of [`venue-visit-plan.md`](venue-visit-plan.md): a survey of what ChamSys MagicQ,
+> grandMA3, ETC Eos and Hog 4 offer an operator in an effect, set against our 24 built-ins, and a
+> plan for the gaps that matter here. The questions asked and their answers are in §11. The survey,
+> with every manual page cited, is the design record's
+> [`effects-design/survey.md`](effects-design/survey.md), beside
 > [`effects-design/INDEX.md`](effects-design/INDEX.md). A one-page copy for human readers is
 > [`effects-design/effects.html`](effects-design/effects.html), with a live copy at
 > <https://claude.ai/artifact/LttskDxQVM8upsDYoBj9P5> (the checked-in file is the authority).
@@ -509,7 +511,7 @@ then 4 and 5.
 
 ## 10. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-FX-WIDTH-SOFTNESS` (session 1): duty, on ratio, fade ratio and attack are each an effect's own
   parameter under its own name. Trigger: an operator looks for one Width or Softness across effects.

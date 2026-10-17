@@ -1,11 +1,12 @@
 # Applying to a selection — one press, whatever you press it from
 
-> **Document status: AGREED, 2026-10-15.** This is design session R3 of
-> [`venue-visit-plan.md`](venue-visit-plan.md). It designs one model for putting a palette, a Look or
-> an effect onto a selection of fixtures and attributes, replacing the seven mechanisms the
-> venue-visit plan's §1 lists. The questions asked and their answers are in §11 and in the design
-> record, [`apply-model-design/INDEX.md`](apply-model-design/INDEX.md), beside the boards. A
-> one-page copy for human readers is
+> **Document status: DONE — sessions 1–8 shipped 2026-10-16 to 2026-10-17, each session's heading
+> citing its commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-15. This is design
+> session R3 of [`venue-visit-plan.md`](venue-visit-plan.md). It designs one model for putting a
+> palette, a Look or an effect onto a selection of fixtures and attributes, replacing the seven
+> mechanisms the venue-visit plan's §1 lists. The questions asked and their answers are in §11 and
+> in the design record, [`apply-model-design/INDEX.md`](apply-model-design/INDEX.md), beside the
+> boards. A one-page copy for human readers is
 > [`apply-model-design/apply-model.html`](apply-model-design/apply-model.html), with a live copy at
 > <https://claude.ai/artifact/9cDRZDeBKFiN5un88v7cNJ> (the checked-in file is the authority).
 >
@@ -790,7 +791,7 @@ Each session is one PR (P1).
 
 ## 10. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - ~~`FU-FX-SELECTION-DISTRIBUTION`~~ — not recorded: the effects plan's session 3 closed it, one
   effect over the selection (`effects-plan.md` D3).
