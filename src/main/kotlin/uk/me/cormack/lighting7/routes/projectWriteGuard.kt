@@ -135,7 +135,7 @@ internal fun Route.refuseVersionSync(state: State, build: Route.() -> Unit): Rou
 
 /**
  * The write guard for the one write it cannot see: a copy into **another** project, named in the
- * body (`POST /projects/{source}/{looks|templates|scripts|cues}/{id}/copy {targetProjectId}`). The
+ * body (`POST /projects/{source}/{looks|templates|scripts}/{id}/copy {targetProjectId}`). The
  * guard judged the path's project, the source; the target gets the same rule here — a venue version
  * takes no copy, and an operator copies nothing into a venue. Returns true when it answered. A target
  * that does not exist passes, for the route's own 404.

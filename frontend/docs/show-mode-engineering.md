@@ -721,7 +721,7 @@ POST   /project/{id}/cues                                   Create cue (no cueSt
 PUT    /project/{id}/cues/{cueId}                           Update cue (number and follow are the entry's, ignored here)
 DELETE /project/{id}/cues/{cueId}                           Delete cue; 409 CUE_IN_USE naming its uses, ?force=true deletes them too
 POST   /project/{id}/cues/delete                            Delete several { cueIds, force?, dryRun? }; dryRun answers the uses
-POST   /project/{id}/cues/{cueId}/copy                     Copy a cue into another project
+POST   /project/{id}/cues/copy-from                         Copy { fromProjectId, cueIds, stackId?, after?, dryRun? } from another project
 POST   /project/{id}/cues/{cueId}/duplicate                Duplicate { stackId? }: appended unnumbered, or loose; scenery and events kept
 ```
 

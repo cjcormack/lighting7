@@ -339,6 +339,37 @@ export interface DuplicateCueResponse {
   entryId?: number | null
 }
 
+/** `POST cues/copy-from` (lighting7 cue model plan §3.8): cues of another project copied into this one. */
+export interface CopyCuesFromRequest {
+  fromProjectId: number
+  /** In the order they are placed. */
+  cueIds: number[]
+  /** The stack each copy gets a new entry in, at its end; absent leaves every copy loose. */
+  stackId?: number
+  /** An entry of `stackId` the copies go after; absent is the end. */
+  after?: number
+  /** The same run rolled back: what a copy would do, nothing written. */
+  dryRun?: boolean
+}
+
+/** A reference the copy could not carry, and the records — `cue 'Storm'`, `Look 'Night'` — that hold it. */
+export interface CopyUnresolved {
+  problem: string
+  in: string[]
+}
+
+export interface CopyCuesFromResponse {
+  dryRun: boolean
+  /** Each copy, and its new entry when it went into a stack. A dry run's ids name nothing. */
+  copied: { fromCueId: number; cueId: number; entryId?: number | null }[]
+  unresolved: CopyUnresolved[]
+  stackId?: number | null
+  looksCopied?: string[]
+  looksLinked?: string[]
+  palettesCopied?: string[]
+  palettesLinked?: string[]
+}
+
 export interface DeleteCuesResponse {
   deleted: number[]
   uses: CueUses[]

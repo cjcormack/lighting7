@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-5`](#fu-manual-venue-visit-r4-5) | a stack's FX size on the rig — at 50 % a cue's chase runs at half its weight over what is underneath while another stack's effects and the programmer's run whole, the X-Touch fader and the phone runner move it with the Show view, a reload keeps it and a project switch puts it back to full | Venue visit R4.5 (filed at K4), 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
@@ -121,6 +122,23 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-6`
+
+**What it proves**: *Copy from another show* — venue-visit R1.6, cue model plan session 6: a cue
+copied between two shows on one venue at different versions keeps its venue records by identity.
+
+**Why it is here**: the tests and the cloud check ran on seeded data and a mock controller; only the
+real hall shows the copy firing the real cannon and moving the real tabs.
+
+**Test**, at the Commemoration Hall, with Christmas Concert 2026 current:
+
+1. **Copy.** Cues → *Copy from another show…* → Panto 2027 → a cue with a cannon event and a tabs
+   change → Act 1 → *Review*: nothing under *Will not resolve* for the cannon or the tabs.
+2. **Fire.** Arm the desk, GO the copy: the hall's cannon fires and the tabs move.
+3. **Loose.** Copy a second cue with *No stack*: it is under *Loose* in the Cues table.
 
 ---
 

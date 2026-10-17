@@ -166,7 +166,7 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | DELETE | `/{projectId}/cues/{cueId}` | Delete a cue (current project only): 409 `CUE_IN_USE` while anything names it, `?force=true` to take those with it (§"Delete") |
 | POST | `/{projectId}/cues/delete` | `{cueIds, force?, dryRun?}` — several at once, all or none (§"Delete") |
 | POST | `/{projectId}/cues/{cueId}/duplicate` | `{stackId?}` — a copy of the cue in this project (current project only): its rows, layers, effects, hooks, notes, scenery and events, named `<name> (copy)`, appended unnumbered to the **end** of `stackId`'s list, or loose without one (show-cue-editing plan D12). Answers 201 `{cueId, name, stackId?, entryId?}`; 400 for a stack of another project or a separator |
-| POST | `/{projectId}/cues/{cueId}/copy` | Copy cue to another project |
+| POST | `/{projectId}/cues/copy-from` | `{fromProjectId, cueIds, stackId?, after?, dryRun?}` — cues of any other project copied into this one (current project only), loose or each a new unnumbered entry in `stackId` (after `after`, else at the end). Answers `{copied: [{fromCueId, cueId, entryId?}], unresolved: [{problem, in}], stackId?, looksCopied, looksLinked, palettesCopied, palettesLinked}`, 201, or 200 for a `dryRun`, the same run rolled back. 400 for no cues, this project as the source, a separator, or an `after` not in the stack; 404 for an unknown project, cue or stack (§"Copying") |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
 | POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
@@ -449,8 +449,8 @@ The write is whole-list: `PUT /api/rest/projects/{id}/cues/{cueId}/events`
 Every problem comes back at once: a patch with no trigger, a trigger its type does not have (by name,
 `output1`, or label, `A`), a tube named twice, an offset outside 0–600 000 ms; a MARKER has none. The
 cue's own DTO carries them as `CueDetails.events`. A re-save keeps each tube's row and uuid, so an
-unchanged list exports byte-for-byte as before. Deleting a cue or a patch sweeps its events; a
-same-project cue copy carries them. They travel in sync embedded in `CueJson.events` on
+unchanged list exports byte-for-byte as before. Deleting a cue or a patch sweeps its events; a cue
+copy carries them, one into another project those that resolve there (§"Copying"). They travel in sync embedded in `CueJson.events` on
 `formatVersion` 21 (`docs/sync-engineering.md` §"Version 21 — cue events").
 
 The MCP tools author them too — `create_cue` and `build_cue_stack` take `events`
@@ -490,15 +490,51 @@ a uuid naming no master of the project, a BPM outside 20–300, a master named t
 already names is accepted even when its master has gone, so a list can be re-saved with the dead row
 still in it, or with it removed. A master a cue names counts as a use for the speed master's delete
 guard (`SpeedMasterUsage.cueTempos`, `cueTempoCount` on the 409), so deleting it is refused until
-`?force=true`. *Duplicate* and `POST /cues/{id}/copy` carry the list through `copyCueRecord`, and
-across projects each master is mapped by its index, as `copy_to_project`'s masters are — a pair whose
-index the target lacks is left out (logged; `copy_to_project` reports it under `unresolved`). The MCP
+`?force=true`. *Duplicate*, `POST /cues/copy-from` and `copy_to_project` carry the list through the
+one cue copier (§"Copying"), and across projects each master is mapped by its index — a pair whose
+index the target lacks is left out and reported under `unresolved`. The MCP
 tools `create_cue` and `build_cue_stack` take `speedMasters` in the same shape, or with a pair's
 master named by `masterIndex` (1 for master 1) instead of its uuid, which is how `build_cue_stack`
 names one in a project that is not current; `get_current_state` lists only the current project's
 uuids. It syncs embedded in
 `CueJson.speedMasters` on `formatVersion` 35 (`docs/sync-engineering.md` §"Version 35 — speed masters
 on a cue"). The cue editor's **Cue** tab edits it (`frontend/CLAUDE.md` §"The cue editor").
+
+## Copying
+
+**One cue copier** (`routes/cueCopier.kt`, cue model plan §3.8, D9, D18) makes every copy of a cue:
+*Duplicate* within a project, `POST /cues/copy-from` from another project, and MCP's
+`copy_to_project`, which copies whole stacks through it. A copy is a new cue with fresh uuids and the
+source's name, holding everything the source holds — fade, curve, notes, stomp, its speed masters,
+layers, own rows, effects, script hooks, scenery and events. Within one project every reference is
+kept as it is. Across projects each is resolved **in the target**:
+
+- **A Look or palette** a layer applies is the target's of that name, else copied with the cue, and
+  so is one a `tmpl:{uuid}` effect parameter names — a colour reference, or an item of a list
+  (a colour list, Palette Steps' `palettes`). A copied Look or palette has its own references
+  mapped the same way. The answer names each under `looksCopied` / `looksLinked` /
+  `palettesCopied` / `palettesLinked`.
+- **A speed master** maps by its index — a layer's and an effect's (one the target lacks drives off
+  master 1) and the cue's own tempo list (one the target lacks is left out). **A script** maps by
+  name; a hook whose script the target lacks is left out.
+- **A cue event's patch and a scenery row's element** match by **uuid** first when the two projects
+  are on one venue — a show pins it, a venue is it — whatever version each pins, since a published
+  version keeps every record's uuid; otherwise, and failing that, a patch by key and fixture type and
+  an element by name. One that does not resolve is left out.
+- **A fixture or group target** — a layer's, a row's, an effect's, each item of a selection — is kept
+  whatever the target's effective rig (`RigScope.of(target)`) holds; one the rig lacks reads as
+  missing through `AssignmentHealth`, as a venue Update's dead references do.
+
+Everything that did not come across is in `unresolved`, each problem with the records that hold it
+(`cue 'Storm'`, `Look 'Night'`). **Prompt-book anchors are never copied**: an anchor is an entry's,
+and a copy is placed afresh. `POST /cues/copy-from` places each copy in the order of `cueIds`,
+unnumbered, so it takes the next auto number — after the `after` entry, else at the end of the
+stack — or leaves it loose, and restamps the stack's holds and announces its pads as Duplicate does.
+A `dryRun` is the same run rolled back. Any project can be the source (D18); the target is the
+current project, under the show-editing lock in the Cues table (frontend `CLAUDE.md` §"The Cues
+table"). The REST `POST /cues/{id}/copy`, which copied as-is into a stack it called "Unsorted", is
+gone. When a portable column is added to a cue, Look, palette or their children, add it to the
+copier too.
 
 ## WebSocket Notifications
 
@@ -541,7 +577,8 @@ cue model plan session 5). `components/cues/CueForm.tsx` is gone.
   (`components/runner/CueCardEditor.tsx`), the cue sheet's bottom pane and `stage/OwnerEditor`
 - `src/components/cues/CueDetailContent.tsx` — the read-only body the mobile runner and the Prompt
   Book rail draw through `CueCardBody`
-- `src/components/cues/CopyCueDialog.tsx` — Copy to another project
+- `src/components/cues/CopyFromShowSheet.tsx` — *Copy from another show…*, the Cues table's
+  library verb: a project, its cues, a stack or none, then the dry run's review before the copy
 
 ### Navigation
 - The Cues row in `navigation.ts`, a Library row after Looks (hidden in a venue)

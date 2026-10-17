@@ -81,7 +81,7 @@ const ControlsContext = createContext<WindowViewControls>(NO_CONTROLS)
  * `screensSheetState`.
  *
  * One row per registry row: an editable name, *this window*, full screen or in a browser tab, a
- * view picker over the seven views, and a Full screen / Exit full screen button. Every write is a
+ * view picker over the views in `lib/windowViews.ts`, and a Full screen / Exit full screen button. Every write is a
  * `windows.*` command by **row id** — this window's included, so a rename of this tab goes out and
  * comes back like any other and there is one path, not two. The one thing read locally is this
  * window's own full-screen state, which `fullscreenchange` knows before the registry does.
