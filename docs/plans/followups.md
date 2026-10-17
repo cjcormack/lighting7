@@ -155,7 +155,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
-| [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — |
+| [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — (venue-visit S17 owns it) |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
 | [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
 | [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
@@ -3032,7 +3032,8 @@ binding service's project.
 
 ### `FU-BUSK-PAD-STALE-NUMBER`
 
-**A cue pad's face can show a stale number** · Ready · Venue-visit K2, 2026-10-16
+**A cue pad's face can show a stale number** · Ready · Venue-visit K2, 2026-10-16 · owned by
+venue-visit S17 (K5, 2026-10-17)
 
 A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with the busk page. R1.4's
 `announceCuePadsChanged` (`routes/cueDelete.kt`) fires `busk.layoutChanged` for the pads of the cues
@@ -3043,7 +3044,8 @@ the MCP tools that place a cue (`create_cue` with a stack, `add_cue_to_stack`, `
 `placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack and
 Record CREATE into a stack. The pad keeps the old number until something else refetches the page.
 This predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they
-placed or renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does.
+placed or renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. Venue-visit S17
+does this, beside the run state the same writes leave stale, and moves this item to Completed.
 
 ### `FU-CUE-ROW-TIMING`
 
