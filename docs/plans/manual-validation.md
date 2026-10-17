@@ -16,6 +16,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | Item | What it proves | Origin |
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R1-7`](#fu-manual-venue-visit-r1-7) | Claude, over MCP on a real show, builds a stack that shares a cue with another stack — one cue, two numbered places, an edit showing in both — moves an entry with its number and anchor, and deletes a cue only after naming its pad and asking | Venue visit R1.7, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-2`](#fu-manual-venue-visit-att-2) | a running show detached from a trial venue and attached back at the same version moves no channel, its Patch list, hides and parks as before the detach, and one attached at an older version runs against it rather than going dark | Venue visit Att.2, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-6`](#fu-manual-venue-visit-r1-6) | a cue with a cannon event and a scenery change copied from Panto 2027 into Christmas Concert 2026 on the Commemoration Hall, one version apart, fires the hall's cannon and moves the hall's tabs | Venue visit R1.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-5`](#fu-manual-venue-visit-r1-5) | the Cues table on a real show lists every cue once, its live dot follows a GO and a busk press, it honours the show-editing lock while the show runs, a loose cue's pad opens it filtered, and a two-cue delete names the real pad and binding | Venue visit R1.5 (filed at K4), 2026-10-17 |
@@ -148,6 +150,67 @@ with no rig attached; a desk screen, the iPad's touch targets and a show running
 3. **End to end.** With the show running a cue, attach it at the installed version: the progress
    shows, the sheet closes on the show's home with *On <venue> vN*, and no channel moves. Then detach
    it again and attach at the older version: the sheet says it runs against that version, and it does.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R1-7`
+
+**What it proves**: *the MCP cue tools* — venue-visit R1.7, cue model plan session 7: a model names a
+cue's place by its number in the stack, shares a cue rather than copying it, and deletes one only
+through the guard.
+
+**Why it is here**: the tests call the tools directly; only a Claude client connected to the desk shows
+a model reading `in:` lines, choosing the entry by number, and stopping at `CUE_IN_USE` to ask.
+
+**Test**, on Sleeping Beauty, with Claude connected over MCP:
+
+1. **Share.** Ask Claude to build an *Encore* stack whose second cue is Act 1's Q14, shared, not
+   copied. The Show view lists Q14's cue in both stacks; `describe_rig` reads `in: Act 1 Q14, Encore Q2`.
+   Change its fade in the cue editor: both places show the new fade.
+2. **By number.** Ask Claude to stand by Encore Q2 and GO: the shared cue fires from Encore.
+3. **Move.** Ask Claude to move an anchored Act 1 cue to Encore: its number and follow come with it,
+   and the Prompt Book's anchor still opens it.
+4. **Delete.** Put a cue on a busk pad and ask Claude to delete it: it names the pad and the entries
+   and asks before forcing. Say yes: the pad and the entries go.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-7`
+
+**What it proves**: *the busk side sheets* — venue-visit R3.7, apply-model plan session 7 (§4.5,
+D10): the busk sheet's tabs are Level · Colour · Position · Beam · Spread · Effects · Speed · Show,
+each family tab the per-property popup's body over the busk selection, and the Effects tab starts a
+library effect on the selection and splits off the selected heads of a running one.
+
+**Why it is here**: the tests pin each tab's requests, the strip's classes and the split's wiring
+against mocks, and the strip's widths were measured in headless Chromium with a Linux font; nobody
+has pressed a tab on the busk screen, read the strip in Safari's own font at the sheet's floor, or
+watched a split from the tab land on a running chase.
+
+**Test**, on the dev rig with the busk view on a desk screen and on the iPad (portrait and landscape),
+four hexes in a group, two movers with zoom and iris, a programmer pointed at a focused Look layer on
+another window, an Intensity palette *Full*, a Beam palette *Wide* and a running chase on the hexes:
+
+1. **The strip.** Drag the sheet to its narrowest: eight glyphs, the mode toggle and the fold chevron
+   on one row with nothing clipped, each glyph naming its tab on hover. Widen it past 380: the open
+   tab gains its word, and only that one.
+2. **Level.** Select the hex group on the rig band, open Level: *Full* in the Palettes band lights the
+   group's dimmers at full as a layer (the rail's stack shows it, **not** the focused Look), the slider
+   moves all four live, and *Save as palette…* opens on Intensity.
+3. **Colour.** The picker at the top, then the Palettes band and the Effects band at the foot; *+
+   Effect…* there starts a colour effect on the selection.
+4. **Position.** Select the two movers, open Position: a drag on the pad moves both, each on its own
+   range, the hollow dot marking the second; Pan and Tilt typed land at the programmer fade.
+5. **Beam.** With the movers selected, a *Zoom · Iris* row: *Wide* is offered under Zoom and not
+   under Iris; the level moves the property picked.
+6. **The Effects tab.** Select Hex 1–2 of the hexes the chase runs on, open Effects: the chase's row,
+   and a cue's effect on those heads drawn with no controls. Open the chase: *Hex 1–2 of Hex 1–4*.
+   Drag Max — nothing moves — then *Apply to Hex 1–2*: they take it **at the phase they had**, Hex 3–4
+   run on, no head jumps, and a second drag moves both Hex 1 and Hex 2. *+ Effect…* with Hex 1–4
+   selected starts one Pulse over them and takes them off the chase.
+7. **The iPad.** Repeat 2, 4 and 6 in the overlay — the bottom sheet upright and the right-hand sheet
+   in landscape: the overlay's *Sheet* button opens onto Colour, its strip carries every tab but Speed
+   with no tab under the close cross, and each tab presses as on the desk.
 
 ---
 

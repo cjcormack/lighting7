@@ -933,10 +933,15 @@ The `fxState` WebSocket message includes `cueStackId` on each effect in `activeE
 
 ## MCP tools
 
-Seven tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
+Nine tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`). Each names a cue by id
+and a **place** by entry (cue model plan §3.10): `entryId`, or the stack's `number` — the one the
+Show view shows, unique in its stack — resolved by `ai/CueEntryRefs.kt`. A cue id alone never names
+a place, since a cue may be in a stack twice (D7); `activate_cue_stack` and `set_standby` refuse one
+by name.
 - `create_cue_stack` — Create with name, loop
-- `activate_cue_stack` — Activate (optionally at specific cue). With no cue named it routes to
-  `activateAtFirstCue`, so it honours an armed standby exactly as the REST route and the surface do
+- `activate_cue_stack` — Activate, or GO to one entry (`entryId` or `number`). With no entry named
+  it routes to `activateAtFirstCue`, so it honours an armed standby exactly as the REST route and
+  the surface do
 - `deactivate_cue_stack` — Deactivate
 - `go_cue_stack` — GO: fire whatever is on deck, starting the stack if it is stopped. It calls
   `CueStackManager.go`, which is also what `SurfaceActions.cueStackGo` calls — the active-or-not
@@ -944,9 +949,26 @@ Seven tools (`ai/AiTools.kt`, offered over MCP — `docs/mcp-engineering.md`):
   button rather than three implementations of it
 - `advance_cue_stack` — Advance forward/backward; the model is pointed at `go_cue_stack` for FORWARD
   and this for BACKWARD
-- `set_standby` — Arm (or, with no `cueId`, disarm) the cue the next GO fires, without moving a light
-- `add_cue_to_stack` — Add a cue to a stack as a new entry, sharing it with any stack it is already in
+- `set_standby` — Arm an entry (or, naming none, disarm) as what the next GO fires, without moving a
+  light; answers `standbyEntryId`, the effective `nextEntryId` and the live `activeEntryId`
+- `add_cue_to_stack` — `{stackId, cueId, number?, after?}`: a new entry, sharing the cue with any
+  stack it is already in, after the entry `after` names (`{entryId}` — a marker's too — or
+  `{number}`), else at the end; answers the entry. `sortOrder` is refused by name
+- `remove_cue_from_stack` — `{stackId, entryId | number}`: the REST entry delete (`removeEntries`,
+  `announceEntriesRemoved`), never the cue, which is loose once its last entry goes
+  (`cueLeftLoose`); a live entry leaves the stage alone until the next GO (D16)
+- `move_cue_to_stack` — `{stackId, entryId | number, toStackId}`: *Move to stack…*
+  (`moveEntryChecked`, `announceEntryMoved`, shared with the REST move), the entry whole — explicit
+  number, follow and prompt-book anchor — to the end of the other stack; answers the moved entry
 
-The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and active cue info, and `cue_run` alongside it for the run state of every stack that has one — the armed-or-positional `nextCueId`, `nextIsArmed`, and the live fade. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Active effects include `cueStackId`. Auto-advance and crossfade are configured per-cue (not per-stack) via the cue editor UI or `create_cue` tool.
+`create_cue` takes `stackId` with `number` and `after` to place the new cue as `add_cue_to_stack`
+does, and the setup tool `build_cue_stack` (`ai/SetupTools.kt`) a row naming `cueId` to share one;
+a row that does may carry only the entry's own `number`, `followSeconds` and `at` (an empty list, blank
+text or `false` beside them is ignored). `create_cue`, `add_cue_to_stack`, `remove_cue_from_stack` and
+`move_cue_to_stack` end in the REST route's announcement (`announceEntryAdded`,
+`announceEntriesRemoved`, `announceEntryMoved`), and `build_cue_stack` and `copy_cues` announce the
+stack's pads when they write the current project, so a busk pad's numbers follow.
+
+The `get_current_state` tool includes `cue_stacks` in its default include set, returning stack names, cue counts, and the live cue and entry, `cue_run` alongside it for the run state of every stack that has one — `activeEntryId`, the armed-or-positional `nextEntryId` / `nextCueId`, `standbyEntryId`, `nextIsArmed`, and the live fade — and `cue_holds`, what holds each live cue (a stack's entry or a loose hold), from `cueHolds.state`'s frame. `cue_stacks` cannot answer what the next GO fires: "next" is server-owned (see §"Standby"), so a model that armed a standby has no other way to read its own arming back. Its `cues` list each cue's `entries`. Active effects include `cueStackId`. Auto-advance is an entry's and the crossfade a cue's, set on the entry and the cue editor's Cue tab or by `build_cue_stack`.
 
 The MCP `instructions` (`RigBriefing.keyConcepts`) describe cue stack concepts and workflow.

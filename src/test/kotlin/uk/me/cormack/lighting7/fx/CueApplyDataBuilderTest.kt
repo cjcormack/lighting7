@@ -25,7 +25,7 @@ import kotlin.test.assertIs
 import java.time.Duration
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.CueStackEntryKind
-import uk.me.cormack.lighting7.models.soleEntryOf
+import uk.me.cormack.lighting7.models.entriesOfCue
 
 /**
  * `CueApplyData` has exactly one builder.
@@ -134,7 +134,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
 
         val applyData = transaction(state.database) {
             val cue = DaoCue.findById(cueId)!!
-            buildCueApplyData(cue, soleEntryOf(cue))
+            buildCueApplyData(cue, entriesOfCue(cue).single())
         }
 
         assertEquals("rich cue", applyData.cueName)

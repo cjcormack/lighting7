@@ -469,7 +469,8 @@ export const RAIL_TABS: readonly { id: RailTab; label: string }[] = [
 /**
  * **Stack · Colour · Spread** — the docked header's tab strip (editor-kit plan session 4).
  *
- * **Its words fold by the busk sheet's rule** (`tabWordClass`, the panels' shared chrome): the
+ * **Its words fold by `tabWordClass`** (the panels' shared chrome; the busk sheet's eight tabs take
+ * `buskTabWordClass` instead): the
  * strip's unpadded wrapper is the `@container`, every tab keeps its glyph, and below 400px of strip
  * only the open tab keeps its word — which, the strip being the rail less its toggle and chevron,
  * is every width the rail has (260–480). The Stack tab's words fold to **the strip's own

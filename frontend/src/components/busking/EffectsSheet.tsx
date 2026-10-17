@@ -1,9 +1,16 @@
-import { Fragment, useMemo, useState } from 'react'
-import { Pause, Play, X } from 'lucide-react'
+import { Fragment, useMemo, useRef, useState } from 'react'
+import { Pause, Play, Plus, X } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { EditorLabel } from '@/components/editor/EditorLabel'
-import { EditedMark, FxEditor } from '@/components/fx/FxEditor'
-import { defaultParameters, differsFromTemplate, draftOf, isTemplateLayerInstance } from '@/components/fx/fxEditorModel'
+import { EditedMark } from '@/components/fx/FxEditor'
+import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
+import { defaultParameters, differsFromTemplate, draftOf, isCueEffect, isTemplateLayerInstance } from '@/components/fx/fxEditorModel'
+import { targetEmitters } from '@/components/fixtures-list/rowModel'
+import { ApplyPicker } from '@/components/press/ApplyPicker'
+import type { PressPair } from '@/hooks/usePress'
+import type { AttributeFamily } from '@/lib/attributeFamily'
+import type { PaletteFit } from '@/lib/paletteOffer'
 import { useEffectDetail } from '@/components/fixtureSheet/effectLabels'
 import { effectsReaching } from '@/components/fixtureSheet/rowSource'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -20,7 +27,8 @@ import { useMaster1Uuid } from '@/store/speedMasters'
 import { useIsDeskConnected } from '@/store/status'
 import { useTemplateListQuery } from '@/store/templates'
 import type { Fixture } from '@/store/fixtures'
-import { findEffectEntry, selectedHeadCount, type BuskingTarget } from './buskingTypes'
+import { findEffectEntry, lookLayerTarget, selectedHeadCount, type BuskingTarget } from './buskingTypes'
+import { writeTargetsOf } from './ColourSheet'
 import { effectTargetLabel, selectionItems } from '@/lib/effectTargets'
 import type { CueTarget } from '@/api/cuesApi'
 
@@ -28,11 +36,12 @@ const EMPTY: readonly ActiveEffect[] = []
 const EMPTY_FIXTURES: readonly Fixture[] = []
 
 /**
- * The programmer effects reaching the busk selection (fixture-fx-sheets plan D20): on a selected
- * fixture or one of its heads, on a selected cell or its fixture, on a selected group or any of its
- * members — and on any group those fixtures are in. The busk tab is a programmer surface, so it
- * lists what the programmer runs — a pad's effect and the operator's own — and leaves a cue's to the
- * cue (the fixture sheet's tray lists it read-only). Pure, so the reach is a table a test can read.
+ * The effects reaching the busk selection (fixture-fx-sheets plan D20, apply-model plan §3.4): on a
+ * selected fixture or one of its heads, on a selected cell or its fixture, on a selected group or any
+ * of its members — and on any group those fixtures are in. What the programmer runs — a pad's effect
+ * and the operator's own — and a cue's, which the tab draws read-only, its home being the cue. A
+ * manual effect (a script's) is left out, and so is one fading out after a GO or a release, which is
+ * nobody's. Pure, so the reach is a table a test can read.
  */
 export function effectsOnSelection(
   effects: readonly ActiveEffect[] | undefined,
@@ -59,14 +68,20 @@ export function effectsOnSelection(
       addFixture(target.fixture)
     }
   }
-  return effectsReaching(effects, [...keys], [...groups]).filter((e) => e.programmerOwned)
+  return effectsReaching(effects, [...keys], [...groups]).filter((e) => !e.leaving && (e.programmerOwned || isCueEffect(e)))
 }
 
 /**
- * The busk view's **Effects** tab — the side sheet's fifth, between Spread and Show
- * (fixture-fx-sheets plan D20, `BuskProgrammer.dc.html`). It lists what is running on the
- * selection — pad effects and the operator's own — with the tray's two-line rows, and a row's name
- * opens the live editor (`FxEditor`) under it, as the fixture sheet's tray does.
+ * The busk view's **Effects** tab, between Spread and Speed (fixture-fx-sheets plan D20,
+ * `BuskProgrammer.dc.html`; apply-model plan §4.5). It lists what is running on the selection — pad
+ * effects and the operator's own, and a cue's read-only — with the tray's two-line rows, and a row's
+ * name opens the live editor under it, as the fixture sheet's tray does.
+ *
+ * **The editor follows the busk selection** — `SplitFxEditor`, the one the FX popover draws: with
+ * part of a Local effect selected it says *Hex 1–2 of Hex 1–4*, holds the edit and offers *Apply to
+ * Hex 1–2* (the desk splits those heads off, each where it was) and *Edit all 4*. **+ Effect…** is
+ * the one picker's effects arm over the busk pair — a bare library effect pressed into Local, taking
+ * those heads off the effects of its family they run.
  *
  * **A pad's effect is edited as the running instance only.** The editor writes the instance
  * (`updateFx`), never the template; the row and the editor say ***edited*** while the instance
@@ -76,13 +91,31 @@ export function effectsOnSelection(
  * A pad's effect has no stop here: the pad is what releases it, and stopping the instance alone would
  * leave the layer to respawn it at its next recook. The operator's own effect keeps pause and stop.
  */
-export function EffectsSheet({ projectId, selectedTargets }: { projectId: number; selectedTargets: Map<string, BuskingTarget> }) {
+export function EffectsSheet({
+  projectId,
+  selectedTargets,
+  families,
+}: {
+  projectId: number
+  selectedTargets: Map<string, BuskingTarget>
+  /** The busk pair's mask, which *+ Effect…* presses under. Null is every attribute. */
+  families: AttributeFamily[] | null
+}) {
   const { data: all } = useActiveEffectsQuery()
   const { fixtures: maybeFixtures, fixtureByKey } = useFixtureLookup()
   const fixtures = maybeFixtures ?? EMPTY_FIXTURES
   const selected = useMemo(() => [...selectedTargets.values()], [selectedTargets])
   const effects = useMemo(() => effectsOnSelection(all ?? EMPTY, selected, fixtures), [all, selected, fixtures])
   const heads = selectedHeadCount(selected)
+  // The busk pair: a group stays one group effect, its distribution intact.
+  const pair = useMemo<PressPair>(() => ({ targets: selected.map(lookLayerTarget), families }), [selected, families])
+  const fit = useMemo<PaletteFit>(
+    () => ({ families: null, emitters: targetEmitters(writeTargetsOf(selected, fixtures)) }),
+    [selected, fixtures],
+  )
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerMounted, setPickerMounted] = useState(false)
+  const addRef = useRef<HTMLButtonElement>(null)
 
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: library } = useEffectLibraryQuery()
@@ -101,6 +134,12 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
   const connected = useIsDeskConnected()
   const effectDetail = useEffectDetail()
   const [editingId, setEditingId] = useState<number | null>(null)
+  // The split's session lives here, not in the editor: a split moves the editor to the copy's row.
+  const [splitSession, setSplitSession] = useState<SplitSession>(null)
+  const edit = (id: number | null) => {
+    setSplitSession(null)
+    setEditingId(id)
+  }
   const [pauseFx] = usePauseFxMutation()
   const [resumeFx] = useResumeFxMutation()
   const [removeFx] = useRemoveFxMutation()
@@ -136,7 +175,7 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
     request.unwrap().catch(() => {
       // Reported by errorToastMiddleware.
     })
-    if (editingId === e.id) setEditingId(null)
+    if (editingId === e.id) edit(null)
   }
   /** A fixture's, a head's or a group's name. */
   function nameOfTarget(t: CueTarget): string {
@@ -166,23 +205,41 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
     <div data-effects-sheet className="flex min-h-0 flex-col border-l bg-card/40">
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-3">
         <EditorLabel>Effects</EditorLabel>
-        <span className="truncate text-[11px] text-muted-foreground">
+        <span className="min-w-0 truncate text-[11px] text-muted-foreground">
           {selected.length === 0
             ? 'nothing selected'
             : `Running on ${heads} ${heads === 1 ? 'head' : 'heads'} · ${effects.length} ${effects.length === 1 ? 'effect' : 'effects'}`}
         </span>
+        <Button
+          ref={addRef}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-[11px]"
+          aria-expanded={pickerOpen}
+          disabled={selected.length === 0}
+          title="A library effect on the selection — Local, taking these heads off the effects of its family they run"
+          onClick={() => {
+            setPickerMounted(true)
+            setPickerOpen((wasOpen) => !wasOpen)
+          }}
+        >
+          <Plus className="size-3" />
+          Effect…
+        </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-effects-list>
         {selected.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">Select heads on the rig to see the effects running on them.</p>
         ) : effects.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            Nothing runs on the selection — press an effect pad, or start one from a fixture sheet.
+            Nothing runs on the selection — press an effect pad, or start one with + Effect.
           </p>
         ) : null}
         {effects.map((e) => {
           const pad = e.programmerLayerId != null
-          const isEditing = editingId === e.id
+          const cue = isCueEffect(e)
+          const isEditing = !cue && editingId === e.id
           const isEdited = edited(e)
           return (
             <Fragment key={e.id}>
@@ -195,19 +252,26 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
               >
                 <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
                   <span className={cn('size-[7px] shrink-0 rounded-full', e.isRunning ? 'bg-violet-500' : 'bg-muted-foreground')} />
-                  <button
-                    type="button"
-                    className="min-w-0 truncate text-left hover:underline"
-                    aria-expanded={isEditing}
-                    onClick={() => setEditingId(isEditing ? null : e.id)}
-                  >
-                    {e.effectType}
-                  </button>
+                  {cue ? (
+                    <span className="min-w-0 truncate" title={`${e.effectType} — its cue’s; edit it in the cue`}>
+                      {e.effectType}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="min-w-0 truncate text-left hover:underline"
+                      aria-expanded={isEditing}
+                      onClick={() => edit(isEditing ? null : e.id)}
+                    >
+                      {e.effectType}
+                    </button>
+                  )}
                   <span className="inline-flex h-4 shrink-0 items-center rounded border px-1 text-[9.5px] text-muted-foreground">
                     {effectDetail(e)}
                   </span>
                   {isEdited && <EditedMark template={e.sourceName ?? undefined} />}
                   <span className="flex-1" />
+                  {!cue && (
                   <button
                     type="button"
                     aria-label={e.isRunning ? `Pause ${e.effectType}` : `Resume ${e.effectType}`}
@@ -217,7 +281,8 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
                   >
                     {e.isRunning ? <Pause className="size-3" /> : <Play className="size-3" />}
                   </button>
-                  {!pad && !isEditing && (
+                  )}
+                  {!pad && !cue && !isEditing && (
                     <button
                       type="button"
                       aria-label={`Stop ${e.effectType}`}
@@ -231,16 +296,19 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
                 </div>
                 <div className="truncate pl-[13px] text-[11px] text-muted-foreground">
                   → {e.propertyName} · {viaGroup(e) != null ? `via ${viaGroup(e)}` : onWhat(e)} ·{' '}
-                  {pad ? `pad${e.sourceName ? ` · ${e.sourceName}` : ''}` : 'programmer'}
+                  {cue ? `cue${e.sourceName ? ` · ${e.sourceName}` : ''}` : pad ? `pad${e.sourceName ? ` · ${e.sourceName}` : ''}` : 'programmer'}
                 </div>
               </div>
               {isEditing && (
                 <div data-effects-editor className="mx-1 mt-1 mb-2 rounded-lg border bg-background p-2.5">
-                  <FxEditor
-                    key={`${e.id}:${e.effectType}`}
+                  <SplitFxEditor
                     effect={e}
-                    onDone={() => setEditingId(null)}
-                    onStop={pad ? undefined : () => stop(e)}
+                    selection={pair.targets}
+                    session={splitSession}
+                    onSessionChange={setSplitSession}
+                    onClose={() => edit(null)}
+                    onFollow={setEditingId}
+                    onStop={pad ? undefined : stop}
                   />
                 </div>
               )}
@@ -248,6 +316,20 @@ export function EffectsSheet({ projectId, selectedTargets }: { projectId: number
           )
         })}
       </div>
+      {pickerMounted && (
+        <ApplyPicker
+          projectId={projectId}
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          anchorRef={addRef}
+          library="effects"
+          family={families?.length === 1 ? families[0] : null}
+          pair={pair}
+          fit={fit}
+          offerNew={false}
+          scope="programmer"
+        />
+      )}
     </div>
   )
 }

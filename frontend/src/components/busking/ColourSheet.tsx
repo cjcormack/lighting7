@@ -26,7 +26,8 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
  * cells), the **rig order** Pick reads in, the **Spread hand-over**, the live push and its release,
  * and the save sheet. Everything else — the picker, the fields, the emitter rows, the read-out,
- * Pick and its hidden leaves, the Palettes band, the footer — is the editor's, docked.
+ * Pick and its hidden leaves, the Palettes and Effects bands, the footer — is the editor's, docked.
+ * The bands sit at the foot of the scroller, under the picker, and press the busk pair into Local.
  *
  * **It writes literals to Local, and only that.** Every drag is `programmer.setColour` per selected
  * target, which is what a palette's *Apply as values* does and what the programmer's colour cell does.
@@ -36,8 +37,8 @@ import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
  * tempo fader's discipline over six bytes.
  *
  * **The family mask is not consulted.** The desk's mask gates *presses*, and a colour drag is a
- * value write like a cell edit, so the sheet does not refuse under a Position marquee. A Palettes
- * band chip is a *press*, and goes through `usePress` under the mask like any other.
+ * value write like a cell edit, so the sheet does not refuse under a Position marquee. A band chip
+ * is a *press*, and goes through `usePress` under the mask like any other.
  *
  * **The buffer is seeded from the rig** — the editor's Pick on mount and on every change of heads,
  * retried until they have reported (`pickOnTargets`) — so a single-channel edit means what it
@@ -312,8 +313,9 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
     }
   }, [flush])
 
+  // The bands press the busk pair into Local, whatever the grid is pointed at.
   const palettes = useMemo<ColourPaletteSource>(
-    () => ({ projectId, targets: layerTargets, families }),
+    () => ({ projectId, targets: layerTargets, families, scope: 'programmer' }),
     [projectId, layerTargets, families],
   )
   const [saving, setSaving] = useState(false)
@@ -342,6 +344,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
         projectId={projectId}
         pickOnTargets
         palettes={palettes}
+        effects={palettes}
         onPick={onPick}
         onSave={onSave}
         onSpread={onSpread}

@@ -3034,14 +3034,14 @@ binding service's project.
 
 A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with the busk page. R1.4's
 `announceCuePadsChanged` (`routes/cueDelete.kt`) fires `busk.layoutChanged` for the pads of the cues
-it names, from add-cue, an entry's removal, an entry's number and a stack delete. Reorder and
-sort-by-number (`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the
-other `placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack,
-Record CREATE into a stack, and MCP `add_cue_to_stack` and
-`build_cue_stack`. The pad keeps the old number until something else refetches the page. This
-predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they placed or
-renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. For MCP `add_cue_to_stack` that
-includes the shared cue itself.
+it names, from add-cue, an entry's removal, an entry's number and a stack delete, and since R1.7 from
+the MCP tools that place a cue (`create_cue` with a stack, `add_cue_to_stack`, `build_cue_stack`,
+`copy_cues` into the current project) and move or remove one. Reorder and sort-by-number
+(`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the other
+`placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack and
+Record CREATE into a stack. The pad keeps the old number until something else refetches the page.
+This predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they
+placed or renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does.
 
 ### `FU-CUE-ROW-TIMING`
 
