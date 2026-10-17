@@ -22,7 +22,21 @@ vi.mock('./ProgrammerAddEffect', () => ({
   ProgrammerAddEffectSheet: () => null,
   useProgrammerAddEffect: () => ({ canAdd: true, reason: '', add: () => {} }),
 }))
-vi.mock('./ProgrammerAddLayerSheet', () => ({ ProgrammerAddLayerSheet: () => null }))
+// *+ Look* and *+ Palette* open the one picker on the window's pair; what it does with a press is
+// `ApplyPicker.test.tsx`'s. Here it is the props it is opened with.
+const pickerProps = vi.hoisted(() => ({ last: null as null | Record<string, unknown> }))
+vi.mock('@/components/press/ApplyPicker', () => ({
+  ApplyPicker: (props: Record<string, unknown>) => {
+    pickerProps.last = props
+    return null
+  },
+}))
+const WINDOW_PAIR = vi.hoisted(() => ({ targets: [{ type: 'fixture', key: 'hex-1' }], families: ['COLOUR'] }))
+const WINDOW_FIT = vi.hoisted(() => ({ families: ['COLOUR'], emitters: [] }))
+vi.mock('@/hooks/usePress', () => ({
+  useWindowPressPair: () => WINDOW_PAIR,
+  useWindowPaletteFit: () => WINDOW_FIT,
+}))
 vi.mock('./ProgrammerFxList', () => ({ ProgrammerFxList: () => null }))
 vi.mock('./ProgrammerLookStack', () => ({ ProgrammerLookStack: () => null }))
 // The hand's place target in the footer. Mocked for the reason every store-touching child here
@@ -226,5 +240,23 @@ describe('ProgrammerRail — the collapsed arms', () => {
     expect(header.textContent).toContain('Layers')
     expect(header.className).toContain('px-3')
     expect(header.className).toContain('gap-2')
+  })
+})
+
+describe('ProgrammerRail — the library doors', () => {
+  it('opens the one picker on the window’s selection from + Palette and + Look', () => {
+    // §4.6: the picker presses the selection the strip would, so the rail's door hands it the
+    // window's pair rather than a target of its own.
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(false))
+    pickerProps.last = null
+    draw()
+    // Not mounted while shut: its pair is a marquee subscription.
+    expect(pickerProps.last).toBeNull()
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a palette layer' })[0])
+    expect(pickerProps.last).toMatchObject({ open: true, library: 'palettes', pair: WINDOW_PAIR, fit: WINDOW_FIT })
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Add a look layer' })[0])
+    expect(pickerProps.last).toMatchObject({ open: true, library: 'looks', pair: WINDOW_PAIR })
   })
 })

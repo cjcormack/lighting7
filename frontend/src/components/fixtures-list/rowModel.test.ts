@@ -16,6 +16,7 @@ import {
   targetFamilies,
   targetEmitters,
   templateTargetsFor,
+  templateTargetsOf,
   type Row,
   type RowId,
   treeKeyAction,
@@ -913,5 +914,48 @@ describe('treeKeyAction', () => {
     const divider = { kind: 'divider', id: 'divider:x', label: 'x' } as Row
     expect(treeKeyAction(divider, 'ArrowLeft')).toBeNull()
     expect(treeKeyAction(divider, 'ArrowRight')).toBeNull()
+  })
+})
+
+describe('templateTargetsOf', () => {
+  it('keeps each cell by its element key rather than folding it onto the parent (venue-visit plan S1)', () => {
+    expect(
+      templateTargetsOf([
+        { key: 'shehds-1.zone-1', properties: [], fixtureKey: 'shehds-1', cellIndex: 0 },
+        { key: 'shehds-1.zone-3', properties: [], fixtureKey: 'shehds-1', cellIndex: 2 },
+      ]),
+    ).toEqual([
+      { type: 'fixture', key: 'shehds-1.zone-1' },
+      { type: 'fixture', key: 'shehds-1.zone-3' },
+    ])
+  })
+
+  it('names a whole fixture by its own key — the desk fans it to the cells that carry the property', () => {
+    expect(templateTargetsOf([{ key: 'shehds-1', properties: [] }, { key: 'par-1', properties: [] }])).toEqual([
+      { type: 'fixture', key: 'shehds-1' },
+      { type: 'fixture', key: 'par-1' },
+    ])
+  })
+
+  it('drops a cell whose parent is in the batch too, since the parent covers it', () => {
+    expect(
+      templateTargetsOf([
+        { key: 'shehds-1.zone-2', properties: [], fixtureKey: 'shehds-1', cellIndex: 1 },
+        { key: 'shehds-1', properties: [] },
+        { key: 'shehds-2.zone-1', properties: [], fixtureKey: 'shehds-2', cellIndex: 0 },
+      ]),
+    ).toEqual([
+      { type: 'fixture', key: 'shehds-1' },
+      { type: 'fixture', key: 'shehds-2.zone-1' },
+    ])
+  })
+
+  it('dedupes a target named twice', () => {
+    expect(
+      templateTargetsOf([
+        { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
+        { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
+      ]),
+    ).toEqual([{ type: 'fixture', key: 'bar.c1' }])
   })
 })

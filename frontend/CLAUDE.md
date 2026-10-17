@@ -1165,8 +1165,8 @@ cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index
 purpose**: the rows render a list and the operator acts on a position in it, so translating
 index → whatever addresses a layer in that world is the host's job. The cue's host PATCHes
 whole arrays through `buildCueInput`; `ProgrammerLookStack`'s maps index → `layerId` and sends
-`programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer` (`addLayer` is `ProgrammerAddLayerSheet`'s,
-since the rail's footer and strip own adding). It must not renumber
+`programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer`. Adding is the rail's *+ Look* /
+*+ Palette*, which press onto the selection through `ApplyPicker` (§"Applying to a selection"). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
 the running effects **in place**, so a drag doesn't restart any effect's phase.
 
@@ -1347,7 +1347,7 @@ recently *pressed* and name order is only the fallback for a library nothing has
 The **family filter** stays, and is the page's only partition: a palette is in exactly one family,
 so `?family=colour` is a view of a small library rather than a division of it, and it deep-links
 from Cmd+K. It is the library row's `PartitionChips` now, with counts (`LookFamilyFilterBar` is
-gone), and `TemplatePicker` mounts the same chips with state of its own. The footer says how many of
+gone), and `ApplyPicker` mounts the same chips with state of its own. The footer says how many of
 the whole library the sheet is showing.
 
 A colour pad carries a **swatch**, but only when the
@@ -2063,7 +2063,7 @@ selection → write-targets planning (`planColourWrites` — a group as a group 
 element key, a whole fixture as one write or one per cell for a pixel bar whose colour lives on its
 cells; it is about the busk selection, not the editor), the rig order Pick reads in, the Spread
 hand-over, the live push and its release, and the save sheet. Everything else — the picker, the
-typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, Recent, the footer — is
+typed R/G/B, the emitter rows, the read-out, Pick and its hidden leaves, the Palettes band, the footer — is
 `components/editor/ColourEditor.tsx`'s, docked (§The editor kit). Every drag is
 `programmer.setColour` per selected target, which is what a palette's *Apply as values* does and what the
 programmer's colour cell does. There is **no layer arm and no ⌥ arm**: a picked colour has no
@@ -2072,7 +2072,7 @@ over the sheet's targets, family Colour) is the route to something trackable. **
 not consulted**: the desk's mask gates presses, not value writes, so the sheet does not refuse under
 a Position marquee — the rig band's family pill, one row up, is where the mask is read (the tab's
 own header said *Colour of 14 heads · writes to Local* and repeated the band until 2026-09-21). A
-*Recent* chip is a press and goes through `usePress` under the mask like any other. The
+Palettes band chip is a press and goes through `usePress` under the busk pair's mask like any other. The
 writes go through `components/editor/useLivePush.ts`, the tempo fader's discipline lifted out of
 `BuskSpeedRail` and made generic over the value: dedupe on an equality, a 50 ms floor, a deferred
 value sent when the floor lifts, the release bypassing both. **A group is one group write only
@@ -2627,7 +2627,7 @@ the record held and stays quiet. A press can also take the record **off** (it wa
 selected head) or write it **into** a focused Look, and the place's toast says which
 (`HandPlacement.describe`). Answering `true` regardless dropped the hand and toasted success
 **beside** the error, on the one place with no Undo to recover through. (`programmerAddLayer` still
-returns `sendGesture`'s verdict for its remaining callers, the add-layer and Make layer sheets.)
+returns `sendGesture`'s verdict for its remaining caller, the Make layer sheet.)
 
 **The four places, and the three Undos.** A **bank** is `useAddBuskPadMutation` — it answers the
 whole page, so the busk view's commit queue needs nothing — and its inverse goes back through the
@@ -2848,9 +2848,10 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 **One press, whatever it is pressed from** (`../docs/plans/apply-model-plan.md` §4.1, session 3).
 A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
-that turns that into a route, and every door calls it: the palette strip and its picker, the colour
-editor's Recent chips (busk Colour tab and the programmer's colour cell), a busk pad's *Apply as
-values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
+that turns that into a route, and every door calls it: the palette strip, the one picker
+(`ApplyPicker`, from `All · n`, a band's *All …* and the rail's *+ Look* / *+ Palette*), the popup's
+Palettes bands (the programmer's colour, level and position editors, and the busk Colour tab), a busk
+pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
 which carries its bank's solo siblings. The effect door — ⌘K *Apply FX* and the picker's Effects
 section — is session 6's, on the desk's `POST /programmer/effects`.
@@ -2867,15 +2868,18 @@ section — is session 6's, on the desk's `POST /programmer/effects`.
   too, as a busk pad's always was; the click its release generates is swallowed. Only the primary
   button presses or holds (`useLongPress`): on Windows `contextmenu` follows the release, so a
   right-click pressed a busk pad before its menu opened. `components/press/PressGestures.tsx` holds the
-  gesture hook, the shared title and `PalettePressButton`, the chip-with-menu the strip, the picker
-  and Recent all draw. **The menu is a modal `Popover` anchored on the button, never a
+  gesture hook, the shared title, `PalettePressButton`, the chip-with-menu the strip, the picker
+  and the bands all draw, and `LookPressButton`, the picker's Look pad (no *Edit* item: `/looks`
+  opens no single Look yet). **The menu is a modal `Popover` anchored on the button, never a
   `ContextMenu`**: Radix's `ContextMenuTrigger` arms a ~700ms touch timer of its own that the
   button's hold would race; and modal, so the tap that dismisses it is not also a press on the chip
   underneath. A busk pad keeps its `ContextMenu`, reached through the synthetic `contextmenu` its hold
   dispatches, and gained *Put on* / *Take off these heads* and *Apply as values* (⌥click too) on a
   palette or Look pad; a cue pad's menu is unchanged, since a cue is playback.
 - **The pair** is the door's: `usePress(projectId, pair)`. A door with none of its own — the rail's
-  hand place — takes the window's through `useWindowPress` (`useWindowPressPair`): on the programmer
+  hand place, *+ Look* and *+ Palette* — takes the window's through `useWindowPress`
+  (`useWindowPressPair`; the rail's picker reads what those heads can take, the strip's offer, from
+  the same snapshot through `useWindowPaletteFit`): on the programmer
   the list's own, the strip's targets and the marquee's families published through the marquee
   store as `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an
   unlinked window's own selection included; elsewhere `useSelectionPair`, the desk's while following
@@ -2956,15 +2960,15 @@ covers it. It folded an element row onto its fixture until venue-visit plan S1, 
 palette route would drop an element key; it never did, and the fold put a colour pressed on one zone
 of a Shehds onto a parent with no colour. A whole fixture whose property lives only on its cells is
 fanned to them **by the desk** (lighting7 `docs/lighting-composition-model.md` §"A press is per
-target"), so the client never expands one; `templateTargetsOf` in `ColourCell.tsx` is the same rule
+target"), so the client never expands one; `templateTargetsOf` in `rowModel.ts` is the same rule
 over a batch's write targets. The strip's families and emitters are read off the **same** targets,
 each resolved to what it is — a fixture whole, a cell as that cell — so a cell selection is offered
 what the cell can take (`FixturesListContainer`'s `writeTargetByKey`, which holds every element), and
 row C counts them as *heads*. The strip reads nothing from Redux; `NewTemplateFromSelectionSheet` takes the
 same targets so a press and its "new from selection" cannot name different heads.
-`TemplateStrip.test.tsx` pins the filter, the target and the tap/⌥click split. The chip and the
-picker's pads press through the strip's one `usePress`, so the two cannot answer "what does a press
-do" a chip apart.
+`TemplateStrip.test.tsx` pins the filter, the target and the tap/⌥click split. The offer itself —
+the family, the emitters, a Beam property — is `paletteFits` (`lib/paletteOffer.ts`), which the
+strip, the picker and the popup bands all filter by, so the three offer one set.
 
 **The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
 rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
@@ -2981,15 +2985,28 @@ compares *after* `…:34.500Z` as text. With nothing pressed yet the row falls b
 by name — all or nothing, never one recent padded out by seven, which would move the row's contents
 under the operator's hand on the second press.
 
-**`All · n` opens `TemplatePicker`** — the offerable library as a searchable pad grid, sections
-Recent · All A–Z · Per fixture · Effects, built from the busk pad's own face (`padFace.ts`'s
-`PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and `templateLayerPresence` against the desk's
-resolved applied state). Three things about it: it takes **`useEditorForm`'s three forms** and
-neither of its own media queries, so the picker and a cell editor never disagree about which shape a
-screen gets; **a press does not close it**, because auditioning three colours in a row is the normal
-case; and its popover width is a **media** query rather than a container one — `PopoverContent` is
-portalled to `body`, so row C's `@container` is not an ancestor and a container class there would
-match nothing, silently.
+**`All · n` opens `ApplyPicker`** (`components/press/ApplyPicker.tsx`, apply-model plan §4.2) — the
+one picker every library door opens: on every family the selection fits from `All · n` and the rail's
+*+ Palette*, on one family from a popup band's *All …*, on the Looks from the rail's *+ Look*. It is
+the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · Effects
+(effect palettes; session 6 adds bare effects) · **Outside the mask** — what the heads could take but
+the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
+**still pressable**, since the mask is tested on the on arm only and a lit one must come off. Built
+from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and
+`templateLayerPresence` / `lookLayerPresence` against the desk's resolved applied state). It presses
+the pair its door hands it through `usePress`, and **never asks for targets**: it replaced the
+add-layer sheet's source and target steps on the programmer, whose `CueTargetPicker` landed one
+fixture or group whatever was selected. A Look can land **on its own fixtures** — a toggle beside
+*On n selected*, chosen by default with nothing selected — which is that sheet's *Use the look's own
+fixtures* kept; a Look whose effects take the layer's targets has none to land on and sits outside
+with that reason. Four things about it: it takes **`useEditorForm`'s three forms** and neither of
+its own media queries, so the picker and a cell editor never disagree about which shape a screen
+gets, and a door with no anchor (the rail's footer, strip and handle) takes the right-hand sheet on a
+desk — the rail mounts it only while open, since its pair is a marquee subscription; **a press does not close it**, because auditioning three colours in a row is the normal case;
+it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
+a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
+`@container` is not an ancestor and a container class there would match nothing, silently.
+`ApplyPicker.test.tsx` pins the sections, the offer, the mask arm and the Look's own fixtures.
 
 **Row C sheds twice on the way down.** Below `@[800px]` the fixture count, its separator and Locate
 / Highlight fold (`MID_FOLDED_CLASS` in `SelectionToolbar.tsx`) — the count is already on the cell
@@ -3152,7 +3169,7 @@ row where the one-option select was, the cue sheet's fade times (`spreadDuration
 `SpreadPopover` — the panel reaches `spreadPlans.ts` only for the raw arm, the popover walks
 nothing. The panel is **store-free**, so the three kit sheets mount it without a store; the two
 hosts that draw a colour endpoint hand `ColourEditor` in (`colourEditor`), because its leaves and
-Recent reach the store.
+Palettes band reach the store.
 
 **The marquee answers the panel's first two questions** (D4). Targets are the marquee's heads —
 `spreadTargetsFor` in `rowModel.ts`, which `templateTargetsFor` now delegates to: a
@@ -3633,7 +3650,7 @@ it (1), **Looks and Palettes** (2), a generic value palette's **Value** edited i
   cue's Curve and a head without a beam angle or gel no longer reach their writers.
 - **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
   generalised (it is gone) and still controlled, folding to a select below its `fold` of its
-  **own** `@container` — so it works inside `TemplatePicker`'s portalled popover, which has no row.
+  **own** `@container` — so it works inside `ApplyPicker`'s portalled popover, which has no row.
   **Measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
   the row leaves them ~430 — **560** for Scripts (all six types in their short labels, 542), and
@@ -3924,17 +3941,19 @@ each was:
   footers have. Drawn where a panel has **verbs beside the value**: Apply on `TextCell` and
   `AddressCell`, and — since session 2 — the colour editor's Save · Pick · Spread…, which are
   gestures about the batch and not writes of it (that editor writes as it goes; its footer writes
-  nothing). Never the level, position or setting editors, which write as they go and carry no
-  verb. A panel that docks it full-bleed says so at its own import — the busk Spread tab with its
+  nothing). The level and position editors draw it too since apply-model session 5, for
+  `PaletteBands`' *Save as palette…*; never the setting editor, which writes as it goes and carries
+  no verb. A panel that docks it full-bleed says so at its own import — the busk Spread tab with its
   `px-3 py-2` (session 3 rewires it), `ColourEditor` for its docked host.
 - **`ColourEditor`** — `fixtures/ColourPickerBody` moved and finished (D10, D12; session 2): the
   picker, the typed R/G/B, the emitter rows and the six-channel buffer, **plus everything the busk
   Colour tab had grown around them** — the read-out line (the emitter counts per head from
-  `emitterHeadCounts`, *mixed*, the swatch, the hex), **Pick**, **Recent** and the `EditorFooter`
-  with *Save as palette… · Pick · Spread…*. The host says which pieces it draws: `targets` (the
+  `emitterHeadCounts`, *mixed*, the swatch, the hex), **Pick**, the **Palettes band** and the
+  `EditorFooter` with *Save as palette… · Pick · Spread…*. The host says which pieces it draws: `targets` (the
   heads, in the host's order — the busk selection expanded in rig order through `headOrder`, the
   programmer's marquee column in row order), `projectId` (what the hidden leaves read the patch
-  list of), `recent` (where the chips come from and where a press lands, with `forms` for D11),
+  list of), `palettes` (the band's press: its targets and its mask — *Colour* in a cell, the busk
+  pair's in the tab),
   `footer`, `counts`, `labelLine`, `docked` (the busk tab's frame: one scroller, the footer static
   under it), `pickOnTargets` (the busk tab's seed from the rig), `onPick`, `onSave`, `onSpread` (absent
   draws the button inert — session 3 wires the programmer's). The cell hands it the batch's targets
@@ -3968,10 +3987,11 @@ each was:
   RGBW head in the marquee to white 0 on a byte typed from an RGB row's cell (found in review;
   the picker gesture and Pick zero only what the editor holds) — (`targetHeads` in `liveAppearance.ts` is the fold,
   over `WriteTarget`'s new `fixtureKey` / `cellIndex`, which `rowWriteTargets` stamps on an element
-  row and `writeTargetsOf` on a busk cell — element keys are never parsed). **Recent is drawn once
-  on a screen** (D11): the cell asks for it in the bottom sheet alone, since row C's strip is one
-  row up in the popover and folded away below 600px; the busk tab always. Its store hooks run in a
-  child mounted only where the chips are drawn, never per cell. **The guidance is the picker's
+  row and `writeTargetsOf` on a busk cell — element keys are never parsed). **The Palettes band is
+  drawn in every form** (apply-model plan §4.3), above the picker, and in the busk tab's scroller
+  where Recent was: D11's *drawn once on a screen* held for Recent, a recents row like row C's
+  strip, and the band is the family's offer instead. Its store hooks run in the band, mounted only
+  where a host passes `palettes`, never per cell. **The guidance is the picker's
   title everywhere**, the paragraph gone. **The picker is fluid in every host**: `index.css` keeps
   the picker's look (saturation radius, the 12px hue bar and its 16px gap, the pointer) and the
   `.colour-picker-fluid` and `.colour-picker-compact` rules, and the 200px `!important` pin is gone
@@ -3994,6 +4014,33 @@ each was:
   — ⌫ through `column.clear`, Spread, Park, the wire — so a value set, cleared and retyped would
   never reach the rig while the field showed it. `useSheet.test.ts` pins the cadence as the
   literal 33, the trailing call, and that a repeat is sent.
+
+- **`PaletteBands`** — `components/editor/PaletteBands.tsx`, the per-property popup (apply-model
+  plan §4.3, D4; session 5): the family's palettes **round** a value cell's editor, in every form it
+  has. `SliderCell` and `PositionCell` wrap their controls in it; `ColourEditor` draws its
+  `PaletteBand` itself. **Above**, the Palettes band: a header — *Palettes*, the cell's family as a
+  badge (the mask a press carries, §3.2 rule 5), the heads it lands on (a fixture by name, a cell
+  by its element key, which is what the press sends), *All · n* — then the family's **value**
+  palettes that fit the heads, recent first and then by name (`recentFirst` in
+  `lib/templateRecents.ts`), two rows of chips clipped by height, never a scroller. The offer is the
+  strip's (`paletteFits` in `lib/paletteOffer.ts`): the family, every emitter a palette names
+  somewhere in the heads (so a Shehds zone is offered what its zone takes), and **for a Beam cell
+  the palettes with a row for its property** — a zoom cell is offered *Wide*, not *Soft edge*.
+  A chip is `PalettePressButton` through `usePress` over the cell batch
+  (`templateTargetsOf(batch.targets)`) with the mask `[family]`, so the gestures and the ring are
+  the strip's; under a focused Look a teal *Into <Look>* line shows and the rings go. *All* mounts
+  `ApplyPicker` on the family on its first press and keeps it, with no *New from selection*
+  (`offerNew={false}`): the picker lives inside the cell editor, and a sheet there would close with
+  it, draft and all — the footer's *Save as palette…* is mounted outside. **The editor**, unchanged. **Below**,
+  `PaletteFooter`: *Save as palette…* (not in a venue), whose sheet the cell mounts **outside** its
+  surface through `usePaletteSave` — a press in a sheet is an outside press to a popover, which
+  would close the sheet with it. **Drawn only where a press has a door**: the container passes
+  `projectId` on the programmer alone, so the plain lists and the cue editor's Values grid draw the
+  editor bare (R2 P2), and a slider cell whose property no value palette can carry (`paletteCarries`,
+  the closed `TEMPLATE_PROPERTIES` vocabulary) has no band. A setting cell (gobo, prism) has none
+  because `SettingCell` is not wrapped — prism is in that vocabulary.
+  The Effects band below the editor is session 6's. `PaletteBands.test.tsx` pins the offer per
+  cell, the press and the bare arm.
 
 - **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
   session 2): one scene element's state wherever it is edited, built from the kit — an
@@ -4039,7 +4086,7 @@ goes through `mergePositionCommits`, which keeps `panCentre` / `tiltCentre` and 
 silently drop it. `ColourCell` takes the same `CellBatch` since session 2, and `CellBatch`
 gained the **`targets`** themselves beside the count — a count and a resolution list cannot name a
 head, and the colour editor needs the heads for its emitter union, its leaves and the palette
-targets its Save and Recent land on.
+targets its Save and its Palettes band land on.
 
 **The unit is the cell's** (D13). The programmer's dimmer cell reads *80%*, so `SliderCell`'s field
 is a percent — `toPct` / `fromPct`, 0 ↔ 0, 50 ↔ 128, 100 ↔ 255, pinned as literals in
@@ -4761,7 +4808,7 @@ Six rules, each with a reason:
   the operator states it, and a new set of heads unstates it again: the appearance store has no
   per-emitter reading, and a 0 would drive every white LED in the marquee dark on the first byte.
   Each tab draws the label line (*4 heads · Local*, call 11 — `EditorLabelLine`'s `docked`) and no
-  Recent (D11: row C's strip is on screen). The rail's floor stays 260 (call 12): the Spread panel
+  Palettes band (D11: row C's strip is on screen, and the cell's popup draws the band). The rail's floor stays 260 (call 12): the Spread panel
   takes its compact curve row below 300 of rail (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked
   panel's root). That root is the busk Spread tab's too, so the busk sheet carries the container as
   well; it never matches there, because that sheet's floor is 320.
@@ -5567,8 +5614,8 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   with nothing selected, after Set · Clear · Spread otherwise.
 - **P2 — what it does not mount**: no desk-selection bridge, no Release, Locate or Highlight (the row
   hover's Info, Locate and Add-to-targets are withheld in the cue context), no palette strip, no
-  `useClearCellEffects`, no live writer, no `projectId` on the table (so no colour editor Recent, no
-  appearance leaves); the source chip is never drawn (its stack is a `programmer.keyStack` request).
+  `useClearCellEffects`, no live writer, no `projectId` on the table (so no Palettes band on any cell,
+  no appearance leaves); the source chip is never drawn (its stack is a `programmer.keyStack` request).
   Its selection is `useLocalListSelection` and `useCellSelection`, this component's own.
   `CueValuesGrid.test.tsx` runs a full pass — set, colour, position, Spread, ⌫, Undo — over the real
   `lightingApi` on a fake socket and asserts no `programmer.*`, `channels.*` or `fx.*` frame left it.

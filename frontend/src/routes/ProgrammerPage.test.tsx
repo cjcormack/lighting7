@@ -93,8 +93,11 @@ vi.mock('@/components/programmer/RailSceneryBand', async () => {
 })
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
 const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
-vi.mock('@/components/programmer/ProgrammerAddLayerSheet', () => ({
-  ProgrammerAddLayerSheet: () => null,
+vi.mock('@/components/press/ApplyPicker', () => ({ ApplyPicker: () => null }))
+vi.mock('@/hooks/usePress', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/usePress')>()),
+  useWindowPressPair: () => ({ targets: [], families: null }),
+  useWindowPaletteFit: () => ({ families: null, emitters: null }),
 }))
 vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
 vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({

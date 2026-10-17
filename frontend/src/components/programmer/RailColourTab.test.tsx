@@ -69,7 +69,7 @@ function snapshot(over: Partial<MarqueeSnapshot> = {}): MarqueeSnapshot {
     permission: { entry: true, clear: true },
     scopeLabel: 'Local',
     commit: vi.fn(),
-    press: { targets: [], askedFamilies: null },
+    press: { targets: [], askedFamilies: null, targetFamilies: [], targetEmitters: [] },
     ...over,
   }
 }
@@ -165,7 +165,7 @@ describe('RailColourTab scope arms', () => {
     draw(snap)
     expect(screen.getByText('Output · read-only')).toBeInTheDocument()
     expect(screen.getByText('Output is a read of the cook — switch to Local to set these cells')).toBeInTheDocument()
-    // Read-only is the editor's whole guarantee — Spread… and Recent included (`ColourEditor.test`).
+    // Read-only is the editor's whole guarantee — Spread… and the Palettes band included (`ColourEditor.test`).
     expect(editor.props?.readOnly).toBe(true)
     act(() => editor.props?.onColourChange(1, 2, 3))
     expect(snap.commit).not.toHaveBeenCalled()

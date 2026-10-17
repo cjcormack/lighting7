@@ -11,7 +11,7 @@ import { resetEditorSurfaceMedia } from './EditorSurface'
  *
  * The first block is the pieces-by-host table on `Colour.dc.html`, one case per row: which host
  * draws the fluid picker and R/G/B, the emitter rows with head counts, the read-out, the label
- * line, Recent, the footer and the keyboard. Then Pick — it reads the appearance store through the
+ * line, the Palettes band, the footer and the keyboard. Then Pick — it reads the appearance store through the
  * editor's own hidden leaves, one per parent fixture, and says *mixed* — the guidance as the
  * picker's title, the keyboard sequence, and the channel byte's clamp, which was
  * `ChannelNumberInput`'s and is the editor's now that the field itself does not clamp.
@@ -28,7 +28,7 @@ vi.mock('@/store/templates', () => ({
   useApplyTemplateMutation: () => [apply],
   useToggleTemplateMutation: () => [toggle],
 }))
-// A Recent chip is a press (`usePress`): its other routes and the ring's applied state.
+// A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
@@ -113,7 +113,7 @@ function draw(props: Partial<ColourEditorProps> = {}) {
 const field = (name: string) => screen.getByRole('spinbutton', { name }) as HTMLInputElement
 const footer = () => document.querySelector('[data-editor-footer]')
 const readout = () => document.querySelector('[data-editor-readout]')
-const recent = () => document.querySelector('[data-colour-editor-recent]')
+const band = () => document.querySelector('[data-palette-band]')
 const knob = () => document.querySelector('.react-colorful__saturation [aria-valuetext]')!.getAttribute('aria-valuetext')
 
 beforeEach(() => {
@@ -142,7 +142,7 @@ afterEach(() => {
 })
 
 describe('the pieces, and which host draws which', () => {
-  it('programmer popover: fluid picker + R/G/B, emitter rows, read-out with counts, label line, no Recent, the footer', () => {
+  it('programmer popover: label line, the Palettes band, fluid picker + R/G/B, emitter rows, read-out with counts, the footer', () => {
     templates = [template(1, 'Warm Amber')]
     draw({
       targets: FOUR,
@@ -150,7 +150,7 @@ describe('the pieces, and which host draws which', () => {
       hasWhiteChannel: true,
       hasAmberChannel: true,
       labelLine: <div data-testid="label-line">4 heads · Local</div>,
-      recent: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], localFamilies: ['COLOUR'], forms: ['bottom-sheet'] },
+      palettes: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] },
       onSave: () => {},
     })
     // The fluid row, never a pinned square.
@@ -166,35 +166,36 @@ describe('the pieces, and which host draws which', () => {
     expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 2 of 4 heads · the rest take RGB only')
     expect(document.querySelector('[data-colour-editor-hex]')).toHaveTextContent('#0A141E')
     expect(screen.getByTestId('label-line')).toBeInTheDocument()
-    // Recent asks for the bottom sheet alone, and this is a popover: row C's strip is one row up.
-    expect(recent()).toBeNull()
+    // The band is above the editor (apply-model plan §4.3), the popover included: it is the family's
+    // offer, where row C's strip is the recents.
+    expect(band()).not.toBeNull()
+    expect(band()!.compareDocumentPosition(field('R')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const verbs = [...footer()!.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
     expect(verbs).toEqual(['Save as palette…', 'Pick', 'Spread to a second colour…'])
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeEnabled()
   })
 
-  it('programmer bottom sheet: Recent is drawn there, and only there of the two sheets', () => {
+  it('draws the Palettes band in every form — the popover, the bottom sheet and the side sheet', () => {
     templates = [template(1, 'Warm Amber')]
-    const source = { projectId: 1, targets: [{ type: 'fixture' as const, key: 'par-1' }], localFamilies: ['COLOUR' as const], forms: ['bottom-sheet' as const] }
-    stubMatchMedia({ narrow: true })
-    const { unmount } = draw({ targets: FOUR, projectId: 1, recent: source })
-    expect(recent()).not.toBeNull()
-    expect(document.querySelectorAll('[data-recent-template]')).toHaveLength(1)
-    unmount()
-    resetEditorSurfaceMedia()
-    stubMatchMedia({ short: true })
-    draw({ targets: FOUR, projectId: 1, recent: source })
-    expect(recent()).toBeNull()
+    const source = { projectId: 1, targets: [{ type: 'fixture' as const, key: 'par-1' }], families: ['COLOUR' as const] }
+    for (const media of [{}, { narrow: true }, { short: true }]) {
+      stubMatchMedia(media)
+      const { unmount } = draw({ targets: FOUR, projectId: 1, palettes: source })
+      expect(band()).not.toBeNull()
+      expect(document.querySelectorAll('[data-band-palette]')).toHaveLength(1)
+      unmount()
+      resetEditorSurfaceMedia()
+    }
   })
 
-  it('busk tab (docked): the body, read-out and Recent in one scroller, the footer static under it, Recent always', () => {
-    draw({ targets: FOUR, projectId: 1, docked: true, recent: { projectId: 1, targets: [], localFamilies: null } })
+  it('busk tab (docked): the body, read-out and the Palettes band in one scroller, the footer static under it', () => {
+    draw({ targets: FOUR, projectId: 1, docked: true, palettes: { projectId: 1, targets: [], families: null } })
     const scroller = document.querySelector('[data-colour-editor-scroller]')!
     expect(scroller.className).toContain('overflow-y-auto')
     expect(within(scroller as HTMLElement).queryByRole('spinbutton', { name: 'R' })).not.toBeNull()
     expect(scroller.querySelector('[data-editor-readout]')).not.toBeNull()
-    expect(scroller.querySelector('[data-colour-editor-recent]')).not.toBeNull()
-    expect(screen.getByText('Colour palettes you press show up here')).toBeInTheDocument()
+    expect(scroller.querySelector('[data-palette-band]')).not.toBeNull()
+    expect(screen.getByText('No colour palette fits these heads')).toBeInTheDocument()
     // The footer is outside the scroller and does not scroll with it.
     expect(scroller.querySelector('[data-editor-footer]')).toBeNull()
     expect(footer()!.className).toContain('shrink-0')
@@ -206,7 +207,7 @@ describe('the pieces, and which host draws which', () => {
     expect(screen.queryByLabelText('W value')).toBeNull()
     expect(readout()).toBeNull()
     expect(footer()).toBeNull()
-    expect(recent()).toBeNull()
+    expect(band()).toBeNull()
   })
 
   it('picker-only form (no typed channels): the R:G:B line and read-out sliders, nothing else', () => {
@@ -377,7 +378,7 @@ describe('the footer', () => {
     expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
   })
 
-  it('Recent draws the colour recents most recent first, the selection’s emitters filtering, and a chip is a press', () => {
+  it('the band draws the colour palettes that fit, recent first then by name, and a chip is a press', () => {
     templates = [
       template(1, 'Deep Blue', { lastPressedAt: '2026-09-18T09:00:00Z' }),
       template(2, 'Warm Amber'),
@@ -386,9 +387,11 @@ describe('the footer', () => {
       template(5, 'Never', { lastPressedAt: null }),
       template(6, 'Per head', { isGeneric: false }),
     ]
-    draw({ targets: FOUR, projectId: 1, recent: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], localFamilies: ['COLOUR'] } })
-    const chips = document.querySelectorAll('[data-recent-template]')
-    expect([...chips].map((c) => c.textContent)).toEqual(['Warm Amber', 'Deep Blue'])
+    draw({ targets: FOUR, projectId: 1, palettes: { projectId: 1, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] } })
+    const chips = document.querySelectorAll('[data-band-palette]')
+    // Not the position palette, nor the UV one (no head here has UV); the pressed ones most recent
+    // first, then the never-pressed — a per-fixture palette among them, as the strip offers one.
+    expect([...chips].map((c) => c.textContent)).toEqual(['Warm Amber', 'Per head', 'Deep Blue', 'Never'])
     // The tap puts the palette on as a layer; ⌥click applies its values (apply-model plan D1, D8).
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'))
     expect(toggle).toHaveBeenCalledWith({

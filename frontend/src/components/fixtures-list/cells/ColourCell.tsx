@@ -1,12 +1,11 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import type { TemplateTarget } from '@/api/templatesApi'
 import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
 import { useRailTabClaim } from '@/components/programmer/railTab'
 import { ColourPickerPopover } from '../../fixtures/ColourPickerPopover'
 import type { CellResolution } from '../columns'
-import type { CellBatch, CellCommit, WriteTarget } from '../rowModel'
+import { templateTargetsOf, type CellBatch, type CellCommit, type WriteTarget } from '../rowModel'
 import type { CellValue } from '../useRowValues'
-import type { ColourRecentSource } from '../../editor/ColourEditor'
+import type { ColourPaletteSource } from '../../editor/ColourEditor'
 import { EditorLabelLine } from '../../editor/EditorLabelLine'
 import { CellSourceChip, type CellKey } from '../../fixtureSheet/CellSourceChip'
 import { useEditorCramped, type CellClickBehaviour } from '../../editor/EditorSurface'
@@ -23,7 +22,7 @@ interface ColourCellOwnProps {
   label?: string
   /**
    * What a commit from this cell lands on — the count for the label line, the targets for the
-   * emitter union, the hidden appearance leaves and the template targets Save and Recent land on.
+   * emitter union, the hidden appearance leaves and the targets Save and the Palettes band land on.
    * See `CellBatch`. Absent where the cell is mounted read-only (`CueValueGrid`), and then this
    * row alone.
    */
@@ -32,10 +31,10 @@ interface ColourCellOwnProps {
   scopeLabel?: string
   /**
    * The project the marquee's heads belong to — what the editor's leaves read the patch list of,
-   * what Recent lists templates from and what *Save as template…* records into. The container
-   * passes it for the **programmer alone**: the two plain lists deliberately draw no template
-   * strip (§List shell), and Save records from the programmer, so their cells get a disabled Save,
-   * no Recent and no leaves — as does a read-only mount or a test, which pass none.
+   * what the Palettes band lists and presses into and what *Save as palette…* records into. The
+   * container passes it for the **programmer alone**: the two plain lists deliberately draw no
+   * palette strip (§List shell), and Save records from the programmer, so their cells get a disabled
+   * Save, no band and no leaves — as does a read-only mount or a test, which pass none.
    */
   projectId?: number
   /**
@@ -84,35 +83,8 @@ interface ColourCellOwnProps {
 
 type ColourCellProps = ColourCellOwnProps & CellClickBehaviour
 
-/** The Recent chips are the programmer's row C strip on a desk; only the bottom sheet, which has folded that strip away, draws them here (editor-kit plan D11). */
-const RECENT_FORMS: ColourRecentSource['forms'] = ['bottom-sheet']
+/** A band press from a cell is masked to the cell's own family (apply-model plan §3.2 rule 5). */
 const COLOUR_FAMILY = ['COLOUR'] as const
-
-/**
- * Where a template press or record lands for these targets: each target by its own key — a whole
- * fixture as itself, a **cell as its element key** (`{type: 'fixture', key: element.key}`, the
- * cells contract the desk resolves) — deduped, and a cell dropped where its parent is in the batch
- * too, since the parent covers it (`templateTargetsFor`'s rule, over the batch's targets rather than
- * the rows, which a cell never sees).
- *
- * A cell used to be folded onto its parent, on the belief that the template route would drop an
- * element key. It never did, and the fold was the bug (venue-visit plan S1): pressing a colour onto
- * one zone of a Shehds landed it on the parent, which has no colour. The desk now fans a parent
- * whose colour lives on its cells out to those cells itself, so a whole-fixture target still means
- * every cell.
- */
-export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarget[] {
-  const parents = new Set(targets.filter((target) => target.fixtureKey == null).map((target) => target.key))
-  const seen = new Set<string>()
-  const out: TemplateTarget[] = []
-  for (const target of targets) {
-    if (target.fixtureKey != null && parents.has(target.fixtureKey)) continue
-    if (seen.has(target.key)) continue
-    seen.add(target.key)
-    out.push({ type: 'fixture', key: target.key })
-  }
-  return out
-}
 
 const NO_TARGETS: readonly WriteTarget[] = []
 
@@ -159,8 +131,8 @@ export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] 
  * the batch's **union** read off its colour descriptors (a head without the emitter takes no byte —
  * `useCellWriters` folds an undeliverable white into RGB), the read-out counting them, Pick over the
  * batch's heads through the editor's own hidden leaves, *Save as template…* opening
- * `NewTemplateFromSelectionSheet` with Colour answered over the marquee's fixtures, and Recent in
- * the bottom sheet alone, and *Spread…* handing the colour to row C's Spread panel as *From*.
+ * `NewTemplateFromSelectionSheet` with Colour answered over the marquee's fixtures, the Palettes band
+ * in every form (apply-model plan §4.3) pressing onto the batch under Colour, and *Spread…* handing the colour to row C's Spread panel as *From*.
  * The targets the editor gets are the batch's as a colour commit lands on them
  * (`colourTargetsOf`): one per RGB colour cell, and the label line counts that list rather than
  * `batch.count`, which also counts a colour-wheel head the commit refuses.
@@ -256,8 +228,8 @@ const RgbColourCell = memo(function RgbColourCell({
   // A white-mix row in a batch with RGB heads opens this picker, but its face still reads as a
   // warmth, as the same row does outside the batch.
   const rowMix = isWarmthOnly(resolutions) ? firstWhiteMix(resolutions) : undefined
-  const recent = useMemo<ColourRecentSource | undefined>(
-    () => (projectId == null ? undefined : { projectId, targets: templateTargets, localFamilies: COLOUR_FAMILY, forms: RECENT_FORMS }),
+  const palettes = useMemo<ColourPaletteSource | undefined>(
+    () => (projectId == null ? undefined : { projectId, targets: templateTargets, families: COLOUR_FAMILY }),
     [projectId, templateTargets],
   )
 
@@ -288,7 +260,7 @@ const RgbColourCell = memo(function RgbColourCell({
         hasUvChannel={hasUv}
         targets={targets}
         projectId={projectId}
-        recent={recent}
+        palettes={palettes}
         // The heads a colour commit reaches — `targets`, not `batch.count`, which also counts a
         // colour-wheel head the commit refuses; the read-out counts the same list.
         labelLine={

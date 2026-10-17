@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the rail's *+ Look* and *+ Palette* press onto the selection | Venue-visit R3.5, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
@@ -180,6 +181,45 @@ and a phone.
 6. **Folds.** The home on the iPad in both orientations and on a phone: no page scrolls sideways,
    the band wraps under its sentence, each status line's buttons wrap under its words on a phone, and
    a show's buttons wrap under its name there.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R3-5`
+
+**What it proves**: *the palette popup and the one picker* — venue-visit R3.5, apply-model plan
+session 5 (§4.2, §4.3, §4.6, D4): the colour, level and position editors carry their family's palettes
+round them in every form, a band press lands on the cell batch under the cell's family, and every
+library door — `All · n`, a band's *All …*, the rail's *+ Look* and *+ Palette* — is one picker that
+presses onto the selection and stays open.
+
+**Why it is here**: the tests pin the offer, the press and the sections against mocks; nothing
+opened the bands on the iPad's bottom sheet, pressed from a picker over a cell popover and watched it
+stay open, or saw the rig take a band press.
+
+**Test**, on the dev rig with the programmer on a desk screen and on the iPad (portrait), Intensity,
+Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, and a Shehds:
+
+1. **Level.** Select Hex 1–4's Dimmer cells and double-click one: above the slider, *Palettes ·
+   Intensity · on Hex 1, Hex 2, Hex 3 +1* and the Intensity palettes, the last pressed first, two rows
+   at most, with *All n*. Tap one: the four hexes take it as a layer and the chip lights; ⌥click
+   another: values, no layer. *Save as palette…* in the footer opens the sheet on Intensity.
+2. **Zoom.** Open a Zoom cell's editor on the movers: only the zoom palette is offered, not the frost
+   one. A Gobo cell's editor has no band.
+3. **Colour.** Open a colour cell's popover on the desk: the band is above the picker (it was the
+   phone's *Recent* alone). Select two Shehds zones' colour cells: the heads line names the zones by
+   key, and a press colours those two zones only.
+4. **The picker.** Press the band's *All*: the picker opens on that family over the popover. Press
+   three palettes in a row: it stays open and each lands. Escape closes the picker, then the popover.
+5. **Outside the mask.** Pick *Position* on row C's pill, open `All · n` on a rows selection: the
+   colour palettes sit under *Outside the mask*, dimmed, *Colour — the selection is Position*.
+6. **The rail.** With Hex 1–2 selected, press *+ Palette* on the rail: the picker opens as a side sheet
+   and a press lands on Hex 1–2. *+ Look* lists the Looks; press one on the selection, then switch to
+   *On its own fixtures* and press another: it lands on its own fixtures.
+7. **The iPad.** Repeat 1 and 4 on the iPad: the editor is a bottom sheet with the band above the
+   slider, the chips take a finger, a hold opens the menu and never presses, and *All* opens the
+   picker as a bottom sheet that stays open across presses.
+8. **A focused Look.** Focus a Look layer and open a Dimmer cell: a teal *Into <Look>* line shows, no
+   chip is lit, and a press writes the Look's draft with nothing on the rig moving.
 
 ---
 

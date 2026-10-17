@@ -69,3 +69,12 @@ export function stripTemplates(
   const recents = recentTemplates(offerable, limit)
   return recents.length > 0 ? recents : offerable.slice(0, Math.max(0, limit))
 }
+
+/**
+ * Every palette given, the pressed ones most recent first and then the rest in the order given (the
+ * library's, which is by name) — a popup band's order. Unlike [stripTemplates] it never falls back
+ * all or nothing: the band shows its family whole, and recency only says which come first.
+ */
+export function recentFirst(offerable: readonly TemplateSummary[]): TemplateSummary[] {
+  return [...recentTemplates(offerable, offerable.length), ...offerable.filter((template) => pressedAt(template) == null)]
+}

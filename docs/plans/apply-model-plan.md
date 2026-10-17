@@ -497,14 +497,14 @@ Each session is one PR (P1).
   `remask`, so the echo is known as its own. Every sheet opens on the selection's mask wherever it
   is opened from, Show's and the Prompt Book's Record and Update included — D3 as written.
 
-### Session 5 — The palette popup and the one picker (frontend)
+### Session 5 — The palette popup and the one picker (frontend) — done, `293db483`
 
 - §4.3's `PaletteBands` on the colour, slider and position editors; *Save as palette* for every family.
 - §4.2's `ApplyPicker`, replacing `TemplatePicker` and the add-layer sheet's source and target steps
   (§4.6). Its Effects section is session 6's.
 - **The cue editor keeps its own.** `AddLayerSheet` (`LayerPicker`, its `CueTargetPicker` step) has
-  one host today, the rail's `ProgrammerAddLayerSheet`; R2.6 gives it a second, the cue editor's
-  *+ Look* and *+ Palette* (show-cue-editing §4.1). This session moves only the programmer's door.
+  one host when this session began, the rail's `ProgrammerAddLayerSheet`, which this session removes;
+  R2.6 gives it the cue editor's *+ Look* and *+ Palette* (show-cue-editing §4.1). This session moves only the programmer's door.
   The cue's moves to the picker in session 8.
 - **No band in the cue grid.** R2.5's Values grid mounts the same cells with no press door (R2 P2:
   no palette strip, no Recent, which has pressed through `usePress` since session 3). A band press
@@ -517,6 +517,29 @@ Each session is one PR (P1).
   - A Shehds cell is offered the colour palettes its zone takes (S1).
   - *+ Palette* presses onto the selection.
 - **Docs:** the frontend CLAUDE.md's editor-kit section.
+- The Palettes band holds **value** palettes, per-fixture ones among them as the strip offers them;
+  effect palettes are the Effects band's (decided during session 5). The picker keeps
+  `TemplatePicker`'s Effects section of effect palettes, so they stay reachable from every library
+  door until session 6 adds bare effects to it.
+- One offer filter, `paletteFits` (`lib/paletteOffer.ts`), for the strip, the bands and the picker
+  (decided during session 5). Only a Beam cell is narrowed by its property; a colour cell's
+  `rgbColour` says nothing about which colour palettes fit. A cell whose property no value palette
+  can carry (outside `TEMPLATE_PROPERTIES`) has no band and no *Save as palette…*. A setting cell
+  (gobo, prism) is bare because `SettingCell` is not wrapped, prism being in that vocabulary.
+- *Outside the mask* stays pressable (decided during session 5): the desk tests the mask on the on arm
+  only, so a lit palette outside it must still come off, and an on press is refused there in the
+  desk's words.
+- The busk Colour tab's Recent became the band too (decided during session 5): Recent was
+  `ColourEditor`'s one slot for both hosts. It sits where Recent sat, at the foot of the tab's
+  scroller, until session 7 rebuilds the tab. The rail's Colour tab draws no band, since row C's strip
+  and the cell's popup are both on screen.
+- A Look in the picker can land on its own fixtures (decided during session 5): *On its own
+  fixtures* beside *On n selected*, chosen by default with nothing selected — the add-layer sheet's
+  *Use the look's own fixtures*, kept. A Look whose effects take the layer's targets is shown outside
+  with that reason there.
+- The programmer's add-layer sheet went whole, its speed and rate master overrides with it (decided
+  during session 5): a press carries neither, and the toggle routes take neither. Recorded as
+  `FU-PRESS-LAYER-MASTER`; a cue layer keeps them in the cue's sheet.
 
 ### Session 6 — Effects in the popup (frontend)
 

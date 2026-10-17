@@ -19,7 +19,8 @@ import { stripTemplates } from '@/lib/templateRecents'
 import { useTemplateListQuery } from '@/store/templates'
 import { NewTemplateFromSelectionSheet } from './NewTemplateFromSelectionSheet'
 import { useVenueMode } from '@/store/venues'
-import { TemplatePicker } from './TemplatePicker'
+import { ApplyPicker } from '@/components/press/ApplyPicker'
+import { outsideMaskReason, paletteFits, type PaletteFit } from '@/lib/paletteOffer'
 import { usePressFamilies } from '@/store/selection'
 import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
 
@@ -76,7 +77,7 @@ import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
  * **The chips are the eight most recently *pressed*, not the whole library** (see `stripTemplates`).
  * A show has sixty templates and this row was sized for six; the fix is not a longer scroller but a
  * different question — the row answers "what am I reaching for", and `All · n` opens a searchable
- * pad grid for everything else (`TemplatePicker`). Recency is a **desk** fact, stamped server-side
+ * pad grid for everything else (`ApplyPicker`). Recency is a **desk** fact, stamped server-side
  * on every press from any surface, so the row agrees with the busk page and with the hardware.
  *
  * **It is a row of the selection bar, not a band of its own.** It renders a leading hairline, then
@@ -94,7 +95,7 @@ export function TemplateStrip({
   askedFamilies,
   targets,
   targetFamilies,
-  targetEmitters = [],
+  targetEmitters = NO_EMITTERS,
 }: {
   projectId: number
   /** The marquee's cells. Empty when the operator has selected rows but not cells. */
@@ -160,33 +161,24 @@ export function TemplateStrip({
     return null
   }, [askedFamilies, targets.length, targetFamilies])
 
-  const visible = useMemo(() => {
-    // The library's own order, which is by name — the same list `/palettes` draws. There is no
-    // operator-set order to honour any more: order belongs to a pad's place in a busk bank.
-    const all = templates ?? []
-    if (families == null) return all
-    return all.filter(
-      (t) =>
-        t.family != null &&
-        families.includes(t.family) &&
-        // The selection's mask, too (apply-model plan §4.2): a palette outside it is not offered,
-        // since the desk would refuse it. An offer, never a refusal — the press itself is not
-        // pre-refused, and with every attribute the mask is null and filters nothing.
-        (pressFamilies == null || pressFamilies.length === 0 || pressFamilies.includes(t.family)) &&
-        // Every emitter the template names has to be somewhere in the selection. A **union** over
-        // the heads, matching how `targetFamilies` is built: with a hex and a par selected together
-        // the amber template is still offered, and the par reports a skip on the press. Requiring
-        // every head to have it would hide most of the library from most mixed selections.
-        //
-        // `?? []` is not defensive noise. `templateList` has no `transformResponse`, so this field
-        // is whatever the desk sent — and lighting7 hot-swaps changed handler bodies but *not* new
-        // response fields, so a desk mid-upgrade serves rows without it. Reading `.every` off
-        // undefined there would take out the whole programmer toolbar until someone restarted the
-        // backend. Absent means "names no emitter", which is what every template predating this
-        // field actually is.
-        (t.requiredEmitters ?? []).every((emitter) => targetEmitters.includes(emitter)),
-    )
-  }, [templates, families, pressFamilies, targetEmitters])
+  // What the heads can take — the family and the emitters (`paletteFits`, which the picker and the
+  // popup bands filter by too, so the three offer one set). Every emitter a palette names has to be
+  // somewhere in the selection: a **union**, matching how `targetFamilies` is built — with a hex and a
+  // par selected together the amber palette is still offered, and the par reports a skip on the press.
+  const fit = useMemo<PaletteFit>(() => ({ families, emitters: targetEmitters }), [families, targetEmitters])
+  const visible = useMemo(
+    () =>
+      // The library's own order, which is by name — the same list `/palettes` draws.
+      (templates ?? []).filter(
+        (t) =>
+          paletteFits(t, fit) &&
+          // The selection's mask, too (apply-model plan §4.2): a palette outside it is not offered,
+          // since the desk would refuse it. An offer, never a refusal — the press itself is not
+          // pre-refused, and with every attribute the mask is null and filters nothing.
+          outsideMaskReason(t.family, pressFamilies) == null,
+      ),
+    [templates, fit, pressFamilies],
+  )
 
   /**
    * The chips the row actually draws: the templates this desk pressed most recently, most recent
@@ -358,18 +350,17 @@ export function TemplateStrip({
       {strip}
       {/* Outside the guard for the sheet's reason below — and because Radix needs the content
           mounted for the close animation the moment `targets` empties under an open picker. */}
-      <TemplatePicker
+      <ApplyPicker
         projectId={projectId}
         open={pickerOpen}
         onOpenChange={setPickerOpen}
         anchorRef={allRef}
-        cells={cells}
-        askedFamilies={askedFamilies}
-        targets={targets}
-        offerable={visible}
-        into={into}
-        presenceOf={presenceOf}
-        onGesture={onGesture}
+        library="palettes"
+        pair={pair}
+        fit={fit}
+        // The *asked* families, as the New chip's: with rows selected and no cells the gesture
+        // named no attribute, and the sheet should ask rather than pre-pick one of several.
+        saveFamilies={cells.length > 0 ? families : null}
       />
       <NewTemplateFromSelectionSheet
         open={newOpen}
@@ -390,6 +381,8 @@ export function TemplateStrip({
  * one by name — two sizes here would make that reference ambiguous about which it meant.
  */
 const HAIRLINE_CLASS = 'mx-0.5 h-5 w-px shrink-0 bg-border'
+
+const NO_EMITTERS: readonly string[] = []
 
 /**
  * One palette on the recents row: tap puts it on as a layer, ⌥click sets its values, a hold or a

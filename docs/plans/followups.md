@@ -64,6 +64,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-PERPROP-BLEND`](#fu-look-perprop-blend) | Trigger | Look | an operator wants one property of a layer to mix while the rest override |
 | [`FU-LOOK-NESTED`](#fu-look-nested) | Trigger | Look | a Look kept hand-synced to another (absorbs `FU-PAL-LINKED`) |
 | [`FU-PRESS-REPLACE-LOOKS`](#fu-press-replace-looks) | Trigger | Look | an operator expects a Look to take another off the same heads outside a solo bank |
+| [`FU-PRESS-LAYER-MASTER`](#fu-press-layer-master) | Trigger | Look | an operator wants a programmer layer's effects on another speed or rate master |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
@@ -1223,6 +1224,21 @@ before D2. A solo bank is the way to make two Looks exclusive today.
 
 **Trigger**: an operator expects pressing one Look to take another off the same heads outside a solo
 bank.
+
+### `FU-PRESS-LAYER-MASTER`
+
+**A programmer layer has no speed or rate master override** · Trigger · apply-model plan session 5
+(venue-visit R3.5)
+
+The rail's *+ Look* and *+ Palette* press through the one picker (`ApplyPicker`), which puts a layer
+on through `/looks/{id}/toggle` and `/palettes/{id}/toggle`. Neither takes `speedMasterUuid` or
+`rateSpeedMasterUuid`, so a programmer layer's effects follow their own masters, and the add-layer
+sheet's two *Override … for this layer* controls, its last step on the programmer, went with it. Nothing
+else sets them on a programmer layer (`programmer.patchLayer` carries neither); a cue layer keeps them.
+The fix is the two fields on the toggle routes and on `patchLayer`, and the override in the layer's
+settings popover.
+
+**Trigger**: an operator wants a programmer layer's effects on another speed or rate master.
 
 ### `FU-LOOK-NESTED`
 
