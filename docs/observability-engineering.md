@@ -150,7 +150,7 @@ parallel workers' threads hold no scope, so the cache lookup is this attribute r
 | Cue GO | `cue.go` | `CueStackManager.activateEntry` | `cue.compose`, `cue.spawn`, `scenery.resolve`, `cue.events` |
 | Project switch | `project.switch` | `ProjectManager.switchProject` | `project.unload`, `project.load`, `project.start`, `project.notify` |
 | Sync run | `sync.run` | `RemoteSyncEngine.runSync` | `sync.export`, git `http.client`, `sync.diff`, `sync.apply` |
-| Venue operations | `venue.publish`, `venue.update`, `venue.extract`, `venue.detach` | `venue/` | `venue.diff`, `venue.snapshot`, `venue.behind`; `venue.dry_run` marks the review |
+| Venue operations | `venue.publish`, `venue.update`, `venue.extract`, `venue.detach`, `venue.attach` | `venue/` | `venue.diff`, `venue.snapshot`, `venue.behind`; `venue.dry_run` marks the review |
 | Script compile | `script.compile` | `Show.script`, on a miss in the show's own cache | `cache.get` on the compiled-jar cache, with `cache.hit` |
 | MCP tool call | `mcp.server` span, `tools/call <tool>` | `McpProtocol` | under the `/mcp` call's transaction |
 

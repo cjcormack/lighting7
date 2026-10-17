@@ -25,6 +25,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.routes.afterAttach
 import uk.me.cormack.lighting7.routes.announceCueStacksDeleted
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
 import uk.me.cormack.lighting7.routes.deleteCueStackRows
@@ -36,12 +37,14 @@ import uk.me.cormack.lighting7.routes.venueDto
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.SeatingPresets
 import uk.me.cormack.lighting7.venue.ShowHides
+import uk.me.cormack.lighting7.venue.UpdateAnswer
+import uk.me.cormack.lighting7.venue.UpdateDecisionAnswer
 import uk.me.cormack.lighting7.venue.VenueExtract.ExtractKind
 import uk.me.cormack.lighting7.venue.VenueVersions
 import java.util.UUID
 
 /**
- * The venue and cross-project tools (`list_venues`, `extract_venue`, `publish_venue`,
+ * The venue and cross-project tools (`list_venues`, `extract_venue`, `attach_to_venue`, `publish_venue`,
  * `copy_to_project`, `delete_cue_stacks`): what a model needs to split a hall from the show built in
  * it, and to prepare one project while another runs. Split from [SetupTools] for length; its rules
  * hold — validate everything, answer every problem at once, write nothing unless all of it passes.
@@ -164,6 +167,51 @@ internal class VenueSetupTools(private val state: State) {
                 )),
             ),
         )
+    }
+
+    // ─── attach_to_venue ────────────────────────────────────────────────
+
+    suspend fun attachToVenue(input: JsonObject): ToolExecutionResult {
+        val problems = unknownFields(input, listOf("projectId", "venueId", "version", "decisions", "dryRun", "reloadLiveShow"), "attach_to_venue")
+            .toMutableList()
+        val projectId = input.int("projectId")
+        if (projectId == null) problems += "projectId is required: the standalone show to attach (list_projects)"
+        val venueId = input.int("venueId")
+        if (venueId == null) problems += "venueId is required: the venue to attach it to (list_venues)"
+        val version = input.int("version")
+        if (version == null && input["version"] != null && input["version"] !is JsonNull) problems += "version must be an integer: the version to attach to"
+        val decisions = when (val raw = input["decisions"]) {
+            null, is JsonNull -> emptyList()
+            is JsonArray -> raw.mapIndexedNotNull { i, e ->
+                runCatching { Json.decodeFromJsonElement(UpdateDecisionAnswer.serializer(), e) }.getOrElse {
+                    problems += "decisions[$i] must be {id, answer, startChannel?}, answer one of ${UpdateAnswer.entries.joinToString()}"
+                    null
+                }
+            }
+            else -> { problems += "decisions must be an array"; emptyList() }
+        }
+        val dryRun = input.bool("dryRun") == true
+        if (problems.isNotEmpty()) return rejected(problems)
+
+        val current = state.projectManager.currentProject.id.value
+        if (projectId == current && !dryRun && input.bool("reloadLiveShow") != true) {
+            return failure(
+                "Project $projectId is the current project: attaching reloads it onto the venue: the rig holds its levels and " +
+                    "each live cue, the programmer and hand-run effects come back, but every effect restarts, and the programmer's values " +
+                    "and effects on a fixture the attach renames do not come back (the review's notes name them). Run it with dryRun " +
+                    "first; send reloadLiveShow: true only when the operator has said the desk is not in use for a show.",
+            )
+        }
+        val result = state.venueAttach.attach(projectId!!, venueId!!, version, decisions, dryRun)
+        val review = result.review
+        if (!review.dryRun) afterAttach(state, result)
+        val summary = when {
+            review.dryRun && review.blockers.isNotEmpty() -> "Checked: attaching to ${review.venueName} v${review.to} is blocked (${review.blockers.size})"
+            review.dryRun -> "Checked: attaching to ${review.venueName} v${review.to} inherits ${review.inherited.values.sum()} record(s), " +
+                "with ${review.decisions.size} decision(s) and ${review.overlaps.count { !it.decided }} overlap(s) to answer"
+            else -> "Attached project $projectId to ${review.venueName} v${review.to}"
+        }
+        return success(summary, Json.encodeToJsonElement(review) as JsonObject)
     }
 
     // ─── publish_venue ──────────────────────────────────────────────────

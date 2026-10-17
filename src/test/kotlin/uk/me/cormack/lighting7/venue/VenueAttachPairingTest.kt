@@ -486,6 +486,25 @@ class VenueAttachPairingTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `without an origin a park on a universe paired under another number is read and kept at the venue's number`() {
+        val u = UUID.randomUUID()
+        val show = VenueAttachPairing.Rows(
+            universes = listOf(VenueAttachPairing.UniverseRow(1, u, 0, 1, "MOCK")),
+            parks = mapOf(ParkAddress(1, 5) to 255.toUByte(), ParkAddress(1, 6) to 200.toUByte()),
+        )
+        val target = VenueAttachPairing.Rows(
+            universes = listOf(VenueAttachPairing.UniverseRow(2, u, 0, 2, "MOCK")),
+            parks = mapOf(ParkAddress(2, 5) to 255.toUByte(), ParkAddress(2, 6) to 255.toUByte()),
+        )
+        val p = VenueAttachPairing.pair(show, null, VenueAttachPairing.Version(UUID.randomUUID(), "Hall", 1, target))
+
+        assertEquals(listOf(ParkAddress(1, 5)), p.writes.parksDropped, "the same level at the venue's number: inherited")
+        assertEquals(mapOf(ParkAddress(1, 6) to ParkAddress(2, 6)), p.writes.parksMoved, "a re-park moves with its universe")
+        assertEquals(emptyList(), p.writes.releases, "nothing released: the show still parks both channels")
+        assertTrue(p.additions.any { it.reason == "REPARK" && it.show?.uuid == "2-006" }, "${p.additions}")
+    }
+
+    @Test
     fun `placements pair by uuid, then the rest in order`() {
         val u = UUID.randomUUID()
         fun facet(vararg placements: UUID) = mapOf<PatchFacet, FacetValue>(
@@ -528,6 +547,7 @@ class VenueAttachPairingTest : RouteIntegrationTest() {
 
         assertEquals(listOf(HideKind.PATCH to shared, HideKind.PATCH to other).toSet(), p.writes.hides.toSet())
         assertTrue(p.decisions.none { it.kind == "HIDE" && it.venue.uuid == other.toString() }, "${p.decisions}")
+        assertTrue("hide:PATCH:$other" in p.decisionIds, "an answer to it, from a review that listed it, is still known")
         assertTrue(p.incoming.none { it.venue?.uuid == other.toString() })
     }
 

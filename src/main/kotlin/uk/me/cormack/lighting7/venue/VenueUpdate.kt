@@ -17,17 +17,13 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.telemetry.Tracing
-import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.models.AddressFacet
 import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
 import uk.me.cormack.lighting7.models.DaoCueEvents
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoCueScenery
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackScenery
-import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
@@ -35,10 +31,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffects
-import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLookScenery
-import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
@@ -52,30 +45,19 @@ import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoStageRegions
 import uk.me.cormack.lighting7.models.DaoStageViewpoint
 import uk.me.cormack.lighting7.models.DaoStageViewpoints
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
-import uk.me.cormack.lighting7.models.EffectivePatch
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.VenueParks
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.PositionFacet
 import uk.me.cormack.lighting7.models.ProjectKind
-import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
-import uk.me.cormack.lighting7.models.EffectTargetRef
-import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.VenueLinks
-import uk.me.cormack.lighting7.models.decodeFacet
-import uk.me.cormack.lighting7.models.encodeFacet
 import uk.me.cormack.lighting7.models.facetElement
-import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
-import uk.me.cormack.lighting7.models.entriesOfCue
 
 /**
  * *Update* a show to a newer version of its venue (venue plan §3.5, P3, P8; session 6): the review of
@@ -229,8 +211,8 @@ class VenueUpdate(private val state: State) {
     private fun apply(projectId: Int, pin: Pin, answers: List<UpdateDecisionAnswer>): Outcome {
         val project = DaoProject[projectId]
         val before = RigScope.of(project)
-        val beforeSpans = spansOf(before)
-        val beforeKeys = keysOf(before)
+        val beforeSpans = VenueRigChecks.spansOf(before)
+        val beforeKeys = VenueRigChecks.keysOf(before)
 
         val dropped = mutableListOf<UpdateItemDto>()
         val blockers = mutableListOf<UpdateItemDto>()
@@ -300,14 +282,14 @@ class VenueUpdate(private val state: State) {
 
         // The rig as the target sees it: clashes, the overlaps the update introduces, what goes dark.
         val after = RigScope.of(project)
-        blockers += clashesOf(after, pin)
-        val afterSpans = spansOf(after)
-        val beforePairs = overlapPairs(beforeSpans)
-        val introduced = overlapPairs(afterSpans).filter { it.key !in beforePairs.keys }.values.toList()
+        blockers += VenueRigChecks.clashesOf(after, pin.toSnapshot, "v${pin.to}").map { UpdateItemDto("KEY_CLASH", it.name, it.detail) }
+        val afterSpans = VenueRigChecks.spansOf(after)
+        val beforePairs = VenueRigChecks.overlapPairs(beforeSpans)
+        val introduced = VenueRigChecks.overlapPairs(afterSpans).filter { it.key !in beforePairs.keys }.values.toList()
         // Suggestions are made in turn, each avoiding the ones before it, so two units re-addressed in
         // one update are never offered the same channels.
-        val suggested = HashMap<UUID, Span>()
-        val decisions = introduced.mapNotNull { (a, b) -> decisionOf(project, a, b, afterSpans, suggested) }
+        val suggested = HashMap<UUID, VenueRigChecks.Span>()
+        val decisions = introduced.mapNotNull { (a, b) -> VenueRigChecks.decisionOf(project, a, b, afterSpans, suggested) }
         val driftIds = driftDtos.map { it.id }.toSet()
         val knownIds = decisions.map { it.id }.toSet() + driftIds
         answers.firstOrNull { it.id !in knownIds }?.let { bad ->
@@ -326,9 +308,10 @@ class VenueUpdate(private val state: State) {
             }
             d.copy(decided = answer != null, answer = answer?.answer, startChannel = answer?.startChannel)
         }
-        val warnings = applyDecisions(project, decided, afterSpans)
+        val warnings = VenueRigChecks.applyDecisions(project, decided, afterSpans, CODE_UPDATE_INVALID)
 
-        val dead = deadReferences(project, beforeKeys, keysOf(RigScope.of(project)), pin) + dormantOverrides(RigScope.of(project), pin)
+        val dead = VenueRigChecks.deadReferences(project, beforeKeys, VenueRigChecks.keysOf(RigScope.of(project)), "is gone in v${pin.to}") +
+            dormantOverrides(RigScope.of(project), pin)
 
         val carryOver = carryOverOf(project, hides - droppedHides.toSet(), drifts, decided, takeVenue, pin)
         return Outcome(
@@ -391,12 +374,12 @@ class VenueUpdate(private val state: State) {
             DaoCueEvents -> {
                 val cueId = DaoCueEvents.select(DaoCueEvents.cue).where { DaoCueEvents.id eq rowId }.single()[DaoCueEvents.cue]
                 deleteRow(link.table, rowId)
-                dropped += UpdateItemDto("LINK", what, "${cueLabel(DaoCue[cueId])}'s event on $what goes: $v removes it")
+                dropped += UpdateItemDto("LINK", what, "${VenueRigChecks.cueLabel(DaoCue[cueId])}'s event on $what goes: $v removes it")
             }
             DaoCueScenery -> {
                 val cueId = DaoCueScenery.select(DaoCueScenery.cue).where { DaoCueScenery.id eq rowId }.single()[DaoCueScenery.cue]
                 deleteRow(link.table, rowId)
-                dropped += UpdateItemDto("LINK", what, "${cueLabel(DaoCue[cueId])}'s scenery change to $what goes: $v removes it")
+                dropped += UpdateItemDto("LINK", what, "${VenueRigChecks.cueLabel(DaoCue[cueId])}'s scenery change to $what goes: $v removes it")
             }
             DaoCueStackScenery -> {
                 val stackId = DaoCueStackScenery.select(DaoCueStackScenery.stack).where { DaoCueStackScenery.id eq rowId }.single()[DaoCueStackScenery.stack]
@@ -426,257 +409,6 @@ class VenueUpdate(private val state: State) {
         else -> null
     } ?: "a record"
 
-    // ── Clashes (blockers) ──────────────────────────────────────────────────────
-
-    /**
-     * The show's own records holding an identity a venue record in the target rig also holds — a
-     * patch's key or head number, any other kind's name: keys and names are one namespace (§3.3), and
-     * a clash cannot be kept (P8).
-     */
-    private fun clashesOf(rig: RigScope, pin: Pin): List<UpdateItemDto> {
-        val out = mutableListOf<UpdateItemDto>()
-        val snapshot = pin.toSnapshot
-        fun clash(name: String, detail: String) {
-            out += UpdateItemDto("KEY_CLASH", name, detail)
-        }
-        val venuePatches = rig.patches(DaoFixturePatches.project eq snapshot).toList()
-        val own = rig.own
-        val ownPatches = own.patches().toList()
-        for (mine in ownPatches) {
-            venuePatches.firstOrNull { it.key == mine.key }?.let {
-                clash(mine.key, "your ${mine.displayName} has the key '${mine.key}', which v${pin.to}'s ${it.displayName} takes — rename yours first")
-            }
-            val n = mine.headNumber ?: continue
-            venuePatches.firstOrNull { it.headNumber == n }?.let {
-                clash(mine.key, "your ${mine.displayName} has head number $n, which v${pin.to}'s ${it.displayName} takes — renumber yours first")
-            }
-        }
-        fun names(kind: String, venue: List<String>, mine: List<String>) {
-            val taken = venue.toSet()
-            mine.filter { it in taken }.forEach { clash(it, "your $kind '$it' has a name v${pin.to}'s $kind takes — rename yours first") }
-        }
-        names("group", rig.groups(DaoFixtureGroups.project eq snapshot).map { it.name }, own.groups().map { it.name })
-        names("rigging", rig.riggings(DaoRiggings.project eq snapshot).map { it.name }, own.riggings().map { it.name })
-        names("stage element", rig.stageElements(DaoStageElements.project eq snapshot).map { it.name }, own.stageElements().map { it.name })
-        names("stage region", rig.stageRegions(DaoStageRegions.project eq snapshot).map { it.name }, own.stageRegions().map { it.name })
-        names("viewpoint", rig.stageViewpoints(DaoStageViewpoints.project eq snapshot).map { it.name }, own.stageViewpoints().map { it.name })
-        return out
-    }
-
-    // ── Overlaps (decisions) ────────────────────────────────────────────────────
-
-    /** One unit's channels as a rig sees them; [mine] when the show owns it or re-addresses it. */
-    private data class Span(
-        val uuid: UUID,
-        val patchId: Int,
-        val key: String,
-        val name: String,
-        val subnet: Int,
-        val universe: Int,
-        val first: Int,
-        val last: Int,
-        val mine: MineKind?,
-    ) {
-        val address: String get() = "$universe-${first.toString().padStart(3, '0')}"
-        fun overlaps(other: Span) = subnet == other.subnet && universe == other.universe && first <= other.last && last >= other.first
-    }
-
-    private enum class MineKind { OWN, OVERRIDE }
-
-    private fun spansOf(rig: RigScope): List<Span> = rig.effective(rig.patches().toList()).map { p: EffectivePatch ->
-        val count = channelCountOf(p.fixtureTypeKey)
-        val mine = when {
-            rig.ownerOf(p.row.readValues[DaoFixturePatches.project]) == RigOwner.SHOW -> MineKind.OWN
-            PatchFacet.ADDRESS in p.overridden -> MineKind.OVERRIDE
-            else -> null
-        }
-        Span(p.uuid, p.id.value, p.key, p.displayName, p.universeConfig.subnet, p.universeConfig.universe, p.startChannel, p.startChannel + count - 1, mine)
-    }
-
-    /** Every overlapping pair with something of the show's on one side, keyed by the two uuids (mine first). */
-    private fun overlapPairs(spans: List<Span>): Map<Pair<UUID, UUID>, Pair<Span, Span>> {
-        val out = LinkedHashMap<Pair<UUID, UUID>, Pair<Span, Span>>()
-        for (a in spans) {
-            if (a.mine == null) continue
-            for (b in spans) {
-                if (a.uuid == b.uuid || !a.overlaps(b)) continue
-                // Two of the show's own: not the update's doing. An override against an own patch: the
-                // own side is mine.
-                if (b.mine == MineKind.OWN) continue
-                if (b.mine == MineKind.OVERRIDE && a.mine == MineKind.OVERRIDE && a.uuid > b.uuid) continue
-                out[a.uuid to b.uuid] = a to b
-            }
-        }
-        return out
-    }
-
-    private fun decisionOf(
-        project: DaoProject,
-        mine: Span,
-        other: Span,
-        spans: List<Span>,
-        suggestedSoFar: MutableMap<UUID, Span>,
-    ): UpdateDecisionDto? {
-        val kind = mine.mine ?: return null
-        val suggested = suggestedSoFar[mine.uuid]?.first ?: freeStart(mine, spans + suggestedSoFar.values)?.also { start ->
-            suggestedSoFar[mine.uuid] = mine.copy(first = start, last = start + (mine.last - mine.first))
-        }
-        // Hiding a venue fixture the show still links to (a tile, a cue event, scenery) is refused, so
-        // it is not offered — the POST would fail after a review that looked clean.
-        val hideable = ShowHides.hideRefusal(project, HideKind.PATCH, other.uuid) == null
-        val answers = buildList {
-            add(UpdateAnswer.KEEP_BOTH)
-            if (suggested != null) add(UpdateAnswer.READDRESS_MINE)
-            if (hideable) add(UpdateAnswer.HIDE_VENUES)
-            add(UpdateAnswer.REMOVE_MINE)
-        }
-        val whose = if (kind == MineKind.OWN) "Your ${mine.name}" else "Your address for ${mine.name}"
-        return UpdateDecisionDto(
-            id = "overlap:${mine.uuid}:${other.uuid}",
-            kind = "ADDRESS_OVERLAP",
-            message = "$whose at ${mine.address} clashes with ${other.name} (${other.key}) at ${other.address}: two fixtures can't share an address.",
-            mine = UpdateUnitDto(mine.uuid.toString(), mine.patchId, mine.key, mine.name, mine.address, kind.name),
-            other = UpdateUnitDto(other.uuid.toString(), other.patchId, other.key, other.name, other.address, "VENUE"),
-            answers = answers,
-            suggestedStartChannel = suggested,
-            suggestedAddress = suggested?.let { "${mine.universe}-${it.toString().padStart(3, '0')}" },
-        )
-    }
-
-    /** The free start channel on [mine]'s universe nearest its own, where nothing else in [spans] sits; null when none. */
-    private fun freeStart(mine: Span, spans: List<Span>): Int? {
-        val count = mine.last - mine.first + 1
-        val others = spans.filter { it.uuid != mine.uuid && it.subnet == mine.subnet && it.universe == mine.universe }
-        return (1..(512 - count + 1))
-            .filter { start -> others.none { start <= it.last && start + count - 1 >= it.first } }
-            .minByOrNull { kotlin.math.abs(it - mine.first) }
-    }
-
-    /**
-     * Carry out each decided answer. Answers notes by decision id. Units are re-addressed in turn against
-     * where the ones before them went ([working]), so two moves in one update never land on each other.
-     */
-    private fun applyDecisions(project: DaoProject, decisions: List<UpdateDecisionDto>, spans: List<Span>): Map<String, String> {
-        val notes = HashMap<String, String>()
-        val working = spans.toMutableList()
-        val byMine = decisions.filter { it.decided }.groupBy { it.mine.uuid }
-        for ((mineUuid, ds) in byMine) {
-            val mine = working.first { it.uuid.toString() == mineUuid }
-            // Hiding the venue's is per pair; removing or re-addressing mine is once for all its pairs.
-            for (d in ds.filter { it.answer == UpdateAnswer.HIDE_VENUES }) {
-                ShowHides.setHiddenByUuid(project, HideKind.PATCH, UUID.fromString(d.other.uuid), hidden = true)
-            }
-            when {
-                ds.any { it.answer == UpdateAnswer.REMOVE_MINE } -> when (mine.mine) {
-                    MineKind.OWN -> deleteOwnPatch(DaoFixturePatch[mine.patchId])
-                    else -> DaoShowOverride.find {
-                        (DaoShowOverrides.project eq project.id) and (DaoShowOverrides.recordUuid eq mine.uuid) and
-                            (DaoShowOverrides.facet eq PatchFacet.ADDRESS)
-                    }.forEach { it.delete() }
-                }
-                ds.any { it.answer == UpdateAnswer.READDRESS_MINE } -> {
-                    val decision = ds.first { it.answer == UpdateAnswer.READDRESS_MINE }
-                    val count = mine.last - mine.first + 1
-                    val start = decision.startChannel ?: freeStart(mine, working)
-                        ?: throw VenueException.badRequest(CODE_UPDATE_INVALID, "There is no free address for ${mine.name} on universe ${mine.universe}")
-                    if (start < 1 || start + count - 1 > 512) {
-                        throw VenueException.badRequest(CODE_UPDATE_INVALID, "${mine.name} takes $count channels: it cannot start at $start")
-                    }
-                    readdress(project, mine, start)
-                    val moved = mine.copy(first = start, last = start + count - 1)
-                    working[working.indexOf(mine)] = moved
-                    val clash = working.firstOrNull { it.uuid != mine.uuid && moved.overlaps(it) }
-                    if (clash != null) notes[decision.id] = "(At ${mine.universe}-$start it still overlaps ${clash.name}.)"
-                }
-            }
-        }
-        return notes
-    }
-
-    private fun readdress(project: DaoProject, mine: Span, start: Int) {
-        when (mine.mine) {
-            MineKind.OWN -> DaoFixturePatch[mine.patchId].startChannel = start
-            else -> {
-                val row = DaoShowOverride.find {
-                    (DaoShowOverrides.project eq project.id) and (DaoShowOverrides.recordUuid eq mine.uuid) and
-                        (DaoShowOverrides.facet eq PatchFacet.ADDRESS)
-                }.first()
-                val value = decodeFacet(PatchFacet.ADDRESS, row.value) as AddressFacet
-                row.value = encodeFacet(value.copy(startChannel = start))
-            }
-        }
-    }
-
-    // ── Dead references ─────────────────────────────────────────────────────────
-
-    private data class Keys(val fixtures: Map<String, String>, val groups: Set<String>)
-
-    private fun keysOf(rig: RigScope) = Keys(
-        fixtures = rig.patches().associate { it.key to it.displayName },
-        groups = rig.groups().map { it.name }.toSet(),
-    )
-
-    /**
-     * Every fixture key and group name the update takes out of the rig that the show's cues, Looks or
-     * templates still name — each with who names it. The rows stay, marked *Missing fixture* as a deleted
-     * fixture's are today.
-     */
-    private fun deadReferences(project: DaoProject, before: Keys, after: Keys, pin: Pin): List<DeadReferenceDto> {
-        val goneFixtures = before.fixtures.keys - after.fixtures.keys
-        val goneGroups = before.groups - after.groups
-        if (goneFixtures.isEmpty() && goneGroups.isEmpty()) return emptyList()
-        val users = LinkedHashMap<Pair<String, String>, LinkedHashSet<UsedByDto>>()
-        fun note(type: String, key: String, user: UsedByDto) {
-            // An effect over a selection (effects plan D3) names each of its items.
-            if (type == EffectTargetRef.Selection.TYPE) {
-                EffectTargetRef.Selection.parseKey(key)?.forEach { note(it.discriminator, it.key, user) }
-                return
-            }
-            val target = when (type) {
-                TargetRef.Fixture.TYPE -> goneFixtures.firstOrNull { key == it || key.startsWith("$it.") }?.let { "FIXTURE" to it }
-                TargetRef.Group.TYPE -> key.takeIf { it in goneGroups }?.let { "GROUP" to it }
-                else -> null
-            } ?: return
-            users.getOrPut(target) { LinkedHashSet() } += user
-        }
-        val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id }
-        if (cues.isNotEmpty()) {
-            val ids = cues.keys.toList()
-            DaoCuePropertyAssignments.select(DaoCuePropertyAssignments.cue, DaoCuePropertyAssignments.targetType, DaoCuePropertyAssignments.targetKey)
-                .where { DaoCuePropertyAssignments.cue inList ids }
-                .forEach { note(it[DaoCuePropertyAssignments.targetType], it[DaoCuePropertyAssignments.targetKey], cueUser(cues.getValue(it[DaoCuePropertyAssignments.cue]))) }
-            DaoCueAdHocEffects.select(DaoCueAdHocEffects.cue, DaoCueAdHocEffects.targetType, DaoCueAdHocEffects.targetKey)
-                .where { DaoCueAdHocEffects.cue inList ids }
-                .forEach { note(it[DaoCueAdHocEffects.targetType], it[DaoCueAdHocEffects.targetKey], cueUser(cues.getValue(it[DaoCueAdHocEffects.cue]))) }
-        }
-        val looks = DaoLook.find { DaoLooks.project eq project.id }.associateBy { it.id }
-        if (looks.isNotEmpty()) {
-            val ids = looks.keys.toList()
-            DaoLookRows.select(DaoLookRows.look, DaoLookRows.targetType, DaoLookRows.targetKey).where { DaoLookRows.look inList ids }
-                .forEach { note(it[DaoLookRows.targetType], it[DaoLookRows.targetKey], UsedByDto("LOOK", it[DaoLookRows.look].value, looks.getValue(it[DaoLookRows.look]).name)) }
-            DaoLookEffects.select(DaoLookEffects.look, DaoLookEffects.targetType, DaoLookEffects.targetKey).where { DaoLookEffects.look inList ids }
-                .forEach { note(it[DaoLookEffects.targetType], it[DaoLookEffects.targetKey], UsedByDto("LOOK", it[DaoLookEffects.look].value, looks.getValue(it[DaoLookEffects.look]).name)) }
-        }
-        val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.associateBy { it.id }
-        if (templates.isNotEmpty()) {
-            DaoTemplateRows.select(DaoTemplateRows.template, DaoTemplateRows.targetType, DaoTemplateRows.targetKey)
-                .where { DaoTemplateRows.template inList templates.keys.toList() }
-                .forEach { note(it[DaoTemplateRows.targetType], it[DaoTemplateRows.targetKey], UsedByDto("TEMPLATE", it[DaoTemplateRows.template].value, templates.getValue(it[DaoTemplateRows.template]).name)) }
-        }
-        return users.map { (target, by) ->
-            val (kind, key) = target
-            val name = if (kind == "FIXTURE") before.fixtures[key] else key
-            DeadReferenceDto(
-                kind = kind,
-                key = key,
-                name = name,
-                usedBy = by.toList(),
-                detail = "${if (kind == "FIXTURE") "'$key'" else "Group '$key'"} is gone in v${pin.to} and is named by " +
-                    by.joinToString { it.label() } + ". The rows stay, marked missing, as a deleted fixture's are.",
-            )
-        }
-    }
-
     /** The show's overrides the target leaves dormant: an address or position naming a universe or rigging it lacks. */
     private fun dormantOverrides(rig: RigScope, pin: Pin): List<DeadReferenceDto> {
         val venue = rig.venue ?: return emptyList()
@@ -700,13 +432,6 @@ class VenueUpdate(private val state: State) {
             }
         }
     }
-
-    private fun cueUser(cue: DaoCue) = UsedByDto("CUE", cue.id.value, cueLabel(cue))
-
-    // A cue's numbers are its entries': every one it has (a shared cue's places), else its name.
-    private fun cueLabel(cue: DaoCue): String =
-        entriesOfCue(cue).mapNotNull { e -> e.cueNumber?.takeIf { it.isNotBlank() }?.let { "Q$it" } }.distinct()
-            .joinToString(" · ").ifEmpty { cue.name }
 
     // ── Carry over ──────────────────────────────────────────────────────────────
 
@@ -793,14 +518,6 @@ class VenueUpdate(private val state: State) {
         HideKind.REGION -> "stage region"
         HideKind.GROUP -> "group"
         HideKind.VIEWPOINT -> "viewpoint"
-    }
-
-    private fun channelCountOf(typeKey: String) = FixtureTypeRegistry.typeInfoForKey(typeKey)?.channelCount ?: 1
-
-    private fun UsedByDto.label() = when (kind) {
-        "CUE" -> name
-        "LOOK" -> "Look $name"
-        else -> "palette $name"
     }
 
     companion object {

@@ -137,7 +137,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-VENUE-VERSION-PRUNE`](#fu-venue-version-prune) | Trigger | Venue | about fifty versions of one venue |
 | [`FU-VENUE-DRAFT-SYNC`](#fu-venue-draft-sync) | Trigger | Venue | two admins edit one venue on two desks |
 | [`FU-VENUE-ELEMENT-OVERRIDES`](#fu-venue-element-overrides) | Trigger | Venue | a show needs to change a venue rigging or element rather than hide it |
-| [`FU-VENUE-UPDATE-BINDINGS`](#fu-venue-update-bindings) | Trigger | Venue | a surface binding names a venue fixture an Update removes |
 | [`FU-STAGE-INDEPENDENT-HEADS`](#fu-stage-independent-heads) | Trigger | Stage | a show runs a multi-head mover's heads apart and the Stage view draws them together |
 | [`FU-LANTERNS-CUSTOM`](#fu-lanterns-custom) | Trigger | Stage | a show hangs a lantern the shipped library lacks |
 | [`FU-GOBO-CUSTOM-IMAGES`](#fu-gobo-custom-images) | Trigger | Stage | a venue fits a gobo the 16-pattern library cannot stand in for |
@@ -2736,20 +2735,6 @@ additive), a rigging's Position (pose, length) and an element's Pose · Finish f
 exactly as a patch's, applied by `RigScope` where it reads those rows — and the Stage editor's drag of
 a venue rigging becoming one, which a patch's deliberately did not (§"Facet overrides", *Not a drag*).
 
-### `FU-VENUE-UPDATE-BINDINGS`
-
-**An Update's dead-reference list does not name surface bindings** · Trigger · venue plan session 6, 2026-10-11
-
-The Update review lists every fixture key and group name the update takes out of the rig that the
-show's **cue, Look and template rows** still name (`venue/VenueUpdate.kt`, `deadReferences`;
-`docs/fixtures-engineering.md` §"Behind, the hold and Update"). A MIDI surface binding names a fixture
-by key too (`midi/BindingTarget.kt` — a `FireTrigger`, a fixture property), and is not read: after the
-update it simply reads as missing in the Surfaces view's binding health, as a deleted fixture's does
-today. **Trigger**: a surface binding names a venue fixture an Update removes and the operator is
-surprised by it. **Then**: read the project's bindings beside the cue, Look and template rows in
-`deadReferences`, naming the device and control, and let the review's *Will point at nothing* group
-list them.
-
 ### `FU-STAGE-INDEPENDENT-HEADS`
 
 **A multi-head mover's heads tilt together** · Trigger · stage-view plan §8, 2026-10-01
@@ -3095,6 +3080,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-VENUE-UPDATE-BINDINGS` — Update's and Attach's dead references read every place a key is stored
+  through `RigKeyReferences` (bindings, cue layer targets, Look element keys and scripts too),
+  `VenueRigChecks.deadReferences` (venue-attach plan session 2).
 - `FU-FX-RATE-MASTER-CLEAR` — the wire can say *unscaled*: `seconds: true` on `PUT /fx/{id}` and
   `updateFx` puts an effect on *Seconds*, which for a wall-clock effect is no rate master, and the
   live editor's Revert sends it (venue-visit plan S15, D7; its done-marker cites the commit).
