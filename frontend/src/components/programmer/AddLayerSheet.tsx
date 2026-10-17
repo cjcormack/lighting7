@@ -6,7 +6,9 @@ interface AddLayerSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   projectId: number
-  defaultTarget: CueTarget | null
+  defaultTarget?: CueTarget | null
+  /** Several targets at once — the cue editor's Values selection. Wins over [defaultTarget]. */
+  defaultTargets?: readonly CueTarget[]
   onAdd: (layer: CueLayer) => void
   /**
    * Passed straight to [LayerPicker]. The programmer sets it false — it has no playback to delay
@@ -29,6 +31,7 @@ export function AddLayerSheet({
   onOpenChange,
   projectId,
   defaultTarget,
+  defaultTargets,
   onAdd,
   allowTiming = true,
   kind,
@@ -42,7 +45,7 @@ export function AddLayerSheet({
         {open && (
           <LayerPicker
             projectId={projectId}
-            preselectedTarget={defaultTarget}
+            preselectedTargets={defaultTargets ?? (defaultTarget ? [defaultTarget] : undefined)}
             onConfirm={onAdd}
             onCancel={() => onOpenChange(false)}
             allowTiming={allowTiming}

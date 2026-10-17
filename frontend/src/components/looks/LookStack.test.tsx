@@ -349,6 +349,50 @@ describe('LookStack', () => {
   })
 })
 
+describe('LookStack — a host with a selection of its own (the cue editor’s Looks tab)', () => {
+  it('draws Targets and Open only where the host passes them, each addressed by index', () => {
+    const onSetTargets = vi.fn()
+    const onOpenSource = vi.fn()
+    const h = { ...handlers(), onSetTargets, onOpenSource }
+    render(<LookStack layers={[layer(), layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" precedenceNote="" />)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Targets' })[1])
+    expect(onSetTargets).toHaveBeenCalledWith(1)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Open Warm Wash' })[0])
+    expect(onOpenSource).toHaveBeenCalledWith(0)
+    cleanup()
+    // Every other host leaves them out, and neither is drawn.
+    renderStack([layer()])
+    expect(screen.queryByRole('button', { name: 'Targets' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Open / })).toBeNull()
+  })
+
+  it('draws Targets refused with the host’s reason', () => {
+    const h = { ...handlers(), onSetTargets: vi.fn() }
+    render(<LookStack layers={[layer()]} looksById={LOOKS} looksLoaded handlers={h} emptyNote="" targetsRefusal="Select fixtures first" />)
+    const targets = screen.getByRole('button', { name: 'Targets' })
+    expect(targets).toBeDisabled()
+    expect(targets).toHaveAttribute('title', 'Select fixtures first')
+  })
+
+  it('draws the host’s add actions in place of Add, and read-only rows with no drag', () => {
+    render(
+      <LookStack
+        layers={[layer()]}
+        looksById={LOOKS}
+        looksLoaded
+        handlers={handlers()}
+        emptyNote=""
+        readOnly
+        addActions={<button type="button">+ Look</button>}
+      />,
+    )
+    expect(screen.getByRole('button', { name: '+ Look' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reorder layer' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Disable layer/ })).toBeNull()
+  })
+})
+
 /**
  * The template arm, which had no coverage at all: every existing case passes a LOOK source and
  * `undefined` for the template library, so neither the `isTemplate` badge nor the kind was pinned.

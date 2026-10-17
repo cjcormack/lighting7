@@ -26,8 +26,11 @@ interface LayerPickerProps {
   projectId: number
   onConfirm: (layer: CueLayer) => void
   onCancel: () => void
-  /** Pre-selected target — the layer skips the target step and lands on this one. */
-  preselectedTarget?: CueTarget | null
+  /**
+   * Pre-selected targets — the layer skips the target step and lands on these: the cue editor's
+   * Values selection (show-cue-editing plan §4.1). Empty asks, as the programmer's door always does.
+   */
+  preselectedTargets?: readonly CueTarget[]
   /**
    * Whether the host can honour a layer's timing.
    *
@@ -46,6 +49,8 @@ interface LayerPickerProps {
 
 type Step = 'look' | 'targets' | 'timing'
 
+const NO_TARGETS: readonly CueTarget[] = []
+
 /**
  * Build one cue layer: which Look, over which targets, with what timing.
  *
@@ -63,10 +68,11 @@ export function LayerPicker({
   projectId,
   onConfirm,
   onCancel,
-  preselectedTarget,
+  preselectedTargets = NO_TARGETS,
   allowTiming = true,
   kind,
 }: LayerPickerProps) {
+  const preselected = preselectedTargets.length > 0
   const { data: looks } = useLookListQuery({ projectId })
   const { data: templates } = useTemplateListQuery({ projectId })
   const { data: groups } = useGroupListQuery()
@@ -83,9 +89,7 @@ export function LayerPicker({
   const [source, setSource] = useState<
     { kind: 'look'; look: LookSummary } | { kind: 'template'; template: TemplateSummary } | null
   >(null)
-  const [targets, setTargets] = useState<CueTarget[]>(
-    preselectedTarget ? [preselectedTarget] : [],
-  )
+  const [targets, setTargets] = useState<CueTarget[]>(() => [...preselectedTargets])
   const [timingValues, setTimingValues] = useState<TimingValues>({
     delayMs: null,
     intervalMs: null,
@@ -153,12 +157,12 @@ export function LayerPicker({
     setSource({ kind: 'look', look: next })
     // A preselected target means the operator came from that target's card and has already said
     // where this goes.
-    setStep(preselectedTarget ? 'timing' : 'targets')
+    setStep(preselected ? 'timing' : 'targets')
   }
 
   const handleSelectTemplate = (next: TemplateSummary) => {
     setSource({ kind: 'template', template: next })
-    setStep(preselectedTarget ? 'timing' : 'targets')
+    setStep(preselected ? 'timing' : 'targets')
   }
 
   const handleSelectTarget = (target: CueTarget) => {
@@ -282,7 +286,7 @@ export function LayerPicker({
         <>
           <div className="flex items-center gap-2 px-4 pt-4 pb-2">
             <button
-              onClick={() => setStep(preselectedTarget ? 'look' : 'targets')}
+              onClick={() => setStep(preselected ? 'look' : 'targets')}
               className="hover:bg-accent rounded p-0.5 -ml-1"
             >
               <ChevronLeft className="size-5" />

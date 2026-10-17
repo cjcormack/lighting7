@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { useParams } from 'react-router'
-import type { Cue, CueLayer } from '@/api/cuesApi'
+import type { Cue, CueLayer, CueTarget } from '@/api/cuesApi'
 import type { HeldRecord } from '@/api/handApi'
 import { buildCueInput } from '@/lib/cueUtils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -123,20 +123,42 @@ function pressSourceOf(held: HeldRecord): PressSource | null {
  * inverse is clean here in a way the programmer's is not, because the PATCH answers the whole cue
  * and the array to put back is the one this window read before sending.
  */
-export function HandCueLayerStrip({ projectId, cue }: { projectId: number; cue: Cue }) {
+export function HandCueLayerStrip({ projectId, cue, host }: { projectId: number; cue: Cue; host?: HandCueLayerHost }) {
   // Same split as the programmer's, for the same reason and multiplied by the number of expanded
   // cue cards.
   const offer = useHandOffer('cue-stack')
-  return offer == null ? null : <CueLayerStripBody projectId={projectId} cue={cue} />
+  return offer == null ? null : <CueLayerStripBody projectId={projectId} cue={cue} host={host} />
 }
 
-function CueLayerStripBody({ projectId, cue }: { projectId: number; cue: Cue }) {
-  const { targets } = useWindowPressPair()
+/**
+ * How a host that writes the cue itself places a layer — the cue editor's Looks tab, whose layers
+ * go through its own write queue (`CueRowStore`) and land on its Values selection, as its *+ Look*
+ * does. Absent, the strip PATCHes the cue it was handed and lands on the window's selection.
+ */
+export interface HandCueLayerHost {
+  targets: readonly CueTarget[]
+  /** Append [layer] to the cue's layers; answers whether the write landed. */
+  append: (layer: CueLayer) => Promise<boolean>
+  undo: () => void
+}
+
+function CueLayerStripBody({ projectId, cue, host }: { projectId: number; cue: Cue; host?: HandCueLayerHost }) {
+  const { targets: windowTargets } = useWindowPressPair()
+  const targets = host?.targets ?? windowTargets
   const placeFromHand = useHandPlace()
   const [patchCue] = usePatchProjectCueMutation()
 
   const onPlace = useCallback(
     (held: HeldRecord) => {
+      if (host != null) {
+        void placeFromHand(held, {
+          where: cue.cueNumber != null ? `cue ${cue.cueNumber}` : cue.name,
+          // A write the store could not land keeps the record held, as a refused mutation does.
+          run: async () => ((await host.append({ ...layerSource(held), targets: [...targets], enabled: true })) ? true : null),
+          undo: host.undo,
+        })
+        return
+      }
       const before = buildCueInput(cue).layers
       const highest = before.reduce((max, l) => Math.max(max, l.sortOrder ?? 0), 0)
       void placeFromHand(held, {
@@ -163,7 +185,7 @@ function CueLayerStripBody({ projectId, cue }: { projectId: number; cue: Cue }) 
             .catch(ignoreReportedError),
       })
     },
-    [cue, projectId, patchCue, placeFromHand, targets],
+    [cue, projectId, patchCue, placeFromHand, targets, host],
   )
 
   return (

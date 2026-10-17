@@ -66,6 +66,22 @@ export type FxTarget =
   | { type: 'group'; group: GroupSummary }
   | { type: 'selection'; targets: CueTarget[]; fixtures: Fixture[]; label: string }
 
+/**
+ * What a tap picks in **draft** (show-cue-editing plan D17): the effect with its starting spec, on
+ * the property it lands on, for the host to store. Nothing runs.
+ */
+export interface DraftEffectPick {
+  effectType: string
+  category: string
+  propertyName: string
+  beatDivision: number
+  /** The master tagged for the family's usage (D16); absent on a wall-clock effect, which starts on its own Seconds. */
+  speedMasterUuid?: string | null
+  blendMode: string
+  parameters: Record<string, string>
+  elementFilter?: string
+}
+
 /** The effect a picker session started and is auditioning — the one a second tap swaps. */
 export interface AuditionedEffect {
   effectId: number
@@ -100,6 +116,7 @@ export function FxPicker({
   onCurrent,
   onEdit,
   elementFilter,
+  draft,
 }: {
   target: FxTarget
   /**
@@ -111,14 +128,24 @@ export function FxPicker({
   initialFamily?: PickerFamily | null
   /** The property that row writes, preferred over the effect's first compatible one. */
   preferredProperty?: string | null
-  /** The effect this session has started, if any. */
-  current: AuditionedEffect | null
-  onCurrent: (next: AuditionedEffect | null) => void
-  /** *Edit <name>* — the host opens `FxEditor` on [current]. */
+  /** The effect this session has started, if any. Unused in [draft]. */
+  current?: AuditionedEffect | null
+  onCurrent?: (next: AuditionedEffect | null) => void
+  /** *Edit <name>* — the host opens the editor on what this session started or picked. */
   onEdit: () => void
+  /**
+   * **Draft**: a tap starts nothing (D17). It hands [DraftEffectPick] to the host, which stores the
+   * effect — the cue editor's FX tab — and a second tap hands the next, which the host swaps in for
+   * [draft.current], the one this session picked. No socket is needed.
+   */
+  draft?: {
+    current: { effectType: string; propertyName: string } | null
+    onPick: (pick: DraftEffectPick) => void
+  }
 }) {
   const { data: library } = useEffectLibraryQuery()
-  const { data: active } = useActiveEffectsQuery()
+  // In draft nothing runs, so nothing running is read.
+  const { data: active } = useActiveEffectsQuery(undefined, { skip: draft != null })
   const { fixtures } = useFixtureLookup()
   const connected = useIsDeskConnected()
   const [addFixtureFx] = useAddFixtureFxMutation()
@@ -191,9 +218,12 @@ export function FxPicker({
   // list has caught up with it: a second tap inside that refetch would otherwise start a second
   // effect and orphan the first.
   const [justStarted, setJustStarted] = useState<number | null>(null)
-  const runningEffect = current != null ? (active ?? []).find((e) => e.id === current.effectId) : undefined
+  const runningEffect = current != null ? (active ?? []).find((e) => e.id === current?.effectId) : undefined
   const masterForCategory = useSpeedMasterForCategory()
-  const running = current != null && (runningEffect != null || justStarted === current.effectId) ? current : null
+  const running =
+    current != null && (runningEffect != null || justStarted === current.effectId) ? current : null
+  /** What the rows mark as picked: the auditioned effect, or in draft the one the host stored. */
+  const shown = draft != null ? draft.current : running
   useEffect(() => {
     if (justStarted != null && (active ?? []).some((e) => e.id === justStarted)) setJustStarted(null)
   }, [active, justStarted])
@@ -253,6 +283,28 @@ export function FxPicker({
     if (propertyName == null) return
     const spec = specFor(entry, propertyName)
 
+    if (draft != null) {
+      if (
+        draft.current != null &&
+        draft.current.propertyName === propertyName &&
+        normalizeEffectName(draft.current.effectType) === normalizeEffectName(entry.name)
+      ) {
+        return
+      }
+      draft.onPick({
+        effectType: entry.name,
+        category: entry.category,
+        propertyName,
+        // A new effect is one bar on the master tagged for its family's usage (D16), as below.
+        beatDivision: NEW_EFFECT_DIVISION,
+        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
+        blendMode: spec.blendMode,
+        parameters: spec.parameters,
+        ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+      })
+      return
+    }
+
     if (running != null && running.propertyName === propertyName) {
       if (normalizeEffectName(running.effectType) === normalizeEffectName(entry.name)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
@@ -265,7 +317,7 @@ export function FxPicker({
       const toUnit = entry.timingSource === 'WALL_CLOCK' || runningOnSeconds ? 'seconds' : 'beats'
       const speed = fromUnit === toUnit ? {} : { beatDivision: NEW_EFFECT_DIVISION }
       if (lightingApi.fx.updateFx(running.effectId, { effectType: entry.name, ...spec, ...speed })) {
-        onCurrent({ ...running, effectType: entry.name })
+        onCurrent?.({ ...running, effectType: entry.name })
       }
       return
     }
@@ -313,7 +365,7 @@ export function FxPicker({
         // Reported by errorToastMiddleware; a failed start leaves nothing auditioned.
         .catch(() => null)
       if (created) setJustStarted(created.effectId)
-      onCurrent(created ? { effectId: created.effectId, effectType: entry.name, propertyName } : null)
+      onCurrent?.(created ? { effectId: created.effectId, effectType: entry.name, propertyName } : null)
     } finally {
       busy.current = false
       setPending(false)
@@ -322,20 +374,20 @@ export function FxPicker({
 
   const effects = byFamily.get(family) ?? []
   const currentEntry =
-    running != null
+    shown != null
       ? [...compatible, ...(paletteStepsEntry != null ? [paletteStepsEntry] : [])].find(
-          (e) => normalizeEffectName(e.name) === normalizeEffectName(running.effectType),
+          (e) => normalizeEffectName(e.name) === normalizeEffectName(shown.effectType),
         )
       : undefined
   // The *On* row: an effect offered through a sentinel names no property of its own, so where the
   // target has several it could land on, the operator picks — and the pick restarts it there.
   const sliderProps = extraSliderPropertiesFor([propertyTarget])
   const sentinel =
-    currentEntry == null || running == null
+    currentEntry == null || shown == null
       ? null
-      : currentEntry.compatibleProperties.includes(SETTING_SENTINEL) && settingProps.some((p) => p.name === running.propertyName)
+      : currentEntry.compatibleProperties.includes(SETTING_SENTINEL) && settingProps.some((p) => p.name === shown.propertyName)
         ? { kind: 'setting' as const, options: settingProps }
-        : currentEntry.compatibleProperties.includes(SLIDER_SENTINEL) && sliderProps.some((p) => p.name === running.propertyName)
+        : currentEntry.compatibleProperties.includes(SLIDER_SENTINEL) && sliderProps.some((p) => p.name === shown.propertyName)
           ? { kind: 'slider' as const, options: sliderProps }
           : null
 
@@ -374,7 +426,7 @@ export function FxPicker({
                 <button
                   type="button"
                   data-effect-pick={entry.name}
-                  disabled={!connected || pending}
+                  disabled={(draft == null && !connected) || pending}
                   aria-label={entry.name}
                   aria-pressed={isCurrent}
                   title={getEffectDescription(entry.name, entry.description)}
@@ -386,7 +438,9 @@ export function FxPicker({
                 >
                   <span className={cn('size-[7px] shrink-0 rounded-full', isCurrent ? 'bg-violet-500' : 'bg-muted-foreground/40')} />
                   <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
-                  {isCurrent && <span className="shrink-0 text-[10px] text-violet-600 dark:text-violet-300">running</span>}
+                  {isCurrent && (
+                    <span className="shrink-0 text-[10px] text-violet-600 dark:text-violet-300">{draft != null ? 'in the cue' : 'running'}</span>
+                  )}
                 </button>
               </li>
             )
@@ -394,12 +448,12 @@ export function FxPicker({
         </ul>
       )}
 
-      {sentinel != null && running != null && currentEntry != null && sentinel.options.length > 1 && (
+      {sentinel != null && shown != null && currentEntry != null && sentinel.options.length > 1 && (
         <div className="flex flex-col gap-1">
           <EditorLabel>On</EditorLabel>
           <Select
-            value={running.propertyName}
-            disabled={!connected || pending}
+            value={shown.propertyName}
+            disabled={(draft == null && !connected) || pending}
             onValueChange={(name) => {
               const pick = sentinel.kind === 'setting' ? { ...chosen, setting: name } : { ...chosen, slider: name }
               setChosen(pick)
@@ -421,11 +475,13 @@ export function FxPicker({
       )}
 
       <div className="flex items-center gap-2 pt-1">
-        <p className="min-w-0 flex-1 text-[10.5px] text-muted-foreground">A tap starts it; another tap swaps it, phase kept.</p>
-        {running != null && (
+        <p className="min-w-0 flex-1 text-[10.5px] text-muted-foreground">
+          {draft != null ? 'A tap adds it to the cue, running nothing; another tap swaps it.' : 'A tap starts it; another tap swaps it, phase kept.'}
+        </p>
+        {shown != null && (
           <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs" onClick={onEdit}>
             <Pencil className="size-3" />
-            Edit {currentEntry?.name ?? running.effectType}
+            Edit {currentEntry?.name ?? shown.effectType}
           </Button>
         )}
       </div>
