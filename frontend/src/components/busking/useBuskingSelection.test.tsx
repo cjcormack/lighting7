@@ -17,7 +17,7 @@ import {
  * Three things are worth pinning and all are quiet failures: the rehydration, which is the only
  * place a target is dropped; the writes, which must send the *layer* target shape — a group by
  * name — because a pad's ring and a select LED have to agree about which group they mean; and the
- * local arm, where the same three writes must reach the tab's copy and never the desk.
+ * local arm, where the same writes — the mask's included — must reach the tab's copy and never the desk.
  */
 
 let deskTargets: CueTarget[] = []
@@ -26,6 +26,7 @@ const setSelection = vi.fn()
 const toggleSelection = vi.fn()
 const clearSelection = vi.fn()
 const subselectSelection = vi.fn()
+const maskSelection = vi.fn()
 
 const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] }
 const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: [] }
@@ -50,6 +51,7 @@ vi.mock('@/store/selection', async () => {
     toggleDeskSelection: (t: CueTarget) => toggleSelection(t),
     clearDeskSelection: () => clearSelection(),
     subselectDeskSelection: (mode: string) => subselectSelection(mode),
+    setDeskSelectionFamilies: (f: AttributeFamily[] | null) => maskSelection(f),
   }
 })
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [movers] }) }))
@@ -68,6 +70,7 @@ beforeEach(() => {
   toggleSelection.mockClear()
   clearSelection.mockClear()
   subselectSelection.mockClear()
+  maskSelection.mockClear()
   rigQuery = { data: { rows: [] }, isError: false }
 })
 
@@ -124,6 +127,14 @@ describe('useBuskingSelection', () => {
     expect(clearSelection).toHaveBeenCalled()
   })
 
+  it('re-masks through the desk, which keeps its own heads (apply-model plan D3)', () => {
+    const { result } = renderHook(() => useBuskingSelection(1))
+    result.current.setFamilies(['POSITION'])
+    result.current.setFamilies(null)
+    expect(maskSelection.mock.calls).toEqual([[['POSITION']], [null]])
+    expect(setSelection).not.toHaveBeenCalled()
+  })
+
   describe('unlinked from the desk (D8)', () => {
     it('shows the snapshot taken at unlink, and stops following the desk', () => {
       deskTargets = [{ type: 'fixture', key: 'par-1' }]
@@ -158,6 +169,18 @@ describe('useBuskingSelection', () => {
       expect(setSelection).not.toHaveBeenCalled()
       expect(toggleSelection).not.toHaveBeenCalled()
       expect(clearSelection).not.toHaveBeenCalled()
+    })
+
+    it('re-masks the tab’s own copy with its targets kept, and never the desk', () => {
+      const { result } = renderHook(() => useBuskingSelection(1))
+      act(() => unlinkFromDesk({ targets: [{ type: 'group', key: 'Movers' }], families: ['COLOUR'] }))
+      act(() => result.current.setFamilies(['INTENSITY', 'POSITION']))
+      expect(getLocalSelection()).toEqual({ targets: [{ type: 'group', key: 'Movers' }], families: ['INTENSITY', 'POSITION'] })
+      expect(result.current.families).toEqual(['INTENSITY', 'POSITION'])
+      act(() => result.current.setFamilies(null))
+      expect(getLocalSelection()).toEqual({ targets: [{ type: 'group', key: 'Movers' }], families: null })
+      expect(maskSelection).not.toHaveBeenCalled()
+      expect(setSelection).not.toHaveBeenCalled()
     })
 
     it('adopts the desk’s selection on re-link and drops the copy', () => {

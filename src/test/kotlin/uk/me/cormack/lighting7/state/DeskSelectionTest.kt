@@ -180,6 +180,29 @@ class DeskSelectionTest {
     }
 
     @Test
+    fun `setFamilies replaces the mask, keeps the heads and stamps the mover`() = runBlocking {
+        val s = selection()
+        s.set(listOf(hex1, wash), colour, screen1)
+
+        s.setFamilies(setOf(PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR), screen2)
+        assertEquals(
+            DeskSelection.Snapshot(listOf(hex1, wash), setOf(PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR), screen2),
+            s.state.value,
+            "the family pill's write: the heads as written, a group still a group",
+        )
+        s.setFamilies(PropertyMaskGroup.entries.toSet(), screen2)
+        assertNull(s.state.value.families, "every group named is every attribute")
+        assertEquals(listOf(hex1, wash), s.targets)
+
+        val seen = mutableListOf<DeskSelection.Snapshot>()
+        val job = CoroutineScope(Dispatchers.Unconfined).launch { s.state.collect { seen += it } }
+        s.setFamilies(null, screen2)
+        yield()
+        assertEquals(1, seen.size, "a mask write that changes nothing emits nothing")
+        job.cancel()
+    }
+
+    @Test
     fun `clear drops the heads, the mask and the mover`() {
         val s = selection()
         s.set(listOf(hex1), colour, screen1)

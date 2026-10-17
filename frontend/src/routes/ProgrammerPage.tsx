@@ -95,6 +95,12 @@ export function ProgrammerPage() {
   const { showHeaderProps } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
+  // The marquee's store (editor-kit plan session 4): the grid publishes into it, and the rail's
+  // Colour and Spread tabs read it. It is provided here, above the sheets as well as the body, so
+  // that a sheet taking a mask opens on an unlinked window's marquee (apply-model plan D3,
+  // `useWindowMaskReader`). A stable store rather than state: the marquee moves at pointer rate, and
+  // the store re-renders only a subscribed reader, never this page or the body's memo barrier.
+  const [marqueeStore] = useState(createMarqueeStore)
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the grid
@@ -122,52 +128,54 @@ export function ProgrammerPage() {
   }
 
   return (
-    <ProgrammerSheetsProvider projectId={projectIdNum}>
-      <div className="flex h-full flex-col">
-        <ShowHeader
-          view="programmer"
-          projectId={projectIdNum}
-          projectName={project.name}
-          {...showHeaderProps}
-        />
-        {/* **No `ShowBar` here, and this is the only view without one.** The space plan's session 5
-            asked whether `ShowHeader` should fold into the bar on all four live views; the answer
-            taken at the desk was narrower and blunter — the *programmer* does not want the show
-            chrome at all, and the other three keep both bands exactly as they were.
+    <MarqueeStoreContext.Provider value={marqueeStore}>
+      <ProgrammerSheetsProvider projectId={projectIdNum}>
+        <div className="flex h-full flex-col">
+          <ShowHeader
+            view="programmer"
+            projectId={projectIdNum}
+            projectName={project.name}
+            {...showHeaderProps}
+          />
+          {/* **No `ShowBar` here, and this is the only view without one.** The space plan's session 5
+              asked whether `ShowHeader` should fold into the bar on all four live views; the answer
+              taken at the desk was narrower and blunter — the *programmer* does not want the show
+              chrome at all, and the other three keep both bands exactly as they were.
 
-            The reasoning is the plan's own D1, applied to a band rather than to a row: everything
-            above the grid earns its place by the line, and 60px of blackout, tempo, cue numbers
-            and a transport is the largest thing on this page that is not about editing values. It
-            is not lost, it is one pill away — the switcher in the header above reaches Show and
-            the Prompt Book, which carry the full bar, and Busk, whose side sheet's Show tab is the
-            same transport in the phone runner's shape.
+              The reasoning is the plan's own D1, applied to a band rather than to a row: everything
+              above the grid earns its place by the line, and 60px of blackout, tempo, cue numbers
+              and a transport is the largest thing on this page that is not about editing values. It
+              is not lost, it is one pill away — the switcher in the header above reaches Show and
+              the Prompt Book, which carry the full bar, and Busk, whose side sheet's Show tab is the
+              same transport in the phone runner's shape.
 
-            What genuinely goes with it, so nobody rediscovers it as a bug:
+              What genuinely goes with it, so nobody rediscovers it as a bug:
 
-             - **Blind is here, and blackout is gone outright.** Blind is *not* show chrome: it is
-               a programmer fact — `ProgrammerSummary.blind`, written by `programmerSetBlind`, faded
-               by the programmer's own fade — and the desk pass that followed session 5 found a
-               programmer you could not go blind on unliveable (`PD-BLIND-ON-PROGRAMMER`). So the
-               one Blind control in the app is the action bar's, in row A's Stage zone beside Clear
-               and the fade, and the bar draws no tile for any host; the other three views *report*
-               it through `ProgrammerIndicator`, as the app header does here. Session 5's note used
-               to refuse exactly this as "a second Blind toggle" — it is not second, because
-               `useShowBarProps` supplies none. What must not happen is the reverse drift: a Blind
-               tile creeping back into the bar for one host, which would put one control in two
-               places again. Blackout is a genuine absence; it was confirmed unimportant here.
-             - **GO and BACK are not on this page**, and the programmer binds no transport keys —
-               `useTransportKeys` is Show's and the Prompt Book's. Busking from the grid means
-               keeping Show or Busk on screen, or a MIDI surface.
-             - **The speed masters are not resident on this page**, and `PD-SPEED-OVERLAY` did not
-               change that: the bank is *summoned*, from the app header's Speed Masters overview
-               panel, which hangs over every route and is nobody's view chrome. Nothing was added
-               to this page for it. `ProgrammerFxList`'s own rows still name each effect's master,
-               and `/speed-masters` still manages the bank. The panel's toggle persists app-wide,
-               so an operator who opens it here has a tempo band on screen until they close it —
-               by their own door, which is what makes it not session 5's band returning. */}
-        <ProgrammerBody projectId={projectIdNum} />
-      </div>
-    </ProgrammerSheetsProvider>
+               - **Blind is here, and blackout is gone outright.** Blind is *not* show chrome: it is
+                 a programmer fact — `ProgrammerSummary.blind`, written by `programmerSetBlind`, faded
+                 by the programmer's own fade — and the desk pass that followed session 5 found a
+                 programmer you could not go blind on unliveable (`PD-BLIND-ON-PROGRAMMER`). So the
+                 one Blind control in the app is the action bar's, in row A's Stage zone beside Clear
+                 and the fade, and the bar draws no tile for any host; the other three views *report*
+                 it through `ProgrammerIndicator`, as the app header does here. Session 5's note used
+                 to refuse exactly this as "a second Blind toggle" — it is not second, because
+                 `useShowBarProps` supplies none. What must not happen is the reverse drift: a Blind
+                 tile creeping back into the bar for one host, which would put one control in two
+                 places again. Blackout is a genuine absence; it was confirmed unimportant here.
+               - **GO and BACK are not on this page**, and the programmer binds no transport keys —
+                 `useTransportKeys` is Show's and the Prompt Book's. Busking from the grid means
+                 keeping Show or Busk on screen, or a MIDI surface.
+               - **The speed masters are not resident on this page**, and `PD-SPEED-OVERLAY` did not
+                 change that: the bank is *summoned*, from the app header's Speed Masters overview
+                 panel, which hangs over every route and is nobody's view chrome. Nothing was added
+                 to this page for it. `ProgrammerFxList`'s own rows still name each effect's master,
+                 and `/speed-masters` still manages the bank. The panel's toggle persists app-wide,
+                 so an operator who opens it here has a tempo band on screen until they close it —
+                 by their own door, which is what makes it not session 5's band returning. */}
+          <ProgrammerBody projectId={projectIdNum} />
+        </div>
+      </ProgrammerSheetsProvider>
+    </MarqueeStoreContext.Provider>
   )
 }
 
@@ -202,11 +210,6 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
   // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
-  // The marquee's store (editor-kit plan session 4): the grid publishes into it and the rail's
-  // Colour and Spread tabs read it, so it sits above both. A store rather than state here, because
-  // the marquee moves at pointer rate and this component is the memo barrier — a value held here
-  // would re-render the whole subtree per frame; the store re-renders only a subscribed tab.
-  const [marqueeStore] = useState(createMarqueeStore)
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
   // in that order are what the operator means: throw away the busk, load the cue again.
@@ -271,50 +274,48 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
       {/* Its template sibling, for the same reason and at the same height: a focused *template*
           layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
           the grid, the notices and the scope band all need to know what it holds. */}
-      <MarqueeStoreContext.Provider value={marqueeStore}>
-        <LookRowStoreProvider projectId={projectId}>
-          <FocusedTemplateLayerProvider projectId={projectId}>
-            <EditorContextProvider value={{ kind: 'live' }}>
-              <ProgrammerWorkspace
-                header={
-                  // Row A: the noun and the verbs, on one 40px line. It declares the `@container`
-                  // both halves query — neither may declare its own, or each would measure itself
-                  // instead of the width it has to share (see `ProgrammerWorkspace`'s doc comment
-                  // for that bug).
-                  //
-                  // **It is the workspace's header, in the grid's column**, so the rail stands
-                  // beside it and under nothing but the `ShowHeader` — the busk sheet's place
-                  // beside the rig band. It was drawn above the workspace, which put the rail a
-                  // row lower on this view than the sheet is on that one. Its fold ladder measures
-                  // the row it now has, which is the column less the rail, as the band's does.
-                  //
-                  // Under 500px of viewport height it is not drawn at all: the same two components
-                  // go into row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and
-                  // the page's chrome is one line rather than two. `null` in that arm rather than
-                  // a hidden div, because the components are mounted in the other place and two
-                  // copies would be two of every query behind them.
-                  //
-                  // The shell's chrome row, with the one ground any row has: row A keeps its
-                  // `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the
-                  // verbs' own band.
-                  shortViewport ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
-                }
-                grid={
-                  <ProgrammerGrid
-                    projectId={projectId}
-                    grouped={grouped}
-                    onGroupedChange={setGrouped}
-                    columnVisibility={columnVisibility}
-                    onColumnVisibilityChange={setColumnVisibility}
-                    leading={shortViewport ? rowA : null}
-                  />
-                }
-                rail={<ProgrammerRail />}
-              />
-            </EditorContextProvider>
-          </FocusedTemplateLayerProvider>
-        </LookRowStoreProvider>
-      </MarqueeStoreContext.Provider>
+      <LookRowStoreProvider projectId={projectId}>
+        <FocusedTemplateLayerProvider projectId={projectId}>
+          <EditorContextProvider value={{ kind: 'live' }}>
+            <ProgrammerWorkspace
+              header={
+                // Row A: the noun and the verbs, on one 40px line. It declares the `@container`
+                // both halves query — neither may declare its own, or each would measure itself
+                // instead of the width it has to share (see `ProgrammerWorkspace`'s doc comment
+                // for that bug).
+                //
+                // **It is the workspace's header, in the grid's column**, so the rail stands
+                // beside it and under nothing but the `ShowHeader` — the busk sheet's place
+                // beside the rig band. It was drawn above the workspace, which put the rail a
+                // row lower on this view than the sheet is on that one. Its fold ladder measures
+                // the row it now has, which is the column less the rail, as the band's does.
+                //
+                // Under 500px of viewport height it is not drawn at all: the same two components
+                // go into row B's leading slot, which is `ProgrammerGrid`'s `leading` prop, and
+                // the page's chrome is one line rather than two. `null` in that arm rather than
+                // a hidden div, because the components are mounted in the other place and two
+                // copies would be two of every query behind them.
+                //
+                // The shell's chrome row, with the one ground any row has: row A keeps its
+                // `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the
+                // verbs' own band.
+                shortViewport ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
+              }
+              grid={
+                <ProgrammerGrid
+                  projectId={projectId}
+                  grouped={grouped}
+                  onGroupedChange={setGrouped}
+                  columnVisibility={columnVisibility}
+                  onColumnVisibilityChange={setColumnVisibility}
+                  leading={shortViewport ? rowA : null}
+                />
+              }
+              rail={<ProgrammerRail />}
+            />
+          </EditorContextProvider>
+        </FocusedTemplateLayerProvider>
+      </LookRowStoreProvider>
     </ProgrammerScopeProvider>
   )
 })

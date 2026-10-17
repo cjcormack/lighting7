@@ -24,12 +24,12 @@ import {
 import { selectSaveStatus } from '@/store/saveStatusSlice'
 import type { BuskPage } from '@/api/buskApi'
 import { allBanks, buskPageTabId, parseBuskDragId } from '@/lib/buskLayout'
-import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
-import { Badge } from '@/components/ui/badge'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { DeskChip } from '@/components/desk/DeskChip'
 import { EditorLabel } from '../editor/EditorLabel'
 import { BuskPageChip } from './BuskPageChip'
 import { BlindPill } from './BlindMarks'
+import { BuskFamilyPill } from './BuskFamilyPill'
 import { summariseSelection, type BuskingTarget } from './buskingTypes'
 import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
 
@@ -44,8 +44,8 @@ import { SelectionVerbButtons, type SelectionVerbs } from './selectionVerbs'
  * while paged with the desk, naming any other window paged with it; *Page: Own* while not), the
  * three selection verbs — *Spread…* · Locate · Highlight, the band's
  * three with the band's handlers, handed down by `BuskingView` as [pads] — the selection summary
- * in the gap (nothing else says it in Pads: the tiles are off screen), the family pill while a mask
- * is set, the selection's **link badge** (desk-follow plan D8 — Pads always follows the desk
+ * in the gap (nothing else says it in Pads: the tiles are off screen), the family pill — the mask's
+ * picker, `BuskFamilyPill`, drawn over any selection — the selection's **link badge** (desk-follow plan D8 — Pads always follows the desk
  * selection, D2, so here the desk chip is only ever the badge; the chip's dashed form is kept for
  * the moment between a local window entering Pads and the D3 relink) — then the host's Focus control and *Edit layout* / *Done* right-anchored. **No Cells menu, no steps, no Clear**: those act on a selection
  * made on the tiles, and the use this view is built for is a two-screen desk — the rig on one
@@ -181,6 +181,8 @@ export const FOLDED_PAGE_SUBJECT_CLASS = 'hidden @[400px]:inline'
 export interface PadRowSelection {
   selectedTargets: Map<string, BuskingTarget>
   families: AttributeFamily[] | null
+  /** The mask's write, the targets kept — the family pill's picker (apply-model plan D3). */
+  onFamilies: (families: AttributeFamily[] | null) => void
   verbs: SelectionVerbs
 }
 
@@ -613,14 +615,13 @@ export function BuskPageStrip({
             ) : (
               <span className="flex-1" />
             )}
-            {pads != null && pads.families != null && pads.families.length > 0 && (
-              <Badge
-                variant="outline"
-                data-pad-family
-                className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-              >
-                {formatFamilyList(pads.families, ' · ')}
-              </Badge>
+            {pads != null && (
+              <BuskFamilyPill
+                families={pads.families}
+                onChange={pads.onFamilies}
+                selected={pads.selectedTargets.size > 0}
+                marker="data-pad-family"
+              />
             )}
             {/* Blind beside the mask, in Pads only: in Split and Rig the rig row carries it
                 (`BlindMarks.tsx`). */}

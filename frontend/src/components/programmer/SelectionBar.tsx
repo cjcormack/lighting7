@@ -6,6 +6,7 @@ import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionB
 import { DeskChip } from '@/components/desk/DeskChip'
 import { TemplateStrip } from './TemplateStrip'
 import { usePressFamilies } from '@/store/selection'
+import { SelectionMaskPill } from './SelectionMaskPill'
 import type { LocateTarget } from '@/store/locate'
 
 const NO_FAMILIES: readonly AttributeFamily[] = []
@@ -37,6 +38,15 @@ const NO_EMITTERS: readonly string[] = []
  * the mask under it, which the bridge lands here as a *row* selection — and then the pill is the
  * only thing on this bar saying that a Colour press will be refused. The busk band draws the same
  * pill from the same pair. The plain lists keep the marquee's own reading: they never bridge.
+ *
+ * **While this window follows the desk the pill is the mask's picker** (apply-model plan D3,
+ * `SelectionMaskPill`), drawn over every selection — `All` when unmasked — and a change goes
+ * through the list's desk bridge as [onRemask]: `selection.setFamilies`, the mask alone with the
+ * desk keeping its heads, the bridge queueing the echo it will answer with. A standing marquee
+ * whose columns no longer say the mask drops to its rows — a marquee names its own columns, and the
+ * mask now says something else. An **unlinked** programmer keeps the badge (the bridge answers no
+ * write there): its own selection is the list's, whose only mask is the marquee's columns, so
+ * there is no fact for a picker to write.
  */
 export function SelectionBar({
   projectId,
@@ -48,6 +58,7 @@ export function SelectionBar({
   targetFamilies = NO_FAMILIES,
   targetEmitters = NO_EMITTERS,
   marqueeDragging,
+  onRemask = null,
 }: {
   /** The project the template strip presses into. Absent — the plain lists — draws no strip. */
   projectId?: number
@@ -59,6 +70,8 @@ export function SelectionBar({
   targetFamilies?: readonly AttributeFamily[]
   targetEmitters?: readonly string[]
   marqueeDragging: boolean
+  /** The desk bridge's mask write, which makes the pill its picker; null when the list does not bridge. */
+  onRemask?: ((families: readonly AttributeFamily[] | null) => void) | null
 }) {
   const askedFamilies = useMemo(() => (cells.length > 0 ? cellFamilies(cells) : null), [cells])
   const pressFamilies = usePressFamilies(askedFamilies)
@@ -82,6 +95,11 @@ export function SelectionBar({
       // since on a phone the hover is the only place that count is said.
       cellTitle={`${fixtures} · ${describeCellScope(cells, columnLabel)} — edit once, applies to all`}
       family={shownFamilies != null && shownFamilies.length > 0 ? formatFamilyList(shownFamilies, ' · ') : null}
+      familyControl={
+        projectId != null && onRemask != null ? (
+          <SelectionMaskPill families={shownFamilies} onChange={onRemask} tone="bar" />
+        ) : undefined
+      }
       hints={{ entry: cellEntryKey, clear: cellClearKey }}
       chip={projectId != null ? <DeskChip /> : undefined}
       // The templates, on this line since session 2: a hairline, the chips in a scroller, then

@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { DeskChip } from '@/components/desk/DeskChip'
 import { BlindPill } from './BlindMarks'
 import { COMPACT_FOCUS_WORD_CLASS } from './RigBand'
-import { formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import type { AttributeFamily } from '@/lib/attributeFamily'
+import { BuskFamilyPill } from './BuskFamilyPill'
 import { cn } from '@/lib/utils'
 import { EditorLabel } from '../editor/EditorLabel'
 import { summariseSelection, type BuskingTarget } from './buskingTypes'
@@ -37,6 +37,8 @@ import { summariseSelection, type BuskingTarget } from './buskingTypes'
 export interface RigStripProps {
   selectedTargets: Map<string, BuskingTarget>
   families: AttributeFamily[] | null
+  /** The mask's write, the targets kept — the family pill's picker (apply-model plan D3). */
+  onFamilies: (families: AttributeFamily[] | null) => void
   /** Drawn at the row's end: the Focus control, at the top-right of the body as on the band. */
   controls?: ReactNode
   className?: string
@@ -58,21 +60,14 @@ export function RigStrip({ className, ...content }: RigStripProps) {
 }
 
 /** The strip's pieces — label, summary, family pill, blind pill, desk chip — without a row. */
-export function RigStripContent({ selectedTargets, families, controls }: Omit<RigStripProps, 'className'>) {
+export function RigStripContent({ selectedTargets, families, onFamilies, controls }: Omit<RigStripProps, 'className'>) {
   const summary = summariseSelection([...selectedTargets.values()])
   return (
     <>
       {/* *Pads*, not *Rig*: in Pads this is the body's top row, as the desk board's pad row is. */}
       <EditorLabel>Pads</EditorLabel>
       <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{summary}</span>
-      {families != null && families.length > 0 && (
-        <Badge
-          variant="outline"
-          className="shrink-0 whitespace-nowrap border-primary/40 bg-primary/10 px-2 py-0 text-[10px] text-primary"
-        >
-          {formatFamilyList(families, ' · ')}
-        </Badge>
-      )}
+      <BuskFamilyPill families={families} onChange={onFamilies} selected={selectedTargets.size > 0} />
       {/* Blind, beside the mask: off the desk board this strip and the short board's merged row
           are the only rig chrome in Pads — the resting focus there — and the sheet is an overlay
           with no fold, so without it a blind programmer was reported nowhere (`BlindMarks.tsx`). */}

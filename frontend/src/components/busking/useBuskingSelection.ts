@@ -4,7 +4,14 @@ import type { SubselectMode } from '@/api/selectionApi'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
 import { useBuskRigQuery } from '@/store/busk'
-import { clearDeskSelection, subselectDeskSelection, toggleDeskSelection, useSelectionPair } from '@/store/selection'
+import {
+  clearDeskSelection,
+  setDeskSelectionFamilies,
+  subselectDeskSelection,
+  toggleDeskSelection,
+  useSelectionPair,
+} from '@/store/selection'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { effectiveRig } from '@/lib/buskRig'
 import { subselectTargets } from '@/lib/cellsSubSelection'
 import { getLocalSelection, setLocalSelection, useDeskFollow } from '@/lib/deskFollow'
@@ -22,7 +29,7 @@ import { buskingTargetKey, type BuskingTarget } from './buskingTypes'
  *
  * **The local arm is the exception, and it is per tab.** Clicking the desk chip to *This window*
  * snapshots the desk's targets and mask into `lib/deskFollow.ts`'s copy and stops following; the
- * three writes then edit that copy and the desk's is untouched, and a press sends the copy as its
+ * writes — toggle, clear, the sub-selection and the mask — then edit that copy and the desk's is untouched, and a press sends the copy as its
  * pair. Re-linking drops the copy and adopts the desk's. Two things the local arm does more simply
  * than the desk does, on purpose: its toggle is add-or-remove by key, without the desk's head-by-
  * head narrowing of a partly covered group (the desk owns that rule and a client copy would drift),
@@ -146,5 +153,21 @@ export function useBuskingSelection(projectId: number) {
     [following, rigLoaded, rig, groups, fixtures],
   )
 
-  return { selectedTargets, families, toggleTarget, clearSelection, subselect }
+  /**
+   * Re-mask the selection, keeping its targets — the family pill's picker (apply-model plan D3).
+   * Following, `selection.setFamilies`: the mask alone, the desk keeping its heads; unlinked, the
+   * tab's copy with its targets kept. `null` is every attribute.
+   */
+  const setFamilies = useCallback(
+    (next: AttributeFamily[] | null) => {
+      if (following) {
+        setDeskSelectionFamilies(next)
+        return
+      }
+      setLocalSelection({ targets: getLocalSelection().targets, families: next })
+    },
+    [following],
+  )
+
+  return { selectedTargets, families, toggleTarget, clearSelection, subselect, setFamilies }
 }

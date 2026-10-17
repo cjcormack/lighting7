@@ -751,6 +751,19 @@ comes **off** rather than widening; pressing twice still means off. One limit wo
 press), so a Look's *effect* in a skipped family still runs — it is still named in
 `skippedFamilies`, which is the honest report.
 
+**There is one mask, the selection's, and every surface reads it** (apply-model plan D3). It is set
+three ways: a marquee publishes its heads and names its columns and a rows-only click publishes its
+heads and clears the mask, each a `selection.set` of the whole fact, and the selection's **family
+pill is its picker** — the programmer's row C while the window follows the desk, and every busk row
+that carries the selection — an *All attributes* switch over the four families, whose write is
+`selection.setFamilies`: the mask alone, the desk keeping its heads. A window that has unlinked masks its own copy instead (the busk tab's), or, on the
+programmer, keeps the marquee's columns as its only mask. The sheets that take a mask — Record,
+Record Look, Include, Make layer and Update — **open on it**, and stay editable there: a sheet's
+change is that write's own and never moves the selection, so narrowing one Record never narrows the
+next press. On the desk this added one write, `selection.setFamilies` (`DeskSelection.setFamilies`,
+the mask replaced and the heads kept); the press doors already read `families`, and the record
+routes already took a `mask`.
+
 > **The library has no order and no groups.** Palettes and Looks list by name, and nothing but a
 > create assigns a position, because there is no position to assign. `template_groups`,
 > `templates.sort_order`, `looks.sort_order` and `POST /templates/reorder` all existed to give the

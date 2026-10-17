@@ -494,6 +494,12 @@ class SocketMessageWireFormatTest {
         assertEquals(CueTargetDto("fixture", "hex-1"), assertIs<SelectionToggleInMessage>(toggle).target)
         assertNull(assertIs<SelectionToggleInMessage>(toggle).sourceName)
         assertIs<SelectionClearInMessage>(json.decodeFromString<InMessage>("""{"type":"selection.clear"}"""))
+        val remask = json.decodeFromString<InMessage>("""{"type":"selection.setFamilies","families":["BEAM"]}""")
+        assertEquals(listOf("BEAM"), assertIs<SelectionSetFamiliesInMessage>(remask).families)
+        assertNull(
+            assertIs<SelectionSetFamiliesInMessage>(json.decodeFromString<InMessage>("""{"type":"selection.setFamilies"}""")).families,
+            "absent families is every attribute",
+        )
     }
 
     @Test

@@ -18,7 +18,7 @@ import { normaliseFamilies, parseFamilies, sameFamilies } from '../lib/selection
  * of the selection and not a second fact because a mask without targets means nothing and clearing
  * the selection must clear it; the rule that keeps them one fact is the desk's: `set` replaces the
  * whole fact (absent families = every attribute), `toggle` edits the heads and keeps the mask,
- * `clear` drops both.
+ * `setFamilies` edits the mask and keeps the heads, `clear` drops both.
  *
  * `selection.state` is both the snapshot on connect and the broadcast on every change — one frame
  * type, because it is a `StateFlow` and a delta frame would carry nothing the whole fact doesn't.
@@ -30,7 +30,7 @@ import { normaliseFamilies, parseFamilies, sameFamilies } from '../lib/selection
  * `windows.announce` this tab sends on every connect (`api/windowsApi.ts`), which carries a name
  * *and* buys the row id `source.id` names. Session 1's `sourceName` on each write is gone from this
  * side; the desk still accepts it as a fallback until `FU-WINDOWS-RETIRE-SOURCENAME` deletes it.
- * The three writes get no reply; the state frame is the acknowledgement.
+ * The writes get no reply; the state frame is the acknowledgement.
  *
  * A group and one of its members are two separate entries: what the desk holds is what was
  * *said*, and expanding a group to its heads is a question asked later (server-side `coverage()`),
@@ -92,6 +92,11 @@ export interface SelectionWsApi {
   set(targets: CueTarget[], families?: readonly AttributeFamily[] | null): void
   /** Add the target, or take it off if its heads are already covered. The mask is kept. */
   toggle(target: CueTarget): void
+  /**
+   * Replace the mask and keep the heads (apply-model plan D3) — the family pill's write. Absent or
+   * null is every attribute.
+   */
+  setFamilies(families: readonly AttributeFamily[] | null): void
   /** Nothing selected, no mask, no mover. */
   clear(): void
   /**
@@ -183,6 +188,9 @@ export function createSelectionWsApi(conn: InternalApiConnection): SelectionWsAp
         families: normaliseFamilies(families) ?? undefined,
       }),
     toggle: (target) => sendGesture(conn, { type: 'selection.toggle', target }),
+    // Folded to the one spelling for `set`'s reason: the echo compares equal to what was sent.
+    setFamilies: (families) =>
+      sendGesture(conn, { type: 'selection.setFamilies', families: normaliseFamilies(families) ?? undefined }),
     clear: () => sendGesture(conn, { type: 'selection.clear' }),
     subselect: (mode) => sendGesture(conn, { type: 'selection.subselect', mode }),
   }

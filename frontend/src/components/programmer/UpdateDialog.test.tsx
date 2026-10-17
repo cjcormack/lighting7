@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { selectionWs } from '@/test/backendMock'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
 /**
@@ -31,10 +32,13 @@ const checklist = (cueIds: number[]) => ({
 const answer = { current: (_: Body): unknown => checklist([1, 2]) }
 const update = vi.fn((body: Body) => ({ unwrap: () => Promise.resolve(answer.current(body)) }))
 
+// The desk selection's frame is what the dialog opens its mask on (apply-model plan D3).
+vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 vi.mock('@/store/programmerOps', () => ({
   useUpdateProgrammerMutation: () => [update, { isLoading: false, error: undefined, reset: () => {} }],
 }))
 
+import { lightingApi } from '@/api/lightingApi'
 import { UpdateDialog } from './UpdateDialog'
 
 const cueTarget = { kind: 'CUE', cueId: 9, cueStackId: 4, name: 'Storm' } as unknown as IncludedTarget
@@ -49,6 +53,9 @@ function narrowTo(keep: string) {
 beforeEach(() => {
   update.mockClear()
   answer.current = () => checklist([1, 2])
+})
+afterEach(() => {
+  selectionWs.last = null
 })
 
 describe('UpdateDialog mask', () => {
@@ -110,7 +117,27 @@ describe('UpdateDialog mask', () => {
     expect(update.mock.calls.at(-1)![0]).toEqual({ projectId: 6, mask: ['COLOUR'] })
   })
 
-  it('opens on All attributes again after a close', async () => {
+  /**
+   * It opens on the selection's mask (apply-model plan D3), and in Mode B asks for the checklist
+   * once, under that mask — never first under the closed dialog's and then again. A change here is
+   * the dialog's own and writes nothing to the selection.
+   */
+  it('opens on the selection’s mask and fetches the checklist once, under it (Mode B)', async () => {
+    // Every write that could move the selection: the whole fact, and the mask alone.
+    const writes = (['set', 'setFamilies', 'toggle', 'clear'] as const).map((name) => vi.spyOn(lightingApi.selection, name))
+    selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
+    render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={null} />)
+    await screen.findByText('Cue 2')
+    expect(update).toHaveBeenCalledTimes(1)
+    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, mask: ['COLOUR'] })
+    expect(box('Colour').checked).toBe(true)
+    fireEvent.click(box('Beam'))
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
+    expect(update.mock.calls[1][0]).toEqual({ projectId: 6, mask: ['COLOUR', 'BEAM'] })
+    for (const write of writes) expect(write).not.toHaveBeenCalled()
+  })
+
+  it('opens on the selection’s mask again after a close, whatever was picked here', async () => {
     answer.current = () => ({ applied: false, mode: 'A', results: [], warnings: [] })
     const { rerender } = render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={cueTarget} />)
     narrowTo('Beam')

@@ -19,6 +19,7 @@ import { restApi } from './restApi'
 import {
   clearDeskSelection,
   setDeskSelection,
+  setDeskSelectionFamilies,
   subselectDeskSelection,
   toggleDeskSelection,
   useDeskSelection,
@@ -27,7 +28,7 @@ import {
 
 /**
  * The desk selection's cache entry as one **fact** — targets, mask, mover (multi-screen plan D2,
- * D7) — and the three writes.
+ * D7) — and the writes.
  *
  * Two of these are the vocabulary pins the plan asks for: `parseFamilies` against
  * `ATTRIBUTE_FAMILIES`, the way `maskPicker.test.ts` pins `MASK_GROUPS`, so a fifth family fails
@@ -197,6 +198,21 @@ describe('the writes', () => {
     const set = vi.spyOn(lightingApi.selection, 'set')
     setDeskSelection([{ type: 'fixture', key: 'par-1' }])
     expect(set).toHaveBeenCalledWith([{ type: 'fixture', key: 'par-1' }], null)
+  })
+
+  /**
+   * The family pill's write (apply-model plan D3): the mask alone, as `selection.setFamilies` — the
+   * desk keeps its heads, so no heads are sent and none from a stale frame can undo a toggle.
+   */
+  it('re-masks with the mask alone, never the heads, and clears it with null', () => {
+    const set = vi.spyOn(lightingApi.selection, 'set')
+    const setFamilies = vi.spyOn(lightingApi.selection, 'setFamilies')
+    selectionWs.fire({ targets: [{ type: 'group', key: 'Front wash' }], families: ['COLOUR'], source: null })
+    setDeskSelectionFamilies(['COLOUR', 'POSITION'])
+    expect(setFamilies).toHaveBeenLastCalledWith(['COLOUR', 'POSITION'])
+    setDeskSelectionFamilies(null)
+    expect(setFamilies).toHaveBeenLastCalledWith(null)
+    expect(set).not.toHaveBeenCalled()
   })
 
   it('sends a bare toggle, and nothing but the clear on a clear', () => {

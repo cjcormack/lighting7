@@ -171,6 +171,7 @@ function bandFor(
       stackRows={handlers.stackRows ?? false}
       focus={handlers.focus ?? 'split'}
       controls={handlers.controls}
+      onFamilies={handlers.onFamilies ?? (() => {})}
     />
   )
   // The view's column: the band, the page strip and the page body, the boxes the band measures
@@ -502,9 +503,29 @@ describe('the rig band', () => {
     expect(row.className).not.toMatch(/(^| )flex-wrap( |$)/)
   })
 
+  it('draws the family pill as the mask’s picker when handed the write — All over an unmasked selection, in the same place (apply-model plan D3)', () => {
+    const onFamilies = vi.fn()
+    const controls = <button type="button">Focus here</button>
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls, onFamilies }, null)
+    const state = document.querySelector('[data-rig-row-state]') as HTMLElement
+    const pill = within(state).getByRole('button', { name: 'All' })
+    expect(pill).toHaveAttribute('data-rig-family')
+    fireEvent.click(pill)
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    fireEvent.click(screen.getByLabelText('Position'))
+    expect(onFamilies).toHaveBeenCalledWith(['INTENSITY', 'COLOUR', 'BEAM'])
+    cleanup()
+    // The compact board's row carries the same picker.
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls, onFamilies, compact: true }, ['COLOUR'])
+    expect(
+      within(document.querySelector('[data-rig-row="compact"]') as HTMLElement).getByRole('button', { name: 'Colour' }),
+    ).toHaveAttribute('data-rig-family')
+  })
+
   it('draws an amber BLIND pill in the state group, right after the family pill, only while the programmer is blind — in Split and in Rig', () => {
     const controls = <button type="button">Focus here</button>
-    // Not blind: nothing — absent means nothing to say, the family pill's own rule (D14).
+    // Not blind: nothing — absent means nothing to say (D14's rule, which the family pill kept until
+    // it became the mask's picker).
     draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, ['COLOUR'])
     expect(document.querySelector('[data-busk-blind]')).toBeNull()
     cleanup()
@@ -540,10 +561,11 @@ describe('the rig band', () => {
         )
         cleanup()
       }
-      // With no mask the pill stands alone at the front of the group.
+      // With no mask the picker reads All at the front of the group, and the blind pill follows it.
       draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls }, null)
       const state = document.querySelector('[data-rig-row-state]') as HTMLElement
-      expect(state.firstElementChild).toHaveAttribute('data-busk-blind')
+      expect(state.firstElementChild).toHaveTextContent('All')
+      expect(state.firstElementChild!.nextElementSibling).toHaveAttribute('data-busk-blind')
       cleanup()
       // The compact board's row carries it too, its word on the compact rung.
       draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }], { controls, compact: true }, ['COLOUR'])
@@ -1247,7 +1269,7 @@ describe('the folded rig strip', () => {
     const map = new Map<string, BuskingTarget>([
       ['group:Front wash', { type: 'group', name: 'Front wash', group: group('Front wash', 6) }],
     ])
-    render(<RigStrip selectedTargets={map} families={['COLOUR']} controls={<span>Focus here</span>} />)
+    render(<RigStrip selectedTargets={map} families={['COLOUR']} onFamilies={() => {}} controls={<span>Focus here</span>} />)
     expect(screen.getByText('Front wash · 6 heads')).toBeInTheDocument()
     // In Pads this is the body's top row, as the desk board's pad row is: it says so.
     expect(screen.getByText('Pads')).toBeInTheDocument()
@@ -1271,7 +1293,7 @@ describe('the folded rig strip', () => {
     // board's merged row, which mounts the same pieces) is the only rig chrome in Pads.
     programmer.blind = true
     try {
-      render(<RigStrip selectedTargets={map} families={['COLOUR']} />)
+      render(<RigStrip selectedTargets={map} families={['COLOUR']} onFamilies={() => {}} />)
       const pill = document.querySelector('[data-busk-blind]') as HTMLElement
       expect(pill).toHaveTextContent('Blind')
       expect(pill.previousElementSibling).toHaveTextContent('Colour')
@@ -1283,8 +1305,20 @@ describe('the folded rig strip', () => {
     expect(screen.getByRole('img', { name: 'Following the desk selection' })).toBeInTheDocument()
     cleanup()
     unlinkFromDesk({ targets: [], families: null })
-    render(<RigStrip selectedTargets={map} families={['COLOUR']} />)
+    render(<RigStrip selectedTargets={map} families={['COLOUR']} onFamilies={() => {}} />)
     expect(screen.getByRole('button', { name: 'Targets: This window' })).toBeInTheDocument()
+  })
+
+  it('carries the mask’s picker — All over an unmasked selection — and writes through it (apply-model plan D3)', () => {
+    const map = new Map<string, BuskingTarget>([
+      ['group:Front wash', { type: 'group', name: 'Front wash', group: group('Front wash', 6) }],
+    ])
+    const onFamilies = vi.fn()
+    render(<RigStrip selectedTargets={map} families={null} onFamilies={onFamilies} />)
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    fireEvent.click(screen.getByLabelText('Beam'))
+    expect(onFamilies).toHaveBeenCalledWith(['INTENSITY', 'POSITION', 'COLOUR'])
   })
 })
 

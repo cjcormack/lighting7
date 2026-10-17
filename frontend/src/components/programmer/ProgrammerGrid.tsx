@@ -147,6 +147,7 @@ function ProgrammerGridBody({
           targetFamilies,
           targetEmitters,
           marqueeDragging,
+          remask,
         }) => (
           <div className="flex flex-col">
             {/* Row B. Its own `@container`, with every query on the child — the wrapper can never
@@ -500,6 +501,7 @@ function ProgrammerGridBody({
                 targetFamilies={targetFamilies}
                 targetEmitters={targetEmitters}
                 marqueeDragging={marqueeDragging}
+                onRemask={remask}
               />
             </div>
           </div>
