@@ -141,8 +141,11 @@ export function FxPicker({
   /** The effect this session has started, if any. Unused in [draft]. */
   current?: AuditionedEffect | null
   onCurrent?: (next: AuditionedEffect | null) => void
-  /** *Edit <name>* — the host opens the editor on what this session started or picked. */
-  onEdit: () => void
+  /**
+   * *Edit <name>* — the host opens the editor on what this session started or picked. Absent, no
+   * *Edit*: the cue editor's bands store a draft the FX tab edits.
+   */
+  onEdit?: () => void
   /**
    * **Draft**: a tap starts nothing (D17). It hands [DraftEffectPick] to the host, which stores the
    * effect — the cue editor's FX tab — and a second tap hands the next, which the host swaps in for
@@ -491,7 +494,7 @@ export function FxPicker({
         <p className="min-w-0 flex-1 text-[10.5px] text-muted-foreground">
           {draft != null ? 'A tap adds it to the cue, running nothing; another tap swaps it.' : 'A tap starts it; another tap swaps it, phase kept.'}
         </p>
-        {shown != null && (
+        {shown != null && onEdit != null && (
           <Button variant="outline" size="sm" className="h-7 shrink-0 gap-1 px-2 text-xs" onClick={onEdit}>
             <Pencil className="size-3" />
             Edit {currentEntry?.name ?? shown.effectType}

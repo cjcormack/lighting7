@@ -11,7 +11,8 @@ import { chan, makeActiveEffect, settingProp, sliderProp } from '@/test/fixtureF
  * editors. What is pinned is the offer per cell — a dimmer cell the Intensity palettes, a zoom cell
  * the Beam palettes with a zoom row, a gobo cell none — that a band press lands on the cell batch
  * under the cell's own family, the focused Look's teal line with no rings, *Save as palette…* with
- * the family, and that a cell with no press door (no `projectId`) draws its editor bare. Then the
+ * the family, and that a cell with no press door (no `projectId`, no cue editor) draws its editor
+ * bare — the cue editor's cells draw the bands through `PressCue`, pinned below. Then the
  * Effects band below the editor (session 6): a zoom cell offered Zoom Breathe, a gobo cell its Effects
  * band and no Palettes band, the running effects lit and opened over the cell batch.
  */
@@ -98,6 +99,7 @@ const { SliderCell } = await import('@/components/fixtures-list/cells/SliderCell
 const { PositionCell } = await import('@/components/fixtures-list/cells/PositionCell')
 const { SettingCell } = await import('@/components/fixtures-list/cells/SettingCell')
 const { paletteCarries } = await import('./PaletteBands')
+const { PressCueContext } = await import('@/components/press/pressCue')
 
 function template(over: Partial<TemplateSummary>): TemplateSummary {
   return {
@@ -331,7 +333,7 @@ describe('the Palettes band', () => {
     ])
   })
 
-  it('draws the editor bare where there is no press door — the plain lists, the cue grid', () => {
+  it('draws the editor bare where there is no press door — the plain lists', () => {
     slider(DIMMER, { projectId: undefined })
     expect(document.querySelector('[data-palette-band]')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Save as palette…' })).toBeNull()
@@ -436,5 +438,100 @@ describe('the Effects band', () => {
     fx.active = [makeActiveEffect({ id: 44, effectType: 'Pulse', targetKey: 'hex-1', programmerOwned: false, cueId: 12 })]
     slider(DIMMER)
     expect(document.querySelector('[data-band-effect="44"]')).toBeDisabled()
+  })
+})
+
+describe('in the cue editor (apply-model plan §3.6)', () => {
+  const storedPulse = (targetKey: string, propertyName = 'dimmer') => ({
+    targetType: 'fixture' as const,
+    targetKey,
+    effectType: propertyName === 'zoom' ? 'ZoomBreathe' : 'Pulse',
+    category: 'dimmer',
+    propertyName,
+    beatDivision: 4,
+    blendMode: 'OVERRIDE',
+    distribution: 'LINEAR',
+    phaseOffset: 0,
+    elementMode: null,
+    elementFilter: null,
+    stepTiming: null,
+    parameters: {},
+  })
+  function inCue(layered: string[] = [], { readOnly = false, effects = [storedPulse('hex-2'), storedPulse('hex-9'), storedPulse('hex-1', 'zoom')] } = {}) {
+    const cue = {
+      projectId: 1,
+      cueId: 3,
+      cueLabel: 'Q2',
+      readOnly,
+      layered: new Set(layered),
+      effects,
+      pressLayer: vi.fn(() => Promise.resolve({ action: 'applied' as const, cue: {} as never })),
+      landValues: vi.fn(() => 0),
+      pickEffect: vi.fn(() => Promise.resolve(true)),
+    }
+    render(
+      <PressCueContext.Provider value={cue}>
+        <SliderCell
+          value={{ kind: 'slider', min: 128, max: 128, isUniform: true }}
+          resolutions={[DIMMER]}
+          label="dimmer"
+          batch={batchOf(DIMMER)}
+          autoOpen
+          keyboardSeed={null}
+          onCommit={() => {}}
+          onBeginEdit={() => {}}
+        />
+      </PressCueContext.Provider>,
+    )
+    return cue
+  }
+
+  it('draws the bands with the grid passing no project, says where a press goes, and no Save as palette…', () => {
+    inCue()
+    expect(chips()).toEqual(['Half', 'Full'])
+    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q2 · as a layer')
+    expect(screen.queryByRole('button', { name: 'Save as palette…' })).toBeNull()
+  })
+
+  it('a chip press is the cue’s layer press on the cell batch under the cell’s family, never the programmer’s', async () => {
+    const cue = inCue()
+    await act(async () => {
+      fireEvent.click(screen.getByText('Full'))
+    })
+    expect(cue.pressLayer).toHaveBeenCalledWith(
+      { templateId: 1 },
+      [
+        { type: 'fixture', key: 'hex-1' },
+        { type: 'fixture', key: 'hex-2' },
+      ],
+      ['INTENSITY'],
+    )
+    expect(toggle).not.toHaveBeenCalled()
+  })
+
+  it('rings a chip the cue layers, partly', () => {
+    inCue(['TEMPLATE:2'])
+    expect(screen.getByText('Half').closest('button')).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Full').closest('button')).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('lists the cue’s stored effects on this property that reach these heads, and nothing running', () => {
+    fx.active = [makeActiveEffect({ id: 41, effectType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' })]
+    inCue()
+    expect(document.querySelector('[data-band-effect]')).toBeNull()
+    const stored = [...document.querySelectorAll('[data-band-stored-effect]')]
+    expect(stored.map((chip) => chip.textContent)).toEqual(['Pulse'])
+    expect(stored[0].getAttribute('title')).toMatch(/stored in Q2; edit it in the FX tab/)
+  })
+
+  it('lists a stored effect with no property of its own under its family', () => {
+    inCue([], { effects: [{ ...storedPulse('hex-1'), propertyName: null as unknown as string }] })
+    expect([...document.querySelectorAll('[data-band-stored-effect]')].map((chip) => chip.textContent)).toEqual(['Pulse'])
+  })
+
+  it('draws no bands in a cue that is read-only', () => {
+    inCue([], { readOnly: true })
+    expect(document.querySelector('[data-palette-band]')).toBeNull()
+    expect(document.querySelector('[data-effects-band]')).toBeNull()
   })
 })

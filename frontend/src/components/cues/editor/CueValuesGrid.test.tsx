@@ -52,6 +52,9 @@ const data = vi.hoisted(() => ({
   desk: new Map<number, Cue>(),
   failNext: false,
   patches: [] as { cueId: number; propertyAssignments: CuePropertyAssignment[] }[],
+  presses: [] as Record<string, unknown>[],
+  /** The desk's answers to the next presses, in order. */
+  answers: [] as { action: 'applied' | 'removed'; cue: Cue }[],
 }))
 vi.mock('@/store/cues', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/cues')>()),
@@ -76,6 +79,13 @@ vi.mock('@/store/cues', async (importOriginal) => ({
       return { unwrap: () => Promise.resolve({}) }
     },
   ],
+  usePressCueLayerMutation: () => [
+    (arg: Record<string, unknown>) => {
+      data.presses.push(arg)
+      const answer = data.answers.shift()
+      return { unwrap: () => (answer ? Promise.resolve(answer) : Promise.reject(new Error('refused'))) }
+    },
+  ],
 }))
 const spread = vi.hoisted(() => ({ calls: [] as Record<string, unknown>[] }))
 vi.mock('@/store/programmerOps', async (importOriginal) => ({
@@ -96,9 +106,10 @@ vi.mock('@/store/programmerOps', async (importOriginal) => ({
     },
   ],
 }))
+const palettes = vi.hoisted(() => ({ list: [] as unknown[] }))
 vi.mock('@/store/templates', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/templates')>()),
-  useTemplateListQuery: () => ({ data: [] }),
+  useTemplateListQuery: () => ({ data: palettes.list }),
 }))
 vi.mock('@/store/selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/selection')>()),
@@ -109,7 +120,9 @@ vi.mock('@/store/status', async (importOriginal) => ({
   useIsDeskConnected: () => true,
 }))
 const rig = vi.hoisted(() => ({ fixtures: [] as unknown[], groups: null as unknown[] | null }))
-vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: rig.fixtures }) }))
+vi.mock('@/hooks/useFixtureLookup', () => ({
+  useFixtureLookup: () => ({ fixtures: rig.fixtures, fixtureByKey: new Map((rig.fixtures as { key: string }[]).map((f) => [f.key, f])) }),
+}))
 vi.mock('@/store/fixtures', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtures')>()),
   useVisibleFixtureListQuery: () => ({ data: rig.fixtures }),
@@ -270,6 +283,9 @@ beforeEach(() => {
   data.desk.clear()
   data.failNext = false
   data.patches.length = 0
+  data.presses.length = 0
+  data.answers.length = 0
+  palettes.list = []
   data.cookAt = 1
   data.cueAt = 1
   socket.sent.length = 0
@@ -435,6 +451,61 @@ describe('CueValuesGrid', () => {
     // And the socket is the one `lightingApi` writes to: a live write does reach it.
     lightingApi.programmer.set('fixture', 'orbit-sr', 'dimmer', '255')
     expect(socket.sent.some((frame) => frame.type?.startsWith('programmer.'))).toBe(true)
+  })
+
+  it('a palette pressed on cue cells puts a cue layer on, Blue replaces Red in the stored cue, and a second press takes it off — sending nothing', async () => {
+    const colour = (id: number, name: string, hex: string) => ({
+      id,
+      uuid: `t${id}`,
+      name,
+      kind: 'value',
+      family: 'COLOUR',
+      isGeneric: true,
+      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: hex }],
+      requiredEmitters: [],
+      effect: null,
+    })
+    palettes.list = [colour(1, 'Red', '#ff0000'), colour(2, 'Blue', '#0000ff')]
+    const RED = { kind: 'TEMPLATE', id: 1, uuid: 't1', name: 'Red' } as const
+    const BLUE = { kind: 'TEMPLATE', id: 2, uuid: 't2', name: 'Blue' } as const
+    // An own level on the head, so its row is in the grid.
+    const own: CuePropertyAssignment[] = [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]
+    const layered = (...sources: (typeof RED | typeof BLUE)[]): Cue => ({
+      ...cue(1, own),
+      layers: sources.map((source, i) => ({ templateId: source.id, sortOrder: i, enabled: true, targets: [{ type: 'fixture', key: 'orbit-sr' }], propertyMask: 'COLOUR', source })),
+    })
+    data.cues.set(1, cue(1, own))
+    const view = render(<Editor cueId={1} />)
+    selectCell(1, 'fixture:orbit-sr', 'colour')
+    fireEvent.keyDown(window, { key: 'Enter' })
+    const chip = async (id: number) => (await waitFor(() => document.querySelector(`[data-band-palette="${id}"]`)!)) as HTMLElement
+    expect(document.querySelector('[data-palette-band-into]')?.textContent).toBe('Into Q1 · as a layer')
+
+    data.answers.push({ action: 'applied', cue: layered(RED) })
+    fireEvent.click(await chip(1))
+    await waitFor(() => expect(data.presses).toHaveLength(1))
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, templateId: 1, targets: [{ type: 'fixture', key: 'orbit-sr' }], families: ['COLOUR'] })
+
+    // The desk replaced Red with Blue on the pressed head; the chip rings where the cue layers it.
+    data.answers.push({ action: 'applied', cue: layered(BLUE) })
+    fireEvent.click(await chip(2))
+    await waitFor(() => expect(data.presses).toHaveLength(2))
+    expect(data.presses[1]).toEqual(expect.objectContaining({ templateId: 2 }))
+    data.cues.set(1, layered(BLUE))
+    view.rerender(
+      <Provider store={store}>
+        <Editor cueId={1} />
+      </Provider>,
+    )
+    await waitFor(() => expect((document.querySelector('[data-band-palette="2"]') as HTMLElement).getAttribute('aria-pressed')).toBe('true'))
+    expect((document.querySelector('[data-band-palette="1"]') as HTMLElement).getAttribute('aria-pressed')).toBe('false')
+
+    data.answers.push({ action: 'removed', cue: cue(1, own) })
+    fireEvent.click(await chip(2))
+    await waitFor(() => expect(data.presses).toHaveLength(3))
+    expect(data.patches).toHaveLength(0)
+    const banned = socket.sent.filter((frame) => /^(programmer|channels|fx)\./.test(frame.type ?? '') || frame.type === 'updateChannel')
+    expect(banned).toEqual([])
   })
 
   it('takes keys only in its own region, and dims the other grid’s selection', async () => {

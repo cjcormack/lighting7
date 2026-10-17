@@ -780,7 +780,8 @@ export function ColourEditor({
       {leaves}
       {labelLine}
       {bandSection}
-      {controls}
+      {/* The popover's 12px padding is 2px short of the knob's 14px overhang, and the popover scrolls. */}
+      <div className="px-0.5">{controls}</div>
       {readout}
       {effectsSection}
       {footerRow}

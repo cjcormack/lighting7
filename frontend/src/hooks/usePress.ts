@@ -6,6 +6,7 @@ import type { TemplateSummary } from '@/api/templatesApi'
 import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 import { useLookRowStore, type LookRowStoreValue } from '@/components/programmer/LookRowStore'
 import { landValuesInLook } from '@/components/programmer/landValuesInLook'
+import { usePressCue, type PressCue } from '@/components/press/pressCue'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { PaletteFit } from '@/lib/paletteOffer'
@@ -28,17 +29,21 @@ export interface PressPair {
   families: readonly AttributeFamily[] | null
 }
 
-/** Where this window's presses land: the programmer, or the focused Look layer's draft. */
-export type PressInto = { kind: 'programmer' } | { kind: 'look'; lookName: string }
+/** Where this window's presses land: the programmer, the focused Look layer's draft, or the cue being edited. */
+export type PressInto = { kind: 'programmer' } | { kind: 'look'; lookName: string } | { kind: 'cue'; cueLabel: string }
 
 export interface PressOptions {
-  /** `'programmer'` ignores a focused Look layer: the door always writes Local. Default `'window'`. */
+  /**
+   * `'programmer'` ignores a focused Look layer and the cue editor: the door always writes Local.
+   * Default `'window'`.
+   */
   scope?: 'window' | 'programmer'
 }
 
 /**
  * What a press did: put the record on (`on` — a layer, or values), took the pressed heads off it
- * (`off`), wrote it into the focused Look (`into`), or nothing (`null` — refused, already said).
+ * (`off`), wrote values into the focused Look or the cue's own rows (`into`), or nothing (`null` —
+ * refused, already said).
  */
 export type PressResult = 'on' | 'off' | 'into' | null
 
@@ -98,6 +103,12 @@ export function usePressLook(options: PressOptions = {}): LookRowStoreValue | nu
   return options.scope !== 'programmer' && scope?.kind === 'layer' ? lookStore : null
 }
 
+/** The cue a press from this door lands in — the cue editor's ([PressCue]) — or null. */
+export function usePressInCue(options: PressOptions = {}): PressCue | null {
+  const cue = usePressCue()
+  return options.scope !== 'programmer' ? cue : null
+}
+
 /**
  * One press, whatever it is pressed from (apply-model plan §4.1).
  *
@@ -131,9 +142,15 @@ export function usePressLook(options: PressOptions = {}): LookRowStoreValue | nu
  * Effect*'s path) — and stopped again if the absorb is refused, so nothing is left on stage; a Look is
  * refused, since Looks don't nest. No `programmer.*` frame is sent. A door that writes Local whatever
  * the grid is pointed at — the fixture sheet, a cue slot — passes `scope: 'programmer'`.
+ *
+ * **In the cue editor a press writes the cue** (plan §3.6, session 8; [PressCue]): a palette or a
+ * Look goes on, or comes off, as a layer of the stored cue through `POST /cues/{id}/layers/press`
+ * — the programmer's rule, applied by the desk to the cue's layers — and *Apply as values* lands a
+ * value palette's literals as the cue's own rows. Nothing is sent to the stage.
  */
 export function usePress(projectId: number, pair: PressPair, options: PressOptions = {}): Press {
   const look = usePressLook(options)
+  const cue = usePressInCue(options)
 
   const [applyTemplate] = useApplyTemplateMutation()
   const [toggleTemplate] = useToggleTemplateMutation()
@@ -143,8 +160,13 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
   const [removeFx] = useRemoveFxMutation()
 
   const into = useMemo<PressInto>(
-    () => (look != null ? { kind: 'look', lookName: look.lookName ?? 'this Look' } : PROGRAMMER),
-    [look],
+    () =>
+      cue != null
+        ? { kind: 'cue', cueLabel: cue.cueLabel }
+        : look != null
+          ? { kind: 'look', lookName: look.lookName ?? 'this Look' }
+          : PROGRAMMER,
+    [cue, look],
   )
 
   const press = useCallback(
@@ -157,6 +179,34 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
         return null
       }
       try {
+        if (cue != null) {
+          if (cue.readOnly) {
+            toast.error(`${cue.cueLabel} is read-only here — nothing was written`)
+            return null
+          }
+          if (gesture === 'asValues') {
+            if (source.kind === 'look' || source.template.kind === 'effect') {
+              toast.error(`In ${cue.cueLabel} a tap puts ${source.kind === 'look' ? source.look.name : source.template.name} on as a layer`)
+              return null
+            }
+            const answer = await applyTemplate({ projectId, templateId: source.template.id, targets, families, write: false }).unwrap()
+            const values = answer.values ?? []
+            const landed = cue.landValues(values)
+            const missed = values.length - landed + answer.skipped.length
+            if (missed > 0) {
+              toast.warning(`${landed} value${landed === 1 ? '' : 's'} into ${cue.cueLabel} · ${missed} could not take it`)
+            }
+            return landed > 0 ? 'into' : null
+          }
+          const answer = await cue.pressLayer(
+            source.kind === 'template' ? { templateId: source.template.id } : { lookId: source.look.id },
+            targets,
+            families ?? null,
+          )
+          if (answer == null) return null
+          reportSkipped(answer.skippedFamilies, pair.families)
+          return answer.action === 'removed' ? 'off' : 'on'
+        }
         if (look != null) {
           const lookName = look.lookName ?? 'this Look'
           if (source.kind === 'look') {
@@ -250,7 +300,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
         return null
       }
     },
-    [pair, look, projectId, applyTemplate, toggleTemplate, applyLook, toggleLook, absorb, removeFx],
+    [pair, cue, look, projectId, applyTemplate, toggleTemplate, applyLook, toggleLook, absorb, removeFx],
   )
 
   return useMemo(() => ({ press, into }), [press, into])

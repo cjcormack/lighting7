@@ -14,6 +14,8 @@ import type {
   CopyCuesFromRequest,
   CopyCuesFromResponse,
   UpdateStageResponse,
+  CueLayerPressRequest,
+  CueLayerPressResponse,
 } from '../api/cuesApi'
 
 // Subscribe to WebSocket cue list changes - invalidate all cue caches
@@ -254,6 +256,24 @@ export const cuesApi = restApi.injectEndpoints({
       }),
     }),
 
+    /**
+     * A palette or a Look pressed into the stored cue (apply-model plan §3.6): the desk applies the
+     * programmer's press rule to the cue's layers and writes them, sending nothing to the stage. The
+     * cue editor's `CueRowStore` sends it in its save chain and lands the answer's layers itself; the
+     * `Cue` tag re-reads the cook, which a new layer changes.
+     */
+    pressCueLayer: build.mutation<CueLayerPressResponse, { projectId: number; cueId: number } & CueLayerPressRequest>({
+      query: ({ projectId, cueId, ...body }) => ({
+        url: `projects/${projectId}/cues/${cueId}/layers/press`,
+        method: 'POST',
+        body,
+      }),
+      invalidatesTags: (_result, _error, { projectId, cueId }) => [
+        { type: 'Cue', id: cueId },
+        { type: 'CueStackList', id: projectId },
+      ],
+    }),
+
     // `snapshotCueFromLive` lived here until Session 3. Capturing the stage is now
     // `recordProgrammer({ source: 'STAGE_SNAPSHOT' })` in `programmerOps.ts` — the same
     // capture, plus the programmer overlay it used to miss, as one Record source among
@@ -277,6 +297,7 @@ export const {
   useApplyCueMutation,
   useStopCueMutation,
   useUpdateCueStageMutation,
+  usePressCueLayerMutation,
 } = cuesApi
 
 /**

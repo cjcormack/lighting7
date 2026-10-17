@@ -64,6 +64,9 @@ const lookStore = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => scope.current }))
 vi.mock('@/components/programmer/LookRowStore', () => ({ useLookRowStore: () => lookStore.current }))
 
+const cueArm = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('@/components/press/pressCue', () => ({ usePressCue: () => cueArm.current }))
+
 const marquee = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('@/components/fixtures-list/marqueeContext', () => ({ useMarquee: () => marquee.current }))
 
@@ -97,6 +100,7 @@ beforeEach(() => {
   answers.absorbOk = true
   scope.current = { kind: 'local' }
   lookStore.current = null
+  cueArm.current = null
   marquee.current = null
   desk.following = true
   desk.pair = { targets: HEX, families: null }
@@ -312,5 +316,69 @@ describe('useWindowPaletteFit — what the rail’s picker offers', () => {
     expect(fit()).toEqual({ families: null, emitters: null })
     marquee.current = null
     expect(fit()).toEqual({ families: null, emitters: null })
+  })
+})
+
+describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
+  function arm(action: 'applied' | 'removed' = 'applied', readOnly = false) {
+    const value = {
+      projectId: 1,
+      cueId: 3,
+      cueLabel: 'Q4',
+      readOnly,
+      layered: new Set<string>(),
+      effects: [],
+      pressLayer: vi.fn(() => Promise.resolve({ action, skippedFamilies: [], cue: {} })),
+      landValues: vi.fn((values: readonly unknown[]) => values.length),
+      pickEffect: vi.fn(() => Promise.resolve(true)),
+    }
+    cueArm.current = value
+    return value
+  }
+
+  it('a palette or a Look press is the cue’s layer press, with the pair, and nothing else is sent', async () => {
+    const cue = arm()
+    desk.pair = { targets: HEX, families: ['COLOUR'] }
+    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBe('on')
+    expect(cue.pressLayer).toHaveBeenCalledWith({ templateId: 1 }, HEX, ['COLOUR'])
+    expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')).toBe('on')
+    expect(cue.pressLayer).toHaveBeenLastCalledWith({ lookId: 7 }, HEX, ['COLOUR'])
+    for (const spy of [calls.toggleTemplate, calls.toggleLook, calls.applyLook, calls.absorb, calls.programmerFrame]) {
+      expect(spy).not.toHaveBeenCalled()
+    }
+  })
+
+  it('answers off when the desk took it off, and names the cue as where presses go', async () => {
+    arm('removed')
+    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBe('off')
+    const { result } = renderHook(() => useWindowPress(1))
+    expect(result.current.into).toEqual({ kind: 'cue', cueLabel: 'Q4' })
+  })
+
+  it('Apply as values lands a value palette’s literals as the cue’s own rows; a Look or an effect palette is refused', async () => {
+    const cue = arm()
+    answers.apply = { written: 1, skipped: [], values: [{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }] }
+    expect(await send({ kind: 'template', template: AMBER }, 'asValues')).toBe('into')
+    expect(calls.applyTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 1, targets: HEX, families: undefined, write: false })
+    expect(cue.landValues).toHaveBeenCalledWith([{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }])
+    expect(await send({ kind: 'template', template: BREATHE }, 'asValues')).toBeNull()
+    expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'asValues')).toBeNull()
+    expect(toast.error).toHaveBeenCalledTimes(2)
+    expect(cue.pressLayer).not.toHaveBeenCalled()
+  })
+
+  it('a read-only cue refuses the press out loud and writes nothing', async () => {
+    const cue = arm('applied', true)
+    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBeNull()
+    expect(await send({ kind: 'template', template: AMBER }, 'asValues')).toBeNull()
+    expect(toast.error).toHaveBeenCalledWith('Q4 is read-only here — nothing was written')
+    expect(cue.pressLayer).not.toHaveBeenCalled()
+    expect(calls.applyTemplate).not.toHaveBeenCalled()
+  })
+
+  it('a door that writes Local whatever the window is pointed at ignores the cue', async () => {
+    arm()
+    const { result } = renderHook(() => usePress(1, { targets: HEX, families: null }, { scope: 'programmer' }))
+    expect(result.current.into).toEqual({ kind: 'programmer' })
   })
 })

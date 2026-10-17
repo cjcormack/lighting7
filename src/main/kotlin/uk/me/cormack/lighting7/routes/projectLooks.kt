@@ -423,33 +423,22 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
                 return@withCurrentProject
             }
-            val targets = when (val resolved = resolveLookToggleTargets(request.targets, look)) {
-                is LookTargetResolution.Refused -> {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
-                    return@withCurrentProject
-                }
-                is LookTargetResolution.Targets -> resolved.targets
-            }
             // The selection's mask, if it has one, narrows the layer to the families the Look and
             // the mask share (multi-screen plan D5); the ones left out are reported, not silent.
             // On the *on* arm only — an off press comes off under any mask (`pressWouldRelease`).
-            val mask = if (pressWouldRelease(state, look.source.uuid, targets)) {
-                LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
-            } else {
-                when (val resolved = resolveLookMask(families, look)) {
-                    is LookMaskResolution.Refused -> {
-                        call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
-                        return@withCurrentProject
-                    }
-                    is LookMaskResolution.Masked -> resolved
+            val press = when (val resolved = resolveLookPress(request.targets, look, families) { pressWouldRelease(state, look.source.uuid, it) }) {
+                is LookPressResolution.Refused -> {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
+                    return@withCurrentProject
                 }
+                is LookPressResolution.Ready -> resolved
             }
 
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
                     source = look.source,
-                    targets = targets,
-                    propertyMask = mask.propertyMask,
+                    targets = press.targets,
+                    propertyMask = press.propertyMask,
                     beatDivisionOverride = request.beatDivision,
                     fadeMs = request.fadeMs ?: 0,
                 )
@@ -459,7 +448,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                     ToggleLookResponse(
                         outcome.action,
                         outcome.effectCount,
-                        if (outcome.action == "applied") mask.skippedFamilies else emptyList(),
+                        if (outcome.action == "applied") press.skippedFamilies else emptyList(),
                     ),
                 )
             } catch (e: IllegalStateException) {

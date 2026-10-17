@@ -371,6 +371,28 @@ export interface CopyCuesFromResponse {
 }
 
 /**
+ * `POST cues/{id}/layers/press` (apply-model plan §3.6): a palette or a Look pressed into the stored
+ * cue — exactly one of the two ids — over `targets` under the selection's `families`.
+ */
+export interface CueLayerPressRequest {
+  templateId?: number
+  lookId?: number
+  targets: CueTarget[]
+  families?: string[]
+}
+
+/** What the press did to the stored cue, and the cue as stored after it. */
+export interface CueLayerPressResponse {
+  action: 'applied' | 'removed'
+  /** The other palettes' layers the press narrowed or dropped on its heads. */
+  released?: number
+  propertyMask?: string | null
+  /** The Look's families the mask left out. */
+  skippedFamilies?: string[]
+  cue: Cue
+}
+
+/**
  * `POST cues/{id}/update-stage`: what *Update stage* moved, or with `dryRun` would move — the
  * (head, property) values whose level changes, and the cue's effects edited, stopped and started.
  */

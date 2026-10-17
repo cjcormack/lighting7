@@ -5,6 +5,15 @@ import { LayerRow, LookStack, describeStackSource, type LookStackLayer } from '.
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 
+vi.mock('@/store/speedMasters', () => ({
+  useSpeedMasterLiveQuery: () => ({
+    data: [
+      { index: 1, uuid: 'm1', name: 'Master 1', bpm: 120 },
+      { index: 2, uuid: 'm2', name: 'Chase', bpm: 96 },
+    ],
+  }),
+}))
+
 /**
  * The shared component's own contract, driven with plain spies.
  *
@@ -270,6 +279,34 @@ describe('LookStack', () => {
     fireEvent.click(screen.getByTitle(/How this layer combines/))
     fireEvent.click(await screen.findByLabelText('Beam'))
     expect(h.onSetPropertyMask).toHaveBeenCalledWith(0, null)
+  })
+
+  it('writes a cue layer’s timing and masters from its settings popover, by index', async () => {
+    const onSetTiming = vi.fn()
+    renderStack([layer(), layer({ delayMs: 500, speedMasterUuid: 'm2' })], { handlers: { ...handlers(), onSetTiming } })
+    fireEvent.click(screen.getAllByTitle(/This layer’s settings/)[0])
+    fireEvent.change(await screen.findByLabelText('Delay (ms)'), { target: { value: '1500' } })
+    expect(onSetTiming).toHaveBeenCalledWith(0, { delayMs: 1500, intervalMs: null, randomWindowMs: null })
+    fireEvent.click(screen.getByRole('button', { name: /Override speed master/ }))
+    expect(onSetTiming).toHaveBeenLastCalledWith(0, { speedMasterUuid: 'm1' })
+    fireEvent.click(screen.getByRole('button', { name: /Override rate master/ }))
+    expect(onSetTiming).toHaveBeenLastCalledWith(0, { rateSpeedMasterUuid: 'm1' })
+  })
+
+  it('shows an overridden master and takes it away', async () => {
+    const onSetTiming = vi.fn()
+    renderStack([layer({ delayMs: 500, speedMasterUuid: 'm2' })], { handlers: { ...handlers(), onSetTiming } })
+    fireEvent.click(screen.getByTitle(/This layer’s settings/))
+    expect(((await screen.findByLabelText('Delay (ms)')) as HTMLInputElement).value).toBe('500')
+    fireEvent.click(screen.getByRole('button', { name: /Remove override — each effect follows its own master/ }))
+    expect(onSetTiming).toHaveBeenCalledWith(0, { speedMasterUuid: null })
+  })
+
+  it('draws no timing in the popover for a host without onSetTiming — the programmer’s layers fire now', async () => {
+    renderStack([layer()])
+    fireEvent.click(screen.getByTitle(/How this layer combines/))
+    await screen.findByText('Blend mode')
+    expect(screen.queryByLabelText('Delay (ms)')).not.toBeInTheDocument()
   })
 
   it('offers the combine control once per row, addressed by index', () => {

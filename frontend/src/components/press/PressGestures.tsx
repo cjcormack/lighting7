@@ -58,6 +58,11 @@ export function tapVerb(
   ownHeads = true,
 ): { label: string; gesture: PressGesture } {
   if (into.kind === 'look') return { label: `Into ${into.lookName}`, gesture: 'press' }
+  if (into.kind === 'cue') {
+    return hasTargets || ownHeads
+      ? { label: `Put on or take off in ${into.cueLabel}`, gesture: 'press' }
+      : { label: 'Put on — select fixtures first', gesture: 'press' }
+  }
   if (!hasTargets) {
     return ownHeads
       ? { label: 'Put on or take off its own heads', gesture: 'press' }
@@ -71,6 +76,11 @@ export function tapVerb(
 /** The chip's and the pad's shared `title`: every gesture stated, since ⌥click is not guessed. */
 export function templatePressTitle(template: TemplateSummary, into: PressInto): string {
   if (into.kind === 'look') return `Click to write “${template.name}” into ${into.lookName} · hold or right-click for more`
+  if (into.kind === 'cue') {
+    return template.kind === 'effect'
+      ? `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
+      : `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · ⌥click to set its values as ${into.cueLabel}’s own · hold or right-click for more`
+  }
   return template.kind === 'effect'
     ? `Click to run “${template.name}” as a layer that tracks it · ⌥click to run a copy · hold or right-click for more`
     : `Click to put “${template.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
@@ -79,7 +89,8 @@ export function templatePressTitle(template: TemplateSummary, into: PressInto): 
 /**
  * A palette chip or pad with its hold menu: *Put on* or *Take off these heads* (the tap's verb),
  * *Apply as values*, *Pick up* and *Edit palette…* — *Into <Look>* alone in place of the first two
- * while a Look layer is focused, where every press writes the Look.
+ * while a Look layer is focused, where every press writes the Look, and in the cue editor *Put on or
+ * take off in Q1* and a value palette's *Apply as values*, the cue's own rows.
  *
  * **A `Popover` anchored on the button, never a `ContextMenu`.** Radix's `ContextMenuTrigger` arms
  * a ~700ms touch timer of its own, which this button's hold would race; `PopoverAnchor` registers
@@ -158,6 +169,7 @@ function PalettePressMenu({
       presence={presence}
       hasTargets={hasTargets}
       ownHeads={!template.isGeneric}
+      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'effect')}
       onGesture={onGesture}
       onPickUp={() => {
         onDone()
@@ -226,6 +238,7 @@ function PressMenuItems({
   presence,
   hasTargets,
   ownHeads,
+  asValues = into.kind === 'programmer',
   onGesture,
   onPickUp,
   onEdit,
@@ -237,6 +250,8 @@ function PressMenuItems({
   hasTargets: boolean
   /** A press with no targets lands on the record's own heads — a per-fixture palette, a Look. */
   ownHeads: boolean
+  /** Offer *Apply as values* — the programmer's, and a value palette's in the cue. */
+  asValues?: boolean
   onGesture: (gesture: PressGesture) => void
   onPickUp: () => void
   /** Absent, no edit item: a Look has no address to open it at yet. */
@@ -247,7 +262,7 @@ function PressMenuItems({
   return (
     <div role="menu" aria-label={name} className="flex flex-col">
       <MenuItem icon={verb.gesture === 'off' ? Undo2 : Layers} label={verb.label} onSelect={() => onGesture(verb.gesture)} />
-      {into.kind === 'programmer' && (
+      {asValues && (
         <MenuItem icon={ListChecks} label="Apply as values" onSelect={() => onGesture('asValues')} />
       )}
       <MenuItem icon={Hand} label="Pick up" onSelect={onPickUp} />

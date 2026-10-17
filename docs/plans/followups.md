@@ -1235,9 +1235,11 @@ The rail's *+ Look* and *+ Palette* press through the one picker (`ApplyPicker`)
 on through `/looks/{id}/toggle` and `/palettes/{id}/toggle`. Neither takes `speedMasterUuid` or
 `rateSpeedMasterUuid`, so a programmer layer's effects follow their own masters, and the add-layer
 sheet's two *Override … for this layer* controls, its last step on the programmer, went with it. Nothing
-else sets them on a programmer layer (`programmer.patchLayer` carries neither); a cue layer keeps them.
-The fix is the two fields on the toggle routes and on `patchLayer`, and the override in the layer's
-settings popover.
+else sets them on a programmer layer (`programmer.patchLayer` carries neither); a cue layer keeps them,
+set in the cue Looks tab's layer settings popover since apply-model plan session 8 (`LayerTimingFields`,
+through `LayerHandlers.onSetTiming`). The fix is the two fields on the toggle routes and on
+`patchLayer`, and the programmer rail's popover passing `onSetTiming` for the masters alone (a
+programmer layer has no playback to delay against).
 
 **Trigger**: an operator wants a programmer layer's effects on another speed or rate master.
 

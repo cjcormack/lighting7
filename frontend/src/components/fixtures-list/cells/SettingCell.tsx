@@ -14,6 +14,7 @@ import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
 import { PaletteBands } from '../../editor/PaletteBands'
+import { useCueBandProject } from '../../press/pressCue'
 import { familyForCategory } from '@/lib/attributeFamily'
 
 interface SettingCellOwnProps {
@@ -121,6 +122,8 @@ export const SettingCell = memo(function SettingCell({
     setQuery('')
     setHighlight(0)
   }, [])
+  // The cue editor's grid passes no project; its presses land in the cue (`usePressCue`).
+  const cueProjectId = useCueBandProject()
   const { isOpen, setOpen, keyboardOpen, atButton } = useEditorOpen({
     autoOpen,
     autoClose,
@@ -335,7 +338,7 @@ export const SettingCell = memo(function SettingCell({
         )}
         {/* No Palettes band: a value palette cannot carry a slotted role, so the popup is its
             Effects band alone — Slot Steps and the effect palettes that step this setting. */}
-        {projectId != null && (
+        {(projectId ?? cueProjectId) != null && (
           <div className="mt-1 border-t px-2 pt-2 pb-1.5">
             <PaletteBands projectId={projectId} family={family} property={property} targets={heads.targets ?? NO_TARGETS} palettes={false}>
               {null}

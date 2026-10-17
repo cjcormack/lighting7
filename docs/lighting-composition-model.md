@@ -648,20 +648,24 @@ and releasing Blue popped Amber back onto hex-1.
 family and kind** — value palettes off value palettes, effect palettes off effect palettes — so Blue
 on Red's heads leaves Red on the rest, Red pressed back does the same to Blue, and Amber Breathe runs
 over Red rather than replacing it. Looks replace nothing and are replaced by nothing: two Looks on
-one head stack (`FU-PRESS-REPLACE-LOOKS`). `ProgrammerLayerStack.toggle` resolves the replaced set
-itself (`familyReplacements`, from each palette's snapshot), so every door — the toggle routes, a
-busk pad, the MIDI `PressTemplate`, `apply_palette` — gets it without asking, and a solo bank's
+one head stack (`FU-PRESS-REPLACE-LOOKS`). The replaced set is found from each palette's snapshot
+(`LayerPressRules.familyReplacements`, `fx/LayerPressRules.kt`), and `ProgrammerLayerStack.toggle`
+asks it on every press, so every door — the toggle routes, a busk pad, the MIDI `PressTemplate`,
+`apply_palette` — gets it without asking, and a solo bank's
 siblings run beside it, never instead (P4). Both count in the answer's `released`. A replacement
 takes off only the heads the palette lands on: a per-fixture palette pressed over heads its rows do
-not name replaces nothing there (`paletteHeads`). A per-fixture palette pressed with no targets
-names its own rows' heads (`pressTargets`, which `pressWouldRelease` asks too), and one already on
+not name replaces nothing there (`LayerPressRules.paletteHeads`). A per-fixture palette pressed with
+no targets names its own rows' heads (`LayerPressRules.pressTargets`, which the arm asks too), and one already on
 the stack naming none is read as naming them, so both replace and are replaced like any other. Then, when the record's newest layer is the
 **top of the stack** — after the press's own replacements — and carries the press's settings (mask,
 blend, amount, stomp, speed masters, beat-division override), it takes the press's targets beside
 what the subtraction left it, instead of a second layer going on: Red on hex-1 and then on hex-1
 and hex-2 is one layer, the same layer, its effects on hex-1 keeping their phase. With another layer pressed on top in between, it is two, so a widening
-never changes what a higher layer shows. The rule is `fx/LayerPress.kt`, pure over a layer list, so
-the cue editor's press (apply-model §3.6) can share it. Its effect-side twin is the bare effect
+never changes what a higher layer shows. The rule is `fx/LayerPress.kt`, pure over a layer list, and
+what it is handed — the replaced set, the per-fixture heads, the press's targets — is
+`fx/LayerPressRules.kt`, read from the palettes and never from a store, so the programmer and a
+**stored cue** find them one way: the cue editor's press (`POST /cues/{id}/layers/press`, apply-model
+§3.6) is `LayerPress` over the cue's layers, written to the cue and sent nowhere. Its effect-side twin is the bare effect
 press's **Local replacement** (apply-model session 2, `POST /programmer/effects`): a library effect
 takes the pressed heads off every other Local effect of its family — read from the property it
 drives, not the library category a palette's family reads — never off a layer's;
@@ -753,9 +757,9 @@ no targets to be masked on. A `Sel · property` fader ignores it too: the contro
 attribute, as a cell edit is not masked by a marquee elsewhere. **The mask is tested on the on arm
 only**: it is a fact about what a press puts on, so a press that is taking a record off comes off
 under any mask — a lit Intensity pad is still released while a Colour marquee stands, and a surface
-button never reads dead. Each door asks `pressWouldRelease` (`routes/pressArm.kt`), which reads
-`toggle`'s own "already on" answer off `appliedState` before the press, so the stack itself did not
-move. `ProgrammerLayerStack.toggle` already took `propertyMask`, and the "already on" comparison
+button never reads dead. Each door asks `pressWouldRelease` (`routes/pressArm.kt`) before the
+press, which is `LayerPress.wouldRelease` — the decision `LayerPress.press` itself makes — over the
+programmer's stack; the cue's press asks the same function over the cue's layers. `ProgrammerLayerStack.toggle` already took `propertyMask`, and the "already on" comparison
 still reads coverage by targets, so a Look on the stack under a Colour mask pressed again unmasked
 comes **off** rather than widening; pressing twice still means off. One limit worth knowing: the cook applies a layer's
 `propertyMask` to its **rows**, not to its effects (a pre-existing property of the mask, not of the
@@ -839,6 +843,8 @@ keeping only fixtures still in the patch (`DaoLook.ownTargets`) — that is how 
 which has no selection, presses a Look (D7). A Look with a deferred effect and no targets asserts
 nothing and is refused (`LOOK_NEEDS_SELECTION`), as is a Look none of whose fixtures are patched
 (`LOOK_NO_TARGETS`): a toggle that applied nothing and reported success would read as a dead pad.
+Neither refuses an off press — a layer of the Look already naming no targets comes off whatever its
+targets would now resolve to (`routes/pressArm.kt`'s `resolveLookPress`).
 The derived targets are passed to the layer explicitly, so the applied state below lights the tile.
 The busk press applies the same reading to a **generic** palette — its rows take their targets
 from the press, so with none it is refused (`PALETTE_NEEDS_SELECTION`) — while a per-fixture

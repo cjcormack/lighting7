@@ -44,8 +44,13 @@ const data = vi.hoisted(() => ({
   /** The cue as the desk holds it, where it has moved past the cache. */
   desk: null as Cue | null,
   patches: [] as Record<string, unknown>[],
+  presses: [] as Record<string, unknown>[],
+  /** What the desk answers a press with: the cue as stored after it. */
+  pressed: null as Cue | null,
   /** While set, a PATCH after the first waits for it — a write in flight. */
   hold: null as Promise<void> | null,
+  /** While set, the next PATCH is refused. */
+  failNext: false,
   selection: [] as CueTarget[],
   library: [] as EffectLibraryEntry[],
   addFx: vi.fn(),
@@ -58,8 +63,18 @@ vi.mock('@/store/cues', async (importOriginal) => ({
   usePatchProjectCueMutation: () => [
     (arg: Record<string, unknown>) => {
       data.patches.push(arg)
+      if (data.failNext) {
+        data.failNext = false
+        return { unwrap: () => Promise.reject(new Error('refused')) }
+      }
       const wait = data.patches.length > 1 ? data.hold : null
       return { unwrap: () => (wait ?? Promise.resolve()).then(() => ({})) }
+    },
+  ],
+  usePressCueLayerMutation: () => [
+    (arg: Record<string, unknown>) => {
+      data.presses.push(arg)
+      return { unwrap: () => Promise.resolve({ action: 'applied', cue: data.pressed ?? data.cue! }) }
     },
   ],
 }))
@@ -82,17 +97,24 @@ vi.mock('@/components/looks/LookStack', () => ({
     )
   },
 }))
-const addLayer = vi.hoisted(() => ({ defaultTargets: null as readonly CueTarget[] | null, onAdd: null as ((layer: CueLayer) => void) | null, kind: null as string | null }))
-vi.mock('@/components/programmer/AddLayerSheet', () => ({
-  AddLayerSheet: (props: { open: boolean; defaultTargets?: readonly CueTarget[]; onAdd: (l: CueLayer) => void; kind?: string }) => {
-    if (props.open) {
-      addLayer.defaultTargets = props.defaultTargets ?? null
-      addLayer.onAdd = props.onAdd
-      addLayer.kind = props.kind ?? null
-    }
-    return null
-  },
-}))
+// The one picker, standing in: it presses through the real `usePress`, so the cue arm is what runs.
+const picker = vi.hoisted(() => ({ props: null as { library: string; pair: { targets: readonly CueTarget[] } } | null }))
+vi.mock('@/components/press/ApplyPicker', async () => {
+  const { usePress } = await import('@/hooks/usePress')
+  return {
+    ApplyPicker: (props: { projectId: number; library: string; pair: { targets: readonly CueTarget[]; families: null } }) => {
+      picker.props = props
+      const { press, into } = usePress(props.projectId, props.pair)
+      return (
+        <div data-testid="picker" data-into={into.kind === 'cue' ? into.cueLabel : into.kind}>
+          <button type="button" onClick={() => void press({ kind: 'look', look: { id: 5, name: 'Cool' } }, 'press')}>
+            press Cool
+          </button>
+        </div>
+      )
+    },
+  }
+})
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
 vi.mock('@/store/looks', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/looks')>()),
@@ -145,7 +167,8 @@ vi.mock('sonner', async (importOriginal) => {
 import { chan, makeFixture, sliderProp } from '@/test/fixtureFactories'
 import { store } from '@/store'
 import { resetKeyRegion } from '@/components/sheet/keyRegion'
-import { CueRowStoreProvider, useCueRowStore, type CueRowStoreValue } from './CueRowStore'
+import { CueRowStoreProvider, useCueRowSaveState, useCueRowStore, type CueRowStoreValue } from './CueRowStore'
+import { usePressCue, type PressCue } from '@/components/press/pressCue'
 import { CueLooksTab } from './CueLooksTab'
 import { CueEffectsTab } from './CueEffectsTab'
 import { moveItem } from './cueListEdits'
@@ -270,13 +293,16 @@ beforeEach(() => {
   data.cue = null
   data.desk = null
   data.patches.length = 0
+  data.presses.length = 0
+  data.pressed = null
   data.hold = null
+  data.failNext = false
   data.selection = []
   data.library = [PULSE, SINE]
   data.addFx.mockReset()
   socket.sent.length = 0
   stack.handlers = null
-  addLayer.onAdd = null
+  picker.props = null
   resetKeyRegion()
 })
 afterEach(() => vi.clearAllMocks())
@@ -352,7 +378,7 @@ describe('the Looks tab', () => {
     ])
   })
 
-  it('Targets takes the Values selection; + Look opens the picker on it and appends the layer', async () => {
+  it('Targets takes the Values selection; + Look opens the picker on it, whose press writes the cue', async () => {
     data.cue = cueOf({ layers: [layer(WARM, 0)] })
     const view = render(<Editor tab="looks" />)
     expect(stack.props!.targetsRefusal).toMatch(/Select fixtures or groups in Values/)
@@ -369,15 +395,46 @@ describe('the Looks tab', () => {
     expect(((await patched(1)).layers as CueLayer[])[0].targets).toEqual(data.selection)
 
     fireEvent.click(screen.getByRole('button', { name: 'Look' }))
-    expect(addLayer.kind).toBe('look')
-    expect(addLayer.defaultTargets).toEqual(data.selection)
-    act(() => addLayer.onAdd!({ lookId: 5, targets: data.selection, delayMs: 1000 }))
-    const added = (await patched(2)).layers as CueLayer[]
-    expect(added.map((l) => [l.lookId, l.sortOrder])).toEqual([
-      [4, 0],
-      [5, 1],
-    ])
-    expect(added[1].delayMs).toBe(1000)
+    expect(picker.props!.library).toBe('looks')
+    expect(picker.props!.pair.targets).toEqual(data.selection)
+    expect(screen.getByTestId('picker').getAttribute('data-into')).toBe('Q1')
+    fireEvent.click(screen.getByRole('button', { name: 'press Cool' }))
+    await waitFor(() => expect(data.presses).toHaveLength(1))
+    // The desk applies the rule to the stored layers: the client sends the press, not a list.
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, lookId: 5, targets: data.selection })
+    expect(data.patches).toHaveLength(1)
+  })
+
+  it('the layer settings write a layer’s timing and masters, an existing one and one the picker just put on', async () => {
+    data.cue = cueOf({ layers: [{ ...layer(WARM, 0), id: 1 }] })
+    data.selection = [{ type: 'fixture', key: 'orbit-sr' }]
+    const view = render(<Editor tab="looks" />)
+    act(() => stack.handlers!.onSetTiming!(0, { delayMs: 1500, intervalMs: null, randomWindowMs: null }))
+    expect(((await patched(1)).layers as CueLayer[])[0]).toEqual(expect.objectContaining({ lookId: 4, delayMs: 1500 }))
+    data.desk = cueOf({ layers: [{ ...layer(WARM, 0), id: 1, delayMs: 1500 }] })
+    act(() => stack.handlers!.onSetTiming!(0, { speedMasterUuid: 'm2' }))
+    expect(((await patched(2)).layers as CueLayer[])[0]).toEqual(expect.objectContaining({ delayMs: 1500, speedMasterUuid: 'm2' }))
+
+    // + Look puts Cool on; the cue as the desk answers it has the new layer, untimed.
+    data.cue = cueOf({ layers: [{ ...layer(WARM, 0), id: 1, delayMs: 1500, speedMasterUuid: 'm2' }] })
+    data.desk = null
+    data.pressed = cueOf({ layers: [...data.cue.layers, { ...layer(COOL, 1), id: 2 }] })
+    fireEvent.click(screen.getByRole('button', { name: 'Look' }))
+    fireEvent.click(screen.getByRole('button', { name: 'press Cool' }))
+    await waitFor(() => expect(data.presses).toHaveLength(1))
+    data.cue = data.pressed
+    view.rerender(
+      <Provider store={store}>
+        <MemoryRouter>
+          <Editor tab="looks" />
+        </MemoryRouter>
+      </Provider>,
+    )
+    act(() => stack.handlers!.onSetTiming!(1, { intervalMs: 2000 }))
+    act(() => stack.handlers!.onSetTiming!(1, { rateSpeedMasterUuid: 'm3' }))
+    const layers = (await patched(3)).layers as CueLayer[]
+    expect(layers[1]).toEqual(expect.objectContaining({ lookId: 5, intervalMs: 2000, rateSpeedMasterUuid: 'm3' }))
+    expect(layers[0]).toEqual(expect.objectContaining({ lookId: 4, delayMs: 1500, speedMasterUuid: 'm2' }))
   })
 
   it('locked, writes nothing and a ⌫ in the editor asks to unlock — the transport never sees it', async () => {
@@ -515,6 +572,66 @@ describe('the FX tab', () => {
   })
 })
 
+it('a bare effect picked from a band appends after every effect, and a second pick swaps it and nothing else', async () => {
+  const a = pulse({ effectType: 'Strobe', uuid: 'e-a', sortOrder: 0 })
+  const b = pulse({ effectType: 'Flicker', uuid: 'e-b', sortOrder: 1 })
+  data.cue = cueOf({ adHocEffects: [a, b] })
+  const probe: { cue?: PressCue | null } = {}
+  function Probe() {
+    probe.cue = usePressCue()
+    return null
+  }
+  render(
+    <CueRowStoreProvider projectId={1} cueId={1} readOnly={false}>
+      <Probe />
+    </CueRowStoreProvider>,
+  )
+  const first = pulse()
+  act(() => void probe.cue!.pickEffect(first, null))
+  const appended = (await patched(1)).adHocEffects as CueAdHocEffect[]
+  expect(appended.map((e) => [e.effectType, e.sortOrder])).toEqual([['Strobe', 0], ['Flicker', 1], ['Pulse', 2]])
+  data.desk = cueOf({ adHocEffects: appended.map((e, i) => ({ ...e, uuid: e.uuid ?? `e-${i}` })) })
+  act(() => void probe.cue!.pickEffect(pulse({ effectType: 'SineWave' }), first))
+  const swapped = (await patched(2)).adHocEffects as CueAdHocEffect[]
+  expect(swapped.map((e) => e.effectType)).toEqual(['Strobe', 'Flicker', 'SineWave'])
+})
+
+it('a press after a save that failed leaves Save failed standing', async () => {
+  data.cue = cueOf()
+  const probe: { cue?: PressCue | null; state?: string } = {}
+  function Probe() {
+    probe.cue = usePressCue()
+    probe.state = useCueRowSaveState()
+    return null
+  }
+  render(
+    <CueRowStoreProvider projectId={1} cueId={1} readOnly={false}>
+      <Probe />
+    </CueRowStoreProvider>,
+  )
+  data.failNext = true
+  void probe.cue!.pickEffect(pulse(), null)
+  await act(async () => void (await probe.cue!.pressLayer({ templateId: 2 }, [{ type: 'fixture', key: 'hex-1' }], null)))
+  expect(data.presses).toHaveLength(1)
+  expect(probe.state).toBe('error')
+})
+
+it('a read-only cue stores no picked effect', async () => {
+  data.cue = cueOf()
+  const probe: { cue?: PressCue | null } = {}
+  function Probe() {
+    probe.cue = usePressCue()
+    return null
+  }
+  render(
+    <CueRowStoreProvider projectId={1} cueId={1} readOnly>
+      <Probe />
+    </CueRowStoreProvider>,
+  )
+  await expect(probe.cue!.pickEffect(pulse(), null)).resolves.toBe(false)
+  expect(data.patches).toHaveLength(0)
+})
+
 it('one flush carries the rows and a list in one PATCH, and one Undo puts both back', async () => {
   data.cue = cueOf({ layers: [{ ...layer(WARM, 0), id: 1 }, { ...layer(COOL, 1), id: 2 }] })
   const probe: { store?: CueRowStoreValue | null } = {}
@@ -564,6 +681,9 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
   fireEvent.click(screen.getByRole('button', { name: /^Effect$|Effect/ }))
   fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
   act(() => stack.handlers!.onRemove(0))
+  fireEvent.click(screen.getByRole('button', { name: 'Look' }))
+  fireEvent.click(screen.getByRole('button', { name: 'press Cool' }))
+  await waitFor(() => expect(data.presses).toHaveLength(1))
   await waitFor(() => expect(data.patches.length).toBeGreaterThanOrEqual(3), { timeout: 3000 })
   // Every write is the cue's layers or effects, never its own rows.
   expect(data.patches.every((p) => !('propertyAssignments' in p))).toBe(true)

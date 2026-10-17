@@ -2611,7 +2611,7 @@ on the backend field — `rows` and `requiredEmitters` both carry it now, as
 is declared `rows?:` on this side**, and that is not belt-and-braces about the annotation: a desk
 mid-upgrade serves handler bodies without new response fields, which `lastPressedAt`'s own comment
 already records, so the client must not crash on a server that predates the fix. Declaring it
-required was what hid the other unguarded reads from `strict` — `LayerPicker`'s `.length`,
+required was what hid the other unguarded reads from `strict` — the retired add-layer picker's `.length`,
 `seedValues`' `for…of` (then `TemplateEditor`'s, now `familyControls/templateRows.ts`; its `isGeneric` guard lets an effect palette through,
 since every effect palette is generic), and four more. Making the type honest is what found them;
 each now reads `?? []`, and `templateRowsSwatch` takes an absent list as an empty one.
@@ -2968,7 +2968,15 @@ paragraphs.
   was; a Look refused, since Looks don't nest. `landValuesInLook` is the draft's one landing, shared
   with Spread's `write: false` arm. A door that writes Local whatever the grid is pointed at passes `scope: 'programmer'` (the
   fixture sheet, a cue slot, the busk view). In a focused Look the chips draw no ring and the menu
-  offers *Into <Look>* in place of the first two items. `write: false` stamps no recent.
+  offers *Into <Look>* in place of the first two items. `write: false` stamps no recent. **In the cue
+  editor a press writes the cue** (apply-model plan §3.6, session 8): `PressInto` gains `{kind:
+  'cue', cueLabel}`, from `PressCue` (`components/press/pressCue.ts`), which `CueRowStoreProvider`
+  provides and `usePress` reads before the programmer's scope — so every door under the editor (a
+  cell's bands, the Looks tab's picker) is in the cue and none outside is, and a door passing
+  `scope: 'programmer'` still writes Local. A palette or a Look is `POST /cues/{id}/layers/press`, the
+  desk's rule over the stored layers; *Apply as values* lands a value palette's literals as the cue's
+  own rows (a Look or an effect palette is refused, a tap being its layer); the effects arm is
+  `FxPicker`'s draft arm. Nothing reaches the stage.
 - **The desk owns every rule** (plan P2): coverage, family replacement, widening and the mask test
   are server-side. The hook pre-refuses one thing: a **palette with no targets that would land
   nowhere** — a generic one on either gesture, a per-fixture one applied as values — which the toggle
@@ -3069,7 +3077,8 @@ the selection's mask leaves out, dimmed with the reason (*Colour — the selecti
 from the busk pad's own face (`padFace.ts`'s `PAD_SHELL` / `templateSwatch` / `padPresenceClass`, and
 `templateLayerPresence` / `lookLayerPresence` against the desk's resolved applied state). It presses
 the pair its door hands it through `usePress`, and **never asks for targets**: it replaced the
-add-layer sheet's source and target steps on the programmer, whose `CueTargetPicker` landed one
+add-layer sheet's source and target steps — on the programmer in session 5, in the cue editor in
+session 8 — whose `CueTargetPicker` step landed one
 fixture or group whatever was selected. A Look can land **on its own fixtures** — a toggle beside
 *On n selected*, chosen by default with nothing selected — which is that sheet's *Use the look's own
 fixtures* kept; a Look whose effects take the layer's targets has none to land on and sits outside
@@ -4122,8 +4131,10 @@ each was:
   `PaletteFooter`: *Save as palette…* (not in a venue), whose sheet the cell mounts **outside** its
   surface through `usePaletteSave` — a press in a sheet is an outside press to a popover, which
   would close the sheet with it. **Drawn only where a press has a door**: the container passes
-  `projectId` on the programmer alone, so the plain lists and the cue editor's Values grid draw the
-  editor bare (R2 P2), and a slider cell whose property no value palette can carry (`paletteCarries`,
+  `projectId` on the programmer alone, so the plain lists draw the editor bare; the cue editor's
+  Values grid passes none either but its presses land in the cue (`PressCue`, below), so its cells
+  draw both bands and no footer — *Save as palette…* records from the programmer. A slider cell whose
+  property no value palette can carry (`paletteCarries`,
   the closed `TEMPLATE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
   (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
   carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
@@ -4138,8 +4149,15 @@ each was:
   palettes by the property the effect drives — a beam built-in's library property, Slot Steps' named
   setting, Palette Steps' palettes' rows (`effectPaletteDrives`, given the library and palette list
   through its `EffectFitContext`) — so a zoom cell is offered the Zoom Breathe palettes and a gobo cell
-  the Slot Steps of its gobo. `PaletteBands.test.tsx` pins the offer per cell, the press, the bare
-  arm and the Effects band's offer, lit chips and setting-cell popup.
+  the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
+  cue arm without a prop: `usePress` reads `PressCue` (`components/press/pressCue.ts`), which
+  `CueRowStoreProvider` provides, so a band press there is the cue's layer press and the line reads
+  *Into Q1 · as a layer*; a chip is ringed partly where the cue layers its record (`cuePresence` — by
+  record, never by head, since the desk owns coverage); the Effects band lists the cue's **stored**
+  effects on the property that reach the heads (`storedEffectReaches`), drawn and not opened — the FX
+  tab edits them, and no live editor or `SplitFxEditor` is offered — and *+ Effect …* stores a draft.
+  `PaletteBands.test.tsx` pins the offer per cell, the press, the bare arm, the Effects band's offer,
+  lit chips and setting-cell popup, and the cue arm.
 
 - **`SceneryControl`** — `components/scenery/SceneryControl.tsx` (scenery-programmer plan D5, D17;
   session 2): one scene element's state wherever it is edited, built from the kit — an
@@ -4246,6 +4264,9 @@ Three rules, each of which was learned rather than designed:
   is a band where neither side holds the full 357px editor, Radix flips it above the cell, and
   `limitShift` then refuses to slide it back down because that would cover the anchor. It renders at
   a negative `top` and the window clips it, silently. Found on a 852×524 screen, not by a test.
+  The popover is also bounded by that room (`POPOVER_BOUND_CLASS`, Radix's available height) and
+  scrolls inside it, so an editor taller than it — a colour cell with both bands, low in the cue
+  editor — is never cut off past the window.
 - **"Is this a touch surface" is the form, never a `sm:` variant.** `SettingCell`'s option rows are
   the one control that *is* the list, so they need a finger-sized height on both sheets and not in
   the popover. A `sm:` variant says `min-width: 640px`, which is true of the landscape phone the
@@ -5722,8 +5743,16 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   with nothing selected, after Set · Clear · Spread otherwise.
 - **P2 — what it does not mount**: no desk-selection bridge, no Release, Locate or Highlight (the row
   hover's Info, Locate and Add-to-targets are withheld in the cue context), no palette strip, no
-  `useClearCellEffects`, no live writer, no `projectId` on the table (so no Palettes band on any cell,
-  no appearance leaves); the source chip is never drawn (its stack is a `programmer.keyStack` request).
+  `useClearCellEffects`, no live writer, no `projectId` on the table (so no appearance leaves and no
+  *Save as palette…*); the source chip is never drawn (its stack is a `programmer.keyStack` request).
+  A cell's popup **does** draw the Palettes and Effects bands (apply-model plan session 8): they press
+  into the cue through `PressCue`, never the programmer — a palette or a Look goes on as a cue layer
+  through `POST /cues/{id}/layers/press`, the desk's press rule over the stored layers (Blue replaces
+  Red on the heads, a second press takes it off), sent in the store's save chain as one Undo with its
+  answer's layers landed in the cache; ⌥click (*Apply as values*) lands a value palette's literals as
+  own rows; a bare effect is stored in draft, a second pick on the same selection swapping the one it
+  stored. A read-only cue's cells draw neither band (`useCueBandProject`), and a press that reaches
+  it anyway is refused with a toast.
   Its selection is `useLocalListSelection` and `useCellSelection`, held by the editor (below), never
   the desk's.
   `CueValuesGrid.test.tsx` runs a full pass — set, colour, position, Spread, ⌫, Undo — over the real
@@ -5766,14 +5795,22 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   stored one and keeps its uuid (§3.4). A disabled layer is stored. The tab draws each gesture at
   once and keeps drawing it while any list write waits (`CueRowStore.listsBusy`), until the cue has
   been read again — so a refetch between two writes never draws a removed layer back. *+ Look* and
-  *+ Palette* open `AddLayerSheet` (`LayerPicker`, timing on) on the Values selection
-  (`defaultTargets`, which skips its target step; empty asks); a row's **Targets** is
+  *+ Palette* open the one picker (`ApplyPicker`, apply-model plan session 8) on the Values selection,
+  no mask, offering what its heads can take (`cueWriteTargets`, the strip's `targetFamilies` and
+  `targetEmitters`), and its presses write the cue through the desk's press route (`PressCue`) — the
+  Look's *On its own fixtures* is a layer naming no targets; `AddLayerSheet` and `LayerPicker` are deleted
+  (`addLayerSheetRetired.test.ts`). **A layer's timing and masters are its settings popover's**
+  (§11, 12): the wide row's popover draws `LayerTimingFields` — delay, interval, random window, and
+  the opt-in speed and rate master overrides that were the add sheet's last step — when the host passes
+  `LayerHandlers.onSetTiming`, which only this tab does, for a layer the picker just put on and an
+  existing one alike; typed timing coalesces on the store's flush, a master pick saves at once. A
+  row's **Targets** is
   `LayerHandlers.onSetTargets`, a new optional member only this host passes, refused with the reason
   while nothing is selected (`targetsRefusal`); **Open** (`onOpenSource`) leaves for
   `/looks?edit={id}` — the Looks route opens that Look's sheet, the palettes route's rule — or
   `/palettes?edit=` for a palette layer (`hooks/useEditParam.ts`, both routes'). The hand's *Place
-  here* strip stays under it, unlocked, and places through the tab: on the Values selection, through
-  the store's writes (`HandCueLayerStrip`'s `host`), its Undo the store's.
+  here* strip stays under it, unlocked, and its place is a press on the Values selection
+  (`HandCueLayerStrip`'s `host`, through `usePress`'s cue arm), its Undo the store's save toast's.
 - **The FX tab** (`CueEffectsTab.tsx`, session 6, §4.1, D17): one row per stored effect — target
   (`effectTargetLabel`, a selection by its items), effect, property, speed (*Seconds* and its cycle,
   or the cycle on its master, S15), size, direction and runs (`effectDynamicsParts`, `runsWord`) and

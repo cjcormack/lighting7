@@ -21,13 +21,26 @@ let looks: LookSummary[] = []
 const press = vi.fn(async () => 'on' as const)
 const pairs: PressPair[] = []
 /** A focused Look layer, where a test says so: `usePress` lands there, and the effects arm absorbs. */
-const focus = vi.hoisted(() => ({ look: null as null | { projectId: number; lookId: number; lookName: string } }))
+const focus = vi.hoisted(() => ({
+  look: null as null | { projectId: number; lookId: number; lookName: string },
+  /** The cue editor, where a test says so: presses write the cue (`PressCue`). */
+  cue: null as null | { cueLabel: string; layered: ReadonlySet<string>; pickEffect: (effect: unknown, replacing: unknown) => Promise<boolean> },
+}))
 vi.mock('@/hooks/usePress', () => ({
   usePress: (_projectId: number, pair: PressPair) => {
     pairs.push(pair)
-    return { press, into: focus.look != null ? { kind: 'look', lookName: focus.look.lookName } : { kind: 'programmer' } }
+    return {
+      press,
+      into:
+        focus.cue != null
+          ? { kind: 'cue', cueLabel: focus.cue.cueLabel }
+          : focus.look != null
+            ? { kind: 'look', lookName: focus.look.lookName }
+            : { kind: 'programmer' },
+    }
   },
   usePressLook: () => focus.look,
+  usePressInCue: () => focus.cue,
 }))
 
 vi.mock('@/store/templates', () => ({
@@ -44,7 +57,13 @@ vi.mock('@/store/fixtureFx', () => ({
 }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
-  useFixtureLookup: () => ({ fixtures: [{ key: 'hex-1', name: 'Hex 1', groups: [], properties: [], elements: [] }], fixtureByKey: new Map() }),
+  useFixtureLookup: () => ({
+    fixtures: [
+      { key: 'hex-1', name: 'Hex 1', groups: [], properties: [], elements: [] },
+      { key: 'hex-2', name: 'Hex 2', groups: [], properties: [], elements: [] },
+    ],
+    fixtureByKey: new Map(),
+  }),
 }))
 /** The effects arm's `FxPicker`, by the props it is handed; a press on it starts effect 77, as a tap would. */
 const fxPicker = vi.hoisted(() => vi.fn())
@@ -233,6 +252,7 @@ beforeEach(() => {
   library = [PRESSED, GENERIC, PER_FIXTURE, EFFECT, WHITE_KEY, FULL, WIDE, SOFT]
   looks = []
   focus.look = null
+  focus.cue = null
   fxPicker.mockClear()
   absorb.mockClear()
   stopEffect.mockClear()
@@ -500,6 +520,44 @@ describe('ApplyPicker — effects', () => {
     expect(stopEffect).toHaveBeenCalledWith(expect.objectContaining({ id: 77 }))
     rerender(picker({ library: 'effects', pair: MASKED, open: false }))
     expect(absorb).not.toHaveBeenCalled()
+  })
+
+  it('in the cue editor stores the bare effect in draft — no press, no Edit — and a second tap swaps it', () => {
+    const pickEffect = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(true))
+    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickEffect }
+    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    expect(panel().textContent).toContain('stored in Q4')
+    const first = fxPicker.mock.lastCall![0]
+    expect(first.press).toBeUndefined()
+    expect(first.onEdit).toBeUndefined()
+    const pick = { effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    act(() => first.draft.onPick(pick))
+    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ targetType: 'fixture', targetKey: 'hex-1', effectType: 'Pulse' }), null)
+    const second = fxPicker.mock.lastCall![0]
+    expect(second.draft.current).toEqual({ effectType: 'Pulse', propertyName: 'dimmer' })
+    act(() => second.draft.onPick({ ...pick, effectType: 'SineWave' }))
+    expect(pickEffect).toHaveBeenLastCalledWith(
+      expect.objectContaining({ effectType: 'SineWave' }),
+      expect.objectContaining({ effectType: 'Pulse', targetKey: 'hex-1' }),
+    )
+    expect(absorb).not.toHaveBeenCalled()
+
+    // A tap over another selection adds afresh rather than swapping the effect on the first.
+    rerender(picker({ library: 'effects', pair: { ...MASKED, targets: [{ type: 'fixture', key: 'hex-2' }] } }))
+    expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
+    act(() => fxPicker.mock.lastCall![0].draft.onPick(pick))
+    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ targetKey: 'hex-2' }), null)
+  })
+
+  it('in the cue editor, an append that did not land is not swapped by the next tap', async () => {
+    const pickEffect = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(false))
+    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickEffect }
+    render(picker({ library: 'effects', pair: MASKED }))
+    const pick = { effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    await act(async () => fxPicker.mock.lastCall![0].draft.onPick(pick))
+    expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
+    await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, effectType: 'SineWave' }))
+    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ effectType: 'SineWave' }), null)
   })
 
   it('absorbs nothing on the programmer, or when nothing was started', () => {
