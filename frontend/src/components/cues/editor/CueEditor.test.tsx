@@ -33,10 +33,10 @@ vi.mock('./CueRowStore', () => ({
   CueRowStoreProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   useCueRowSaveState: () => 'clean',
 }))
-vi.mock('@/components/cues/CueDetailContent', () => ({
-  CueLayersReadout: () => <div data-testid="looks" />,
-  CueEffectsReadout: () => <div data-testid="fx" />,
-}))
+// The Looks and FX tables are pinned in `CueLooksFxTabs.test.tsx`.
+vi.mock('./CueLooksTab', () => ({ CueLooksTab: () => <div data-testid="looks" /> }))
+vi.mock('./CueEffectsTab', () => ({ CueEffectsTab: () => <div data-testid="fx" /> }))
+vi.mock('./CueValuesView', () => ({ CueValuesViewProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/scenery/CueSceneryEditor', () => ({
   CueSceneryEditorBody: () => <div data-testid="scenery-editor" />,
 }))

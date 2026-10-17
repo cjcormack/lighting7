@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { ArrowRight, Circle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useEditParam } from '../hooks/useEditParam'
 import { useCopyLookMutation, useLookListQuery } from '../store/looks'
 import { LookDetailSheet } from '../components/looks/LookDetailSheet'
 import { LookSheet } from '../components/looks/LookSheet'
@@ -75,6 +76,9 @@ export function ProjectLooks() {
       setSearchParams(params, { replace: true })
     }
   }, [searchParams, isCurrentProject, setSearchParams])
+
+  // `?edit=<id>` opens that Look's sheet — the cue editor's *Open Look*.
+  useEditParam(looks, !currentLoading, isCurrentProject, setDetailLookId)
 
   const library = useMemo(() => looks ?? [], [looks])
   const shown = useMemo(() => filterLooks(library, filter), [library, filter])

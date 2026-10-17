@@ -36,7 +36,10 @@ vi.mock('@/components/programmer/useInclude', () => ({ useInclude: () => ({ incl
 vi.mock('@/components/programmer/RecordLookSheet', () => ({
   RecordLookSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="record" /> : null),
 }))
-vi.mock('@/components/looks/LookDetailSheet', () => ({ LookDetailSheet: () => null }))
+vi.mock('@/components/looks/LookDetailSheet', () => ({
+  LookDetailSheet: ({ open, look }: { open: boolean; look: LookSummary | null }) =>
+    open ? <div data-testid="detail">{look?.name}</div> : null,
+}))
 vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: () => null }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 vi.mock('@tanstack/react-virtual', () => ({
@@ -141,6 +144,15 @@ describe('ProjectLooks', () => {
   it('opens the record sheet from ?action=record, for the command palette', () => {
     renderAt('/projects/1/looks?action=record')
     expect(screen.getByTestId('record')).toBeInTheDocument()
+  })
+
+  it('opens a Look’s sheet from ?edit=, the cue editor’s Open Look — on the running project only', () => {
+    renderAt('/projects/1/looks?edit=2')
+    expect(screen.getByTestId('detail')).toHaveTextContent('Cool Fill')
+    cleanup()
+    current = { id: 9, name: 'Other' }
+    renderAt('/projects/1/looks?edit=2')
+    expect(screen.queryByTestId('detail')).toBeNull()
   })
 
   it('says so when there are no looks, and when the project is missing', () => {

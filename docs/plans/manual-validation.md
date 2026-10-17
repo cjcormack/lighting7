@@ -20,6 +20,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
+| [`FU-MANUAL-VENUE-VISIT-R2-6`](#fu-manual-venue-visit-r2-6) | Q1's Looks reordered and one switched off, and a Pulse added in draft on its FX tab, move nothing on the rig — the next GO into Q1 lands the new order, leaves the disabled Look off and runs the Pulse — while a locked ⌫ on either tab asks to unlock and never goes back a cue | Venue visit R2.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R2-5`](#fu-manual-venue-visit-r2-5) | an edit in Q1's Values grid over the Scrim Look moves nothing on the rig, and the next GO into Q1 lands it — the Orbits at 80 % — while ⌫ gives the cell back to the Look (locked, it asks to unlock and never goes back a cue) and Undo puts the list back | Venue visit R2.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-2`](#fu-manual-venue-visit-r3-2) | Local effects follow the selection on the rig — a bare chase pressed over four hexes is one chase, a second colour effect on two of them takes those two off the first and nothing else moves, and an edit for two heads of a running chase splits them off with no head jumping, a step-timed or ping-pong chase included | Venue-visit R3.2, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R2-4`](#fu-manual-venue-visit-r2-4) | Q4 edits from its card and from the table's pane alike, the pane keeps its height across a reload, a GO in a stack holding a cue twice walks through both places in order, and the fixture sheet's *on Q12* opens the cue's editor in place | Venue visit R2.4, 2026-10-16 |
@@ -283,6 +284,34 @@ desk lacks:
    *Make current* is refused with its reason in all four, and nothing switches.
 5. **Folds.** The home on the iPad in both orientations and on a phone: the header's *On the rig* or
    *Make current* and the ⋮ stay on screen, and each status line's buttons wrap under its words.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-R2-6`
+
+**What it proves**: *the Looks and FX tables write the stored cue and nothing else* — venue-visit
+R2.6, show-cue-editing plan session 6 (D3, D17, P2, §10): a layer reordered or switched off and an
+effect added in draft are stored, the rig does not move, and the cue's next GO lands them.
+
+**Why it is here**: the tests read the wire for a pass over both tabs and pin each PATCH; only the
+rig shows that a live cue edited this way leaves the stage alone until its next first hold, and that
+GO then composes the new order and runs the new effect.
+
+**Test**, on Sleeping Beauty (or a scratch copy), the show unlocked, Q1 live:
+
+1. **Reorder and switch off.** Open Q1 in the cards view, Looks tab. Drag its bottom Look above the
+   one over it, and press the eye on another to switch it off. Each saves (*Q1 · looks saved* with
+   Undo). **Nothing moves on the rig.**
+2. **A Pulse in draft.** On the Values tab select the Orbits' rows, then on the FX tab press *+
+   Effect* and tap Pulse: a Pulse row on the Orbits appears, at one bar. Tap Sine Wave: the row
+   swaps. Tap Pulse again and press Done. **Nothing pulses on the rig.**
+3. **GO.** GO out of Q1 and back into it (or GO from the cue before it): the Looks compose in the new
+   order, the switched-off Look adds nothing, and the Orbits pulse.
+4. **Open Look.** On the Looks tab press a Look's open glyph: the Looks library opens with that
+   Look's sheet.
+5. **Locked ⌫.** With the show locked, click in Q1's Looks tab and press ⌫, then the same on its FX
+   tab: the *Unlock the show to edit?* question opens each time and the show does **not** go back a
+   cue. The rows draw read-only and *+ Look*, *+ Palette* and *+ Effect* are disabled.
 
 ---
 
