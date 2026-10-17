@@ -339,7 +339,9 @@ calls:
   - *+ Effect …*, which opens `FxPicker` on this property for a bare effect (§3.4).
 - **Footer**: *Save as palette…* for every family, from the cell's values
   (`NewTemplateFromSelectionSheet` with the family), and the family's own tools (*Spread…*, *Pick*,
-  *Aim…*).
+  *Aim…*). As session 5 built it (`293db483`), `PaletteFooter`'s `tools` slot is drawn empty and the
+  colour editor keeps its own *Pick* and *Spread…*; the position cell's *Spread…* and *Aim…* are
+  venue-visit S12's and S13's.
 - **Under a focused Look** a teal band says *Into Warm wash*. The rings go, since a Look holds values.
   The presses follow §3.6.
 

@@ -157,7 +157,8 @@ The plan adds its own:
   - never takes or changes a number `main` already has.
 
   Taken: S11 28, S15 29, R4.1 30, S8 31, R1.3 32, R4.2 33, R4.3 34, S16 35. Venue-attach session 1
-  needed none (`e5b60d72`: an older reader loses only the origin).
+  needed none (`e5b60d72`: an older reader loses only the origin), and session 2 writes only records
+  v24 and v27 carry. Nothing left in §4 is known to bump.
 - **P6 — Lanes, bodies in their plans.** §4 sorts every session across this plan and the six R
   plans into lanes that run in parallel. A session's body and its done-marker live in its own plan.
   §4 holds no status, so parallel PRs never edit it. Where §4 and a plan's own dependencies
@@ -201,15 +202,29 @@ Grouped by area. §4 gives the order.
   selection that is one group is in that group's own member order, as a spread over one already is
   since S7.
 - Encoders and a drag control set the amount. It sits on S11's scale and S7's order.
+- `SpreadPanel` has three hosts: row C's popover, the rail's Spread tab and, since R2.5, the cue
+  editor's Values grid. A focused Look layer and the Values grid resolve with `write: false` into the
+  row being edited, so there a head's current position is that row's, not the stage's; the sketch
+  says which a fan reads.
+- The position cell's popup has no *Spread…*. Since R3.5 (`293db483`) it sits in `PaletteBands`,
+  whose footer `tools` slot (apply-model §4.3's *Spread…*, *Pick*, *Aim…*) no cell fills yet; the
+  colour editor's own *Spread…* seeds the rail's tab.
 - Start with a one-board sketch of the panel. No separate design session.
 
 **S13 — Aim from the floor plan.**
 - Click to aim the selection, single or multiple, on the Stage view's Plan camera.
 - Height comes from a Z control or a region's surface.
-- Aim also opens from the programmer.
+- Aim also opens from the programmer: the position cell popup's footer, `PaletteBands`' `tools`
+  slot, where apply-model §4.3 puts *Aim…* (R3.5 built the slot and filled nothing).
 - Points outside the stage (auditorium, walls, the room) are reachable because the plan extends to
-  the room, with numeric entry for anything off the drawing.
+  the room, with numeric entry for anything off the drawing. Today the Plan is fitted to the rig's
+  bounds (`orthoSection`, `stageCameras.ts`), and a pointer maps to its metres only in the editor
+  (`edit/sectionView.ts`).
 - Show skipped heads by reason, as the route already answers them.
+- The Stage view already aims at a typed point: `StageAimControls` (X, Y, Z; a region's centre at
+  head height above its top, `regionAimPoint`; skipped heads by name and reason), the *Aim…*
+  popover on the fixture sheet's Position row in the Stage view's single-fixture panel, and
+  `StageAimPanel` for a multi-selection. S13 adds the click and the programmer's door to it.
 
 ### Effects
 

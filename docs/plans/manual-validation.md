@@ -154,14 +154,15 @@ the phone runner and a MIDI fader.
 **Why it is here**: the tests read weights off synthetic ticks; nothing has watched a half-size stack
 chase over a held level on real heads, or the X-Touch fader and its motor beside the slider.
 
-**Test**, on Sleeping Beauty, a cue in Act 1 running a dimmer chase over a wash held at 40 %:
+**Test**, on Sleeping Beauty, a cue in Act 1 running a dimmer chase over a wash the cue itself holds
+at 40 %:
 
 1. **The slider.** GO the cue: Act 1's row on the Show view shows *FX size* at 100 %. Drag it to 50 %:
    the chase runs halfway between 40 % and its own output. At 0 % the wash sits at 40 %.
 2. **Only this stack.** Run an effect from a second stack's cue and busk one from a pad: both run whole
    while Act 1 sits at 50 %. Press Act 1's cue on a busk pad as well: under the loose hold its chase
    runs whole.
-3. **Other doors.** Bind `stackEffectSize` for Act 1 to an X-Touch fader: the motor follows the slider
+3. **Other doors.** Bind Act 1's *FX size* target (`stackEffectSize`) to an X-Touch fader: the motor follows the slider
    and the fader moves it. On a phone the runner's row under the strip moves it too.
 4. **Reload and switch.** At 50 %, pull Sleeping Beauty from its repo with a change waiting: it stays
    at 50 %. Switch to another show and back: it is at 100 %.
@@ -182,14 +183,15 @@ size fade reads as a fade, and whether a continuing effect really never jumps.
 1. **A crossfade.** Q3 runs a Pulse chase, Q4 a Colour Cycle, both 3 s. GO from Q3 to Q4: the chase
    shrinks to nothing over 3 s while the cycle grows from nothing, and the chase leaves the FX list
    once it is gone.
-2. **Continuing.** Give Q4 the same Pulse on the same group as Q3. GO from Q3: the Pulse runs on in
-   phase, with no dip.
+2. **Continuing.** Layer one Look holding a Pulse on the group into both Q3 and Q4. GO from Q3: the
+   Pulse runs on in phase, with no dip. (Two cues' own Pulses are two effects: one shrinks as the
+   other grows.)
 3. **Effect-only and snaps.** GO from Q4 into a cue holding only an effect: it fades in over its
    time. A stack's first GO, a 0 s cue, a press of a cue pad and a stack stop snap.
 4. **Back mid-fade.** GO from Q3 to Q4 and GO BACK halfway: Q3's chase grows back from where it stood.
 5. **The programmer.** The press routes take a fade the client does not send yet
    (`FU-FX-PRESS-FADE-CLIENT`), so drive this one through the REST call: press an effect palette with
-   `fadeMs: 2000` and watch it grow; Clear and it shrinks.
+   `fadeMs: 2000` and watch it grow. Set the programmer fade to 2 s and Clear: it shrinks over 2 s.
 
 ---
 
@@ -425,8 +427,8 @@ desk lacks:
 2. **Live and sync.** GO a cue: the Live line names it within a moment, and a busk cue pad's press
    adds it as *Loose*. *Sync now* on an admin's home
    syncs and the line's time resets; an operator's home has no Sync line.
-3. **Sections.** The cards are the sidebar's rows less Desk, Show reads *2 stacks · 35 cues* as the
-   Show view counts them, and on TCH Test (off the rig) the Programmer, Stage and Fixtures cards are
+3. **Sections.** The cards are the sidebar's rows less Desk, Show reads *2 stacks* and Cues *35*, each
+   cue once, and on TCH Test (off the rig) the Programmer, Stage and Fixtures cards are
    muted with the hollow dot; one opens the *not on the rig* page.
 4. **Actions.** TCH Test's ⋮ on its card, on its home and in ⌘K (viewing it) offer the same items;
    the switcher's row offers Open and Make current. On the show whose venue is missing,
@@ -920,10 +922,10 @@ drag.
 1. **Reorder.** Open a group of four or more heads (Groups → its row's details → *Members*) and drag
    the last member to the top. The numbers, the Groups list's member rows and Patches' *Edit Group*
    sheet all read the new order.
-2. **A chase.** Start a Pulse on the group at *Linear*. It runs from the member you dragged to the
-   top. *Runs as* Center Out reads the step each head fires on, and a Center Out Pulse fires those
+2. **A chase.** Start a Pulse on the group at *Rig*. It runs from the member you dragged to the
+   top. *Runs as* Centre out reads the step each head fires on, and a Centre out Pulse fires those
    steps in that order.
-3. **A spread.** Select the group alone, Spread Dimmer 0 → 100 % at *Linear*. The dragged member gets
+3. **A spread.** Select the group alone, Spread Dimmer 0 → 100 % at *Rig*. The dragged member gets
    0 %. Add a fixture from outside the group to the selection: the spread follows the busk rig's order
    again.
 4. **A venue's group.** In a show on the hall, a venue group's *Members* view has no drag handles and
