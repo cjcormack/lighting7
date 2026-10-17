@@ -490,7 +490,7 @@ says palette). All of them have merged.
 - **Docs:** the frontend CLAUDE.md's "The cue editor"; `fx-engineering.md` (a cue effect edited in
   draft).
 
-### Session 7 — Edited since GO and Update stage (backend + frontend)
+### Session 7 — Edited since GO and Update stage (backend + frontend) — done, `f378ee9`
 
 - §3.5: the mark on R1's holds, `cueHolds.state`'s `edited`, the route with its `dryRun`, the cue's
   own fade, the effect reconcile; the chip on the card, the row, the pane and the
