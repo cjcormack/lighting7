@@ -33,6 +33,9 @@ import uk.me.cormack.lighting7.testsupport.createWsClient
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
+import io.ktor.http.isSuccess
+import uk.me.cormack.lighting7.show.FixturesChangeListener
+import uk.me.cormack.lighting7.testsupport.entryIdOf
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -522,6 +525,82 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
 
         assertEquals(HttpStatusCode.OK, client.delete("/api/rest/projects/$projectId/cue-stacks/$stackId?deleteLooseCues=true").status)
         assertEquals(listOf(kept), client.page(page.id).pads.map { it.cue?.id })
+    }
+
+    @Test
+    fun `a reorder, a sort, a cue created into the stack and a recorded cue re-read its cues' pads`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val stackId = client.createStack("Main")
+        val opening = client.createCue("opening", stackId)
+        val closing = client.createCue("closing", stackId)
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("cues", cue(closing))))))
+        val stack = "/api/rest/projects/$projectId/cue-stacks/$stackId"
+
+        val gestures: List<Pair<String, suspend () -> HttpResponse>> = listOf(
+            "reorder" to {
+                client.post("$stack/reorder") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ReorderCuesRequest(listOf(state.entryIdOf(closing), state.entryIdOf(opening))))
+                }
+            },
+            "sort by cue number" to { client.post("$stack/sort-by-cue-number") },
+            "POST /cues" to {
+                client.post("/api/rest/projects/$projectId/cues") {
+                    contentType(ContentType.Application.Json)
+                    setBody(NewCue(name = "first", cueStackId = stackId, sortOrder = 0))
+                }
+            },
+            "Record CREATE" to {
+                client.post("/api/rest/programmer/record") {
+                    contentType(ContentType.Application.Json)
+                    setBody(ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, sortOrder = 0))
+                }
+            },
+        )
+        for ((gesture, send) in gestures) {
+            val heard = mutableListOf<List<Int>>()
+            val listener = object : FixturesChangeListener {
+                override fun buskLayoutChanged(pageIds: List<Int>) { heard += pageIds }
+            }
+            state.show.fixtures.registerListener(listener)
+            try {
+                val response = send()
+                assertTrue(response.status.isSuccess(), "$gesture: ${response.status} ${response.bodyAsText()}")
+            } finally {
+                state.show.fixtures.unregisterListener(listener)
+            }
+            assertTrue(heard.any { page.id in it }, "$gesture re-reads the page holding the stack's cue")
+        }
+    }
+
+    @Test
+    fun `deleting a cue re-reads the pads of the cues it renumbered`() = testApplication {
+        mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        val client = jsonClient()
+        val stackId = client.createStack("Main")
+        client.createCue("one", stackId)
+        val two = client.createCue("two", stackId)
+        val three = client.createCue("three", stackId)
+        val page = client.createPage("Act 1")
+        client.writeLayout(page.id, layout(row(column(12, bank("cues", cue(three))))))
+
+        val heard = mutableListOf<List<Int>>()
+        val listener = object : FixturesChangeListener {
+            override fun buskLayoutChanged(pageIds: List<Int>) { heard += pageIds }
+        }
+        state.show.fixtures.registerListener(listener)
+        try {
+            assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/cues/$two?force=true").status)
+        } finally {
+            state.show.fixtures.unregisterListener(listener)
+        }
+
+        assertEquals("2", client.page(page.id).pads.single().cue!!.entries.single().cueNumber, "three moved up a place")
+        assertEquals(listOf(listOf(page.id)), heard)
     }
 
     @Test

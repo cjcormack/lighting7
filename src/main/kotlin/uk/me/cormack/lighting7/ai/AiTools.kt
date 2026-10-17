@@ -1270,7 +1270,7 @@ class AiTools(private val state: State) {
         } ?: return errorResult(refusal ?: "Cue stack $stackId not found")
         val (cueId, entry) = created
         if (stackId != null) {
-            announceEntryAdded(state, stackId, priorities)
+            announceEntriesPlaced(state, stackId, priorities)
         } else {
             state.show.fixtures.cueListChanged()
             state.show.fixtures.cueStackListChanged()
@@ -1829,7 +1829,7 @@ class AiTools(private val state: State) {
             priorities = stackEntryPriorities(placement.stack)
             cue.name to buildJsonObject { putEntry(entry) }
         } ?: return errorResult(refusal ?: "Failed to add cue $cueId to stack $stackId")
-        announceEntryAdded(state, stackId, priorities)
+        announceEntriesPlaced(state, stackId, priorities)
 
         val (cueName, entry) = added
         return ToolExecutionResult(

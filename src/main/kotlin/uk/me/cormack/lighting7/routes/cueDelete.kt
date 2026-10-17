@@ -301,7 +301,9 @@ internal fun afterCuesDeleted(state: State, deletion: CueDeletion) {
     state.show.fixtures.cueListChanged()
     state.show.fixtures.cueStackListChanged()
     if (deletion.removal.anchorsRemoved > 0) state.show.fixtures.promptBookChanged()
-    if (deletion.pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(deletion.pageIds.toList())
+    // The pages that lost a pad, and those of the cues left in each stack, which may have renumbered.
+    val pageIds = deletion.pageIds + cuePadPageIds(state, deletion.removal.stackIds.flatMap { cueIdsOfStack(state, it) })
+    if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
     state.show.fixtures.cueSlotListChanged()
 }
 
@@ -311,10 +313,15 @@ internal fun afterCuesDeleted(state: State, deletion: CueDeletion) {
  * own transaction; call once the write has committed.
  */
 internal fun announceCuePadsChanged(state: State, cueIds: Collection<Int>) {
-    if (cueIds.isEmpty()) return
-    val pageIds = transaction(state.database) {
+    val pageIds = cuePadPageIds(state, cueIds)
+    if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
+}
+
+/** The busk pages holding a pad for one of [cueIds], in their own transaction. */
+private fun cuePadPageIds(state: State, cueIds: Collection<Int>): Set<Int> {
+    if (cueIds.isEmpty()) return emptySet()
+    return transaction(state.database) {
         DaoBuskPad.find { DaoBuskPads.cue inList cueIds.distinct() }
             .mapTo(HashSet()) { it.bank.column.page.id.value }
     }
-    if (pageIds.isNotEmpty()) state.show.fixtures.buskLayoutChanged(pageIds.toList())
 }

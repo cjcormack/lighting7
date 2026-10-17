@@ -141,6 +141,8 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             }
 
             if (details != null) {
+                // Looping decides what follows the last entry.
+                if (manager.isStackActive(resource.stackId)) manager.runState.publishRunState(state, resource.stackId)
                 state.show.fixtures.cueStackListChanged()
                 call.respond(details)
             } else {
@@ -180,7 +182,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             val priorities = transaction(state.database) {
                 val stack = DaoCueStack.findById(resource.parent.stackId)
                     ?.takeIf { it.project.id == project.id }
-                    ?: return@transaction emptyMap<Int, Int>()
+                    ?: return@transaction null
                 val before = cueEntryIds(stack)
                 val current = entriesOf(stack)
                 val byId = current.associateBy { it.id.value }
@@ -193,10 +195,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 renumberAutoEntries(stack, before)
                 stackEntryPriorities(stack)
             }
-            // Cue priority is derived from stack position; keep anything already on stage in step.
-            state.show.cueStackManager.holds.restampEntries(priorities)
-            state.show.fixtures.cueStackListChanged()
-            state.show.fixtures.cueListChanged()
+            if (priorities != null) announceEntriesPlaced(state, resource.parent.stackId, priorities)
             call.respond(HttpStatusCode.OK)
         }
     }
@@ -265,7 +264,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 // A number another entry holds explicitly is a conflict, as on the entry PATCH and POST /cues.
                 call.respond(if (numberTaken) HttpStatusCode.Conflict else HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
-                announceEntryAdded(state, resource.parent.stackId, priorities ?: emptyMap())
+                announceEntriesPlaced(state, resource.parent.stackId, priorities ?: emptyMap())
                 call.respond(details!!)
             }
         }
@@ -612,9 +611,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue stack not found"))
             } else {
                 val (response, priorities) = result
-                state.show.cueStackManager.holds.restampEntries(priorities)
-                state.show.fixtures.cueStackListChanged()
-                state.show.fixtures.cueListChanged()
+                announceEntriesPlaced(state, resource.parent.stackId, priorities)
                 call.respond(response)
             }
         }
@@ -1019,13 +1016,16 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
 }
 
 /**
- * What adding a cue entry to [stackId] owes once its transaction has committed: the holds restamped
- * from [priorities] (the entries after it moved down a place), the lists, and the pads of the stack's
- * cues, whose auto-numbered neighbours may have taken new numbers. REST `add-cue`, `create_cue` and
- * `add_cue_to_stack` end here.
+ * What placing, reordering or sorting cue entries of [stackId] owes once its transaction has committed:
+ * the holds restamped from [priorities] (a live cue's priority is its place), the stack's run state
+ * when it is active (its next entry may have moved), the lists, and the pads of the stack's cues,
+ * whose auto-numbered entries may have taken new numbers. Every handler that places a cue entry in a
+ * stack of the current project ends here.
  */
-internal fun announceEntryAdded(state: State, stackId: Int, priorities: Map<Int, Int>) {
-    state.show.cueStackManager.holds.restampEntries(priorities)
+internal fun announceEntriesPlaced(state: State, stackId: Int, priorities: Map<Int, Int>) {
+    val manager = state.show.cueStackManager
+    manager.holds.restampEntries(priorities)
+    if (manager.isStackActive(stackId)) manager.runState.publishRunState(state, stackId)
     state.show.fixtures.cueStackListChanged()
     state.show.fixtures.cueListChanged()
     announceCuePadsChanged(state, cueIdsOfStack(state, stackId))

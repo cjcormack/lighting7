@@ -657,7 +657,7 @@ payload-free, since one project has one rig).
 | `cueListChanged` | — | Cue CRUD; also fired (with `cueStackListChanged`) when a forced Look delete took cue layers |
 | `cueStackListChanged` | — | Cue-stack CRUD, a stack's set, and any cue scenery write or element delete that swept scenery — the stack list carries every cue's own changes (`cues[].scenery`, scenery-programmer plan D13/D14) |
 | `cueSlotListChanged` | — | Cue-slot CRUD; also fired when a cue or Look delete swept its slots |
-| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, or a palette / Look / cue / cue-stack delete that took pads off them. **Also refreshes the library lists client-side** — see below |
+| `busk.layoutChanged` | `pageIds` | The busk layout of these pages changed: page CRUD or reorder, a whole-page layout write, a pad appended to a bank, a palette / Look / cue / cue-stack delete that took pads off them, or a stack-list write that moved the places or numbers of the cues their pads name (`announceCuePadsChanged`). **Also refreshes the library lists client-side** — see below |
 | `busk.rigChanged` | — | The busk **rig** changed: a whole-document write, or a group / patch delete that took tiles off it. Payload-free because there is one rig per project (busk-further plan D1); the client re-reads `GET /busk/rig` |
 | `patchListChanged` | — | Patch CRUD |
 | `riggingListChanged` | — | Rigging CRUD |
@@ -671,7 +671,7 @@ payload-free, since one project has one rig).
 | `fixturesChanged` | — | Fixtures re-registered; `channelMappingState` follows immediately |
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
-| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
+| `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition, and one per stack-list write that can move an active stack's next (an entry placed, reordered, sorted, moved or removed, or the stack's loop changed); the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
 | `cueHolds.state` | `projectId`, `cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}], edited?}]` | What holds every live cue, and whether each is edited since GO (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that

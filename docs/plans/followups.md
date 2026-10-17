@@ -155,7 +155,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-AI-RIG-SAFE`](#fu-ai-rig-safe) | Trigger | AI | an operator asks Claude to make the rig safe, or to strike or douse every lamp |
 | [`FU-RESTRIKE-ACROSS-RESTART`](#fu-restrike-across-restart) | Trigger | Rig | a desk restarted inside a lamp's restrike time strikes it too soon |
 | [`FU-CUE-BINDING-SWEEP`](#fu-cue-binding-sweep) | Trigger | Cues | an operator finds a dead `FireCue` binding, left by a forced cue delete, confusing |
-| [`FU-BUSK-PAD-STALE-NUMBER`](#fu-busk-pad-stale-number) | Ready | Cues | — (venue-visit S17 owns it) |
 | [`FU-CUE-ROW-TIMING`](#fu-cue-row-timing) | Trigger | Cues | an operator needs a per-row fade or move-in-dark set from the Show view |
 | [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
 | [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
@@ -3030,23 +3029,6 @@ was told. **Trigger**: an operator finds a dead binding left this way confusing.
 `FireCue` rows `cueUsesOf` already finds inside the forced delete's transaction, and reload the
 binding service's project.
 
-### `FU-BUSK-PAD-STALE-NUMBER`
-
-**A cue pad's face can show a stale number** · Ready · Venue-visit K2, 2026-10-16 · owned by
-venue-visit S17 (K5, 2026-10-17)
-
-A cue pad's face shows its cue's numbers from `BuskCueDto.entries`, read with the busk page. R1.4's
-`announceCuePadsChanged` (`routes/cueDelete.kt`) fires `busk.layoutChanged` for the pads of the cues
-it names, from add-cue, an entry's removal, an entry's number and a stack delete, and since R1.7 from
-the MCP tools that place a cue (`create_cue` with a stack, `add_cue_to_stack`, `build_cue_stack`,
-`copy_cues` into the current project) and move or remove one. Reorder and sort-by-number
-(`routes/projectCueStacks.kt`) relabel auto numbers without calling it, and so do the other
-`placeCueInStack` callers, which can relabel their new neighbours: `POST /cues` into a stack and
-Record CREATE into a stack. The pad keeps the old number until something else refetches the page.
-This predates R1.4. **Then**: call `announceCuePadsChanged` from those handlers with the cues they
-placed or renumbered — the stack's cues (`cueIdsOfStack`), as REST add-cue does. Venue-visit S17
-does this, beside the run state the same writes leave stale, and moves this item to Completed.
-
 ### `FU-CUE-ROW-TIMING`
 
 **The cue editor's Values grid cannot set an own row's fade or move-in-dark** · Trigger ·
@@ -3099,6 +3081,10 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-BUSK-PAD-STALE-NUMBER` — a reorder, a sort-by-number, `POST /cues` and Record CREATE into a
+  stack announce the stack's cue pads, through the one announce every placing handler ends in
+  (`announceEntriesPlaced`), and a cue delete those of the cues left in its stacks (venue-visit plan
+  S17; its done-marker cites the commit).
 - `FU-VENUE-UPDATE-BINDINGS` — Update's and Attach's dead references read every place a key is stored
   through `RigKeyReferences` (bindings, cue layer targets, Look element keys and scripts too),
   `VenueRigChecks.deadReferences` (venue-attach plan session 2).

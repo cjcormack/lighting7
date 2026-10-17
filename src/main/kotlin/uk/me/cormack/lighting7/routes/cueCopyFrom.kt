@@ -106,18 +106,20 @@ internal fun copyCuesFrom(state: State, target: DaoProject, request: CopyCuesFro
 }
 
 /**
- * What a real copy owes once its transaction has committed: the lists it changed and, when the target
- * is the [live] project, the holds restamped from [priorities] and the target stack's pads announced
- * (a neighbour's auto number may have moved). `POST /cues/copy-from` and `copy_cues` both end here.
+ * What a real copy owes once its transaction has committed: the lists it changed and, into a stack of
+ * the [live] project, [announceEntriesPlaced] with [priorities]. `POST /cues/copy-from` and
+ * `copy_cues` both end here.
  */
 internal fun announceCuesCopied(state: State, response: CopyCuesFromResponse, priorities: Map<Int, Int>, live: Boolean) {
     val fixtures = state.show.fixtures
-    if (live) state.show.cueStackManager.holds.restampEntries(priorities)
     if (response.looksCopied.isNotEmpty()) fixtures.lookListChanged()
     if (response.palettesCopied.isNotEmpty()) fixtures.templateListChanged()
-    fixtures.cueListChanged()
-    if (response.stackId != null) {
-        fixtures.cueStackListChanged()
-        if (live) announceCuePadsChanged(state, cueIdsOfStack(state, response.stackId))
+    when {
+        response.stackId != null && live -> announceEntriesPlaced(state, response.stackId, priorities)
+        response.stackId != null -> {
+            fixtures.cueListChanged()
+            fixtures.cueStackListChanged()
+        }
+        else -> fixtures.cueListChanged()
     }
 }
