@@ -465,8 +465,10 @@ class RemoteSyncEngine(
 
     /**
      * Merge a show's pin (`project.json`'s `venueUuid`, `venueVersion`, `venueRepo`, v24) three-way
-     * into the merged tree at [tree], which holds the remote's `project.json`: where only this desk's
-     * pin moved since the merge base, it is written over the remote's. Where only the remote's moved,
+     * into the merged tree at [tree], which holds the remote's `project.json`, with its origin
+     * (`detachedFromVenueUuid`, `detachedFromVersion`), which Detach writes as it clears the pin, so
+     * the two move as one: where only this desk's pin moved since the merge base, it is written over
+     * the remote's. Where only the remote's moved,
      * or both did, the remote's stands — as the rest of `project.json` (name, description, stage size)
      * always has; nothing arbitrates two desks re-pinning one show apart (an Update only moves a pin
      * forward, on one desk). No merge base
@@ -476,19 +478,22 @@ class RemoteSyncEngine(
         fun at(ref: String?): ProjectJson? = ref
             ?.let { JGitClient.readBlob(repo, it, "project.json") }
             ?.let { runCatching { canonicalDecode(ProjectJson.serializer(), it) }.getOrNull() }
-        fun ProjectJson.pin() = Triple(venueUuid, venueVersion, venueRepo)
+        fun ProjectJson.pin() = listOf(venueUuid, venueVersion, venueRepo, detachedFromVenueUuid, detachedFromVersion)
         val local = at(localSha) ?: return
         val path = tree.resolve("project.json")
         if (!Files.exists(path)) return
         val remote = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(path)) }.getOrNull() ?: return
         if (local.pin() == remote.pin()) return
-        val basePin = at(JGitClient.mergeBase(repo, localSha, remoteSha))?.pin() ?: Triple(null, null, null)
+        val basePin = at(JGitClient.mergeBase(repo, localSha, remoteSha))?.pin() ?: listOf(null, null, null, null, null)
         if (local.pin() == basePin || remote.pin() != basePin) return
         Files.writeString(
             path,
             canonicalEncode(
                 ProjectJson.serializer(),
-                remote.copy(venueUuid = local.venueUuid, venueVersion = local.venueVersion, venueRepo = local.venueRepo),
+                remote.copy(
+                    venueUuid = local.venueUuid, venueVersion = local.venueVersion, venueRepo = local.venueRepo,
+                    detachedFromVenueUuid = local.detachedFromVenueUuid, detachedFromVersion = local.detachedFromVersion,
+                ),
             ),
         )
         logger.info("Auto-merge kept this desk's venue pin ({} v{}) over the remote's", local.venueUuid, local.venueVersion)

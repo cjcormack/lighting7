@@ -36,6 +36,7 @@ import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCRIPT_HASH
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_DETACHED_FROM
 import uk.me.cormack.lighting7.testsupport.allUuidsIn
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
 import uk.me.cormack.lighting7.testsupport.seedRichProject
@@ -115,8 +116,12 @@ class ProjectCloneTest {
         // records embedded in a parent document).
         ProjectExporter(state).export(sourceId, exportDirA)
         ProjectExporter(state).export(result.projectId, exportDirB)
-        val sourceUuids = allUuidsIn(exportDirA)
+        // The origin's venue uuid (venue-attach plan D1) names a project outside the archive, so a clone
+        // keeps it: the one uuid in the export that is a reference to nothing the archive holds.
+        val external = setOf(RICH_PROJECT_DETACHED_FROM.first.toString())
+        val sourceUuids = allUuidsIn(exportDirA) - external
         val cloneUuids = allUuidsIn(exportDirB)
+        assertTrue(cloneUuids.containsAll(external), "the clone keeps the origin")
 
         assertTrue(sourceUuids.size > 20, "expected the rich fixture to hold identities, got ${sourceUuids.size}")
         assertEquals(
@@ -124,11 +129,11 @@ class ProjectCloneTest {
             "clone shares identities with its source",
         )
         assertEquals(
-            sourceUuids.size, cloneUuids.size,
+            sourceUuids.size, (cloneUuids - external).size,
             "clone holds a different number of identities than its source",
         )
         // Every identity in the export is a row the clone copied, plus the project row itself.
-        assertEquals(cloneUuids.size - 1, result.recordsCloned, "recordsCloned does not match the graph")
+        assertEquals((cloneUuids - external).size - 1, result.recordsCloned, "recordsCloned does not match the graph")
     }
 
     /**

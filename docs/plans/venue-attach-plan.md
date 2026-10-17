@@ -205,8 +205,11 @@ Each pair compares S with T, and with O where there is an origin (P3):
 - **Parks.** These are per channel, resolved as `models/VenueParks.kt` resolves them:
   - **The show parks the channel.**
     - The same value as the venue's effective park: the show's row goes, so the channel is inherited.
-    - A different value: the show's row stays as a re-park.
-    - No venue park on the channel: the show's row stays as its own.
+    - With an origin, the origin's value, where the venue re-parked or unparked the channel since: the
+      venue changed it (P3), so the show's row goes and the venue's comes in. That is an **output
+      change** and is listed (decided with Chris, 2026-10-17, in Att.1's review).
+    - Otherwise a different value: the show's row stays as a re-park.
+    - Otherwise no venue park on the channel: the show's row stays as its own.
   - **The show doesn't park it, but the venue does.** This needs a judgement, so it uses the origin
     when there is one:
     - With an origin, if O parked the channel, the show unparked it after detaching, so a
@@ -233,6 +236,9 @@ The review answers these instead of attaching (`ATTACH_BLOCKED`):
   show's record.
 - **A head-number clash** of the same kind. Head numbers are in the namespace. Detach's own check
   misses them, and this plan's doesn't.
+- **A universe number clash.** A show universe left unpaired because a venue universe it does not
+  pair with holds its `subnet:universe` (the venue renumbered one the show pairs by uuid). Universes are
+  never hidden (P6), so it is never resolved by a hide.
 - **A *Take venue's* rename onto a key the show already uses** for another kept record.
 
 ## 4. The attach

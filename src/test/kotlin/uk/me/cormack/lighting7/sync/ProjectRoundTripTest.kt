@@ -60,6 +60,7 @@ import uk.me.cormack.lighting7.sync.dto.InstallsJson
 import uk.me.cormack.lighting7.sync.dto.TemplateJson
 import uk.me.cormack.lighting7.sync.dto.UniverseConfigJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_DETACHED_FROM
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
 import kotlinx.serialization.json.Json
@@ -120,6 +121,36 @@ class ProjectRoundTripTest {
         ProjectExporter(state).export(imported.projectId, exportDirB)
 
         assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+    }
+
+    /**
+     * A standalone show's origin (venue-attach plan D1) travels in `project.json` and imports back.
+     */
+    @Test
+    fun `a detached show's origin exports in project json and round-trips`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val project = canonicalDecode(ProjectJson.serializer(), Files.readString(exportDirA.resolve("project.json")))
+        assertEquals(RICH_PROJECT_DETACHED_FROM.first.toString(), project.detachedFromVenueUuid)
+        assertEquals(RICH_PROJECT_DETACHED_FROM.second, project.detachedFromVersion)
+        assertNull(project.venueUuid)
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val p = DaoProject[imported.projectId]
+            assertEquals(RICH_PROJECT_DETACHED_FROM.first, p.detachedFromVenueUuid)
+            assertEquals(RICH_PROJECT_DETACHED_FROM.second, p.detachedFromVersion)
+        }
+    }
+
+    @Test
+    fun `a show on a venue exports no origin`() {
+        val onVenue = seedShowOnVenue(state)
+        ProjectExporter(state).export(onVenue.showId, exportDirA)
+        val text = Files.readString(exportDirA.resolve("project.json"))
+        assertFalse(text.contains("detachedFrom"), "a show on a venue records no origin: $text")
     }
 
     /**

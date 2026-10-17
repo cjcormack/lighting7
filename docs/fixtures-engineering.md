@@ -2674,6 +2674,13 @@ before and after, on `seedShowOnVenue`, whose three overrides must come over app
   to a removed record; the answer lists it. Nothing may be left pointing into a snapshot (checked).
 - **Then** the show's hides and overrides are deleted, and the pin, `venue_repo` and the stage size —
   read from the version until now — are written onto the show.
+- **The pin becomes the show's origin** (venue-attach plan D1): `projects.detached_from_venue_uuid` +
+  `.detached_from_version`, written in the transaction that clears the pin and answered as
+  `detachedFrom` `{venueUuid, version, venueId?, venueName?}` — as the project list and detail carry it
+  too. A clone keeps it, Extract clears it (a show that extracts a venue is on it, not detached from
+  another), and it is portable: `project.json`'s `detachedFromVenueUuid` and `detachedFromVersion`, so a
+  show detached on one desk and pulled on another can still be attached with its origin. A show detached
+  before this was recorded has none.
 - **A show that is behind detaches at its pin** — what it runs — not at the installed version: an
   update has decisions only Update can ask. The answer carries `behind` and `installed`, and the
   confirm says the hall's later changes stay behind. A live show reloads, which lifts a hold: a
@@ -2690,6 +2697,31 @@ before and after, on `seedShowOnVenue`, whose three overrides must come over app
   its pin through the importer that already does (`mergeProjectPin` takes the remote's when the local
   pin is the base's), and a desk with no copy of the venue imports it as any standalone show
   (`VenueRepoSyncTest`).
+
+**Attaching back: the pairing.** *Attach to venue…* is Detach in reverse (venue-attach plan; the
+attach itself is Att.2). Its first half is `venue/VenueAttachPairing.kt`: a pure function over three row sets — the show's own rows, the
+version it was detached from (its origin) when this desk holds it, and the target version, read by
+`VenueAttachRows` — answering an `AttachPlan` and writing nothing. Each show record pairs with at most
+one target record of its kind, by uuid first (a version keeps its records' uuids, so a detached show's
+rows still share them) and then by key: a patch's key, a universe's `subnet:universe`, any other
+kind's name; a scene element only on the VENUE layer and never as Preset seating. Each pair compares
+the show's value with the target's, and with the origin's where there is one, so a change the venue
+made is told from one the show made: equal is inherited (the show's row goes and its links are
+re-pointed onto the venue's); a patch facet only the show changed becomes an override based on the
+target, one both changed an override based on the origin (drift); a differing identity (key, type,
+head number, placement count) keeps the show's by default, *Take venue's* renaming its references;
+differing hall structure takes the venue's and a differing group keeps the show's. Whatever the show
+keeps while a venue record matches it hides that record and takes a fresh uuid, so no uuid is held by
+both a show row and a venue row. A venue record with no pair is hidden when the origin held it (the
+show removed it) and comes in otherwise, unless the in-use rule refuses the hide; universes always
+come in; parks and machine overrides follow the plan's §3.5, parks three ways too (a show park still at
+the origin's value takes the venue's re-park or unpark since, as an output change). A key, head number
+or name the show keeps that a venue record it cannot hide holds is a blocker — the check Detach's own
+lacks for head numbers — and so is a show universe whose number a venue universe holds.
+The plan carries the review's lists and every write the attach will make (`AttachWrites`), so Att.2
+only writes it. `VenueAttachPairingTest` pins each case on the Sleeping Beauty-shaped fixture, from
+P2's round trip (detach, then pair at the same version: every record inherited, the show's hides,
+overrides and releases back as they were) onwards.
 
 ### Venue parks
 

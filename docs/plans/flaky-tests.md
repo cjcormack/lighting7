@@ -21,6 +21,7 @@ put anything durable in `testing-engineering.md`.
 
 | Test | Seen failing | Rate | Suspected cause |
 |---|---|---|---|
+| `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance…" (`routes`) | local, `claude/vv-att.1` on `abf3c83` (a full `check --rerun-tasks`); "the follow fired Q2 expected:<2> but was:<1>" at line 134 | 1 in 4 runs | Suspected, not traced: the test waits for the follow's BPM to land, then reads the active cue, and the two can be momentarily out of step |
 
 ## Fixed
 

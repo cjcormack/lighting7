@@ -98,11 +98,19 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.Overrides
 import java.time.Duration
+import java.util.UUID
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.CueStackEntryKind
 
 /** Name of the project [seedRichProject] creates. */
 const val RICH_PROJECT_NAME = "round-trip-rich"
+
+/**
+ * The venue the rich project records being detached from (venue-attach plan D1), and the version: a
+ * venue no desk holds, since the origin only steers an attach, and non-default so canonical JSON
+ * carries both. An extract of the rich project clears them, so `seedShowOnVenue`'s show has none.
+ */
+val RICH_PROJECT_DETACHED_FROM: Pair<UUID, Int> = UUID.fromString("5b0e6c1a-7f2d-4c3e-9a8b-1d2e3f4a5b6c") to 7
 
 /**
  * The scene images the fixture paints with (scrim plan session 1), made in code: a PNG with alpha
@@ -148,6 +156,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         stageWidthM = 12.0
         stageDepthM = 8.0
         stageHeightM = 6.0
+        detachedFromVenueUuid = RICH_PROJECT_DETACHED_FROM.first
+        detachedFromVersion = RICH_PROJECT_DETACHED_FROM.second
     }
 
     // 2 universes, 4 patches, 2 groups. The address is machine-local (Phase 2 cloud sync)

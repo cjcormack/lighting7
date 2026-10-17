@@ -326,6 +326,14 @@ data class ProjectJson(
     val venueVersion: Int? = null,
     /** v24: where the pinned venue syncs, `owner/repo` (or a remote URL) — a hint for a desk without it. */
     val venueRepo: String? = null,
+    /**
+     * Where a standalone show was detached from (venue-attach plan D1): the venue project's uuid and
+     * the version it was pinned to. Both or neither; omitted when absent, and on any project but a
+     * standalone show. No version of its own: absent is a show with no origin, which every show
+     * detached before these fields were written already is.
+     */
+    val detachedFromVenueUuid: String? = null,
+    val detachedFromVersion: Int? = null,
 )
 
 /**

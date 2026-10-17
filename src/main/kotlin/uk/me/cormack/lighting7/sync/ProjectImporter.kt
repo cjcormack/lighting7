@@ -437,6 +437,9 @@ class ProjectImporter(private val state: State) {
                 venueUuid = pin?.venueUuid
                 venueVersion = pin?.version
                 venueRepo = pin?.hint
+                val origin = originOf(projectJson, targetKind, pin)
+                detachedFromVenueUuid = origin?.first
+                detachedFromVersion = origin?.second
             }
 
             val clashes = populateProject(sourceDir, project, format.formatVersion)
@@ -583,6 +586,9 @@ class ProjectImporter(private val state: State) {
             project.venueUuid = pin?.venueUuid
             project.venueVersion = pin?.version
             project.venueRepo = pin?.hint
+            val origin = originOf(projectJson, project.kind, pin)
+            project.detachedFromVenueUuid = origin?.first
+            project.detachedFromVersion = origin?.second
 
             val clashes = populateProject(sourceDir, project, format.formatVersion)
 
@@ -648,6 +654,18 @@ class ProjectImporter(private val state: State) {
             ?: throw ImportError.invalidArchive("project.json names venue $venueUuid but no venueVersion")
         if (version < 1) throw ImportError.invalidArchive("project.json's venueVersion must be at least 1: $version")
         return Pin(uuid, version, projectJson.venueRepo?.takeIf { it.isNotBlank() })
+    }
+
+    /**
+     * A standalone show's origin as an archive states it (venue-attach plan D1), or null — for a show
+     * on a venue, a venue, a version, and an archive naming none. Both fields or neither; a half or an
+     * unparseable one reads as none rather than failing the import: the origin only steers an attach.
+     */
+    private fun originOf(projectJson: ProjectJson, kind: ProjectKind, pin: Pin?): Pair<UUID, Int>? {
+        if (kind != ProjectKind.SHOW || pin != null) return null
+        val uuid = projectJson.detachedFromVenueUuid?.let { runCatching { UUID.fromString(it) }.getOrNull() } ?: return null
+        val version = projectJson.detachedFromVersion?.takeIf { it >= 1 } ?: return null
+        return uuid to version
     }
 
     /** Refuse (409 `VENUE_MISSING`) a pin whose snapshot is not on this desk. Inside a transaction. */

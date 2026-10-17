@@ -198,6 +198,17 @@ export interface ExtractVenueResult {
   imagesCopied: number
 }
 
+/**
+ * Where a standalone show was detached from: the venue by uuid (its id and name when it is on this
+ * desk) and the version it was pinned to.
+ */
+export interface DetachedFrom {
+  venueUuid: string
+  version: number
+  venueId?: number | null
+  venueName?: string | null
+}
+
 /** `POST /projects/{id}/detach` — what a detach did, or with `dryRun` would do (venue plan D9, session 7). */
 export interface DetachResult {
   dryRun: boolean
@@ -209,6 +220,8 @@ export interface DetachResult {
   installed?: number | null
   /** How far behind the pin was: the venue's later changes do not come with it. */
   behind?: VenueBehind
+  /** The origin the show now records; absent from a desk older than venue attach. */
+  detachedFrom?: DetachedFrom
   copied: VenueRigRows
   /** `key: facet, facet` for each venue patch whose overrides were written in. */
   overridesApplied: string[]

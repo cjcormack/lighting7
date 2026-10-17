@@ -1,7 +1,7 @@
 import { InternalApiConnection } from "./internalApi";
 import { Subscription } from "./subscription";
 import { ScriptType } from "../store/scripts";
-import type { VenueBehind } from "./venueApi";
+import type { DetachedFrom, VenueBehind } from "./venueApi";
 import type { CueNumberClash } from "../store/cloudSync";
 
 /**
@@ -51,6 +51,8 @@ export interface ProjectSummary {
   parks?: number;
   /** *Make rig safe*'s blackout still holds on the project, so it opens dark. Runtime only. */
   safeBlackout?: boolean;
+  /** Where a standalone show was detached from; absent for any other project and from an older desk. */
+  detachedFrom?: DetachedFrom | null;
 }
 
 /**
@@ -86,6 +88,8 @@ export interface ProjectDetail {
   kind?: ProjectKind;
   /** The venue a show sits on; its stage size above is the venue's. */
   venue?: ProjectVenue | null;
+  /** Where a standalone show was detached from; absent for any other project and from an older desk. */
+  detachedFrom?: DetachedFrom | null;
 }
 
 // For creating a new project
