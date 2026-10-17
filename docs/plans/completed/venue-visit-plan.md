@@ -265,6 +265,9 @@ a one-line row here.
 - ~~K5 — after nine more~~ — done, `e8e48998` (plans corrected for S13 and R3.8, S12's hosts and footer;
   S17 added for R1.7's review; the Cue editor, Cue library, Apply and Venue attach lanes folded; no
   operator check needed correcting; no question for Chris; no manual check run).
+- ~~K6 — closing the plan~~ — done, `7c197bc0` (plans corrected for S12 and S17, S12's operator check
+  among them; §4 emptied; this plan and the six R plans moved to `completed/` with their design
+  folders; no manual check run).
 
 ### Research and design — done
 
