@@ -116,7 +116,9 @@ The plan adds its own:
 - **P2 — Nothing in the Show view sends output but *Update stage*.** The cue grid mounts none of the
   surfaces that reach the rig or the desk: the desk-selection bridge, Release, Locate, Highlight,
   the palette strip, the popup's Palettes bands (a press since R3.3, `a14d8220`; the grid's cells
-  take no `projectId`, so they draw none — apply-model plan session 5), `useClearCellEffects` and the live writers. Its selection is
+  take no `projectId`, so they draw none — apply-model plan session 5) and its Effects band (R3.6,
+  `e8217314`, which starts an effect through the bare effect press, behind the same `projectId`
+  gate in `PaletteBands`), `useClearCellEffects` and the live writers. Its selection is
   local state. A test
   per tab asserts that a full editing pass sends no `programmer.*`, `channels.*` or `fx.*` frame.
 - **P3 — A cue's children keep their uuids across a write**, reconciled by natural key as a Look's
@@ -243,10 +245,10 @@ effect across writes. No `formatVersion` change: the archive already carries eac
 
 - **The source.** The vis-source vocabulary (`output | outputProgrammer | programmer | nextGo`) gains
   `edit`. It is per window like the others; the window's *edit target* (an entry id, or a cue id for a
-  loose cue) rides beside it in the Stage view's per-window store and in `windows.viewOptions`
+  cue opened from no entry: a loose one, or one in several places opened in the sheet, §4.7) rides beside it in the Stage view's per-window store and in `windows.viewOptions`
   (`source: 'edit'`, `editEntry` / `editCue`), so the Screens sheet can point another window at it.
 - **The channels** come from R1's entry-keyed preview (`GET …/cue-stacks/{sid}/preview?entryId=`,
-  P2 of R1) or, for a loose cue, a route of its own (R1.2's preview takes only an `entryId` under a
+  P2 of R1) or, for a cue with no entry, a route of its own (R1.2's preview takes only an `entryId` under a
   stack's path, composed against that stack's context), composed as a loose press; refetched,
   debounced at 300 ms, on every `cueListChanged` (it names no cue) and on a `cuesRecomposed` whose
   `cueIds` hold the cue (a Look or palette contents edit under it). Because edits save as they go (D10), the
@@ -353,7 +355,11 @@ the sheet's yields to it then. A pane or card that is not the region draws its s
 
 R1's Cues table opens a cue in its first entry's stack, and a loose cue in a read-only sheet. Once
 session 4 lands, that sheet mounts `CueEditor` (no entry, so no number or follow), so a loose cue is
-edited in the same editor. Session 4 landed first (`a4ab679`), so R1 session 5 makes the swap.
+edited in the same editor. Session 4 landed first (`a4ab679`), and R1 session 5 made the swap
+(`a410c6c`): the Cues table opens a placed cue at its first entry and a loose one in
+`CueEditorSheet` (`stage/OwnerEditor.tsx`), the editor's third host (`host="sheet"`), which R2.4
+built for *Moves with* and *on Q12*. The sheet opens by cue: a cue in one stack edits that entry,
+and one in several places has no entry there, which the header says.
 
 ## 5. The action set
 
@@ -512,11 +518,15 @@ says palette). All of them have merged.
 ### Session 8 — Show on stage (frontend + preview)
 
 - §3.7: the `edit` source, its announce keys, the Screens sheet's Source segment, the toggle in the
-  header; the loose cue's preview route (R1.2's takes only an `entryId`).
+  header; the preview route for a cue with no entry (R1.2's takes only an `entryId`).
 - **Where the source lives.** `VisSource` is `hooks/useVisSource.ts`'s, per window; it is announced
   by `stageViewOptions`, applied by `applyStageViewOptions` and read on arrival by
   `consumeLaunchStageOptions` (`lib/stageViewpoint.ts`), and a Screens row's *Copy link* carries it
   as `source=` (`windowSetupUrl`). The edit target rides beside it in all four.
+- **Three hosts, one with no entry.** The header's toggle is drawn in `CueEditorHeader`, so the
+  card, the pane and `CueEditorSheet` (§4.7) all get it. The sheet opens by cue, so a shared cue
+  opened there has no entry and takes the no-entry route, as a loose cue does. Over the Stage view
+  (*Moves with*) the sheet sits on the very window the toggle points.
 - **The Screens row cannot name a cue.** Its Source is `STAGE_SOURCE_OPTION`, an `enum` segment of
   two of the four sources (*Output · Next GO*, `lib/windowViews.ts`). The row offers *Cue in edit*
   **only while that window already shows one** (§11, 19); a cue `picker` was declined.

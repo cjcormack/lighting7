@@ -600,7 +600,7 @@ pads and stacks show the confirm reads right.
 1. **Blind edit.** On Act 1, open Q4's card. The split button reads *Blind edit in programmer*, amber.
    Press it: the programmer opens, Blind is on, and nothing on stage moves — values or effects.
 2. **← Show.** In the programmer's source box press *← Show*: Act 1 opens with Q4's card open.
-3. **Duplicate.** Unlock, and *Duplicate* Q3: the copy, *Q3 (copy)*, is the last cue of Act 1, its
+3. **Duplicate.** Unlock, and *Duplicate* Q3: the copy, named for Q3's name with *(copy)* after it, is the last cue of Act 1, its
    card open, and every other cue keeps its number.
 4. **Delete.** Put a cue on a busk pad, then *Delete…* it from its card: the confirm lists its entry
    and the pad's page (and any slot, anchor or binding). Delete; the pad's page redraws without it.
@@ -873,8 +873,8 @@ provenance from the desk. Nothing in review watched a held pulse land back in st
    programmer chip say *values and effects held* on hover; the fixture sheet's FX tray and the
    programmer rail's FX band mark the busked Pulse *held · Blind*; its row's stack says *Blind holds
    it*.
-3. **Blind off.** Turn Blind off. The busked pulse paints at once — no fade in — and in step with the
-   cue's, not from the top of its cycle.
+3. **Blind off.** Turn Blind off. The busked pulse comes back in step with the cue's, not from the top
+   of its cycle, growing from nothing over the programmer fade (R4.4); at a 0 s fade it paints at once.
 4. **A Blind edit.** With Blind on, Include a cue that holds an effect (*Edit in programmer* after
    switching Blind on). Nothing moves on stage until Blind goes off.
 
