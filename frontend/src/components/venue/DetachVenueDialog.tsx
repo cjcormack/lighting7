@@ -21,7 +21,8 @@ import type { DetachResult } from '@/api/venueApi'
  * **rolled back** on the desk (`dryRun`), so what it lists is what the press will do: the venue's
  * records that become the show's own, the overrides written in, the hides that go. A show behind its
  * venue detaches at its pin — what it runs — and the confirm says the hall's later changes stay
- * behind. Both roles: a detach changes only the show. A refusal is drawn here (`detachVenue` is in
+ * behind. Both roles: a detach changes only the show. The version it leaves is remembered, which is
+ * what *Attach to venue…* matches against three ways. A refusal is drawn here (`detachVenue` is in
  * `SILENT_ENDPOINTS`).
  */
 export function DetachVenueDialog({
@@ -143,6 +144,10 @@ function DetachSummary({ result }: { result: DetachResult }) {
           {item.name}: {item.detail}
         </p>
       ))}
+      <p data-detach-remembered="">
+        {result.detachedFrom?.venueName ?? result.venueName} v{result.detachedFrom?.version ?? result.version} will be remembered, so
+        the show can be attached again.
+      </p>
     </div>
   )
 }

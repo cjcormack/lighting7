@@ -1,10 +1,12 @@
 import { restApi, type RestTagType } from "./restApi"
 import type {
+  AttachReview,
   DetachResult,
   ExtractKind,
   ExtractVenueResult,
   ReplaceSeatingResult,
   SeatingPresets,
+  UpdateDecisionAnswer,
   VenueDiff,
   VenueHistory,
   VenueVersion,
@@ -101,6 +103,43 @@ export const venuesApi = restApi.injectEndpoints({
       invalidatesTags: (_result, error, { dryRun }) => (error || dryRun ? [] : [...SHOW_RIG_TAGS]),
     }),
 
+    /**
+     * *Attach to venue…*'s review (venue-attach plan §4.1): the attach rolled back on the desk. With no
+     * answers it is the `GET`; with some it is the `POST` as a dry run, since answering one decision can
+     * change what else the review lists. A query, not a mutation, so a change of answers keeps the last
+     * review drawn while the next is read. Read only while the sheet is open.
+     */
+    venueAttachReview: build.query<
+      AttachReview,
+      { projectId: number; venueId: number; to?: number; decisions: UpdateDecisionAnswer[] }
+    >({
+      query: ({ projectId, venueId, to, decisions }) =>
+        decisions.length === 0
+          ? `projects/${projectId}/venue/attach?venue=${venueId}${to != null ? `&to=${to}` : ''}`
+          : {
+              url: `projects/${projectId}/venue/attach`,
+              method: 'POST',
+              body: { venueId, ...(to != null ? { to } : {}), decisions, dryRun: true },
+            },
+      providesTags: ['Project', 'Venue'],
+    }),
+
+    /**
+     * The attach: the show's rows that are the venue's records go, its differences become overrides,
+     * hides and releases, and the pin is written. Its renames reach cue, Look, palette and binding rows.
+     */
+    attachVenue: build.mutation<
+      AttachReview,
+      { projectId: number; venueId: number; to?: number; decisions: UpdateDecisionAnswer[] }
+    >({
+      query: ({ projectId, venueId, to, decisions }) => ({
+        url: `projects/${projectId}/venue/attach`,
+        method: 'POST',
+        body: { venueId, ...(to != null ? { to } : {}), decisions },
+      }),
+      invalidatesTags: (_result, error) => (error ? [] : [...SHOW_RIG_TAGS, 'TemplateList', 'SurfaceBinding']),
+    }),
+
     /** What a venue offers to seat from (its installed version), or a show (its pinned one), and the show's own. */
     seatingPresets: build.query<SeatingPresets, number>({
       query: (projectId) => `projects/${projectId}/seating/presets`,
@@ -130,6 +169,8 @@ export const {
   useDiscardVenueDraftMutation,
   useExtractVenueMutation,
   useDetachVenueMutation,
+  useVenueAttachReviewQuery,
+  useAttachVenueMutation,
   useSeatingPresetsQuery,
   useReplaceSeatingFromPresetMutation,
 } = venuesApi

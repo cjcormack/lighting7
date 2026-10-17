@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { AlertTriangle, ArrowUpCircle, CircleSlash, HelpCircle, Layers, XCircle } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -14,21 +14,11 @@ import {
 } from '@/components/ui/sheet'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { formatError } from '@/lib/formatError'
-import { cn } from '@/lib/utils'
 import { FACET_LABELS } from '@/lib/venue'
 import { useUpdateVenueMutation, useVenueUpdateReviewQuery } from '@/store/venueHold'
-import type { UpdateAnswer, UpdateDecision, UpdateDrift, UpdateItem } from '@/api/venueApi'
+import type { UpdateAnswer, UpdateDrift } from '@/api/venueApi'
 import { VenueChangeList } from './VenueChangeList'
-
-/** The words on a decision's answers (P8), in the board's order. */
-const ANSWER_LABELS: Record<UpdateAnswer, string> = {
-  KEEP_BOTH: 'Keep both',
-  READDRESS_MINE: 'Re-address mine',
-  HIDE_VENUES: "Hide the venue's",
-  REMOVE_MINE: 'Remove mine',
-  KEEP_MINE: 'Keep mine',
-  TAKE_VENUES: "Take venue's",
-}
+import { facetValueOf, OverlapDecisionRow, ReviewGroup as Group, ReviewItemRow } from './VenueReviewParts'
 
 /**
  * *Review update* (venue plan §3.5, P3, P8; `Update.dc.html`'s callouts 3–6): the hall's changes from
@@ -169,14 +159,14 @@ export function VenueUpdateSheet({
 
                 {blockers.length > 0 && (
                   <Group label="Can't be kept" count={blockers.length} tone="red" icon={<XCircle className="size-3.5 text-red-600 dark:text-red-400" />}>
-                    {blockers.map((b, i) => <ItemRow key={`${b.kind}-${i}`} sign="!" item={b} tone="red" />)}
+                    {blockers.map((b, i) => <ReviewItemRow key={`${b.kind}-${i}`} sign="!" detail={b.detail} tone="red" />)}
                   </Group>
                 )}
 
                 {decisions.length > 0 && (
                   <Group label="Needs a decision" count={decisions.length} tone="red" icon={<AlertTriangle className="size-3.5 text-red-600 dark:text-red-400" />}>
                     {decisions.map((d) => (
-                      <DecisionRow key={d.id} decision={d} chosen={answers[d.id]} onChoose={(a) => answer(d.id, a)} />
+                      <OverlapDecisionRow key={d.id} decision={d} chosen={answers[d.id]} onChoose={(a) => answer(d.id, a)} />
                     ))}
                   </Group>
                 )}
@@ -197,14 +187,14 @@ export function VenueUpdateSheet({
 
                 {(review.dropped?.length ?? 0) > 0 && (
                   <Group label="Dropped" count={review.dropped!.length} icon={<CircleSlash className="size-3.5 text-muted-foreground" />}>
-                    {review.dropped!.map((item, i) => <ItemRow key={`${item.kind}-${i}`} sign="−" item={item} />)}
+                    {review.dropped!.map((item, i) => <ReviewItemRow key={`${item.kind}-${i}`} sign="−" detail={item.detail} />)}
                   </Group>
                 )}
 
                 {(review.deadReferences?.length ?? 0) > 0 && (
                   <Group label="Will point at nothing" count={review.deadReferences!.length} icon={<HelpCircle className="size-3.5 text-muted-foreground" />}>
                     {review.deadReferences!.map((ref) => (
-                      <ItemRow key={`${ref.kind}-${ref.key}`} sign="?" item={{ kind: ref.kind, name: ref.key, detail: ref.detail }} />
+                      <ReviewItemRow key={`${ref.kind}-${ref.key}`} sign="?" detail={ref.detail} />
                     ))}
                   </Group>
                 )}
@@ -236,92 +226,10 @@ export function VenueUpdateSheet({
   )
 }
 
-function Group({
-  label,
-  count,
-  icon,
-  tone,
-  children,
-}: {
-  label: string
-  count: number
-  icon?: ReactNode
-  tone?: 'red' | 'amber'
-  children: ReactNode
-}) {
-  return (
-    <div className="space-y-1.5" role="group" aria-label={label}>
-      <div className="flex items-center gap-1.5">
-        {icon}
-        <EditorLabel
-          className={cn(tone === 'red' && 'text-red-700 dark:text-red-400', tone === 'amber' && 'text-amber-700 dark:text-amber-400')}
-        >
-          {label}
-        </EditorLabel>
-        <span className="rounded bg-muted px-1.5 text-[10px] font-semibold tabular-nums">{count}</span>
-      </div>
-      <ul className="space-y-1">{children}</ul>
-    </div>
-  )
-}
-
-function ItemRow({ sign, item, tone }: { sign: string; item: UpdateItem; tone?: 'red' }) {
-  return (
-    <li className={cn('flex items-start gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm', tone === 'red' && 'border-red-500/40')}>
-      <span aria-hidden className={cn('w-3 shrink-0 text-center font-mono font-bold', tone === 'red' ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground')}>
-        {sign}
-      </span>
-      <span className="min-w-0">{item.detail}</span>
-    </li>
-  )
-}
-
-function DecisionRow({
-  decision,
-  chosen,
-  onChoose,
-}: {
-  decision: UpdateDecision
-  chosen: UpdateAnswer | undefined
-  onChoose: (answer: UpdateAnswer) => void
-}) {
-  return (
-    <li className="space-y-1.5 rounded-md border border-red-500/40 bg-card px-2.5 py-2 text-sm">
-      <div className="flex items-start gap-2">
-        <span aria-hidden className="w-3 shrink-0 text-center font-mono font-bold text-red-600 dark:text-red-400">!</span>
-        <span className="min-w-0">{decision.message}</span>
-      </div>
-      <div className="flex flex-wrap gap-1.5 pl-5" role="radiogroup" aria-label={`Answer: ${decision.mine.name}`}>
-        {decision.answers.map((a) => (
-          <Button
-            key={a}
-            role="radio"
-            aria-checked={chosen === a}
-            size="sm"
-            variant={chosen === a ? 'default' : 'outline'}
-            className="h-7"
-            onClick={() => onChoose(a)}
-          >
-            {a === 'READDRESS_MINE' && decision.suggestedAddress ? `${ANSWER_LABELS[a]} → ${decision.suggestedAddress}` : ANSWER_LABELS[a]}
-          </Button>
-        ))}
-      </div>
-    </li>
-  )
-}
-
-/** A short line for a facet's value: a gel's code, an address, else the facet's name. */
-function facetValue(drift: UpdateDrift, value: Record<string, unknown> | null | undefined): string | null {
-  if (value == null) return null
-  if (drift.facet === 'MEDIA' && typeof value.gelCode === 'string') return value.gelCode
-  if (drift.facet === 'ADDRESS' && typeof value.startChannel === 'number') return `ch ${value.startChannel}`
-  return null
-}
-
 function DriftRow({ drift, to, taken, onToggle }: { drift: UpdateDrift; to: number; taken: boolean; onToggle: () => void }) {
   const facet = FACET_LABELS[drift.facet]
-  const theirs = facetValue(drift, drift.venue)
-  const mine = facetValue(drift, drift.value)
+  const theirs = facetValueOf(drift.facet, drift.venue)
+  const mine = facetValueOf(drift.facet, drift.value)
   return (
     <li className="flex items-start gap-2 rounded-md border bg-card px-2.5 py-1.5 text-sm">
       <span aria-hidden className="w-3 shrink-0 text-center font-mono font-bold text-amber-600 dark:text-amber-400">~</span>

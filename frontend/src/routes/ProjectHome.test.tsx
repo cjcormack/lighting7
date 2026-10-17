@@ -101,6 +101,9 @@ vi.mock('@/components/venue/PublishVenueSheet', () => ({
 vi.mock('@/components/venue/VenueUpdateSheet', () => ({
   VenueUpdateSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="update-sheet" /> : null),
 }))
+vi.mock('@/components/venue/AttachVenueSheet', () => ({
+  AttachVenueSheet: ({ open, showName }: { open: boolean; showName: string }) => (open ? <div data-testid="attach-sheet">{showName}</div> : null),
+}))
 vi.mock('@/components/venue/RunAgainstDialog', () => ({
   RunAgainstDialog: ({ open, pinned }: { open: boolean; pinned: number }) => (open ? <div data-testid="run-against">v{pinned}</div> : null),
 }))
@@ -299,12 +302,15 @@ describe('the status block', () => {
     expect(document.querySelector('[data-status-row="live"]')).toBeNull()
   })
 
-  it('a standalone show reads No venue, with the attach slot', () => {
+  it('a standalone show reads No venue, and its Attach to venue… opens the sheet', () => {
     drawHome(1)
     const venue = document.querySelector('[data-status-row="venue"]') as HTMLElement
     expect(venue.textContent).toContain('No venue')
-    expect((within(venue).getByRole('button', { name: 'Attach to venue…' }) as HTMLButtonElement).disabled).toBe(true)
-    expect(venue.textContent).toContain('Not available yet')
+    const attach = within(venue).getByRole('button', { name: 'Attach to venue…' }) as HTMLButtonElement
+    expect(attach.disabled).toBe(false)
+    expect(screen.queryByTestId('attach-sheet')).toBeNull()
+    fireEvent.click(attach)
+    expect(screen.getByTestId('attach-sheet').textContent).toBe('Default')
   })
 
   it('reads sync for an admin, with Sync now, and nothing to an operator', () => {

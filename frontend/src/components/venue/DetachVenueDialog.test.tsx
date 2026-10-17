@@ -71,6 +71,13 @@ describe('DetachVenueDialog (venue plan session 7)', () => {
     expect(screen.queryByText(/It detaches at v3/)).toBeNull()
   })
 
+  it('says the version it leaves will be remembered, so the show can be attached again', () => {
+    draw({ ...DRY, detachedFrom: { venueUuid: 'u', version: 3, venueId: 9, venueName: 'Commemoration Hall' } })
+    expect(document.querySelector('[data-detach-remembered]')!.textContent).toBe(
+      'Commemoration Hall v3 will be remembered, so the show can be attached again.',
+    )
+  })
+
   it('detaches for real on the press, and waits for the preview first', async () => {
     draw(null)
     expect(screen.getByRole('button', { name: 'Detach' })).toBeDisabled()

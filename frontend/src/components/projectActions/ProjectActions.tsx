@@ -27,6 +27,7 @@ import CloneProjectDialog from '@/CloneProjectDialog'
 import DeleteProjectConfirmDialog from '@/DeleteProjectConfirmDialog'
 import ExportProjectDialog from '@/ExportProjectDialog'
 import ProjectSwitchConfirmDialog from '@/ProjectSwitchConfirmDialog'
+import { AttachVenueSheet } from '../venue/AttachVenueSheet'
 import { DetachVenueDialog } from '../venue/DetachVenueDialog'
 import { ExtractVenueSheet } from '../venue/ExtractVenueSheet'
 import { PublishVenueSheet } from '../venue/PublishVenueSheet'
@@ -127,6 +128,9 @@ function ProjectActionDialogs({
           showName={project.name}
           venueName={venue?.name ?? 'its venue'}
         />
+      )}
+      {dialog === 'attach' && (
+        <AttachVenueSheet open onOpenChange={onOpenChange} projectId={project.id} showName={project.name} />
       )}
       {dialog === 'extract' && <ExtractFromProject projectId={project.id} onOpenChange={onOpenChange} />}
       {dialog === 'history' && venueHistory && <VenueHistorySheet open onOpenChange={onOpenChange} history={venueHistory} />}

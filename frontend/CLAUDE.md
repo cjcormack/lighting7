@@ -6964,7 +6964,7 @@ group's *Settings*, which takes its words. The table:
 | Export… | an admin | copy |
 | Update venue to vN… | a show on a venue it is behind | venue |
 | Detach from venue… | a show on a venue this desk holds at its pinned version | venue |
-| Attach to venue… | a standalone show — a disabled slot until `venue-attach-plan.md` builds it | venue |
+| Attach to venue… | a standalone show; opens `AttachVenueSheet` | venue |
 | Extract a venue… | an admin, a standalone show | venue |
 | History · Publish vN… | an admin on a venue; Publish refused with nothing to publish | venue |
 | Delete… | a show, or an admin on a venue; refused on the project on the rig | danger |
@@ -6978,8 +6978,38 @@ predicates are what is offered, never a permission: the desk refuses whatever it
 `projectActions.test.ts` pins the table per kind, role and state; `ProjectActionPlaces.test.tsx`
 renders the four places and pins that the card, the home's ⋮ and ⌘K offer one set — a venue's too,
 to an admin and an operator — that a show whose venue is missing offers no working *Make current*
-in any of them, and that ⌘K's *History* and *Publish vN…* for a viewed venue carry their reasons and
-open the band's sheets.
+in any of them, that ⌘K's *History* and *Publish vN…* for a viewed venue carry their reasons and
+open the band's sheets, and that *Attach to venue…* opens its sheet from all four doors.
+
+**Attach to venue…** (venue-attach plan §5, D1–D4; `components/venue/AttachVenueSheet.tsx`, the rules
+in `lib/venueAttach.ts`) is Detach in reverse, on Update's shell and rows (`VenueReviewParts.tsx`,
+which `VenueUpdateSheet` draws from too). It opens on the venue the show was detached from — first in
+the list and marked *Detached from here*, from the project list's `detachedFrom` — at its installed
+version, offering the version the show left beside it while the desk holds it. One line says whether
+matching is three-way (*Using v7, the version TCH Test left.*) or not: no origin, or the desk's own
+reason from `origin.detail` for one it lacks or one of another venue. The review is the attach rolled
+back on the desk: `GET …/venue/attach` with no answers, the same `POST` as a dry run with some
+(`venueAttachReview`, a query so the last review stays drawn while the next reads), re-read 250 ms
+after the last answer (a run of presses is one dry run, each a whole attach rolled back on the desk's
+one connection) because answering one decision can retire another — an identity's *Take venue's*
+retires the group decisions its members made — or take an answer off one. The desk refuses such an
+answer by name (`ATTACH_INVALID`, two sentences `VenueAttachTest` pins), and the sheet drops it
+(`staleAnswerIdOf`) and reads again; any other failed read holds *Attach* back, since the review on
+screen is not the one for the answers given. The review is grouped
+Output (*Attaching changes no output.*, else changes output then drawing only), From the venue (the
+counts it inherits), Overrides (drift rows with *Keep mine* / *Take venue's*), Decisions (identity with
+its rename's reach — who names the key, by record: *in 8 cues, 1 Look*; scripts said apart, never
+rewritten — hall and groups, each with its default pressed, and P8's overlaps, which must be
+answered: a dry run sends *Re-address mine* bare and the desk picks the free start, and the attach
+sends the start the last review suggested, the address on the button), Comes in from the venue and
+Hidden in this show (without an origin each incoming record has *Hide in this show*, the `HIDE`
+decision, matched by kind and record; none on a hide the desk refused),
+Yours, Will point at nothing, blockers and the desk's notes; an attach behind on output says it
+opens held, or, on the rig, runs against its pin. *Attach* waits for every overlap and no blocker,
+collapses to its progress — the sheet held open until the desk answers — and closes on the show's
+home. `attachVenue` is a silent endpoint; the
+sheet draws a refusal and keeps the answers. Detach's confirm says the version it leaves is
+remembered.
 
 ### A project's home
 
@@ -6993,7 +7023,7 @@ and it leads with status. A show's is below; a venue's follows it. The header (`
   drawing only or up to date, red for a version not on this desk — with the banner's own actions,
   `VenueBehindActions` (*Review update*, *Run against v7…* while held on the rig, *Hold output*
   while running against; the banner keeps *Later*), and *Open venue*. A standalone show reads *No
-  venue* beside the attach slot.
+  venue* beside *Attach to venue…*, which is the ⋮'s action, so it opens the same sheet.
 - **Sync**, for an admin only, since every cloud-sync route is an admin's: *Synced · owner/repo · 2
   min ago* or *Not synced*, and *Sync now* through `useSyncNow` (`components/cloudSync/`), the hook
   the Sync tab's Status panel presses too. Its toasts share the global toaster's id, so a run and
