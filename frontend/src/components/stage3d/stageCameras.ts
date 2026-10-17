@@ -82,7 +82,9 @@ export function sceneBoundsLighting(
  * section fitted to the hall would stand outside its walls and show their backs, or nothing: the
  * room faces inward, so from outside only its far side draws. How deep the section sees reaches the
  * venue too ([orthoSection]'s `beyond`), so the hall floor under a raised stage and the stage
- * house's back wall are not clipped by the far plane.
+ * house's back wall are not clipped by the far plane. **The plan's fit reaches the room too**
+ * (venue-visit plan S13, [orthoSection]'s `room`): its centre and size take in the drawn rooms'
+ * footprint, so the house and the walls are on the plan to aim at, while its plane stays the rig's.
  */
 export interface OrthoSection {
   position: Vec3
@@ -100,7 +102,12 @@ export interface OrthoSection {
  * audience right, which is stage left in actor terms (lighting7 `docs/fixtures-engineering.md`'s
  * axis table) — with the house to the left and upstage to the right.
  */
-export function orthoSection(view: OrthoCamera, b: LightingBounds, beyond: LightingBounds | null = null): OrthoSection {
+export function orthoSection(
+  view: OrthoCamera,
+  b: LightingBounds,
+  beyond: LightingBounds | null = null,
+  room: LightingBounds | null = null,
+): OrthoSection {
   const cx = (b.min.x + b.max.x) / 2
   const cy = (b.min.y + b.max.y) / 2
   const cz = (b.min.z + b.max.z) / 2
@@ -114,15 +121,18 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds, beyond: Light
   const rightX = Math.min(b.min.x, beyond?.min.x ?? Infinity)
   switch (view) {
     case 'plan': {
+      // The plan is fitted to the room as well as the rig (venue-visit plan S13), so a point in the
+      // house or by a wall is on the drawing to be clicked. Only the fit: the plane stays the rig's.
+      const fit = planFit(b, room)
       const eyeZ = b.max.z + m
       return {
-        position: [cx, eyeZ, -cy],
-        target: [cx, b.min.z, -cy],
+        position: [fit.cx, eyeZ, -fit.cy],
+        target: [fit.cx, b.min.z, -fit.cy],
         // Screen-up is three's −z, which is lighting +Y: upstage at the top.
         up: [0, 0, -1],
         far: eyeZ - lowZ + m,
-        width: spanX + 2 * FIT_MARGIN_M,
-        height: spanY + 2 * FIT_MARGIN_M,
+        width: fit.spanX + 2 * FIT_MARGIN_M,
+        height: fit.spanY + 2 * FIT_MARGIN_M,
       }
     }
     case 'front': {
@@ -148,6 +158,15 @@ export function orthoSection(view: OrthoCamera, b: LightingBounds, beyond: Light
       }
     }
   }
+}
+
+/** The plan's footprint: the rig's, grown to the room's across and up and down stage. */
+function planFit(b: LightingBounds, room: LightingBounds | null) {
+  const minX = Math.min(b.min.x, room?.min.x ?? Infinity)
+  const maxX = Math.max(b.max.x, room?.max.x ?? -Infinity)
+  const minY = Math.min(b.min.y, room?.min.y ?? Infinity)
+  const maxY = Math.max(b.max.y, room?.max.y ?? -Infinity)
+  return { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, spanX: maxX - minX, spanY: maxY - minY }
 }
 
 /**
