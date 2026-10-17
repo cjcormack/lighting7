@@ -85,12 +85,18 @@ export interface CueLayer {
  * A layer as the server reads it back, carrying what it applies — kind, id, uuid and name — so a cue
  * card can label the line without a second fetch.
  *
- * `source` is **read-only** and must never be sent back: `lookId` / `templateId` are the write
+ * `source` and `id` are **read-only** and must never be sent back: `lookId` / `templateId` are the write
  * fields. Same contract as `presetName` was and as `health` is on an assignment. `buildCueInput`
  * strips it, and a regression test pins that.
  */
 export interface CueLayerDetail extends CueLayer {
   source: LayerSource | null
+  /**
+   * The stored layer's id, read-only: a cue write keeps every layer it keeps (show-cue-editing
+   * plan §3.4), so this names one layer across writes — what the cue editor's Looks tab finds a
+   * gesture's layer by. Never sent back. Absent from a desk that predates it.
+   */
+  id?: number
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)

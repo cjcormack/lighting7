@@ -1,4 +1,4 @@
-import type { Cue, CueInput } from '@/api/cuesApi'
+import type { Cue, CueAdHocEffect, CueInput, CueLayer } from '@/api/cuesApi'
 import { formatMs } from './formatMs'
 
 const CURVE_LABELS: Record<string, string> = {
@@ -89,37 +89,51 @@ export function nextAvailableName(base: string, taken: Set<string>): string {
   return `${base} ${Date.now()}`
 }
 
+/**
+ * A layer as the cue's write takes it: its write fields, rebuilt one by one — never the read-only
+ * `source` or `id`, which the desk answers and ignores on write.
+ */
+export function cueLayerInput(layer: CueLayer): CueLayer {
+  return {
+    lookId: layer.lookId,
+    // Session 3: a layer applies a Look **or** a template. Missing from this rebuild it would be
+    // dropped on every inline cue edit — and because both ids are optional now, the compiler would
+    // not have said a word. Exactly the failure the comment below describes.
+    templateId: layer.templateId,
+    sortOrder: layer.sortOrder,
+    enabled: layer.enabled,
+    targets: layer.targets,
+    propertyMask: layer.propertyMask,
+    blendMode: layer.blendMode,
+    amount: layer.amount,
+    stomp: layer.stomp,
+    // Rebuilt field-by-field (unlike an effect's spread) because the detail row carries `source`
+    // and `id`, which the input type must not. The cost of that shape is that every new field
+    // must be added HERE too, or every inline cue edit silently strips it — which is what a
+    // regression test in cueUtils.test.ts pins, field by field.
+    speedMasterUuid: layer.speedMasterUuid,
+    rateSpeedMasterUuid: layer.rateSpeedMasterUuid,
+    delayMs: layer.delayMs,
+    intervalMs: layer.intervalMs,
+    randomWindowMs: layer.randomWindowMs,
+  }
+}
+
+/** An effect as the cue's write takes it: everything but the read-only `uuid`. */
+export function cueEffectInput(effect: CueAdHocEffect): CueAdHocEffect {
+  const { uuid: _uuid, ...input } = effect
+  return input
+}
+
 /** Build a CueInput snapshot from a Cue (for inline editing mutations). */
 export function buildCueInput(cue: Cue): CueInput {
   return {
     name: cue.name,
-    layers: cue.layers.map((layer) => ({
-      lookId: layer.lookId,
-      // Session 3: a layer applies a Look **or** a template. Missing from this rebuild it would be
-      // dropped on every inline cue edit — and because both ids are optional now, the compiler would
-      // not have said a word. Exactly the failure the comment below describes.
-      templateId: layer.templateId,
-      sortOrder: layer.sortOrder,
-      enabled: layer.enabled,
-      targets: layer.targets,
-      propertyMask: layer.propertyMask,
-      blendMode: layer.blendMode,
-      amount: layer.amount,
-      stomp: layer.stomp,
-      // Rebuilt field-by-field (unlike adHocEffects' spread) because the detail row carries
-      // `source`, which the input type must not. The cost of that shape is that every new field
-      // must be added HERE too, or every inline cue edit silently strips it — which is what a
-      // regression test in cueUtils.test.ts pins, field by field.
-      speedMasterUuid: layer.speedMasterUuid,
-      rateSpeedMasterUuid: layer.rateSpeedMasterUuid,
-      delayMs: layer.delayMs,
-      intervalMs: layer.intervalMs,
-      randomWindowMs: layer.randomWindowMs,
-    })),
+    layers: cue.layers.map(cueLayerInput),
     // `uuid` is the response's name for the stored effect, never a write field: the desk matches an
     // effect by its target, property and type, so a body echoing it back would claim an identity
     // the write does not read.
-    adHocEffects: cue.adHocEffects.map(({ uuid: _uuid, ...e }) => e),
+    adHocEffects: cue.adHocEffects.map(cueEffectInput),
     propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
     triggers: cue.triggers.map((t) => ({
       triggerType: t.triggerType,
@@ -147,10 +161,8 @@ export function buildCueInput(cue: Cue): CueInput {
   }
 }
 
-// `reorderCueLayers` and `densifyCueLayerOrder` stood here, restating every `sortOrder` from array
-// position so a client-side layer drag could not leave two layers tied. Both were deleted rather
-// than kept a third time: the drag they served went with `LayersPane` in session 2a, the programmer
-// stack deliberately leaves that order to the server (`ProgrammerLookStack.onMove`), and nothing but
-// their own tests had called them since. The rule they encoded is stated where it binds — `sortOrder`
-// is the authoritative playback order, and a tie in it hands the cook step's precedence to insertion
-// order, which is the accident the layer model exists to remove.
+// A client-side reorder of a cue's layers restates every `sortOrder` from array position, so two
+// layers can never tie: the cue editor's Looks tab does (`components/cues/editor/cueListEdits.ts`'s
+// `restated`); the programmer stack leaves that order to the server (`ProgrammerLookStack.onMove`).
+// `sortOrder` is the authoritative playback order, and a tie in it hands the cook step's precedence
+// to insertion order, which is the accident the layer model exists to remove.

@@ -1993,6 +1993,20 @@ above a static value regardless of layer order. See `lighting-composition-model.
 Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_effects`
 table. At apply time these are converted directly to `FxInstance`s tagged with the cue id.
 
+**A cue effect is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
+edits the stored row, never an instance. Its fields are the live editor's (`FxEffectFields`) over a
+draft of the stored effect (`cueEffectDraftOf` / `withCueEffectDraft` in the frontend's
+`fxEditorModel.ts`, so Seconds, size, direction, runs and the spread's shape round-trip as a
+palette's effect does), and every change is the cue's whole `adHocEffects` list on its `PATCH`.
+*+ Effect* runs the picker in draft: a tap stores the effect with the picker's starting spec —
+`startingSpec`, the step effects' seeded lists, D16's one bar on the usage master — on the editor's
+own selection (one row as itself, several as one `selection` effect, its key the list's canonical
+JSON), and creates no instance; a second tap swaps the stored type. Nothing reaches the stage until
+the cue next comes on — its first hold spawns what the row then says — because a cue PATCH
+republishes nothing (`docs/cue-stacks-engineering.md`; *Update stage* is that plan's session 7). A
+reorder restates every `sortOrder`, and `writeCueChildren` keeps each effect's uuid by its key
+(target, property, type), which is how a later *Update stage* can tell an edited effect from a new one.
+
 ### Look Delete Blocking
 
 A Look cannot be deleted if any cue layer references it via `cue_layers` — a plain indexed FK query,

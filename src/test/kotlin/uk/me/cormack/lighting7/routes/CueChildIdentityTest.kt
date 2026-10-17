@@ -186,6 +186,52 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a reorder that restates every sortOrder keeps each layer's and effect's uuid`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val (warm, cool) = client.twoLooks()
+        val dynamics = pulse.copy(seconds = true, beatDivision = 2.0, size = 0.5, direction = "BOUNCE", nShot = 3)
+        val chase = pulse.copy(targetKey = "hex-2", effectType = "SineWave", sortOrder = 1)
+        val created = client.createCue(
+            NewCue(
+                name = "order",
+                cueStackId = ProgrammerRouteTestSupport.createStack(client, projectId, "s"),
+                adHocEffects = listOf(dynamics.copy(sortOrder = 0), chase),
+                layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0), CueLayerDto(lookId = cool, sortOrder = 1)),
+            ),
+        )
+        val before = orderedChildren(created.id)
+
+        // The Looks and FX tabs' write: each whole list, every sortOrder restated, one layer off.
+        val response = client.patch("${base()}/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put(
+                        "layers",
+                        Json.encodeToJsonElement(
+                            listOf(
+                                CueLayerDto(lookId = cool, sortOrder = 0),
+                                CueLayerDto(lookId = warm, sortOrder = 1, enabled = false),
+                            ),
+                        ),
+                    )
+                    put("adHocEffects", Json.encodeToJsonElement(listOf(chase.copy(sortOrder = 0), dynamics.copy(sortOrder = 1))))
+                },
+            )
+        }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+
+        val after = orderedChildren(created.id)
+        assertEquals(before.layers.reversed(), after.layers, "each layer keeps its uuid in its new place")
+        assertEquals(before.effects.reversed(), after.effects, "each effect keeps its uuid in its new place")
+        val details = response.body<CueDetails>()
+        assertEquals(listOf(true, false), details.layers.map { it.enabled }, "the disabled layer is stored")
+        val moved = details.adHocEffects.single { it.effectType == "Pulse" }
+        assertEquals(listOf(true, 0.5, "BOUNCE", 3), listOf(moved.seconds, moved.size, moved.direction, moved.nShot))
+    }
+
+    @Test
     fun `the sync export of a one-value edit changes one record`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

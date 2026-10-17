@@ -572,6 +572,10 @@ Each session is one PR (P1).
 - `CueEditor`'s (`components/cues/editor/`, R2.4) Values grid and Looks tab gain the bands and the
   picker over its own selection, writing the cue (R2's P2: nothing sent). The Looks tab's *+ Look*
   and *+ Palette* leave R2.6's `AddLayerSheet` for the picker, which retires it.
+- **What R2.6 left.** The editor's selection is `CueValuesView` (`components/cues/editor/`), its
+  `selectionTargets` what *+ Look*, *+ Palette*, *Targets* and *+ Effect* act on; `AddLayerSheet`
+  takes it as `defaultTargets`. The tabs write through `CueRowStore.editLayers` / `editEffects`, a
+  whole list built on `fetchLatestCue` — what a press route answering the cue would replace.
 - **Tests:**
   - A palette pressed on cue cells adds a cue layer, and Blue replaces Red in the stored cue.
   - A second press takes it off.
