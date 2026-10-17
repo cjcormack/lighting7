@@ -82,7 +82,7 @@ describe('the sidebar sections', () => {
   })
 })
 
-/** Navigation plan D4: off the rig every row stays, and the nine that need it carry a hollow dot. */
+/** Navigation plan D4: off the rig every row stays, and the ten that need it carry a hollow dot. */
 describe('off the rig', () => {
   const offRigRows = (container: HTMLElement) =>
     [...container.querySelectorAll('[data-off-rig]')].map((el) => el.textContent)
@@ -94,14 +94,14 @@ describe('off the rig', () => {
     ]
   })
 
-  it('draws every row on a project that is not current, and dots the nine that need the rig', () => {
+  it('draws every row on a project that is not current, and dots the ten that need the rig', () => {
     const { container: on } = renderAt('/projects/1/patches')
     const onRows = [...on.querySelectorAll('button')].map((b) => b.textContent)
     cleanup()
     const { container } = renderAt('/projects/3/patches')
     expect([...container.querySelectorAll('button')].map((b) => b.textContent).slice(1)).toEqual(onRows.slice(1))
     expect(offRigRows(container)).toEqual([
-      'Programmer', 'Show', 'Prompt Book', 'Busk', 'Stage', 'Fixtures', 'Groups', 'Channels', 'Surfaces',
+      'Programmer', 'Applied', 'Show', 'Prompt Book', 'Busk', 'Stage', 'Fixtures', 'Groups', 'Channels', 'Surfaces',
     ])
     for (const row of container.querySelectorAll('[data-off-rig]')) {
       expect(row.querySelector('[data-off-rig-dot]')).not.toBeNull()
@@ -126,6 +126,6 @@ describe('off the rig', () => {
 
   it('puts the dot on the rail too', () => {
     const { container } = renderAt('/projects/3/patches', true)
-    expect(container.querySelectorAll('[data-off-rig] [data-off-rig-dot]').length).toBe(9)
+    expect(container.querySelectorAll('[data-off-rig] [data-off-rig-dot]').length).toBe(10)
   })
 })

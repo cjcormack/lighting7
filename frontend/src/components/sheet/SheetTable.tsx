@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
 } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { GripVertical, Pencil } from 'lucide-react'
+import { ArrowDown, ArrowUp, GripVertical, Pencil } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -135,6 +135,25 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
    */
   revealCell?: CellRef<C> | null
   onRevealedCell?: () => void
+  /**
+   * Sortable headers: a press on a header in [keys] calls [onSort] with its key, and the sorted one
+   * carries an arrow and `aria-sort`. The sheet sorts nothing itself — the caller hands it the rows
+   * in the order it chose. The first column sorts as [firstKey].
+   */
+  sort?: SheetSort
+  /**
+   * Where the scroller starts, read once on mount, and its moves, at most once a frame — the
+   * applied tables keep a window's place in each table this way.
+   */
+  scroll?: { initialTop: number; onScroll: (top: number) => void }
+}
+
+export interface SheetSort {
+  key: string | null
+  dir: 'asc' | 'desc'
+  keys: ReadonlySet<string>
+  firstKey?: string
+  onSort: (key: string) => void
 }
 
 /**
@@ -178,8 +197,20 @@ export function SheetTable<Row extends SheetRow, C extends string>({
   onScrolledToRow,
   revealCell,
   onRevealedCell,
+  sort,
+  scroll,
 }: SheetTableProps<Row, C>) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const scrollFrame = useRef<number | null>(null)
+  const onScrollMoved = useStableCallback(scroll?.onScroll)
+  const initialTop = useRef(scroll?.initialTop ?? 0)
+  useEffect(() => {
+    const el = scrollRef.current
+    if (el != null && initialTop.current > 0) el.scrollTop = initialTop.current
+    return () => {
+      if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current)
+    }
+  }, [])
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -279,6 +310,18 @@ export function SheetTable<Row extends SheetRow, C extends string>({
         // so the sticky first column and the body are one colour, and no top line — the row
         // above owns it.
         className={SHEET_SCROLLER_CLASS}
+        onScroll={
+          scroll == null
+            ? undefined
+            : (e) => {
+                const el = e.currentTarget
+                if (scrollFrame.current != null) return
+                scrollFrame.current = requestAnimationFrame(() => {
+                  scrollFrame.current = null
+                  onScrollMoved?.(el.scrollTop)
+                })
+              }
+        }
         onClick={(e) => {
           if (!onBackgroundClick) return
           const target = e.target as Element
@@ -303,8 +346,9 @@ export function SheetTable<Row extends SheetRow, C extends string>({
               // `px-2` *after* the header class — `cn` is tailwind-merge and the header class carries
               // `px-1.5`, so this order is what keeps the label on the row cells' 8px inset.
               className={cn(SHEET_STICKY_CELL_CLASS, SHEET_HEADER_CELL_CLASS, 'px-2')}
+              aria-sort={ariaSort(sort, sort?.firstKey)}
             >
-              {firstColumn.label}
+              <HeaderLabel label={firstColumn.label} sortKey={sort?.firstKey} sort={sort} />
             </div>
             {columns.map((column) => (
               <div
@@ -314,8 +358,9 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                 // rather than cells with no editor that inflate the count and refuse Clear.
                 {...(column.cell != null ? { 'data-column-header': column.key } : {})}
                 className={cn(SHEET_HEADER_CELL_CLASS, column.align === 'right' && 'text-right')}
+                aria-sort={ariaSort(sort, column.key)}
               >
-                {column.label}
+                <HeaderLabel label={column.label} sortKey={column.key} sort={sort} />
               </div>
             ))}
           </div>
@@ -439,6 +484,32 @@ export function SheetTable<Row extends SheetRow, C extends string>({
         />
       )}
     </div>
+  )
+}
+
+function ariaSort(sort: SheetSort | undefined, key: string | undefined): 'ascending' | 'descending' | undefined {
+  if (sort == null || key == null || sort.key !== key) return undefined
+  return sort.dir === 'desc' ? 'descending' : 'ascending'
+}
+
+/** A header's label — a button where the column sorts, with the arrow on the sorted one. */
+function HeaderLabel({ label, sortKey, sort }: { label: string; sortKey: string | undefined; sort: SheetSort | undefined }) {
+  if (sort == null || sortKey == null || !sort.keys.has(sortKey)) return <>{label}</>
+  const on = sort.key === sortKey
+  const Arrow = sort.dir === 'desc' ? ArrowDown : ArrowUp
+  return (
+    <button
+      type="button"
+      className={cn(
+        'inline-flex max-w-full items-center gap-0.5 rounded-sm uppercase tracking-wider hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
+        on && 'text-foreground',
+      )}
+      title={on ? (sort.dir === 'asc' ? `Sorted by ${label} — press for descending` : `Sorted by ${label}, descending — press to unsort`) : `Sort by ${label}`}
+      onClick={() => sort.onSort(sortKey)}
+    >
+      <span className="truncate">{label}</span>
+      {on && <Arrow className="size-3 shrink-0" aria-hidden />}
+    </button>
   )
 }
 

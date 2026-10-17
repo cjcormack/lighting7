@@ -53,6 +53,7 @@ import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { resetStageViewpointStore, setStageViewpoint, stageViewpoint } from '@/lib/stageViewpoint'
 import { resetVisSourceStore, setVisSource, visSource } from '@/hooks/useVisSource'
 import { resetWorkLightsStore, setWorkLights } from '@/components/stage3d/scene/workLights'
+import { getAppliedTable, resetAppliedTableStore, setAppliedTable } from '@/lib/appliedTables'
 import { store } from './index'
 import { restApi } from './restApi'
 import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
@@ -101,6 +102,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   resetBuskPageFollowStores()
   resetImmersiveStore()
+  resetAppliedTableStore()
 })
 
 describe('the cache entry', () => {
@@ -249,6 +251,15 @@ describe('the announce', () => {
     expect((windowsWs.announced[3] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'on' })
     // Six keys, never a seventh: the source and the work lights ride inside `viewOptions`.
     expect(Object.keys(windowsWs.announced[3] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+  })
+
+  it('carries the applied tables’ table, and re-announces when it moves (venue-visit plan S14)', async () => {
+    mountBridge('/projects/1/programmer/applied')
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'fx' })
+    act(() => setAppliedTable('palettes'))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'palettes' })
   })
 
   it('keeps the five-key frame on a view that contributes no options — a library', async () => {
@@ -412,6 +423,21 @@ describe('handleWindowCommand — the Stage view’s viewpoint (stage-view plan 
     expect(visSource()).toBe('nextGo')
     expect(handleWindowCommand(frame('/projects/1/stage', { source: 'output' }), ctx('/projects/1/busk'))).toBe('ignored')
     expect(visSource()).toBe('nextGo')
+  })
+})
+
+describe('handleWindowCommand — the applied tables (venue-visit plan S14)', () => {
+  const ctx = (currentView: string) => ({ myRowId: 's-1', currentView, navigate: vi.fn() })
+  const frame = (view: string, options: Record<string, string>) => ({ type: 'viewOptions' as const, targetId: 's-1', view, options })
+
+  it('sets the table on a window on the applied view, and only there', () => {
+    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'looks' }), ctx('/projects/1/programmer/applied'))).toBe('applied')
+    expect(getAppliedTable()).toBe('looks')
+    // The programmer page is another view, though the path is a prefix of this one.
+    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'fx' }), ctx('/projects/1/programmer'))).toBe('ignored')
+    expect(getAppliedTable()).toBe('looks')
+    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'cues' }), ctx('/projects/1/programmer/applied'))).toBe('applied')
+    expect(getAppliedTable()).toBe('looks')
   })
 })
 

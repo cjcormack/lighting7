@@ -35,6 +35,7 @@ import {
   ProgrammerRedirect,
   ProgrammerFxRedirect,
 } from "./routes/ProgrammerPage";
+import { ProgrammerApplied } from "./routes/ProgrammerApplied";
 // Redirects for paths that no longer name a view — see the module header for why they are
 // collected rather than parked in whichever module happens to be the destination.
 import {
@@ -390,6 +391,15 @@ function getAppRouter() {
         {
           path: "programmer",
           element: <ProgrammerRedirect />,
+        },
+        // The applied tables (venue-visit plan S14): one route, a tab per table in `?table=`.
+        {
+          path: "projects/:projectId/programmer/applied",
+          element: (
+            <RigGate navId="programmer-applied" to={(p, { search }) => `/projects/${p}/programmer/applied${search}`}>
+              <ProgrammerApplied />
+            </RigGate>
+          ),
         },
         // `/programmer/fx` was a route when the FX sheet was a destination. It is a section of the
         // page now, so the path survives only to land a bookmark.

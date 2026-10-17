@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
@@ -113,6 +114,39 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S14`
+
+**What it proves**: *the applied tables at the desk* — venue-visit S14: Applied FX, Applied Looks
+and Applied Palettes read the live programmer as the rail does, their rows act through the rail's
+actions, and the Screens sheet puts them on another window.
+
+**Why it is here**: the tests compare the tables with the rail over stubbed state; only a desk shows
+them keeping up while the programmer is busked from another screen, a spent N-shot on a real palette
+layer, and the folds on the iPad and a phone.
+
+**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks and effects:
+
+1. **Rows.** Open *Applied* under Programmer on Screen 2 with the programmer on Screen 1. Each table
+   lists what the rail lists, in the rail's order and numbering. Press a busk pad and release one on
+   Screen 1: the tables follow without a reload.
+2. **What the desk reports.** An effect on a master reads *M2 · 96*; one on Seconds reads *Seconds*.
+   Turn Blind on: the programmer's effects read *held · Blind* and the others do not. Press an effect
+   palette with *Runs* set to 3. When it has run its count, its Applied FX row and its Applied
+   Palettes row both read *spent*.
+3. **Actions.** From the tables: pause and resume an effect, *Edit…* it, *Stop* two at once; disable a
+   Look layer, *Detach* it and nothing on stage moves; *Pick up* a palette and place it on Screen 1;
+   ⏎ on a layer opens its settings. Each shows on the rail as if done there.
+4. **Address.** Sort by Home, filter *wash*, pick the *Layers* chip, then reload: the same view.
+   Switch to Looks and back: Applied FX is where it was left, scroll included.
+5. **Screens.** From Screen 1's Screens sheet, put Screen 2 on *Applied*, then set its *Table* to
+   *Palettes*: Screen 2 switches. ⌘K's *Applied Looks* opens that tab.
+6. **Folds and the rig.** On the iPad (1180×820) Timing, Dynamics and Settings merge and nothing but
+   Applied Palettes' Note needs a sideways scroll; on a phone the name column stays put while the
+   rest scrolls. Open them on TCH Test, which is not on the rig: they draw *TCH Test isn't on the
+   rig*, the address keeping its `?table=`.
 
 ---
 

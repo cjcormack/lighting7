@@ -19,6 +19,8 @@ import {
   useNavItems,
   useUniverseNavItems,
   useTemplateFamilyNavItems,
+  APPLIED_NAV_ID,
+  appliedTableNavItems,
   useWindowCommands,
   filterNavItems,
   useIsNavAdmin,
@@ -208,9 +210,11 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   // A venue's palette drops the show's views, as its rail does (venue plan §4).
   const isVenue = viewedProject?.kind === "VENUE"
   // The Settings row is the Project group's *Settings*, which takes its words.
+  // The Applied row is offered as its three tables instead.
   const visibleItems = filterNavItems(allNavItems, isViewingActiveProject, isNavAdmin, isVenue).filter(
-    (item) => item.id !== PROJECT_SETTINGS_NAV_ID,
+    (item) => item.id !== PROJECT_SETTINGS_NAV_ID && item.id !== APPLIED_NAV_ID,
   )
+  const visibleAppliedItems = filterNavItems(appliedTableNavItems, isViewingActiveProject, true, isVenue)
   // A universe item names the live rig's universes, so only the project on the rig is offered them.
   const visibleUniverseItems = isViewingActiveProject ? filterNavItems(universeNavItems, true) : []
   const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject, true, isVenue)
@@ -302,7 +306,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {[...visibleItems, ...visibleUniverseItems, ...visibleTemplateFamilyItems].map((item) => (
+                {[...visibleItems, ...visibleAppliedItems, ...visibleUniverseItems, ...visibleTemplateFamilyItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     // cmdk keys selection on `value`, so it must be unique: `commandLabel` names

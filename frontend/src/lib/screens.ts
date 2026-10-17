@@ -40,7 +40,7 @@ export function windowSetupUrl(
   origin: string = window.location.origin,
 ): string {
   let url = newWindowUrl(name, view, origin)
-  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'workLights', 'immersive']) {
+  for (const key of ['page', 'focus', 'sheet', 'viewpoint', 'source', 'workLights', 'table', 'immersive']) {
     const value = options?.[key]
     if (value == null || value === '') continue
     if (key === 'immersive' && value !== 'on') continue
