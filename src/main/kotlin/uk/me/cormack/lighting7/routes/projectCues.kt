@@ -82,6 +82,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
+            val speedMasters = checkCueSpeedMasters(state, project, null, newCue.speedMasters).getOrElse { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
+                return@withCurrentProject
+            }
             // An insert shifts the positions after it, and a live cue's priority is its position.
             var priorities = emptyMap<Int, Int>()
             var numberTaken = false
@@ -104,6 +108,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     fadeCurve = newCue.fadeCurve
                     notes = newCue.notes
                     stomp = newCue.stomp
+                    this.speedMasters = speedMasters
                 }
                 writeCueChildren(
                     cue,
@@ -175,6 +180,10 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
+            val speedMasters = checkCueSpeedMasters(state, project, resource.cueId, updatedData.speedMasters).getOrElse { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
+                return@withCurrentProject
+            }
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
                 if (cue.project.id != project.id) return@transaction null
@@ -186,6 +195,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 cue.fadeCurve = updatedData.fadeCurve
                 cue.notes = updatedData.notes
                 cue.stomp = updatedData.stomp
+                cue.speedMasters = speedMasters
 
                 // Replace children, keeping the uuid of every child the write keeps.
                 writeCueChildren(
@@ -245,6 +255,16 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
+            val speedMasters = body["speedMasters"]?.let { raw ->
+                val items = raw as? JsonArray ?: run {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("speedMasters must be an array: send [] to clear it"))
+                    return@withCurrentProject
+                }
+                checkCueSpeedMasters(state, project, resource.cueId, items).getOrElse { problem ->
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem.message!!))
+                    return@withCurrentProject
+                }
+            }
 
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
@@ -256,6 +276,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if ("fadeCurve" in body) cue.fadeCurve = body["fadeCurve"]!!.jsonPrimitive.content
                 if ("notes" in body) cue.notes = body["notes"].nullableString()
                 if ("stomp" in body) cue.stomp = body["stomp"]!!.jsonPrimitive.boolean
+                if (speedMasters != null) cue.speedMasters = speedMasters
 
                 // Only the lists present are replaced; a null one is left alone.
                 writeCueChildren(cue, effects, assignments, triggers, layers)
@@ -553,6 +574,8 @@ data class NewCue(
     val notes: String? = null,
     val cueType: String = "STANDARD",
     val stomp: Boolean = false,
+    /** The masters the cue sets on GO, `[{speedMasterUuid, bpm}]` — the whole list (S16). */
+    val speedMasters: List<JsonElement> = emptyList(),
 )
 
 @Serializable
@@ -597,6 +620,12 @@ data class CueDetails(
      * plan session 9); edited by `PUT cues/{id}/events`. Never tracked: a later cue shows none of them.
      */
     val events: List<CueEventDto> = emptyList(),
+    /**
+     * The speed masters this cue sets on every GO into it and every press of it, in order
+     * (venue-visit plan S16, D20) — never on a reload's re-GO, and never tracked. Written whole by
+     * the cue's POST, PUT and PATCH.
+     */
+    val speedMasters: List<CueSpeedMasterDto> = emptyList(),
     /** Every entry naming the cue, in show order (stacks in show order, then position); empty when loose. */
     val entries: List<CueEntryPlaceDto> = emptyList(),
     /** The busk pads, cue slots and `FireCue` bindings naming the cue — the list's alone, null on one cue's read. */

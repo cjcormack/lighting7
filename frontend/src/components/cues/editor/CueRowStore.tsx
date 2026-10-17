@@ -5,7 +5,8 @@ import { fetchLatestCue, usePatchProjectCueMutation, useProjectCueCookedQuery, u
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { withoutInfrastructure } from '@/lib/infrastructure'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import type { CookedRow, Cue, CuePropertyAssignment } from '@/api/cuesApi'
+import { cueEffectInput, cueLayerInput } from '@/lib/cueUtils'
+import type { CookedRow, Cue, CueAdHocEffect, CueLayer, CueLayerDetail, CuePatchInput, CuePropertyAssignment } from '@/api/cuesApi'
 import {
   CueRowDraft,
   applyCueRowEntries,
@@ -16,10 +17,29 @@ import {
   type CueRowTargetType,
 } from './cueRowDraft'
 
-/** What one save changed: the rows' keys, and the rows the cue held under them before it. */
+/**
+ * What one save changed, for its Undo: the rows' keys and the rows the cue held under them before
+ * it, and the whole layer or effect list as it stood before, for each list the save wrote.
+ */
 interface UndoStep {
-  keys: readonly string[]
-  rows: readonly CuePropertyAssignment[]
+  rows?: { keys: readonly string[]; rows: readonly CuePropertyAssignment[] }
+  layers?: readonly CueLayer[]
+  adHocEffects?: readonly CueAdHocEffect[]
+}
+
+/** One of the cue's two other child lists, as the Looks and FX tabs write them. */
+export type CueChildList = 'layers' | 'adHocEffects'
+
+/**
+ * A gesture on one child list: the list as the desk holds it in — a layer with its `id`, an effect
+ * with its `uuid`, so a gesture can find the child it was made on — the list to write out (null:
+ * nothing to write).
+ */
+export type CueListEdit<T> = (stored: readonly T[]) => T[] | null
+
+interface ListEdits {
+  layers: CueListEdit<CueLayerDetail> | null
+  adHocEffects: CueListEdit<CueAdHocEffect> | null
 }
 
 /**
@@ -85,6 +105,22 @@ export interface CueRowStoreValue {
   ownGroups: ReadonlySet<string>
   /** Heads and groups with an own row (stored or pending) — *Own only*. */
   ownTargets: ReadonlySet<string>
+  /**
+   * A gesture on the cue's layers or effects (the Looks and FX tabs, §3.3): [edit] is applied to the
+   * list as the desk holds it at flush time, after any gesture still pending on that list, and the
+   * whole list is PATCHed — never `propertyAssignments`. Coalesced with the rows' flush (400 ms,
+   * 2 s); [now] saves at once, for a discrete gesture (a reorder, a toggle, an add). Answers
+   * whether the write that carried it landed.
+   */
+  editLayers: (edit: CueListEdit<CueLayerDetail>, now?: boolean) => Promise<boolean>
+  editEffects: (edit: CueListEdit<CueAdHocEffect>, now?: boolean) => Promise<boolean>
+  /**
+   * A layer or effect gesture is waiting for its flush or its PATCH: a tab drawing its gesture
+   * ahead of the desk keeps drawing it until this goes false and the cue is read again.
+   */
+  listsBusy: boolean
+  /** Bumped by every Undo, so an editor holding a draft of its own can start again from the cue. */
+  undoSeq: number
   undo: () => void
   canUndo: boolean
   /** Save whatever is pending now. */
@@ -162,6 +198,10 @@ export function CueRowStoreProvider({
   const chainRef = useRef<Promise<unknown>>(Promise.resolve())
   /** What the last save changed — the rows' keys and the rows they replaced — for its Undo. */
   const undoRef = useRef<UndoStep | null>(null)
+  /** The layer and effect gestures no flush has carried yet, each list's composed into one edit. */
+  const listEditsRef = useRef<ListEdits>({ layers: null, adHocEffects: null })
+  /** Those gestures' answers — what the flush that takes them settles, and counts back down. */
+  const carriedRef = useRef<((landed: boolean) => void)[]>([])
   const cueLabel = cue ? cueLabelOf(cue) : 'Cue'
   const labelRef = useRef(cueLabel)
   labelRef.current = cueLabel
@@ -179,13 +219,16 @@ export function CueRowStoreProvider({
 
   /**
    * One write, queued behind the last: read the cue as the desk holds it now (the cache can be
-   * behind — `fetchLatestCue` says why), build the whole list from it with [build], PATCH it. The
-   * cached cue stands in only when the read fails, so a desk that cannot be read is still written.
+   * behind — `fetchLatestCue` says why), build the PATCH from it with [build] — any of the rows, the
+   * layers and the effects, each its whole list — and send it. The cached cue stands in only when the
+   * read fails, so a desk that cannot be read is still written. Answers whether it landed and what
+   * [build] said to keep for Undo; null when there was nothing to write.
    */
   const enqueue = useCallback(
-    (build: (stored: readonly CuePropertyAssignment[]) => CuePropertyAssignment[] | null) => {
+    <U,>(build: (latest: Cue) => { body: CuePatchInput; undo: U } | null) => {
       const writesAtStart = writesRef.current
-      const run = async (): Promise<{ ok: boolean; before: readonly CuePropertyAssignment[] } | null> => {
+      const settle = () => setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
+      const run = async (): Promise<{ ok: boolean; undo?: U } | null> => {
         const args = { ...argsRef.current, cueId: entry.cueId }
         let latest: Cue | undefined
         try {
@@ -193,19 +236,24 @@ export function CueRowStoreProvider({
         } catch {
           latest = entry.cue
         }
-        if (!latest) return { ok: false, before: [] }
-        const before = latest.propertyAssignments
-        const list = build(before)
-        if (list == null) return null
+        if (!latest) {
+          setSaveState('error')
+          return { ok: false }
+        }
+        const built = build(latest)
+        if (built == null) {
+          settle()
+          return null
+        }
         setSaveState('saving')
         try {
-          await patchCue({ projectId: args.projectId, cueId: args.cueId, propertyAssignments: list }).unwrap()
-          setSaveState(writesRef.current === writesAtStart ? 'clean' : 'dirty')
-          return { ok: true, before }
+          await patchCue({ projectId: args.projectId, cueId: args.cueId, ...built.body }).unwrap()
+          settle()
+          return { ok: true, undo: built.undo }
         } catch {
           setSaveState('error')
           ignoreReportedError()
-          return { ok: false, before }
+          return { ok: false }
         }
       }
       const next = chainRef.current.then(run, run)
@@ -215,17 +263,30 @@ export function CueRowStoreProvider({
     [entry, patchCue],
   )
 
+  /** Layer and effect gestures not yet carried by a write that has finished. */
+  const [listsInFlight, setListsInFlight] = useState(0)
+  const [undoSeq, setUndoSeq] = useState(0)
+
   const undo = useCallback(() => {
     const step = undoRef.current
     if (step == null || readOnlyRef.current) return
-    // The flush timers stay: an edit to another row still lands, queued behind this.
+    // The flush timers stay: an edit to another row, or a gesture on a list, still lands — queued
+    // behind this, built on what it puts back.
     undoRef.current = null
     setCanUndo(false)
-    // Pending edits to the rows the save changed go with it; an edit to any other row still lands.
-    draft.discard(step.keys)
     toast.dismiss(toastId)
-    void enqueue((stored) => restoreCueRows(stored, step.keys, step.rows)).then((result) => {
-      if (result?.ok) toast(`${labelRef.current} · values put back`, { id: toastId })
+    // Pending edits to the rows the save changed go with it; an edit to any other row still lands.
+    if (step.rows) draft.discard(step.rows.keys)
+    setUndoSeq((n) => n + 1)
+    void enqueue((latest) => ({
+      body: {
+        ...(step.rows ? { propertyAssignments: restoreCueRows(latest.propertyAssignments, step.rows.keys, step.rows.rows) } : {}),
+        ...(step.layers ? { layers: [...step.layers] } : {}),
+        ...(step.adHocEffects ? { adHocEffects: [...step.adHocEffects] } : {}),
+      },
+      undo: null,
+    })).then((result) => {
+      if (result?.ok) toast(`${labelRef.current} · ${wordsFor(step)} put back`, { id: toastId })
     })
   }, [draft, enqueue, toastId])
 
@@ -234,19 +295,46 @@ export function CueRowStoreProvider({
     // Only what no save has carried yet: a sent entry is in the cue, or about to be, and sending it
     // again would re-assert it over a later edit of that row from elsewhere.
     const sent = draft.unsaved()
-    if (sent.size === 0) return
-    draft.markSending(sent)
+    const { layers: layerEdit, adHocEffects: effectEdit } = listEditsRef.current
+    listEditsRef.current = { layers: null, adHocEffects: null }
+    const carried = carriedRef.current
+    carriedRef.current = []
+    if (sent.size === 0 && layerEdit == null && effectEdit == null) return
+    if (sent.size > 0) draft.markSending(sent)
     const keys = [...sent.keys()]
-    void enqueue((stored) => applyCueRowEntries(stored, sent)).then((result) => {
-      if (!result?.ok) {
-        draft.markFailed(sent)
+    // One PATCH for everything pending, so one Undo puts back everything it changed.
+    void enqueue<UndoStep>((latest) => {
+      const body: CuePatchInput = {}
+      const step: UndoStep = {}
+      if (sent.size > 0) {
+        body.propertyAssignments = applyCueRowEntries(latest.propertyAssignments, sent)
+        step.rows = { keys, rows: rowsWithKeys(latest.propertyAssignments, keys) }
+      }
+      const layers = layerEdit?.(latest.layers) ?? null
+      if (layers != null) {
+        body.layers = layers.map(cueLayerInput)
+        step.layers = latest.layers.map(cueLayerInput)
+      }
+      const effects = effectEdit?.(latest.adHocEffects) ?? null
+      if (effects != null) {
+        body.adHocEffects = effects.map(cueEffectInput)
+        step.adHocEffects = latest.adHocEffects.map(cueEffectInput)
+      }
+      return Object.keys(body).length === 0 ? null : { body, undo: step }
+    }).then((result) => {
+      if (carried.length > 0) setListsInFlight((n) => n - carried.length)
+      for (const answer of carried) answer(result?.ok === true)
+      if (result == null) return
+      if (!result.ok) {
+        if (sent.size > 0) draft.markFailed(sent)
         return
       }
-      draft.markSaved(sent, Date.now())
+      if (sent.size > 0) draft.markSaved(sent, Date.now())
       // Undo is set only by a save that landed, and names exactly what it changed.
-      undoRef.current = { keys, rows: rowsWithKeys(result.before, keys) }
+      const step = result.undo!
+      undoRef.current = step
       setCanUndo(true)
-      toast(`${labelRef.current} · values saved`, {
+      toast(`${labelRef.current} · ${wordsFor(step)} saved`, {
         id: toastId,
         action: { label: 'Undo', onClick: () => undo() },
       })
@@ -291,6 +379,35 @@ export function CueRowStoreProvider({
       schedule()
     },
     [draft, entry, schedule],
+  )
+
+  const editList = useCallback(
+    <T,>(kind: CueChildList, edit: CueListEdit<T>, now: boolean) => {
+      if (readOnlyRef.current) return Promise.resolve(false)
+      const pending = listEditsRef.current[kind] as CueListEdit<T> | null
+      // Composed rather than replaced: two gestures inside one flush window both land, the second
+      // applied to the first's answer.
+      const composed: CueListEdit<T> =
+        pending == null ? edit : (stored) => {
+          const first = pending(stored)
+          return edit(first ?? [...stored])
+        }
+      ;(listEditsRef.current as Record<CueChildList, CueListEdit<T> | null>)[kind] = composed
+      const landed = new Promise<boolean>((resolve) => carriedRef.current.push(resolve))
+      setListsInFlight((n) => n + 1)
+      schedule()
+      if (now) flushRef.current()
+      return landed
+    },
+    [schedule],
+  )
+  const editLayers = useCallback(
+    (edit: CueListEdit<CueLayerDetail>, now = false) => editList('layers', edit, now),
+    [editList],
+  )
+  const editEffects = useCallback(
+    (edit: CueListEdit<CueAdHocEffect>, now = false) => editList('adHocEffects', edit, now),
+    [editList],
   )
 
   // Retire what the server now states, once a cook read after the save has landed.
@@ -462,6 +579,10 @@ export function CueRowStoreProvider({
       heads,
       ownGroups,
       ownTargets,
+      editLayers,
+      editEffects,
+      listsBusy: listsInFlight > 0,
+      undoSeq,
       undo,
       canUndo,
       flush,
@@ -488,6 +609,10 @@ export function CueRowStoreProvider({
     fixtures,
     setValue,
     removeValue,
+    editLayers,
+    editEffects,
+    listsInFlight,
+    undoSeq,
     undo,
     canUndo,
     flush,
@@ -498,6 +623,12 @@ export function CueRowStoreProvider({
       <CueRowSaveStateContext.Provider value={saveState}>{children}</CueRowSaveStateContext.Provider>
     </CueRowStoreContext.Provider>
   )
+}
+
+/** What a save or its Undo changed, in the toast's words: `values`, `looks and effects`. */
+function wordsFor(step: UndoStep): string {
+  const words = [step.rows && 'values', step.layers && 'looks', step.adHocEffects && 'effects'].filter((w): w is string => !!w)
+  return words.length <= 1 ? (words[0] ?? 'values') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
 }
 
 function cueLabelOf(cue: Cue): string {

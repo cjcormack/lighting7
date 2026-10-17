@@ -127,6 +127,12 @@ describe('buildCueInput', () => {
     expect('source' in input.layers[0]).toBe(false)
   })
 
+  it('hands back the speed masters, which a PUT would otherwise clear', () => {
+    const cue: Cue = { ...cueWithOneLayer(), speedMasters: [{ speedMasterUuid: 'm2', bpm: 128 }] }
+    expect(buildCueInput(cue).speedMasters).toEqual([{ speedMasterUuid: 'm2', bpm: 128 }])
+    expect(buildCueInput(cueWithOneLayer()).speedMasters).toEqual([])
+  })
+
   it('strips the response-only uuid from an effect and keeps the rest', () => {
     const cue = cueWithOneLayer()
     const withEffect: Cue = {

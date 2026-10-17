@@ -652,6 +652,9 @@ internal class VenueSetupTools(private val state: State) {
                     fadeCurve = c.fadeCurve
                     notes = c.notes
                     stomp = c.stomp
+                    speedMasters = mapCueSpeedMasters(c.speedMasters, source, target) { index, _ ->
+                        report.unresolved("speed master ${index ?: "(deleted)"} is not in project ${target.id.value}; its tempo is left out", by)
+                    }
                 }
                 placed.cue = cue
                 copiedCues[c.id.value] = cue

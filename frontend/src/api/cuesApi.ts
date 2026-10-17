@@ -85,12 +85,18 @@ export interface CueLayer {
  * A layer as the server reads it back, carrying what it applies — kind, id, uuid and name — so a cue
  * card can label the line without a second fetch.
  *
- * `source` is **read-only** and must never be sent back: `lookId` / `templateId` are the write
+ * `source` and `id` are **read-only** and must never be sent back: `lookId` / `templateId` are the write
  * fields. Same contract as `presetName` was and as `health` is on an assignment. `buildCueInput`
  * strips it, and a regression test pins that.
  */
 export interface CueLayerDetail extends CueLayer {
   source: LayerSource | null
+  /**
+   * The stored layer's id, read-only: a cue write keeps every layer it keeps (show-cue-editing
+   * plan §3.4), so this names one layer across writes — what the cue editor's Looks tab finds a
+   * gesture's layer by. Never sent back. Absent from a desk that predates it.
+   */
+  id?: number
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
@@ -199,6 +205,17 @@ export interface CueTrigger {
   sortOrder?: number
 }
 
+/**
+ * One speed master a cue sets as it comes on (venue-visit plan S16, D20): on every GO into one of
+ * its entries, GO TO and GO BACK included, and every loose press — never a reload. The cue's, not
+ * an entry's, so a shared cue sets the same tempo from every stack; it never tracks.
+ */
+export interface CueSpeedMaster {
+  speedMasterUuid: string
+  /** 20–300, a master's range. */
+  bpm: number
+}
+
 /** Script trigger with resolved name (from API response) */
 export interface CueTriggerDetail {
   triggerType: TriggerType
@@ -269,6 +286,11 @@ export interface Cue {
    * tracked: a later cue carries none of an earlier one's. Optional: the desk omits an empty list.
    */
   events?: CueEvent[]
+  /**
+   * The masters this cue sets on GO, in order — written whole through the cue's own PATCH.
+   * Optional: the desk omits an empty list, and an older desk sends none.
+   */
+  speedMasters?: CueSpeedMaster[]
 }
 
 /** One entry naming a cue — one place it sits in a stack's list. */
@@ -364,6 +386,8 @@ export interface CueInput {
   stomp?: boolean
   /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
   cueType?: CueType
+  /** The whole list; a PUT clears what it is not sent, a PATCH leaves an absent list alone. */
+  speedMasters?: CueSpeedMaster[]
 }
 
 // Partial input for PATCH (inline edits — only send changed fields). The place fields — stack,

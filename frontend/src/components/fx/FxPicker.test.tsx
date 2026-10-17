@@ -44,7 +44,7 @@ vi.mock('@/store/speedMasters', () => ({
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [], fixtureByKey: new Map() }) }))
 
-import { FxPicker, type AuditionedEffect, type FxTarget } from './FxPicker'
+import { FxPicker, type AuditionedEffect, type DraftEffectPick, type FxTarget } from './FxPicker'
 
 const position = (name: string): EffectLibraryEntry => ({
   name,
@@ -95,6 +95,42 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('FxPicker', () => {
+  it('in draft, a tap hands the host the effect with its starting spec and starts nothing; a second tap picks again', () => {
+    const picks: DraftEffectPick[] = []
+    function Draft() {
+      const [current, setCurrent] = useState<{ effectType: string; propertyName: string } | null>(null)
+      return (
+        <FxPicker
+          target={TARGET}
+          initialFamily="POSITION"
+          onEdit={() => {}}
+          draft={{
+            current,
+            onPick: (pick) => {
+              picks.push(pick)
+              setCurrent({ effectType: pick.effectType, propertyName: pick.propertyName })
+            },
+          }}
+        />
+      )
+    }
+    render(<Draft />)
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(picks[0]).toMatchObject({
+      effectType: 'Circle',
+      propertyName: 'position',
+      blendMode: 'ADDITIVE',
+      beatDivision: 4,
+      speedMasterUuid: 'm-position',
+      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+    })
+    expect(screen.getByRole('button', { name: 'Circle' })).toHaveAttribute('aria-pressed', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
+    expect(picks.map((p) => p.effectType)).toEqual(['Circle', 'Figure 8'])
+    expect(addFixtureFx).not.toHaveBeenCalled()
+    expect(updateFx).not.toHaveBeenCalled()
+  })
+
   it('starts a programmer-owned effect on a tap, with its defaults, Around for a movement', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))

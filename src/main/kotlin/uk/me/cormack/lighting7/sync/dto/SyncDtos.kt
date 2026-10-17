@@ -70,6 +70,12 @@ data class FormatVersionJson(
     // cannot spawn, so every cue and Look holding one would skip that effect. `minReader`
     // stays at **5** — no field changed. See `docs/sync-engineering.md` §"Version 34 — one effect over a
     // selection".
+    // v35: speed masters on a cue (venue-visit plan S16). `CueJson` gains `speedMasters` (default
+    // empty, omitted): the masters the cue sets on GO, each a master's uuid and a BPM
+    // ([CueSpeedMasterJson]). A cue that sets none exports byte-for-byte as at v34. The writer's number
+    // moves by the sharp-edge rule: a v34 reader would import every cue without its tempos and its next
+    // wipe-then-export push would write them away for every peer. `minReader` stays at **5** — a missing
+    // list sets nothing. See `docs/sync-engineering.md` §"Version 35 — speed masters on a cue".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -286,7 +292,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 34,
+    val formatVersion: Int = 35,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -957,6 +963,19 @@ data class CueJson(
     val scenery: List<SceneryChangeJson> = emptyList(),
     /** v21: the tubes the cue fires on GO into it, each at its offset, while the desk is armed. */
     val events: List<CueEventJson> = emptyList(),
+    /** v35: the masters the cue sets on every GO into it, in order. */
+    val speedMasters: List<CueSpeedMasterJson> = emptyList(),
+)
+
+/**
+ * v35: one master a cue sets on GO (venue-visit plan S16) — the master by uuid, so
+ * `ExportUuidRemapper` re-points it on a clone, and its BPM. Imported as stored: a uuid the archive's
+ * masters lack is skipped at GO, as a master deleted under the cue is.
+ */
+@Serializable
+data class CueSpeedMasterJson(
+    val speedMasterUuid: String,
+    val bpm: Double,
 )
 
 /**

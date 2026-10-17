@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
+import { useEditParam } from '../hooks/useEditParam'
 import { useCreateTemplateMutation, useSaveTemplateMutation, useTemplateListQuery } from '../store/templates'
 import { useSpeedMasterListQuery } from '../store/speedMasters'
 import { useEffectLibraryQuery } from '../store/fixtureFx'
@@ -106,21 +107,12 @@ export function ProjectTemplates() {
     }
   }, [searchParams, isCurrentProject, setSearchParams])
 
-  // `?edit=<id>` opens that palette's editor and strips the param — a chip's *Edit palette…* (the
-  // apply-model plan's hold menu). Waits for the list, and opens nothing off the current project,
-  // where no row opens either.
-  useEffect(() => {
-    const edit = searchParams.get('edit')
-    if (edit == null || templates == null || currentLoading) return
-    const id = Number(edit)
-    if (isCurrentProject && templates.some((t) => t.id === id)) {
-      setEditingId(id)
-      setEditorOpen(true)
-    }
-    const params = new URLSearchParams(searchParams)
-    params.delete('edit')
-    setSearchParams(params, { replace: true })
-  }, [searchParams, templates, isCurrentProject, currentLoading, setSearchParams])
+  // `?edit=<id>` opens that palette's editor — a chip's *Edit palette…* (the apply-model plan's hold
+  // menu) and the cue editor's *Open* on a palette layer.
+  useEditParam(templates, !currentLoading, isCurrentProject, (id) => {
+    setEditingId(id)
+    setEditorOpen(true)
+  })
 
   const library = useMemo(() => templates ?? [], [templates])
   // Memoised like `library`: a fresh `[]` per render while the masters load would rebuild the

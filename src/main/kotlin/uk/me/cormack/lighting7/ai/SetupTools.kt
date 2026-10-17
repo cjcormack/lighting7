@@ -1586,6 +1586,7 @@ class SetupTools(
         val place: PromptBookRectDto?,
         val scenery: List<SceneryWrite>,
         val events: List<CueEventWrite>,
+        val speedMasters: List<CueSpeedMasterDto>,
     )
 
     private fun buildCueStack(input: JsonObject, target: ToolProject): ToolExecutionResult {
@@ -1687,6 +1688,10 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot carry events: it is never gone to"
                 parseToolCueEventList(it, context.patches, "events", rowProblems)
             }.orEmpty()
+            val speedMasters = (row["speedMasters"] as? JsonArray)?.let {
+                if (marker) rowProblems += "a marker cannot set speed masters: it is never gone to"
+                transaction(state.database) { parseCueSpeedMasters(it, speedMastersOf(project), emptyList(), "speedMasters", rowProblems) }
+            }.orEmpty()
             val place = row["at"]?.let { at ->
                 if (!target.isCurrent) {
                     // As the Prompt Book routes: only the current project's book is edited.
@@ -1700,7 +1705,7 @@ class SetupTools(
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
-            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events)
+            } else ShowCue(number.takeUnless { marker }, name, row.string("notes")?.trim()?.takeIf { it.isNotEmpty() }, fade, curve, follow, marker, layers, values, place, scenery, events, speedMasters)
         }
         if (problems.isNotEmpty()) return rejected(problems)
 
@@ -1735,6 +1740,7 @@ class SetupTools(
                     notes = spec.notes
                     fadeDuration = spec.fade
                     fadeCurve = spec.fadeCurve
+                    speedMasters = spec.speedMasters
                 }
                 writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
                 replaceCueScenery(cue, spec.scenery)

@@ -235,6 +235,8 @@ object DaoCues : IntIdTable("cues") {
      * See `docs/lighting-composition-model.md` §"Stomp".
      */
     val stomp = bool("stomp").default(false)
+    /** The speed masters this cue sets on GO, in order (venue-visit plan S16) — see `cueSpeedMasters.kt`. */
+    val speedMasters = json<List<CueSpeedMasterDto>>("speed_masters", Json).default(emptyList())
     val uuid = javaUUID("uuid").autoGenerate()
 
     // Cue names are deliberately *not* unique: two stacks may both hold a "Blackout". Cues are
@@ -251,6 +253,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var fadeCurve by DaoCues.fadeCurve
     var notes by DaoCues.notes
     var stomp by DaoCues.stomp
+    var speedMasters by DaoCues.speedMasters
     var uuid by DaoCues.uuid
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
