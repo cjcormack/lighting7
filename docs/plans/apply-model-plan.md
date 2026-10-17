@@ -329,9 +329,9 @@ calls:
 - **Palettes band**: the family's palettes that fit the heads, filtered as the strip filters, recent
   first, then by name, up to two rows, with *All …*.
   - A Beam cell offers the Beam palettes that set its property (a zoom cell, those with a zoom row).
-  - A setting cell (gobo, prism) has no band: a value palette can't carry a slotted role. R4.7's
-    Slot Steps is an effect on a setting, and a palette of it an effect palette (session 6 asks
-    about its band).
+  - A setting cell (gobo, prism) has no Palettes band: a value palette can't carry a slotted role.
+    R4.7's Slot Steps is an effect on a setting, and a palette of it an effect palette, so a setting
+    cell has the popup with its Effects band only (session 6, §11, 11).
 - **The editor**, unchanged. A drag or a typed value is a Local value.
 - **Effects band**:
   - the effects running on these heads, lit;
@@ -512,7 +512,7 @@ Each session is one PR (P1).
   the cue.
 - **Tests:**
   - A dimmer cell offers Intensity palettes and a zoom cell the Beam palettes with a zoom row.
-  - A gobo cell has no band.
+  - A gobo cell has no Palettes band (session 6 gives it its Effects band).
   - A band press lands on the cell batch under the cell's family.
   - A Shehds cell is offered the colour palettes its zone takes (S1).
   - *+ Palette* presses onto the selection.
@@ -542,10 +542,9 @@ Each session is one PR (P1).
   drives it (Zoom Breathe, Iris Pulse, Frost Pulse, Focus Pull) and its Beam effect palettes. R4.7's
   Palette Steps is offered where `FxPicker` offers it (two generic value palettes or more naming
   the property).
-- **Ask Chris before building: a setting cell's popup.** §4.3 gives a gobo or prism cell no band
-  and session 5 wraps only colour, slider and position editors. R4.7 added Slot Steps on a setting
-  and its effect palettes. Does a setting cell gain the popup with only its Effects band, or stay
-  as it is with Slot Steps reached through *+ Effect* in the rail?
+- **A setting cell gains the popup with its Effects band only** (§11, 11). §4.3 gives a gobo or
+  prism cell no Palettes band and session 5 wraps only colour, slider and position editors; R4.7
+  added Slot Steps on a setting and its effect palettes, which this band offers there.
 - **Tests:**
   - *+ Effect* over a four-head selection starts one effect over them (effects plan D3), and takes
     those heads off another Local effect of its family.
@@ -623,4 +622,10 @@ Answered by Chris, 2026-10-15, in three rounds:
    modifier, and ⌥ to stack, were declined.
 9. **Should the MCP tools follow the UI?** Yes (D9). Keeping values as the default was declined.
 10. **The busk view's popup?** A side-sheet tab per family (D10). Colour only, and pads only, were
+    declined.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K3:
+
+11. **A gobo or prism cell's popup, now Slot Steps exists?** It gains the popup with only its Effects
+    band, offering Slot Steps and its effect palettes. Leaving it to *+ Effect* in the rail was
     declined.

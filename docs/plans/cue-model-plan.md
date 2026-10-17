@@ -542,8 +542,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   *Duplicate*, *Delete…*, *Add to stack…* and *Move to stack…* over several rows, and takes a loose
   row (`entryId` and `stackId` null). The table's bar mounts it as a fourth host, with rungs of its
   own in `FOLDS`, rather than drawing its own buttons. It takes the show-editing lock (`locked`).
-  **Ask Chris** whether the table honours that lock while the show runs, as the cue sheet does, or
-  is read-only only off the rig, as the Looks sheet is (`libraryPermission`).
+  It **honours that lock while the show runs**, as the cue sheet does (§10, 20).
 - **The home's cue count moves to this row** (Nav.4, `8ac4817`; frontend `CLAUDE.md` §"A project's
   home"). Show's card counts its stacks and the project's cues (`stacksAndCues` in
   `navigation.ts`) until the Cues row lands; then the row takes `homeCount: (c) => c.cues` and
@@ -585,8 +584,8 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   Show view's does.
 - **No MCP tool moves an entry.** Since R2 session 3 the UI's *Move to stack…* moves the entry
   whole (`POST /cue-stacks/{id}/entries/{entryId}/move {toStackId}`), but a model can only add then
-  remove, which drops the explicit number, the follow and the anchor. **Ask Chris** whether
-  §3.10 gains a move tool on that route.
+  remove, which drops the explicit number, the follow and the anchor. §3.10 **gains a move tool**
+  on that route (§10, 21), answering the moved entry.
 - **Tests:** each new tool, and each changed one naming an entry by number.
 - **Docs:** `mcp-engineering.md`, `cue-stacks-engineering.md` §"MCP tools".
 
@@ -669,3 +668,10 @@ Answered by Chris, 2026-10-16, during session 4:
 19. **Does the Record sheet's stack select gain *No stack*?** Not yet: session 5 adds it with the
     Cues table, where a loose cue recorded that way can be found. The backend takes a stackless
     CREATE from session 4.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K3:
+
+20. **Does the Cues table honour the show-editing lock while the show runs?** Yes, as the cue sheet
+    does. Read-only only off the rig, as the Looks sheet is, was declined.
+21. **Does an MCP tool move an entry to another stack?** Yes, on R2 session 3's move route, so the
+    number, follow and anchor go with it. Leaving models to add then remove was declined.

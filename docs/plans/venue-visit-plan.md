@@ -107,7 +107,7 @@ Agreed with Chris, 2026-10-14:
 | D17 | **A unit's stored locate is pan and tilt only.** Every other property keeps its category default. |
 | D18 | **Make rig safe can be undone.** *Undo* strikes the lamps it turned off, then releases the blackout, so the show resumes as it was. |
 | D19 | **Bulk lamp-on is staggered.** It strikes one unit at a time, a couple of seconds apart, to spread the inrush current. A unit that went off too recently to restrike reliably is shown with a warning and the time left. The same applies to a bulk lamp-on over a selection. |
-| D20 | **A cue sets its speed masters on every GO into one of its entries**, GO TO and GO BACK included, even when another stack already holds the cue live. Tempo is state the cue re-asserts. Its events are different: they fire once, on the cue's first hold (cue model plan D15). Agreed 2026-10-15, after R1. |
+| D20 | **A cue sets its speed masters on every GO into one of its entries**, GO TO and GO BACK included, even when another stack already holds the cue live. Tempo is state the cue re-asserts. Its events are different: they fire once, on the cue's first hold (cue model plan D15). Agreed 2026-10-15, after R1. A loose press (a pad, a slot, `apply_cue`, `FireCue`) sets them too, as it brings the cue on as a GO does; a reload's re-press does not (Chris, 2026-10-17, K3; S16). |
 
 The plan adds its own:
 
@@ -232,8 +232,8 @@ Grouped by area. §4 gives the order.
   can open it on any window.
 - Each needs a nav row too. `navigation.test.ts` requires every window view to have a row in
   `navigation.ts` with the same `pathMatch` and a matching `needsRig` (Nav.1), and its route sits in
-  `RigGate` (Nav.2). **Ask Chris** whether they are Run rows, each a card on a show's home
-  (`homeSectionsOf`, Nav.4), or children of the Programmer row, which a home leaves off.
+  `RigGate` (Nav.2). They are **children of the Programmer row** (Chris, 2026-10-17, K3), so a
+  show's home leaves them off; Run rows with home cards were declined.
 - R3 may later change what a row can do, but not the tables themselves.
 
 ### Effects
@@ -251,10 +251,11 @@ Grouped by area. §4 gives the order.
   through, rather than the hold registry's first hold (`CueHolds.acquire`), where events fire: D20
   fires where events don't. A reload's re-GO (`Show.resume`) sets no tempo, though it shares GO
   BACK's `fireEvents = false`, so S16 needs its own flag (D15: a tap wins until the next cue).
-- **Ask Chris first** whether a loose press (a pad, a slot, `apply_cue`) sets tempo. Since R1.2 it
-  brings a cue on as a GO does, but D15 and D20 name only GOs. R3.1 and R3.3 changed palette and Look
-  presses only: a cue's loose press is still `takeLooseCue` (`fx/CueHolds.kt`). A reload calls that
-  too (`Show.resume`, `fireEvents = false`), so a yes needs the same flag there.
+- **A loose press sets tempo too** (Chris, 2026-10-17, K3): a pad, a slot, `apply_cue`, MIDI
+  `FireCue` and the hand bring a cue on as a GO does since R1.2, so they re-assert its masters as a
+  GO does; GOs only was declined. A cue's loose press is `takeLooseCue` (`fx/CueHolds.kt`; R3.1 and
+  R3.3 changed palette and Look presses only). A reload calls that too (`Show.resume`,
+  `fireEvents = false`), and a reload sets no tempo, so the press needs the same flag there.
 - It's a field of the cue, not of its entries, so a shared cue sets the same tempo from every stack.
 - **Where it's edited.** The cue editor's **Cue** tab (`components/cues/editor/CueTab.tsx`, R2.4
   `a4ab679`), which holds what the header leaves. Its three hosts get it at once: the card, the cue
@@ -294,8 +295,8 @@ a one-line row here.
 - ~~K2 — after R1.4~~ — done, `fff3addb` (plans corrected for the shared cue, R1.3, R4.2 and Nav.1;
   R1.4's gaps to R2.3, R2.4 and `FU-BUSK-PAD-STALE-NUMBER`; the Cues lane folded; no manual check run).
 - ~~K3 — after twelve more~~ — done, `d9cb8382` (plans corrected for R3.1–R3.4, R4.3, R4.6, R4.7,
-  R2.3, R2.4 and Nav.2–Nav.4; R1.6's and Att.3's needs met; six questions for Chris in the bodies; no
-  manual check run).
+  R2.3, R2.4 and Nav.2–Nav.4; R1.6's and Att.3's needs met; nine questions answered by Chris, in
+  the plans' question lists; no manual check run).
 
 ### Research and design — done
 

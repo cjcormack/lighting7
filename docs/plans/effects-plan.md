@@ -291,8 +291,8 @@ between them — and the **target** resolves it per head, which is what no outpu
 |---|---|
 | `POST /fx/add`, `PUT /fx/{id}`, `updateFx`, `POST /groups/{name}/fx` | gain `size`, `direction`, `nShot` (s1); `spread`, `wings`, `blocks`, `groups` (s2); a `targets` list on `POST /fx/add` (s3), and on `PUT /fx/{id}` and `updateFx` for the apply-model plan's split (its session 2) |
 | Look, cue and palette effect DTOs, `ActiveEffect` | the same fields |
-| `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5); `cueRunStateChanged` carries `effectSize` |
-| a WS set frame for a stack's size | new (s5): D10's WS, as `grandMaster.set` is — `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush` |
+| `PUT /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` | new (s5) |
+| a stack-size state frame and its set frame | new (s5): D10's WS, as `grandMaster.state` / `.set` are — a `StateFlow`-backed state frame keyed by stack (§11, 17), the set `CONTINUOUS` in `TraceSampling.WS_MESSAGES`, the slider writing through `useLivePush`. Not on `cueRunStateChanged`, which a fader drag would flood |
 | MIDI `BindingTarget.StackEffectSize {stackUuid}` | new fader target (s5) |
 | MCP effect schemas (`AiToolSchemas`) | gain each field as its session lands |
 
@@ -438,13 +438,13 @@ busk view's own chrome does not change**: no new strip, no new tab, only the pad
 ### Session 5 — A stack's effect size (backend + frontend)
 
 - §4.3 and the wire (§3.7): a runtime per-stack value in `CueStackManager` weighting that stack's
-  effects (P3's `stackSize`, multiplied into `FxInstance.weight`), REST, the WS set frame,
-  `cueRunStateChanged`, the MIDI target with its health and feedback; dropped on a project switch and
+  effects (P3's `stackSize`, multiplied into `FxInstance.weight`), REST, its own state and set
+  frames (§3.7), the MIDI target with its health and feedback; dropped on a project switch and
   carried across a reload by `show/ShowCarry.kt`, beside the standbys.
-- **Ask Chris first** which stack's size weighs a cue two stacks hold, or a stack and a press. Since
-  R1.2 such a cue is one set of instances, tagged with its first hold's stack (`FxInstance.cueStackId`,
-  never retagged; null when a loose hold came first, `CueHolds.tagged`). Two readings: the highest
-  hold's stack, 100 % under a loose hold; or the product over its stack holds.
+- **A cue two stacks hold, or a stack and a press, is weighed by its highest hold's stack** (§11,
+  18): the stack whose hold is on top, 100 % under a loose hold. Since R1.2 such a cue is one set of
+  instances, tagged with its first hold's stack (`FxInstance.cueStackId`, null when a loose hold came
+  first, `CueHolds.tagged`), so the weight follows the top hold rather than that tag.
 - The slider on the Show view's stack row and `RunMobile`; `lib/surfaceDrop.ts` and the binding
   picker.
 - **Tests:** 50 % halves each of the stack's effects' weight and no other stack's; a fader moves it;
@@ -535,3 +535,10 @@ Answered by Chris, 2026-10-15, in five rounds:
 15. **Do the programmer's gestures fade effects?** Yes, at the programmer fade (D13).
 16. **Palettes cannot hold wheel slots; how do steps reach wheels?** By slot name (D8). Palette steps
     without wheels, and opening the palette vocabulary to slots, were declined.
+
+Answered by Chris, 2026-10-17, at venue-visit course check K3:
+
+17. **How does a stack's size travel over WS?** Its own `StateFlow`-backed frame, as the grand
+    master's does. Riding `cueRunStateChanged`, which a fader drag would flood, was declined.
+18. **Whose size weighs a cue two stacks hold, or a stack and a press?** The highest hold's stack's,
+    100 % under a loose hold. The product over its stack holds was declined.

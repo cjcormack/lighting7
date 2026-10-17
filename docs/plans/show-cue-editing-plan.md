@@ -478,9 +478,9 @@ says palette). All of them have merged.
   R4.7), D16's master through `useSpeedMasterForCategory` — on `effectTargetOf`'s target
   (`components/fx/selectionEffectTarget.ts`): one row as itself, several as one `selection` effect
   (effects plan D3, R4.3). The `FxScope` is `FxEditor`'s own derivation, lifted to be shared.
-- ***Open Look* has no address to go to.** `/looks` opens no single Look (a palette has `?edit=`,
-  R3.3); `stage/OwnerEditor` opens `LookDetailSheet` in place for *Moves with*. Ask Chris whether
-  *Open Look* gains a `/looks` address or opens the Look in place, before building it.
+- ***Open Look* gets an address.** `/looks` opens no single Look today (a palette has `?edit=`,
+  R3.3). This session gives it one, `/looks?edit={id}`, and *Open Look* navigates there (§11, 18);
+  opening it in place, as `stage/OwnerEditor` does for *Moves with*, was declined.
 - **Tests:** a reorder restates every `sortOrder` and keeps uuids (with session 2); a disabled layer
   is stored; an effect added in draft sends no `fx.add`; a swap replaces it; an effect's Seconds,
   size, direction, runs and spread shape survive an edit and a reorder; an effect added over two
@@ -517,9 +517,8 @@ says palette). All of them have merged.
   `consumeLaunchStageOptions` (`lib/stageViewpoint.ts`), and a Screens row's *Copy link* carries it
   as `source=` (`windowSetupUrl`). The edit target rides beside it in all four.
 - **The Screens row cannot name a cue.** Its Source is `STAGE_SOURCE_OPTION`, an `enum` segment of
-  two of the four sources (*Output · Next GO*, `lib/windowViews.ts`). Ask Chris whether the row
-  offers *Cue in edit* only while that window already shows one, or picks a cue through a `picker`
-  control as the viewpoint's does.
+  two of the four sources (*Output · Next GO*, `lib/windowViews.ts`). The row offers *Cue in edit*
+  **only while that window already shows one** (§11, 19); a cue `picker` was declined.
 - **Off the rig.** The Stage view draws only the project on the rig (`RigGate`, Nav.2) and the
   preview route is `withCurrentProject`, so *Show on stage* is withheld, with the reason, for a cue
   the editor reads as another project's (`canEdit` false).
@@ -608,3 +607,10 @@ Answered by Chris, 2026-10-16, during session 3:
 17. ***Move to stack…* drops the entry's place?** No: it moves the entry whole, on a route of its own,
     so its number, follow and prompt-book anchor go with it. Keeping R1.4's add then remove was
     declined, and so was copying the number and follow onto a new entry (which still lost the anchor).
+
+Answered by Chris, 2026-10-17, at venue-visit course check K3:
+
+18. ***Open Look* from the cue editor?** `/looks` gains an address, `?edit={id}` as a palette's, and
+    *Open Look* goes there. Opening the Look in place over the cue was declined.
+19. **Can a Screens row point a window at the cue in edit?** Only while that window already shows
+    one. A picker over every cue was declined.
