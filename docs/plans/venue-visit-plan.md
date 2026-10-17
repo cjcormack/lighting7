@@ -195,6 +195,10 @@ Grouped by area. §4 gives the order.
 - ~~S14 — Full-width applied tables~~ — done, `dae7dd5` (one route with a tab per table,
   `/programmer/applied?table=`, under the Programmer row; a row opens what the rail's row opens, by
   Chris's calls of 2026-10-17).
+- ~~S13 — Aim from the floor plan~~ — done, `07f5de4` (an armed mode, *Aim on the plan*, so a click
+  aims only while armed and Edit wins; head height on the region under the click, else the deck or
+  the house floor, or a typed Z; the Plan always fits the drawn room; *Aim…* in the position cell's
+  footer; by Chris's calls of 2026-10-17).
 
 **S12 — Fan in and fan out.**
 - Spread gains a relative mode: a fan amount around each head's current position.
@@ -210,21 +214,6 @@ Grouped by area. §4 gives the order.
   whose footer `tools` slot (apply-model §4.3's *Spread…*, *Pick*, *Aim…*) no cell fills yet; the
   colour editor's own *Spread…* seeds the rail's tab.
 - Start with a one-board sketch of the panel. No separate design session.
-
-**S13 — Aim from the floor plan.**
-- Click to aim the selection, single or multiple, on the Stage view's Plan camera.
-- Height comes from a Z control or a region's surface.
-- Aim also opens from the programmer: the position cell popup's footer, `PaletteBands`' `tools`
-  slot, where apply-model §4.3 puts *Aim…* (R3.5 built the slot and filled nothing).
-- Points outside the stage (auditorium, walls, the room) are reachable because the plan extends to
-  the room, with numeric entry for anything off the drawing. Today the Plan is fitted to the rig's
-  bounds (`orthoSection`, `stageCameras.ts`), and a pointer maps to its metres only in the editor
-  (`edit/sectionView.ts`).
-- Show skipped heads by reason, as the route already answers them.
-- The Stage view already aims at a typed point: `StageAimControls` (X, Y, Z; a region's centre at
-  head height above its top, `regionAimPoint`; skipped heads by name and reason), the *Aim…*
-  popover on the fixture sheet's Position row in the Stage view's single-fixture panel, and
-  `StageAimPanel` for a multi-selection. S13 adds the click and the programmer's door to it.
 
 ### Effects
 
