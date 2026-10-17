@@ -193,6 +193,7 @@ object BindingHealthEvaluator {
         BindingTarget.Blackout -> AssignmentHealth.Ok
         BindingTarget.GrandMasterToggle -> AssignmentHealth.Ok
         BindingTarget.GrandMasterFader -> AssignmentHealth.Ok
+        is BindingTarget.StackEffectSize -> checkStack(target.stackId, target.stackUuid, context)
     }
 
     /** A [BindingTarget.FireTrigger]'s fixture must be patched and carry that trigger (by name or label). */

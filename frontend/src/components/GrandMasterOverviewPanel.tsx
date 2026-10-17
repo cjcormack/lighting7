@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { useLivePush } from '@/components/editor/useLivePush'
+import { useLiveFader } from '@/components/editor/useLiveFader'
+import { levelPercent } from '@/lib/levelPercent'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
 import { GRAND_MASTER_FULL } from '@/api/grandMasterApi'
 import { setGrandMasterLevel, useGrandMasterLevel } from '@/store/grandMaster'
@@ -16,9 +16,9 @@ import { RigSafetyControls } from './rigSafety/RigSafetyControls'
  * than resident on it, because a fader always under the pointer is too easy to move by accident. It scales every dimmer and UV channel,
  * and the colour mix of a head with no dimmer (D12); a strobe is cut only at 0.
  *
- * The fader writes as it moves, floored and deduplicated by `useLivePush`, the release always
- * landing — a fader is judged against the rig. A drag shows its own value until the release; after
- * that the desk's frame is the truth, which a MIDI fader or another window may move too.
+ * The fader writes as it moves and holds its own value over the desk's until the release settles
+ * (`useLiveFader`) — a fader is judged against the rig, and a MIDI fader or another window may move
+ * it too.
  *
  * Under the fader, the **Rig** row (venue-visit plan S6): *Make rig safe…*, bulk lamp commands and
  * *Undo* — the panel is where the rig's output as a whole is set.
@@ -35,32 +35,8 @@ export function GrandMasterOverviewPanel({ isVisible }: { isVisible: boolean }) 
 export function GrandMasterControl() {
   const level = useGrandMasterLevel()
   const connected = useIsDeskConnected()
-  // What the operator moved, drawn over the desk's level until the desk says the same or
-  // `HOLD_MS` pass — so a release does not snap back to the pre-drag level for a round trip.
-  const [held, setHeld] = useState<{ value: number; settling: boolean } | null>(null)
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const { push, flush, reset } = useLivePush<number>(setGrandMasterLevel)
-
-  useEffect(() => {
-    if (held?.settling && Math.abs(held.value - level) < 0.001) setHeld(null)
-  }, [held, level])
-  useEffect(() => () => {
-    if (timer.current) clearTimeout(timer.current)
-  }, [])
-
-  const settle = (value: number) => {
-    setHeld({ value, settling: true })
-    if (timer.current) clearTimeout(timer.current)
-    timer.current = setTimeout(() => setHeld(null), HOLD_MS)
-  }
-
-  const shown = held?.value ?? level
-
-  const set = (v: number) => {
-    reset()
-    setGrandMasterLevel(v)
-    settle(v)
-  }
+  const fader = useLiveFader(level, setGrandMasterLevel)
+  const shown = fader.shown
 
   return (
     <div
@@ -75,41 +51,21 @@ export function GrandMasterControl() {
         step={1}
         value={[shown]}
         disabled={!connected}
-        onValueChange={([v]) => {
-          if (timer.current) clearTimeout(timer.current)
-          setHeld({ value: v, settling: false })
-          push(v)
-        }}
-        onValueCommit={([v]) => {
-          flush(v)
-          reset()
-          settle(v)
-        }}
+        onValueChange={fader.onValueChange}
+        onValueCommit={fader.onValueCommit}
         aria-label="Grand master"
       />
       <div className={cn('w-10 shrink-0 text-right text-sm font-semibold tabular-nums', levelClass(shown))}>
         {levelPercent(shown)}%
       </div>
-      <Button size="sm" variant="outline" disabled={!connected} onClick={() => set(0)}>
+      <Button size="sm" variant="outline" disabled={!connected} onClick={() => fader.set(0)}>
         Out
       </Button>
-      <Button size="sm" variant="outline" disabled={!connected} onClick={() => set(GRAND_MASTER_FULL)}>
+      <Button size="sm" variant="outline" disabled={!connected} onClick={() => fader.set(GRAND_MASTER_FULL)}>
         Full
       </Button>
     </div>
   )
-}
-
-const HOLD_MS = 1500
-
-/**
- * The level as a whole percentage that never reads as an end it is not at: 99.6 is 99, not 100
- * (the rig is dimmed), and 0.4 is 1, not 0 (a strobe still runs).
- */
-export function levelPercent(level: number): number {
-  if (level >= GRAND_MASTER_FULL) return GRAND_MASTER_FULL
-  if (level <= 0) return 0
-  return Math.min(GRAND_MASTER_FULL - 1, Math.max(1, Math.round(level)))
 }
 
 /** Amber below full, red at 0: a desk left at 60 % looks like a dim show. */

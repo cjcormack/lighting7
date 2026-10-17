@@ -40,7 +40,7 @@ export function TemplatesRedirect() {
  * **Chips filter, dividers group** (D3). A family is an exact partition here (a template is in exactly
  * one), so the chips narrow the sheet to one family and, under *All*, the rows are grouped by family
  * divider in `TEMPLATE_FAMILY_ORDER`. The partition is a **view, never a route**: `?family=` deep-links
- * from Cmd+K and the choice is remembered under `looks.family` — the route's, so `TemplatePicker`
+ * from Cmd+K and the choice is remembered under `looks.family` — the route's, so `ApplyPicker`
  * mounts the same `PartitionChips` with state of its own.
  *
  * **Still no stored order.** Within a family, and in a filtered view, the rows are the server's name

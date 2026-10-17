@@ -71,7 +71,7 @@ type ColourPickerPopoverProps = Omit<ColourEditorProps, 'open' | 'contentRef' | 
 
 /**
  * The colour editor's **popover half**: the open state, the keyboard wiring and the two surfaces.
- * Everything the editor *is* — the picker, the fields, the emitter rows, the read-out, Pick, Recent,
+ * Everything the editor *is* — the picker, the fields, the emitter rows, the read-out, Pick, the band,
  * the footer and the six-channel buffer — is `ColourEditor` (editor-kit plan D10), which the busk
  * view's Colour tab docks and this component floats; every editor prop is passed straight through.
  *

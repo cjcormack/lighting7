@@ -21,6 +21,11 @@ export interface LiveCueHolds {
   /** The priority it composes at — its highest hold's. */
   priority: number
   holds: CueHold[]
+  /**
+   * Its highest hold's stack, null when that hold is a press: the stack whose FX size weighs its
+   * effects. Absent from a desk before effects plan session 5.
+   */
+  topStackId?: number | null
 }
 
 export interface CueHoldsState {
@@ -63,7 +68,12 @@ export function parseCueHoldsFrame(raw: unknown): CueHoldsState {
       const cue = c as Record<string, unknown>
       if (typeof cue.cueId !== 'number') return []
       const holds = (Array.isArray(cue.holds) ? cue.holds : []).map(parseHold).filter((h): h is CueHold => h != null)
-      return [{ cueId: cue.cueId, priority: typeof cue.priority === 'number' ? cue.priority : 0, holds }]
+      return [{
+        cueId: cue.cueId,
+        priority: typeof cue.priority === 'number' ? cue.priority : 0,
+        holds,
+        topStackId: typeof cue.stackId === 'number' ? cue.stackId : null,
+      }]
     }),
   }
 }

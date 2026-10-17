@@ -21,7 +21,8 @@ vi.mock('@/store/grandMaster', () => ({
 }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => state.connected }))
 
-import { GrandMasterChip, GrandMasterControl, GrandMasterImmersiveChip, levelPercent } from './GrandMasterOverviewPanel'
+import { GrandMasterChip, GrandMasterControl, GrandMasterImmersiveChip } from './GrandMasterOverviewPanel'
+import { levelPercent } from '@/lib/levelPercent'
 
 afterEach(() => {
   cleanup()

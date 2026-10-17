@@ -15,16 +15,16 @@ interface AddLayerSheetProps {
    * against, and it drops the timing fields on the way out.
    */
   allowTiming?: boolean
-  /** Passed straight to [LayerPicker]: open on one library. The programmer rail's footer sets it. */
+  /** Passed straight to [LayerPicker]: open on one library. */
   kind?: 'look' | 'template'
 }
 
 /**
  * Right-hand sheet wrapping `LayerPicker`.
  *
- * Lives beside the picker rather than in the cue editor because both the cue editor's Looks tab and
- * the programmer open it: a layer means the same thing in either stack, so "add a layer" is one
- * gesture with one sheet.
+ * The add-layer sheet for a cue's layers, unmounted until the cue editor's *+ Look* and *+ Palette*
+ * host it (show-cue-editing plan session 6). The programmer's door is the one picker, which presses
+ * onto the selection instead (`ApplyPicker`, apply-model plan §4.6).
  */
 export function AddLayerSheet({
   open,

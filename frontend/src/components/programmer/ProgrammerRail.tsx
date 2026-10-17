@@ -43,7 +43,9 @@ import {
   useProgrammerAddEffect,
   type AddEffectOffer,
 } from './ProgrammerAddEffect'
-import { ProgrammerAddLayerSheet, type ProgrammerAddLayerKind } from './ProgrammerAddLayerSheet'
+import { ApplyPicker, type ApplyLibrary } from '@/components/press/ApplyPicker'
+import { useWindowPaletteFit, useWindowPressPair } from '@/hooks/usePress'
+import { useMarquee } from '@/components/fixtures-list/marqueeContext'
 import { ProgrammerFxList } from './ProgrammerFxList'
 import { ProgrammerLookStack } from './ProgrammerLookStack'
 import { HandProgrammerLayerStrip } from '@/components/hand/HandLayerTargets'
@@ -62,7 +64,7 @@ import type { RailTab } from './railTab'
 const LABEL_CLASS =
   'inline-flex shrink-0 items-center gap-1 text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground'
 
-type AddKind = ProgrammerAddLayerKind | 'effect'
+type AddKind = 'look' | 'template' | 'effect'
 
 /**
  * Which half of the one scroller a gesture asked for.
@@ -266,13 +268,44 @@ export function ProgrammerRail() {
           addEffect={addEffect}
         />
       </RailHandleFrame>
-      <ProgrammerAddLayerSheet
-        projectId={projectId}
-        kind={adding === 'look' || adding === 'template' ? adding : null}
-        onClose={closeAdd}
-      />
+      {(adding === 'look' || adding === 'template') && (
+        <RailApplyPicker projectId={projectId} library={adding === 'look' ? 'looks' : 'palettes'} onClose={closeAdd} />
+      )}
       <ProgrammerAddEffectSheet open={adding === 'effect'} offer={addEffect} onClose={closeAdd} />
     </>
+  )
+}
+
+/**
+ * *+ Look* and *+ Palette*: the one picker on the window's selection (apply-model plan §4.6) — the
+ * strip's targets and the marquee's families, an unlinked window's own included — so a press from
+ * the rail lands where a press from row C would, with the same gestures. Mounted only while open:
+ * its pair is a marquee subscription, which a shut picker in the rail's footer must not hold.
+ */
+function RailApplyPicker({
+  projectId,
+  library,
+  onClose,
+}: {
+  projectId: number
+  library: ApplyLibrary
+  onClose: () => void
+}) {
+  const pair = useWindowPressPair()
+  const fit = useWindowPaletteFit()
+  // The families the marquee asked for, as the strip's New chip takes them: with rows selected and
+  // no cells the gesture named no attribute, and the sheet should ask.
+  const asked = useMarquee()?.press.askedFamilies ?? null
+  return (
+    <ApplyPicker
+      projectId={projectId}
+      open
+      onOpenChange={(next) => !next && onClose()}
+      library={library}
+      pair={pair}
+      fit={fit}
+      saveFamilies={asked}
+    />
   )
 }
 

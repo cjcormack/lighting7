@@ -370,7 +370,7 @@ function ColourRow({ row, headKey, headName, sourceGroup }: { row: Extract<Sheet
         </div>
         {open && (
           // The editor kit's ColourEditor, docked in the row (D7, call 5): the picker and the typed
-          // channels, no Spread or Recent — the sheet is one fixture.
+          // channels, no Spread or Palettes band — the sheet is one fixture.
           <fieldset disabled={readOnly} className="min-w-0" data-testid="colour-editor">
             <ColourEditor
               r={colour.r}

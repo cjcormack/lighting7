@@ -216,6 +216,7 @@ instance is replaced wholesale on project switch, so `setupBroadcastSubscription
 | Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
 | FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
 | Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
+| Stack effect size | `StackEffectSizeSocket.kt` | 1 | 1 | `handleStackEffectSize` | `setupStackEffectSizeSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
@@ -511,6 +512,20 @@ ignored. The Grand Master overview panel's fader, sent at frame rate (floored at
 `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT /projects/{id}/grand-master` reads and sets the
 same value over REST, and a MIDI `grandMasterFader` binding moves it too.
 
+### Stack effect size — `StackEffectSizeSocket.kt`
+
+| Message | Fields | Reply |
+|---|---|---|
+| `stackEffectSize.set` | `stackId: Int`, `size: Double` | none — `stackEffectSize.state` follows |
+
+One of the live project's stacks' effect size (effects plan D10), clamped into 0–1; a non-finite
+size is ignored. A stack the live project does not have is dropped with a debug log — only a first
+move reads the row, so a fader dragged at frame rate costs no database read after its first frame.
+The *FX size* slider's write, `CONTINUOUS` in `TraceSampling.WS_MESSAGES` and never traced; an
+operator gesture, so `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT
+/projects/{id}/cue-stacks/{sid}/effect-size` reads and sets the same value over REST, and a MIDI
+`stackEffectSize` binding moves it too.
+
 ### Speed masters — `SpeedMasterSocket.kt`
 
 The desk's only WS tempo surface. A master is addressed by uuid, and `masterUuid` null/omitted
@@ -655,7 +670,7 @@ payload-free, since one project has one rig).
 | `promptBookChanged` | — | Prompt-book content changed |
 | `showChanged` | `projectId`, `activeStackId?`, `activeStackName?` | The active show/stack moved |
 | `cueRunStateChanged` | `projectId`, `stackId`, `activeCueId?`, `nextCueId?`, `activeEntryId?`, `nextEntryId?`, `standbyEntryId?`, `nextIsArmed`, `transition`, `fadeDurationMs?`, `fadeElapsedMs?`, `autoAdvance`, `autoAdvanceDelayMs?` | One frame per transition; the client animates the fade locally. The entry ids are which **entry** the stack is on, arms and fires next (cue model plan P2) — a stack naming one cue twice is on one of the two |
-| `cueHolds.state` | `projectId`, `cues: [{cueId, priority, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}]}]` | What holds every live cue (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
+| `cueHolds.state` | `projectId`, `cues: [{cueId, priority, stackId?, holds: [{kind: STACK, stackId, entryId} \| {kind: LOOSE, seq}]}]` | What holds every live cue (§"Cue holds" below). `StateFlow`-backed, so the subscription is the snapshot |
 
 **`busk.layoutChanged` also has to refresh the library rows' `buskPageCount`,** and where that
 happens is not obvious. The backend deliberately does **not** fire `paletteListChanged` /
@@ -700,8 +715,9 @@ frame older than one already sent for its stack — the stale snapshot and the `
 duplicate alike. See `docs/cue-stacks-engineering.md` §"WebSocket".
 
 **Cue holds.** `cueHolds.state` is the hold registry's frame (`fx/CueHolds.kt`, cue model plan P3,
-§3.4): per live cue, its priority and every hold on it — a stack's entry, or a loose press with its
-sequence number. It is a `StateFlow` hosted on `State` (`State.cueHoldsFrame`) rather than on the
+§3.4): per live cue, its priority, every hold on it — a stack's entry, or a loose press with its
+sequence number — and `stackId`, the stack of its highest hold (absent under a loose one), which is
+the stack whose effect size weighs the cue's effects (§"Stack effect size"). It is a `StateFlow` hosted on `State` (`State.cueHoldsFrame`) rather than on the
 show, so the socket's subscription survives a project switch and a switch is just the next frame
 (empty, then the new show's). The registry writes a whole frame on every hold that comes or goes
 and every priority restamp, so the subscription is both the connect snapshot and the stream — no
@@ -936,6 +952,20 @@ every DIMMER and UV channel, and the colour mix (a `DmxColour`'s RGB, WHITE and 
 with no dimmer; a STROBE channel is cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
+
+### Stack effect size — `StackEffectSizeSocket.kt`
+
+| Message | Payload | Cast |
+|---|---|---|
+| `stackEffectSize.state` | `projectId: Int`, `stacks: [{stackId, size}]` — every stack below full | Connect snapshot + broadcast |
+
+Each cue stack's runtime weight on its effects (effects plan D10; `docs/fx-engineering.md` §"Size,
+direction and N-shot"): a stack absent is at 100 %, so a fresh show's frame is an empty list.
+`StateFlow`-backed (`StackEffectSizes.state`), re-subscribed through `flatMapLatest` off
+`projectChangedFlow`, as `grandMaster.state` is, because the sizes live on the show's
+`CueStackManager`, which a project switch replaces — and with it every stack back at full. Its own
+frame rather than a field of `cueRunStateChanged`, which a fader drag would flood (§11, question 20).
+Nothing is persisted; a same-project reload carries the sizes (`ShowCarry`).
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -1296,6 +1326,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-effect state, the five FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
+| `plugins/StackEffectSizeSocket.kt` | Each stack's effect size: `stackEffectSize.state` and `stackEffectSize.set` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |

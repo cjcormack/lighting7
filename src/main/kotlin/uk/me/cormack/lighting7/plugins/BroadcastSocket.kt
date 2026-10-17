@@ -244,14 +244,18 @@ data class CueHoldsStateOutMessage(
         fun of(frame: CueHolds.Frame) = CueHoldsStateOutMessage(
             projectId = frame.projectId,
             cues = frame.cues.map { cue ->
-                LiveCueHoldsDto(cue.cueId, cue.priority, cue.holds.map(CueHoldDto::of))
+                LiveCueHoldsDto(cue.cueId, cue.priority, cue.holds.map(CueHoldDto::of), cue.stackId)
             },
         )
     }
 }
 
+/**
+ * One live cue. [stackId] is its highest hold's stack, null when that hold is loose — the stack whose
+ * effect size weighs its effects (effects plan D10).
+ */
 @Serializable
-data class LiveCueHoldsDto(val cueId: Int, val priority: Int, val holds: List<CueHoldDto>)
+data class LiveCueHoldsDto(val cueId: Int, val priority: Int, val holds: List<CueHoldDto>, val stackId: Int? = null)
 
 /** One hold: `STACK` with its [stackId] and [entryId], or `LOOSE` with its press [seq] (newest on top). */
 @Serializable

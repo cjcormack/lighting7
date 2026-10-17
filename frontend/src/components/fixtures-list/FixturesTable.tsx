@@ -85,11 +85,11 @@ export interface FixturesTableProps {
    */
   scopeLabel: string
   /**
-   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
-   * the patch list, Recent lists templates and *Save as template…* records into it. The container
-   * passes it for the programmer scope only — the two plain lists draw no template strip and get
-   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
-   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
+   * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
+   * leaves. The container passes it for the programmer scope only — the two plain lists draw no
+   * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
+   * its editor bare rather than reaching for a store it has no project in.
    */
   projectId?: number
   /**
@@ -591,11 +591,11 @@ interface RowViewProps {
    */
   scopeLabel: string
   /**
-   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
-   * the patch list, Recent lists templates and *Save as template…* records into it. The container
-   * passes it for the programmer scope only — the two plain lists draw no template strip and get
-   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
-   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
+   * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
+   * leaves. The container passes it for the programmer scope only — the two plain lists draw no
+   * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
+   * its editor bare rather than reaching for a store it has no project in.
    */
   projectId?: number
   /** See `FixturesTableProps.onSpread`. */
@@ -1213,11 +1213,11 @@ function PropertyCell({
   /** *Local*, or the focused Look's name — see `FixturesTableProps`. */
   scopeLabel: string
   /**
-   * The project the rows belong to, for the colour editor alone: its hidden appearance leaves read
-   * the patch list, Recent lists templates and *Save as template…* records into it. The container
-   * passes it for the programmer scope only — the two plain lists draw no template strip and get
-   * none of the three — and every test mounts this table bare; a cell with none draws no Recent, a
-   * disabled Save and no leaves rather than reaching for a store it has no project in.
+   * The project the rows belong to: the popup's Palettes band and *Save as palette…* on the colour,
+   * level and position editors (apply-model plan §4.3), and the colour editor's hidden appearance
+   * leaves. The container passes it for the programmer scope only — the two plain lists draw no
+   * palette strip and get none of it — and every test mounts this table bare; a cell with none draws
+   * its editor bare rather than reaching for a store it has no project in.
    */
   projectId?: number
   /** The colour editor's *Spread…* — see `FixturesTableProps.onSpread`. */
@@ -1268,6 +1268,7 @@ function PropertyCell({
           label={label}
           batch={batch}
           scopeLabel={scopeLabel}
+          projectId={projectId}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}
@@ -1314,6 +1315,7 @@ function PropertyCell({
           label={label}
           batch={batch}
           scopeLabel={scopeLabel}
+          projectId={projectId}
           placeholder={placeholder}
           disabled={disabled}
           autoOpen={autoOpen}

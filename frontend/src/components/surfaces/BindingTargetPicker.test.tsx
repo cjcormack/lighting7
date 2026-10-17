@@ -45,7 +45,11 @@ vi.mock('@/store/windows', () => ({
     { id: 'w2', windowId: 'b', name: 'Screen 2', view: '/busk', fullscreen: false, follows: true, user: null, viewOptions: null },
   ],
 }))
-vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: [] }) }))
+const stacks = vi.hoisted(() => [
+  { id: 4, name: 'Act 1', type: 'STACK' },
+  { id: 9, name: 'Act 2', type: 'STACK' },
+])
+vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
 // The three record libraries, behind `useRecordBindingOptions`.
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
@@ -202,6 +206,16 @@ describe('BindingTargetPicker record targets', () => {
     renderPicker(false, { type: 'buskPageNext' })
     expect(screen.getByText('Busk page — next')).toBeInTheDocument()
     expect(screen.getByText(/wrapping at the ends/)).toBeInTheDocument()
+  })
+
+  it("offers a stack's FX size on a fader, and a change of stack lets the old stack's uuid go", () => {
+    const onChange = renderPicker(true, { type: 'stackEffectSize', stackId: 4, stackUuid: 'uuid-act-1' })
+    expect(screen.getByText('Cue stack — FX size')).toBeInTheDocument()
+    expect(screen.getByText('Act 1')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByRole('combobox')[1]!)
+    fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))
+    // The uuid wins at dispatch, so keeping Act 1's would leave the fader on Act 1.
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'stackEffectSize', stackId: 9, stackUuid: null })
   })
 
   it('does not offer a record kind on a fader', () => {

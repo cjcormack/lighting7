@@ -13,34 +13,25 @@ import {
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Pipette, Save, Waves } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
+import type { TemplateTarget } from '@/api/templatesApi'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { padPresenceClass, templateSwatch } from '@/components/busking/padFace'
 import { ExtendedChannelSlider } from '@/components/fixtures/ExtendedChannelSlider'
 import { FixtureAppearanceSource } from '@/components/fixtures/fixtureAppearance'
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import { hexToRgb, rgbToHex } from '@/components/fx/colourUtils'
-import { templateLayerPresence } from '@/components/busking/lookPresence'
-import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
-import { usePress, type PressGesture } from '@/hooks/usePress'
-import { useProgrammerAppliedQuery } from '@/store/programmer'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss, parseCssRgb } from '@/lib/colourMath'
 import { LiveAppearanceReporter, pickSelectionColour, targetHeads, type PickedColour } from '@/lib/liveAppearance'
-import { recentTemplates } from '@/lib/templateRecents'
 import { cn } from '@/lib/utils'
 import type { ColourPropertyDescriptor } from '@/store/fixtures'
 import { usePatchListQuery } from '@/store/patches'
-import { usePressFamilies } from '@/store/selection'
-import { useTemplateListQuery } from '@/store/templates'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
-import { EditorLabel } from './EditorLabel'
 import { EditorReadout } from './EditorReadout'
-import { useEditorForm, type EditorForm } from './EditorSurface'
 import { numericSeed } from './useEditorKeyboard'
+import { PaletteBand } from './PaletteBands'
 
 /** The whole of what this editor writes: three colour bytes and the three bundled emitters. */
 export interface ColourChannels {
@@ -83,25 +74,15 @@ function zeroIfHeld(value: number | undefined): number | undefined {
 }
 
 /**
- * Where the **Recent** chips come from, and where a press lands (editor-kit plan D10, D11). A
- * host that draws none passes nothing.
+ * Where the **Palettes** band's palettes are pressed (apply-model plan §4.3, editor-kit D10). A host
+ * that draws none passes nothing.
  */
-export interface ColourRecentSource {
+export interface ColourPaletteSource {
   projectId: number
-  /** Where a chip press lands — the template route's targets, so a fixture and never a cell. */
+  /** Where a chip press lands — fixtures by key, a cell by its element key. */
   targets: readonly TemplateTarget[]
-  /**
-   * The host's own attribute mask for the press; the desk's wins while this tab follows the desk
-   * (`usePressFamilies`). The programmer's colour cell says *Colour*, the busk tab its pair.
-   */
-  localFamilies: readonly AttributeFamily[] | null
-  /**
-   * Draw the chips only in these forms. The programmer's cell passes the bottom sheet alone: row
-   * C's strip is on screen one row up in the popover and a chip set drawn twice is the double D11
-   * refuses, while below 600px that strip is folded away. Absent, the chips are always drawn — the
-   * busk tab has no strip on its screen.
-   */
-  forms?: readonly EditorForm[]
+  /** The press's mask: *Colour* in the programmer's cell (the cell's own family), the busk pair's in its tab. */
+  families: readonly AttributeFamily[] | null
 }
 
 export interface ColourEditorProps {
@@ -184,8 +165,8 @@ export interface ColourEditorProps {
    * the rig has them. The programmer leaves it off: its editor opens at the cell's value already.
    */
   pickOnTargets?: boolean
-  /** The Recent chips. Absent, none are drawn. */
-  recent?: ColourRecentSource
+  /** The Palettes band. Absent, none is drawn. */
+  palettes?: ColourPaletteSource
   /** Draw the footer — *Save as template… · Pick · Spread…*. Default true; the fixture sheet passes false. */
   footer?: boolean
   /**
@@ -201,14 +182,14 @@ export interface ColourEditorProps {
   /**
    * The scope takes no value — the programmer rail's tab in Output or on a focused template layer.
    * **A whole guarantee, not a part one**: every control that writes is drawn but takes no input —
-   * the picker, the fields and the emitter rows, and the Recent chips (a template press) — and
+   * the picker, the fields and the emitter rows, and the Palettes band (a palette press) — and
    * *Spread…* is disabled, since it hands a value on to be written. Pick stays live, since it reads
    * and writes nothing, and so does *Save as template…*, which records from the selection rather
    * than writing through the scope.
    */
   readOnly?: boolean
   /**
-   * The busk tab's frame: the body, the read-out and Recent in one scroller, the footer static
+   * The busk tab's frame: the body, the read-out and the Palettes band in one scroller, the footer static
    * under it. Off, everything stacks in one column, which is the popover's shape.
    */
   docked?: boolean
@@ -288,7 +269,7 @@ export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<Colou
  *
  * It was `fixtures/ColourPickerBody`, extracted from the popover so the busk view's Colour tab
  * could host the same picker, fields and six-channel buffer; the tab then grew everything around
- * the body — the read-out line, Pick, Recent, the footer, the hidden appearance leaves — and the
+ * the body — the read-out line, Pick, the palettes, the footer, the hidden appearance leaves — and the
  * popover did not get them back. They are the editor's now, and the hosts say only which pieces
  * they draw: the programmer's colour cell (a 352px popover and both sheets), the busk tab
  * (docked), the Spread tab's colour endpoint (the picker and R/G/B alone — a colour intent has no
@@ -315,12 +296,11 @@ export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<Colou
  * `.colour-picker-compact`, because a Tailwind utility cannot size this picker (`index.css` says
  * why).
  *
- * **This kit module reaches three feature trees and four stores** — `busking/padFace` and
- * `busking/lookPresence` for a chip's swatch and ring, `press/PressGestures` and `hooks/usePress`
- * for a chip's press, and the templates, programmer, selection and patch stores — because Recent and
- * the leaves are the editor's own (D10, D12) rather than a host's.
+ * **This kit module reaches feature trees and stores** — through `PaletteBand` the busk pad's
+ * face, the press and the templates and programmer stores, and the patch store for the leaves —
+ * because the band and the leaves are the editor's own (D10, D12) rather than a host's.
  * Through `ColourPickerPopover` that graph now sits under the fixture and group detail sheets too;
- * `import/no-cycle` holds, and those two hosts pass neither `recent` nor `projectId`, so neither
+ * `import/no-cycle` holds, and those two hosts pass neither `palettes` nor `projectId`, so neither
  * store-bound child mounts there. Said here so the widening is a decision and not a surprise.
  */
 export function ColourEditor({
@@ -346,7 +326,7 @@ export function ColourEditor({
   headOrder,
   projectId,
   pickOnTargets = false,
-  recent,
+  palettes,
   footer = true,
   counts = true,
   labelLine,
@@ -665,22 +645,26 @@ export function ColourEditor({
     </EditorReadout>
   ) : null
 
-  // Recent is *mounted* only where its chips are drawn (D11): the form question is asked here, so
-  // the popover form on the programmer mounts no template-list or selection subscription for chips
-  // it would not show. One shared-media subscription per open editor.
-  const form = useEditorForm()
-  const recentShown = recent != null && (recent.forms == null || recent.forms.includes(form))
-  const recentChips = recentShown ? (
-    <RecentTemplates projectId={recent.projectId} targets={recent.targets} localFamilies={recent.localFamilies} available={available} className={docked ? 'px-3 pb-2' : undefined} />
-  ) : null
-  // A chip is a template press — a write — so read-only takes it out of reach with the controls.
-  const recentSection =
-    recentChips != null && readOnly ? (
+  // The Palettes band, mounted only where a host asks for one — its store hooks are the band's.
+  const band =
+    palettes == null ? null : (
+      <PaletteBand
+        projectId={palettes.projectId}
+        family="COLOUR"
+        targets={palettes.targets}
+        families={palettes.families}
+        emitters={available}
+        className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
+      />
+    )
+  // A chip is a palette press — a write — so read-only takes it out of reach with the controls.
+  const bandSection =
+    band != null && readOnly ? (
       <div inert className="opacity-50">
-        {recentChips}
+        {band}
       </div>
     ) : (
-      recentChips
+      band
     )
 
   // The footer: the save first, then Pick and Spread…, the busk Colour tab's shape. **One line,
@@ -741,7 +725,7 @@ export function ColourEditor({
     return (
       <div ref={contentRef} onKeyDown={onKeyDown} data-colour-editor={compact ? 'compact' : 'full'} className="flex min-h-0 flex-1 flex-col">
         {leaves}
-        {/* The tab's one scroller: the picker, its read-out, Recent. The picker row is padded to the
+        {/* The tab's one scroller: the picker, its read-out, the Palettes band. The picker row is padded to the
             knob's half-width on **every** side a scroller clips — the knob is react-colorful's own
             28px (its injected stylesheet lands after `index.css`, so the 20px rule there loses),
             and at 0% it hangs 14px past the square. The top was `pt-3`, 2px short, so a knob at
@@ -754,7 +738,7 @@ export function ColourEditor({
             {controls}
             {readout}
           </div>
-          {recentSection}
+          {bandSection}
         </div>
         {footerRow}
       </div>
@@ -765,9 +749,9 @@ export function ColourEditor({
     <div ref={contentRef} onKeyDown={onKeyDown} data-colour-editor={compact ? 'compact' : 'full'} className="space-y-3">
       {leaves}
       {labelLine}
+      {bandSection}
       {controls}
       {readout}
-      {recentSection}
       {footerRow}
     </div>
   )
@@ -879,88 +863,3 @@ const AppearanceLeaves = memo(function AppearanceLeaves({ projectId, keys, onCha
     </div>
   )
 })
-
-/**
- * **Recent** — the template recents row (`lib/templateRecents.ts`) over the colour-family, generic,
- * value templates the selection can take. A chip is a press through `usePress` over the host's
- * targets and mask — tap a layer, ⌥click its values, a hold or right-click the menu — so it stamps
- * `lastPressedAt`, wears the pad's ring and lands in a focused Look as any press does. No new list,
- * no new order. Its own component so its store hooks run only where the chips are drawn — the
- * editor mounts it only in a form the host allows, and never per cell.
- */
-function RecentTemplates({
-  projectId,
-  targets,
-  localFamilies,
-  available,
-  className,
-}: Omit<ColourRecentSource, 'forms'> & { available: readonly ColourEmitter[]; className?: string }) {
-  const { data: templates } = useTemplateListQuery({ projectId })
-  const families = usePressFamilies(localFamilies)
-  const pair = useMemo(() => ({ targets, families }), [targets, families])
-  const { press, into } = usePress(projectId, pair)
-  const { data: applied } = useProgrammerAppliedQuery()
-  const onGesture = useCallback(
-    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
-    [press],
-  )
-  const shown = useMemo(() => {
-    const offerable = (templates ?? []).filter(
-      (t) =>
-        t.family === 'COLOUR' &&
-        t.kind === 'value' &&
-        t.isGeneric &&
-        (t.requiredEmitters ?? []).every((emitter) => (available as readonly string[]).includes(emitter)),
-    )
-    return recentTemplates(offerable)
-  }, [templates, available])
-
-  return (
-    <div data-colour-editor-recent className={cn('border-t pt-2', className)}>
-      <EditorLabel>Recent from palettes</EditorLabel>
-      {shown.length === 0 ? (
-        <p className="mt-1 text-[10px] text-muted-foreground">Colour palettes you press show up here</p>
-      ) : (
-        <div className="mt-1.5 flex flex-wrap gap-1.5">
-          {shown.map((template) => {
-            const presence = into.kind === 'look' ? 'none' : templateLayerPresence(applied ?? [], targets, template.id)
-            return (
-              <PalettePressButton
-                key={template.id}
-                projectId={projectId}
-                template={template}
-                into={into}
-                presence={presence}
-                hasTargets={targets.length > 0}
-                onGesture={onGesture}
-              >
-                {(handlers) => (
-                  <button
-                    type="button"
-                    data-recent-template={template.id}
-                    {...handlers}
-                    title={templatePressTitle(template, into)}
-                    aria-pressed={presence !== 'none'}
-                    className={cn(
-                      'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs hover:bg-accent',
-                      padPresenceClass(presence),
-                    )}
-                  >
-                    {templateSwatch(template) != null && (
-                      <span
-                        aria-hidden
-                        className="size-3 rounded-full border border-border"
-                        style={{ background: templateSwatch(template) ?? undefined }}
-                      />
-                    )}
-                    <span className="max-w-[9rem] truncate">{template.name}</span>
-                  </button>
-                )}
-              </PalettePressButton>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}

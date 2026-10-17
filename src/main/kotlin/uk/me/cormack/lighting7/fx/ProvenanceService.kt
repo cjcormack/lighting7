@@ -212,6 +212,8 @@ class ProvenanceService internal constructor(
      * programmer holds this effect back" has one answer on the rig and on the wire (W1, W4).
      */
     private val programmerSuppression: () -> Map<String, Set<String>>,
+    /** An effect's weight now, its stack's size included — [FxEngine.weightOf]. */
+    private val effectWeight: (FxInstance) -> Double = { it.weight(it.dynamics) },
 ) {
     // Conflated: recomputed on layer events only (programmer mutation, cue republish,
     // effect lifecycle, park change) — never per frame. Full-state snapshots rather than
@@ -558,7 +560,7 @@ class ProvenanceService internal constructor(
         val effectByKey = HashMap<Pair<String, String>, FxInstance>()
         for (effect in activeEffects()) {
             if (!effect.isRunning) continue
-            if (effect.spent || effect.weight(effect.dynamics) <= 0.0) continue
+            if (effect.spent || effectWeight(effect) <= 0.0) continue
             if (!include(effect)) continue
             val propertyName = effect.target.propertyName
             for (fixtureKey in coverageKeys(effect)) {
@@ -760,7 +762,7 @@ class ProvenanceService internal constructor(
             // puts nothing on stage, and one under full weight is a mix with what is underneath, so
             // only a full-weight OVERRIDE covers the layers below it. A setting has no mix: it is on
             // stage, and covers, from half weight up, as its target writes it ([weighDiscrete]).
-            val weight = if (effect.spent) 0.0 else effect.weight(effect.dynamics)
+            val weight = if (effect.spent) 0.0 else effectWeight(effect)
             val discrete = effect.target is SettingTarget
             val paints = if (discrete) weighDiscrete(weight) else weight > 0.0
             val on = !covered && effect.isRunning && heldBack[effect] == null && paints

@@ -65,6 +65,8 @@ vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
   useAbsorbLookEffectsMutation: () => [vi.fn()],
+  // The picker reads the Look library when it is opened on Looks; the strip's never is.
+  useLookListQuery: () => ({ data: [] }),
 }))
 // No programmer page above the strip here: Local, no focused Look, no published marquee.
 vi.mock('@/components/programmer/LookRowStore', () => ({ useLookRowStore: () => null }))
@@ -488,9 +490,8 @@ describe('TemplateStrip', () => {
     expect(allButton()).not.toHaveClass('hidden')
   })
 
-  it('presses through the same hook from a picker pad as from a chip', async () => {
-    // One `usePress` for both surfaces: two copies would be two answers to what a press does, a
-    // chip apart.
+  it('presses the strip’s pair from a picker pad, as a chip does', async () => {
+    // The picker presses the pair its door hands it: from `All · n`, the strip's own.
     render(strip(COLOUR_CELL))
     fireEvent.click(allButton())
     // Scoped to the panel: the chip in the scroller carries the same title, which is the point —

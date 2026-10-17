@@ -64,7 +64,8 @@ export function matchesBindingTarget(
       return (
         (eff.type === "cueStackGo" ||
           eff.type === "cueStackBack" ||
-          eff.type === "cueStackPause") &&
+          eff.type === "cueStackPause" ||
+          eff.type === "stackEffectSize") &&
         eff.stackId === match.stackId
       )
   }
@@ -95,6 +96,8 @@ export function describeTarget(target: BindingTarget): string {
       return "Grand Master"
     case "grandMasterFader":
       return "Grand Master fader"
+    case "stackEffectSize":
+      return `FX size · stack ${target.stackId}`
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
     // The uuid is not resolved to a name here: this is a pure function with no access to the

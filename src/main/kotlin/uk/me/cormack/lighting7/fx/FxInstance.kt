@@ -607,7 +607,10 @@ class FxInstance internal constructor(
      */
     var layerEffectUuid: java.util.UUID? = null
 
-    /** If this effect belongs to a cue stack, the stack ID. Null otherwise. */
+    /**
+     * The stack of the hold that brought this effect's cue on, null for a loose one or no cue. Not
+     * the stack whose effect size weighs it, which is the cue's highest hold ([weighingStackOf]).
+     */
     var cueStackId: Int? = null
 
     /**
@@ -760,11 +763,12 @@ class FxInstance internal constructor(
         set(value) { updateEnvelope { EffectEnvelope.constant(value) } }
 
     /**
-     * The weight P3 applies after the blend on this pass: [FxDynamics.size] × [intensityMultiplier],
-     * in `[0, 1]`. Session 5's stack size multiplies in here too. Takes the caller's per-pass
-     * snapshot, like every other tick-path read.
+     * The weight P3 applies after the blend on this pass: [FxDynamics.size] × [intensityMultiplier]
+     * × [stackSize] (its stack's effect size, D10 — [StackEffectSizes.weightOf]), in `[0, 1]`.
+     * Takes the caller's per-pass snapshot, like every other tick-path read.
      */
-    fun weight(dynamics: FxDynamics): Double = (dynamics.size * intensityMultiplier).coerceIn(0.0, 1.0)
+    fun weight(dynamics: FxDynamics, stackSize: Double = 1.0): Double =
+        (dynamics.size * intensityMultiplier * stackSize).coerceIn(0.0, 1.0)
 
     /**
      * Where an N-shot's count began ([FxDynamics.nShot], D9): the master tick of a beat effect's first

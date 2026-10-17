@@ -115,8 +115,8 @@ The plan adds its own:
   before each PR.
 - **P2 — Nothing in the Show view sends output but *Update stage*.** The cue grid mounts none of the
   surfaces that reach the rig or the desk: the desk-selection bridge, Release, Locate, Highlight,
-  the palette strip, the colour editor's Recent chips (a press since R3.3, `a14d8220`: the grid's
-  colour editor takes no `recent`), `useClearCellEffects` and the live writers. Its selection is
+  the palette strip, the popup's Palettes bands (a press since R3.3, `a14d8220`; the grid's cells
+  take no `projectId`, so they draw none — apply-model plan session 5), `useClearCellEffects` and the live writers. Its selection is
   local state. A test
   per tab asserts that a full editing pass sends no `programmer.*`, `channels.*` or `fx.*` frame.
 - **P3 — A cue's children keep their uuids across a write**, reconciled by natural key as a Look's

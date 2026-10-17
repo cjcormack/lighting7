@@ -406,6 +406,14 @@ class FxEngine(
      */
     private val isLayerStomped: (FxInstance, String, String) -> Boolean = cueLayer::isLayerStomped
 
+    /** Each cue stack's effect size (D10), set by the show's [CueStackManager]; null weighs nothing. */
+    @Volatile
+    var stackEffectSizes: StackEffectSizes? = null
+
+    /** [effect]'s weight on this pass (P3): its own [FxInstance.weight] times its stack's size. */
+    internal fun weightOf(effect: FxInstance, dyn: FxDynamics): Double =
+        effect.weight(dyn, stackEffectSizes?.weightOf(effect) ?: StackEffectSizes.FULL)
+
     /**
      * Provenance computation + broadcast. The lambdas hand it read access to the engine's
      * live effect set without a service → engine reference.
@@ -418,6 +426,7 @@ class FxEngine(
         cueStackIdFor = cueLayer::cueStackIdFor,
         effectOrder = sortedEffectsComparator,
         programmerSuppression = ::programmerSuppression,
+        effectWeight = { weightOf(it, it.dynamics) },
     )
 
     /** PROGRAMMER-layer write delegation. */
@@ -1998,7 +2007,7 @@ class FxEngine(
                 val context = effect.splitMember?.context ?: EffectContext.SINGLE
                 val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, context)
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
-                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, effect.weight(dyn))
+                    effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weightOf(effect, dyn))
                 }
             }
 
@@ -2040,7 +2049,7 @@ class FxEngine(
         val filteredCount = elementKeys.size
         if (filteredCount == 0) return
 
-        val weight = effect.weight(dyn)
+        val weight = weightOf(effect, dyn)
         var lastMemberPhase = Double.NaN
         for ((distributionIdx, elementKey) in elementKeys.withIndex()) {
             val distOffset = plan.offsets[distributionIdx]
@@ -2086,7 +2095,7 @@ class FxEngine(
                 val allMembers = expansion.members
                 val groupSize = allMembers.size
                 val plan = plansFor(effect, expansion, dyn).members
-                val weight = effect.weight(dyn)
+                val weight = weightOf(effect, dyn)
                 var lastMemberPhase = Double.NaN
                 for ((memberIdx, member) in allMembers.withIndex()) {
                     val distOffset = plan.offsets[memberIdx]

@@ -368,6 +368,7 @@ internal fun Route.routeApiRestProjects(state: State) {
         routeApiRestProjectScenery(state)
         routeApiRestProjectEffects(state)
         routeApiRestProjectGrandMaster(state)
+        routeApiRestProjectStackEffectSize(state)
         routeApiRestProjectFixtureCommands(state)
         routeApiRestProjectRigSafety(state)
         routeApiRestProjectUniverseConfigs(state)

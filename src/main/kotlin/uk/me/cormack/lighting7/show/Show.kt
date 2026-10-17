@@ -419,6 +419,17 @@ class Show(
                 if (effects.isNotEmpty()) fxEngine.addEffects(effects)
             }
 
+            // Before the GOs, so the effects they bring back arrive at their stack's size. A stack the
+            // reload removed is dropped.
+            step("carry the stacks' effect sizes") {
+                if (carry.stackEffectSizes.isNotEmpty()) {
+                    val stacks = transaction(state.database) {
+                        DaoCueStack.find { DaoCueStacks.project eq project.id }.mapTo(HashSet()) { it.id.value }
+                    }
+                    cueStackManager.effectSizes.restore(carry.stackEffectSizes.filterKeys { it in stacks })
+                }
+            }
+
             for ((stackId, entryId) in carry.liveEntries) {
                 runCatching { cueStackManager.activateEntry(state, stackId, entryId, fireEvents = false) }
                     .onFailure { logger.warn("Reload could not bring back entry {} on stack {}: {}", entryId, stackId, it.message) }

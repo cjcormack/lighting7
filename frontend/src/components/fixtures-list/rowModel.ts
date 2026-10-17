@@ -1,3 +1,4 @@
+import type { TemplateTarget } from '../../api/templatesApi'
 import { resolveCell } from './columns'
 import { filterTerms, fixtureMatchesTerms } from '../../lib/fixtureSearch'
 import type { CellResolution, ColumnKey } from './columns'
@@ -747,7 +748,7 @@ export interface CellBatch {
   /**
    * The targets themselves, in visible row order — the marquee's heads for this column. The colour
    * editor reads them for its emitter counts, its hidden appearance leaves and the template
-   * targets its Save and Recent land on (editor-kit plan D10, D12); a count and a resolution list
+   * targets its Save and its Palettes band land on (editor-kit plan D10, D12); a count and a resolution list
    * cannot name a head. Optional only because a cell mounted with no batch (`CueValueGrid`, a
    * read-only row) builds a one-row stand-in from its own resolutions, which name no head;
    * [batchForTargets] always fills it.
@@ -910,4 +911,30 @@ export function parseSelectParam(raw: string): SelectParam | null {
   const key = raw.slice(separator + 1)
   if ((kind !== 'fixture' && kind !== 'group') || key === '') return null
   return { kind, key }
+}
+
+/**
+ * Where a template press or record lands for these targets: each target by its own key — a whole
+ * fixture as itself, a **cell as its element key** (`{type: 'fixture', key: element.key}`, the
+ * cells contract the desk resolves) — deduped, and a cell dropped where its parent is in the batch
+ * too, since the parent covers it (`templateTargetsFor`'s rule, over the batch's targets rather than
+ * the rows, which a cell never sees).
+ *
+ * A cell used to be folded onto its parent, on the belief that the template route would drop an
+ * element key. It never did, and the fold was the bug (venue-visit plan S1): pressing a colour onto
+ * one zone of a Shehds landed it on the parent, which has no colour. The desk now fans a parent
+ * whose colour lives on its cells out to those cells itself, so a whole-fixture target still means
+ * every cell.
+ */
+export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarget[] {
+  const parents = new Set(targets.filter((target) => target.fixtureKey == null).map((target) => target.key))
+  const seen = new Set<string>()
+  const out: TemplateTarget[] = []
+  for (const target of targets) {
+    if (target.fixtureKey != null && parents.has(target.fixtureKey)) continue
+    if (seen.has(target.key)) continue
+    seen.add(target.key)
+    out.push({ type: 'fixture', key: target.key })
+  }
+  return out
 }
