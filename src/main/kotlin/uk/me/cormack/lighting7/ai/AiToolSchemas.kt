@@ -513,7 +513,9 @@ internal val getCurrentStateTool = ToolDef(
     name = "get_current_state",
     description = "Get the current state of the lighting system. Use to check what's running before making changes. " +
             "`speed_masters` lists the tempo clocks and the uuids every effect-authoring tool names them by; " +
-            "`cue_run` says what each running stack's next GO will fire; " +
+            "`cues` lists each cue's entries — its places in stacks, each with its entryId and number (a cue may be in several, or none: loose); " +
+            "`cue_run` says what each running stack's next GO will fire, by entry and by cue; " +
+            "`cue_holds` lists every live cue and what holds it — a stack's entry, or a loose hold (apply_cue, a pad); " +
             "`programmer` is the manual overlay this surface writes through set_programmer, apply_palette, apply_look, aim_fixtures and move_scenery, clears with clear_programmer and takes off stage with set_blind (`blind`; its `scenery` lists the elements held); " +
             "`selection` is the desk's shared selection (what a selection-relative surface control acts on), " +
             "reported for context — the tools on this surface take explicit targets; " +
@@ -530,7 +532,7 @@ internal val getCurrentStateTool = ToolDef(
                     put("enum", buildJsonArray {
                         add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
                         add("groups"); add("looks"); add("palettes"); add("cues")
-                        add("cue_stacks"); add("cue_run"); add("programmer"); add("selection")
+                        add("cue_stacks"); add("cue_run"); add("cue_holds"); add("programmer"); add("selection")
                         add("windows"); add("parked")
                     })
                 })
@@ -691,9 +693,30 @@ internal val cueEventItemSchema = buildJsonObject {
     put("required", buildJsonArray { add("fixture"); add("trigger") })
 }
 
+/** A new entry's `number`, for create_cue and add_cue_to_stack. */
+internal const val NEW_ENTRY_NUMBER_NOTE =
+    "The new entry's cue number in the stack ('14', '14A'), unique there. Omit to let the stack number it from its neighbours. Needs stackId."
+
+/** Where create_cue and add_cue_to_stack put a new entry. */
+private val afterEntrySchema = buildJsonObject {
+    put("type", "object")
+    put("description", "Put the new entry just after this one: a cue by entryId or number, or a marker by entryId. Omit to append at the end of the stack. Needs stackId.")
+    put("properties", buildJsonObject { putEntryRefProps("The entry to follow") })
+}
+
+/** A cue's place on the stack tools: the `stackId` it is in and the entry. */
+private fun stackEntryInput(stackDescription: String, what: String, required: Boolean = true) = buildJsonObject {
+    put("type", "object")
+    put("properties", buildJsonObject {
+        put("stackId", buildJsonObject { put("type", "integer"); put("description", stackDescription) })
+        putEntryRefProps(what)
+    })
+    if (required) put("required", buildJsonArray { add("stackId") })
+}
+
 internal val createCueTool = ToolDef(
     name = "create_cue",
-    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. The new cue is in no stack: use add_cue_to_stack to place it in one, or apply_cue to activate it.",
+    description = "Create a named cue as an ordered stack of look and palette layers, its own values, and ad-hoc effects. Its static states come from the looks it layers — make them with create_look's values first — and from its own values. Cues allow recalling a complete state with a single action. The new cue is loose — in no stack — unless stackId places it in one; add_cue_to_stack places it later, apply_cue holds it live.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -728,6 +751,9 @@ internal val createCueTool = ToolDef(
                 put("items", cueSpeedMasterItemSchema)
                 put("description", CUE_SPEED_MASTERS_NOTE)
             })
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "Also place the new cue in this stack, as an entry. Omit for a loose cue.") })
+            put("number", buildJsonObject { put("type", "string"); put("description", NEW_ENTRY_NUMBER_NOTE) })
+            put("after", afterEntrySchema)
         })
         put("required", buildJsonArray { add("name") })
     }
@@ -779,15 +805,8 @@ internal val createCueStackTool = ToolDef(
 
 internal val activateCueStackTool = ToolDef(
     name = "activate_cue_stack",
-    description = "Activate a cue stack, starting playback from the first cue (or a specific cue). The cue's effects are started. If the cue has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
-    inputSchema = buildJsonObject {
-        put("type", "object")
-        put("properties", buildJsonObject {
-            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID to activate") })
-            put("cueId", buildJsonObject { put("type", "integer"); put("description", "Optional: start at a specific cue instead of the first") })
-        })
-        put("required", buildJsonArray { add("stackId") })
-    }
+    description = "Activate a cue stack, starting playback from the first cue (or the armed standby), or GO to one entry of it: name the entry by entryId or by its number in the stack. The cue's effects are started. If the entry has auto-advance configured, the stack will automatically advance to the next cue after the delay.",
+    inputSchema = stackEntryInput("The cue stack ID to activate", "Optional: the entry to start at instead of the first"),
 )
 
 internal val deactivateCueStackTool = ToolDef(
@@ -821,35 +840,46 @@ internal val advanceCueStackTool = ToolDef(
 
 internal val addCueToStackTool = ToolDef(
     name = "add_cue_to_stack",
-    description = "Add an existing cue to a cue stack as a new entry. A cue already in another stack (or in this one) is shared, not moved: it plays from both, and editing it changes it in both. If sortOrder is omitted, the cue is appended to the end.",
+    description = "Add an existing cue to a cue stack as a new entry, and answer the entry. A cue already in another stack (or in this one) is shared: it plays from both, each entry with its own number and follow, and editing the cue changes it in both. To take a cue's place from one stack to another instead, use move_cue_to_stack.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID") })
             put("cueId", buildJsonObject { put("type", "integer"); put("description", "The cue ID to add") })
-            put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in the stack (0-based). Omit to append.") })
+            put("number", buildJsonObject { put("type", "string"); put("description", NEW_ENTRY_NUMBER_NOTE) })
+            put("after", afterEntrySchema)
         })
         put("required", buildJsonArray { add("stackId"); add("cueId") })
     }
 )
 
-internal val setStandbyTool = ToolDef(
-    name = "set_standby",
-    description = "Put a cue on deck: arm the cue the stack's next GO will fire, or omit cueId to disarm and " +
-            "leave the positional next on deck. Arming changes no lights — it only decides what GO fires next, " +
-            "which is why \"stand by cue 5\" and \"go\" are two separate gestures. `cue_run` in get_current_state " +
-            "reports what is currently on deck.",
+internal val removeCueFromStackTool = ToolDef(
+    name = "remove_cue_from_stack",
+    description = "Take one entry out of a stack — the cue's place there, with its number, follow and prompt-book anchor. The cue itself is never deleted: it stays in its other stacks, or is left loose (in no stack) if this was its last; delete_cues deletes cues. Removing the live entry changes nothing on stage until the stack's next GO, which fires the entry that followed it.",
+    inputSchema = stackEntryInput("The cue stack ID", "The entry to remove"),
+)
+
+internal val moveCueToStackTool = ToolDef(
+    name = "move_cue_to_stack",
+    description = "Move one entry to the end of another stack, whole: the same entry, so its explicit number, its follow and its prompt-book anchor go with it (an auto number is renumbered where it lands). Refused when the other stack already holds that number. A live entry leaves the stage alone, as remove_cue_from_stack does. Answers the moved entry.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
-            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The cue stack ID") })
-            put("cueId", buildJsonObject {
-                put("type", "integer")
-                put("description", "The cue to arm. Must belong to this stack. Omit to disarm.")
-            })
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "The stack the entry is in now") })
+            putEntryRefProps("The entry to move")
+            put("toStackId", buildJsonObject { put("type", "integer"); put("description", "The stack to move it to") })
         })
-        put("required", buildJsonArray { add("stackId") })
+        put("required", buildJsonArray { add("stackId"); add("toStackId") })
     }
+)
+
+internal val setStandbyTool = ToolDef(
+    name = "set_standby",
+    description = "Put a cue on deck: arm the entry the stack's next GO will fire (by entryId or by number), or name neither to disarm and " +
+            "leave the positional next on deck. Arming changes no lights — it only decides what GO fires next, " +
+            "which is why \"stand by cue 5\" and \"go\" are two separate gestures. `cue_run` in get_current_state " +
+            "reports what is currently on deck.",
+    inputSchema = stackEntryInput("The cue stack ID", "The entry to arm, in this stack; name none to disarm"),
 )
 
 internal val goCueStackTool = ToolDef(
@@ -881,7 +911,7 @@ private val maskSchema = buildJsonObject {
 internal val recordCueTool = ToolDef(
     name = "record_cue",
     description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue. " +
-            "CREATE makes a new cue in a stack; MERGE adds the recorded values to an existing cue; " +
+            "CREATE makes a new cue, placed in cueStackId when given and loose (in no stack) otherwise; MERGE adds the recorded values to an existing cue; " +
             "UPDATE_EXISTING replaces that cue's in-mask content; REMOVE deletes the rows the recording names. " +
             "Scenery the programmer holds (move_scenery; `programmer.scenery` in get_current_state) is recorded too unless " +
             "scenery is false: a change row for each held piece the cue would not show anyway — a held state equal to what " +
@@ -930,7 +960,8 @@ internal val recordCueTool = ToolDef(
 internal val includeIntoProgrammerTool = ToolDef(
     name = "include_into_programmer",
     description = "Load a cue or a look back into the programmer as an edit buffer — the desk's Include. " +
-            "Name exactly one of cueId or lookId. The included thing becomes the update target, so the " +
+            "Name exactly one of cueId or lookId; a cue may also name the entry it is included from (entryId, or stackId and number), " +
+            "which the desk's programmer indicator then shows. The included thing becomes the update target, so the " +
             "follow-up is: include, change what you want, then update_from_programmer with no targets, which " +
             "writes back only what changed and leaves everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
@@ -944,6 +975,8 @@ internal val includeIntoProgrammerTool = ToolDef(
         put("properties", buildJsonObject {
             put("cueId", buildJsonObject { put("type", "integer") })
             put("lookId", buildJsonObject { put("type", "integer") })
+            put("stackId", buildJsonObject { put("type", "integer"); put("description", "With number: the stack of the entry the cue is included from.") })
+            putEntryRefProps("Optional: the entry of cueId it is included from")
             put("mask", maskSchema)
             put("targets", buildJsonObject {
                 put("type", "array")

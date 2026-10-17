@@ -277,6 +277,19 @@ fixture with extra placements `media=[…; SL: …]`, each placement's own laid 
 the fitted slots are named — which gel a scroller frame holds is the unit's, so "frame 9" says nothing
 until the model can see what is loaded there.
 
+**A cue's places** (cue model plan §3.10). A cue may sit in several stacks, twice in one, or in none,
+so every tool names a cue by id and a place by **entry** — `entryId`, or the stack's `number`, the
+one the Show view shows and unique in its stack (`ai/CueEntryRefs.kt`'s `EntryRef` and
+`findStackEntry`). `activate_cue_stack` and `set_standby` take one and refuse a `cueId` by name;
+`add_cue_to_stack` and `create_cue` (with `stackId`) take a new entry's `number` and `after`;
+`remove_cue_from_stack` and `move_cue_to_stack` are the REST entry delete and move
+(`announceEntriesRemoved`, `moveEntryChecked`); `include_into_programmer` names the entry a cue is
+included from; the prompt book's anchors name entries. `describe_rig` lists each cue's places
+(`in: Act 1 Q14, Act 2 Q3`, or `loose` — `cuePlacesLabel`) and each stack's entries with their
+numbers and ids, and the briefing says a cue may be shared and that only `delete_cues` deletes one.
+`get_current_state`'s `cues` carry `entries`, `cue_run` the entry ids, and `cue_holds` what holds
+each live cue. The stack tools are in `docs/cue-stacks-engineering.md` §"MCP tools".
+
 `describe_rig` and `get_current_state` both report **parked channels** — address, held value,
 and the fixture channel it drives (`ai/ParkReport.kt`, from `Fixtures.getChannelMappings`) — and
 `park_channel` / `unpark_channel` park and release one. Park
@@ -451,6 +464,8 @@ prompt-book markup from a script and lighting notes.
 | `publish_venue` | `VenueVersions.publish` with a note, as `POST /venues/{id}/publish` calls it, then `venueHold.refreshCurrent()` so a live show the publish leaves behind runs on rather than blacking out. Answers the version and the venue's shows, and says each takes it only when the operator updates it — **no tool runs Update**, whose review and decisions are the operator's. Admin only |
 | `copy_to_project` | Show content between two projects, neither switched to (below) |
 | `delete_cue_stacks` | Stacks by id — `deleteCueStackRows`, shared with the REST delete, so the entries, their anchors and the stack's set go as there and the cues stay; the answer counts `cuesLeftLoose`. A running stack is refused rather than deactivated under the operator; `dryRun` answers what would go; `projectId` |
+| `delete_cues` | Cues by id — `deleteCuesChecked`, shared with `POST /cues/delete` (cue model plan D8): all or none, refused without `force` with `code: CUE_IN_USE` and every use (`uses`: entries, pads, slots, anchors, bindings); with it each cue goes with them, its holds let go where it is live. `dryRun` answers the uses; `projectId` |
+| `copy_cues` | Cues of `fromProjectId` into the tool's project (`projectId`, else the current one), loose or at the end of `stackId` — `copyCuesFrom` and the cue copier, shared with `POST /cues/copy-from`, answering its `copied` and `unresolved` (below); `dryRun` |
 | `list_fixture_types` | `FixtureTypeRegistry.allTypes` with a text filter: the vocabulary a patch list is matched against. A type whose length is set per install (a lightstrip) is marked `acceptsLength` with its `defaultLengthM`; a type hung with a lantern from the library (the generic dimmer) is marked `acceptsLantern`, and the tool schema lists the library's ids and each kind's default; a type with loadable settings (the Source Four Revolution) carries `loadable` — each loadable setting, what its slots `take` (`GEL` · `GOBO` · `GOBO_OR_GEL`) and each slot with its stock colour or gobo, the open hole left out. `properties: true` adds each type's settable properties (name, kind, category, a setting's option names) and a multi-head type's `cellProperties` — the names `create_look`'s values take |
 | `get_patch` | Stage, regions, riggings, universes, every patch (address, `headNumber` where set, groups, rigging, placement, `lengthM` where set, and `alsoAt` — a paired dimmer's other lanterns, or the other sides of a lightstrip run, each with its own `lengthM`) and groups. Every placed fixture and `alsoAt` lantern also carries `world` — its x/y/z composed through its rigging's pose (`show/StageCoords.kt`'s `worldPosition`, the backend copy of the frontend's `worldPositionLighting`, so the model is told the position the Stage view draws), rounded to the millimetre and absent when x or y is unset; a moving fixture with a stored locate carries `locate`, its pan and tilt bytes per unit (`docs/fixtures-engineering.md` §"Stored locate") |
 | `patch_fixtures` | Bulk patch, **upsert by key**, `dryRun`; creates missing universes (ARTNET, no address) and groups; takes `headNumber` (the source console's head number — absent leaves it, `null` clears, unique in the project as the patch will stand, so a list that swaps two numbers goes through) and the same placement fields as `place_fixtures`, `alsoAt` and the lantern and focus included, and `media` and `locate` the same way; a re-patch to another type drops stored media the new type cannot hold, on the fixture and each of its placements, and keeps only the stored locate of units the new type pans and tilts |
@@ -465,9 +480,9 @@ prompt-book markup from a script and lighting notes.
 | `render_view` | A PNG of a stage viewpoint, drawn by a signed-in desk window (§"`render_view`" below): `viewpoint` a camera (`orbit`, `eye`, `plan`, `front`, `side`), a saved view by name or uuid, or a seat `{seating, seat}`; `width` / `height` 160–1920 and at most 1920 × 1080 pixels in all (default 1280 × 720; one side alone is 16:9 to it, refused if that puts the other out of range); `source` `output` (default), `outputProgrammer`, `programmer` or `nextGo`; `workLights` `true` to lift the dark and check geometry (default `false`, the room as lit). Read-only. `ai/RenderViewTool.kt` |
 | `place_fixtures` | Partial placement per key: rigging (by name, `null` detaches), offsets, yaw/pitch/roll (`rollDeg` stands a strip on end), beam, gel, kind, hidden, `lengthM` (only for an `acceptsLength` type — refused by name for any other, `null` clears), and `alsoAt` — a paired dimmer's other lanterns (label, rigging, offsets, yaw/pitch/roll, and a side's own `lengthM`), the whole list replacing the stored one, matched by position so a re-sent lantern keeps its identity; `[]` or `null` clears. The description steers a model to patch a paired circuit once rather than a second fixture at one address. For an `acceptsLantern` type, the row and each `alsoAt` entry also take the **lantern and its focus** (stage-view plan session 7): `lanternType` (a library id; on an `alsoAt` entry null means the fixture's own), `zoomDeg`, `lampRotationDeg`, `shutters` (four `{depth, angleDeg}`, top · bottom · left · right), `gateRotationDeg`, `iris`, `focusSoftness` — absent leaves each, `null` clears — checked by the same `resolvePatchFocus` the REST routes call, so an unknown id, a zoom outside the lantern's range, a kind that contradicts the lantern, or any of them on a DMX type is refused by name with nothing written; a lantern names the kind, so a model sending one need not send `kind`. `get_patch` reports all seven where set, per placement too. For a type with loadable settings, the row and each `alsoAt` entry also take **`media`** (fixture optics plan session 3) — `{slots: {<setting>: {<slot>: {gel} | {gobo} | {}}}}`, naming only the slots that differ from the stock, `{}` an empty slot; on the row absent leaves it and `null` clears, on an `alsoAt` entry it is the lantern's own, layered over the fixture's slot by slot — checked by the same `patchMediaRefusal` the REST routes call, every problem at once and nothing written: an unknown setting or slot, the open hole, an unknown gel (the schema lists the library's codes) or gobo, a gobo in a gel-only slot, any of it on a type with no loadable settings. `get_patch` reports each unit's `media` where set. The row also takes **`locate`** (venue-visit plan S8): the fixture's stored locate, `[{head?, pan, tilt, panFine?, tiltFine?}]` in DMX bytes, replacing the stored list (`null` or `[]` clears it), refused by name for a unit the type does not pan and tilt (`StoredLocate.typeProblems`) and for a fine byte on a unit with no fine channel; `get_patch` reports it. On a show on a venue, a venue fixture's row writes through the facets the show owns (§"Tools on a show on a venue") |
 | `override_venue_fixtures` | A show's venue fixtures by key: each facet `SHOW` / `VENUE` / `KEEP_MINE`, an `address` override, and `hidden`; `dryRun`. The fixture sheet's switches (§"Tools on a show on a venue") |
-| `get_prompt_book` | Page count, cover pages, anchors (with cue number and stack) and notes; with no book, where to import one |
-| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or palette layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
-| `mark_up_prompt_book` | Cover pages, anchor upserts for existing cues, and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
+| `get_prompt_book` | Page count, cover pages, anchors (each its `entryId`, cue, number and stack) and notes; with no book, where to import one |
+| `build_cue_stack` | A new stack (or `stackId` to append) of cues in running order: number, name, notes, fade, curve, follow, marker, look or palette layers, its own `values` (current project only), `scenery` (stage-view plan session 8: the elements each cue moves on GO, below), `events` (session 9: the one-shot triggers each cue fires after GO, below), and `at` — its place in the prompt book. A row naming an existing `cueId` **shares** that cue instead, taking only the entry's own `number`, `followSeconds` and `at` (the cue's content fields are refused by name, since they would change it everywhere). A stack-level `scenery` is the stack's *set*, replacing the one stored when given |
+| `mark_up_prompt_book` | Cover pages, anchor upserts for existing entries (`entryId`, or `stackId` and `number`; a `cueId` alone is refused, naming no place), and notes (NOTE with tone, FREETEXT, STRIKETHROUGH) |
 
 **Scenery** (stage-view plan session 8). The cue and Look authoring tools carry a `scenery` list —
 `create_cue`, `create_look` and `build_cue_stack` (per cue, and the stack's set) — and `set_scenery`
@@ -581,7 +596,8 @@ head on its side (`docs/fixtures-engineering.md` §"Aiming a head at a point").
 The setup tools that read or store data take an optional **`projectId`** — `get_patch`,
 `patch_fixtures`, `delete_groups`, `unpatch_fixtures`, `rename_fixtures`, `edit_groups`, `set_stage`, `place_fixtures`,
 `override_venue_fixtures`, `set_scene`, `get_scene`,
-`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, and the
+`upload_scene_image`, `get_prompt_book`, `build_cue_stack`, `delete_cue_stacks`, `delete_cues`,
+`copy_cues` (its target), and the
 show-running `set_scenery` — so a show can be prepared while another runs, as the REST routes'
 `withProject` writes allow. `ai/ToolProject.kt`'s `State.toolProject` resolves it (absent is the
 current project; a venue version, or an id that names nothing, answers *Project not found*) and
@@ -612,6 +628,13 @@ store (`SceneImageStore.hydrate`), on a real run only. The copier is hand-writte
 export/import subset because the importer only ever populates a whole project; when a portable
 column is added to a cue, Look, palette, stack or element, add it to the copier (or, for a stack or
 element, here) too.
+
+**`copy_cues`** (`VenueSetupTools.copyCues`) is `POST /cues/copy-from` as a tool: `copyCuesFrom`
+(`routes/cueCopyFrom.kt`) in one transaction a `dryRun` rolls back, so the copier, the placement
+(each copy unnumbered at the end of `stackId`, else loose) and the answer — `copied
+[{fromCueId, cueId, entryId?}]`, `unresolved [{problem, in}]`, the Looks and palettes copied and
+linked — are the route's. Its target is the tool's `projectId`, current or not; the holds restamp and
+the busk pads' announcement are the live show's, so they follow only a copy into the current project.
 
 ### Tools on a live venue
 
@@ -784,7 +807,7 @@ renders (the frontend draws without `requestAnimationFrame`), but a machine asle
 The window's half — a lazily loaded render host in the app shell, the Stage view's own scene on a
 detached canvas — is `frontend/docs/stage-vis-engineering.md` §"Rendering for `render_view`".
 
-Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; the venue split (extract, a show on the venue, `copy_to_project`, a hide, `delete_cue_stacks`, `publish_venue`, `projectId` on a project that is not current, and the guards) in `McpVenueSplitToolsTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
+Tests: `src/test/kotlin/.../mcp/McpSetupToolsTest.kt` and `McpSceneToolsTest.kt`; the venue split (extract, a show on the venue, `copy_to_project`, `copy_cues`, a hide, `delete_cue_stacks`, `publish_venue`, `projectId` on a project that is not current, and the guards) in `McpVenueSplitToolsTest.kt`; a cue's places (`create_cue` into a stack, a cue shared and twice in one stack addressed by number and by entry, remove, move, `delete_cues`, a shared `build_cue_stack` row, `describe_rig`'s `in:`) in `McpLookCueEditingTest.kt`; `render_view` in `McpRenderViewTest.kt` (the vocabulary, the named errors, and the whole round trip over a real signed-in socket) and `state/StageRenderServiceTest.kt`.
 
 ## Tests
 

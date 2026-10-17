@@ -276,8 +276,8 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            // v32: each place in a stack's list is its own record, written from the entry itself — never
-            // through the P4 bridge (`soleEntryOf`), so a shared or loose cue travels as it is. The
+            // v32: each place in a stack's list is its own record, written from the entry itself, so a
+            // shared or loose cue travels as it is. The
             // number when explicit, and an auto one only where a reader deriving from position could
             // not give it (P5, as amended 2026-10-16: `heldAutoNumbers`).
             val heldNumbers = project.cueStacks.flatMap { heldAutoNumbers(it).entries }.associate { it.key to it.value }

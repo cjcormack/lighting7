@@ -67,6 +67,8 @@ import uk.me.cormack.lighting7.routes.normaliseGelCode
 import uk.me.cormack.lighting7.routes.parseHeadNumber
 import uk.me.cormack.lighting7.routes.normaliseKindOverride
 import uk.me.cormack.lighting7.routes.placeCueInStack
+import uk.me.cormack.lighting7.routes.announceCuePadsChanged
+import uk.me.cormack.lighting7.routes.cueIdsOfStack
 import uk.me.cormack.lighting7.routes.cueEntriesInOrder
 import uk.me.cormack.lighting7.routes.cueEntryIds
 import uk.me.cormack.lighting7.routes.renumberAutoEntries
@@ -130,6 +132,8 @@ class SetupTools(
             publishVenueTool.name -> venues.publishVenue(input, caller)
             copyToProjectTool.name -> venues.copyToProject(input)
             deleteCueStacksTool.name -> venues.deleteCueStacks(input)
+            deleteCuesTool.name -> venues.deleteCues(input)
+            copyCuesTool.name -> venues.copyCues(input)
             listFixtureTypesTool.name -> listFixtureTypes(input)
             getPatchTool.name -> getPatch(state.toolProject(input))
             patchFixturesTool.name -> patchFixtures(input, state.toolProject(input))
@@ -1508,10 +1512,12 @@ class SetupTools(
                     anchors.sortedWith(compareBy({ it.region.firstOrNull()?.page }, { it.region.firstOrNull()?.y })).forEach { a ->
                         val entry = entries[a.entryId]
                         addJsonObject {
+                            put("entryId", a.entryId)
                             entry?.cueId?.let { put("cueId", it) }
                             entry?.let {
                                 it.cueNumber?.let { n -> put("cueNumber", n) }
                                 put("cueName", it.displayName)
+                                put("stackId", it.stackId)
                                 stackNames[it.stackId]?.let { s -> put("stack", s) }
                             }
                             a.region.firstOrNull()?.let { putPlace(it) }
@@ -1572,7 +1578,7 @@ class SetupTools(
         return rect
     }
 
-    /** One cue of a build_cue_stack call, validated. */
+    /** One cue of a build_cue_stack call, validated: a new cue, a marker, or an existing cue shared ([shareCueId]). */
     private data class ShowCue(
         val number: String?,
         val name: String,
@@ -1587,6 +1593,7 @@ class SetupTools(
         val scenery: List<SceneryWrite>,
         val events: List<CueEventWrite>,
         val speedMasters: List<CueSpeedMasterDto>,
+        val shareCueId: Int? = null,
     )
 
     private fun buildCueStack(input: JsonObject, target: ToolProject): ToolExecutionResult {
@@ -1607,12 +1614,15 @@ class SetupTools(
             val elements: Map<UUID, SceneryElementInfo>,
             val patches: Map<Int, CueEventPatchInfo>,
             val speedMasters: List<SpeedMasterRef>,
+            /** The project's cues by id, for a row sharing one. */
+            val cueNames: Map<Int, String>,
         )
         val context = transaction(state.database) {
             val pageCount = DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.pageCount
             val elements = sceneryElementsOf(project)
             val patches = cueEventPatchesOf(project)
             val masters = speedMasterRefsOf(project)
+            val cueNames = DaoCue.find { DaoCues.project eq project.id }.associate { it.id.value to it.name }
             if (stackId != null) {
                 val stack = DaoCueStack.findById(stackId)
                 val error = when {
@@ -1621,13 +1631,13 @@ class SetupTools(
                     else -> null
                 }
                 val numbers = stack?.let { cueEntriesInOrder(it) }?.mapNotNull { it.cueNumber }?.toSet().orEmpty()
-                Context(error, numbers, pageCount, elements, patches, masters)
+                Context(error, numbers, pageCount, elements, patches, masters, cueNames)
             } else {
                 val clash = !DaoCueStack.find {
                     (DaoCueStacks.project eq project.id) and (DaoCueStacks.name eq stackName.orEmpty()) and
                         (DaoCueStacks.type eq CueStackType.STACK.name)
                 }.empty()
-                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches, masters)
+                Context(if (clash) "a cue stack named '$stackName' already exists — pass its stackId to append to it" else null, emptySet(), pageCount, elements, patches, masters, cueNames)
             }
         }
         context.stackError?.let { problems += it }
@@ -1638,20 +1648,22 @@ class SetupTools(
         val seenNumbers = mutableMapOf<String, Int>()
         val cues = cueRows.mapIndexedNotNull { index, element ->
             val row = element as? JsonObject ?: run { problems += "cues[$index]: not an object"; return@mapIndexedNotNull null }
+            val rawShare = row["cueId"]?.takeIf { it !is JsonNull }
+            val shareId = rawShare?.let { row.int("cueId") }
+            if (rawShare != null && shareId == null) {
+                problems += "cues[$index]: cueId must be an integer"
+                return@mapIndexedNotNull null
+            }
+            if (shareId != null) return@mapIndexedNotNull sharedRow(index, row, shareId, context.cueNames, context.takenNumbers, seenNumbers, target, context.pageCount, problems)
             val name = row.string("name")?.trim().orEmpty()
             val where = "cues[$index] ('$name')"
             val rowProblems = mutableListOf<String>()
             val marker = row.boolean("marker") == true
-            if (name.isEmpty()) rowProblems += "name must not be blank"
+            if (name.isEmpty()) rowProblems += "name must not be blank (or cueId, to share an existing cue)"
             if (name.length > 255) rowProblems += "name must be at most 255 characters"
             val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
             if (marker && number != null) rowProblems += "a marker cannot carry a number"
-            if (number != null && !marker) {
-                if (number.length > MAX_CUE_NUMBER_LENGTH) rowProblems += "number must be at most $MAX_CUE_NUMBER_LENGTH characters"
-                seenNumbers[number]?.let { rowProblems += "number '$number' is also used by cues[$it]" }
-                seenNumbers.putIfAbsent(number, index)
-                if (number in context.takenNumbers) rowProblems += "the stack already has a cue numbered '$number'"
-            }
+            if (number != null && !marker) checkRowNumber(number, index, context.takenNumbers, seenNumbers, rowProblems)
             val fade = seconds(row, "fadeSeconds", rowProblems)
             val follow = seconds(row, "followSeconds", rowProblems)
             val curve = row.string("fadeCurve")?.trim()?.uppercase() ?: EasingCurve.LINEAR.name
@@ -1694,16 +1706,7 @@ class SetupTools(
                 if (marker) rowProblems += "a marker cannot set speed masters: it is never gone to"
                 parseCueSpeedMasters(it, context.speedMasters, emptyList(), "speedMasters", rowProblems, byIndex = true)
             }.orEmpty()
-            val place = row["at"]?.let { at ->
-                if (!target.isCurrent) {
-                    // As the Prompt Book routes: only the current project's book is edited.
-                    rowProblems += "'at' anchors the cue in the prompt book, which only the current project's can be marked up — leave 'at' out and anchor later with mark_up_prompt_book"
-                    null
-                } else if (context.pageCount == null) {
-                    rowProblems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
-                    null
-                } else parsePlace(at, context.pageCount, "at", rowProblems)
-            }
+            val place = rowPlace(row, target, context.pageCount, rowProblems)
             if (rowProblems.isNotEmpty()) {
                 problems += rowProblems.map { "$where: $it" }
                 null
@@ -1712,7 +1715,7 @@ class SetupTools(
         if (problems.isNotEmpty()) return rejected(problems)
 
         /** One row built: a cue entry ([id] its cue's) or a marker entry ([id] null — a marker is no cue). */
-        data class BuiltCue(val id: Int?, val entryId: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>)
+        data class BuiltCue(val id: Int?, val entryId: Int, val number: String?, val name: String, val skipped: List<LookValueSkip>, val shared: Boolean)
         data class Built(val stackId: Int, val stackName: String, val cues: List<BuiltCue>, val anchors: Int)
         val built = transaction(state.database) {
             val stack = stackId?.let { DaoCueStack.findById(it)!! } ?: DaoCueStack.new {
@@ -1736,17 +1739,19 @@ class SetupTools(
                     }
                     return@map Triple(null, marker, spec)
                 }
-                val cue = DaoCue.new {
+                // A shared row adds an entry and leaves the cue as it is (cue model plan D1).
+                val cue = spec.shareCueId?.let { DaoCue[it] } ?: DaoCue.new {
                     name = spec.name
                     this.project = project
                     notes = spec.notes
                     fadeDuration = spec.fade
                     fadeCurve = spec.fadeCurve
                     speedMasters = spec.speedMasters
+                }.also { cue ->
+                    writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
+                    replaceCueScenery(cue, spec.scenery)
+                    replaceCueEvents(cue, spec.events)
                 }
-                writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
-                replaceCueScenery(cue, spec.scenery)
-                replaceCueEvents(cue, spec.events)
                 val entry = placeCueInStack(
                     stack, cue,
                     cueNumber = spec.number,
@@ -1777,7 +1782,7 @@ class SetupTools(
             Built(
                 stack.id.value, stack.name,
                 created.map { (cue, entry, spec) ->
-                    BuiltCue(cue?.id?.value, entry.id.value, entry.cueNumber, entry.displayName, spec.values?.skipped.orEmpty())
+                    BuiltCue(cue?.id?.value, entry.id.value, entry.cueNumber, entry.displayName, spec.values?.skipped.orEmpty(), spec.shareCueId != null)
                 },
                 anchors,
             )
@@ -1785,10 +1790,14 @@ class SetupTools(
         state.show.fixtures.cueListChanged()
         state.show.fixtures.cueStackListChanged()
         if (built.anchors > 0) state.show.fixtures.promptBookChanged()
+        // A shared cue's pads show its new place, and an append can renumber the stack's auto entries.
+        if (target.isCurrent) announceCuePadsChanged(state, cueIdsOfStack(state, built.stackId))
 
+        val sharedCount = built.cues.count { it.shared }
         return success(
             "${if (stackId == null) "Created" else "Appended to"} stack '${built.stackName}' (id=${built.stackId}): " +
-                "${built.cues.size} cue(s), ${built.anchors} anchored in the prompt book",
+                "${built.cues.size} cue(s)" + (if (sharedCount > 0) ", $sharedCount of them shared" else "") +
+                ", ${built.anchors} anchored in the prompt book",
             buildJsonObject {
                 put("stackId", built.stackId)
                 put("stackName", built.stackName)
@@ -1796,7 +1805,8 @@ class SetupTools(
                 putJsonArray("cues") {
                     built.cues.forEach { cue ->
                         addJsonObject {
-                            cue.id?.let { put("cueId", it) } ?: put("marker", true)
+                            if (cue.id != null) put("cueId", cue.id) else put("marker", true)
+                            if (cue.shared) put("shared", true)
                             put("entryId", cue.entryId)
                             cue.number?.let { put("number", it) }
                             put("name", cue.name)
@@ -1808,38 +1818,108 @@ class SetupTools(
         )
     }
 
+    /**
+     * A build_cue_stack row naming an existing [cueId] (cue model plan §3.10): the cue is shared into
+     * the stack as a new entry, its content untouched, so only the entry's own fields — number, follow
+     * and the prompt-book place — may come with it. Null after its problems.
+     */
+    private fun sharedRow(
+        index: Int,
+        row: JsonObject,
+        cueId: Int,
+        cueNames: Map<Int, String>,
+        takenNumbers: Set<String>,
+        seenNumbers: MutableMap<String, Int>,
+        target: ToolProject,
+        pageCount: Int?,
+        problems: MutableList<String>,
+    ): ShowCue? {
+        val cueName = cueNames[cueId] ?: run { problems += "cues[$index]: no cue $cueId in this project"; return null }
+        val where = "cues[$index] (cue $cueId, '$cueName')"
+        val rowProblems = mutableListOf<String>()
+        row.string("name")?.trim()?.takeIf { it.isNotEmpty() && it != cueName }?.let {
+            rowProblems += "a shared cue keeps its own name ('$cueName'): leave name out"
+        }
+        val content = listOf("notes", "fadeSeconds", "fadeCurve", "marker", "layers", "values", "scenery", "events", "speedMasters")
+            .filter { row[it]?.let(::saysNothing) == false }
+        if (content.isNotEmpty()) {
+            rowProblems += "${content.joinToString()} would change the cue in every place it plays: a shared row takes only number, " +
+                "followSeconds and at — edit the cue itself to change it"
+        }
+        val number = row.string("number")?.trim()?.takeIf { it.isNotEmpty() }
+        if (number != null) checkRowNumber(number, index, takenNumbers, seenNumbers, rowProblems)
+        val follow = seconds(row, "followSeconds", rowProblems)
+        val place = rowPlace(row, target, pageCount, rowProblems)
+        if (rowProblems.isNotEmpty()) {
+            problems += rowProblems.map { "$where: $it" }
+            return null
+        }
+        return ShowCue(
+            number = number, name = cueName, notes = null, fade = null, fadeCurve = EasingCurve.LINEAR.name, follow = follow,
+            marker = false, layers = emptyList(), values = null, place = place, scenery = emptyList(), events = emptyList(),
+            speedMasters = emptyList(), shareCueId = cueId,
+        )
+    }
+
+    /** A row's field that changes nothing: absent, null, an empty list, a blank text or `false`. */
+    private fun saysNothing(element: JsonElement): Boolean = when (element) {
+        is JsonNull -> true
+        is JsonArray -> element.isEmpty()
+        is JsonPrimitive -> (element.isString && element.content.isBlank()) || element.booleanOrNull == false
+        else -> false
+    }
+
+    /** A build_cue_stack row's cue [number], checked against the stack's and the call's other rows. */
+    private fun checkRowNumber(number: String, index: Int, takenNumbers: Set<String>, seenNumbers: MutableMap<String, Int>, problems: MutableList<String>) {
+        if (number.length > MAX_CUE_NUMBER_LENGTH) problems += "number must be at most $MAX_CUE_NUMBER_LENGTH characters"
+        seenNumbers[number]?.let { problems += "number '$number' is also used by cues[$it]" }
+        seenNumbers.putIfAbsent(number, index)
+        if (number in takenNumbers) problems += "the stack already has a cue numbered '$number'"
+    }
+
+    /** A build_cue_stack row's `at`, or null — refused, as the Prompt Book routes refuse it, outside the current project. */
+    private fun rowPlace(row: JsonObject, target: ToolProject, pageCount: Int?, problems: MutableList<String>): PromptBookRectDto? {
+        val at = row["at"] ?: return null
+        return when {
+            !target.isCurrent -> {
+                problems += "'at' anchors the cue in the prompt book, which only the current project's can be marked up — leave 'at' out and anchor later with mark_up_prompt_book"
+                null
+            }
+            pageCount == null -> {
+                problems += "'at' needs a prompt book, and this project has none — import the PDF first, or leave 'at' out and anchor later with mark_up_prompt_book"
+                null
+            }
+            else -> parsePlace(at, pageCount, "at", problems)
+        }
+    }
+
     private fun markUpPromptBook(input: JsonObject): ToolExecutionResult {
         val project = state.projectManager.currentProject
         data class Book(val id: Int, val pageCount: Int)
-        // An anchor marks an entry (cue model plan D4); this tool still names a cue, so it reaches a
-        // cue with exactly one entry (session 7 names entries). Read here so a cue in no stack, or in
-        // several, is refused with the rest rather than skipped while counted as anchored.
-        val (book, entryByCue) = transaction(state.database) {
-            val cueIds = DaoCue.find { DaoCues.project eq project.id }.map { it.id.value }
-            DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.let { Book(it.id.value, it.pageCount) } to
-                cueIds.associateWith { cueId -> soleEntryOfCueId(cueId)?.id?.value }
-        }
-        if (book == null) return failure(noPromptBookMessage())
+        val book = transaction(state.database) {
+            DaoPromptBook.find { DaoPromptBooks.project eq project.id }.firstOrNull()?.let { Book(it.id.value, it.pageCount) }
+        } ?: return failure(noPromptBookMessage())
 
         val problems = mutableListOf<String>()
         val coverPages = input.int("coverPages")
         if (input["coverPages"] != null && (coverPages == null || coverPages !in 0 until book.pageCount)) {
             problems += "coverPages must be 0–${book.pageCount - 1}"
         }
-        val anchors = (input["anchors"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
-            val row = element as? JsonObject ?: run { problems += "anchors[$index]: not an object"; return@mapIndexedNotNull null }
-            val cueId = row.int("cueId")
-            if (cueId == null || cueId !in entryByCue) {
-                problems += "anchors[$index]: no cue $cueId in this project"
-                return@mapIndexedNotNull null
-            }
-            if (entryByCue[cueId] == null) {
-                problems += "anchors[$index]: cue $cueId is not in exactly one stack"
-                return@mapIndexedNotNull null
-            }
-            parsePlace(row["at"], book.pageCount, "anchors[$index] (cue $cueId)", problems)?.let { cueId to it }
+        // An anchor marks an entry (cue model plan D4): by its id, or by its stack and number. Read here
+        // so an entry of another project, or a number its stack lacks, is refused with the rest.
+        // Problems are gathered per attempt: a retried transaction must not report one twice.
+        val (anchors, anchorProblems) = transaction(state.database) {
+            val found = mutableListOf<String>()
+            (input["anchors"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
+                val where = "anchors[$index]"
+                val row = element as? JsonObject ?: run { found += "$where: not an object"; return@mapIndexedNotNull null }
+                anchorEntry(row, project, where, found::add)?.let { entryId ->
+                    parsePlace(row["at"], book.pageCount, "$where (entry $entryId)", found)?.let { entryId to it }
+                }
+            } to found
         }
-        anchors.groupBy { it.first }.filter { it.value.size > 1 }.keys.forEach { problems += "cue $it is anchored twice" }
+        problems += anchorProblems
+        anchors.groupBy { it.first }.filter { it.value.size > 1 }.keys.forEach { problems += "entry $it is anchored twice" }
         val notes = (input["notes"] as? JsonArray).orEmpty().mapIndexedNotNull { index, element ->
             val row = element as? JsonObject ?: run { problems += "notes[$index]: not an object"; return@mapIndexedNotNull null }
             val kind = row.string("kind")?.trim()?.uppercase() ?: PromptBookAnnotationKind.NOTE.name
@@ -1865,8 +1945,8 @@ class SetupTools(
         transaction(state.database) {
             val dao = DaoPromptBook.findById(book.id)!!
             coverPages?.let { dao.coverPages = it }
-            for ((cueId, place) in anchors) {
-                val entry = DaoCueStackEntry[entryByCue.getValue(cueId)!!]
+            for ((entryId, place) in anchors) {
+                val entry = DaoCueStackEntry[entryId]
                 val anchor = DaoPromptBookAnchor.find {
                     (DaoPromptBookAnchors.promptBook eq dao.id) and (DaoPromptBookAnchors.entry eq entry.id)
                 }.firstOrNull() ?: DaoPromptBookAnchor.new {
@@ -1889,7 +1969,7 @@ class SetupTools(
         }
         state.show.fixtures.promptBookChanged()
         return success(
-            "Prompt book updated: ${anchors.size} cue(s) anchored, ${notes.size} note(s) added" +
+            "Prompt book updated: ${anchors.size} entr${if (anchors.size == 1) "y" else "ies"} anchored, ${notes.size} note(s) added" +
                 (coverPages?.let { ", $it cover page(s)" } ?: ""),
             buildJsonObject {
                 put("anchored", anchors.size)
@@ -1897,6 +1977,19 @@ class SetupTools(
                 coverPages?.let { put("coverPages", it) }
             },
         )
+    }
+
+    /**
+     * The entry an anchor row names — `entryId`, or `stackId` and `number` — in [project], or null after
+     * [problem]. A `cueId` alone is refused: a shared cue has several places, a loose one none. Inside a
+     * transaction.
+     */
+    private fun anchorEntry(row: JsonObject, project: DaoProject, where: String, problem: (String) -> Unit): Int? {
+        if (row["cueId"] != null && listOf("entryId", "number").none { row[it] != null && row[it] !is JsonNull }) {
+            problem("$where: name the entry the cue is called from — entryId, or stackId and number (a cue may sit in several stacks, so cueId alone names no place)")
+            return null
+        }
+        return findProjectEntry(project, row, where, problem)?.id?.value
     }
 
     /** The anchor's cached label, as the Prompt Book view writes it: `Q<number>`, else the name. */

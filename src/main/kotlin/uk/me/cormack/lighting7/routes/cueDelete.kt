@@ -206,6 +206,19 @@ internal fun afterEntriesRemoved(state: State, removal: EntryRemoval) {
     }
 }
 
+/**
+ * Everything *Remove from stack* owes once its transaction has committed: [afterEntriesRemoved] and
+ * the broadcasts, the pads of the removed cues and of [stackId]'s remaining ones (renumbered) among
+ * them. The REST route and `remove_cue_from_stack` both end here.
+ */
+internal fun announceEntriesRemoved(state: State, removal: EntryRemoval, stackId: Int) {
+    afterEntriesRemoved(state, removal)
+    state.show.fixtures.cueStackListChanged()
+    state.show.fixtures.cueListChanged()
+    if (removal.anchorsRemoved > 0) state.show.fixtures.promptBookChanged()
+    announceCuePadsChanged(state, removal.cueIds + cueIdsOfStack(state, stackId))
+}
+
 /** What [deleteCues] did, for [afterCuesDeleted] once the transaction has committed. */
 internal data class CueDeletion(
     val cueIds: Set<Int>,
@@ -237,6 +250,38 @@ internal fun deleteCues(state: State, project: DaoProject, cues: List<DaoCue>): 
         cue.delete()
     }
     return CueDeletion(cues.mapTo(HashSet()) { it.id.value }, removal, pageIds, project.id == state.projectManager.currentProject.id)
+}
+
+/** What [deleteCuesChecked] decided. */
+internal sealed interface DeleteCuesOutcome {
+    /** Ids [project] has no cue for; nothing was deleted. */
+    data class NotFound(val missing: List<Int>) : DeleteCuesOutcome
+
+    /** Refused without force (409 `CUE_IN_USE`): the cues something names, each with its uses. */
+    data class InUse(val uses: List<CueUsesDto>) : DeleteCuesOutcome
+
+    /** [deletion] is [CueDeletion.NONE] on a dry run, whose [response] deletes nothing. */
+    data class Done(val response: DeleteCuesResponse, val deletion: CueDeletion) : DeleteCuesOutcome
+}
+
+/**
+ * The bulk delete behind `POST /cues/delete` and `delete_cues` (D8): all of [request]'s cues or
+ * none, refused while anything names one unless forced; a dry run answers the uses and deletes
+ * nothing. Inside the caller's transaction; [afterCuesDeleted] with [DeleteCuesOutcome.Done]'s
+ * deletion once it commits.
+ */
+internal fun deleteCuesChecked(state: State, project: DaoProject, request: DeleteCuesRequest): DeleteCuesOutcome {
+    val ids = request.cueIds.distinct()
+    val cues = ids.associateWith { id -> DaoCue.findById(id)?.takeIf { it.project.id == project.id } }
+    val missing = cues.filterValues { it == null }.keys.toList()
+    if (missing.isNotEmpty()) return DeleteCuesOutcome.NotFound(missing)
+    val found = cues.values.filterNotNull()
+    val uses = cueUsesOf(project, found).values.filter { it.isUsed() }.sortedBy { ids.indexOf(it.cueId) }
+    return when {
+        request.dryRun -> DeleteCuesOutcome.Done(DeleteCuesResponse(emptyList(), uses), CueDeletion.NONE)
+        uses.isNotEmpty() && !request.force -> DeleteCuesOutcome.InUse(uses)
+        else -> DeleteCuesOutcome.Done(DeleteCuesResponse(ids, uses), deleteCues(state, project, found))
+    }
 }
 
 /**

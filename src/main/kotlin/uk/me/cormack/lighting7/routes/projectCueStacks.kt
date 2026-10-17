@@ -265,11 +265,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                 // A number another entry holds explicitly is a conflict, as on the entry PATCH and POST /cues.
                 call.respond(if (numberTaken) HttpStatusCode.Conflict else HttpStatusCode.BadRequest, ErrorResponse(error))
             } else {
-                state.show.cueStackManager.holds.restampEntries(priorities ?: emptyMap())
-                state.show.fixtures.cueStackListChanged()
-                state.show.fixtures.cueListChanged()
-                // Its auto-numbered neighbours may shift too, which their pads show.
-                announceCuePadsChanged(state, cueIdsOfStack(state, resource.parent.stackId))
+                announceEntryAdded(state, resource.parent.stackId, priorities ?: emptyMap())
                 call.respond(details!!)
             }
         }
@@ -287,11 +283,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
             if (removal == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Entry not found"))
             } else {
-                afterEntriesRemoved(state, removal)
-                state.show.fixtures.cueStackListChanged()
-                state.show.fixtures.cueListChanged()
-                if (removal.anchorsRemoved > 0) state.show.fixtures.promptBookChanged()
-                announceCuePadsChanged(state, removal.cueIds + cueIdsOfStack(state, resource.parent.parent.stackId))
+                announceEntriesRemoved(state, removal, resource.parent.parent.stackId)
                 call.respond(HttpStatusCode.NoContent)
             }
         }
@@ -353,35 +345,16 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
         val stackId = entryResource.parent.parent.stackId
         withCurrentProject(state, entryResource.parent.parent.parent.projectId) { project ->
             val request = call.receive<MoveEntryRequest>()
-            var status = HttpStatusCode.BadRequest
-            val result = transaction(state.database) {
-                val entry = stackEntry(project, stackId, entryResource.entryId)?.takeIf { !it.isMarker }
-                    ?: run { status = HttpStatusCode.NotFound; return@transaction null to "Entry not found" }
-                if (request.toStackId == stackId) return@transaction null to "The entry is already in that stack"
-                val target = DaoCueStack.findById(request.toStackId)?.takeIf { it.project.id == project.id }
-                    ?: return@transaction null to "Stack not found"
-                if (target.type == CueStackType.SEPARATOR.name) return@transaction null to "Cannot add cues to a separator"
-                val number = entry.cueNumber?.takeIf { !entry.cueNumberAuto && it.isNotEmpty() }
-                number?.let { explicitNumberClash(target, it) }
-                    ?.let { status = HttpStatusCode.Conflict; return@transaction null to it }
-                moveEntry(state, project, entry, target) to null
+            val outcome = transaction(state.database) {
+                moveEntryChecked(state, project, stackEntry(project, stackId, entryResource.entryId), request.toStackId)
             }
-            val (move, error) = result
-            if (move == null) {
-                call.respond(status, ErrorResponse(error ?: "Failed to move entry"))
-                return@withCurrentProject
+            when (outcome) {
+                is EntryMoveOutcome.Refused -> call.respond(outcome.status, ErrorResponse(outcome.message))
+                is EntryMoveOutcome.Moved -> {
+                    announceEntryMoved(state, outcome.move)
+                    call.respond(MoveEntryResponse(stackId = outcome.move.toStackId, entryId = outcome.move.entryId))
+                }
             }
-            val manager = state.show.cueStackManager
-            manager.holds.restampEntries(move.priorities)
-            manager.runState.clearStandbyForEntries(state, setOf(move.entryId))
-            for (id in listOf(move.fromStackId, move.toStackId)) {
-                if (manager.isStackActive(id)) manager.runState.publishRunState(state, id)
-            }
-            state.show.fixtures.cueStackListChanged()
-            state.show.fixtures.cueListChanged()
-            if (move.anchored) state.show.fixtures.promptBookChanged()
-            announceCuePadsChanged(state, cueIdsOfStack(state, move.fromStackId) + cueIdsOfStack(state, move.toStackId))
-            call.respond(MoveEntryResponse(stackId = move.toStackId, entryId = move.entryId))
         }
     }
 
@@ -1043,6 +1016,58 @@ internal fun moveEntry(state: State, project: DaoProject, entry: DaoCueStackEntr
         anchored = !DaoPromptBookAnchor.find { DaoPromptBookAnchors.entry eq entry.id }.empty(),
         priorities = priorities,
     )
+}
+
+/**
+ * What adding a cue entry to [stackId] owes once its transaction has committed: the holds restamped
+ * from [priorities] (the entries after it moved down a place), the lists, and the pads of the stack's
+ * cues, whose auto-numbered neighbours may have taken new numbers. REST `add-cue`, `create_cue` and
+ * `add_cue_to_stack` end here.
+ */
+internal fun announceEntryAdded(state: State, stackId: Int, priorities: Map<Int, Int>) {
+    state.show.cueStackManager.holds.restampEntries(priorities)
+    state.show.fixtures.cueStackListChanged()
+    state.show.fixtures.cueListChanged()
+    announceCuePadsChanged(state, cueIdsOfStack(state, stackId))
+}
+
+/** What [moveEntryChecked] decided. */
+internal sealed interface EntryMoveOutcome {
+    data class Moved(val move: EntryMove) : EntryMoveOutcome
+    data class Refused(val status: HttpStatusCode, val message: String) : EntryMoveOutcome
+}
+
+/**
+ * *Move to stack…* for [entry] — a cue entry of [project], or null when the caller found none —
+ * into stack [toStackId], refused before anything moves: a marker or a missing entry, the same
+ * stack, a separator, or an explicit number [toStackId] already holds. The REST route and
+ * `move_cue_to_stack` both come here. Inside the caller's transaction; [announceEntryMoved] once it
+ * commits.
+ */
+internal fun moveEntryChecked(state: State, project: DaoProject, entry: DaoCueStackEntry?, toStackId: Int): EntryMoveOutcome {
+    fun refused(status: HttpStatusCode, message: String) = EntryMoveOutcome.Refused(status, message)
+    val moving = entry?.takeIf { !it.isMarker } ?: return refused(HttpStatusCode.NotFound, "Entry not found")
+    if (toStackId == moving.stackId) return refused(HttpStatusCode.BadRequest, "The entry is already in that stack")
+    val target = DaoCueStack.findById(toStackId)?.takeIf { it.project.id == project.id }
+        ?: return refused(HttpStatusCode.BadRequest, "Stack not found")
+    if (target.type == CueStackType.SEPARATOR.name) return refused(HttpStatusCode.BadRequest, "Cannot add cues to a separator")
+    val number = moving.cueNumber?.takeIf { !moving.cueNumberAuto && it.isNotEmpty() }
+    number?.let { explicitNumberClash(target, it) }?.let { return refused(HttpStatusCode.Conflict, it) }
+    return EntryMoveOutcome.Moved(moveEntry(state, project, moving, target))
+}
+
+/** The runtime half of [moveEntry] and its broadcasts, once its transaction has committed. */
+internal fun announceEntryMoved(state: State, move: EntryMove) {
+    val manager = state.show.cueStackManager
+    manager.holds.restampEntries(move.priorities)
+    manager.runState.clearStandbyForEntries(state, setOf(move.entryId))
+    for (id in listOf(move.fromStackId, move.toStackId)) {
+        if (manager.isStackActive(id)) manager.runState.publishRunState(state, id)
+    }
+    state.show.fixtures.cueStackListChanged()
+    state.show.fixtures.cueListChanged()
+    if (move.anchored) state.show.fixtures.promptBookChanged()
+    announceCuePadsChanged(state, cueIdsOfStack(state, move.fromStackId) + cueIdsOfStack(state, move.toStackId))
 }
 
 /** Marker entry [entryId] of stack [stackId] in [project], or null. Inside a transaction. */
