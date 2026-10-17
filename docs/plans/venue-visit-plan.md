@@ -191,6 +191,9 @@ Grouped by area. §4 gives the order.
   family checkboxes, `MaskToggles` for R3.4).
 - ~~S11 — Position in −127…+127 (D3, P3)~~ — done, `cb71b335` (the scale is exact, DMX − 128, so
   DMX 0 reads −128; the intent is `pos:`; `formatVersion` 28).
+- ~~S14 — Full-width applied tables~~ — done, `dae7dd5` (one route with a tab per table,
+  `/programmer/applied?table=`, under the Programmer row; a row opens what the rail's row opens, by
+  Chris's calls of 2026-10-17).
 
 **S12 — Fan in and fan out.**
 - Spread gains a relative mode: a fan amount around each head's current position.
@@ -207,34 +210,6 @@ Grouped by area. §4 gives the order.
 - Points outside the stage (auditorium, walls, the room) are reachable because the plan extends to
   the room, with numeric entry for anything off the drawing.
 - Show skipped heads by reason, as the route already answers them.
-
-**S14 — Full-width applied tables.**
-- Three views:
-  - Applied FX
-  - Applied Looks
-  - Applied Palettes
-- They share one table shell and the row actions the rail already has (`ProgrammerLookStack.tsx`,
-  `ProgrammerFxList.tsx`):
-  - a layer row's *Detach* and its *lost Hex 3–4 to Amber* note (`lib/replacementNotes.ts`). Both
-    reached the rail with R3.3 (`a14d8220`), so S14 lands second and carries *Detach* (apply-model
-    plan §7);
-  - an effect row's *Edit…* (`FxEditorPopover`), *Save as palette…* and *Stop*. R3.6 puts the split
-    edit in that popover wherever it opens, so the table gets it by mounting the same popover.
-- Applied FX reads what the desk reports: timing (a master or *Seconds*, S15), size, direction and
-  runs with *spent* (R4.1), and *held · Blind* (R2.1). Applied Palettes marks a layer's spent effect.
-- Applied FX is one row per running instance, as the rail is:
-  - an effect over a selection (R4.3, `3cefa3ed`) is one row, its reach read through
-    `lib/effectTargets.ts`, since its key names no fixture;
-  - an effect split by an edit (R3.2, `4212865a`) is one row per head copy;
-  - a step effect (R4.7) names its palettes or slots, as `EffectSummary` does.
-- Each remembers its sort, filter and scroll, and takes them from a query string.
-- Each is registered in `lib/windowViews.ts` with `needsRig: true`, so the Screens ("Windows") sheet
-  can open it on any window.
-- Each needs a nav row too. `navigation.test.ts` requires every window view to have a row in
-  `navigation.ts` with the same `pathMatch` and a matching `needsRig` (Nav.1), and its route sits in
-  `RigGate` (Nav.2). They are **children of the Programmer row** (Chris, 2026-10-17, K3), so a
-  show's home leaves them off; Run rows with home cards were declined.
-- R3 may later change what a row can do, but not the tables themselves.
 
 ### Effects
 
