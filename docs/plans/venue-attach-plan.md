@@ -248,12 +248,23 @@ The review answers these instead of attaching (`ATTACH_BLOCKED`):
 | Route | Notes |
 |---|---|
 | `GET /projects/{id}/venue/attach?venue={venueId}&to={n}` | The review: the attach rolled back (P4). `to` defaults to the venue's installed version. |
-| `POST /projects/{id}/venue/attach` `{venueId, to?, decisions, dryRun?}` | Apply. `decisions` answers drift, identity, hall structure, group and overlap rows by id, as Update's do. |
+| `POST /projects/{id}/venue/attach` `{venueId, to?, decisions, dryRun?}` | Apply. `decisions` answers drift, identity, hall structure, group and overlap rows by id, as Update's do, and, without an origin, each incoming record's hide. |
 
+- **Decisions as Att.1 built them** (`e5b60d72`). An answer is Update's `UpdateDecisionAnswer`
+  `{id, answer, startChannel?}`. The pairing makes five kinds (`AttachDecisionDto.kind`): `IDENTITY`,
+  `HALL`, `GROUP` and `DRIFT`, each `KEEP_MINE | TAKE_VENUES`, and `HIDE`, `TAKE_VENUES | HIDE_VENUES`.
+  Each has a default the pairing applies when it is unanswered, and `decided` says only whether it was
+  answered. So `ATTACH_UNDECIDED` counts P8's overlaps alone, not Update's `any { !it.decided }`. The
+  pairing throws `ATTACH_INVALID` for an answer its decision does not take, and leaves an id it did not
+  make to the caller: Att.2 refuses one that is not an overlap's either.
 - **Errors.**
-  - 409 `NOT_A_STANDALONE_SHOW` (a venue, a version, or a show already on a venue).
-  - 409 `VENUE_MISSING` (a version this desk lacks).
-  - 409 `VENUE_NOTHING_PUBLISHED`.
+  - 409 `NOT_A_STANDALONE_SHOW` (a venue, or a show already on a venue). `projectWriteGuard` answers
+    first for a version (`VENUE_VERSION_READ_ONLY`) and for an operator on a venue
+    (`VENUE_ADMIN_ONLY`).
+  - 404 `VENUE_VERSION_UNKNOWN` (a `to` the venue lacks) and 409 `NOT_A_VENUE` (a `venueId` that is
+    not a venue), as `VenueAttachRows.inputs` already answers them. A version a desk lacks is never
+    the target: the target is read from the venue's `venue_versions`.
+  - 409 `VENUE_NOTHING_PUBLISHED`, also from `inputs`.
   - 409 `ATTACH_UNDECIDED` (an overlap left unanswered).
   - 409 `ATTACH_BLOCKED` (§3.6).
   - 400 `ATTACH_INVALID`.
@@ -261,32 +272,55 @@ The review answers these instead of attaching (`ATTACH_BLOCKED`):
 - **A live show reloads** (`switchProject(id, reload = true)`, the carry), and fires the lists Detach
   fires.
 - **MCP.** `attach_to_venue {projectId, venueId, version?, decisions?, dryRun}` answers the same DTO.
-  There is no remote-access gate: it is a stored write, as Detach is.
+  There is no remote-access gate: it is a stored write, as Detach is. It sits beside `extract_venue`
+  (`ai/VenueSetupTools.kt`, its schema in `ai/SetupToolSchemas.kt`) and takes that tool's
+  `reloadLiveShow` rule: attaching the current project is refused without `reloadLiveShow: true`,
+  and a dry run never needs it (`docs/mcp-engineering.md`'s `extract_venue` row).
 - **Answer.** `AttachReviewDto`:
   - `{from: null, to, origin?, output, drawing, inherited, overrides, kept, hides, additions,
     incoming, renames, decisions, blockers, deadReferences}`.
   - Each item names its kind, the show's record and the venue's, and why.
   - `inherited` is a count per kind, with no rows.
+  - Att.1's `AttachPlan` carries every list but two, as the DTOs Att.2 serialises (`AttachItemDto`,
+    `AttachOverrideDto`, `AttachRenameDto`, `AttachDecisionDto`, `AttachOriginDto`), and its
+    `writes` is not part of the answer. Att.2 adds `deadReferences` and P8's overlap decisions, both
+    judged on the written rig (§4.2 steps 7 and 8). It also adds each rename's reach, which §5's
+    decision rows show and `AttachRenameDto` lacks: `RigKeyReferences.users` over the show answers
+    who names the key.
 
 ### 4.2 The transaction
 
 In one transaction, in this order (the review is the same, rolled back):
 
-1. Resolve the target, and the origin if there is one. Pair every kind (§3.2).
+1. Resolve the target, and the origin if there is one. Pair every kind (§3.2). Att.1 built this
+   step: `VenueAttachRows.inputs(show, venueId, to)` reads the three row sets inside the caller's
+   transaction, and `VenueAttachPairing.pair(show, origin, target, answers)` answers an `AttachPlan`
+   whose `writes` (`AttachWrites`) lists every write below.
 2. **Re-point links onto the target.** Re-point every `VenueLinks` link from each inherited or
-   overridden show row to its target record: `repoint(show, showRows → targetRows)`, through the
-   pairing map rather than by uuid equality, since a key pair's uuids differ.
+   overridden show row to its target record, through the pairing map rather than by uuid equality,
+   since a key pair's uuids differ. The map is `AttachWrites.replaced`, show row id → target row id
+   per kind. `VenueLinks.Link.repoint` matches by uuid between two projects only, so Att.2 adds a
+   form that takes the map. The last two links in `VenueLinks.ALL`, a placement's patch and a
+   member's group, are ownership: a replaced patch's placements and a replaced group's members are
+   deleted in step 5, never moved onto the venue's rows.
 3. **Rewrite references.** Rewrite the show's uuid-keyed references to paired records: seat views,
-   platform `regionUuid`s and facet values. Re-key machine overrides as in §3.5.
+   platform `regionUuid`s and facet values, through `AttachWrites.uuidRewrites`. Delete the machine
+   overrides in `machineOverridesDropped` and re-key those in `machineOverridesRekeyed` (§3.5).
 4. **Write the pin.** Set `venueUuid` and `venueVersion = to` (and `venueRepo` from the venue's
    sync config). Clear `detachedFrom`.
 5. **Delete the show's paired rows**, children first: placements, members, then patches, groups,
-   riggings, regions, elements, viewpoints, universes.
-6. **Write what the pairs became.** Write the overrides with their base, the hides, the releases,
-   and the fresh uuids of kept rows (P5). Then apply the renames.
+   riggings, regions, elements, viewpoints, universes. Delete the show's parks in
+   `AttachWrites.parksDropped` too.
+6. **Write what the pairs became.** Write the overrides with their base (`overrides`), the hides
+   (`hides`), the releases (`releases`), and the fresh uuids of kept rows (`freshUuids`, P5). Then
+   apply the renames: `RigKeyReferences.rewrite(show, fixtureRenames, groupRenames, …)`. Its
+   `renamedPatchIds` are the target's patches, since step 2 has already moved the show's busk rig
+   tiles onto them.
 7. **Check with the venue's guards.** Open a fresh `RigScope` and run Update's `clashesOf` (key,
    head number and name) and the overlap comparison, before against after. Any clash is a blocker. An
-   introduced overlap is a decision.
+   introduced overlap is a decision. Update's helpers are private to `VenueUpdate` (`clashesOf`,
+   `spansOf`, `overlapPairs`, `decisionOf`, `applyDecisions`, `deadReferences`), and `clashesOf` and
+   `deadReferences` take its private `Pin`, so Att.2 lifts them where both can call them.
 8. **Collect the leftovers.** Collect `deadReferences` (keys and group names leaving the rig that
    cue, Look and palette rows still name, a selection effect's items included as Update's own
    collection reads them since R4.3, and every script naming a renamed key) and the output and
@@ -306,7 +340,8 @@ In one transaction, in this order (the review is the same, rolled back):
   - An older desk ignores them (`ignoreUnknownKeys`) and loses them on its next export, which costs
     only the origin.
   - Session 1 checks `docs/sync-engineering.md`'s rule for an additive optional field and bumps
-    `formatVersion` only if it says to. `RichProjectFixture` sets both.
+    `formatVersion` only if it says to. `RichProjectFixture` sets both. It took no bump
+    (`e5b60d72`): an older reader loses only the origin, which leaves a valid standalone show.
 - **Machine-local or portable.** The fields are portable on purpose. A show detached on one desk and
   pulled on another can still attach with its origin.
 - **Attach clears them**, and so does *Extract* (a show that extracts a venue is no longer detached
@@ -320,6 +355,11 @@ In one transaction, in this order (the review is the same, rolled back):
     running show behind: it lifts the hold for that pin pair (*Run against*), rather than blacking
     it out mid-run.
   - The review says so.
+  - **`VenueHoldService` has no door for this yet.** The reload's loader calls `judge` first, which
+    holds a show behind on output unless `runAgainst` already names its pin pair. `setRunAgainst`
+    refuses a show not behind (`VENUE_NOT_BEHIND`), as a standalone show is before the attach, and
+    `refreshCurrent` sets `runAgainst` only for a show not held and runs after the load. So Att.2
+    adds a call that records `(projectId, to, installed)` before `switchProject(id, reload = true)`.
 - **On the rig,** the reload carries the running show (`Show.resume`) and crossfades what changed
   over `RESUME_FADE_MS`. By P2 that is nothing for a clean round trip.
 
@@ -406,9 +446,14 @@ Each session is one PR (P1).
 
 - §4.1–4.2, 4.4.
   - `venue/VenueAttach.kt`, which applies the plan in one transaction, with the review as the run
-    rolled back.
-  - The routes and `attach_to_venue`.
+    rolled back. It writes the `AttachPlan` Att.1's pairing answers (`e5b60d72`, §4.2 step 1), and
+    adds what the pairing leaves to it: P8's overlaps, the dead references, each rename's reach, and
+    the `NOT_A_STANDALONE_SHOW` check (`VenueAttachRows.inputs` does not make it).
+  - The routes, beside `routes/venueDetach.kt`'s (its reload and list frames are the model), and
+    `attach_to_venue`.
   - The reload, and *Run against* for a running show attached behind.
+  - **No `formatVersion`.** The attach writes records sync already carries: hides and overrides (v24),
+    releases (v27), the pin, and the origin it clears.
 - **Tests:**
   - P2's round trip: detach, then attach at the same version. The effective rig and parks are equal
     field for field (through `RigScope.effective` and `VenueParks.effective`), and so is the output
@@ -420,6 +465,9 @@ Each session is one PR (P1).
   - No uuid is held by both a show row and a visible venue row afterwards (P5).
   - The dry run leaves the database unchanged.
   - A running show reloads, and one attached behind runs against.
+- **Operator check.** This plan has no Verification section, so the session writes its own
+  Outstanding row in `manual-validation.md`: on a trial venue, detach a running show and attach it
+  back at the same version, and no channel moves.
 - **Docs:**
   - `docs/fixtures-engineering.md`, a new §"Attach" beside §"Detach";
   - `docs/mcp-engineering.md`;
@@ -431,6 +479,10 @@ Each session is one PR (P1).
 - **The entry points** (§7): an `attach` dialog in `ProjectDialog`, mounted by `ProjectActionDialogs`
   (`components/projectActions/ProjectActions.tsx`) beside Detach's; the action's `run` opens it, and
   `ATTACH_NOT_BUILT` goes. `VenueRow` takes the whole action, so its button runs it.
+- **The origin is on the wire since Att.1**: `ProjectSummary.detachedFrom` and
+  `ProjectDetail.detachedFrom` (`api/projectApi.ts`), typed `DetachedFrom` `{venueUuid, version,
+  venueId?, venueName?}` in `api/venueApi.ts`, `venueId` and `venueName` absent for a venue this
+  desk lacks. The sheet's default and its *Detached from here* mark read it.
 - **Tests:**
   - The sheet defaults to the origin venue and the installed version.
   - It says three-way or not.
