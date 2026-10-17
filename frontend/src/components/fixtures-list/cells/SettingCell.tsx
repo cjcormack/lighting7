@@ -13,6 +13,8 @@ import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { useEditorKeyboard } from '../../editor/useEditorKeyboard'
 import { useEditorOpen } from '../../editor/useEditorOpen'
+import { PaletteBands } from '../../editor/PaletteBands'
+import { familyForCategory } from '@/lib/attributeFamily'
 
 interface SettingCellOwnProps {
   value: Extract<CellValue, { kind: 'setting' }>
@@ -23,6 +25,11 @@ interface SettingCellOwnProps {
   batch?: CellBatch
   /** *Local*, or the focused Look's name — the label line's scope. */
   scopeLabel?: string
+  /**
+   * The project a press from the Effects band lands in — the programmer's grid alone passes it
+   * (see `SliderCell`). Absent, the list is drawn bare.
+   */
+  projectId?: number
   /** No value in the current scope — see `UnsetCellMark`. */
   placeholder?: boolean
   /**
@@ -89,6 +96,7 @@ export const SettingCell = memo(function SettingCell({
   label = 'Setting',
   batch,
   scopeLabel = 'Local',
+  projectId,
   placeholder,
   disabled = false,
   autoOpen,
@@ -205,6 +213,8 @@ export const SettingCell = memo(function SettingCell({
 
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
+  const family = first.kind === 'setting' || first.kind === 'colour-setting' ? familyForCategory(first.property.category) : 'BEAM'
+  const property = first.kind === 'setting' || first.kind === 'colour-setting' ? first.property.name : ''
 
   return (
     <EditorSurface
@@ -323,7 +333,18 @@ export const SettingCell = memo(function SettingCell({
             <span>{skipped}</span>
           </EditorReadout>
         )}
+        {/* No Palettes band: a value palette cannot carry a slotted role, so the popup is its
+            Effects band alone — Slot Steps and the effect palettes that step this setting. */}
+        {projectId != null && (
+          <div className="mt-1 border-t px-2 pt-2 pb-1.5">
+            <PaletteBands projectId={projectId} family={family} property={property} targets={heads.targets ?? NO_TARGETS} palettes={false}>
+              {null}
+            </PaletteBands>
+          </div>
+        )}
       </div>
     </EditorSurface>
   )
 })
+
+const NO_TARGETS: NonNullable<CellBatch['targets']> = []

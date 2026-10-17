@@ -18,11 +18,12 @@ import {
   SLIDER_SENTINEL,
   type FxPropertyTarget,
 } from '@/lib/fxTargetProperties'
-import { fxCreateAddition } from '@/lib/fxCreateRequest'
+import { fxCreateAddition, type FxCreateTarget } from '@/lib/fxCreateRequest'
 import {
   useActiveEffectsQuery,
   useAddFixtureFxMutation,
   useEffectLibraryQuery,
+  usePressProgrammerEffectMutation,
   useRemoveFxMutation,
   type EffectLibraryEntry,
 } from '@/store/fixtureFx'
@@ -44,6 +45,7 @@ import type { BlendMode } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { CueTarget } from '@/api/cuesApi'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { normalizeEffectName } from '../busking/buskingTypes'
@@ -116,9 +118,17 @@ export function FxPicker({
   onCurrent,
   onEdit,
   elementFilter,
+  press,
   draft,
 }: {
   target: FxTarget
+  /**
+   * Start through the **bare effect press** (`POST /programmer/effects`, apply-model plan §3.4, D5)
+   * under the door's mask: one Local effect over the target, which first takes those heads off every
+   * other Local effect of its family. Absent — a focused Look, which a press must leave as the stage
+   * was — the effect starts on `/fx/add` alone, for its host to absorb.
+   */
+  press?: { projectId: number; families: readonly AttributeFamily[] | null }
   /**
    * Start on some of a multi-head fixture's heads — the sheet's head strip picking exactly the odd,
    * even or a half of them (`elementFilterFor`). Absent: every head.
@@ -149,6 +159,7 @@ export function FxPicker({
   const { fixtures } = useFixtureLookup()
   const connected = useIsDeskConnected()
   const [addFixtureFx] = useAddFixtureFxMutation()
+  const [pressEffect] = usePressProgrammerEffectMutation()
   const [applyGroupFx] = useApplyGroupFxMutation()
   const [removeFx] = useRemoveFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
@@ -334,35 +345,33 @@ export function FxPicker({
           // Reported by errorToastMiddleware; the start below goes ahead.
         })
       }
-      const addition = fxCreateAddition(
-        target.type === 'group'
-          ? { type: 'group', groupName: target.group.name }
-          : target.type === 'selection'
-            ? { type: 'selection', targets: target.targets }
-            : { type: 'fixture', fixtureKey: target.fixture.key },
-        {
-          effectType: entry.name,
-          propertyName,
-          // A new effect is one bar on the master tagged for its family's usage, else master 1
-          // (venue-visit plan D16) — stamped here, as the palette editor stamps one, so a null
-          // still means master 1 everywhere. A wall-clock effect starts on its own Seconds.
-          beatDivision: NEW_EFFECT_DIVISION,
-          ...(entry.timingSource === 'WALL_CLOCK'
-            ? {}
-            : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
-          blendMode: spec.blendMode as BlendMode,
-          phaseOffset: 0,
-          parameters: spec.parameters,
-          programmerOwned: true,
-          ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
-        },
-      )
-      const created = await (addition.kind === 'group'
-        ? applyGroupFx({ groupName: addition.groupName, ...addition.payload })
-        : addFixtureFx(addition.payload)
+      const request = {
+        effectType: entry.name,
+        propertyName,
+        // A new effect is one bar on the master tagged for its family's usage, else master 1
+        // (venue-visit plan D16) — stamped here, as the palette editor stamps one, so a null
+        // still means master 1 everywhere. A wall-clock effect starts on its own Seconds.
+        beatDivision: NEW_EFFECT_DIVISION,
+        ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
+        blendMode: spec.blendMode as BlendMode,
+        phaseOffset: 0,
+        parameters: spec.parameters,
+        ...(elementFilter != null && target.type === 'fixture' ? { elementFilter } : {}),
+      }
+      const created = await (
+        press != null
+          ? pressEffect({
+              ...request,
+              speedMasterUuid: request.speedMasterUuid ?? undefined,
+              projectId: press.projectId,
+              targets: pressTargetsOf(target),
+              ...(press.families != null && press.families.length > 0 ? { families: [...press.families] } : {}),
+            })
+          : startOn(fxCreateAddition(fxCreateTargetOf(target), { ...request, programmerOwned: true }))
       )
         .unwrap()
-        // Reported by errorToastMiddleware; a failed start leaves nothing auditioned.
+        // Reported by errorToastMiddleware — a mask refusal in the desk's own words; a failed start
+        // leaves nothing auditioned.
         .catch(() => null)
       if (created) setJustStarted(created.effectId)
       onCurrent?.(created ? { effectId: created.effectId, effectType: entry.name, propertyName } : null)
@@ -371,6 +380,10 @@ export function FxPicker({
       setPending(false)
     }
   }
+
+  /** `/fx/add`, or the group route for a group. */
+  const startOn = (addition: ReturnType<typeof fxCreateAddition>) =>
+    addition.kind === 'group' ? applyGroupFx({ groupName: addition.groupName, ...addition.payload }) : addFixtureFx(addition.payload)
 
   const effects = byFamily.get(family) ?? []
   const currentEntry =
@@ -487,4 +500,22 @@ export function FxPicker({
       </div>
     </div>
   )
+}
+
+/** The create route's address for a target. */
+function fxCreateTargetOf(target: FxTarget): FxCreateTarget {
+  return target.type === 'group'
+    ? { type: 'group', groupName: target.group.name }
+    : target.type === 'selection'
+      ? { type: 'selection', targets: target.targets }
+      : { type: 'fixture', fixtureKey: target.fixture.key }
+}
+
+/** A target as the press names it: a fixture or a cell by its key, a group by its name, a selection's items in order. */
+export function pressTargetsOf(target: FxTarget): CueTarget[] {
+  return target.type === 'group'
+    ? [{ type: 'group', key: target.group.name }]
+    : target.type === 'selection'
+      ? [...target.targets]
+      : [{ type: 'fixture', key: target.fixture.key }]
 }

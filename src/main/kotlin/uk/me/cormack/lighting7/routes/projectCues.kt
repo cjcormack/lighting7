@@ -44,7 +44,11 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     .toList()
                 // Every cue's entries and places in one go, not a stack's list per cue.
                 val slots = entrySlotsOf(cues.map { it.id.value })
-                cues.map { it.toCueDetails(isCurrentProject, state.show.fixtures, slots[it.id.value].orEmpty()) }
+                val uses = cueUsesOf(project, cues, slots)
+                cues.map { cue ->
+                    cue.toCueDetails(isCurrentProject, state.show.fixtures, slots[cue.id.value].orEmpty())
+                        .copy(usedBy = uses[cue.id.value]?.usedBy())
+                }
             }
             call.respond(cues)
         }
@@ -624,6 +628,8 @@ data class CueDetails(
     val speedMasters: List<CueSpeedMasterDto> = emptyList(),
     /** Every entry naming the cue, in show order (stacks in show order, then position); empty when loose. */
     val entries: List<CueEntryPlaceDto> = emptyList(),
+    /** The busk pads, cue slots and `FireCue` bindings naming the cue — the list's alone, null on one cue's read. */
+    val usedBy: CueUsedByDto? = null,
 )
 
 /** One place a cue has in a stack's list (cue model plan D2): the entry's own fields. */

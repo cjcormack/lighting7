@@ -19,13 +19,13 @@ put anything durable in `testing-engineering.md`.
 
 ## Open
 
-| Test | Seen failing | Rate | Suspected cause |
-|---|---|---|---|
+None.
 
 ## Fixed
 
 | Test | Fixed in | What it was |
 |---|---|---|
+| `CueSpeedMastersTest` "GO, GO TO, GO BACK and auto-advance each set the cue's masters, and a tap wins until the next cue" | a3949db | Traced: `activateEntry` sets the cue's tempo before the stack's active cue moves, so waiting on the BPM could end before the GO landed; the test now waits on the active cue |
 | `ProgrammerDetachTest` "detach keeps the layer's effects running as Local effects" | 7a9c7cd | A running Pulse moved the dimmer between two channel reads; the comparison now leaves that channel out |
 
 ### `ProgrammerDetachTest` "detach keeps the layer's effects running as Local effects"

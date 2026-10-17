@@ -1,12 +1,15 @@
+import { useMemo } from 'react'
 import { useSelector } from 'react-redux'
 import type { CueTarget } from '@/api/cuesApi'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { Fixture } from '@/store/fixtures'
-import { useDeskSelection } from '@/store/selection'
+import { useDeskSelection, usePressFamilies } from '@/store/selection'
 import { selectRowTargets } from '@/store/selectionSlice'
 import { useDeskFollow, useLocalSelection } from '@/lib/deskFollow'
 import { effectTargetLabel, selectionFixtures } from '@/lib/effectTargets'
 import { headAsFixture } from '@/components/fixtureSheet/sheetPick'
+import { useMarquee } from '@/components/fixtures-list/marqueeContext'
+import type { PressPair } from '@/hooks/usePress'
 import type { FxTarget } from './FxPicker'
 
 /**
@@ -62,4 +65,19 @@ export function useWindowSelectionTargets(onProgrammer: boolean): readonly CueTa
   const local = useLocalSelection()
   const rows = useSelector((s: Parameters<typeof selectRowTargets>[0]) => selectRowTargets(s, 'programmer'))
   return following ? desk : onProgrammer ? rows : local.targets
+}
+
+/**
+ * The pair a bare effect press from this window carries — *+ Effect* and ⌘K *Apply FX* alike, so the
+ * two doors read one selection (apply-model plan §8 session 6): the targets [useWindowSelectionTargets]
+ * gives, a group row kept a group so its effect is one group effect with its distribution, and the
+ * mask a press from this window carries — the desk's while following, else the programmer marquee's
+ * families or the busk view's own.
+ */
+export function useWindowEffectPair(onProgrammer: boolean): PressPair {
+  const targets = useWindowSelectionTargets(onProgrammer)
+  const local = useLocalSelection()
+  const marquee = useMarquee()
+  const families = usePressFamilies(onProgrammer ? (marquee?.press.askedFamilies ?? null) : local.families)
+  return useMemo(() => ({ targets, families }), [targets, families])
 }

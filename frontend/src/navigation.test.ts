@@ -152,7 +152,7 @@ describe("sections", () => {
   })
 
   it("orders Library, with the FX Library called Effects", () => {
-    expect(idsIn("library")).toEqual(["looks", "templates", "fx-library", "speed-masters", "scripts"])
+    expect(idsIn("library")).toEqual(["looks", "cues", "templates", "fx-library", "speed-masters", "scripts"])
     expect(navItems.find((i) => i.id === "fx-library")?.label).toBe("Effects")
   })
 
@@ -182,7 +182,7 @@ describe("venue mode's rail", () => {
     const all = filterNavItems(navItems, true, true).map((i) => i.id)
     // Show, Prompt Book and Busk, and the whole Library.
     expect(all.filter((id) => !shown.includes(id)).sort()).toEqual(
-      ["fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
+      ["cues", "fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
     )
     for (const kept of ["patches", "fixtures", "groups", "programmer", "stage-view", "channels", "project-settings", "stage", "rigging"]) {
       expect(shown).toContain(kept)
@@ -429,10 +429,10 @@ describe("window commands", () => {
     const labels = commands.map((c) => c.label)
     expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
     expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
-    // Eight views × two other windows (the iPad on an install route takes the viewed project),
+    // Nine views × two other windows (the iPad on an install route takes the viewed project),
     // plus the focus arm on each Busk show and the immersive arm on each live-view show.
     const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id) && !/-immersive$/.test(c.id))
-    expect(shows).toHaveLength(16)
+    expect(shows).toHaveLength(18)
     expect(shows.map((c) => c.label)).toContain("Show Applied on Screen 2")
     expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
     // The Stage view (a hall screen on a viewpoint) is a view like any other, with no immersive arm.
@@ -521,6 +521,7 @@ describe("window commands", () => {
       "Open Stage on another display",
       "Open Applied on another display",
       "Open Looks on another display",
+      "Open Cues on another display",
       "Open Palettes on another display",
     ])
     expect(buildWindowCommands(base({ canOpenOnDisplay: true, projectId: null })).some((c) => c.id.startsWith("window-open-"))).toBe(false)

@@ -128,6 +128,13 @@ export interface UpdateFxRequest {
   wings?: number
   blocks?: number
   groups?: number
+  /**
+   * The heads this edit is for (apply-model plan §3.4, D5): absent, or every head the effect paints,
+   * is the in-place edit; some of them splits those off — only a Local effect's, and no change to
+   * the spread's shape. Over REST the split answers `EffectSplitResponse`; the frame answers only
+   * `fxChanged` REMOVED and ADDED, so an editor that must follow the edited copy splits over REST.
+   */
+  targets?: { type: 'fixture' | 'group'; key: string }[]
 }
 
 /**

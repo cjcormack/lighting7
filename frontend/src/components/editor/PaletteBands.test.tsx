@@ -4,14 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TemplateSummary } from '@/api/templatesApi'
 import type { CellResolution } from '@/components/fixtures-list/columns'
 import type { CellBatch, WriteTarget } from '@/components/fixtures-list/rowModel'
-import { chan, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveEffect, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 /**
  * The per-property popup (apply-model plan §4.3): the Palettes band round the level and position
  * editors. What is pinned is the offer per cell — a dimmer cell the Intensity palettes, a zoom cell
  * the Beam palettes with a zoom row, a gobo cell none — that a band press lands on the cell batch
  * under the cell's own family, the focused Look's teal line with no rings, *Save as palette…* with
- * the family, and that a cell with no press door (no `projectId`) draws its editor bare.
+ * the family, and that a cell with no press door (no `projectId`) draws its editor bare. Then the
+ * Effects band below the editor (session 6): a zoom cell offered Zoom Breathe, a gobo cell its Effects
+ * band and no Palettes band, the running effects lit and opened over the cell batch.
  */
 
 let templates: TemplateSummary[] = []
@@ -27,7 +29,27 @@ vi.mock('@/store/looks', () => ({
   useToggleLookMutation: () => [vi.fn()],
   useAbsorbLookEffectsMutation: () => [vi.fn()],
 }))
-vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
+/** The effect library and what runs — the Effects band's offer and its lit chips. */
+const fx = vi.hoisted(() => ({ library: [] as unknown[], active: [] as unknown[] }))
+vi.mock('@/store/fixtureFx', () => ({
+  useRemoveFxMutation: () => [vi.fn()],
+  useEffectLibraryQuery: () => ({ data: fx.library }),
+  useActiveEffectsQuery: () => ({ data: fx.active }),
+}))
+vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()] }))
+/** The picker *+ Effect …* and *All* open, by the props they open it with — its own test is `ApplyPicker.test.tsx`. */
+const picker = vi.hoisted(() => vi.fn())
+vi.mock('@/components/press/ApplyPicker', () => ({
+  ApplyPicker: (props: { open: boolean; library: string }) => {
+    picker(props)
+    return props.open ? <div data-testid={`picker-${props.library}`} /> : null
+  },
+}))
+/** The live editor a running chip opens — the split is `FxEditorPopover.test.tsx`'s. */
+vi.mock('@/components/fx/FxEditorPopover', () => ({
+  FxEditorPopover: ({ effect, selection }: { effect: { id: number } | null; selection?: unknown }) =>
+    effect == null ? null : <div data-testid="fx-editor" data-effect={effect.id} data-selection={JSON.stringify(selection)} />,
+}))
 /** What the desk's applied state says is on. */
 const applied = vi.hoisted(() => ({ current: [] as unknown[] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerAppliedQuery: () => ({ data: applied.current }) }))
@@ -35,7 +57,17 @@ vi.mock('@/store/venues', () => ({ useVenueMode: () => ({ isVenue: false, canEdi
 vi.mock('@/store/hand', () => ({ handPickUp: vi.fn() }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({
-    fixtures: [],
+    // What an effect paints is read off the heads' properties, as the desk reads it.
+    fixtures: ['hex-1', 'hex-2', 'hex-9'].map((key) => ({
+      key,
+      name: key,
+      groups: [],
+      elements: [],
+      properties: [
+        { type: 'slider', name: 'dimmer' },
+        { type: 'slider', name: 'zoom' },
+      ],
+    })),
     fixtureTypes: [],
     fixtureByKey: new Map([
       ['hex-1', { key: 'hex-1', name: 'Hex 1' }],
@@ -118,6 +150,28 @@ const HOME = template({
   rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'pos:0,0' }],
 })
 const PULSE = template({ id: 7, uuid: 'u7', name: 'Pulse', kind: 'effect', rows: [] })
+const beamEffect = (effectType: string, propertyName: string | null = null) => ({
+  effectType,
+  category: 'beam',
+  propertyName,
+  beatDivision: 4,
+  blendMode: 'OVERRIDE',
+  distribution: 'LINEAR',
+  parameters: {},
+})
+const BREATHE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('ZoomBreathe') })
+const PULSE_IRIS = template({ id: 9, uuid: 'u9', name: 'Iris throb', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('IrisPulse') })
+const GOBO_STEPS = template({ id: 10, uuid: 'u10', name: 'Gobo walk', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('SlotSteps', 'gobo') })
+const libraryEntry = (name: string, property: string) => ({
+  name,
+  category: 'beam',
+  outputType: 'SLIDER',
+  effectMode: 'STANDARD',
+  compatibleProperties: [property],
+  parameters: [],
+})
+const ZOOM_BREATHE = libraryEntry('ZoomBreathe', 'zoom')
+const IRIS_PULSE = libraryEntry('IrisPulse', 'iris')
 
 const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
 const zoom = sliderProp('zoom', 'zoom', chan(2))
@@ -162,7 +216,10 @@ beforeEach(() => {
       unobserve() {}
     },
   )
-  templates = [FULL, HALF, RED, WIDE, SOFT, HOME, PULSE]
+  templates = [FULL, HALF, RED, WIDE, SOFT, HOME, PULSE, BREATHE_ZOOM, PULSE_IRIS, GOBO_STEPS]
+  fx.library = [ZOOM_BREATHE, IRIS_PULSE]
+  fx.active = []
+  picker.mockClear()
   applied.current = []
   look.focused = false
   toggle.mockClear()
@@ -284,19 +341,100 @@ describe('the Palettes band', () => {
   it('gives a gobo cell no Palettes band: a value palette cannot carry a slotted role', () => {
     expect(paletteCarries('gobo')).toBe(false)
     expect(paletteCarries('zoom')).toBe(true)
-    const gobo = settingProp('gobo', 'gobo', chan(5), [{ name: 'open', level: 0, displayName: 'Open' }])
-    render(
-      <SettingCell
-        value={{ kind: 'setting', isUniform: true, level: 0 }}
-        resolutions={[{ kind: 'setting', property: gobo }]}
-        label="Gobo"
-        autoOpen
-        keyboardSeed=""
-        onCommit={() => {}}
-        onBeginEdit={() => {}}
-      />,
-    )
+    gobo()
     expect(screen.getByRole('option', { name: 'Open' })).toBeInTheDocument()
     expect(document.querySelector('[data-palette-band]')).toBeNull()
+  })
+})
+
+const goboProp = settingProp('gobo', 'gobo', chan(5), [{ name: 'open', level: 0, displayName: 'Open' }])
+function gobo(over: Partial<React.ComponentProps<typeof SettingCell>> = {}) {
+  return render(
+    <SettingCell
+      value={{ kind: 'setting', isUniform: true, level: 0 }}
+      resolutions={[{ kind: 'setting', property: goboProp }]}
+      label="Gobo"
+      batch={{ count: 2, skipped: 0, resolutions: [], targets: HEADS }}
+      projectId={1}
+      autoOpen
+      keyboardSeed=""
+      onCommit={() => {}}
+      onBeginEdit={() => {}}
+      {...over}
+    />,
+  )
+}
+
+const effectChips = () => [...document.querySelectorAll('[data-band-effect-palette]')].map((chip) => chip.textContent)
+
+describe('the Effects band', () => {
+  it('sits below a dimmer cell’s editor, under its family', () => {
+    slider(DIMMER)
+    const band = document.querySelector('[data-effects-band="INTENSITY"]')
+    expect(band).not.toBeNull()
+    // Below the editor: after the slider in document order.
+    expect(screen.getByRole('slider').compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('offers a zoom cell Zoom Breathe — the Beam effect palettes that drive zoom — and opens the picker on zoom', () => {
+    slider(ZOOM)
+    expect(effectChips()).toEqual(['Slow zoom'])
+    fireEvent.click(screen.getByRole('button', { name: 'Effect…' }))
+    expect(screen.getByTestId('picker-effects')).toBeInTheDocument()
+    expect(picker).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        library: 'effects',
+        family: 'BEAM',
+        property: 'zoom',
+        pair: { targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }], families: ['BEAM'] },
+      }),
+    )
+  })
+
+  it('gives a gobo cell its Effects band and no Palettes band: Slot Steps of its gobo', () => {
+    gobo()
+    expect(document.querySelector('[data-palette-band]')).toBeNull()
+    expect(document.querySelector('[data-effects-band="BEAM"]')).not.toBeNull()
+    expect(effectChips()).toEqual(['Gobo walk'])
+    expect(screen.queryByRole('button', { name: 'Save as palette…' })).toBeNull()
+  })
+
+  it('draws a setting cell bare where there is no press door', () => {
+    gobo({ projectId: undefined })
+    expect(document.querySelector('[data-effects-band]')).toBeNull()
+  })
+
+  it('presses an effect palette onto the cell batch under the cell’s family', async () => {
+    slider(ZOOM)
+    await act(async () => {
+      fireEvent.click(screen.getByText('Slow zoom'))
+    })
+    expect(toggle).toHaveBeenCalledWith(
+      expect.objectContaining({ templateId: 8, families: ['BEAM'], targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }] }),
+    )
+  })
+
+  it('lights the effects running on these heads and opens the editor over the cell batch', () => {
+    fx.active = [
+      makeActiveEffect({ id: 41, effectType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' }),
+      makeActiveEffect({ id: 42, effectType: 'Pulse', targetKey: 'hex-9', propertyName: 'dimmer' }),
+      makeActiveEffect({ id: 43, effectType: 'ZoomBreathe', targetKey: 'hex-1', propertyName: 'zoom' }),
+    ]
+    slider(DIMMER)
+    const lit = [...document.querySelectorAll('[data-band-effect]')].map((chip) => chip.getAttribute('data-band-effect'))
+    expect(lit).toEqual(['41'])
+    fireEvent.click(document.querySelector('[data-band-effect="41"]')!)
+    const editor = screen.getByTestId('fx-editor')
+    expect(editor).toHaveAttribute('data-effect', '41')
+    expect(JSON.parse(editor.getAttribute('data-selection')!)).toEqual([
+      { type: 'fixture', key: 'hex-1' },
+      { type: 'fixture', key: 'hex-2' },
+    ])
+  })
+
+  it('reads a cue’s effect as its cue’s: lit, but not edited here', () => {
+    fx.active = [makeActiveEffect({ id: 44, effectType: 'Pulse', targetKey: 'hex-1', programmerOwned: false, cueId: 12 })]
+    slider(DIMMER)
+    expect(document.querySelector('[data-band-effect="44"]')).toBeDisabled()
   })
 })

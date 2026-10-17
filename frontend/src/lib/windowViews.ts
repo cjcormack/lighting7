@@ -7,14 +7,15 @@ import { APPLIED_TABLES, APPLIED_TABLE_TABS, VIEW_OPTION_APPLIED_TABLE } from '.
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
- * live views, the Stage view, the applied tables and the two libraries. A `windows.show` carries a **route path**, so
+ * live views, the Stage view, the applied tables and the three libraries. A `windows.show` carries a **route path**, so
  * this is the vocabulary that turns a picker's choice into one and a row's `view` back into a label.
  *
- * Eight literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
+ * Nine literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
  * entry's `pathMatch` answers "which sidebar row is lit" and has already diverged from "what is
  * this view called" once (`/palettes` carries four ⌘K entries on one `pathMatch`). The order is
  * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
- * viewpoint), then the applied tables (venue-visit plan S14), then the two libraries. Stage is not a
+ * viewpoint), then the applied tables (venue-visit plan S14), then the three libraries — Looks, Cues
+ * (cue model plan §3.7) and Palettes, in the sidebar's order. Stage is not a
  * live view — it has no `ShowHeader` and no immersive — so it carries its viewpoint, its source and
  * its work lights, and nothing else; the applied tables carry which table, and nothing else.
  * `/programmer/applied` sits under `/programmer`, and the longest segment wins (`windowViewOf`).
@@ -29,7 +30,7 @@ export interface WindowView {
   segment: string
   /**
    * The per-view options a window on this view announces and the Screens sheet can set
-   * (busk-further plan D13). Absent for a view that contributes none — the two libraries — so the
+   * (busk-further plan D13). Absent for a view that contributes none — the three libraries — so the
    * sheet renders whatever a row's *current* view contributes and never learns the word busk. The
    * write is one generic command, `windows.viewOptions {targetId, view, options}`, and the values
    * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
@@ -210,6 +211,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     options: [APPLIED_TABLE_OPTION],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
+  { id: 'cues', label: 'Cues', segment: '/cues' },
   { id: 'templates', label: 'Palettes', segment: '/palettes' },
 ]
 
@@ -254,7 +256,7 @@ export function windowViewProject(view: WindowView, projectId: number, currentPr
 }
 
 /**
- * Which of the eight a route path is showing, or null for any other page. Longest segment wins so
+ * Which of the nine a route path is showing, or null for any other page. Longest segment wins so
  * a future `/show/…` sibling still reads as Show, not as whatever shorter segment it also ends in.
  */
 export function windowViewOf(pathname: string): WindowView | null {
@@ -266,7 +268,7 @@ export function windowViewOf(pathname: string): WindowView | null {
   return best
 }
 
-/** A label for any route: one of the eight by name, else the path itself. */
+/** A label for any route: one of the nine by name, else the path itself. */
 export function windowViewLabel(pathname: string): string {
   return windowViewOf(pathname)?.label ?? pathname
 }

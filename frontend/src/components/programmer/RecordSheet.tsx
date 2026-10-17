@@ -59,6 +59,12 @@ export interface RecordSheetProps {
  */
 const NEW_STACK = 'new'
 
+/**
+ * *No stack* (cue model plan §10, 19): the new cue is loose — in no stack, found in the Cues table.
+ * Never on the wire either; submit sends no `cueStackId`.
+ */
+const NO_STACK = 'none'
+
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
   {
     value: 'TOUCHED',
@@ -78,7 +84,7 @@ const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
 ]
 
 const MODES: { value: RecordMode; label: string; hint: string }[] = [
-  { value: 'CREATE', label: 'New cue', hint: 'Add a new cue to a stack.' },
+  { value: 'CREATE', label: 'New cue', hint: 'Add a new cue to a stack, or to none.' },
   { value: 'MERGE', label: 'Merge', hint: 'Add to the cue, keeping what it already has.' },
   {
     value: 'UPDATE_EXISTING',
@@ -208,7 +214,7 @@ export function RecordSheet({
   // and backend sweep item D1 retired the sessions that produced it.
   const submit = async () => {
     resetCreateStack()
-    let cueStackId = creating && !newStack ? Number(stackId) : undefined
+    let cueStackId = creating && !newStack && stackId !== NO_STACK ? Number(stackId) : undefined
     if (creating && newStack) {
       // The stack first, and only now: a cancelled sheet leaves nothing behind (S10). It joins the
       // show order at the end, like the Show view's own *New stack*. Once made it is the selection,
@@ -232,7 +238,8 @@ export function RecordSheet({
       cueStackId,
       cueId: creating ? undefined : (cueId ?? undefined),
       name: creating && name.trim() !== '' ? name.trim() : undefined,
-      cueNumber: creating && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
+      // A number is an entry's, so a cue in no stack has none to take.
+      cueNumber: creating && cueStackId != null && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
     })
     if ('data' in response && response.data) setResult(response.data)
   }
@@ -289,8 +296,12 @@ export function RecordSheet({
                     ))}
                     {recordableStacks.length > 0 && <SelectSeparator />}
                     <SelectItem value={NEW_STACK}>New stack…</SelectItem>
+                    <SelectItem value={NO_STACK}>No stack</SelectItem>
                   </SelectContent>
                 </Select>
+                {stackId === NO_STACK && (
+                  <p className="text-xs text-muted-foreground">In no stack — find it in the Cues table.</p>
+                )}
               </div>
               {newStack && (
                 <div className="space-y-2">
@@ -314,15 +325,17 @@ export function RecordSheet({
                   placeholder="Auto"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="record-number">Cue #</Label>
-                <Input
-                  id="record-number"
-                  value={cueNumber}
-                  onChange={(e) => setCueNumber(e.target.value)}
-                  placeholder="Auto"
-                />
-              </div>
+              {stackId !== NO_STACK && (
+                <div className="space-y-2">
+                  <Label htmlFor="record-number">Cue #</Label>
+                  <Input
+                    id="record-number"
+                    value={cueNumber}
+                    onChange={(e) => setCueNumber(e.target.value)}
+                    placeholder="Auto"
+                  />
+                </div>
+              )}
             </>
           )}
 

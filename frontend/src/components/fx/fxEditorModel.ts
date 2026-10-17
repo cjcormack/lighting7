@@ -439,6 +439,23 @@ export function filteredElementCount(n: number, filter: string): number {
   }
 }
 
+/** Whether head [index] of [total] is in a head filter — the desk's `ElementFilter.includes`, clause for clause. */
+export function elementFilterIncludes(filter: string, index: number, total: number): boolean {
+  const half = Math.floor((total + 1) / 2)
+  switch (filter) {
+    case 'ODD':
+      return index % 2 === 0
+    case 'EVEN':
+      return index % 2 === 1
+    case 'FIRST_HALF':
+      return index < half
+    case 'SECOND_HALF':
+      return index >= half
+    default:
+      return true
+  }
+}
+
 /** `1 run`, `3 runs` — the editor's Advanced summary and the pad face's word for an N-shot (D9). */
 export function runsWord(nShot: number): string {
   return `${nShot} run${nShot === 1 ? '' : 's'}`
@@ -630,6 +647,18 @@ export function withCueEffectDraft<E extends CueEffectFields>(effect: E, draft: 
     ...(draft.elementMode !== 'PER_FIXTURE' || effect.elementMode != null ? { elementMode: draft.elementMode } : {}),
     ...(draft.elementFilter !== 'ALL' || effect.elementFilter != null ? { elementFilter: draft.elementFilter } : {}),
   }
+}
+
+/**
+ * **A cue's effect is read-only in the tray** (Fx board, *Open*; fixture-fx-sheets session 5): it
+ * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put
+ * back anything changed here (W5 refuses a cue's instance for the same reason). Session 3 left it
+ * editable, as `ActiveEffectSheet` had; a *pad's* instance is edited (D20), being the programmer's.
+ * The open row's naming of the cue is the board's *opens it*: a button that opens the cue's **cue
+ * editor** in place, through `OwnerEditor` — the Stage view's *Moves with* path, not a second one.
+ */
+export function isCueEffect(effect: Pick<ActiveEffect, 'programmerOwned' | 'cueId'>): boolean {
+  return !effect.programmerOwned && effect.cueId != null
 }
 
 /**

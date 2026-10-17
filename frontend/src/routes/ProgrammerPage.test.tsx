@@ -68,8 +68,7 @@ vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
   useProgrammerAddEffect: () => ({
     disabled: true,
     reason: 'no selection',
-    target: null,
-    onCreated: vi.fn(),
+    pair: { targets: [], families: null },
   }),
   ProgrammerAddEffectSheet: () => null,
 }))

@@ -31,7 +31,7 @@ import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
 import { EditorReadout } from './EditorReadout'
 import { numericSeed } from './useEditorKeyboard'
-import { PaletteBand } from './PaletteBands'
+import { EffectsBand, PaletteBand } from './PaletteBands'
 
 /** The whole of what this editor writes: three colour bytes and the three bundled emitters. */
 export interface ColourChannels {
@@ -167,6 +167,11 @@ export interface ColourEditorProps {
   pickOnTargets?: boolean
   /** The Palettes band. Absent, none is drawn. */
   palettes?: ColourPaletteSource
+  /**
+   * The Effects band, below the editor (apply-model plan §4.3) — the programmer's cell popup. Absent,
+   * none is drawn: the busk Colour tab's effects are its Effects tab's.
+   */
+  effects?: ColourPaletteSource
   /** Draw the footer — *Save as template… · Pick · Spread…*. Default true; the fixture sheet passes false. */
   footer?: boolean
   /**
@@ -327,6 +332,7 @@ export function ColourEditor({
   projectId,
   pickOnTargets = false,
   palettes,
+  effects,
   footer = true,
   counts = true,
   labelLine,
@@ -657,6 +663,16 @@ export function ColourEditor({
         className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
       />
     )
+  const effectsBand =
+    effects == null ? null : (
+      <EffectsBand
+        projectId={effects.projectId}
+        family="COLOUR"
+        property="rgbColour"
+        targets={effects.targets}
+        families={effects.families}
+      />
+    )
   // A chip is a palette press — a write — so read-only takes it out of reach with the controls.
   const bandSection =
     band != null && readOnly ? (
@@ -752,6 +768,13 @@ export function ColourEditor({
       {bandSection}
       {controls}
       {readout}
+      {effectsBand != null && readOnly ? (
+        <div inert className="opacity-50">
+          {effectsBand}
+        </div>
+      ) : (
+        effectsBand
+      )}
       {footerRow}
     </div>
   )

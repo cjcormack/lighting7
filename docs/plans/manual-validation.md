@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the rail's *+ Look* and *+ Palette* press onto the selection | Venue-visit R3.5, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
@@ -215,6 +216,51 @@ and a phone.
 
 ---
 
+## `FU-MANUAL-VENUE-VISIT-R3-6`
+
+**What it proves**: *effects in the popup* — venue-visit R3.6, apply-model plan session 6 (§3.4,
+§4.3, §4.5's split editor, §4.6, D5): a cell's popup carries its Effects band below the editor, every
+door that starts a library effect presses it as one Local effect over the selection, and the live
+editor splits off the selected heads of a running effect without a head jumping.
+
+**Why it is here**: the tests pin the requests, the offer and the split editor's arms against mocks;
+nothing watched a split land on a running chase on the rig, or read the band's lit effects on the
+iPad's bottom sheet.
+
+**Test**, on the dev rig with the programmer on a desk screen and on the iPad (portrait), four hexes
+in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palette and a Gobo walk
+(Slot Steps) palette:
+
+1. **The band.** Select Hex 1–4's Dimmer cells and open one: below the slider, *Effects* with *+
+   Effect…*. Press *+ Effect…*, tap Pulse: the four hexes pulse as **one** chase (one row in the
+   rail's FX list), and the band lists Pulse, lit.
+2. **Replacement.** Start Colour Cycle on Hex 1–4 from a colour cell's *+ Effect…*, then select Hex 3–4
+   only and start Rainbow Cycle from their colour cell: Hex 3–4 run the rainbow, Hex 1–2 keep cycling,
+   and nothing else on the rig moves.
+3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and open it from the rail's
+   *Edit…*: the editor says *Hex 1–2 of Hex 1–4*. Drag Max down — nothing on the rig moves — then
+   press *Apply to Hex 1–2*: Hex 1–2 take the new Max **at the phase they had**, Hex 3–4 run on
+   untouched, and no head jumps. Drag Max again: both Hex 1 and Hex 2 follow. Repeat on a step-timed
+   chase and on a ping-pong one.
+4. **Edit all.** Start a fresh Pulse on Hex 1–4, select Hex 1–2 and open it: drag Max, then press
+   *Edit all 4*: all four take the held change at once, and every later drag moves all four live.
+5. **No split for a layer.** Press Amber Breathe on Hex 1–4, select Hex 1–2 and open its effect: no
+   *Apply to …* line; a change moves all four.
+6. **Beam and settings.** Open a mover's Zoom cell: the band offers Zoom Breathe (*+ Effect…* opens
+   on Beam with Zoom Breathe in it) and no frost palette. Open its Gobo cell: an Effects band with
+   Gobo walk and no Palettes band; press it and the gobo steps.
+7. **⌘K.** *Apply FX → On the selection* with Hex 1–2 selected and the pill on *Intensity*: the
+   picker opens on the effects, a tap starts one effect over Hex 1–2, and a Colour effect tapped is
+   refused in the desk's words (*… outside the selection's mask*).
+8. **The iPad.** Repeat 1 and 3 on the iPad: the cell's bottom sheet shows the Effects band's lit
+   chip, a tap opens the editor as a bottom sheet with the split line, and *+ Effect…* opens the
+   effects as a bottom sheet.
+9. **A focused Look.** Focus a Look layer, select two of its heads and start a Pulse from a Dimmer
+   cell's *+ Effect…*: close the picker and the Pulse is in the Look's effects, and no other running
+   effect lost a head.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-R3-5`
 
 **What it proves**: *the palette popup and the one picker* — venue-visit R3.5, apply-model plan
@@ -235,7 +281,7 @@ Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, 
    at most, with *All n*. Tap one: the four hexes take it as a layer and the chip lights; ⌥click
    another: values, no layer. *Save as palette…* in the footer opens the sheet on Intensity.
 2. **Zoom.** Open a Zoom cell's editor on the movers: only the zoom palette is offered, not the frost
-   one. A Gobo cell's editor has no band.
+   one. A Gobo cell's editor has no Palettes band (R3.6 gives it an Effects band).
 3. **Colour.** Open a colour cell's popover on the desk: the band is above the picker (it was the
    phone's *Recent* alone). Select two Shehds zones' colour cells: the heads line names the zones by
    key, and a press colours those two zones only.

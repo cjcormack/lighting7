@@ -24,10 +24,15 @@ const addFixtureFx = vi.hoisted(() =>
 )
 const removeFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve() })))
 const applyGroupFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 88 }) })))
+/** The bare effect press: one Local effect over the targets, which took them off effect 5 (stopped). */
+const pressEffect = vi.hoisted(() =>
+  vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({ effectId: 99, stopped: [5], narrowed: [] }) })),
+)
 vi.mock('@/store/fixtureFx', () => ({
   useEffectLibraryQuery: () => ({ data: wire.library }),
   useActiveEffectsQuery: () => ({ data: wire.active }),
   useAddFixtureFxMutation: () => [addFixtureFx],
+  usePressProgrammerEffectMutation: () => [pressEffect],
   useRemoveFxMutation: () => [removeFx],
 }))
 vi.mock('@/store/groups', () => ({
@@ -44,7 +49,7 @@ vi.mock('@/store/speedMasters', () => ({
 }))
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [], fixtureByKey: new Map() }) }))
 
-import { FxPicker, type AuditionedEffect, type DraftEffectPick, type FxTarget } from './FxPicker'
+import { FxPicker, pressTargetsOf, type AuditionedEffect, type DraftEffectPick, type FxTarget } from './FxPicker'
 
 const position = (name: string): EffectLibraryEntry => ({
   name,
@@ -90,6 +95,7 @@ beforeEach(() => {
   wire.templates = []
   updateFx.mockClear()
   addFixtureFx.mockClear()
+  pressEffect.mockClear()
   removeFx.mockClear()
 })
 afterEach(cleanup)
@@ -443,5 +449,90 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'SlotSteps', propertyName: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
+  })
+})
+
+/**
+ * The bare effect press (apply-model plan §3.4, session 6): *+ Effect*, ⌘K *Apply FX* and a band's
+ * *+ Effect …* start one Local effect over the selection through `POST /programmer/effects`, with the
+ * door's mask — the desk then takes those heads off the family's other Local effects, which is why
+ * the answer names effect 5 stopped and the client does nothing about it.
+ */
+describe('FxPicker on the bare effect press', () => {
+  const HEX = [1, 2, 3, 4].map((n) => makeFixture(`hex-${n}`, [sliderProp('dimmer', 'dimmer', chan(n))]))
+  const FOUR: FxTarget = {
+    type: 'selection',
+    targets: HEX.map((f) => ({ type: 'fixture' as const, key: f.key })),
+    fixtures: HEX,
+    label: 'Hex 1, Hex 2 +2',
+  }
+
+  function Pressing({ target = FOUR }: { target?: FxTarget }) {
+    const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+    return (
+      <FxPicker
+        target={target}
+        initialFamily="INTENSITY"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+        press={{ projectId: 3, families: ['INTENSITY'] }}
+      />
+    )
+  }
+
+  it('starts one effect over a four-head selection through the press, with the mask, and never /fx/add', async () => {
+    render(<Pressing />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
+    expect(pressEffect.mock.calls[0][0]).toMatchObject({
+      projectId: 3,
+      effectType: 'Pulse',
+      propertyName: 'dimmer',
+      targets: HEX.map((f) => ({ type: 'fixture', key: f.key })),
+      families: ['INTENSITY'],
+      beatDivision: 4,
+    })
+    expect(pressEffect.mock.calls[0][0]).not.toHaveProperty('programmerOwned')
+    expect(addFixtureFx).not.toHaveBeenCalled()
+    expect(applyGroupFx).not.toHaveBeenCalled()
+  })
+
+  it('auditions the pressed effect: a second tap swaps it in place rather than pressing again', async () => {
+    const { rerender } = render(<Pressing />)
+    wire.library = [PULSE, { ...PULSE, name: 'Breathe' }]
+    rerender(<Pressing />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveEffect({ id: 99, effectType: 'Pulse', targetKey: '[]', propertyName: 'dimmer' })]
+    rerender(<Pressing />)
+    fireEvent.click(screen.getByRole('button', { name: 'Breathe' }))
+    expect(pressEffect).toHaveBeenCalledTimes(1)
+    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ effectType: 'Breathe' }))
+  })
+
+  it('names a group as itself, so its effect is one group effect with its distribution', () => {
+    expect(pressTargetsOf({ type: 'group', group: { name: 'front' } as never })).toEqual([{ type: 'group', key: 'front' }])
+    expect(pressTargetsOf(FOUR)).toEqual(FOUR.type === 'selection' ? FOUR.targets : [])
+  })
+
+  it('sends no mask where the door carries none', async () => {
+    function Unmasked() {
+      const [current, setCurrent] = useState<AuditionedEffect | null>(null)
+      return (
+        <FxPicker
+          target={FOUR}
+          initialFamily="INTENSITY"
+          current={current}
+          onCurrent={setCurrent}
+          onEdit={() => {}}
+          press={{ projectId: 3, families: null }}
+        />
+      )
+    }
+    render(<Unmasked />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
+    expect(pressEffect.mock.calls[0][0]).not.toHaveProperty('families')
   })
 })
