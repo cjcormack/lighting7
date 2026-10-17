@@ -14,6 +14,7 @@ import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/a
 import { computeCombinedCss } from '@/lib/colourMath'
 import { skippedRowsMessage } from '@/lib/selectionMask'
 import { getSpreadOver, setSpreadOver, useSpreadOver } from '@/lib/spreadOver'
+import { getSpreadFanPrefs, setSpreadFanPrefs, useSpreadFanPrefs, type FanAxes, type SpreadMode } from '@/lib/spreadFan'
 import {
   SPREAD_CURVES,
   SPREAD_ORDERS,
@@ -29,7 +30,7 @@ import {
 import { WHITE_POLICIES, WHITE_POLICY_LABELS, type TemplateProperty, type WhitePolicy } from '@/lib/templateIntent'
 import { cn } from '@/lib/utils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import type { SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
+import type { SpreadBase, SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
 import type { ColourEditorProps } from './ColourEditor'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
@@ -84,6 +85,17 @@ import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positio
  * families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape — toasted
  * in `skippedRowsMessage`'s vocabulary, keyed so a Live drag under a mask replaces one toast.
  *
+ * **Fan** (venue-visit plan S12) is the intent arm's second mode on Position, *Ends · Fan*: one
+ * amount per axis (*Pan · Tilt · Both*, the outer heads' offset in centre steps) about **each
+ * head's own position**, symmetric about the middle of the order, under the same Curve · Order ·
+ * Parts · Over. The desk does the arithmetic (`mode: FAN` on the same route) and reads where each
+ * head starts — Local's value, else the stage — or takes the row being edited, which a
+ * `write: false` host hands in as [IntentSpreadPlan.fanBases]. **The panel holds the gesture's
+ * anchor**: the first send's answer says where each head started (`base`), and every later send in
+ * the gesture carries it back, so a Live drag never fans a fan; until that answer is in, later sends
+ * wait for it rather than read heads it is moving. The anchor, and the amounts with it, go when the
+ * selection changes, the popover closes, the mode or property changes, or *Re-read* is pressed.
+ *
  * **The colour picker is seeded, never fed its own writes.** `ColourEditor`'s `combinedCss` moves
  * only when the panel means the knob to move — switching the endpoint being edited, Swap, the
  * Colour editor's *Spread…* hand-over — for the ping-pong reason documented on that prop. The
@@ -98,8 +110,11 @@ import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positio
  * write as it is edited (until Live is on), so there is a press to stand in for.
  */
 
-/** One end of a hand-over into the panel: the Colour editor's colour as *From*. */
-export interface SpreadSeed {
+/** A hand-over into the panel: the Colour editor's colour as *From*, or the position cell's *Spread…* opening Fan. */
+export type SpreadSeed = ColourSpreadSeed | FanSpreadSeed
+
+/** The Colour editor's *Spread…*: its colour as *From*. */
+export interface ColourSpreadSeed {
   /**
    * The colour, handed over as *From* — its **RGB** only. A colour intent has no emitter component
    * (white, amber and UV are rows of their own in the template grammar), so a white or amber the
@@ -108,6 +123,12 @@ export interface SpreadSeed {
    */
   from: { r: number; g: number; b: number }
   /** A fresh identity per hand-over, so two hand-overs of one colour both land. */
+  key: number
+}
+
+/** The position cell's *Spread…*: the panel on Position, in Fan, at no fan, over where the heads are. */
+export interface FanSpreadSeed {
+  fan: true
   key: number
 }
 
@@ -152,6 +173,19 @@ export interface IntentSpreadPlan extends SpreadPlanBase {
   colourTemplates?: readonly TemplateSummary[]
   /** `write: false` on every request — a focused Look layer (D6). Absent, the key is omitted. */
   write?: false
+  /**
+   * Fan: each head's starting position **in the row being edited** — the `write: false` hosts' own
+   * `pan,tilt` per head that holds one, sent with the gesture's first request. Absent, the desk reads
+   * every head (Local, else the stage).
+   */
+  fanBases?: () => SpreadBase[]
+  /** What the read-out calls the rows [fanBases] reads — *the layer’s rows*, *Q12’s values*. */
+  fanRowsLabel?: string
+  /**
+   * Which rows a fan lands in — a focused layer's or a cue's id, absent for Local. A change drops
+   * the anchor as a new selection does: an anchor read in one scope is no start in another.
+   */
+  fanScope?: string
   /** Send one request. A refusal is already toasted by `errorToastMiddleware`; the panel ignores it. */
   send: (request: SpreadRequestBody) => Promise<SpreadResponse>
   /** The latest request's answer, after its `skippedFamilies` have been toasted — the Look-layer arm reads `written[]`. */
@@ -199,6 +233,12 @@ export interface SpreadForm {
   parts: number
   over: SpreadOver
   seed: number
+  /** Position only: *Ends* or *Fan*. */
+  mode: SpreadMode
+  axes: FanAxes
+  /** The fan's amounts, centre steps on each axis; meaningful only against the gesture's anchor. */
+  fanPan: number
+  fanTilt: number
 }
 
 interface SpreadPanelProps {
@@ -290,6 +330,7 @@ function initialFamily(available: readonly AttributeFamily[], mask: readonly Att
 }
 
 function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
+  const prefs = getSpreadFanPrefs()
   return {
     family: property.family,
     property,
@@ -299,6 +340,23 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
     parts: base?.parts ?? 1,
     over: base?.over ?? 'HEADS',
     seed: base?.seed ?? 0,
+    mode: base?.mode ?? prefs.mode,
+    axes: base?.axes ?? prefs.axes,
+    fanPan: 0,
+    fanTilt: 0,
+  }
+}
+
+/** Whether a form spreads as a fan — Fan chosen, on a position property. */
+export function isFanForm(form: SpreadForm): boolean {
+  return form.mode === 'FAN' && spreadEditorKind(form.property) === 'position'
+}
+
+/** The amounts a fan form sends: an axis it does not move is absent, which the desk leaves where it was. */
+function fanAmountsOf(form: SpreadForm): { pan?: number; tilt?: number } {
+  return {
+    ...(form.axes !== 'TILT' ? { pan: form.fanPan } : {}),
+    ...(form.axes !== 'PAN' ? { tilt: form.fanTilt } : {}),
   }
 }
 
@@ -323,13 +381,14 @@ const sameSend = (a: Send, b: Send) => JSON.stringify(a) === JSON.stringify(b)
  * mid-upgrade must never see it on a Local spread (plan §6).
  */
 export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): SpreadRequestBody | null {
-  if (!isCompleteSpreadEndpoint(form.from) || !isCompleteSpreadEndpoint(form.to)) return null
+  const fan = isFanForm(form)
+  if (!fan && (!isCompleteSpreadEndpoint(form.from) || !isCompleteSpreadEndpoint(form.to))) return null
   const body: SpreadRequestBody = {
     targets: [...plan.targets],
     families: plan.mask == null ? undefined : [...plan.mask],
     property: form.property.propertyName,
-    from: serializeSpreadEndpoint(form.from),
-    to: serializeSpreadEndpoint(form.to),
+    // A fan's base is not part of the form: the panel adds the gesture's anchor at send time.
+    ...(fan ? { mode: 'FAN' as const, fan: fanAmountsOf(form) } : { from: serializeSpreadEndpoint(form.from), to: serializeSpreadEndpoint(form.to) }),
     curve: form.curve,
     order: form.order,
     parts: form.parts,
@@ -339,6 +398,17 @@ export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): Sprea
   if (plan.write === false) body.write = false
   return body
 }
+
+/** One fan gesture's anchor: where each head started, once the desk has answered the first send. */
+interface FanGesture {
+  anchor: SpreadBase[] | null
+  /** The first send is in flight: later sends wait for it rather than read heads it is moving. */
+  anchoring: boolean
+  /** The latest send that is waiting for the anchor. */
+  waiting: SpreadRequestBody | null
+}
+
+const newFanGesture = (): FanGesture => ({ anchor: null, anchoring: false, waiting: null })
 
 /** One live write: a desk request, or the raw kind's values. */
 type Send = { kind: 'intent'; body: SpreadRequestBody } | { kind: 'raw'; values: number[]; over: SpreadOver }
@@ -433,6 +503,73 @@ export function SpreadPanel({
     setPickerSeed((prev) => ({ css: computeCombinedCss(rgb.r, rgb.g, rgb.b, 0, 0, 0), key: prev.key + 1 }))
   }, [])
 
+  // ── The fan's anchor (see the docblock) ──
+  /**
+   * The fan gesture under way. A dropped anchor is a new gesture **object**, so the old one still
+   * finishes on its own: its first answer still lands its anchor and sends the send that waited
+   * for it — the amount a drag was let go on — even after the popover closed.
+   */
+  const fanGestureRef = useRef<FanGesture>(newFanGesture())
+  const [fanReadout, setFanReadout] = useState<{ fromStage: number; clamped: number } | null>(null)
+
+  const sendIntent = useCallback((plan: IntentSpreadPlan, outgoing: SpreadRequestBody, gesture: FanGesture) => {
+    let body = outgoing
+    const fan = body.mode === 'FAN'
+    let given: ReadonlySet<string> | null = null
+    if (fan) {
+      if (gesture.anchor != null) {
+        body = { ...body, base: gesture.anchor }
+      } else if (gesture.anchoring) {
+        gesture.waiting = body
+        return
+      } else if (Object.values(body.fan ?? {}).every((amount) => amount === 0)) {
+        // No fan yet and none asked for: sending it would only write every head where it stands.
+        return
+      } else {
+        gesture.anchoring = true
+        const rows = plan.fanBases?.() ?? []
+        given = new Set(rows.map((row) => row.target.key))
+        if (rows.length > 0) body = { ...body, base: rows }
+      }
+    }
+    const seq = ++requestSeq.current
+    /** The gesture's first send has settled: send what waited for it, against the anchor if one landed. */
+    const settle = () => {
+      gesture.anchoring = false
+      const waiting = gesture.waiting
+      gesture.waiting = null
+      if (waiting != null) sendIntent(plan, waiting, gesture)
+    }
+    void plan
+      .send(body)
+      .then((answer: SpreadResponse) => {
+        if (given != null) {
+          const bases = answer.base ?? []
+          // No base — the mask kept Position out, say — is no anchor: the next send reads the heads again.
+          if (bases.length > 0) {
+            gesture.anchor = bases
+            if (gesture === fanGestureRef.current) {
+              setFanReadout({ fromStage: bases.filter((b) => !given.has(b.target.key)).length, clamped: answer.clamped?.length ?? 0 })
+            }
+          }
+          settle()
+        }
+        if (seq !== requestSeq.current) return
+        const message = skippedRowsMessage(answer.skippedFamilies ?? [], plan.mask)
+        if (message != null) toast.warning(message, { id: SKIPPED_FAMILIES_TOAST })
+        if (fan && given == null && gesture === fanGestureRef.current) {
+          setFanReadout((prev) => (prev == null ? prev : { ...prev, clamped: answer.clamped?.length ?? 0 }))
+        }
+        plan.onAnswer?.(answer, body)
+      })
+      // The refusal is toasted by `errorToastMiddleware`; nothing landed, so there is nothing here to
+      // undo — but a send that waited on it is tried as the gesture's first instead of being lost.
+      .catch(() => {
+        if (given != null) settle()
+        ignoreReportedError()
+      })
+  }, [])
+
   const { push, flush, reset } = useLivePush<Send>(
     (send) => {
       const plan = activePlanRef.current
@@ -441,21 +578,26 @@ export function SpreadPanel({
         return
       }
       if (plan?.kind !== 'intent') return
-      const seq = ++requestSeq.current
-      const body = send.body
-      void plan
-        .send(body)
-        .then((answer: SpreadResponse) => {
-          if (seq !== requestSeq.current) return
-          const message = skippedRowsMessage(answer.skippedFamilies ?? [], plan.mask)
-          if (message != null) toast.warning(message, { id: SKIPPED_FAMILIES_TOAST })
-          plan.onAnswer?.(answer, body)
-        })
-        // The refusal is toasted by `errorToastMiddleware`; nothing landed, so there is nothing here to undo.
-        .catch(ignoreReportedError)
+      sendIntent(plan, send.body, fanGestureRef.current)
     },
     { equals: sameSend },
   )
+
+  /** Drop the fan's anchor: the next fan send starts a new gesture and reads the heads again. */
+  const dropAnchor = useCallback(() => {
+    fanGestureRef.current = newFanGesture()
+    setFanReadout(null)
+  }, [])
+
+  /** A fresh fan gesture: no anchor, and no fan — the amounts back at 0 over wherever the heads now are. */
+  const resetFan = useCallback(() => {
+    dropAnchor()
+    reset()
+    if (formRef.current.fanPan === 0 && formRef.current.fanTilt === 0) return
+    const next = { ...formRef.current, fanPan: 0, fanTilt: 0 }
+    formRef.current = next
+    setForm(next)
+  }, [dropAnchor, reset])
 
   /** Disown any answer still in flight. */
   const clearAnswer = useCallback(() => {
@@ -487,6 +629,9 @@ export function SpreadPanel({
       // Over is the window's (`lib/spreadOver.ts`): written through, so a panel mounted later — or
       // one mounted beside this one — opens on it.
       if (patch.over != null) setSpreadOver(patch.over)
+      if (patch.mode != null || patch.axes != null) {
+        setSpreadFanPrefs({ mode: patch.mode ?? formRef.current.mode, axes: patch.axes ?? formRef.current.axes })
+      }
       const next = { ...formRef.current, ...patch }
       formRef.current = next
       setForm(next)
@@ -535,14 +680,18 @@ export function SpreadPanel({
   // A fresh selection is a fresh gesture: nothing the last one sent says where these heads are,
   // and an answer in flight describes heads that are no longer selected.
   const selectionKey = useMemo(
-    () => (intentPlan == null ? `${activePlan?.kind ?? ''}:${activePlan?.count ?? 0}` : intentPlan.targets.map((t) => `${t.type}:${t.key}`).join('|')),
+    () =>
+      intentPlan == null
+        ? `${activePlan?.kind ?? ''}:${activePlan?.count ?? 0}`
+        : `${intentPlan.fanScope ?? 'local'}#${intentPlan.targets.map((t) => `${t.type}:${t.key}`).join('|')}`,
     [intentPlan, activePlan],
   )
   useEffect(() => {
     gestureRef.current = false
     reset()
     clearAnswer()
-  }, [selectionKey, reset, clearAnswer])
+    resetFan()
+  }, [selectionKey, reset, clearAnswer, resetFan])
 
   /** Change the property (and family): fresh endpoints, and an answer in flight no longer describes this property. */
   const chooseProperty = useCallback(
@@ -551,11 +700,12 @@ export function SpreadPanel({
       formRef.current = next
       setForm(next)
       clearAnswer()
+      dropAnchor()
       setEditing('from')
       reseedPicker(next.from)
       reset()
     },
-    [reseedPicker, reset, clearAnswer],
+    [reseedPicker, reset, clearAnswer, dropAnchor],
   )
 
   /**
@@ -606,11 +756,41 @@ export function SpreadPanel({
     formRef.current = next
     setForm(next)
   }, [storedOver])
+  // The mode and axes the same way (`lib/spreadFan.ts`). Another panel leaving Fan drops this one's
+  // anchor too: its amounts no longer describe anything it is showing.
+  const storedFan = useSpreadFanPrefs()
+  useEffect(() => {
+    const current = formRef.current
+    if (current.mode === storedFan.mode && current.axes === storedFan.axes) return
+    const next = { ...current, mode: storedFan.mode, axes: storedFan.axes }
+    formRef.current = next
+    setForm(next)
+    if (current.mode !== storedFan.mode) resetFan()
+  }, [storedFan, resetFan])
 
   // The colour editor's hand-over: Colour, From set to its colour, the knob seeded to it, applied
   // once per seed and then dropped by the host. In the popover host it opens the panel.
   useEffect(() => {
     if (seed == null) return
+    if ('fan' in seed) {
+      // The position cell's *Spread…*: Position, Fan, no fan yet — a fan starts where the heads are.
+      if (intentPlan == null || (headFamilies.length > 0 && !headFamilies.includes('POSITION'))) {
+        onSeedConsumed?.()
+        return
+      }
+      chosenRef.current = true
+      const property = propertiesForRef.current('POSITION').find((p) => p.intent === 'position') ?? spreadPropertiesFor('POSITION')[0]
+      if (property.propertyName !== formRef.current.property.propertyName) chooseProperty(property)
+      setSpreadFanPrefs({ mode: 'FAN', axes: formRef.current.axes })
+      const next = { ...formRef.current, mode: 'FAN' as const }
+      formRef.current = next
+      setForm(next)
+      resetFan()
+      clearAnswer()
+      if (host === 'popover') setIsOpen(true)
+      onSeedConsumed?.()
+      return
+    }
     // A selection that cannot take colour has nothing for the hand-over to set; the seed is spent
     // rather than left to re-apply, and the family segment keeps a checked item.
     if (intentPlan == null || (headFamilies.length > 0 && !headFamilies.includes('COLOUR'))) {
@@ -636,7 +816,7 @@ export function SpreadPanel({
     reset()
     if (host === 'popover') setIsOpen(true)
     onSeedConsumed?.()
-  }, [seed, onSeedConsumed, reseedPicker, reset, clearAnswer, headFamilies, intentPlan, host])
+  }, [seed, onSeedConsumed, reseedPicker, reset, clearAnswer, headFamilies, intentPlan, host, chooseProperty, resetFan])
 
   // First paint of a colour editor: seed the knob from *From* (the initial state is a placeholder).
   const seededRef = useRef(false)
@@ -746,7 +926,10 @@ export function SpreadPanel({
     onDone: () => {
       if (!canApply) return
       apply()
-      if (host === 'popover') setIsOpen(false)
+      if (host === 'popover') {
+        setIsOpen(false)
+        resetFan()
+      }
     },
   })
 
@@ -767,6 +950,7 @@ export function SpreadPanel({
 
   // ── The controls ────────────────────────────────────────────────────────────────────────────
   const editorKind = spreadEditorKind(form.property)
+  const fanForm = intentPlan != null && isFanForm(form)
   const properties = intentPlan == null ? [] : propertiesFor(form.family)
   const offeredFamilies = intentPlan?.offered ?? available
   const editingEndpoint = editing === 'from' ? form.from : form.to
@@ -791,7 +975,7 @@ export function SpreadPanel({
             aria-label={curve.label}
             className="h-auto flex-1 flex-col gap-0.5 px-1 py-1 text-[10px]"
           >
-            <CurvePicture curve={curve.id} />
+            <CurvePicture curve={curve.id} fan={fanForm} />
             {/* The compact curve row: below 300px of rail the pictures stand alone and the word is
                 the item's name (editor-kit plan session 4, call 12). A container query on the
                 docked panel — the popover and the kit sheets have no container above them, and the
@@ -960,6 +1144,51 @@ export function SpreadPanel({
             </ToggleGroup>
           )}
 
+          {/* Position's two modes: Ends is From → To, Fan an amount about each head's own position. */}
+          {editorKind === 'position' && (
+            <div className={cn('flex items-center gap-2', COMPACT_WRAP_CLASS)}>
+              <ToggleGroup
+                type="single"
+                size="sm"
+                aria-label="Spread mode"
+                value={form.mode}
+                onValueChange={(next) => {
+                  if (!next || next === formRef.current.mode) return
+                  resetFan()
+                  commit({ mode: next as SpreadMode })
+                }}
+                className="w-28 shrink-0"
+              >
+                <ToggleGroupItem value="ENDS" className="flex-1 text-xs" title="From one position to another across the heads">
+                  Ends
+                </ToggleGroupItem>
+                <ToggleGroupItem value="FAN" className="flex-1 text-xs" title="An amount around each head’s own position — fan out, fan in">
+                  Fan
+                </ToggleGroupItem>
+              </ToggleGroup>
+              {fanForm && (
+                <ToggleGroup
+                  type="single"
+                  size="sm"
+                  aria-label="Fan axes"
+                  value={form.axes}
+                  onValueChange={(next) => next && commit({ axes: next as FanAxes })}
+                  className="min-w-0 flex-1"
+                >
+                  <ToggleGroupItem value="PAN" className="flex-1 text-xs">
+                    Pan
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="TILT" className="flex-1 text-xs">
+                    Tilt
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="BOTH" className="flex-1 text-xs">
+                    Both
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
+          )}
+
           {/* From / To. A colour has one picker for whichever end is being edited; the other three
               shapes are typed side by side. */}
           {editorKind === 'colour' ? (
@@ -1012,6 +1241,15 @@ export function SpreadPanel({
               />
               )}
             </ColourEndpoints>
+          ) : fanForm ? (
+            <FanAmounts
+              axes={form.axes}
+              pan={form.fanPan}
+              tilt={form.fanTilt}
+              onChange={(patch) => commit(patch)}
+              readout={fanReadoutLine(intentPlan, fanReadout)}
+              onReread={resetFan}
+            />
           ) : (
             <NumericEndpoints kind={editorKind} from={form.from} to={form.to} onChange={setEndpoint} onSwap={swap} />
           )}
@@ -1136,7 +1374,10 @@ export function SpreadPanel({
         disabled={!canApply || dockedRefusal != null}
         onClick={() => {
           apply()
-          if (host === 'popover' && !(live && showsLive)) setIsOpen(false)
+          if (host === 'popover' && !(live && showsLive)) {
+            setIsOpen(false)
+            resetFan()
+          }
         }}
         title={live && showsLive ? 'Live is on — every adjustment is sent as it is made; press to send the spread again as it stands' : 'Send the spread to the desk'}
       >
@@ -1182,7 +1423,10 @@ export function SpreadPanel({
   return (
     <EditorSurface
       open={isOpen}
-      onOpenChange={setIsOpen}
+      onOpenChange={(open) => {
+        setIsOpen(open)
+        if (!open) resetFan()
+      }}
       title="Spread"
       contentClassName="w-[336px]"
       align="end"
@@ -1497,6 +1741,137 @@ function formatDurationMs(ms: number): string {
   return `${ms}ms`
 }
 
+// ─── The fan's amounts ──────────────────────────────────────────────────────
+
+/** The read-out under a fan's amounts: where the heads started, and any the fan held at the end of travel. */
+function fanReadoutLine(plan: IntentSpreadPlan | null, readout: { fromStage: number; clamped: number } | null): string {
+  const rows = plan?.fanBases != null
+  const parts = [rows ? `From ${plan?.fanRowsLabel ?? 'the rows'}` : 'From where they are']
+  if (rows && readout != null && readout.fromStage > 0) {
+    parts.push(`${readout.fromStage} ${readout.fromStage === 1 ? 'head' : 'heads'} from the stage`)
+  }
+  if (readout != null && readout.clamped > 0) {
+    parts.push(`${readout.clamped} ${readout.clamped === 1 ? 'head' : 'heads'} at the end of travel`)
+  }
+  return parts.join(' · ')
+}
+
+function FanAmounts({
+  axes,
+  pan,
+  tilt,
+  onChange,
+  readout,
+  onReread,
+}: {
+  axes: FanAxes
+  pan: number
+  tilt: number
+  onChange: (patch: { fanPan?: number; fanTilt?: number }) => void
+  readout: string
+  onReread: () => void
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <EditorLabel>Amount · the outer heads, centre steps</EditorLabel>
+      {axes !== 'TILT' && <FanAmountRow axis="Pan" value={pan} onChange={(fanPan) => onChange({ fanPan })} />}
+      {axes !== 'PAN' && <FanAmountRow axis="Tilt" value={tilt} onChange={(fanTilt) => onChange({ fanTilt })} />}
+      <p data-fan-readout className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        <span className="min-w-0 flex-1">{readout}</span>
+        <button
+          type="button"
+          className="shrink-0 text-foreground underline underline-offset-2 hover:text-primary focus-visible:outline-2"
+          title="Read where the heads are now, and start the fan again from there"
+          onClick={onReread}
+        >
+          Re-read
+        </button>
+      </p>
+    </div>
+  )
+}
+
+function FanAmountRow({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value: number; onChange: (value: number) => void }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-7 shrink-0 text-[9px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{axis}</span>
+      <FanAmountStrip axis={axis} value={value} onChange={onChange} />
+      <EditorField
+        label={`${axis} amount`}
+        value={value}
+        min={CENTRE_MIN}
+        max={CENTRE_MAX}
+        onCommit={(n) => onChange(clampCentre(Math.round(n)))}
+        className="w-14 shrink-0"
+      />
+    </div>
+  )
+}
+
+/** Centre steps a full-width drag moves: the whole scale across the strip. */
+const STRIP_SPAN = CENTRE_MAX - CENTRE_MIN
+
+/**
+ * The fan's drag strip: 0 in the middle, −128…+127 across it. A press anywhere starts a drag from
+ * the value as it stands — the strip is a relative control, like the fan — with ⇧ for a quarter of
+ * the speed; a double click is 0, and the arrow keys step it (⇧ by 8).
+ */
+function FanAmountStrip({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value: number; onChange: (value: number) => void }) {
+  const drag = useRef<{ lastX: number; acc: number; width: number } | null>(null)
+  const at = (v: number) => ((v - CENTRE_MIN) / STRIP_SPAN) * 100
+  const mid = at(0)
+  const knob = at(value)
+  return (
+    <div
+      role="slider"
+      tabIndex={0}
+      aria-label={`${axis} fan`}
+      aria-valuemin={CENTRE_MIN}
+      aria-valuemax={CENTRE_MAX}
+      aria-valuenow={value}
+      aria-valuetext={formatCentre(value)}
+      data-fan-strip={axis.toLowerCase()}
+      title="Drag to fan out or in — ⇧ for fine, double-click for no fan"
+      className="relative h-7 min-w-0 flex-1 cursor-ew-resize touch-none overflow-hidden rounded-md border bg-input/30 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture?.(e.pointerId)
+        drag.current = { lastX: e.clientX, acc: value, width: e.currentTarget.getBoundingClientRect().width || 1 }
+      }}
+      onPointerMove={(e) => {
+        const held = drag.current
+        if (held == null) return
+        held.acc += ((e.clientX - held.lastX) * STRIP_SPAN * (e.shiftKey ? 0.25 : 1)) / held.width
+        held.lastX = e.clientX
+        held.acc = Math.max(CENTRE_MIN, Math.min(CENTRE_MAX, held.acc))
+        const next = clampCentre(Math.round(held.acc))
+        if (next !== value) onChange(next)
+      }}
+      onPointerUp={() => {
+        drag.current = null
+      }}
+      onPointerCancel={() => {
+        drag.current = null
+      }}
+      onDoubleClick={() => onChange(0)}
+      onKeyDown={(e) => {
+        const step = e.shiftKey ? 8 : 1
+        const delta = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? step : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -step : 0
+        if (delta === 0) return
+        e.preventDefault()
+        onChange(clampCentre(value + delta))
+      }}
+    >
+      <span aria-hidden className="absolute inset-y-1 w-px bg-muted-foreground/60" style={{ left: `${mid}%` }} />
+      <span
+        aria-hidden
+        className="absolute top-1/2 h-2 -translate-y-1/2 rounded-full bg-primary/80"
+        style={{ left: `${Math.min(mid, knob)}%`, width: `${Math.abs(knob - mid)}%` }}
+      />
+      <span aria-hidden className="absolute top-1 bottom-1 w-1.5 -translate-x-1/2 rounded-sm bg-foreground shadow" style={{ left: `${knob}%` }} />
+    </div>
+  )
+}
+
 // ─── The curve pictures ─────────────────────────────────────────────────────
 
 /**
@@ -1509,10 +1884,14 @@ function formatDurationMs(ms: number): string {
  * drawn as its two wings — two strokes meeting at a marked centre, each fanning outward — where
  * Mirror stays one stroke reflected about the middle.
  */
-function CurvePicture({ curve }: { curve: SpreadCurve }) {
+function CurvePicture({ curve, fan = false }: { curve: SpreadCurve; fan?: boolean }) {
   const heads = 8
   const x = (i: number): number => 2 + i * 4
   const y = (t: number): number => 13 - t * 11
+  // A fan reads each curve against the midline — each head's own position, −A below and +A above.
+  const midline = fan ? (
+    <line data-curve-midline x1={1} y1={y(0.5)} x2={31} y2={y(0.5)} stroke="currentColor" strokeWidth="0.75" strokeDasharray="1.5 2" opacity={0.6} />
+  ) : null
   if (curve === 'WINGS') {
     const half = heads / 2
     const left = Array.from({ length: half }, (_, i) => `${x(i)},${y(1 - i / (half - 1))}`).join(' ')
@@ -1520,6 +1899,7 @@ function CurvePicture({ curve }: { curve: SpreadCurve }) {
     const centre = (x(half - 1) + x(half)) / 2
     return (
       <svg aria-hidden data-curve-picture="WINGS" viewBox="0 0 32 14" className="h-3.5 w-8">
+        {midline}
         <polyline points={left} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={right} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
         <line x1={centre} y1={y(0) - 1} x2={centre} y2={y(0) + 1} stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -1540,6 +1920,7 @@ function CurvePicture({ curve }: { curve: SpreadCurve }) {
   const points = Array.from({ length: heads }, (_, i) => `${x(i)},${y(t(i))}`).join(' ')
   return (
     <svg aria-hidden data-curve-picture={curve} viewBox="0 0 32 14" className="h-3.5 w-8">
+      {midline}
       <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   )

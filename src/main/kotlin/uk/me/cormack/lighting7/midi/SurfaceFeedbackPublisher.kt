@@ -174,6 +174,8 @@ class SurfaceFeedbackPublisher(
      * (`CueStackManager.stackIdForUuid`), kept for the show's life, so a rebuild reads no row twice.
      */
     private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
+    /** The fan encoders' gesture, for `SelectionFan` rings (venue-visit plan S12). Null disables that arm. */
+    private val selectionFan: FanRing? = null,
     private val types: () -> List<ControlSurfaceRegistry.DeviceTypeInfo> = { ControlSurfaceRegistry.allTypes },
     val touchState: TouchStateTracker = TouchStateTracker(),
     val takeover: SoftTakeoverStateMachine = SoftTakeoverStateMachine(),
@@ -303,6 +305,14 @@ class SurfaceFeedbackPublisher(
         val policy: BindingTakeoverPolicy,
     )
 
+    /** An encoder bound to the selection's fan on [axis] — [GrandMasterEntry]'s shape, its value in [SelectionFan]. */
+    private data class FanEntry(
+        val displayKey: String,
+        val control: ControlDescriptor,
+        val axis: FanAxis,
+        val policy: BindingTakeoverPolicy,
+    )
+
     /** Snapshot of every derived index produced by a single [rebuildIndex] pass. */
     private data class Index(
         val byChannel: Map<Long, List<ContinuousEntry>>,
@@ -338,6 +348,8 @@ class SurfaceFeedbackPublisher(
         val grandMasterEntries: List<GrandMasterEntry>,
         /** Stack effect-size faders: likewise. */
         val stackSizeEntries: List<StackSizeEntry>,
+        /** Fan encoders: likewise. */
+        val fanEntries: List<FanEntry> = emptyList(),
     ) {
         companion object {
             val EMPTY = Index(
@@ -378,6 +390,7 @@ class SurfaceFeedbackPublisher(
     private var grandMasterJob: Job? = null
     private var speedMasterJob: Job? = null
     private var stackSizeJob: Job? = null
+    private var fanJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
     private var publisherScope: CoroutineScope? = null
@@ -434,6 +447,12 @@ class SurfaceFeedbackPublisher(
         subscribeStackSizes(scope)
         subscribeLocate(scope)
         subscribeProgrammerLayers(scope)
+        selectionFan?.let { fan ->
+            // Machine-scoped like the selection it fans, so subscribed once rather than per show.
+            fanJob = fan.shown
+                .onEach { resyncFanEntries(index.get().fanEntries) }
+                .launchIn(scope)
+        }
     }
 
     /**
@@ -565,6 +584,8 @@ class SurfaceFeedbackPublisher(
         speedMasterJob = null
         stackSizeJob?.cancel()
         stackSizeJob = null
+        fanJob?.cancel()
+        fanJob = null
         locateJob?.cancel()
         locateJob = null
         layersJob?.cancel()
@@ -858,6 +879,7 @@ class SurfaceFeedbackPublisher(
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
         val grandMasterEntries = mutableListOf<GrandMasterEntry>()
         val stackSizeEntries = mutableListOf<StackSizeEntry>()
+        val fanEntries = mutableListOf<FanEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
         val recordRefs = RecordRefResolver(projectId)
@@ -894,6 +916,9 @@ class SurfaceFeedbackPublisher(
                             control = control,
                             policy = binding.takeoverPolicy ?: classDefault,
                         )
+                    }
+                    (binding.target as? BindingTarget.SelectionFan)?.let { fan ->
+                        fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
                     }
                     (binding.target as? BindingTarget.StackEffectSize)?.let { stack ->
                         stackSizeEntries += StackSizeEntry(
@@ -983,6 +1008,7 @@ class SurfaceFeedbackPublisher(
                 speedMasterEntries = speedMasterEntries,
                 grandMasterEntries = grandMasterEntries,
                 stackSizeEntries = stackSizeEntries,
+                fanEntries = fanEntries,
             )
         )
         // Seed takeover state so a PICKUP encoder knows where the tempo already sits before
@@ -990,6 +1016,7 @@ class SurfaceFeedbackPublisher(
         resyncSpeedMasterEntries(speedMasterEntries)
         resyncGrandMasterEntries(grandMasterEntries)
         resyncStackSizeEntries(stackSizeEntries)
+        resyncFanEntries(fanEntries)
     }
 
     private fun resolveStackUuid(stackUuid: String): Int? = try {
@@ -1063,6 +1090,7 @@ class SurfaceFeedbackPublisher(
         resyncStackSizeEntries(
             idx.stackSizeEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
+        resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
         val entries = idx.continuousByDisplay[displayKey] ?: return
         for (entry in entries) {
             if (entry.control.controlId != controlId) continue
@@ -1105,6 +1133,7 @@ class SurfaceFeedbackPublisher(
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
         resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
         resyncStackSizeEntries(idx.stackSizeEntries.filter { it.displayKey == displayKey })
+        resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
         for (entry in idx.ledsByDisplay[displayKey].orEmpty()) {
@@ -1342,6 +1371,16 @@ class SurfaceFeedbackPublisher(
         for (entry in entries) {
             val stackId = entry.stackId ?: continue
             val value7Bit = stackEffectSizeTo7Bit(sizes.of(stackId))
+            sendControlFeedback(entry.displayKey, entry.control, value7Bit)
+            takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
+        }
+    }
+
+    /** Push the fan's amount on each entry's axis onto its control — 64 at no fan — and record it for PICKUP. */
+    private fun resyncFanEntries(entries: List<FanEntry>) {
+        val fan = selectionFan ?: return
+        for (entry in entries) {
+            val value7Bit = SelectionFan.amountTo7Bit(fan.amountFor(entry.axis)).toUByte()
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

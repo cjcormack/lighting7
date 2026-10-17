@@ -120,6 +120,16 @@ class BindingTargetSerializationTest {
     }
 
     @Test
+    fun `SelectionFan round trips with its axis and is a continuous target`() {
+        val fan: BindingTarget = BindingTarget.SelectionFan(FanAxis.TILT)
+        val encoded = BindingTargetJson.encodeToString(fan)
+        assertTrue(encoded.contains("\"type\":\"selectionFan\""), encoded)
+        assertTrue(encoded.contains("\"axis\":\"TILT\""), encoded)
+        assertEquals(fan, BindingTargetJson.decodeFromString<BindingTarget>(encoded))
+        assertEquals(ControlKind.CONTINUOUS, targetControlKind(fan))
+    }
+
+    @Test
     fun `SetBank round trips`() {
         val target: BindingTarget = BindingTarget.SetBank(deviceTypeKey = "x-touch-compact-standard", bank = "layer-b")
         val encoded = BindingTargetJson.encodeToString(target)

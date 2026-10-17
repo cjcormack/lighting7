@@ -2902,6 +2902,12 @@ address a desk window by its **registry name**, `selectionNext` / `selectionPrev
 reach `DeskSelection.subselect` — see `docs/midi-surface-engineering.md` §"Windows and the
 sub-selection".
 
+**And the fan** (venue-visit plan S12): `selectionFan {axis: 'PAN' | 'TILT'}`, a continuous target
+the picker offers as *Selection — fan* with an *Axis* select, the library's Desk row as *Fan pan* and
+*Fan tilt*, and `describeTarget` as *Sel · fan pan*. The desk holds the fan's anchor and feeds the
+ring the amount, so nothing on this side computes one — see `docs/midi-surface-engineering.md`
+§"The selection fan".
+
 A button can also press a **record**: `applyLook` onto the Look's *own* fixtures, `pressTemplate`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
@@ -3339,6 +3345,36 @@ busk view. `useSheetKeyboard` is the kit's window listener and it is **capture-p
 `useTransportKeys` toggles the lock on `L` from a bubble listener whether or not the transport is
 enabled, and a name typed into a cue cell begins with a character — so the sheet claims the key
 first and the transport now stands aside from a key whose default is already prevented.
+
+**Fan is Spread's second mode on Position** (venue-visit plan S12, `venue-visit-design/Fan.dc.html`,
+decided with Chris 2026-10-17). A position plan draws *Ends · Fan* above the endpoints, and in Fan
+*Pan · Tilt · Both* beside it; *Ends* is From → To as before. "Fan" is a label inside Spread, not a
+second name for it: the editor kit retired Fan as a name for first → last, and this is the other
+gesture, the one other desks call fan — an **amount** about each head's own position. One amount row
+per chosen axis replaces From · To: a centred drag strip (`role="slider"`, −128…+127 centre steps,
+0 in the middle; a press anywhere drags from the value as it stands, ⇧ a quarter as far, a double
+click is 0, the arrows step it, ⇧ by 8) and a typed field. The amount is the outer heads' offset;
+Curve · Order · Parts · Over keep their meanings against the midline the curve pictures draw. The
+mode and axes are a per-tab store, `lib/spreadFan.ts`, for `spreadOver.ts`'s reason; the amounts are
+the form's. **The desk does the arithmetic**: the request is `mode: 'FAN'` and `fan: {pan?, tilt?}`
+with no endpoints (an axis not fanned is absent), and the desk reads where each head starts. **The
+panel holds the gesture's anchor**: the first send's answer carries `base`, each head's starting
+`pan,tilt`, and every later send carries it back, so a Live drag never fans a fan; until that answer
+is in, later sends wait for it rather than read heads it is moving. Each gesture is its own object
+(`FanGesture`): dropping the anchor starts a new one, and the old one still finishes — its first
+answer lands its anchor and sends the send that waited, so the amount a drag was let go on lands
+after the popover closes, and one that waited on a failed first send is tried in its place. An answer
+with no `base` (the mask kept Position out) is no anchor. A fan of 0 is not sent before one is set,
+so turning Fan on under Live writes nothing. The anchor and the amounts go when the selection or the
+plan's `fanScope` (a focused layer's or a cue's id) changes, the popover closes, the mode or property
+changes, or *Re-read* (on the read-out) is pressed. A `write: false` host starts from the row being
+edited: `useMarqueeSpreadPlans` gives the plan `fanBases` — the layer's draft-else-committed position
+(`lookPositionOf`) or the cue's `composedValue` per head — sent with the first request, and the
+read-out says *From the layer’s rows · 2 heads from the stage* for the heads the row lacked, and
+names any the desk held at the end of travel (`clamped`); the desk reads those heads from the stage,
+never from Local, which is another context's. The position cell's ***Spread…*** opens the rail's
+Spread tab in Fan at 0 (`FanSpreadSeed`, the claim's `spreadFan`), or row C's popover where the rail
+draws no tabs; see `PaletteBands` below.
 
 **The row keys are every sheet's, and they are the one half that listens in the bubble phase.**
 Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface passes `useSheet`
@@ -4143,7 +4179,15 @@ each was:
   would close the sheet with it — then the family's own tools in its `tools` slot: the position
   cell's ***Aim…*** (venue-visit plan S13, `stage3d/PositionAimTool.tsx`), `StageAimControls` in a
   popover over the cell batch's heads, refused with the reason off the rig, in Output, in a focused
-  layer (aim writes Local) and where no head annotates its pan and tilt in degrees. **Drawn only where a press has a door**: the container passes
+  layer (aim writes Local) and where no head annotates its pan and tilt in degrees; then its
+  ***Spread…*** (venue-visit plan S12, `cells/PositionSpreadTool.tsx`), which opens Spread on Position
+  in Fan at 0 and closes the cell's editor — no seed, since a fan starts where the heads are. The
+  opener is the list container's (`PositionFanContext`): the rail's Spread tab through the claim's
+  `spreadFan`, which answers false where the rail draws no tabs (overlay mode, push mode's narrow
+  arm), and then row C's popover, the colour hand-over's fallback. It is drawn only where that
+  context is provided, refused under two heads (a fan of one moves nothing), in Output and on a
+  focused palette layer, and live in a focused Look layer, where the fan lands in the layer's draft. At the popup's 288px both fold to their icons, their words the buttons'
+  names, and *Save as palette…* keeps its word: the colour footer's fold. **Drawn only where a press has a door**: the container passes
   `projectId` on the programmer alone, so the plain lists draw the editor bare; the cue editor's
   Values grid passes none either but its presses land in the cue (`PressCue`, below), so its cells
   draw both bands and no footer — *Save as palette…* records from the programmer, and *Aim…* writes

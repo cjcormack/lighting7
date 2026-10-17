@@ -686,6 +686,9 @@ export function SurfaceLibrary({
         actionChip("sel-odd", SUBSELECT_MODE_LABELS.ODD, { type: "selectionCells", mode: "ODD" }),
         actionChip("sel-even", SUBSELECT_MODE_LABELS.EVEN, { type: "selectionCells", mode: "EVEN" }),
         actionChip("sel-masters", "Masters", { type: "selectionCells", mode: "MASTERS" }),
+        // The fan (venue-visit plan S12): an encoder each, over the one desk selection.
+        actionChip("fan-pan", "Fan pan", { type: "selectionFan", axis: "PAN" }),
+        actionChip("fan-tilt", "Fan tilt", { type: "selectionFan", axis: "TILT" }),
       ],
     })
 

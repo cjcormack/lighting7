@@ -59,6 +59,7 @@ The implementation follows four separable concerns, mirroring the phase breakdow
   │    └─ SurfaceActions dispatch by BindingTarget variant:                  │
   │         ├─ FixtureProperty / GroupProperty → ProgrammerStore (L2)        │
   │         ├─ SelectionProperty → ProgrammerStore, every selected head      │
+  │         ├─ SelectionFan → SelectionFan.turn → the spread route's resolve │
   │         ├─ SelectTarget / ClearSelection → State.deskSelection           │
   │         ├─ LocateSelection → LocateManager.toggle, per selected target   │
   │         ├─ CueStackGo / Back / Pause → CueStackManager; FireCue → holds  │
@@ -141,9 +142,10 @@ All code lives under `src/main/kotlin/uk/me/cormack/lighting7/midi/`.
 
 | File | Purpose |
 |---|---|
-| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `GrandMasterFader`, `StackEffectSize(stackId, stackUuid?)`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
+| `BindingTarget.kt` | Sealed ADT of what a control drives: `FixtureProperty`, `GroupProperty` (each, like `SelectionProperty` and `EncoderBankSet`, with an optional `colourAxis` — `ColourAxis.kt`, null is hue), `CueStackGo` / `Back` / `Pause`, `FireCue` (each with a uuid beside the int), `FireTrigger(fixtureKey, trigger)` (a one-shot tube, needing the desk's arm), `Flash(target, max)`, `Blackout`, `GrandMasterToggle`, `GrandMasterFader`, `StackEffectSize(stackId, stackUuid?)`, `SetBank`, `SpeedMasterBpm` / `Tap`, the selection family `SelectionProperty`, `SelectionFan(axis)`, `SelectTarget`, `ClearSelection`, `LocateSelection`, and `Unknown` — the tolerant decode's placeholder, never written by a client. Serialized as JSON with `classDiscriminator = "type"` and `ignoreUnknownKeys = true`. Persisted as text in `DaoControlSurfaceBindings.targetPayload`. |
 | `ControlSurfaceBindingService.kt` | Binding CRUD + in-memory resolver cache keyed by `(projectId, deviceTypeKey, controlId, bank)`; exact-bank wins over global. Decodes **per row**: an undecodable payload becomes `BindingTarget.Unknown` (health `unknownTarget`, re-written verbatim) rather than failing the project. Fills `cueUuid` / `stackUuid` on create and update. Emits `BindingChange` events; broadcast via `surfaceBank.bindingsChanged`. |
 | `SelectionWrites.kt` | The pure fan-out behind `SelectionProperty`: one programmer write per selected head, a group's members tagged with `sourceGroup`, heads without the property skipped, an empty selection → no writes. |
+| `SelectionFan.kt` | The fan encoders' gesture over the desk selection (venue-visit plan S12): the anchor (each head's start, the rig order read once), the amount per axis, a turn read as a move from the value the ring was last shown, a new gesture's pickup at the centre, and `shown` / `amountFor` — the `FanRing` half the feedback publisher reads. |
 | `MidiLearnSessionManager.kt` | 30-second Learn sessions; captures the first matching physical input, holds the captured descriptor until the originating client commits or cancels. Scoped to the originating client via `ownedLearnSessions` so two `/surfaces` tabs don't cross-capture. |
 
 ### Inbound routing
@@ -367,6 +369,7 @@ The `ControlSurfaceBindingService` maintains an in-memory resolver cache rebuilt
 | `SpeedMasterBpm(masterUuid?, minBpm, maxBpm)` | Continuous | `SpeedMasterBank.setBpm` across the binding's window |
 | `SpeedMasterTap(masterUuid?)` | Button | `SpeedMasterBank.tap` |
 | `SelectionProperty(propertyName, colourAxis?)` | Continuous (press = full) | Programmer write (owner `surface`) on **every head in the desk selection** via `SelectionWrites`, on the binding's colour axis where the head's property is a colour; an empty selection drops the write with a debug log, never widened to "everything". Health `unknownProperty` when no patched fixture can take the property on a fader |
+| `SelectionFan(axis)` | Continuous | **Fan** the desk selection's positions on `PAN` or `TILT` (venue-visit plan S12) through the Spread panel's own resolve (`spreadIntoProgrammer`, `mode: FAN`, owner `surface`): each head at its own position plus its share of the amount, symmetric about the middle of the order. `midi/SelectionFan.kt` holds the gesture's **anchor** — where each head started, as the desk answered the first turn, and the rig order read once — so a turn never fans a fan and a detent costs no database read. It reads a turn as a **move** from the value the ring was last shown, two centre steps a 7-bit step. The anchor goes and the ring returns to the centre (64) when the selection changes, the show is rebuilt, or anything else has written a fanned head's position since the fan last did — judged at the next turn against Local as output arbitrates it, the axis properties and the sideband included, and that turn writes nothing, so the next starts from where the heads are. A new gesture **picks up at the centre**: an input more than `PICKUP_STEPS` (4) from 64 is ignored, so a detent sent before the device took the centred ring, or a touched motor fader still standing off it, cannot jump the heads. Fed back like the grand master (`FanEntry`, from `SelectionFan.shown`): 64 is no fan. An empty selection drops the turn. Health always `ok`. Not an encoder-bank property: the bank drives one head per strip, and a fan is one gesture over the selection |
 | `SelectTarget(target, mode)` | Button | `DeskSelection.toggle` (head-by-head, a group by its members) or `set(listOf(target))` for `REPLACE`; LED lit while the target's heads are all selected. A `TOGGLE` binding toggles on press **and**, if the button is still held at `SurfaceInputRouter.SELECT_HOLD_MS` (500 ms), fires a `REPLACE` as well — the fader-wing gesture, so the LED is immediate and a hold narrows the selection to that one target. A release always cancels the pending replacement, even if the binding changed or went dead meanwhile. A `REPLACE` binding acts on press and arms no hold |
 | `ClearSelection` | Button | `DeskSelection.clear()` |
 | `LocateSelection` | Button | `toggleLocate` (the `POST /locate/toggle` path) once per selected target: all located → all released, else the unlocated ones come up; LED lit while the selection is non-empty and every target is located |
@@ -580,6 +583,8 @@ Parallel coroutines collect from:
 - `GlobalScalerState.blackoutEnabled.combine(grandMasterEnabled)` → scaler LEDs
 - `GlobalScalerState.grandMasterLevel` → grand-master faders (per show, re-armed with the scaler)
 - `StackEffectSizes.state` → stack effect-size faders (per show, re-armed the same way)
+- `SelectionFan.shown` → fan controls (machine-scoped like the selection, subscribed once; stamped,
+  so an equal amount written again still re-feeds the rings)
 - `ActiveBankState.changes` → bank-button LEDs + trigger full resync for affected device
 - `ControlSurfaceBindingService.bindingChanges` → rebuild index + resync every device
 - `DeskSelection.targets` → rebuild index (selection entries' channel sets) + resync every device
@@ -648,7 +653,7 @@ spelling, a group it only partly covers is respelt as the members left behind. A
 group expands to itself, so a stale entry stays comparable rather than vanishing.
 
 The surface reaches it through three targets (`SelectionProperty`, `SelectTarget`,
-`ClearSelection`) plus `LocateSelection`, and — since the record variants — `PressTemplate` and
+`ClearSelection`) plus `LocateSelection` and `SelectionFan`, and — since the record variants — `PressTemplate` and
 `PressPad` too, and since the busk-further plan `SelectionNext` / `SelectionPrev` /
 `SelectionCells`, which rewrite the selection's targets over the rig order through
 `DeskSelection.subselect` (`docs/lighting-composition-model.md` §"The rig"); the router stays selection-blind — every arm calls a `SurfaceActions` method and
@@ -731,7 +736,7 @@ empty snapshot. `SurfaceSocket` sends the connect burst from the tracker's store
 | `ProgrammerStore` | any thread | lock-free `ConcurrentHashMap` slot stacks |
 | Cue stack dispatch | `GlobalScope` (fire-and-forget) | service's own coordination |
 
-The router thread never blocks on show services. Programmer store mutations are lock-free (the engine's publish serialises on its own lock). Cue stack operations and fire-cue dispatches land on `GlobalScope` so the router keeps draining MIDI events even during slow cue transitions.
+The router thread never blocks on show services. The one continuous target that does real work on it is `SelectionFan`: a turn runs the spread route's resolve synchronously under the fan's monitor, and reads the rig order — a database transaction — once per gesture, not once per detent. Programmer store mutations are lock-free (the engine's publish serialises on its own lock). Cue stack operations and fire-cue dispatches land on `GlobalScope` so the router keeps draining MIDI events even during slow cue transitions.
 
 ## State wiring
 

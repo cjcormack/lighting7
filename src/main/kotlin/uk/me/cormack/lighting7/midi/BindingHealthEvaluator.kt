@@ -178,6 +178,7 @@ object BindingHealthEvaluator {
         BindingTarget.SelectionNext -> AssignmentHealth.Ok
         BindingTarget.SelectionPrev -> AssignmentHealth.Ok
         is BindingTarget.SelectionCells -> AssignmentHealth.Ok
+        is BindingTarget.SelectionFan -> AssignmentHealth.Ok
         is BindingTarget.Unknown -> AssignmentHealth.UnknownTarget(target.targetType)
         is BindingTarget.SetBank -> {
             val profile = context.deviceTypes.firstOrNull { it.typeKey == target.deviceTypeKey }

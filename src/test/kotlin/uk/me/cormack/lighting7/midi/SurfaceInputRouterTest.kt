@@ -283,6 +283,18 @@ class SurfaceInputRouterTest {
     }
 
     @Test
+    fun `SelectionFan passes the encoder's value and its axis to the fan, and ignores a press`() {
+        val actions = RecordingActions()
+        val target = BindingTarget.SelectionFan(FanAxis.TILT)
+        val router = buildRouter(actions, listOf(binding(1, "enc-1", target), binding(2, "btn-3", target)))
+
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 70u))
+        router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
+
+        assertEquals(listOf<RecordedCall>(RecordedCall.WriteFan(FanAxis.TILT, 70u)), actions.calls.toList())
+    }
+
+    @Test
     fun `StackEffectSize passes the fader's value and its stack to the stack's size, and ignores a press`() {
         val actions = RecordingActions()
         val target = BindingTarget.StackEffectSize(stackId = 4, stackUuid = "00000000-0000-0000-0000-000000000004")
@@ -950,6 +962,7 @@ private class RecordingActions : SurfaceActions {
     override fun writeSelectionProperty(propertyName: String, midiValue7Bit: UByte, colourAxis: ColourAxis?) {
         calls += RecordedCall.WriteSelection(propertyName, midiValue7Bit, colourAxis)
     }
+    override fun writeSelectionFan(axis: FanAxis, midiValue7Bit: UByte) { calls += RecordedCall.WriteFan(axis, midiValue7Bit) }
     override fun selectTarget(target: CueTargetDto, mode: BindingTarget.SelectMode) {
         calls += RecordedCall.SelectTarget(target, mode)
     }
@@ -1010,6 +1023,7 @@ private class RecordingFeedbackHooks : SurfaceFeedbackHooks {
 }
 
 private sealed class RecordedCall {
+    data class WriteFan(val axis: FanAxis, val value: UByte) : RecordedCall()
     data class WriteFixture(val fixtureKey: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
     data class WriteGroup(val groupName: String, val prop: String, val value: UByte, val axis: ColourAxis? = null) : RecordedCall()
     data class FlashFixturePress(val fixtureKey: String, val prop: String, val max: UByte) : RecordedCall()

@@ -347,6 +347,11 @@ export function cueCellWriters(store: CueRowStoreValue, targetType: CueRowTarget
   }
 }
 
+/** A focused Look layer's position for one head, as the grid draws it: the draft, else the committed row. */
+export function lookPositionOf(store: ReturnType<typeof useLookRowStore>, targetKey: string): string | undefined {
+  return store?.draft.get(targetKey, 'position') ?? lookRowValueOf(store, targetKey, 'position')
+}
+
 /** A committed Look row value, in canonical string form, or undefined. */
 function lookRowValueOf(
   store: ReturnType<typeof useLookRowStore>,

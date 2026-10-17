@@ -17,6 +17,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 |---|---|---|
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-S12`](#fu-manual-venue-visit-s12) | real movers fan out and back in about their own positions from the programmer's Spread, the busk Spread tab and an X-Touch encoder — the middle head still, a group in its member order, Live never fanning a fan, a typed Look's rows the start of a fan into it | Venue visit S12, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S13`](#fu-manual-venue-visit-s13) | on the Plan the movers land where the operator clicks — downstage at head height and in the house above the seats — and *Aim…* in a position cell's popup aims the cell's heads at a typed point | Venue visit S13, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R1-7`](#fu-manual-venue-visit-r1-7) | Claude, over MCP on a real show, builds a stack that shares a cue with another stack — one cue, two numbered places, an edit showing in both — moves an entry with its number and anchor, and deletes a cue only after naming its pad and asking | Venue visit R1.7, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-7`](#fu-manual-venue-visit-r3-7) | the busk side sheets at the desk — each family tab (Level, Colour, Position, Beam) presses its palettes and starts its effects over the busk selection on the busk screen and the iPad, the Position tab's pad moves the selected heads, the strip's eight tabs fit the sheet's floor, and a split from the Effects tab on a running chase leaves no head jumping | Venue-visit R3.7, 2026-10-17 |
@@ -190,6 +191,42 @@ with no rig attached; a desk screen, the iPad's touch targets and a show running
 3. **End to end.** With the show running a cue, attach it at the installed version: the progress
    shows, the sheet closes on the show's home with *On <venue> vN*, and no channel moves. Then detach
    it again and attach at the older version: the sheet says it runs against that version, and it does.
+
+---
+
+## `FU-MANUAL-VENUE-VISIT-S12`
+
+**What it proves**: *fan in and fan out* — venue-visit S12: Spread's Fan mode moves each head from
+its own position by its share of an amount, symmetric about the middle of the order, from every door
+it has.
+
+**Why it is here**: the tests drive the desk's resolve on seeded movers and the panel on a stubbed
+desk; nothing has watched beams fan on a rig, felt the drag strip or turned a real encoder bound to
+it.
+
+**Test**, at the Commemoration Hall, with five movers focused on one spot downstage and lit:
+
+1. **The programmer.** Select the five movers' Position cells, open row C's *Spread*, choose *Fan*
+   and *Pan*, switch *Live* on and drag the strip right: the beams fan out about the spot, the middle
+   mover still, the outer two moving furthest. Drag back to the middle: they meet on the spot again.
+   Drag past the middle: the fan crosses. Close the popover and open it again: the amount reads 0, and
+   a drag fans from where the heads now are.
+2. **Both axes and a group.** Choose *Both*, set Pan 20 and Tilt 10 and Apply. Select the movers'
+   group alone and fan again: the fan runs in the group's member order as its sheet lists it, not rig
+   order.
+3. **Anchor.** With Live on, drag fast back and forth for several seconds, then let go at 0: every
+   mover is back on the spot, none walked off it. Move one mover from its Position cell, then press
+   *Re-read* and fan: the fan starts from the moved mover's new position.
+4. **The busk tab and the cell.** On the busk view's Spread tab fan the selection's tilt; then on the
+   programmer open a mover's Position cell, press its *Spread…*: the rail's Spread tab opens on
+   Position, in Fan, at 0.
+5. **A Look layer.** Focus a Look layer holding positions for three of the movers and fan them: the
+   read-out says how many came from the stage, the layer's draft takes the fanned values, and the
+   stage follows only as the Look does.
+6. **The encoder.** Bind an X-Touch encoder to *Selection — fan* on Pan (the library's *Fan pan*
+   chip). With the movers selected, turn it: they fan out and back with the ring, the ring's centre LED
+   at no fan. Select different movers: the ring returns to the centre, and the next turn fans the new
+   selection from where it is.
 
 ---
 

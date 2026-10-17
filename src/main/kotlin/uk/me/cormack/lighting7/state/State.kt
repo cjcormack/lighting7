@@ -26,6 +26,7 @@ import uk.me.cormack.lighting7.auth.DEFAULT_BCRYPT_COST
 import uk.me.cormack.lighting7.fx.CueTriggerManager
 import uk.me.cormack.lighting7.midi.ActiveBankState
 import uk.me.cormack.lighting7.midi.EncoderBankState
+import uk.me.cormack.lighting7.midi.SelectionFan
 import uk.me.cormack.lighting7.midi.BindingHealthEvaluator
 import uk.me.cormack.lighting7.midi.ControlSurfaceBindingService
 import uk.me.cormack.lighting7.midi.ControlSurfaceRegistry
@@ -731,6 +732,9 @@ class State(val config: ApplicationConfig) {
         DeskSelection(rigOrder = ::buskRigOrder) { runCatching { show.takeUnless { it.isClosing }?.fixtures }.getOrNull() }
     }
 
+    /** The fan encoders' gesture over [deskSelection] (venue-visit plan S12); runtime only, dropped with the show. */
+    val selectionFan: SelectionFan by lazy { SelectionFan(this) }
+
     /**
      * The effective rig order for `selection.subselect` and a spread's `LINEAR` order
      * (`state/BuskRigOrder.kt`), read fresh from the current project's rig tables at gesture time —
@@ -958,6 +962,7 @@ class State(val config: ApplicationConfig) {
             buskRefsProvider = ::buildBuskRefs,
             stackEffectSizesProvider = { show.cueStackManager.effectSizes },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
+            selectionFan = selectionFan,
             latencyTracker = midiLatencyTracker,
         )
     }

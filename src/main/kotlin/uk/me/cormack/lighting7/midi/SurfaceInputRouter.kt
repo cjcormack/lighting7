@@ -260,6 +260,7 @@ class SurfaceInputRouter(
             is BindingTarget.StackEffectSize -> actions.writeStackEffectSize(target.stackId, target.stackUuid, value7Bit)
             is BindingTarget.SelectionProperty ->
                 actions.writeSelectionProperty(target.propertyName, value7Bit, target.colourAxis)
+            is BindingTarget.SelectionFan -> actions.writeSelectionFan(target.axis, value7Bit)
             is BindingTarget.Strip -> logger.warn(
                 "Strip binding {} reached continuous dispatch — resolve should have derived it",
                 binding.id,
@@ -334,6 +335,10 @@ class SurfaceInputRouter(
             )
             is BindingTarget.StackEffectSize -> logger.debug(
                 "Ignoring button press on binding {} → stack effect size (continuous target)",
+                binding.id,
+            )
+            is BindingTarget.SelectionFan -> logger.debug(
+                "Ignoring button press on binding {} → selection fan (continuous target)",
                 binding.id,
             )
             is BindingTarget.Flash -> {

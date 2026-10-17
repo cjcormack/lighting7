@@ -161,6 +161,19 @@ export interface SelectionPropertyTarget {
   colourAxis?: ColourAxis | null
 }
 
+/** The axis a {@link SelectionFanTarget} encoder fans. */
+export type FanAxis = "PAN" | "TILT"
+
+/**
+ * **Fan** the selection's positions on one axis (venue-visit plan S12): a turn moves the fan's
+ * amount, two centre steps a 7-bit step, each selected head written at its own position plus its
+ * share. The desk holds where the heads started; the ring shows the amount, 64 its 0.
+ */
+export interface SelectionFanTarget {
+  type: "selectionFan"
+  axis: FanAxis
+}
+
 /** How a {@link SelectTargetTarget} press changes the desk selection. */
 export type SelectMode = "toggle" | "replace"
 
@@ -372,6 +385,7 @@ export type BindingTarget =
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
   | SelectionPropertyTarget
+  | SelectionFanTarget
   | SelectTargetTarget
   | ClearSelectionTarget
   | LocateSelectionTarget

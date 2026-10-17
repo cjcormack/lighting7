@@ -125,6 +125,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'fixtureProperty':
     case 'groupProperty':
     case 'selectionProperty':
+    case 'selectionFan':
     case 'speedMasterBpm':
     case 'grandMasterFader':
     case 'stackEffectSize':

@@ -28,10 +28,19 @@ import {
   targetFamilies,
   type WriteTarget,
 } from './rowModel'
-import { applyPlannedWrite, useCellWriters } from './useCellWriters'
+import { applyPlannedWrite, lookPositionOf, useCellWriters } from './useCellWriters'
 import type { ColumnKey } from './columns'
 import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { LocateTarget } from '../../store/locate'
+import type { SpreadBase } from '../../store/programmerOps'
+
+/** The rows' own positions, as a fan's starting points: each head the row holds a `pan,tilt` for. */
+function fanBasesFrom(heads: readonly LocateTarget[], valueOf: (key: string) => string | undefined): SpreadBase[] {
+  return heads.flatMap((head) => {
+    const value = valueOf(head.key)
+    return value != null && parseProgrammerValue(value)?.kind === 'position' ? [{ target: { type: 'fixture', key: head.key }, value }] : []
+  })
+}
 
 /** Columns a spread can drive: the template vocabulary's, plus Speed as raw bytes (D15). Gobo and Prism build no plan. */
 const SPREAD_COLUMNS: ColumnKey[] = ['dimmer', 'colour', 'position', 'zoom', 'focus', 'iris', 'strobe', 'speed']
@@ -237,12 +246,19 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         colourTemplates,
         send: (body) => spread({ ...body, projectId, fadeMs: getProgrammerFadeMs() }).unwrap(),
       }
+      // A fan there starts from the row being edited, not the stage (venue-visit plan S12).
       if (cueStore) {
         plan.write = false
         plan.onAnswer = landInCue
+        plan.fanBases = () => fanBasesFrom(each, (key) => cueStore.composedValue('fixture', key, 'position'))
+        plan.fanRowsLabel = `${cueStore.cueLabel}’s values`
+        plan.fanScope = `cue:${cueStore.cueId}`
       } else if (setLookValue) {
         plan.write = false
         plan.onAnswer = landInLayer
+        plan.fanBases = () => fanBasesFrom(each, (key) => lookPositionOf(layerStore, key))
+        plan.fanRowsLabel = 'the layer’s rows'
+        plan.fanScope = `layer:${layerStore.layerId}`
       }
       out.push(plan)
     }
@@ -283,7 +299,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       }
     }
     return out
-  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, cueStore, landInCue, writers])
+  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, layerStore, cueStore, landInCue, writers])
 
   const intent = plans.find((plan): plan is IntentSpreadPlan => plan.kind === 'intent')
   const labelLine: ReactNode =

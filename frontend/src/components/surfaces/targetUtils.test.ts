@@ -11,6 +11,11 @@ describe('describeTarget', () => {
       .toBe('Bank layer-b (xtc)')
   })
 
+  it('describes a fan as the selection’s, on its axis', () => {
+    expect(describeTarget({ type: 'selectionFan', axis: 'PAN' })).toBe('Sel · fan pan')
+    expect(describeTarget({ type: 'selectionFan', axis: 'TILT' })).toBe('Sel · fan tilt')
+  })
+
   it('describes a tempo binding with its configured range', () => {
     // The range is the part an operator needs to see: two bindings on the same master with
     // different windows behave very differently under the same finger.

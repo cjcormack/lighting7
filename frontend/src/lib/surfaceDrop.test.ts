@@ -289,6 +289,16 @@ describe('colour axes', () => {
   })
 })
 
+describe('a fan control (venue-visit plan S12)', () => {
+  it('is continuous, so its chip lands on a fader or an encoder and not a button', () => {
+    const target: BindingTarget = { type: 'selectionFan', axis: 'PAN' }
+    expect(targetControlKind(target)).toBe('continuous')
+    const chip: SurfaceChipDrag = { type: 'surface-chip', target, label: 'Fan pan', swatch: null }
+    expect(canLand(chip, { type: 'surface-control', controlId: 'fader-1', kinds: controlKinds(fader) })).toBe(true)
+    expect(canLand(chip, { type: 'surface-control', controlId: 'btn-25', kinds: controlKinds(button) })).toBe(false)
+  })
+})
+
 describe('a stack effect-size fader', () => {
   it('is continuous, so its chip lands on a fader and not a button (BindingControlKind.kt)', () => {
     const target: BindingTarget = { type: 'stackEffectSize', stackId: 3 }

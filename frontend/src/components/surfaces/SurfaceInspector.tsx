@@ -412,6 +412,7 @@ function LiveCard({
   const selection = useDeskSelection()
   const isSelectionTarget =
     resolved?.target.type === "selectionProperty" ||
+    resolved?.target.type === "selectionFan" ||
     resolved?.target.type === "selectTarget" ||
     resolved?.target.type === "locateSelection"
 

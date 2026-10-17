@@ -35,6 +35,8 @@ export type {
   SpeedMasterBpmTarget,
   SpeedMasterTapTarget,
   SelectionPropertyTarget,
+  SelectionFanTarget,
+  FanAxis,
   SelectTargetTarget,
   SelectMode,
   ClearSelectionTarget,
