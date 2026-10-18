@@ -24,7 +24,7 @@ export const FIXTURE_FILTER_PLACEHOLDER = 'Filter fixtures…'
  * The programmer's row B placeholder, at every width.
  *
  * An input's placeholder cannot switch by container query, and that row keeps its field from
- * 360px of row up (the chrome tidy-up), where `Filter fixtures…` would clip again exactly as
+ * 600px of row up (the chrome tidy-up), where `Filter fixtures…` would clip again exactly as
  * `PD-FILTER-PLACEHOLDER-CLIP` found it did at 600. One word fits behind the search icon at the
  * field's 132px floor, so the programmer says the one word and the hint says the rest. The two
  * plain list routes keep the long form: their field is capped at 340 on a row with only Lit and

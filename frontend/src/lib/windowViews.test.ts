@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  APPLIED_TABLE_OPTION,
   IMMERSIVE_OPTION,
   PAGE_FOLLOWS_OPTION,
+  PROGRAMMER_TABLE_OPTION,
   STAGE_SOURCE_OPTION,
   STAGE_VIEWPOINT_OPTION,
   STAGE_WORK_LIGHTS_OPTION,
@@ -14,13 +14,13 @@ import {
 } from './windowViews'
 
 /**
- * The nine views one window can put on another: the four live views in `ViewSwitcher` order, the
- * Stage view, the applied tables, then the three libraries. Matching is segment-aware, so the legacy `/program` and the
+ * The eight views one window can put on another: the four live views in `ViewSwitcher` order, the
+ * Stage view, then the three libraries. Matching is segment-aware, so the legacy `/program` and the
  * old `/fx` never answer for a view.
  */
 describe('WINDOW_VIEWS', () => {
-  it('is the four live views in ViewSwitcher order, then Stage, the applied tables, then Looks, Cues and Palettes', () => {
-    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'applied', 'looks', 'cues', 'templates'])
+  it('is the four live views in ViewSwitcher order, then Stage, then Looks, Cues and Palettes', () => {
+    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'cues', 'templates'])
   })
 
   it('names the Cues table by its route, a library: stored data, no options, no rig (cue model plan §3.7)', () => {
@@ -32,19 +32,17 @@ describe('WINDOW_VIEWS', () => {
     expect(windowViewOf('/projects/1/cue-stacks')).toBeNull()
   })
 
-  it('names the applied tables under the programmer — the longer segment wins — with their table as the one option (venue-visit plan S14)', () => {
-    expect(windowViewOf('/projects/1/programmer/applied')?.id).toBe('applied')
+  it('gives the Programmer its table beside immersive — Values, Stack, FX and Scenery (tables-colours plan D1)', () => {
+    const programmer = WINDOW_VIEWS.find((v) => v.id === 'programmer')!
     expect(windowViewOf('/projects/1/programmer')?.id).toBe('programmer')
-    expect(windowViewLabel('/projects/1/programmer/applied')).toBe('Applied')
-    const applied = WINDOW_VIEWS.find((v) => v.id === 'applied')!
-    expect(applied.needsRig).toBe(true)
-    expect(applied.options).toEqual([APPLIED_TABLE_OPTION])
-    expect(APPLIED_TABLE_OPTION).toEqual({
+    expect(programmer.needsRig).toBe(true)
+    expect(programmer.options).toEqual([PROGRAMMER_TABLE_OPTION, IMMERSIVE_OPTION])
+    expect(PROGRAMMER_TABLE_OPTION).toEqual({
       key: 'table',
       label: 'Table',
       kind: 'enum',
-      values: ['fx', 'looks', 'palettes'],
-      valueLabels: { fx: 'FX', looks: 'Looks', palettes: 'Palettes' },
+      values: ['values', 'stack', 'fx', 'scenery'],
+      valueLabels: { values: 'Values', stack: 'Stack', fx: 'FX', scenery: 'Scenery' },
     })
   })
 

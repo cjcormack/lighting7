@@ -8,12 +8,13 @@ import { SheetPage } from './SheetPage'
 /**
  * **Row B for a library** (library-sheets plan D2): the filter · the partition chips · a spacer ·
  * the create verb, on the list shell's 40px chrome row. The create verb leaves the page header for
- * it, as the patch list's *+ Patch* did.
+ * it, as the patch list's *+ Patch* did. A programmer table leads it with the table tabs.
  *
  * Every slot but the filter is optional: Speed Masters and Looks partition nothing and draw no chips
  * (D3), and a library read from another project has no create verb.
  */
 export function LibraryRow({
+  leading,
   filter,
   onFilterChange,
   filterLabel = 'Filter by name',
@@ -21,6 +22,8 @@ export function LibraryRow({
   create,
   className,
 }: {
+  /** Before the filter — the programmer's table tabs. */
+  leading?: ReactNode
   filter: string
   onFilterChange: (next: string) => void
   /** The field's accessible name and tooltip — what the filter matches. */
@@ -33,6 +36,7 @@ export function LibraryRow({
 }) {
   return (
     <SheetPage.Row className={className}>
+      {leading}
       <div className="relative min-w-0 max-w-[340px] flex-[999_1_0%]">
         <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input

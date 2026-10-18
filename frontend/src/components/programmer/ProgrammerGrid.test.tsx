@@ -26,8 +26,8 @@ vi.mock('@/components/fixtures-list/FixturesListContainer', () => ({
       <div>
         {renderToolbar({
           filter: <input data-testid="filter" placeholder={filterPlaceholder} />,
-          lit: <button type="button">Lit</button>,
-          columns: <button type="button">Columns</button>,
+          lit: <button type="button" data-testid="lit">Lit</button>,
+          columns: <button type="button" data-testid="columns">Columns</button>,
           selection: null,
           cells: [],
           cellEntryKey: false,
@@ -42,6 +42,9 @@ vi.mock('@/components/fixtures-list/FixturesListContainer', () => ({
   },
 }))
 vi.mock('./ProgrammerScopeBand', () => ({ ProgrammerScopeBand: () => <div data-testid="band" /> }))
+vi.mock('./ProgrammerTableTabs', () => ({
+  ProgrammerTableTabs: ({ compact }: { compact?: boolean }) => <div data-testid="tabs" data-compact={compact ? '' : undefined} />,
+}))
 vi.mock('./SelectionBar', () => ({ SelectionBar: () => null }))
 vi.mock('./LayerRowNotices', () => ({ LayerRowNotices: () => null }))
 vi.mock('./LookRowStore', () => ({ useLookRowStore: () => null }))
@@ -86,22 +89,33 @@ describe('ProgrammerGrid — row B', () => {
     expect(screen.getByRole('button', { name: /Groups/ })).toBeTruthy()
   })
 
-  it('hands the container the one-word placeholder, since the row keeps its field down to 360', () => {
+  it('hands the container the one-word placeholder, since the row keeps its field down to 600', () => {
     draw()
     expect(container.filterPlaceholder).toBe(FIXTURE_FILTER_PLACEHOLDER_SHORT)
     expect(FIXTURE_FILTER_PLACEHOLDER_SHORT).toBe('Filter…')
   })
 
-  it('keeps the field from 360 of row B and lets it take the slack before the spacer', () => {
+  it('keeps the field from 600 of row B and lets it take the slack before the spacer', () => {
     draw()
     const field = screen.getByTestId('filter').parentElement!
-    expect(field.className).toContain('@[360px]:flex')
+    expect(field.className).toContain('@[600px]:flex')
     expect(field.className).toContain('flex-[999_1_0%]')
     expect(field.className).toContain('max-w-[340px]')
     expect(field.className).not.toMatch(/(^|\s)flex-1(\s|$)/)
     const icon = screen.getByRole('button', { name: 'Filter fixtures' })
-    expect(icon.className).toContain('@[360px]:hidden')
+    expect(icon.className).toContain('@[600px]:hidden')
     expect(icon.className).not.toContain('h-7')
+  })
+
+  it('leads row B with the table tabs, and takes Lit and Columns’ words below 760 to make room for them (tables-colours plan D1)', () => {
+    const { container: root } = draw()
+    const row = root.querySelector('.border-b.px-3')!
+    const tabs = screen.getByTestId('tabs')
+    expect(row.contains(tabs)).toBe(true)
+    expect(tabs.compareDocumentPosition(screen.getByTestId('band')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(tabs).not.toHaveAttribute('data-compact')
+    expect(screen.getByTestId('lit').parentElement!.className).toContain('@max-[760px]:[&_.control-label]:hidden')
+    expect(screen.getByTestId('columns').parentElement!.className).toContain('@max-[760px]:[&_.control-label]:hidden')
   })
 
   it('is a 40px row with every control at the 32px tier', () => {

@@ -55,7 +55,7 @@ function open(effect: ActiveEffect) {
   render(
     <MemoryRouter initialEntries={['/projects/1/programmer']}>
       <Routes>
-        <Route path="/projects/:projectId/programmer" element={<NewTemplateFromEffectSheet open onOpenChange={() => {}} effect={effect} />} />
+        <Route path="/projects/:projectId/programmer" element={<NewTemplateFromEffectSheet projectId={1} open onOpenChange={() => {}} effect={effect} />} />
       </Routes>
     </MemoryRouter>,
   )

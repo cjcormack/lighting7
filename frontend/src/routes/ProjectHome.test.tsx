@@ -195,7 +195,7 @@ function sidebarRows(id: number): Row[] {
   )
   const rows: Row[] = []
   let section: string | null = null
-  // A child row (the Programmer's Applied) has no card: the home lists each section's top rows.
+  // A child row has no card: the home lists each section's top rows.
   for (const el of container.querySelectorAll('[data-nav-section], button:not([data-nav-child])')) {
     if (el.hasAttribute('data-nav-section')) section = el.getAttribute('data-nav-section')
     else if (section != null && section !== 'desk') rows.push([section, el.textContent ?? '', el.hasAttribute('data-off-rig')])
@@ -227,13 +227,6 @@ describe('the sections', () => {
     const sidebar = sidebarRows(id)
     expect(sidebar.length).toBeGreaterThan(10)
     expect(homeRows(id)).toEqual(sidebar)
-  })
-
-  it('leave off the Programmer’s Applied row, which the sidebar draws as its child (venue-visit plan S14)', () => {
-    isAdmin = true
-    drawHome(18)
-    expect(document.querySelector('[data-home-card="programmer"]')).not.toBeNull()
-    expect(document.querySelector('[data-home-card="programmer-applied"]')).toBeNull()
   })
 
   it('carry their counts: Show counts its stacks, Cues the project’s cues', () => {

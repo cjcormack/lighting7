@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router'
+import { useNavigate, useSearchParams } from 'react-router'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { labelUnlessCompact } from '@/lib/utils'
@@ -101,6 +101,7 @@ import type {
 } from './rowModel'
 import type { LocateTarget } from '../../store/locate'
 import type { Fixture } from '../../store/fixtures'
+import { useStableCallback } from '@/hooks/useStableCallback'
 import type { GroupSummary } from '../../api/groupsApi'
 
 const EMPTY_FIXTURES: Fixture[] = []
@@ -135,6 +136,12 @@ export interface FixturesListContainerProps {
    */
   showOwnership?: boolean
   /**
+   * The project the list is of — its route's. A prop rather than `useParams`, so the container holds
+   * no router subscription: the programmer keeps it mounted under its other tables, whose filters
+   * and tabs replace the address, and a route hook would re-render the whole grid on each.
+   */
+  projectId: number
+  /**
    * Consume the `?select=` deep-link param. Off for the programmer sheet: those links are
    * minted by Cmd+K for the fixtures/groups pair, and the forwarding branch here would bounce
    * a group select out of the programmer and onto /groups/list.
@@ -151,7 +158,7 @@ export interface FixturesListContainerProps {
   onColumnVisibilityChange?: (next: ColumnVisibility) => void
   /**
    * The filter field's placeholder. Defaults to the long form; the programmer passes
-   * `FIXTURE_FILTER_PLACEHOLDER_SHORT` because its row B keeps the field down to 360px of row and
+   * `FIXTURE_FILTER_PLACEHOLDER_SHORT` because its row B keeps the field down to 600px of row and
    * a placeholder cannot switch by container query (`lib/fixtureFilterCopy.ts`). The `title` and
    * `aria-label` carry the whole hint whichever is shown.
    */
@@ -271,6 +278,7 @@ export function FixturesListContainer({
   grouped,
   selectionScope,
   showOwnership = false,
+  projectId,
   enableDeepLinkSelect = true,
   respondToIncludeSelection = false,
   columnVisibility: controlledColumnVisibility,
@@ -280,11 +288,9 @@ export function FixturesListContainer({
   renderFooter,
   compactControls = false,
 }: FixturesListContainerProps) {
+  const rootRef = useRef<HTMLDivElement>(null)
   const { data: maybeFixtures, isLoading: fixturesLoading } = useVisibleFixtureListQuery()
   const { data: maybeGroups, isLoading: groupsLoading } = useGroupListQuery()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const { projectId } = useParams()
-  const navigate = useNavigate()
 
   // Module-level constants keep the fallback identity stable across renders.
   const fixtures = maybeFixtures ?? EMPTY_FIXTURES
@@ -1008,7 +1014,7 @@ export function FixturesListContainer({
     if (railClaim?.spreadFan()) return
     setSpreadSeed((prev) => ({ fan: true, key: (prev?.key ?? 0) + 1 }))
   }, [railClaim])
-  const routeProjectId = projectId != null ? Number(projectId) : undefined
+  const routeProjectId = Number.isFinite(projectId) ? projectId : undefined
 
   // The marquee has to be counted, or the editor's label line says "1 head" while the commit
   // writes six hundred. **One batch per marquee column**, keyed by column: a commit from a cell in
@@ -1076,74 +1082,18 @@ export function FixturesListContainer({
   )
   usePublishMarquee(marqueeSnapshot)
 
-  // ?select=fixture:<key> / ?select=group:<name> deep-link (Cmd+K lands here):
-  // select the row, expand its group if needed, scroll it into view, then
-  // consume the param so a refresh doesn't re-pin. Waits for BOTH queries (a
-  // group link must not be judged against a groups list that hasn't loaded),
-  // and clears the filters — including the persisted Lit toggle — because
-  // "navigate to this fixture" must show the fixture, not silently lose it to
-  // a filter left on last session.
-  const selectParam = searchParams.get('select')
-  useEffect(() => {
-    if (!enableDeepLinkSelect) return
-    if (!selectParam || fixturesLoading || groupsLoading) return
-    const parsed = parseSelectParam(selectParam)
-    // Group rows only exist on the grouped list. Links minted before the
-    // fixtures/groups list split pointed group selects at /fixtures/list, so
-    // forward them to /groups/list instead of silently consuming the param.
-    if (parsed?.kind === 'group' && !grouped) {
-      navigate(`/projects/${projectId}/groups/list?select=${encodeURIComponent(selectParam)}`, {
-        replace: true,
-      })
-      return
-    }
-    let rowId: RowId | null = null
-    if (parsed?.kind === 'group' && groups.some((g) => g.name === parsed.key)) {
-      rowId = groupRowId(parsed.key)
-    } else if (parsed?.kind === 'fixture') {
-      const fixture = fixtures.find((f) => f.key === parsed.key)
-      if (fixture) {
-        // Flat mode has no member rows — the fixture's own row is the target.
-        const parentGroup = grouped
-          ? fixture.groups.find((name) => groups.some((g) => g.name === name))
-          : undefined
-        if (parentGroup) {
-          setExpandedGroups((prev) => new Set(prev).add(parentGroup))
-          rowId = memberRowId(parentGroup, parsed.key)
-        } else {
-          rowId = fixtureRowId(parsed.key)
-        }
-      }
-    }
-    if (rowId) {
+  // A Cmd+K `?select=` link landing on this list: shown, selected and scrolled to — see
+  // `DeepLinkSelect`, which holds the router subscription so this container need not.
+  const landDeepLink = useCallback(
+    (rowId: RowId, expandGroup: string | null) => {
+      if (expandGroup != null) setExpandedGroups((prev) => new Set(prev).add(expandGroup))
       setFilter('')
       setOnlyLit(false)
       selectRow(rowId, 'replace')
       setScrollToRowId(rowId)
-    }
-    setSearchParams(
-      (prev) => {
-        prev.delete('select')
-        return prev
-      },
-      { replace: true },
-    )
-    // selectRow is referentially stable (a useCallback over the slice's own stable select and
-    // the cell clear); setOnlyLit/setSearchParams are stable setters;
-    // navigate/projectId only feed the group-forwarding branch, which leaves
-    // this route anyway; groups/fixtures/loading flags/grouped cover
-    // everything else read here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    selectParam,
-    fixtures,
-    groups,
-    fixturesLoading,
-    groupsLoading,
-    grouped,
-    enableDeepLinkSelect,
-    setSearchParams,
-  ])
+    },
+    [selectRow, setOnlyLit],
+  )
 
   // "Select Heads on Include": pick up the fixtures the last Include pulled in. Keyed on the
   // request's nonce, not its contents — including the same cue twice must re-select, since the
@@ -1252,6 +1202,8 @@ export function FixturesListContainer({
       // full-screen toggle — is not this grid's to seed an editor with. Same posture as
       // `useTransportKeys`; a bubble listener on `window` is the last to run, so the answer is here.
       if (e.defaultPrevented) return
+      // The programmer keeps this grid mounted under another table, `inert`: it hears no key there.
+      if (rootRef.current?.closest('[inert]') != null) return
       if (keyTargetIsGuarded(e.target)) return
 
       if (e.key === 'Escape') {
@@ -1493,7 +1445,17 @@ export function FixturesListContainer({
     // One arm: a flex column the grid fills, under a row or two of chrome and over a footer that
     // sits hard against the grid's last row (CLAUDE.md §List shell). There was a second arm — a
     // `space-y-3` rhythm for the two plain lists inside their `Card` — and the Card is gone.
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={rootRef} className="flex min-h-0 flex-1 flex-col">
+      {enableDeepLinkSelect && (
+        <DeepLinkSelect
+          projectId={projectId}
+          grouped={grouped}
+          fixtures={fixtures}
+          groups={groups}
+          loading={fixturesLoading || groupsLoading}
+          onLand={landDeepLink}
+        />
+      )}
       {renderToolbar ? (
         renderToolbar({
           filter: filterControl,
@@ -1568,7 +1530,7 @@ export function FixturesListContainer({
           // and Save, and the colour editor's leaves, need. All three routes are under
           // `/projects/:projectId`, but the two plain lists deliberately draw no palette strip
           // (§List shell) and Save records from the programmer, so their cells get none, like the strip.
-          projectId={selectionScope === 'programmer' && projectId != null ? Number(projectId) : undefined}
+          projectId={selectionScope === 'programmer' ? routeProjectId : undefined}
           onSpread={onSpreadFromColour}
           onShowInfo={handleShowInfo}
           scrollToRowId={scrollToRowId}
@@ -1663,3 +1625,71 @@ function sameSet(a: ReadonlySet<RowId>, b: ReadonlySet<RowId>): boolean {
   return true
 }
 
+
+/**
+ * The `?select=fixture:<key>` / `?select=group:<name>` deep link (Cmd+K lands here): select the row,
+ * expand its group if needed, scroll it into view, then consume the param so a refresh doesn't
+ * re-pin. Waits for both queries (a group link must not be judged against a groups list that hasn't
+ * loaded), and clears the filters — including the persisted Lit toggle — because "navigate to this
+ * fixture" must show the fixture, not silently lose it to a filter left on last session.
+ *
+ * A component rather than an effect of the container's so that only a list taking deep links — the
+ * two plain lists, never the programmer — subscribes to the address.
+ */
+function DeepLinkSelect({
+  projectId,
+  grouped,
+  fixtures,
+  groups,
+  loading,
+  onLand,
+}: {
+  projectId: number
+  grouped: boolean
+  fixtures: readonly Fixture[]
+  groups: readonly GroupSummary[]
+  loading: boolean
+  onLand: (rowId: RowId, expandGroup: string | null) => void
+}) {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const land = useStableCallback(onLand)
+  const selectParam = searchParams.get('select')
+  useEffect(() => {
+    if (!selectParam || loading) return
+    const parsed = parseSelectParam(selectParam)
+    // Group rows only exist on the grouped list. Links minted before the
+    // fixtures/groups list split pointed group selects at /fixtures/list, so
+    // forward them to /groups/list instead of silently consuming the param.
+    if (parsed?.kind === 'group' && !grouped) {
+      navigate(`/projects/${projectId}/groups/list?select=${encodeURIComponent(selectParam)}`, {
+        replace: true,
+      })
+      return
+    }
+    if (parsed?.kind === 'group' && groups.some((g) => g.name === parsed.key)) {
+      land(groupRowId(parsed.key), null)
+    } else if (parsed?.kind === 'fixture') {
+      const fixture = fixtures.find((f) => f.key === parsed.key)
+      if (fixture) {
+        // Flat mode has no member rows — the fixture's own row is the target.
+        const parentGroup = grouped
+          ? fixture.groups.find((name) => groups.some((g) => g.name === name))
+          : undefined
+        if (parentGroup) land(memberRowId(parentGroup, parsed.key), parentGroup)
+        else land(fixtureRowId(parsed.key), null)
+      }
+    }
+    setSearchParams(
+      (prev) => {
+        prev.delete('select')
+        return prev
+      },
+      { replace: true },
+    )
+    // `land` is stable; navigate/projectId only feed the group-forwarding branch, which leaves this
+    // route anyway; the rest is listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectParam, fixtures, groups, loading, grouped, setSearchParams])
+  return null
+}

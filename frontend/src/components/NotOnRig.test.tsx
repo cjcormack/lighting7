@@ -73,9 +73,9 @@ function renderAt(path: string, navId = 'program') {
           }
         />
         <Route
-          path="/projects/:projectId/programmer/applied"
+          path="/projects/:projectId/programmer"
           element={
-            <RigGate navId="programmer-applied" to={(p, { search }) => `/projects/${p}/programmer/applied${search}`}>
+            <RigGate navId="programmer" to={(p, { search }) => `/projects/${p}/programmer${search}`}>
               <div>the view</div>
             </RigGate>
           }
@@ -116,15 +116,15 @@ describe('RigGate', () => {
     expect(screen.getByRole('button', { name: 'Open Sleeping Beauty’s Stage' })).toBeTruthy()
   })
 
-  it('draws NotOnRig for the applied tables off the rig, keeping the table in the address (venue-visit plan S14)', () => {
-    renderAt('/projects/3/programmer/applied?table=looks')
+  it('draws NotOnRig for the programmer off the rig, keeping its table in the address (tables-colours plan D1)', () => {
+    renderAt('/projects/3/programmer?table=stack')
     expect(screen.queryByText('the view')).toBeNull()
     expect(document.querySelector('[data-not-on-rig] p')?.textContent).toBe(
-      "The applied tables list what the programmer holds on the rig that's live, and Sleeping Beauty is on it now.",
+      "The Programmer writes to the rig that's live, and Sleeping Beauty is on it now.",
     )
-    expect(screen.getByTestId('where').textContent).toBe('/projects/3/programmer/applied?table=looks')
-    fireEvent.click(screen.getByRole('button', { name: 'Open Sleeping Beauty’s Applied' }))
-    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer/applied?table=looks')
+    expect(screen.getByTestId('where').textContent).toBe('/projects/3/programmer?table=stack')
+    fireEvent.click(screen.getByRole('button', { name: 'Open Sleeping Beauty’s Programmer' }))
+    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer?table=stack')
   })
 
   it('never says active', () => {

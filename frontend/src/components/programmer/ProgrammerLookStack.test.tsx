@@ -131,7 +131,7 @@ describe('ProgrammerLookStack', () => {
     // The whole point of the index → `layerId` translation: `layerId`s are not positions and are
     // not dense, so acting on the array index would hit the wrong layer.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
 
     // Drawn top wins: the second row on screen is the FIRST layer in the array.
     fireEvent.click(screen.getAllByLabelText('Disable layer')[1])
@@ -147,7 +147,7 @@ describe('ProgrammerLookStack', () => {
     // headed "top wins" has to be the last one. Only the rendering reverses — the badge and every
     // index a handler receives are the array's — so the FX band's "layer 2" still names badge 2.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     const names = screen.getAllByTitle('Show this look in the grid').map((b) => b.textContent)
     expect(names).toEqual(['Slow Pulse', 'Warm Wash'])
     const badges = screen.getAllByLabelText('Reorder layer').map((h) => h.nextElementSibling?.textContent)
@@ -159,7 +159,7 @@ describe('ProgrammerLookStack', () => {
     // fighting a value a Look above sets. It goes through `patchLayer` like every other field —
     // deliberately *not* through the pads' `looks/{id}/toggle`, which owns add/remove only.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
 
     openSettings(1)
     fireEvent.click(screen.getByLabelText('Stomp lower layers'))
@@ -169,13 +169,13 @@ describe('ProgrammerLookStack', () => {
   it('says on the row itself that a layer is stomping', () => {
     // The one setting that changes what the rows *below* do, so it does not hide in the popover.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE, stomp: true })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     expect(screen.getAllByText('stomp')).toHaveLength(1)
   })
 
   it('commits an amount against the layer id', () => {
     mocks.layers = [layer({ layerId: 40, amount: 1 })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
 
     openSettings(0)
     const input = screen.getByLabelText('Layer amount (%)')
@@ -189,7 +189,7 @@ describe('ProgrammerLookStack', () => {
     // Same index→id translation the other ops get, and worth its own case because blend and mask
     // arrive from a popover rather than from the row: the second row must still reach layer 41.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 41, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
 
     openSettings(1)
     // Switched off, all four are ticked and nothing is written; unticking the rest narrows to Colour.
@@ -203,7 +203,7 @@ describe('ProgrammerLookStack', () => {
     // `programmer.patchLayer` treats a missing field as "don't touch". Sending `undefined` for a
     // cleared mask would make un-masking a silent no-op, so null has to travel as ''.
     mocks.layers = [layer({ layerId: 40, propertyMask: 'COLOUR' })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
 
     openSettings(0)
     fireEvent.click(await screen.findByRole('switch', { name: 'All attributes' }))
@@ -225,7 +225,7 @@ describe('ProgrammerLookStack', () => {
       }),
       layer({ layerId: 42, targets: [] }),
     ]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     expect(screen.getByText('Look · front-wash · 60% · [Colour] · ADD')).toBeInTheDocument()
     expect(screen.getByText('Look · 2 targets · 100% · 2 effects')).toHaveAttribute(
       'title',
@@ -245,7 +245,7 @@ describe('ProgrammerLookStack', () => {
     }
     render(
       <ProgrammerScopeProvider>
-        <ProgrammerLookStack />
+        <ProgrammerLookStack projectId={1} />
         <Probe />
       </ProgrammerScopeProvider>,
     )
@@ -262,18 +262,18 @@ describe('ProgrammerLookStack', () => {
     // dnd-kit's pointer sequence isn't drivable with fireEvent; what is pinned is that the dense
     // row kept the affordance the wide row has, once per row.
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     expect(screen.getAllByLabelText('Reorder layer')).toHaveLength(2)
   })
 
   it('offers an empty state rather than a blank pane', () => {
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     expect(screen.getByText(/No layers\./)).toBeInTheDocument()
   })
 
   it('detaches a layer by its id from the popover', () => {
     mocks.layers = [layer({ layerId: 40 }), layer({ layerId: 12, source: SLOW_PULSE })]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     openSettings(1)
     fireEvent.click(screen.getByRole('button', { name: 'Detach' }))
     expect(mocks.detachLayer).toHaveBeenCalledWith(40)
@@ -285,7 +285,7 @@ describe('ProgrammerLookStack', () => {
     const heads = (...keys: string[]) => keys.map((key) => ({ type: 'fixture', key, state: 'all' }))
     mocks.layers = [layer({ layerId: 40, source: RED })]
     mocks.applied = [{ source: RED, targets: heads('hex-1', 'hex-2', 'hex-3') }]
-    render(<ProgrammerLookStack />)
+    render(<ProgrammerLookStack projectId={1} />)
     // The first frame this window sees has nothing before it to compare with.
     expect(document.querySelector('[data-layer-note]')).toBeNull()
 

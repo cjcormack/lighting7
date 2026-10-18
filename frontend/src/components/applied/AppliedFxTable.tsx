@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pause, Pencil, Play, Plus, Square } from 'lucide-react'
+import { ArrowDownUp, Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pause, Pencil, Play, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -29,6 +29,7 @@ import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { useStopEffect, useToggleFxPause } from '@/components/fx/useEffectControls'
 import { NewTemplateFromEffectSheet } from '@/components/programmer/NewTemplateFromEffectSheet'
 import { homeOf, layerHomesOf, saveAsTemplateOffer } from '@/components/programmer/ProgrammerFxList'
+import { ProgrammerAddEffectSheet, useProgrammerAddEffect } from '@/components/programmer/ProgrammerAddEffect'
 import {
   FX_HOMES,
   FX_HOME_LABELS,
@@ -38,12 +39,12 @@ import {
   matchesFilter,
   parseFxHome,
   sortRows,
-  type AppliedView,
   type FxHome,
   type FxState,
   type SortValue,
-} from '@/lib/appliedTables'
-import { AppliedTableShell, type AppliedBand } from './AppliedTableShell'
+  type TableView,
+} from '@/lib/programmerTables'
+import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
 
 type FxColumnKey = 'property' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'size' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
 
@@ -61,7 +62,8 @@ interface FxSheetRow extends SheetRow {
 const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 'speed', 'size', 'runs', 'home', 'state'])
 
 /**
- * **Applied FX** (venue-visit plan S14): every running effect, one row per instance, exactly as the
+ * **The FX table** (venue-visit plan S14's Applied FX, the programmer's FX tab since tables-colours
+ * plan D1): every running effect, one row per instance, exactly as the
  * rail's FX band lists them (`ProgrammerFxList`) — an effect over a selection one row with its reach
  * from `lib/effectTargets.ts`, a split edit one row per head copy, a step effect naming its palettes
  * or slots.
@@ -74,6 +76,10 @@ const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 's
  * **A row's actions are the rail's** — *Edit…* (`FxEditorPopover`, so the split edit and pause come
  * with it), *Save as palette…* with the rail's gate, *Stop* — plus *Pause* / *Resume*, the editor's
  * own, lifted onto the row (`useToggleFxPause`). ⏎ and the name's double click open the editor.
+ *
+ * **`+ Effect` is the library row's create verb**, the rail footer's own (`useProgrammerAddEffect`):
+ * the bare effect press over the selection in Local, into the Look a focused Look layer applies,
+ * refused with the reason in Output and over a palette — so effects are made where they are listed.
  */
 export function AppliedFxTable({
   projectId,
@@ -81,8 +87,8 @@ export function AppliedFxTable({
   onViewChange,
 }: {
   projectId: number
-  view: AppliedView
-  onViewChange: (next: AppliedView) => void
+  view: TableView
+  onViewChange: (next: TableView) => void
 }) {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
@@ -181,9 +187,12 @@ export function AppliedFxTable({
             value={chip ?? 'ALL'}
             allCount={all.length}
             onChange={(next) => onViewChange({ ...view, chip: next === 'ALL' ? null : next })}
+            className={PROGRAMMER_CHIPS_CLASS}
             fold={400}
           />
         }
+        create={<AddEffectVerb projectId={projectId} />}
+        rule={<EffectsBelowRule />}
         noun="effect"
         rowName={(row) => row.effect.effectType}
         onOpenRow={openEditor}
@@ -219,6 +228,7 @@ export function AppliedFxTable({
         />
       )}
       <NewTemplateFromEffectSheet
+        projectId={projectId}
         open={saving != null}
         onOpenChange={(next) => !next && setSaving(null)}
         effect={saving}
@@ -603,5 +613,40 @@ function FxVerbs({
         onClick={() => selected.forEach((row) => controls.stop(row.effect))}
       />
     </>
+  )
+}
+
+/**
+ * *+ Effect*, with its own offer: the offer reads the desk selection, which moves at marquee rate,
+ * and only this button has to hear it.
+ */
+function AddEffectVerb({ projectId }: { projectId: number }) {
+  const offer = useProgrammerAddEffect()
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      {/* The title is on a span: a disabled button takes no hover, and the title says why it is shut. */}
+      <span className="flex shrink-0" title={offer.reason}>
+        <Button variant="outline" size="sm" aria-label="Add an effect" disabled={offer.disabled} onClick={() => setOpen(true)}>
+          <Plus className="size-3.5" />
+          <span className="hidden @[560px]:inline">Effect</span>
+        </Button>
+      </span>
+      <ProgrammerAddEffectSheet projectId={projectId} open={open} offer={offer} onClose={() => setOpen(false)} />
+    </>
+  )
+}
+
+/** *Values above beat effects below* — the rail's boundary band, whatever order the rows are in. */
+function EffectsBelowRule() {
+  return (
+    <div
+      data-effects-rule
+      className="flex h-7 shrink-0 items-center gap-1.5 border-b border-amber-800/70 bg-amber-950/40 px-3"
+      title="Effects run under the values: a value set above an effect beats it, whatever the layer order. Per-layer stomp is the way round it."
+    >
+      <ArrowDownUp className="size-3 shrink-0 text-amber-300" />
+      <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-amber-300">Values above beat effects below</span>
+    </div>
   )
 }

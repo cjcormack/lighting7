@@ -80,7 +80,7 @@ describe('ProgrammerFxList', () => {
       effect({ id: 1, targetKey: 'hex-1' }),
       effect({ id: 2, targetKey: 'hex-2' }),
     ]
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
 
     // Two identical effects on two heads read as two rows because the target is on the row.
     expect(screen.getAllByText('sinewave')).toHaveLength(2)
@@ -98,14 +98,14 @@ describe('ProgrammerFxList', () => {
     mocks.effects = [
       effect({ programmerLayerId: 4, lookId: 1, sourceName: 'Warm Wash', programmerOwned: false }),
     ]
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
     expect(screen.getByText('in Warm Wash')).toBeInTheDocument()
     expect(screen.getByText('layer 1')).toBeInTheDocument()
   })
 
   it('marks a group target as one', () => {
     mocks.effects = [effect({ targetKey: 'Front wash', isGroupTarget: true })]
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
     expect(screen.getByTitle('Group Front wash')).toBeInTheDocument()
   })
 
@@ -116,12 +116,12 @@ describe('ProgrammerFxList', () => {
     ]
     // A fresh mount each time: the list is memoised, and the mocked read is not a store a rerender
     // would wake.
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
     expect(document.querySelector('[data-held-blind]')).toBeNull()
     cleanup()
 
     mocks.blind = true
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
     const held = [...document.querySelectorAll('[data-held-blind]')]
     expect(held).toHaveLength(1)
     expect(held[0].textContent).toBe('held · Blind')
@@ -131,7 +131,7 @@ describe('ProgrammerFxList', () => {
 
   it('says when a row is paused', () => {
     mocks.effects = [effect({ isRunning: false })]
-    render(<ProgrammerFxList />)
+    render(<ProgrammerFxList projectId={1} />)
     expect(screen.getByTitle('Paused')).toBeInTheDocument()
   })
 })

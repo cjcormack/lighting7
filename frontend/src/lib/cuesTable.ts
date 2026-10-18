@@ -1,5 +1,5 @@
 import type { Cue } from '@/api/cuesApi'
-import { matchesFilter, sortRows, type SortDir, type SortValue } from './appliedTables'
+import { matchesFilter, sortRows, type SortDir, type SortValue } from './programmerTables'
 
 /**
  * **The Cues table's model** (lighting7 cue model plan §3.7, D13): every cue once, read off the

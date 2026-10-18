@@ -181,7 +181,6 @@ export function ProgrammerSourceStrip({
   const { data: looks } = useLookListQuery({ projectId }, { skip: lookId == null })
 
   const placed = useMemo(() => includedCueEntry(target, stacks), [target, stacks])
-  const navigate = useNavigate()
   /**
    * *← Show* (show-cue-editing plan D16): back to the card of the entry this window Included from
    * the Show view, by `?entry=`, so a cue twice in one stack opens the right row. Only while that
@@ -319,22 +318,7 @@ export function ProgrammerSourceStrip({
           `aria-hidden`: the number and the location are in this sentence too, and without it they
           are announced twice. */}
       <span className="sr-only">{boxTitle}</span>
-      {backToShow != null && (
-        <Button
-          size="sm"
-          variant="outline"
-          // Its word only from `@[800px]`, the arrow alone below. **Not drawn below `@[600px]`**: the
-          // phone's arm is `Q4 · Update · Revert` to the pixel, and the arrow pushed Revert out of
-          // the box (measured at 393px); the switcher's Show pill is the way back there.
-          className="hidden h-7 shrink-0 gap-1 @[600px]:inline-flex @max-[800px]:w-7 @max-[800px]:px-0"
-          aria-label="Back to Show"
-          title="Back to this cue on the Show view"
-          onClick={() => navigate(backToShow)}
-        >
-          <ArrowLeft className="size-3.5" />
-          <span className="hidden @[800px]:inline">Show</span>
-        </Button>
-      )}
+      {backToShow != null && <BackToShowButton to={backToShow} />}
       <span
         aria-hidden="true"
         className={cn(ZONE_LABEL, 'hidden shrink-0 text-blue-300 @[600px]:inline')}
@@ -568,5 +552,29 @@ function Strip({
     >
       {children}
     </div>
+  )
+}
+
+/**
+ * *← Show*, its own component so only it reads the router: `useNavigate` re-renders on every
+ * location change, and the programmer's tables replace the address on every keystroke.
+ */
+function BackToShowButton({ to }: { to: string }) {
+  const navigate = useNavigate()
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      // Its word only from `@[800px]`, the arrow alone below. **Not drawn below `@[600px]`**: the
+      // phone's arm is `Q4 · Update · Revert` to the pixel, and the arrow pushed Revert out of
+      // the box (measured at 393px); the switcher's Show pill is the way back there.
+      className="hidden h-7 shrink-0 gap-1 @[600px]:inline-flex @max-[800px]:w-7 @max-[800px]:px-0"
+      aria-label="Back to Show"
+      title="Back to this cue on the Show view"
+      onClick={() => navigate(to)}
+    >
+      <ArrowLeft className="size-3.5" />
+      <span className="hidden @[800px]:inline">Show</span>
+    </Button>
   )
 }

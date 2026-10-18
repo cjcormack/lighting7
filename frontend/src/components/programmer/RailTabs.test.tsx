@@ -78,7 +78,7 @@ afterEach(() => {
 })
 
 function draw() {
-  return render(<ProgrammerWorkspace grid={<div />} rail={<ProgrammerRail />} />)
+  return render(<ProgrammerWorkspace grid={<div />} rail={<ProgrammerRail projectId={6} />} />)
 }
 
 const tab = (name: string) => screen.getByRole('tab', { name })

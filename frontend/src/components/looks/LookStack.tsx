@@ -824,12 +824,12 @@ export function LayerSettingsPopover({
   layer: LookStackLayer
   index: number
   handlers: LayerHandlers
-  /** Controlled by a host that opens it from elsewhere — an applied table's ⏎ or double click. */
+  /** Controlled by a host that opens it from elsewhere — the Stack table's row menu and bar. */
   open?: boolean
   onOpenChange?: (open: boolean) => void
   /**
    * Draw no button, only the point the popover opens at: a host with no room for the trigger opens
-   * it from a menu (an applied table's narrow row).
+   * it from a menu (the Stack table's narrow row).
    */
   anchorOnly?: boolean
 }) {

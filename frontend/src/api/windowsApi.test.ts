@@ -48,8 +48,8 @@ describe('the announce', () => {
         expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows'])
         continue
       }
-      // Stage and the applied tables are not live views: their options are their own, never immersive.
-      if (view.id === 'stage' || view.id === 'applied') continue
+      // Stage is not a live view: its options are its own, never immersive.
+      if (view.id === 'stage') continue
       // Six keys and never a seventh: immersive rides inside viewOptions, not beside it.
       expect(Object.keys(frame), view.id).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
       expect((frame.viewOptions as Record<string, string>).immersive, view.id).toBe('on')
@@ -60,10 +60,11 @@ describe('the announce', () => {
     expect(announcedViewOptions(windowViewOf('/projects/1/fixtures'), busk, 'on')).toBeUndefined()
   })
 
-  it('carries the applied tables’ table inside viewOptions and nothing else (venue-visit plan S14)', () => {
-    const options = announcedViewOptions(windowViewOf('/projects/1/programmer/applied'), {}, 'on', {}, { table: 'looks' })
-    expect(options).toEqual({ table: 'looks' })
-    const frame = announceFrame({ ...ME, view: '/projects/1/programmer/applied', viewOptions: options })
+  it('carries the Programmer’s table inside viewOptions beside immersive (tables-colours plan D1)', () => {
+    const options = announcedViewOptions(windowViewOf('/projects/1/programmer'), {}, 'on', {}, { table: 'stack' })
+    expect(options).toEqual({ table: 'stack', immersive: 'on' })
+    expect(announcedViewOptions(windowViewOf('/projects/1/show'), {}, 'on', {}, { table: 'stack' })).toEqual({ immersive: 'on' })
+    const frame = announceFrame({ ...ME, view: '/projects/1/programmer', viewOptions: options })
     expect(Object.keys(frame)).toEqual(['type', 'windowId', 'name', 'view', 'fullscreen', 'follows', 'viewOptions'])
   })
 

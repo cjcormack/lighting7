@@ -94,7 +94,7 @@ afterEach(() => {
 
 function draw() {
   render(
-    <ProgrammerWorkspace grid={<div />} rail={<ProgrammerRail />} />,
+    <ProgrammerWorkspace grid={<div />} rail={<ProgrammerRail projectId={6} />} />,
   )
 }
 

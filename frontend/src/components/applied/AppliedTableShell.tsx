@@ -8,30 +8,36 @@ import { LibraryRow } from '@/components/sheet/LibraryRow'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import { useSheet } from '@/components/sheet/useSheet'
 import { useContainerBand } from '@/hooks/useContainerBand'
+import { ProgrammerTableTabs } from '@/components/programmer/ProgrammerTableTabs'
 import {
   nextSort,
   rememberScroll,
   rememberedScroll,
-  type AppliedTable,
-  type AppliedView,
-} from '@/lib/appliedTables'
+  type ProgrammerTable,
+  type TableView,
+} from '@/lib/programmerTables'
 
 /**
- * The widths the three tables fold at, widest first — the sheet's own width, so a folded sidebar
- * counts. Measured against the desk: 1440 with the sidebar open leaves the sheet 1200, the
- * 1180×820 iPad 940, a 768 tablet 528, a phone 375. Band 0 draws every column, band 1 merges the
+ * The widths the tables fold at, widest first — the sheet's own width, so a folded sidebar and the
+ * rail beside the programmer count. Band 0 draws every column, band 1 merges the
  * secondary ones, bands 2 and 3 lead with the name and what identifies a row and let the rest
  * scroll sideways under the sticky name column. Nothing is hidden.
  */
 export const APPLIED_BAND_FLOORS: readonly number[] = [1100, 860, 480, 0]
 export type AppliedBand = 0 | 1 | 2 | 3
 
+/**
+ * The partition chips' floor on a programmer table: the table tabs lead the row, so without it the
+ * filter takes the slack and the chips' folded select overruns the create verb.
+ */
+export const PROGRAMMER_CHIPS_CLASS = 'min-w-32'
+
 /** The read-only scope every applied table is: no column holds a cell, so no key edits one. */
 const NO_KEYS = { entry: false, clear: false }
 const NO_COPY = () => ({ setTitle: 'Nothing here is set in the table — use a row’s actions', clearTitle: 'Nothing here is cleared in the table — use a row’s actions' })
 
 export interface AppliedTableShellProps<Row extends SheetRow, C extends string> {
-  table: AppliedTable
+  table: Exclude<ProgrammerTable, 'values'>
   /** The rows, already filtered and sorted by the caller from [view]. */
   rows: readonly Row[]
   /** Every row before the filter — the footer's total and the empty state's question. */
@@ -41,11 +47,18 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   /** The keys a header press sorts by; the first column's is [firstSortKey]. */
   sortKeys: ReadonlySet<string>
   firstSortKey: string
-  view: AppliedView
-  onViewChange: (next: AppliedView) => void
+  view: TableView
+  onViewChange: (next: TableView) => void
   filterLabel: string
   /** The partition chips, where the table has some. */
   chips?: ReactNode
+  /** The library row's create verb — *+ Effect*, *+ Look or palette*. */
+  create?: ReactNode
+  /** A rule row under the selection bar, over the sheet's header. */
+  rule?: ReactNode
+  /** `SheetTable`'s row drag, where the table's order is one the operator can change. */
+  rowDrag?: SheetTableProps<Row, C>['rowDrag']
+  rowClass?: SheetTableProps<Row, C>['rowClass']
   /** What a row is called — `effect`, `look`, `palette`. */
   noun: string
   rowName: (row: Row) => string
@@ -60,20 +73,23 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   verbs: (selected: readonly Row[]) => ReactNode
   /** Drawn in place of the sheet while there is nothing applied at all. */
   emptyNote: string
+  /** The rows are still being read: the spinner, not [emptyNote]. */
+  loading?: boolean
   footer: ReactNode
 }
 
 /**
- * **The one shell the three applied tables share** (venue-visit plan S14): the list shell's library
- * row (filter · chips), the selection bar with the table's verbs, the sheet and the footer — the
- * library sheets' anatomy over the live programmer.
+ * **The one shell the programmer's Stack, FX and Scenery tables share** (venue-visit plan S14,
+ * tables-colours plan D1): the list shell's library row (the table tabs · filter · chips · create),
+ * the selection bar with the table's verbs, the sheet and the footer — the library sheets' anatomy
+ * over the live programmer.
  *
  * **Every column is a read-out.** What a row can change it changes through its actions, which are
  * the rail's own (`ProgrammerFxList`, `ProgrammerLookStack`) calling the rail's mutations, so a
- * later change to what a row can do (R3) moves the actions and never the table. The sheet still
+ * later change to what a row can do moves the actions and never the table. The sheet still
  * selects rows — a click, a drag down the name column, ⌘A, ↑ / ↓ — for the bar's verbs over several.
  *
- * Sort, filter and chip are the route's (`useAppliedView`), handed in as [view]; a header press is
+ * Sort, filter and chip are the page's (`ProgrammerTables`), handed in as [view]; a header press is
  * `nextSort`. Scroll is remembered per window and table here, through the sheet's `scroll`.
  */
 export function AppliedTableShell<Row extends SheetRow, C extends string>({
@@ -88,12 +104,17 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   onViewChange,
   filterLabel,
   chips,
+  create,
+  rule,
+  rowDrag,
+  rowClass,
   noun,
   rowName,
   onOpenRow,
   pencil = true,
   verbs,
   emptyNote,
+  loading = false,
   footer,
 }: AppliedTableShellProps<Row, C>) {
   const [measure, bandIndex] = useContainerBand(APPLIED_BAND_FLOORS)
@@ -135,7 +156,17 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   const plural = count === 1 ? noun : `${noun}s`
   return (
     <>
-      <LibraryRow filter={view.q} onFilterChange={setFilter} filterLabel={filterLabel} chips={chips} />
+      {/* The row's own `@container`: the tabs and the create verb fold their words by its width. */}
+      <div className="@container">
+        <LibraryRow
+          leading={<ProgrammerTableTabs />}
+          filter={view.q}
+          onFilterChange={setFilter}
+          filterLabel={filterLabel}
+          chips={chips}
+          create={create}
+        />
+      </div>
       <div className="@container">
         <SelectionBar
           rowLabel={count > 0 ? `${count} ${plural}` : null}
@@ -157,9 +188,12 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
           foldForStrip={false}
         />
       </div>
+      {rule}
       {/* The measured box is the sheet's column, so the band follows the room the sheet has. */}
       <div ref={measure} className="flex min-h-0 flex-1 flex-col" data-applied-band={band}>
-        {total === 0 ? (
+        {loading ? (
+          <SheetPage.Empty loading />
+        ) : total === 0 ? (
           <SheetPage.Empty>{emptyNote}</SheetPage.Empty>
         ) : rows.length === 0 ? (
           <SheetPage.Empty>No {noun}s match the filter.</SheetPage.Empty>
@@ -170,6 +204,8 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
             firstColumn={firstColumn}
             sort={sort}
             scroll={scroll}
+            rowDrag={rowDrag}
+            rowClass={rowClass}
           />
         )}
       </div>
