@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.plugins
 
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
@@ -226,28 +228,28 @@ private suspend fun reportTempoWrite(
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupSpeedMasterSubscriptions(scope: SocketScope) {
-    val bank = scope.state.show.speedMasterBank
-
     // Exactly one state frame on connect (the one-snapshot rule in
-    // docs/websocket-engineering.md); anything per-tick here would be a storm.
-    scope.sendSnapshot { send(buildSpeedMastersState(bank)) }
+    // docs/websocket-engineering.md), and one more for each show a switch brings in, whose bank is
+    // its own; anything per-tick here would be a storm.
+    scope.subscribeShow({ show -> flow { emit(buildSpeedMastersState(show.speedMasterBank)) } }) { scope.send(it) }
 
-    scope.subscribe(bank.changes) { change ->
-        // A tempo move invalidates the client's local beat timer: it is still free-running at
-        // the old rate, and the throttle below would leave it there for up to
-        // BEAT_FRAME_INTERVAL beats (~8s at 120 BPM, ~48s at the 20 BPM floor) — the numbers
-        // snap to the new tempo while the dot visibly does not. Arm this master's next beat
-        // frame, the same one-shot the client asks for by hand on `speedMasters.requestBeat`,
-        // so phase re-locks within one beat. A TAP burst re-arms an already-armed master,
-        // which the set collapses; the cost is at most one extra frame per beat while tapping.
-        //
-        // A null uuid is resolved the same way `speedMasters.requestBeat` resolves one, and for
-        // the same reason: null tags only the synthetic pre-load master 1, so a write that lands
-        // in the boot window would otherwise park a `null` that no post-load beat can ever match
-        // — the request stays armed for the life of the connection and the retune it was meant
-        // to answer waits out the throttle anyway.
-        scope.pendingBeatRequests.add(change.uuid ?: bank.master1Uuid())
-        scope.send(
+    scope.subscribeShow({ show ->
+        val bank = show.speedMasterBank
+        bank.changes.map { change ->
+            // A tempo move invalidates the client's local beat timer: it is still free-running at
+            // the old rate, and the throttle below would leave it there for up to
+            // BEAT_FRAME_INTERVAL beats (~8s at 120 BPM, ~48s at the 20 BPM floor) — the numbers
+            // snap to the new tempo while the dot visibly does not. Arm this master's next beat
+            // frame, the same one-shot the client asks for by hand on `speedMasters.requestBeat`,
+            // so phase re-locks within one beat. A TAP burst re-arms an already-armed master,
+            // which the set collapses; the cost is at most one extra frame per beat while tapping.
+            //
+            // A null uuid is resolved the same way `speedMasters.requestBeat` resolves one, and for
+            // the same reason: null tags only the synthetic pre-load master 1, so a write that lands
+            // in the boot window would otherwise park a `null` that no post-load beat can ever match
+            // — the request stays armed for the life of the connection and the retune it was meant
+            // to answer waits out the throttle anyway.
+            scope.pendingBeatRequests.add(change.uuid ?: bank.master1Uuid())
             SpeedMasterChangedOutMessage(
                 masterUuid = change.uuid?.toString(),
                 index = change.index,
@@ -255,23 +257,23 @@ fun setupSpeedMasterSubscriptions(scope: SocketScope) {
                 source = change.source.name,
                 timestampMs = change.timestampMs,
             )
-        )
-    }
+        }
+    }) { scope.send(it) }
 
-    // One subscription for the whole bank, not one per master: `bank.beats` is already
-    // tagged at emit time, so a master added or removed by a reload needs no re-binding
+    // One subscription for each show's bank, not one per master: `bank.beats` is already
+    // tagged at emit time, so a master added to or removed from the bank needs no re-binding
     // here. `remove` is the consume half of the one-shot request — it returns whether the
     // request was pending AND clears it, so the throttle resumes on the next beat. It runs
     // FIRST and unconditionally for exactly that reason: behind the interval test it would be
     // short-circuited by the one beat in sixteen that is *also* a throttle beat, leaving the
     // request armed by the very frame that satisfied it and releasing a redundant second frame
     // on the next beat — a one-in-sixteen event now that every tempo move arms a request.
-    scope.subscribe(
-        bank.beats.filter { beat ->
+    scope.subscribeShow({ show ->
+        show.speedMasterBank.beats.filter { beat ->
             val requested = scope.pendingBeatRequests.remove(beat.uuid)
             requested || beat.beatNumber % BEAT_FRAME_INTERVAL == 0L
         }
-    ) { beat ->
+    }) { beat ->
         scope.send(
             SpeedMasterBeatOutMessage(
                 masterUuid = beat.uuid?.toString(),

@@ -3,6 +3,8 @@ package uk.me.cormack.lighting7.plugins
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
@@ -756,39 +758,47 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
     // `programmer.layerState` and `provenanceState` can each be seen twice at connect. Harmless:
     // all three are idempotent, and the client already coalesces repeated provenance frames into
     // one debounced refetch.
-    scope.sendSnapshot {
-        send(ProgrammerHandler.stateSnapshot(state))
-        send(buildProvenanceStateMessage(
-            state.show.fxEngine.provenance.compute(),
-            programmerRevision = state.show.fxEngine.provenance.currentProgrammerRevision,
-        ))
-    }
+    //
+    // The four programmer families below are the live show's and follow it
+    // ([SocketScope.subscribeShow]), the snapshot included: the incoming show's revision count
+    // starts again, so the client may already hold the number it arrives with. The revision is
+    // read before the state, so any write the state misses publishes a higher one.
+    scope.subscribeShow({ show ->
+        flow<OutMessage> {
+            val revision = show.fxEngine.provenance.currentProgrammerRevision
+            emit(ProgrammerHandler.stateSnapshot(scope.state))
+            emit(buildProvenanceStateMessage(show.fxEngine.provenance.compute(), programmerRevision = revision))
+        }
+    }) { scope.send(it) }
 
     // StateFlow replays its current value, so a tab opened mid-show sees the live include
     // target immediately rather than only after the next Include.
-    scope.subscribe(scope.state.show.programmerStore.lastIncludedTargetFlow) { target ->
+    scope.subscribeShow({ it.programmerStore.lastIncludedTargetFlow }) { target ->
         scope.send(ProgrammerIncludeTargetOutMessage(includedTargetDto(scope.state, target)))
     }
     // The layer stack is shared state, so every tab gets every change — not only the tab that made
     // it, which is all the unicast reply from `handleProgrammer` covers. Without this, a mutation
     // that moved no value (a layer whose targets don't match its bound Look's rows asserts nothing)
     // pushed no `provenanceState` either, and other tabs kept a stale layer list indefinitely.
-    val skippedLayers = SkippedFrames("programmer.layerState")
-    scope.subscribe(scope.state.show.programmerStore.layersFlow) { change ->
-        skippedLayers.saw(change.seq)
-        val layers = change.layers
-        // Resolved from the emitted list rather than from the store, so the frame's `applied`
-        // describes the very stack its `layers` carry even if another mutation has landed since.
-        scope.send(ProgrammerLayerStateOutMessage(
-            layers.map { it.toDto() },
-            scope.state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
-        ))
-    }
-    val skippedProvenance = SkippedFrames("provenanceState")
-    scope.subscribe(scope.state.show.fxEngine.provenance.flow) { update ->
-        skippedProvenance.saw(update.seq)
-        scope.send(buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision))
-    }
+    scope.subscribeShow({ show ->
+        val skippedLayers = SkippedFrames("programmer.layerState")
+        show.programmerStore.layersFlow.map { change ->
+            skippedLayers.saw(change.seq)
+            // Resolved from the emitted list rather than from the store, so the frame's `applied`
+            // describes the very stack its `layers` carry even if another mutation has landed since.
+            ProgrammerLayerStateOutMessage(
+                change.layers.map { it.toDto() },
+                show.programmerLayerStack.appliedState(change.layers).map { it.toDto() },
+            )
+        }
+    }) { scope.send(it) }
+    scope.subscribeShow({ show ->
+        val skippedProvenance = SkippedFrames("provenanceState")
+        show.fxEngine.provenance.flow.map { update ->
+            skippedProvenance.saw(update.seq)
+            buildProvenanceStateMessage(update.entries, programmerRevision = update.programmerRevision)
+        }
+    }) { scope.send(it) }
     // The programmer's scenery: a StateFlow, so this is its connect snapshot as well as its broadcast.
     scope.subscribe(scope.state.programmerScenery.flow) { scope.send(it.toMessage()) }
 }

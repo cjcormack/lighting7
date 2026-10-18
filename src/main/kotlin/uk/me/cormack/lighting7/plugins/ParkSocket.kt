@@ -154,7 +154,7 @@ private fun parkWriteRefusal(scope: SocketScope): ParkErrorOutMessage? {
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupParkSubscriptions(scope: SocketScope) {
-    scope.subscribe(scope.state.show.parkManager.parkStateFlow) { snapshot ->
+    scope.subscribeShow({ it.parkManager.parkStateFlow }) { snapshot ->
         scope.send(snapshot.toMessage())
     }
 }

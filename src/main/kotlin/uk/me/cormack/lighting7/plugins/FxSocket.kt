@@ -191,9 +191,7 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
 // ─── Subscriptions ──────────────────────────────────────────────────────
 
 fun setupFxSubscriptions(scope: SocketScope) {
-    val engine = scope.state.show.fxEngine
-
-    scope.subscribe(engine.fxStateFlow) { update ->
+    scope.subscribeShow({ it.fxEngine.fxStateFlow }) { update ->
         scope.send(FxStateOutMessage(activeEffects = update.effectStates.values.toList()))
     }
 }

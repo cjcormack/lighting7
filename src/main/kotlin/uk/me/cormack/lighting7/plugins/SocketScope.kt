@@ -1,14 +1,21 @@
 package uk.me.cormack.lighting7.plugins
 
 import io.ktor.server.websocket.*
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import uk.me.cormack.lighting7.auth.AuthenticatedUser
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.onSubscription
 import kotlinx.serialization.SerialName
 import uk.me.cormack.lighting7.perf.DeskMetrics
+import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.state.State
 import java.util.Collections
 import java.util.UUID
@@ -107,6 +114,30 @@ class SocketScope(
 
     fun <T> subscribe(flow: Flow<T>, onEach: suspend (T) -> Unit) {
         jobs += flow.onEach(onEach).launchIn(session)
+    }
+
+    /**
+     * [subscribe] to a flow the live [Show] owns, following it across project switches and reloads.
+     *
+     * Both replace the show and every flow on it, so a flow read off `state.show` once at connect
+     * goes quiet with the show it came from while the socket stays open. [flowOf] is asked again
+     * for each show; a snapshot flow given here is therefore re-sent on every switch.
+     *
+     * The first show is read in `onSubscription`, once this socket holds a slot on the replay-0
+     * change flow, so a switch landing during connect is either already in `state.show` or still to
+     * be delivered. The rendezvous buffer keeps [flowOf]'s flow waiting on the socket as a plain
+     * [subscribe] would, so a slow tab still skips frames upstream rather than queueing them here.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun <T> subscribeShow(flowOf: (Show) -> Flow<T>, onEach: suspend (T) -> Unit) {
+        val changes: SharedFlow<Any> = state.projectManager.projectChangedFlow
+        subscribe(
+            changes
+                .onSubscription { emit(Unit) }
+                .flatMapLatest { flowOf(state.show) }
+                .buffer(Channel.RENDEZVOUS),
+            onEach,
+        )
     }
 
     /**
