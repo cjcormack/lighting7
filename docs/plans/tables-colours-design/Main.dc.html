@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tables and colours spec</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.8 0.12 254)}
+.app{--fg:oklch(0.985 0 0);--card:oklch(0.21 0.006 285.885);--muted:oklch(0.274 0.006 286.033);--mfg:oklch(0.705 0.015 286.067);--bd:oklch(0.274 0.006 286.033);--pri:oklch(0.623 0.214 259.815);--bg:oklch(0.141 0.005 285.823);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box}
+.app *{box-sizing:border-box}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--mfg);white-space:nowrap}
+.cap{font-size:12px;line-height:1.5;color:var(--mfg);margin:0}
+.cap b{color:var(--fg);font-weight:600}
+.note{border-radius:8px;border:1px solid var(--bd);background:var(--card);padding:12px 14px}
+.note.key{border-color:oklch(0.45 0.16 300);background:oklch(0.27 0.09 302 / 0.25)}
+.note.warn{border-color:oklch(0.6 0.14 80);background:oklch(0.5 0.12 80 / 0.12)}
+.note p{margin:0;font-size:12px;line-height:1.5;color:var(--mfg)}
+.note p+p{margin-top:6px}
+.note b{color:var(--fg);font-weight:600}
+.box{border:1px solid var(--bd);border-radius:6px;background:var(--card);font-size:10px;color:var(--mfg);display:flex;align-items:center;justify-content:center;text-align:center;padding:4px}
+.box.pri{border-color:var(--pri);color:var(--fg);background:oklch(0.623 0.214 259.815 / 0.12)}
+.box.vio{border-color:oklch(0.606 0.25 292.717 / 0.7);color:var(--fg);background:oklch(0.606 0.25 292.717 / 0.12)}
+.box.dup{border-style:dashed;border-color:oklch(0.704 0.191 22.216);color:oklch(0.85 0.12 25);background:oklch(0.5 0.15 25 / 0.12)}
+table{border-collapse:collapse;width:100%;font-size:12px;line-height:1.45}
+th{text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--mfg);padding:7px 10px;border-bottom:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3)}
+td{padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:top;color:var(--mfg)}
+td b{color:var(--fg);font-weight:600}
+.tag{display:inline-flex;align-items:center;height:18px;padding:0 7px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;white-space:nowrap}
+.tag.go{background:oklch(0.5 0.15 150 / 0.3);color:#86efac}
+.tag.ask{background:oklch(0.5 0.12 80 / 0.3);color:oklch(0.9 0.15 85)}
+.n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:var(--muted);color:var(--fg);font-size:10px;font-weight:700;flex:0 0 auto}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--fg)}
+</style>
+</helmet>
+<div class="app" style="width: 1240px; min-height: 1720px; padding: 48px 56px; display: flex; flex-direction: column; gap: 28px">
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div class="lbl">Design · 18 Oct 2026 · calls decided</div>
+<h1 style="margin: 0; font-size: 30px; font-weight: 700; letter-spacing: -0.01em">The programmer is the table, and fixtures carry a colour</h1>
+<p class="cap" style="max-width: 900px; font-size: 13px">Two asks. <b>First</b>, retire the separate Applied FX / Looks / Palettes view, and fold the rail's stacked lists (the layer stack, the effects list and the <i>Per-fixture FX</i> sheet) into the programmer's own tables. <b>Second</b>, give fixtures and groups a user-set colour that every view can show, as ChamSys does. Both must keep today's responsiveness. Dark-only and drawn 1440 wide, like the earlier records. Phone and tablet layouts are a second pass, except where a fold changes the shape.</p>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div class="lbl">Today: one fact, three places</div>
+<div style="position: relative; height: 250px; border: 1px solid var(--bd); border-radius: 10px; padding: 12px; display: flex; gap: 10px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+<div class="box" style="height: 26px">Programmer · row A / B / C</div>
+<div class="box pri" style="flex: 1">Values grid<br>fixtures × properties</div>
+</div>
+<div style="width: 150px; display: flex; flex-direction: column; gap: 6px">
+<div class="box" style="height: 26px">Rail · Stack · Colour · Spread</div>
+<div class="box" style="height: 30px">Scenery band</div>
+<div class="box" style="height: 46px">Values: Local + layers</div>
+<div class="box vio" style="height: 40px">Effects list</div>
+<div class="box dup" style="flex: 1">Per-fixture FX<br>a second grid, 260–480 px wide</div>
+</div>
+<div style="width: 150px; display: flex; flex-direction: column; gap: 6px">
+<div class="box" style="height: 26px">/programmer/applied</div>
+<div class="box dup" style="flex: 1">Applied FX<br>Applied Looks<br>Applied Palettes<br>the rail's rows, full width</div>
+</div>
+</div>
+<p class="cap">An effect's row appears in the rail's Effects list, in Applied FX, and as a chip in <i>Per-fixture FX</i>, which builds its own copy of the grid's row model. Layers appear twice too. Each copy has its own width, its own folds and its own verbs, and the rail is the only place where a layer can be reordered.</p>
+</div>
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div class="lbl">Proposed: one sheet with tabs, plus an editor dock</div>
+<div style="position: relative; height: 250px; border: 1px solid var(--bd); border-radius: 10px; padding: 12px; display: flex; gap: 10px">
+<div style="flex: 1; display: flex; flex-direction: column; gap: 6px">
+<div class="box" style="height: 26px">Programmer · row A · <b style="color: var(--fg); margin-left: 4px">Values · Stack · FX · Scenery</b></div>
+<div style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<div class="box pri">Values<br>effects shown in the cells</div>
+<div class="box">Stack<br>Local + layers,<br>drag to reorder</div>
+<div class="box vio">FX<br>every running effect</div>
+<div class="box">Scenery<br>held pieces</div>
+</div>
+</div>
+<div style="width: 150px; display: flex; flex-direction: column; gap: 6px">
+<div class="box" style="height: 26px">Dock · Colour · Spread</div>
+<div class="box" style="flex: 1">Editors over the marquee.<br>No lists. Collapsible.</div>
+</div>
+</div>
+<p class="cap">Each fact appears <b>once</b>, at full width, in the sheet kit's virtualised table. The tabs carry counts, which also replace the collapsed rail's glyph counts. The right side keeps only the docked editors, which act on the marquee and list nothing.</p>
+</div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px">
+<div class="note key">
+<p><b>1 · The programmer is the table.</b> Row B starts with a tab segment: <b>Values · Stack · FX · Scenery</b>, each with a count. <b>Values</b> is today's grid. Effects are drawn <i>in its cells</i> as a wave chip with the division, struck through when held back, so <i>Per-fixture FX</i> is retired along with its second row model. <b>Stack</b> is the Applied Looks and Applied Palettes tables merged back into one table in stack order. It has a pinned <i>Your values</i> row, the layer rows, drag to reorder and chips to filter by kind. <b>FX</b> is Applied FX. <b>Scenery</b> is the rail's band as rows.</p>
+<p>The rail becomes a <b>dock</b> with only Colour and Spread. <code>/programmer/applied</code> redirects to <code>/programmer?table=</code>. The per-window table fact moves with it, so the Screens sheet's <i>Table</i> segment still points a second screen at FX.</p>
+</div>
+<div class="note key">
+<p><b>2 · Fixtures carry a colour.</b> A fixture and a group can each hold one colour from a fixed named set of ten, chosen to avoid the hues the desk already uses for meaning (blue for yours, amber for parked, violet for effects, sky for cues, teal for Looks). The colour marks <b>identity only</b>: the name cell, a busk tile's top band, a stage label, a DMX footprint, a surface's target label. It never fills a value cell or draws a ring, because those already say who owns a value.</p>
+<p>You set it in the patch list's new <b>Colour</b> column, in bulk with the marquee, or with <i>Colour from group</i>. <code>colour:red</code> filters any list, and <i>Select colour…</i> selects by colour. It is portable show data (sync v36), and on a venue it is the venue's, which a show can recolour.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div class="lbl">Responsiveness: the rules both proposals keep</div>
+<table>
+<tr><th style="width: 230px">Rule</th><th>Why, and what it costs</th></tr>
+<tr><td><b>The Values grid never unmounts on a tab switch</b></td><td>Unmounting clears the scoped selection (<code>useListSelection</code>), which is the rule <i>the grid must never remount on a scope change</i> already guards. The other tabs mount on demand over it, and the grid stays mounted but hidden. Hidden, the virtualiser measures nothing and draws no rows, and the programmer event that re-renders it today keeps doing so. There is no new cost.</td></tr>
+<tr><td><b>The FX lens reads one index</b></td><td>Effects are indexed once per <code>fxChanged</code>, keyed by head and property, using the rows the grid has already built. A cell reads its key through the selector store <code>usePropertyValues</code> already uses, with no subscription per row. <i>Per-fixture FX</i> built a second full row model and re-rendered on every programmer event. Removing it is a saving, not a cost.</td></tr>
+<tr><td><b>Stack and FX are the shipped tables</b></td><td><code>AppliedTableShell</code>, <code>SheetTable</code>, memo rows, overscan 8 and the 1100 / 860 / 480 width bands, all unchanged. Only the frame around them moves. The rail's two hand-built lists stop rendering, so a programmer event has fewer subscribers.</td></tr>
+<tr><td><b>A colour is static data, resolved once</b></td><td>Resolved when the row model is built, from the patch and group lists RTK Query already caches, and drawn as a CSS variable <code>--tag</code> on the row. A tag edit re-renders only the rows whose tag changed, and nothing reads it at frame rate. There is no new WebSocket frame: tags ride <code>patchListChanged</code> / <code>groupsState</code>.</td></tr>
+<tr><td><b>3D colours are written on change, never per frame</b></td><td>One colour per body instance, written through the same <code>setColorAt</code> path selection uses and only when a tag changes. The billboard glyphs gain one per-instance attribute alongside <code>aActive</code>. Housings are tinted only when the view option is on.</td></tr>
+<tr><td><b>Measured before it ships</b></td><td>There is no table performance test today. Each plan session records React Profiler commit times on the 1180×820 iPad frame and on the desk for a programmer event on a 120-fixture rig, a fader drag and a tab switch. A session that regresses any of them does not merge.</td></tr>
+</table>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div class="lbl">Calls · decided with Chris, 18 Oct 2026</div>
+<table>
+<tr><th style="width: 34px">#</th><th style="width: 330px">Call</th><th>Decision</th><th style="width: 80px"></th></tr>
+<tr><td><span class="n">1</span></td><td><b>Tabs only, or tabs plus a split?</b> You sometimes want Values and FX on screen together.</td><td>Tabs, with the in-cell FX lens covering the side-by-side case. A second screen covers the rest, since the Screens sheet already sets a window's table. A Values-over-FX bottom split, like the cue editor pane, is the fallback if the lens is not enough.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">2</span></td><td><b>Does the rail keep the Stack?</b></td><td>No. The dock is Colour · Spread. Reordering moves to the Stack table's drag handle (<code>rowDrag</code>), and the collapsed strip's counts move to the tab counts. On the phone, the bottom sheet hosts the dock and the tabs fold to glyph and count.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">3</span></td><td><b>Scenery: a tab or the Stack's top band?</b></td><td>A tab. It is addressed by element and never by the selection (D3), so it has nothing to share with a layer row's columns. <i>All scenery…</i> becomes the tab's filter chips (Set, Venue, Moving only).</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">4</span></td><td><b>Looks and Palettes: one Stack table or two?</b></td><td>One. A programmer's layers are one ordered stack where top wins, and the Applied split by kind hid that order. A kind chip (All · Looks · Palettes) gives the split back as a filter.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">5</span></td><td><b>A fixed named set, or any hex?</b></td><td>A fixed set of ten. Names (<code>red</code>, <code>lime</code>, …) are what <code>colour:</code> filters and MCP read, each has a light and a dark value, and the set leaves out the reserved hues. Any hex would let someone tag a fixture Look-teal.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">6</span></td><td><b>Does a group's colour reach its members?</b></td><td>No inheritance. A head in three groups has no single answer. A group's colour marks the group's row and tile, and <i>Colour from group</i> copies it onto members explicitly.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">7</span></td><td><b>A colour on a venue's fixture</b></td><td>The venue owns it, versioned and classed as drawing-only, so it never puts a show behind on output. A show recolours through a small show-owned table keyed by record uuid. That covers venue groups too, which a facet could not, and needs no base and no drift.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">8</span></td><td><b>Its name</b></td><td>"Colour", with the verb <i>Set colour</i>. <i>Highlight</i> is already the momentary dimmer-to-full verb on the selection bar, so it cannot also mean a tag.</td><td><span class="tag go">Decided</span></td></tr>
+<tr><td><span class="n">9</span></td><td><b>Stage view: tint the housings?</b></td><td>As a view option (<i>Bodies: Plain · By colour</i>), off by default. The label chip carries the colour either way, and a selected housing still turns primary blue.</td><td><span class="tag go">Decided</span></td></tr>
+</table>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1240,"height":1720}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>

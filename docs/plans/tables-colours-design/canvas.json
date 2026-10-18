@@ -1,0 +1,17 @@
+{
+  "v": 3,
+  "createdOnFiles": { "v": 1, "at": "2026-10-18T12:00:00Z" },
+  "title": "Unified tables & fixture colours",
+  "launch": { "view": "canvas" },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": { "x": 0, "y": 0, "w": 1240, "h": 1720, "title": "Spec — the brief, the model, the calls" },
+    "Programmer.dc.html": { "x": 1320, "y": 0, "w": 1440, "h": 2560, "title": "1 · The programmer is the table" },
+    "Colours.dc.html": { "x": 2840, "y": 0, "w": 1440, "h": 2620, "title": "2 · Fixture colours" }
+  },
+  "order": ["Main.dc.html", "Programmer.dc.html", "Colours.dc.html"],
+  "notes": {
+    "title": { "x": 0, "y": -300, "text": "Programmer tables and fixture colours — a proposal", "kind": "title1", "maxW": 4280 }
+  },
+  "designSystems": []
+}
