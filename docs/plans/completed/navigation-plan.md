@@ -1,11 +1,12 @@
 # Navigation — find the show, switch the show, and see all of it
 
-> **Document status: AGREED, 2026-10-15.** Design session R5 of
+> **Document status: DONE — sessions 1–5 shipped 2026-10-16, each session's heading citing its
+> commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-15. Design session R5 of
 > [`venue-visit-plan.md`](venue-visit-plan.md), on project structure and navigation. The other half
 > of R5, re-attaching a show to a venue, is its own plan:
 > [`venue-attach-plan.md`](venue-attach-plan.md). The questions and their answers are in §10 and in
-> the design record, [`navigation-design/INDEX.md`](navigation-design/INDEX.md), beside the boards. A
-> one-page copy of both plans for human readers is
+> the design record, [`navigation-design/INDEX.md`](navigation-design/INDEX.md), beside the boards.
+> A one-page copy of both plans for human readers is
 > [`navigation-design/navigation.html`](navigation-design/navigation.html), with a live copy at
 > <https://claude.ai/artifact/56QW1wW5M8HcB7yXCzqbhX>. The checked-in file is the authority.
 >

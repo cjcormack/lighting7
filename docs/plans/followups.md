@@ -456,7 +456,7 @@ express it as separate instances.
 
 **One Width and one Softness across effects** · Trigger · effects plan session 1 (§10), 2026-10-15
 
-Every desk surveyed (`effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
+Every desk surveyed (`completed/effects-design/survey.md`) has a *width* (how much of the cycle is on) and a
 *softness* (how hard the edges are) that read the same on every waveform. Ours are each effect's own
 parameter under its own name — Pulse's `attackRatio` / `holdRatio`, Square Wave's `dutyCycle`, Strobe's
 `onRatio`, Colour Cycle's `fadeRatio` — and the editor labels them as such (*Attack*, *Duty*, *On*,

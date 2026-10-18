@@ -1,9 +1,10 @@
 # The cue model — one shared cue, stacks as ordered entries
 
-> **Document status: AGREED, 2026-10-14.** This is design session R1 of
-> [`venue-visit-plan.md`](venue-visit-plan.md), whose D1 it implements: one shared cue, stacks as
-> ordered membership, cues outside any stack, and delete as its own explicit operation. The
-> questions asked and their answers are in §10 and in the design record,
+> **Document status: DONE — sessions 1–7 shipped 2026-10-15 to 2026-10-17, each session's heading
+> citing its commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-14. This is design
+> session R1 of [`venue-visit-plan.md`](venue-visit-plan.md), whose D1 it implements: one shared
+> cue, stacks as ordered membership, cues outside any stack, and delete as its own explicit
+> operation. The questions asked and their answers are in §10 and in the design record,
 > [`cue-model-design/INDEX.md`](cue-model-design/INDEX.md). A one-page copy for human readers is
 > [`cue-model-design/cue-model.html`](cue-model-design/cue-model.html), with a live copy at
 > <https://claude.ai/artifact/396mjPfVFE8D6oi2Xh6EHH> (the checked-in file is the authority).
@@ -592,7 +593,8 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 - **Placing a copy in a stack** does what Duplicate's handler does: `placeCueInStack`, the holds
   restamped from `stackEntryPriorities`, `cueListChanged` and `cueStackListChanged`, and
   `announceCuePadsChanged` over the stack's cues, so a neighbour's relabelled auto number reaches its
-  pad (`FU-BUSK-PAD-STALE-NUMBER` lists the handlers that miss it).
+  pad. Since venue-visit S17 every placing handler does both through `announceEntriesPlaced`, which
+  also publishes a live stack's run state.
 - **Where the dialog opens** (§10, 22). *Copy from another show…* is a verb in the library row of the
   current project's Cues table, not a multi-select action: session 5's bar is `CueActions` over the
   shown project's cues, and the source cues are another project's. It opens a dialog that picks the
@@ -621,8 +623,9 @@ pads, slots and `FireCue` run loose from session 2 (D6).
   stays: Record CREATE's answer (`programmerSurface.kt`) and Update's preview labels
   (`programmerUpdate.kt`) take their stack from the caller and call it.
 - **Stale words.** `record_cue`'s description still says CREATE makes a cue "in a stack", though
-  `cueStackId` has been optional since session 4. `add_cue_to_stack` and `build_cue_stack` are two of
-  the handlers `FU-BUSK-PAD-STALE-NUMBER` lists as not announcing a relabelled pad.
+  `cueStackId` has been optional since session 4. `add_cue_to_stack` and `build_cue_stack` were two of
+  the handlers that did not announce a relabelled pad (venue-visit S17 closed
+  `FU-BUSK-PAD-STALE-NUMBER`).
 - **`include_into_programmer` names an entry**, so an AI include sets the target's `entryId` as the
   Show view's does.
 - **No MCP tool moves an entry.** Since R2 session 3 the UI's *Move to stack…* moves the entry
@@ -649,7 +652,7 @@ pads, slots and `FireCue` run loose from session 2 (D6).
 
 ## 8. Follow-ups to record
 
-In [`followups.md`](followups.md), when the session that creates them lands:
+In [`followups.md`](../followups.md), when the session that creates them lands:
 
 - `FU-SYNC-ORDINAL-DOUBLE` narrowed to the other tables (session 3).
 - `FU-CUE-BINDING-SWEEP`: whether a forced cue delete should remove `FireCue` bindings rather than

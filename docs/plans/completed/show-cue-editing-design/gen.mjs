@@ -1,5 +1,5 @@
 // Generates the show-cue-editing boards. Each board is one dark artboard that renders standalone;
-// `node gen.mjs` rewrites all four. The vocabulary is the busk-chrome boards' (../busk-chrome-design/),
+// `node gen.mjs` rewrites all four. The vocabulary is the busk-chrome boards' (../../busk-chrome-design/),
 // restated here rather than read, so a change there cannot move these.
 import { writeFileSync } from 'node:fs'
 

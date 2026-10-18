@@ -533,7 +533,8 @@ Everything that did not come across is in `unresolved`, each problem with the re
 (`cue 'Storm'`, `Look 'Night'`). **Prompt-book anchors are never copied**: an anchor is an entry's,
 and a copy is placed afresh. `POST /cues/copy-from` places each copy in the order of `cueIds`,
 unnumbered, so it takes the next auto number — after the `after` entry, else at the end of the
-stack — or leaves it loose, and restamps the stack's holds and announces its pads as Duplicate does.
+stack — or leaves it loose, and restamps the stack's holds, publishes a live stack's next and announces its
+pads as Duplicate does.
 A `dryRun` is the same run rolled back. Any project can be the source (D18); the target is the
 current project, under the show-editing lock in the Cues table (frontend `CLAUDE.md` §"The Cues
 table"). The REST `POST /cues/{id}/copy`, which copied as-is into a stack it called "Unsorted", is

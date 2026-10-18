@@ -1,7 +1,8 @@
 # Attaching a show to a venue — Detach in reverse
 
-> **Document status: AGREED, 2026-10-15.** This is the re-attach half of design
-> session R5 of [`venue-visit-plan.md`](venue-visit-plan.md). Its navigation half is
+> **Document status: DONE — sessions 1–3 shipped 2026-10-17, each session's heading citing its
+> commit; closed with the venue-visit plan at its K6.** Agreed 2026-10-15. This is the re-attach
+> half of design session R5 of [`venue-visit-plan.md`](venue-visit-plan.md). Its navigation half is
 > [`navigation-plan.md`](navigation-plan.md).
 >
 > - **Questions.** The questions asked and their answers are in §10 and in the shared design record,
@@ -11,7 +12,7 @@
 >   <https://claude.ai/artifact/56QW1wW5M8HcB7yXCzqbhX>. The checked-in file is the authority.
 >
 > This plan builds on the venue plan
-> ([`completed/venue-plan.md`](completed/venue-plan.md)) and changes one of its sessions: Detach
+> ([`venue-plan.md`](venue-plan.md)) and changes one of its sessions: Detach
 > (session 7) starts recording where a show came from. It does not reopen D9 ("no touring tool"),
 > and moving a show between venues stays `FU-VENUE-TOURING`.
 

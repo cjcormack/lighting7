@@ -853,7 +853,7 @@ Broadcast on stack CRUD operations. Frontend subscribes and invalidates `CueStac
 ```
 
 A stack's run state: what is live, what the next GO fires, and how far through a fade the desk
-is. **One frame per transition, not a per-tick stream** — the client animates the fade locally
+is. **One frame per change, not a per-tick stream** — the client animates the fade locally
 from `fadeElapsedMs` + `fadeDurationMs`, the way the session that pressed GO always did. The
 crossfade itself still ticks at 60 fps inside `FxEngine`; that never goes on the wire.
 

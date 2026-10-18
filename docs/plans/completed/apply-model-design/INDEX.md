@@ -6,7 +6,7 @@ seven mechanisms: the palette strip, the picker, busk pads, the add-layer sheet,
 side sheets and Include. Each felt like its own, and it was confusing. R3 asked for one model, a
 per-property popup that offers palettes for every family, how the mask, the selection and the layer
 relate, and which surfaces fold in and which stay as shortcuts. It started from
-[`../../lighting-composition-model.md`](../../lighting-composition-model.md), after venue-visit S1
+[`../../../lighting-composition-model.md`](../../../lighting-composition-model.md), after venue-visit S1
 (palettes reaching cells, `4a1a8fb`). S14 (the applied tables) had not landed, so the rail's rows stand
 in for them.
 
