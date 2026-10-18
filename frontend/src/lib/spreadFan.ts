@@ -14,8 +14,8 @@ export interface SpreadFanPrefs {
 
 /**
  * **The Spread panel's mode and fan axes as the operator last chose them** (venue-visit plan S12) —
- * `spreadOver.ts`'s fact and reason: the panel does not outlive the selection, its three hosts are
- * one panel, and a position marquee should open in the mode it was last left in. The amounts are
+ * `spreadOver.ts`'s fact and reason: the panel does not outlive the selection, its hosts are one
+ * panel, and a position marquee should open in the mode it was last left in. The amounts are
  * not kept here: a fan's amount means something only against the anchor it was set on, which goes
  * with the gesture.
  */
