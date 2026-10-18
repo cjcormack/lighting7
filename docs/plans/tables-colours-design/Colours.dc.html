@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Fixture colours</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.8 0.12 254)}
+.app{--fg:oklch(0.985 0 0);--card:oklch(0.21 0.006 285.885);--muted:oklch(0.274 0.006 286.033);--mfg:oklch(0.705 0.015 286.067);--bd:oklch(0.274 0.006 286.033);--pri:oklch(0.623 0.214 259.815);--bg:oklch(0.141 0.005 285.823);--page:oklch(0.17 0.005 285.9);--teal:oklch(0.704 0.14 182.503);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box}
+.app *{box-sizing:border-box}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--mfg);white-space:nowrap}
+.h2{font-size:18px;font-weight:700;margin:0}
+.note{border-radius:8px;border:1px solid var(--bd);background:var(--card);padding:10px 12px}
+.note p{margin:0;font-size:11.5px;line-height:1.5;color:var(--mfg)}
+.note p+p{margin-top:5px}
+.note b{color:var(--fg);font-weight:600}
+.note.key{border-color:oklch(0.45 0.16 300);background:oklch(0.27 0.09 302 / 0.25)}
+.frame{border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--page);display:flex;flex-direction:column;position:relative}
+.crow{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--bd);flex:0 0 auto}
+.crow.c{background:oklch(0.985 0 0 / 0.04)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3);font-size:12px;font-weight:500;white-space:nowrap;color:var(--fg);flex:0 0 auto}
+.btn.s{height:28px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--mfg)}
+.field{height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3);font-size:12px;color:var(--mfg);display:flex;align-items:center;gap:6px;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--bd);font-size:11.5px;color:var(--mfg);white-space:nowrap;flex:0 0 auto}
+.chip.on{border-color:var(--fg);color:var(--fg);background:oklch(0.985 0 0 / 0.06)}
+.hdr{height:30px;display:flex;border-bottom:1px solid var(--bd);background:var(--bg);flex:0 0 auto}
+.hdr span{padding:0 8px;display:flex;align-items:center;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--mfg);flex:0 0 auto;white-space:nowrap}
+.grow{height:36px;display:flex;align-items:center;border-bottom:1px solid var(--bd);font-size:13px;flex:0 0 auto;background:var(--bg)}
+.grow.sel{background:oklch(0.985 0 0 / 0.06);box-shadow:inset 3px 0 0 var(--fg)}
+.grow.sel .nmt{font-weight:600}
+.nm{padding:0 8px 0 12px;display:flex;align-items:center;gap:8px;height:100%;white-space:nowrap;overflow:hidden;flex:0 0 auto}
+.tg{width:10px;height:10px;border-radius:3px;flex:0 0 auto}
+.td{padding:0 8px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mfg);height:100%;flex:0 0 auto;white-space:nowrap;overflow:hidden}
+.td.fg{color:var(--fg)}
+.cellb{padding:2px 1px;height:100%;display:flex;flex:0 0 auto}
+.cellb > span{flex:1;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:4px;font-size:12px;color:var(--fg)}
+.cellb.mq > span{box-shadow:inset 0 0 0 1px var(--fg);background:oklch(0.985 0 0 / 0.08)}
+.cellb.open > span{box-shadow:inset 0 0 0 2px var(--pri)}
+.gb{display:inline-flex;align-items:center;gap:5px;height:20px;padding:0 7px;border-radius:999px;background:var(--muted);color:var(--fg);font-size:11px}
+.foot{height:22px;display:flex;align-items:center;gap:10px;padding:0 12px;border-top:1px solid var(--bd);font-size:10.5px;color:var(--mfg);flex:0 0 auto}
+.pop{position:absolute;border:1px solid var(--bd);border-radius:10px;background:var(--card);box-shadow:0 12px 40px rgba(0,0,0,0.6);padding:12px;display:flex;flex-direction:column;gap:10px}
+.swb{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--mfg)}
+.swb i{width:34px;height:34px;border-radius:8px;display:block}
+.swb.on i{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--fg)}
+.swb.on{color:var(--fg)}
+.big{display:flex;flex-direction:column;gap:6px;align-items:flex-start}
+.big .pair{display:flex;border-radius:8px;overflow:hidden;border:1px solid var(--bd)}
+.big .pair i{width:48px;height:40px;display:block}
+.big b{font-size:12px}
+.big span{font-size:10px;color:var(--mfg);font-family:ui-monospace,Menlo,monospace}
+.res{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--mfg)}
+.res i{width:14px;height:14px;border-radius:4px;display:block;flex:0 0 auto}
+.tile{width:150px;height:76px;border-radius:8px;border:1px solid var(--bd);background:var(--card);position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:center;padding:8px 10px 10px;gap:3px;flex:0 0 auto}
+.tile.sel{border-color:var(--pri);background:oklch(0.623 0.214 259.815 / 0.2)}
+.tile .top{position:absolute;left:0;right:0;top:0;height:4px}
+.tile .live{position:absolute;left:0;right:0;bottom:0;height:3px}
+.tile b{font-size:12.5px;font-weight:600}
+.tile span{font-size:10px;color:var(--mfg)}
+.slab{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;border:1px solid oklch(0.274 0.006 286.033 / 0.6);background:oklch(0.141 0.005 285.823 / 0.85);font-size:11px;color:var(--fg);position:absolute;white-space:nowrap}
+.slab.on{border-color:var(--pri);background:oklch(0.3 0.09 260 / 0.9)}
+.dmx{display:grid;grid-template-columns:repeat(16, minmax(0, 1fr));gap:2px}
+.dmx div{height:44px;border-radius:4px;background:var(--card);border:1px solid var(--bd);padding:4px 5px;display:flex;flex-direction:column;justify-content:space-between;font-size:9.5px;color:var(--mfg);overflow:hidden;white-space:nowrap}
+.dmx div b{font-size:11px;color:var(--fg);font-weight:600}
+.fdr{width:64px;display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto}
+.fdr .trk{width:8px;height:110px;border-radius:4px;background:var(--muted);position:relative}
+.fdr .cap{position:absolute;left:-12px;width:32px;height:16px;border-radius:3px;background:oklch(0.85 0 0)}
+.fdr .scr{width:64px;height:30px;border-radius:4px;background:#0b0b0d;border:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:9.5px;color:var(--fg);position:relative;overflow:hidden}
+.fdr .scr i{position:absolute;left:0;right:0;top:0;height:3px}
+table{border-collapse:collapse;width:100%;font-size:12px;line-height:1.45}
+th{text-align:left;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--mfg);padding:7px 10px;border-bottom:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3)}
+td{padding:8px 10px;border-bottom:1px solid var(--bd);vertical-align:top;color:var(--mfg)}
+td b{color:var(--fg);font-weight:600}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--fg)}
+.mk{display:flex;flex-direction:column;gap:6px;flex:1}
+.mk .r{height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);font-size:13px}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; min-height: 2620px; padding: 40px 32px; display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: flex; align-items: baseline; gap: 14px">
+<h1 style="margin: 0; font-size: 26px; font-weight: 700">2 · Fixture colours</h1>
+<span class="lbl">Desk · 1440 · dark · Tweaks: name mark</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">A · Ten named colours, clear of the ones that already mean something</h2></div>
+<div style="display: flex; gap: 24px; align-items: flex-start">
+<div class="frame" style="padding: 18px; gap: 16px; flex: 1">
+<div class="lbl">The set · dark and light values</div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 18px">
+<sc-for list="{{palette}}" as="p" hint-placeholder-count="10">
+<div class="big"><div class="pair"><i style="background: {{p.dark}}"></i><i style="background: {{p.light}}"></i></div><b>{{p.name}}</b><span>{{p.key}}</span></div>
+</sc-for>
+</div>
+<div style="border-top: 1px solid var(--bd); padding-top: 14px; display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Reserved: never offered as a tag</div>
+<div style="display: flex; flex-wrap: wrap; gap: 18px">
+<span class="res"><i style="background: var(--pri)"></i>Blue · yours</span>
+<span class="res"><i style="background: oklch(0.828 0.189 84.429)"></i>Amber · parked</span>
+<span class="res"><i style="background: oklch(0.606 0.25 292.717)"></i>Violet · effect</span>
+<span class="res"><i style="background: oklch(0.746 0.16 232.661)"></i>Sky · cue</span>
+<span class="res"><i style="background: var(--teal)"></i>Teal · Look, venue</span>
+</div>
+</div>
+</div>
+<div class="frame" style="padding: 18px; gap: 12px; width: 470px">
+<div class="lbl">Three marks for a name cell</div>
+<div style="display: flex; gap: 10px">
+<div class="mk"><span class="lbl">Swatch</span><div class="r"><i class="tg" style="background: #f87171"></i>Hex 1</div><div class="r"><i class="tg" style="background: #a3e635"></i>Spot 1</div></div>
+<div class="mk"><span class="lbl">Wash</span><div class="r" style="background: #f8717129">Hex 1</div><div class="r" style="background: #a3e63529">Spot 1</div></div>
+<div class="mk"><span class="lbl">Both · recommended</span><div class="r" style="background: #f8717129"><i class="tg" style="background: #f87171"></i>Hex 1</div><div class="r" style="background: #a3e63529"><i class="tg" style="background: #a3e635"></i>Spot 1</div></div>
+</div>
+<div class="note"><p><b>Both reads fastest.</b> The wash gives a block of red rows at a glance, as a ChamSys head window does, and the swatch keeps the colour readable on a selected row, where the selection wash sits over the tint. The left edge is not used, because selection and a cue's own row already draw there. The Tweaks panel switches the mark for the whole board.</p></div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="note key"><p><b>Identity, never state.</b> A colour marks <i>which</i> fixture: the name cell, a tile's top band, a stage label, a DMX footprint, a surface's scribble strip. It never fills a value cell or draws a ring, because those say who owns the value, and a red name must not look like a red value.</p></div>
+<div class="note"><p><b>Names, not hex.</b> The stored value is the key (<code>red</code>, <code>lime</code>, …). Each key has a dark and a light value in <code>index.css</code> (<code>--tag-red</code>, …), so the theme toggle works and <code>colour:red</code> means one thing in a filter, in ⌘K and to Claude.</p></div>
+<div class="note"><p><b>Cyan is the close one.</b> It sits between teal and sky in hue, but it is lighter than both and only ever marks a name, so it stays. If it reads as a cue in practice, it is the one to swap for magenta.</p></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">B · Setting it: the patch list's Colour column</h2><span class="lbl">a cell on the sheet kit, like Gel</span></div>
+<div class="frame">
+<div class="crow"><span style="font-size: 15px; font-weight: 700">Patch List</span><span style="flex: 1"></span><span class="btn">+ Patch</span></div>
+<div class="crow"><span class="chip on">All</span><span class="chip">U1 · 412 / 512</span><span class="chip">U2 · 96 / 512</span><span class="field" style="flex: 1 1 0; max-width: 360px">Filter… try colour:red</span><span style="flex: 1"></span></div>
+<div class="crow c">
+<span style="font-size: 12px; font-weight: 600">3 fixtures</span><span style="color: var(--mfg)">· Colour</span>
+<span class="btn s">Set</span><span class="btn s">Clear</span><span class="btn s">Colour from group</span>
+<span style="flex: 1"></span>
+<span class="btn s ghost">Locate</span><span class="btn s ghost">Highlight</span>
+</div>
+<div class="hdr">
+<span style="width: 200px; padding-left: 12px">Name</span><span style="width: 150px">Colour</span><span style="width: 220px">Type</span><span style="width: 110px">Address</span><span style="width: 220px">Groups</span><span style="width: 140px">Gel</span><span style="width: 120px">Source</span>
+</div>
+<sc-for list="{{patch}}" as="r" hint-placeholder-count="9">
+<div class="grow {{r.cls}}">
+<div class="nm" style="width: 200px; {{r.wash}}"><sc-if value="{{r.showSw}}" hint-placeholder-val="{{true}}"><i class="tg" style="background: {{r.hex}}"></i></sc-if><span class="nmt">{{r.name}}</span></div>
+<div class="cellb {{r.ccls}}" style="width: 150px"><span><sc-if value="{{r.hasTag}}" hint-placeholder-val="{{true}}"><i class="tg" style="background: {{r.hex}}; width: 14px; height: 14px; border-radius: 4px"></i></sc-if>{{r.tagName}}</span></div>
+<span class="td fg" style="width: 220px">{{r.type}}</span>
+<span class="td" style="width: 110px">{{r.addr}}</span>
+<span class="td" style="width: 220px"><span class="gb">{{r.group}}</span></span>
+<span class="td" style="width: 140px">{{r.gel}}</span>
+<span class="td" style="width: 120px">{{r.src}}</span>
+</div>
+</sc-for>
+<div style="height: 40px; background: var(--bg)"></div>
+<div class="foot"><span>9 patches · 3 selected</span></div>
+<div class="pop" style="left: 214px; top: 236px; width: 300px">
+<div style="font-size: 11px; color: var(--mfg)">Colour · 3 fixtures</div>
+<div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+<sc-for list="{{palette}}" as="p" hint-placeholder-count="10">
+<span class="swb {{p.on}}"><i style="background: {{p.dark}}"></i>{{p.name}}</span>
+</sc-for>
+</div>
+<div style="display: flex; gap: 6px; border-top: 1px solid var(--bd); padding-top: 10px"><span class="btn s">None</span><span class="btn s" style="flex: 1">From group · Front wash</span></div>
+<div style="font-size: 10.5px; color: var(--mfg)">Keys 1–9, 0 and ⌫ while the column's cells are selected.</div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="note key"><p><b>One column, every kit gesture.</b> Marquee down Colour, then <i>Set</i>, a double click, or keys 1–9 and 0 for the ten colours (⌫ clears). It writes through the patch route's bulk path, like Address and Gel, in a single request for the whole marquee.</p></div>
+<div class="note"><p><b>Colour from group</b> copies the group's colour onto each selected member that has none, or onto all of them with ⌥. It is the explicit form of the inheritance the spec declines.</p></div>
+<div class="note"><p><b>Venue fixtures</b> (Source: Venue) open the same popover. On a show, the choice is written as the show's recolour, the cell shows <i>yours</i> beside it, and <i>Take venue's</i> clears it, exactly like a facet chip but with no drift to answer.</p></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">C · Seeing it everywhere a fixture is drawn</h2></div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px">
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Programmer · Fixtures › List · Groups › List · cue editor</div>
+<div class="frame">
+<div class="hdr"><span style="width: 200px; padding-left: 12px">Name</span><span style="width: 150px">Dimmer</span><span style="width: 150px">Colour</span><span>Position</span></div>
+<sc-for list="{{prog}}" as="r" hint-placeholder-count="6">
+<div class="grow {{r.cls}}">
+<div class="nm" style="width: 200px; {{r.wash}}"><sc-if value="{{r.showSw}}" hint-placeholder-val="{{true}}"><i class="tg" style="background: {{r.hex}}"></i></sc-if><span class="nmt">{{r.name}}</span></div>
+<span class="td" style="width: 150px"><i style="display: block; width: 100px; height: 6px; border-radius: 3px; background: var(--muted); position: relative; overflow: hidden"><b style="position: absolute; left: 0; top: 0; bottom: 0; width: {{r.dim}}%; background: var(--pri)"></b></i>{{r.dim}}%</span>
+<span class="td" style="width: 150px"><i style="width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--bd); background: {{r.live}}"></i>{{r.liveName}}</span>
+<span class="td">{{r.pos}}</span>
+</div>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 11.5px; color: var(--mfg); line-height: 1.5">The tag colour sits in the name only. The Colour column is still the light's live output: <b style="color: var(--fg)">Hex 1</b> is tagged red and lit amber, and the two never mix.</p>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Busk rig tiles</div>
+<div class="frame" style="padding: 14px; gap: 10px">
+<div style="display: flex; gap: 8px; flex-wrap: wrap">
+<sc-for list="{{tiles}}" as="t" hint-placeholder-count="6">
+<div class="tile {{t.cls}}"><i class="top" style="background: {{t.hex}}"></i><b>{{t.name}}</b><span>{{t.sub}}</span><i class="live" style="background: {{t.live}}"></i></div>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 11.5px; color: var(--mfg); line-height: 1.5">A 4px band across the top in the tag colour. The 3px live-colour bar stays at the bottom, and selection still owns the border and fill, so a selected red tile reads selected first. A group tile takes the group's colour.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Stage view · labels, and housings as a view option</div>
+<div class="frame" style="height: 250px; background: radial-gradient(ellipse at 50% 120%, oklch(0.25 0.01 285) 0%, oklch(0.12 0.005 285) 70%)">
+<div style="position: absolute; left: 40px; right: 40px; top: 58px; height: 4px; background: oklch(0.35 0.005 285); border-radius: 2px"></div>
+<sc-for list="{{stage}}" as="s" hint-placeholder-count="5">
+<div style="position: absolute; left: {{s.x}}px; top: 50px; width: 22px; height: 26px; border-radius: 5px; background: {{s.housing}}; border: 1px solid oklch(0.4 0 0)"></div>
+<span class="slab {{s.cls}}" style="left: {{s.lx}}px; top: 90px"><i class="tg" style="background: {{s.hex}}"></i>{{s.name}}</span>
+</sc-for>
+<div style="position: absolute; right: 14px; bottom: 14px; display: flex; gap: 2px; border: 1px solid var(--bd); background: var(--card); border-radius: 8px; padding: 2px; font-size: 11px; font-weight: 600"><span style="padding: 4px 10px; color: var(--mfg)">Bodies: Plain</span><span style="padding: 4px 10px; border-radius: 6px; background: var(--muted)">By colour</span></div>
+<div style="position: absolute; left: 14px; bottom: 14px; font-size: 11px; color: var(--mfg); max-width: 330px; line-height: 1.5">Labels always carry the swatch. <i>By colour</i> tints the housings, written per instance on a tag change only. A selected body still turns primary blue.</div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Channels · DMX sheet footprints</div>
+<div class="frame" style="padding: 14px; gap: 10px">
+<div class="dmx">
+<sc-for list="{{dmx}}" as="d" hint-placeholder-count="16">
+<div style="background: {{d.bg}}; border-color: {{d.bd}}"><span>{{d.a}} {{d.attr}}</span><b>{{d.v}}</b></div>
+</sc-for>
+</div>
+<p style="margin: 0; font-size: 11.5px; color: var(--mfg); line-height: 1.5">The DMX sheet already tints a fixture's footprint as a run of cells. That run takes the tag colour, so a universe reads by colour, and an untagged fixture keeps today's neutral run. Ownership rings are unchanged.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Surfaces · a strip's target label</div>
+<div class="frame" style="padding: 14px; flex-direction: row; gap: 14px; align-items: flex-end">
+<sc-for list="{{faders}}" as="f" hint-placeholder-count="5">
+<div class="fdr"><div class="trk"><i class="cap" style="top: {{f.cap}}px"></i></div><div class="scr"><i style="background: {{f.hex}}"></i>{{f.name}}</div></div>
+</sc-for>
+<p style="margin: 0 0 0 10px; font-size: 11.5px; color: var(--mfg); line-height: 1.5; flex: 1">The Surfaces view's label under each control gets a top band. Driving a real scribble strip's backlight from the tag is a follow-up: the backend has no scribble colour today.</p>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px">
+<div class="lbl">Selecting and filtering by colour</div>
+<div class="frame" style="padding: 14px; gap: 10px">
+<div class="field" style="color: var(--fg)">⌘K · select red</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; background: var(--muted); font-size: 12.5px"><i class="tg" style="background: #f87171"></i>Select colour · Red<span style="margin-left: auto; color: var(--mfg); font-size: 11px">6 fixtures</span></div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; color: var(--mfg)"><i class="tg" style="background: #f87171"></i>Add to selection · Red<span style="margin-left: auto; font-size: 11px">⌥</span></div>
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; color: var(--mfg)"><i class="tg" style="background: #f87171"></i>Filter lists · colour:red</div>
+</div>
+<p style="margin: 0; font-size: 11.5px; color: var(--mfg); line-height: 1.5"><i>Select colour</i> writes the desk selection (<code>selection.set</code>), so every screen follows. The <code>colour:</code> token joins the fixture filter's grammar on every list.</p>
+</div>
+</div>
+
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">D · Where it lives, and what it costs</h2></div>
+<table>
+<tr><th style="width: 200px">Layer</th><th>What changes</th></tr>
+<tr><td><b>Schema</b></td><td><code>fixture_patches.colour</code> and <code>fixture_groups.colour</code>, both a nullable <code>varchar(16)</code> holding a key, like the prompt-book annotation's colour. They are additive and need no migration. A key the desk does not know reads as none.</td></tr>
+<tr><td><b>Sync</b></td><td><code>colour</code> on <code>FixturePatchJson</code> and <code>FixtureGroupJson</code>. <b>formatVersion 36</b>: an older reader would import the record without the colour and write it back, which is the degraded-record case the bump rule exists for. <code>RichProjectFixture</code> sets a non-default colour on both.</td></tr>
+<tr><td><b>Venue</b></td><td>A venue's patches and groups carry their own colour, published with the version. <code>VenueDiff</code> classes it as <b>drawing only</b>, so a show is never held for it. A show recolours through <code>show_colours (project, record_uuid, colour)</code>, synced as <code>showColours/</code>, laid over the version by <code>RigScope.effective</code> beside the facets. This works for groups too, which facets do not cover.</td></tr>
+<tr><td><b>REST · WS · MCP</b></td><td><code>colour</code> on <code>FixturePatchDto</code>, <code>PatchGroupDto</code> and the live <code>GroupSummary</code>. It is written through the patch PUT / bulk route and the group PUT. There is no new frame, because the existing list-changed invalidations carry it. <code>patch_fixtures</code> and <code>edit_groups</code> take <code>colour</code>, and <code>describe_rig</code> lists it, so Claude can say "the red fixtures".</td></tr>
+<tr><td><b>Render cost</b></td><td>Resolved into the row model once, then drawn as <code>--tag</code> on the row and <code>color-mix(in oklch, var(--tag) 16%, var(--background))</code> on the sticky name cell, which has to stay opaque. A colour edit re-renders only the rows whose key changed. The 3D bodies gain one per-instance colour, written on change. Nothing reads a tag at frame rate.</td></tr>
+</table>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"mark":{"editor":"enum","options":["both","swatch","wash"],"default":"both"},"$preview":{"width":1440,"height":2620}}'>
+class Component extends DCLogic {
+renderVals() {
+const mark = this.props.mark ?? 'both';
+const P = {
+  red: ['Red', '#f87171', '#dc2626'], orange: ['Orange', '#fb923c', '#ea580c'], yellow: ['Yellow', '#facc15', '#ca8a04'],
+  lime: ['Lime', '#a3e635', '#65a30d'], green: ['Green', '#4ade80', '#16a34a'], cyan: ['Cyan', '#67e8f9', '#0891b2'],
+  pink: ['Pink', '#f472b6', '#db2777'], brown: ['Brown', '#c08457', '#92400e'], white: ['White', '#e4e4e7', '#71717a'], grey: ['Grey', '#8b8b94', '#3f3f46'],
+};
+const palette = Object.keys(P).map((k) => ({ key: k, name: P[k][0], dark: P[k][1], light: P[k][2], on: k === 'red' ? 'on' : '' }));
+const hexOf = (k) => (k ? P[k][1] : 'transparent');
+const named = (r) => {
+  const has = !!r.tag;
+  return Object.assign({}, r, {
+    hex: hexOf(r.tag), hasTag: has, tagName: has ? P[r.tag][0] : '',
+    showSw: has && mark !== 'wash',
+    wash: has && mark !== 'swatch' ? 'background: ' + P[r.tag][1] + '29' : '',
+  });
+};
+const patch = [
+  { name: 'Hex 1', tag: 'red', type: 'Hex 12ch', addr: '1.001', group: 'Front wash', gel: '', src: 'This show', cls: 'sel', ccls: 'mq open' },
+  { name: 'Hex 2', tag: 'red', type: 'Hex 12ch', addr: '1.013', group: 'Front wash', gel: '', src: 'This show', cls: 'sel', ccls: 'mq' },
+  { name: 'Hex 3', tag: '', type: 'Hex 12ch', addr: '1.025', group: 'Front wash', gel: '', src: 'This show', cls: 'sel', ccls: 'mq' },
+  { name: 'Hex 4', tag: 'red', type: 'Hex 12ch', addr: '1.037', group: 'Front wash', gel: '', src: 'This show', cls: '', ccls: '' },
+  { name: 'Spot 1', tag: 'lime', type: 'Robe ColorSpot', addr: '1.101', group: 'Movers', gel: '', src: 'Venue', cls: '', ccls: '' },
+  { name: 'Spot 2', tag: 'lime', type: 'Robe ColorSpot', addr: '1.121', group: 'Movers', gel: '', src: 'Venue', cls: '', ccls: '' },
+  { name: 'FOH 1', tag: 'orange', type: 'Generic dimmer', addr: '1.201', group: 'FOH', gel: 'L201', src: 'Venue', cls: '', ccls: '' },
+  { name: 'FOH 2', tag: 'orange', type: 'Generic dimmer', addr: '1.202', group: 'FOH', gel: 'L201', src: 'Venue', cls: '', ccls: '' },
+  { name: 'Cyc LED', tag: 'cyan', type: 'Slender bar 27ch', addr: '2.001', group: 'Cyc', gel: '', src: 'This show', cls: '', ccls: '' },
+].map(named);
+const prog = [
+  { name: 'Front wash', tag: 'red', dim: 80, live: '#ffb070', liveName: 'Amber', pos: '', cls: '' },
+  { name: 'Hex 1', tag: 'red', dim: 80, live: '#ffb070', liveName: 'Amber', pos: '', cls: 'sel' },
+  { name: 'Hex 2', tag: 'red', dim: 80, live: '#ffb070', liveName: 'Amber', pos: '', cls: 'sel' },
+  { name: 'Spot 1', tag: 'lime', dim: 100, live: '#ffffff', liveName: 'Open', pos: '−20°, 34°', cls: '' },
+  { name: 'FOH 1', tag: 'orange', dim: 60, live: '#ffd9a0', liveName: 'L201', pos: '', cls: '' },
+  { name: 'Cyc LED', tag: 'cyan', dim: 55, live: '#3a5bff', liveName: 'Deep blue', pos: '', cls: '' },
+].map(named);
+const tiles = [
+  { name: 'Front wash', sub: 'group · 6', hex: hexOf('red'), live: '#ffb070', cls: 'sel' },
+  { name: 'Hex 1', sub: 'Hex 12ch', hex: hexOf('red'), live: '#ffb070', cls: 'sel' },
+  { name: 'Hex 3', sub: 'untagged', hex: 'transparent', live: '#7aa2ff', cls: '' },
+  { name: 'Movers', sub: 'group · 4', hex: hexOf('lime'), live: '#ffffff', cls: '' },
+  { name: 'FOH', sub: 'group · 8', hex: hexOf('orange'), live: '#ffd9a0', cls: '' },
+  { name: 'Cyc LED', sub: 'Slender bar', hex: hexOf('cyan'), live: '#3a5bff', cls: '' },
+];
+const st = [['FOH 1', 'orange', ''], ['Hex 1', 'red', 'on'], ['Spot 1', 'lime', ''], ['Hex 4', 'red', ''], ['Spot 2', 'lime', '']];
+const stage = st.map((s, i) => ({ name: s[0], hex: hexOf(s[1]), cls: s[2], x: 90 + i * 128, lx: 62 + i * 128, housing: s[2] === 'on' ? '#4262d0' : hexOf(s[1]) + 'cc' }));
+const fp = [
+  ['red', 'Hex 1', ['Dim', 'R', 'G', 'B', 'W', 'A']], ['red', 'Hex 2', ['Dim', 'R', 'G', 'B', 'W', 'A']], ['', 'Hex 3', ['Dim', 'R', 'G', 'B']],
+];
+const dmx = [];
+let a = 1;
+fp.forEach((f) => f[2].forEach((attr) => {
+  const h = f[0] ? P[f[0]][1] : '';
+  dmx.push({ a: a++, attr, v: attr === 'Dim' ? '204' : attr === 'R' ? '255' : attr === 'G' ? '176' : '0', bg: h ? h + '24' : 'oklch(0.274 0.006 286.033 / 0.45)', bd: h ? h + '66' : 'oklch(0.274 0.006 286.033)' });
+}));
+const faders = [['Front', 'red', 20], ['Movers', 'lime', 50], ['FOH', 'orange', 34], ['Cyc', 'cyan', 70], ['Hex 3', '', 90]].map((f) => ({ name: f[0], hex: hexOf(f[1]), cap: f[2] }));
+return { palette, patch, prog, tiles, stage, dmx, faders };
+}
+}
+</script>
+</body>
+</html>

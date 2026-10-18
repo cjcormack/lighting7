@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Programmer tables</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:oklch(0.707 0.165 254.624)}a:hover{color:oklch(0.8 0.12 254)}
+.app{--fg:oklch(0.985 0 0);--card:oklch(0.21 0.006 285.885);--muted:oklch(0.274 0.006 286.033);--mfg:oklch(0.705 0.015 286.067);--bd:oklch(0.274 0.006 286.033);--pri:oklch(0.623 0.214 259.815);--bg:oklch(0.141 0.005 285.823);--page:oklch(0.17 0.005 285.9);--amber:oklch(0.828 0.189 84.429);--violet:oklch(0.606 0.25 292.717);--teal:oklch(0.704 0.14 182.503);font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI","Helvetica Neue",sans-serif;-webkit-font-smoothing:antialiased;background:var(--bg);color:var(--fg);box-sizing:border-box}
+.app *{box-sizing:border-box}
+.lbl{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:var(--mfg);white-space:nowrap}
+.h2{font-size:18px;font-weight:700;letter-spacing:-0.005em;margin:0}
+.note{border-radius:8px;border:1px solid var(--bd);background:var(--card);padding:10px 12px}
+.note p{margin:0;font-size:11.5px;line-height:1.5;color:var(--mfg)}
+.note p+p{margin-top:5px}
+.note b{color:var(--fg);font-weight:600}
+.note.key{border-color:oklch(0.45 0.16 300);background:oklch(0.27 0.09 302 / 0.25)}
+.frame{border:1px solid var(--bd);border-radius:10px;overflow:hidden;background:var(--page);display:flex;flex-direction:column}
+.crow{height:40px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid var(--bd);flex:0 0 auto;min-width:0}
+.crow.wash{background:oklch(0.21 0.006 285.885 / 0.5)}
+.crow.c{background:oklch(0.985 0 0 / 0.04)}
+.pill{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:999px;font-size:12px;font-weight:500;color:var(--mfg);white-space:nowrap}
+.pill.on{background:var(--muted);color:var(--fg)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3);font-size:12px;font-weight:500;white-space:nowrap;color:var(--fg);flex:0 0 auto}
+.btn.s{height:28px}
+.btn.pri{background:var(--pri);border-color:var(--pri);color:oklch(0.21 0.006 285.885);font-weight:600}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--mfg)}
+.btn.dim{opacity:0.45}
+.seg{display:flex;align-items:center;gap:2px;border:1px solid var(--bd);background:var(--card);border-radius:8px;padding:2px;flex:0 0 auto}
+.seg span{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 10px;border-radius:6px;font-size:12px;font-weight:600;color:var(--mfg);white-space:nowrap}
+.seg span.on{background:var(--muted);color:var(--fg);box-shadow:inset 0 -2px 0 var(--pri)}
+.seg em{font-style:normal;font-size:10px;font-weight:700;color:var(--mfg);background:oklch(0.274 0.006 286.033 / 0.8);border-radius:999px;padding:0 6px;line-height:16px}
+.seg span.on em{color:var(--fg);background:oklch(0.623 0.214 259.815 / 0.35)}
+.field{height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.3);font-size:12px;color:var(--mfg);display:flex;align-items:center;gap:6px;min-width:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 9px;border-radius:999px;border:1px solid var(--bd);font-size:11.5px;color:var(--mfg);white-space:nowrap;flex:0 0 auto}
+.chip.on{border-color:var(--fg);color:var(--fg);background:oklch(0.985 0 0 / 0.06)}
+.chip b{font-weight:700;color:var(--fg);font-size:10.5px}
+.hdr{height:30px;display:flex;border-bottom:1px solid var(--bd);background:var(--bg);flex:0 0 auto}
+.hdr span{padding:0 8px;display:flex;align-items:center;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--mfg);flex:0 0 auto;white-space:nowrap}
+.grow{height:36px;display:flex;align-items:center;border-bottom:1px solid var(--bd);font-size:13px;flex:0 0 auto;background:var(--bg)}
+.grow.sel{background:oklch(0.985 0 0 / 0.06);box-shadow:inset 3px 0 0 var(--fg)}
+.grow.sel .nm{font-weight:600}
+.grow.pin{background:oklch(0.623 0.214 259.815 / 0.07)}
+.nm{padding:0 8px 0 12px;display:flex;align-items:center;gap:6px;height:100%;white-space:nowrap;overflow:hidden;flex:0 0 auto}
+.nm .cnt{font-size:10px;font-weight:600;color:var(--mfg);background:var(--muted);border-radius:999px;padding:0 6px;line-height:16px}
+.cell{padding:2px 1px;height:100%;display:flex;flex:0 0 auto}
+.cell > span{flex:1;display:flex;align-items:center;gap:6px;padding:0 6px 0 8px;border-radius:4px;font-size:12px;color:var(--mfg);min-width:0}
+.cell em{font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell.you > span{box-shadow:inset 0 0 0 1px var(--pri);background:oklch(0.623 0.214 259.815 / 0.10);color:var(--fg)}
+.cell.look > span{box-shadow:inset 0 0 0 1px oklch(0.704 0.14 182.503 / 0.8);background:oklch(0.704 0.14 182.503 / 0.08);color:var(--fg)}
+.cell.cue > span{box-shadow:inset 2px 0 0 oklch(0.746 0.16 232.661)}
+.cell.mq > span{box-shadow:inset 0 0 0 1px var(--fg);background:oklch(0.985 0 0 / 0.08);color:var(--fg)}
+.bar{position:relative;flex:1;height:6px;border-radius:999px;background:var(--muted);overflow:hidden;min-width:20px}
+.bar b{position:absolute;left:0;top:0;bottom:0;background:var(--pri);border-radius:999px}
+.cell.look .bar b{background:var(--teal)}
+.cell.out .bar b,.cell.cue .bar b{background:var(--mfg)}
+.sw{width:16px;height:16px;border-radius:4px;border:1px solid var(--bd);flex:0 0 auto}
+.xy{width:16px;height:16px;border-radius:3px;border:1px solid var(--bd);background:oklch(0.274 0.006 286.033 / 0.5);position:relative;flex:0 0 auto}
+.xy b{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--pri);margin:-2px 0 0 -2px}
+.fx{display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 5px;border-radius:4px;background:oklch(0.606 0.25 292.717 / 0.22);color:oklch(0.82 0.12 300);font-size:10px;font-weight:700;white-space:nowrap;flex:0 0 auto;margin-left:auto}
+.fx.held{background:transparent;box-shadow:inset 0 0 0 1px oklch(0.606 0.25 292.717 / 0.5);color:oklch(0.705 0.015 286.067);text-decoration:line-through}
+.foot{height:22px;display:flex;align-items:center;gap:10px;padding:0 12px;border-top:1px solid var(--bd);font-size:10.5px;color:var(--mfg);flex:0 0 auto}
+.dock{width:300px;border-left:1px solid var(--bd);background:var(--bg);display:flex;flex-direction:column;flex:0 0 auto}
+.tabs{display:flex;align-items:stretch;height:40px;border-bottom:1px solid var(--bd);flex:0 0 auto}
+.tabs span{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;font-size:11px;font-weight:600;color:var(--mfg);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs span.on{color:var(--fg);border-bottom-color:var(--pri)}
+.tabs .fold{flex:0 0 40px;border-left:1px solid var(--bd)}
+.td{padding:0 8px;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--mfg);height:100%;flex:0 0 auto;white-space:nowrap;overflow:hidden}
+.td.fg{color:var(--fg)}
+.kind{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:999px;font-size:9px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase}
+.kind.look{background:oklch(0.704 0.14 182.503 / 0.18);color:oklch(0.85 0.1 182)}
+.kind.pal{background:oklch(0.274 0.006 286.033);color:var(--fg)}
+.kind.you{background:oklch(0.623 0.214 259.815 / 0.25);color:oklch(0.85 0.1 259)}
+.grip{color:oklch(0.705 0.015 286.067 / 0.6);font-size:13px;letter-spacing:-2px;padding-left:12px;width:30px;flex:0 0 auto}
+.rule{height:28px;display:flex;align-items:center;gap:8px;padding:0 12px;border-bottom:1px solid oklch(0.473 0.137 46.201 / 0.7);background:oklch(0.279 0.077 45.635 / 0.4);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:oklch(0.879 0.169 91.605);flex:0 0 auto}
+.mini{border:1px solid var(--bd);border-radius:10px;background:var(--page);overflow:hidden;display:flex;flex-direction:column;flex:0 0 auto}
+.sb{font-size:12px;color:var(--mfg);padding:5px 10px;border-radius:6px;display:flex;align-items:center;gap:8px}
+.sb.on{background:var(--muted);color:var(--fg)}
+.sb.gone{text-decoration:line-through;color:oklch(0.704 0.191 22.216)}
+.sb.new{color:#86efac}
+</style>
+</helmet>
+<div class="app" style="width: 1440px; min-height: 2560px; padding: 40px 32px; display: flex; flex-direction: column; gap: 22px">
+
+<div style="display: flex; align-items: baseline; gap: 14px">
+<h1 style="margin: 0; font-size: 26px; font-weight: 700">1 · The programmer is the table</h1>
+<span class="lbl">Desk · 1440 · dark</span>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">A · Values, with effects drawn in the cells</h2><span class="lbl">replaces Per-fixture FX</span></div>
+<div class="frame">
+<div class="crow">
+<span class="pill on">Programmer</span><span class="pill">Show</span><span class="pill">Prompt Book</span><span class="pill">Busk</span>
+<span style="flex: 1"></span>
+<span class="lbl">M1 · 128 BPM</span>
+</div>
+<div class="crow wash">
+<span class="field" style="color: var(--fg); gap: 8px"><span class="kind you">Local</span>14 values<span style="color: var(--mfg)">· 2 since include</span></span>
+<span class="btn s">Update</span><span class="btn s ghost">Revert</span>
+<span style="flex: 1"></span>
+<span class="btn">Blind</span><span class="btn">Record…</span><span class="btn">Clear · 2s</span>
+</div>
+<div class="crow">
+<span class="seg"><span class="on">Values</span><span>Stack<em>4</em></span><span>FX<em>5</em></span><span>Scenery<em>2</em></span></span>
+<span class="field" style="flex: 1 1 0; max-width: 320px">Filter…</span>
+<span class="chip on">All</span><span class="chip">Dimmer</span><span class="chip">Colour</span><span class="chip">Position</span><span class="chip">Beam</span>
+<span style="flex: 1"></span>
+<span class="btn ghost">Output · <b style="color: var(--fg)">Local</b> · Layer</span>
+</div>
+<div style="display: flex; min-height: 0">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+<div class="crow c">
+<span style="font-size: 12px; font-weight: 600">4 heads</span><span style="color: var(--mfg)">·</span><span style="font-size: 12px; color: var(--mfg)">Dimmer, Colour</span>
+<span class="btn s">Set</span><span class="btn s">Clear</span><span class="btn s">Spread…</span>
+<span style="flex: 1"></span>
+<span class="btn s ghost">Locate</span><span class="btn s ghost">Highlight</span>
+</div>
+<div class="hdr">
+<span style="width: 210px; padding-left: 12px">Name</span><span style="width: 170px">Dimmer</span><span style="width: 170px">Colour</span><span style="width: 150px">Position</span><span style="width: 130px">Gobo</span><span style="width: 130px">Zoom</span><span style="width: 116px">Strobe</span>
+</div>
+<sc-for list="{{grid}}" as="r" hint-placeholder-count="9">
+<div class="grow {{r.cls}}">
+<div class="nm" style="width: 210px">{{r.name}}<sc-if value="{{r.isGroup}}" hint-placeholder-val="{{false}}"><span class="cnt">{{r.count}}</span></sc-if></div>
+<sc-for list="{{r.cells}}" as="c" hint-placeholder-count="6">
+<div class="cell {{c.cls}}" style="width: {{c.w}}px"><span>
+<sc-if value="{{c.isBar}}" hint-placeholder-val="{{false}}"><i class="bar"><b style="width: {{c.pct}}%"></b></i></sc-if>
+<sc-if value="{{c.isSw}}" hint-placeholder-val="{{false}}"><i class="sw" style="background: {{c.hex}}"></i></sc-if>
+<sc-if value="{{c.isXy}}" hint-placeholder-val="{{false}}"><i class="xy"><b style="left: {{c.x}}%; top: {{c.y}}%"></b></i></sc-if>
+<em>{{c.text}}</em>
+<sc-if value="{{c.hasFx}}" hint-placeholder-val="{{false}}"><span class="fx {{c.fxCls}}"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M2 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"></path></svg>{{c.fx}}</span></sc-if>
+</span></div>
+</sc-for>
+</div>
+</sc-for>
+<div style="flex: 1; min-height: 40px; background: var(--bg)"></div>
+<div class="foot"><span>9 rows · 4 selected</span><span style="flex: 1"></span><span><span class="fx" style="margin: 0">~ ½</span> runs here</span><span><span class="fx held" style="margin: 0">~ 1</span> held back by a value above it</span></div>
+</div>
+<div class="dock">
+<div class="tabs"><span class="on">Colour</span><span>Spread</span><span class="fold">›</span></div>
+<div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 11px; color: var(--mfg)">4 heads · Local</div>
+<div style="height: 150px; border-radius: 6px; border: 1px solid var(--bd); background: linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, hsl(30 100% 50%)); position: relative"><i style="position: absolute; left: 70%; top: 18%; width: 18px; height: 18px; margin: -9px; border-radius: 50%; border: 2px solid #fff"></i></div>
+<div style="height: 12px; border-radius: 6px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00)"></div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px">
+<span class="field" style="height: 28px">R <b style="color: var(--fg); margin-left: auto">255</b></span><span class="field" style="height: 28px">G <b style="color: var(--fg); margin-left: auto">176</b></span><span class="field" style="height: 28px">B <b style="color: var(--fg); margin-left: auto">112</b></span>
+</div>
+<div style="font-size: 11px; color: var(--mfg); line-height: 1.5">Docked editors only. They act on the marquee, so they list nothing. The tab claims its column's open gesture as it does today.</div>
+</div>
+</div>
+</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="note key"><p><b>The tab segment opens row B.</b> Values · Stack · FX · Scenery, each with a live count, which is all the collapsed rail's glyphs ever said. The scope picker (Output · Local · Layer) stays on row B for the Values tab only. A tab is a per-window view in <code>?table=</code>, remembered like the Applied tables.</p></div>
+<div class="note"><p><b>The FX lens.</b> A cell an effect drives carries a violet chip with the division, read from one index built per <code>fxChanged</code>. When a value above beats the effect, the chip is struck through and its tooltip gives the reason (<i>Programmer</i>, <i>Stomp</i>, <i>Blind</i>), which is <i>Per-fixture FX</i>'s one insight, now in the grid you are already looking at. Clicking the chip opens the live FX editor.</p></div>
+<div class="note"><p><b>The right side is a dock, not a sheet.</b> Colour and Spread only, collapsible to a 40px strip, with the same 260 floor and 300 default. It has nothing that lists, so nothing on it competes with the tables for a programmer event.</p></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">B · Stack: your values and every layer, one ordered table</h2><span class="lbl">replaces the rail's Values band and Applied Looks / Palettes</span></div>
+<div class="frame">
+<div class="crow">
+<span class="seg"><span>Values</span><span class="on">Stack<em>4</em></span><span>FX<em>5</em></span><span>Scenery<em>2</em></span></span>
+<span class="field" style="flex: 1 1 0; max-width: 320px">Filter…</span>
+<span class="chip on">All <b>4</b></span><span class="chip">Looks <b>2</b></span><span class="chip">Palettes <b>2</b></span>
+<span style="flex: 1"></span>
+<span class="btn">+ Look or palette</span>
+</div>
+<div class="crow c">
+<span style="font-size: 12px; font-weight: 600">Night</span><span style="color: var(--mfg)">· layer 3</span>
+<span class="btn s">Edit in grid</span><span class="btn s">Edit look…</span><span class="btn s">Detach</span><span class="btn s">Pick up</span><span class="btn s">Settings</span><span class="btn s">Remove</span>
+<span style="flex: 1"></span>
+<span class="btn s ghost">Deselect</span>
+</div>
+<div class="hdr">
+<span style="width: 30px"></span><span style="width: 40px">#</span><span style="width: 250px">Holds</span><span style="width: 90px">Kind</span><span style="width: 230px">Targets</span><span style="width: 100px">Amount</span><span style="width: 90px">Blend</span><span style="width: 150px">Mask</span><span style="width: 70px">Stomp</span><span style="width: 100px">Effects</span><span style="width: 240px">Note</span>
+</div>
+<sc-for list="{{stack}}" as="r" hint-placeholder-count="5">
+<div class="grow {{r.cls}}">
+<span class="grip">{{r.grip}}</span>
+<span class="td" style="width: 40px">{{r.n}}</span>
+<span class="td fg" style="width: 250px; font-weight: 600">{{r.name}}</span>
+<span class="td" style="width: 90px"><span class="kind {{r.kcls}}">{{r.kind}}</span></span>
+<span class="td fg" style="width: 230px">{{r.targets}}</span>
+<span class="td" style="width: 100px">{{r.amount}}</span>
+<span class="td" style="width: 90px">{{r.blend}}</span>
+<span class="td" style="width: 150px">{{r.mask}}</span>
+<span class="td" style="width: 70px">{{r.stomp}}</span>
+<span class="td" style="width: 100px">{{r.fx}}</span>
+<span class="td" style="width: 240px">{{r.note}}</span>
+</div>
+</sc-for>
+<div class="rule">⇅ Values above beat effects below · <span style="text-transform: none; letter-spacing: 0; font-weight: 500">5 effects run under this stack, on the FX tab</span></div>
+<div style="height: 60px; background: var(--bg)"></div>
+<div class="foot"><span>4 layers + your values · top wins · drag ⋮⋮ to reorder</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="note key"><p><b>One stack, in its real order.</b> The Applied tables split Looks from palettes, which hid the order that decides who wins. Here they are one table, top first, with <i>Your values</i> pinned above them as the row that beats every other. The kind chips give the split back as a filter.</p></div>
+<div class="note"><p><b>Reorder by drag.</b> <code>SheetTable</code>'s <code>rowDrag</code>, positioned with <code>top</code> rather than <code>translateY</code> as the kit already requires. A drag is refused while a kind chip filters the list, because the gaps would make the drop ambiguous.</p></div>
+<div class="note"><p><b>Focus moves here.</b> A layer's ⏎, or <i>Edit in grid</i>, points the Values grid's scope at that layer and switches to Values. The rail's name badge used to do this. <i>Your values</i>' ⏎ points it at Local, and <i>Make layer</i> sits in its row as it does on the rail.</p></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">C · FX: every running effect</h2><span class="lbl">replaces the rail's Effects band and Applied FX</span></div>
+<div class="frame">
+<div class="crow">
+<span class="seg"><span>Values</span><span>Stack<em>4</em></span><span class="on">FX<em>5</em></span><span>Scenery<em>2</em></span></span>
+<span class="field" style="flex: 1 1 0; max-width: 320px">Filter…</span>
+<span class="chip on">All <b>5</b></span><span class="chip">Programmer <b>2</b></span><span class="chip">Cues <b>2</b></span><span class="chip">Manual <b>1</b></span>
+<span style="flex: 1"></span>
+<span class="btn">+ Effect</span>
+</div>
+<div class="crow c">
+<span style="font-size: 12px; font-weight: 600">Pulse</span><span style="color: var(--mfg)">· Front wash</span>
+<span class="btn s">Edit…</span><span class="btn s">Pause</span><span class="btn s">Save as palette…</span><span class="btn s">Stop</span>
+<span style="flex: 1"></span>
+<span class="btn s ghost">Deselect</span>
+</div>
+<div class="rule">⇅ Values above beat effects below</div>
+<div class="hdr">
+<span style="width: 230px; padding-left: 12px">Effect</span><span style="width: 110px">Property</span><span style="width: 230px">Targets</span><span style="width: 150px">Timing</span><span style="width: 80px">Size</span><span style="width: 100px">Direction</span><span style="width: 80px">Runs</span><span style="width: 170px">Home</span><span style="width: 220px">State</span>
+</div>
+<sc-for list="{{fx}}" as="r" hint-placeholder-count="5">
+<div class="grow {{r.cls}}">
+<span class="td fg" style="width: 230px; padding-left: 12px; font-weight: 600"><span class="fx" style="margin: 0">~</span>{{r.name}}</span>
+<span class="td" style="width: 110px">{{r.prop}}</span>
+<span class="td fg" style="width: 230px">{{r.targets}}</span>
+<span class="td" style="width: 150px">{{r.timing}}</span>
+<span class="td" style="width: 80px">{{r.size}}</span>
+<span class="td" style="width: 100px">{{r.dir}}</span>
+<span class="td" style="width: 80px">{{r.runs}}</span>
+<span class="td" style="width: 170px">{{r.home}}</span>
+<span class="td" style="width: 220px">{{r.state}}</span>
+</div>
+</sc-for>
+<div style="height: 50px; background: var(--bg)"></div>
+<div class="foot"><span>5 effects · desk order</span></div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px">
+<div class="note key"><p><b>This is Applied FX, moved, not redrawn.</b> Same columns, the same 1100 / 860 / 480 bands and the same verbs: <i>Edit…</i> (with the split edit), <i>Pause</i>, <i>Save as palette…</i>, <i>Stop</i>. <i>+ Effect</i> is the bare effect press over the selection (<code>POST /programmer/effects</code>), so effects are created and listed in one place.</p></div>
+<div class="note"><p><b>The rule rides with the rows.</b> <i>Values above beat effects below</i> is the one thing the rail drew as a band. It sits under row B here and on the Stack tab, and links the two tabs.</p></div>
+<div class="note"><p><b>Selecting an effect lights its cells.</b> With an FX row selected, switching to Values rings the cells it drives. The index the lens builds answers this too, so the two tabs explain each other without a second grid.</p></div>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; gap: 10px"><h2 class="h2">D · Folds and navigation</h2><span class="lbl">what changes at narrow widths and in the sidebar</span></div>
+<div style="display: flex; gap: 18px; align-items: flex-start">
+<div class="mini" style="width: 470px">
+<div class="crow" style="border-bottom: 1px solid var(--bd)"><span class="lbl" style="width: 72px">iPad 1180</span><span class="seg"><span class="on">Values</span><span>Stack<em>4</em></span><span>FX<em>5</em></span><span>Scenery<em>2</em></span></span></div>
+<div class="crow" style="border-bottom: 1px solid var(--bd)"><span class="lbl" style="width: 72px">Tablet 768</span><span class="seg"><span class="on">Values</span><span>Stack<em>4</em></span><span>FX<em>5</em></span><span>⛰<em>2</em></span></span></div>
+<div class="crow" style="border-bottom: 0"><span class="lbl" style="width: 72px">Phone 390</span><span class="seg"><span class="on">▦</span><span>≡<em>4</em></span><span>~<em>5</em></span><span>⛰<em>2</em></span></span></div>
+</div>
+<div class="mini" style="width: 300px; padding: 10px; gap: 2px">
+<div class="lbl" style="padding: 4px 10px 6px">Sidebar · Run</div>
+<div class="sb on">Programmer</div>
+<div class="sb gone" style="padding-left: 26px">Applied</div>
+<div class="sb">Show</div>
+<div class="sb">Prompt Book</div>
+<div class="sb">Busk</div>
+<div class="sb">Stage</div>
+</div>
+<div class="mini" style="width: 520px; padding: 10px; gap: 2px">
+<div class="lbl" style="padding: 4px 10px 6px">⌘K · Screens · addresses</div>
+<div class="sb"><span class="sb gone" style="padding: 0">Applied FX</span>→<span class="sb new" style="padding: 0">Programmer › FX</span></div>
+<div class="sb"><span class="sb gone" style="padding: 0">/programmer/applied?table=looks</span>→<span class="sb new" style="padding: 0">/programmer?table=stack</span></div>
+<div class="sb">Screens › a window's <b style="color: var(--fg)">Table</b> segment: Values · Stack · FX · Scenery</div>
+<div class="sb">Library › Looks, Palettes, Effects are unchanged: what you <i>own</i> vs what is <i>running</i></div>
+</div>
+</div>
+<div class="note" style="max-width: 1376px"><p><b>Nothing is hidden at any width.</b> The segment drops words before counts. The phone keeps the dock in its bottom sheet, as the rail's colour and spread live today, and the tables use the Applied bands' sideways scroll under the name column. The Library sheets stay where they are: they list what the show owns, and these tabs list what is running now.</p></div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":2560}}'>
+class Component extends DCLogic {
+renderVals() {
+const W = [170, 170, 150, 130, 130, 116];
+const bar = (cls, pct, fx, held) => ({ cls, isBar: true, pct, text: pct + '%', fx, hasFx: !!fx, fxCls: held ? 'held' : '' });
+const sw = (cls, hex, text, fx, held) => ({ cls, isSw: true, hex, text, fx, hasFx: !!fx, fxCls: held ? 'held' : '' });
+const xy = (cls, x, y, text, fx) => ({ cls, isXy: true, x, y, text, fx, hasFx: !!fx, fxCls: '' });
+const tx = (cls, text, fx) => ({ cls, text, fx, hasFx: !!fx, fxCls: '' });
+const blank = () => ({ cls: '', text: '' });
+const row = (name, cls, cells, group) => ({
+  name, cls, isGroup: !!group, count: group || 0,
+  cells: cells.map((c, i) => Object.assign({ w: W[i] }, c)),
+});
+const grid = [
+  row('Front wash', '', [bar('you', 80, '½'), sw('you', '#ffb070', 'Amber'), blank(), blank(), tx('look', '40%'), tx('out', 'Open')], 6),
+  row('Hex 1', 'sel', [bar('you mq', 80, '½'), sw('you mq', '#ffb070', 'Amber'), blank(), blank(), tx('look', '40%'), tx('out', 'Open')]),
+  row('Hex 2', 'sel', [bar('you mq', 80, '½'), sw('you mq', '#ffb070', 'Amber'), blank(), blank(), tx('look', '40%'), tx('out', 'Open')]),
+  row('Hex 3', 'sel', [bar('you mq', 80, '½'), sw('look mq', '#7aa2ff', 'Night', '1 bar'), blank(), blank(), tx('look', '40%'), tx('out', 'Open')]),
+  row('Hex 4', 'sel', [bar('you mq', 80, '½'), sw('look mq', '#7aa2ff', 'Night', '1 bar'), blank(), blank(), tx('look', '40%'), tx('out', 'Open')]),
+  row('Movers', '', [bar('look', 65), sw('cue', '#ffffff', 'Open'), xy('you', 50, 40, '−12°, 34°', '2 bar'), tx('cue', 'Breakup'), tx('cue', '25%'), tx('out', 'Open')], 4),
+  row('Spot 1', '', [bar('you', 100, '¼', true), sw('cue', '#ffffff', 'Open'), xy('you', 40, 40, '−20°, 34°', '2 bar'), tx('cue', 'Breakup'), tx('cue', '25%'), tx('out', 'Open')]),
+  row('Spot 2', '', [bar('look', 65, '¼'), sw('cue', '#ffffff', 'Open'), xy('you', 60, 40, '−4°, 34°', '2 bar'), tx('cue', 'Breakup'), tx('cue', '25%'), tx('out', 'Open')]),
+  row('Cyc LED', '', [bar('cue', 55), sw('cue', '#3a5bff', 'Deep blue', '4 bar'), blank(), blank(), blank(), blank()]),
+];
+const stack = [
+  { cls: 'pin', grip: '', n: '—', name: 'Your values', kind: 'Local', kcls: 'you', targets: '14 values · 7 heads', amount: '', blend: '', mask: '', stomp: '', fx: '2 Local', note: 'Make layer' },
+  { cls: '', grip: '⋮⋮', n: '4', name: 'Amber', kind: 'Palette', kcls: 'pal', targets: 'Hex 1–2', amount: '100%', blend: 'Replace', mask: 'Colour', stomp: '', fx: '', note: '' },
+  { cls: 'sel', grip: '⋮⋮', n: '3', name: 'Night', kind: 'Look', kcls: 'look', targets: 'Front wash · Cyc LED', amount: '100%', blend: 'Replace', mask: 'All', stomp: '', fx: '1 · Colour fade', note: 'lost Hex 1–2 to Amber' },
+  { cls: '', grip: '⋮⋮', n: '2', name: 'Sweep', kind: 'Palette', kcls: 'pal', targets: 'Movers', amount: '100%', blend: 'Replace', mask: 'Position', stomp: 'On', fx: '1 · Sweep', note: '' },
+  { cls: '', grip: '⋮⋮', n: '1', name: 'Base wash', kind: 'Look', kcls: 'look', targets: 'its own 18 fixtures', amount: '60%', blend: 'Replace', mask: 'Dimmer', stomp: '', fx: '', note: '' },
+];
+const fx = [
+  { cls: 'sel', name: 'Pulse', prop: 'Dimmer', targets: 'Front wash (6)', timing: 'M1 · ½', size: '100%', dir: 'Forward', runs: '∞', home: 'Programmer · Local', state: 'Running' },
+  { cls: '', name: 'Colour fade', prop: 'Colour', targets: 'Hex 3–4', timing: 'M1 · 1 bar', size: '80%', dir: 'Bounce', runs: '∞', home: 'Layer 3 · Night', state: 'Running' },
+  { cls: '', name: 'Sweep', prop: 'Position', targets: 'Movers (4)', timing: 'M2 · 2 bar', size: '60%', dir: 'Forward', runs: '∞', home: 'Layer 2 · Sweep', state: 'Running' },
+  { cls: '', name: 'Strobe', prop: 'Dimmer', targets: 'Spot 1–2', timing: 'Seconds · 0.25', size: '100%', dir: 'Forward', runs: '4', home: 'Cue 12 · Main', state: 'Held back on Spot 1 · Programmer' },
+  { cls: '', name: 'Rainbow', prop: 'Colour', targets: 'Cyc LED', timing: 'M1 · 4 bar', size: '100%', dir: 'Forward', runs: '∞', home: 'Cue 12 · Main', state: 'Running' },
+];
+return { grid, stack, fx };
+}
+}
+</script>
+</body>
+</html>
