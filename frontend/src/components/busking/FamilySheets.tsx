@@ -3,7 +3,7 @@ import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EffectsBand, PaletteBand, PaletteFooter } from '@/components/editor/PaletteBands'
 import { targetEmitters } from '@/components/fixtures-list/rowModel'
 import type { CellCommit } from '@/components/fixtures-list/rowModel'
-import { PickPositionControls } from '@/components/fixtureSheet/PickPropertyRow'
+import { PickPositionControls, pickGroups } from '@/components/fixtureSheet/PickPropertyRow'
 import { LevelControl } from '@/components/fixtureSheet/PropertyRow'
 import type { PositionResolution } from '@/components/fixtureSheet/sheetRows'
 import { writePickPosition } from '@/components/fixtureSheet/sheetWrites'
@@ -278,9 +278,10 @@ type PositionCommit = Extract<CellCommit, { kind: 'position' }>
 function UnitPosition({ units }: { units: readonly FamilyUnit<PositionResolution>[] }) {
   const connected = useIsDeskConnected()
   const heads = useMemo(() => units.flatMap((u) => u.heads), [units])
+  const groups = useMemo(() => [...new Set(units.flatMap((u) => pickGroups(u.write) ?? []))], [units])
   const onCommit = (commit: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) => {
     const fadeMs = typed ? getProgrammerFadeMs() : undefined
     for (const unit of units) writePickPosition(unit.write, unit.heads, commit, fadeMs)
   }
-  return <PickPositionControls heads={heads} open readOnly={!connected} onCommit={onCommit} />
+  return <PickPositionControls heads={heads} groups={groups} open readOnly={!connected} onCommit={onCommit} />
 }

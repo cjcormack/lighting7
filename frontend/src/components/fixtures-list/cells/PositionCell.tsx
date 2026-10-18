@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef } from 'react'
+import { memo, useCallback, useRef, type ReactNode } from 'react'
 import { CENTRE_MAX, CENTRE_MIN, clampCentre, dmxToCentre, formatCentre } from '@/lib/positionScale'
 import type { CellResolution } from '../columns'
 import type { CellBatch, CellCommit } from '../rowModel'
@@ -10,6 +10,9 @@ import { EditorReadout } from '../../editor/EditorReadout'
 import { PaletteBands, usePaletteSave } from '../../editor/PaletteBands'
 import { PositionAimTool } from '../../stage3d/PositionAimTool'
 import { PositionSpreadTool } from './PositionSpreadTool'
+import { usePositionJog } from './usePositionJog'
+import { JogSkips, PadModeSwitch, StageJogPad } from '../../editor/StageJog'
+import { usePositionPadMode } from '../../../lib/positionPadMode'
 import { headsLine, skippedLine } from '../../editor/editorCopy'
 import { UNSET_CELL_TITLE, UnsetCellMark } from '../../editor/UnsetCellMark'
 import { numericSeed, useEditorKeyboard } from '../../editor/useEditorKeyboard'
@@ -247,12 +250,13 @@ export const PositionCell = memo(function PositionCell({
             ) : undefined
           }
         >
-          <div className="flex items-start gap-3">
-            <XyPad
-              x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-              y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
-              onChange={commitPad}
-            />
+          <PositionPads
+            x={(panShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+            y={(tiltShown - CENTRE_MIN) / (CENTRE_MAX - CENTRE_MIN)}
+            onChange={commitPad}
+            targets={bandTargets}
+            projectId={projectId}
+          >
             <div className="min-w-0 flex-1 space-y-2">
               <ValueFieldRow
                 label="Pan"
@@ -264,7 +268,7 @@ export const PositionCell = memo(function PositionCell({
               />
               <ValueFieldRow label="Tilt" min={CENTRE_MIN} max={CENTRE_MAX} value={tiltShown} onChange={commitTilt} />
             </div>
-          </div>
+          </PositionPads>
           <EditorReadout>
             <span>{bytesLine}</span>
             {heads.count > 1 && !sameRanges && <span>ranges differ</span>}
@@ -280,6 +284,55 @@ export const PositionCell = memo(function PositionCell({
 })
 
 const NO_TARGETS: NonNullable<CellBatch['targets']> = []
+
+/**
+ * The pad beside the fields, in the viewer's mode: the XY pad, or in Stage mode the jog pad — a
+ * component of its own so only an open editor subscribes to the mode, not every cell on the grid.
+ */
+function PositionPads({
+  x,
+  y,
+  onChange,
+  targets,
+  projectId,
+  children,
+}: {
+  x: number
+  y: number
+  onChange: (nx: number, ny: number) => void
+  targets: NonNullable<CellBatch['targets']>
+  projectId?: number
+  children: ReactNode
+}) {
+  const mode = usePositionPadMode()
+  return (
+    <>
+      <div className="flex justify-end">
+        <PadModeSwitch mode={mode} />
+      </div>
+      <div className="flex items-start gap-3">
+        {mode === 'STAGE' ? <CellJogPad targets={targets} projectId={projectId} /> : <XyPad x={x} y={y} onChange={onChange} />}
+        {children}
+      </div>
+    </>
+  )
+}
+
+/** The jog pad in Stage mode, over the batch's heads, wherever the grid is pointed (`usePositionJog`). */
+function CellJogPad({ targets, projectId }: { targets: NonNullable<CellBatch['targets']>; projectId?: number }) {
+  const jog = usePositionJog(targets, projectId)
+  return (
+    <div className="flex shrink-0 flex-col items-center gap-1">
+      <StageJogPad size={JOG_PAD_SIZE} refusal={jog.refusal} onBegin={jog.begin} onMove={jog.move} />
+      <span className="text-[10px] text-muted-foreground">
+        <JogSkips skipped={jog.skipped} />
+      </span>
+    </div>
+  )
+}
+
+/** The jog pad's side in the cell editor: its edge labels take the rest of the XY pad's room. */
+const JOG_PAD_SIZE = 100
 
 /**
  * The 120px pan/tilt pad: a drag writes both axes, as normalised fractions the cell maps into

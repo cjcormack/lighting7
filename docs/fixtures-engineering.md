@@ -2074,9 +2074,9 @@ field (`frontend/src/components/stage/elementProblems.ts`).
 
 ### Aiming a head at a point
 
-`POST /api/rest/projects/{projectId}/programmer/aim` `{targets, x, y, z, fadeMs?}` points moving
+`POST /api/rest/projects/{projectId}/programmer/aim` `{targets, x, y, z, fadeMs?, write?}` points moving
 heads at a stage coordinate (metres, the frame above), and the `aim_fixtures` MCP tool (with
-a `dryRun`) is the same call. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
+a `dryRun`) is the same call; `write: false` answers without writing. `show/FixtureAim.kt`'s `aimAt` solves each head's pan and tilt;
 `routes/programmerAim.kt` reads the placements, converts to DMX and writes the programmer as owner
 `WEB`, like a spread — so Record captures an aim, Blind previews it and Clear releases it. The
 Stage view's fixture sheet (its *Aim…* popover), its docked aim panel and a click on its Plan
@@ -2133,6 +2133,49 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   palette cues, Looks and busk pads can reference, and it outlives the programmer. The palette is
   created before the programmer is written, so a taken name refuses the call with no head moved;
   `dryRun` creates nothing.
+
+#### Jogging heads across the stage
+
+`mode: "JOG"` on the same route is the relative arm: `{targets, mode: "JOG", dx, dy, planeZ?, base?,
+near?, groups?, write?, fadeMs?}`, answered `{written, skipped, base}`. It is what a position pad's **Stage**
+mode sends (the pads' *Pan/Tilt | Stage* switch): a drag towards SL moves every selected head's beam
+the same distance towards SL, whatever each head's mount, yaw or declared front, so the operator
+never translates "move SR" into a pan and tilt mix per head. It is an input method only: the result
+is ordinary pan and tilt bytes per head, written as an aim writes them (coarse and fine through
+`travelToDmx`), and no stage point is stored.
+
+For each head, `show/FixtureAim.kt`'s `jogAim`:
+
+1. takes the head's starting pan and tilt — its `base` — and turns it into a beam with
+   `beamDirection`, signed about each axis's zero (`dmxToTravel`, `travelToDmx` backwards, reads the
+   bytes);
+2. lands that beam on a horizontal working plane (`jogLanding`): `planeZ`, else head height
+   (`JOG_DEFAULT_PLANE_Z`, 1.7 m, what aiming at a region on the Plan uses). A beam that does not go
+   down onto the plane — a head below it, or one at or above the horizon — takes the point
+   `JOG_FAR_M` (12 m) along the beam instead, and one just below level, which would land so far off
+   that a drag barely turned it, the point `JOG_MAX_LANDING_M` (40 m) along it;
+3. moves that point by `dx` (+x audience-right, which is stage left) and `dy` (+y upstage) metres,
+   keeping its height;
+4. solves the head for the moved point with `aimAt`, scoring the candidates against `near` rather
+   than each axis's zero. Scored against the zero, a drag across a hung head's front swaps families
+   half a turn apart as the point crosses it; scored against where the head is, it stays continuous.
+   `near` is the previous step's answer (travel degrees, `AimWriteDto`'s `panDeg` / `tiltDeg`), else
+   the base itself.
+
+So every landing point on the plane moves by exactly `(dx, dy)`, and the spread between heads is
+kept. A head's start is the request's `base` where it names one, else Local's position (with Local's
+fine entries) unless `write` is false, else what the desk is sending on the coarse and fine channels.
+The answer's `base` says where each head started, **fine bytes included** (`panFine`, `tiltFine`), and
+a client sends it back for the rest of the gesture, so every frame of a drag is measured from its
+start: errors never build up, and a zero offset returns each head's exact 16-bit position (a Local
+coarse value with no fine of its own takes the fine being sent, while the coarse being sent is it). A head
+with no fine channel starts from its coarse byte, so a new gesture on one starts up to half a coarse
+step from where the last left it. `write: false` answers without writing, for a host holding a draft
+(a focused Look layer, the cue editor's Values), whose rows it sends as `base`. Skips are aim's —
+by name — and `out of reach` for a moved point outside the travel. `groups` names the groups a pick
+was made from (a group sheet, the busk Position tab), so each head writes with its group as its
+`sourceGroup`, as the pad's own writes do; it names no head of its own. `aim_fixtures` does not offer
+the arm.
 
 ### Focusing a head on a point
 
