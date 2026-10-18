@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.fixture.dmx.GenericDimmerFixture
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.ImgStageLineWash42LedFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
+import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
 import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
 import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
 import uk.me.cormack.lighting7.fixture.dmx.UVFixture
@@ -173,6 +174,22 @@ class LocateValueResolverTest {
             centred - setOf("position", "panFine", "tiltFine"),
             stored - setOf("position", "panFine", "tiltFine"),
         )
+    }
+
+    @Test
+    fun `a head whose pan declares its front locates facing it, and a stored locate still wins`() {
+        // The Shehds' front is 180° of its 0–540° pan: a third of the way along, not DMX centre.
+        val fixture = ShehdsLed19RgbwFixture.Mode24Ch(universe, "shehds-1", "Shehds 1", 1)
+        val front = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(85u, 128u), front["position"])
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), front["panFine"])
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), front["tiltFine"])
+        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), front["dimmer"])
+
+        val stored = LocateValueResolver.resolve(fixture, locate = listOf(UnitLocate(pan = 128, tilt = 40)))
+            .associate { it.propertyName to it.value }
+        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 40u), stored["position"])
+        assertEquals(front - "position", stored - "position")
     }
 
     @Test

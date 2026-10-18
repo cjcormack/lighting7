@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.fixture.property.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.show.focusRange
 import uk.me.cormack.lighting7.show.middleDmx
+import uk.me.cormack.lighting7.show.travelToDmx
 import java.awt.Color
 import kotlin.math.roundToInt
 
@@ -35,7 +36,7 @@ import kotlin.math.roundToInt
  * Per category: pan/tilt to the unit's **stored locate** where its patch holds one (venue-visit plan
  * D6, D17 — `fixture/locate/StoredLocate.kt`, coarse and fine as stored, fine 0 where none is stored),
  * else to the middle of their range (fine channels to 0 — the 16-bit midpoint is coarse-mid +
- * fine-0); every other property keeps its category default, stored locate or not: dimmer full, shutter open, colour white, gobo open,
+ * fine-0), pan to its front instead where the type declares one (`forwardDeg`); every other property keeps its category default, stored locate or not: dimmer full, shutter open, colour white, gobo open,
  * prism out, iris/frost open, zoom mid, focus at the middle *distance* of a declared range
  * (mid-DMX where none is declared), and every framing shutter out and square to the gate.
  * "Colour white" adapts to the engine: RGB mixers get full RGB *and* full white (the fan-out in
@@ -138,7 +139,8 @@ object LocateValueResolver {
 
         // A stored locate is the unit's own only where it pans and tilts on DMX channels — the units
         // `StoredLocate.unitsOf` offers — and is kept inside each slider's range.
-        val storedAxes = stored?.takeIf { onlyCategories == null }?.let { s -> axesOf(target)?.let { s to it } }
+        val unitLocate = if (onlyCategories == null) stored ?: frontLocate(target) else null
+        val storedAxes = unitLocate?.let { s -> axesOf(target)?.let { s to it } }
         if (onlyCategories == null && target is WithPosition) {
             val pan = storedAxes?.let { (s, axes) -> clampTo(s.pan, axes.pan) }
                 ?: (target.pan as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
@@ -316,6 +318,20 @@ object LocateValueResolver {
             else -> return null
         }
         return CueAssignmentResolver.PropertyValue.Slider(clampTo(value ?: 0, fine))
+    }
+
+    /**
+     * Where a unit whose pan declares its front (`@FixtureProperty.forwardDeg`) locates when it has no
+     * stored locate: pan at the front, fine included, so tilt swings up and downstage as on any other
+     * mover; tilt in the middle. Null for every other unit, which centres both axes.
+     */
+    private fun frontLocate(target: GroupableFixture): UnitLocate? {
+        val pan = declaredProperties(target).values.firstOrNull { it.category == PropertyCategory.PAN } ?: return null
+        val forward = pan.forwardDeg ?: return null
+        if (pan.degMin == null || pan.degMax == null || pan.degMin == pan.degMax) return null
+        val axes = axesOf(target) ?: return null
+        val front = travelToDmx(forward, pan, axes.pan, axes.panFine?.second)
+        return UnitLocate(pan = front.coarse.toInt(), tilt = midValue(axes.tilt).toInt(), panFine = front.fine?.toInt())
     }
 
     private fun clampTo(value: Int, slider: DmxSlider): UByte =

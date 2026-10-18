@@ -29,6 +29,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val axis: PanTiltAxis = PanTiltAxis.NONE,
         val degMin: Double? = null,
         val degMax: Double? = null,
+        /** A PAN slider's front ([FixtureProperty.forwardDeg]); null for the middle of its range. */
+        val forwardDeg: Double? = null,
         val inverted: Boolean = false,
         val focusNearM: Double? = null,
         val focusFarM: Double? = null,
@@ -84,6 +86,7 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
                 ann.axis,
                 ann.degMin.takeUnless { it.isNaN() },
                 ann.degMax.takeUnless { it.isNaN() },
+                ann.forwardDeg.takeUnless { it.isNaN() },
                 ann.inverted,
                 ann.focusNearM.takeUnless { it.isNaN() },
                 ann.focusFarM.takeUnless { it.isNaN() },

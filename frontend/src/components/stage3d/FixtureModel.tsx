@@ -1630,7 +1630,7 @@ function useBeamDirector({
       const panCombined = combineFine(panProp, panRaw, panFineProp, readChannel(channelSource, beamKeys.panFine))
       const tiltCombined = combineFine(tiltProp, tiltRaw, tiltFineProp, readChannel(channelSource, beamKeys.tiltFine))
 
-      // Signed about each axis's own centre. No base angles here: baseYaw and
+      // Signed about each axis's zero (`axisZeroDeg`). No base angles here: baseYaw and
       // basePitch are the body's mount orientation and are carried by the mount
       // group, so folding them in again would apply them twice.
       let panDeg = panProp ? dmxToSignedDegrees(panCombined, panProp) ?? 0 : 0

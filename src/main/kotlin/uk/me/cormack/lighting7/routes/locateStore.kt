@@ -42,8 +42,8 @@ internal const val CODE_LOCATE_NEEDS_SELECTION = "LOCATE_NEEDS_SELECTION"
  * - `POST /projects/{id}/locate/store` `{targets}` — each unit the targets reach that pans and tilts
  *   takes the pan and tilt **the desk is sending it now** (coarse and fine, park included) as its
  *   stored locate. A fixture stores its own unit and every head's; a head stores its own.
- * - `POST /projects/{id}/locate/clear` `{targets}` — those units' stored locate goes: Locate centres
- *   them again.
+ * - `POST /projects/{id}/locate/clear` `{targets}` — those units' stored locate goes: Locate goes
+ *   back to its default.
  *
  * Both write the patch's stored locate where the rig owns the patch (a standalone show's, a venue's
  * own draft, a show's own patch). A **venue patch in a show** takes it through the show's Focus override

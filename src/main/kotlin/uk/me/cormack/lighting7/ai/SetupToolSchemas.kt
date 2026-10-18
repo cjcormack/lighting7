@@ -181,7 +181,7 @@ private fun JsonObjectBuilder.placementProps() {
             "Where Locate points this moving fixture (its stored locate, as get_patch reports it): one entry per unit that pans and tilts — " +
                 "`head` left out for the fixture's own pan and tilt, else the head's index from 0 — with `pan` and `tilt` as DMX bytes 0–255 " +
                 "(128 is the centre of travel) and `panFine` / `tiltFine` where the unit has fine channels. Locate still opens the beam white at full; " +
-                "only pan and tilt move. The list replaces the stored one; null or [] clears it, so Locate centres the fixture again. " +
+                "only pan and tilt move. The list replaces the stored one; null or [] clears it, so Locate goes back to its default: the centre of travel, or the pan front its type declares. " +
                 "Refused on a unit that does not pan and tilt. For a venue fixture in a show it is part of the Focus facet, so it needs Focus to be this show's first.",
         )
         put("items", buildJsonObject {
@@ -265,7 +265,7 @@ internal val listFixtureTypesTool = ToolDef(
 internal val getPatchTool = ToolDef(
     name = "get_patch",
     description = "A project's patch and stage as stored (the current one unless projectId names another): stage dimensions, stage regions, riggings (with names), DMX universes, every patched fixture (key, name, head number where set, type, universe/address, groups, rigging and position — and, for a paired dimmer, `alsoAt`: the other lanterns it drives, each with its label, rigging and position) and groups. " +
-        "A moving fixture with a stored locate (set on the desk with *Set locate from current*, or with patch_fixtures / place_fixtures) carries `locate`: per unit — `head` absent for the fixture's own pan and tilt, else the head's index from 0 — the pan and tilt Locate points it at, as DMX bytes (`pan`, `tilt`, and `panFine` / `tiltFine` where it has fine channels); a unit with none locates to the centre of its travel. " +
+        "A moving fixture with a stored locate (set on the desk with *Set locate from current*, or with patch_fixtures / place_fixtures) carries `locate`: per unit — `head` absent for the fixture's own pan and tilt, else the head's index from 0 — the pan and tilt Locate points it at, as DMX bytes (`pan`, `tilt`, and `panFine` / `tiltFine` where it has fine channels); a unit with none locates to the centre of its travel, or to the pan front its type declares. " +
         "Each placed fixture and `alsoAt` lantern also carries `world`: where it actually is on stage, in world coordinates — x/y/z are offsets along the rigging when `rigging` is set, and `world` composes them with the rigging's position and rotation. It is absent for one with no x or y, which the Stage view does not draw. " +
         "Read it before changing the patch or stage, and after, to check the result. " + COORDINATES,
     inputSchema = objectSchema {

@@ -42,7 +42,7 @@ describe('LocateBox', () => {
 
   it('reads the centre with nothing stored, and Clear has nothing to do', () => {
     render(<LocateBox projectId={4} patch={patch()} />)
-    expect(screen.getByText(/Centre of travel/)).toBeInTheDocument()
+    expect(screen.getByText(/middle of its travel/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Clear/ })).toBeDisabled()
   })
 

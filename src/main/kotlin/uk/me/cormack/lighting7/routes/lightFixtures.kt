@@ -311,6 +311,8 @@ data class SliderPropertyDescriptor(
     val axis: String? = null,
     val degMin: Double? = null,
     val degMax: Double? = null,
+    /** A PAN slider's front in travel degrees (`@FixtureProperty.forwardDeg`), or null for the middle of its range. */
+    val forwardDeg: Double? = null,
     val inverted: Boolean? = null,
     val focusNearM: Double? = null,
     val focusFarM: Double? = null,

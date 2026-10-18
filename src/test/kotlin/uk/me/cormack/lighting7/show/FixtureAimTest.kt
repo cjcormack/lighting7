@@ -173,4 +173,65 @@ class FixtureAimTest {
         assertEquals(270.0, aim.panDeg, 1e-9)
         assertEquals(135.0, aim.tiltDeg, 1e-9)
     }
+
+    private val pan540Front180 = AimAxis(0.0, 540.0, forwardDeg = 180.0)
+
+    @Test
+    fun `a declared front is the same head yawed the other way, hung`() {
+        // The Shehds: hung, it behaves as if yawed −90°. Declaring its front at 180° of 540° says the
+        // same thing in the type, so every travel position points where the yawed head would.
+        val random = Random(20261018)
+        repeat(200) {
+            val pan = random.nextDouble(0.0, 540.0)
+            val tilt = random.nextDouble(0.0, 270.0)
+            assertNear(
+                beamDirection(-90.0, 180.0, pan - pan540.zeroDeg, tilt - tilt270.zeroDeg),
+                beamDirection(0.0, 180.0, pan - pan540Front180.zeroDeg, tilt - tilt270.zeroDeg),
+                1e-9,
+                "pan $pan tilt $tilt:",
+            )
+        }
+    }
+
+    @Test
+    fun `a head with a declared front is aimed about its front`() {
+        val random = Random(20261019)
+        var aimed = 0
+        repeat(2000) {
+            val from = StagePoint(random.nextDouble(-8.0, 8.0), random.nextDouble(-2.0, 10.0), random.nextDouble(0.0, 9.0))
+            val to = StagePoint(random.nextDouble(-8.0, 8.0), random.nextDouble(-2.0, 10.0), random.nextDouble(-1.0, 4.0))
+            val yaw = random.nextDouble(-180.0, 180.0)
+            val pitch = random.nextDouble(-180.0, 180.0)
+            when (val aim = aimAt(from, yaw, pitch, to, pan540Front180, tilt270)) {
+                is AimSolution.Aimed -> {
+                    aimed++
+                    val beam = beamDirection(yaw, pitch, aim.panDeg - pan540Front180.zeroDeg, aim.tiltDeg - tilt270.zeroDeg)
+                    assertNear(unit(from, to), beam, 1e-9, "yaw $yaw pitch $pitch from $from to $to:")
+                    assertTrue(aim.panDeg in 0.0..540.0, "pan ${aim.panDeg}")
+                }
+                else -> {}
+            }
+        }
+        assertTrue(aimed > 1500, "most directions are in reach, was $aimed")
+    }
+
+    @Test
+    fun `a point along the body axis leaves a declared-front pan at its front, where Locate puts it`() {
+        val aim = aimAt(StagePoint(0.0, 0.0, 0.0), 0.0, 0.0, StagePoint(0.0, 0.0, 5.0), pan540Front180, tilt270)
+        assertIs<AimSolution.Aimed>(aim)
+        assertEquals(180.0, aim.panDeg, 1e-9)
+    }
+
+    @Test
+    fun `aims either side of a declared front stay on one answer rather than flipping half a turn`() {
+        // Hung, the front's tilt plane runs up and downstage: points just either side of it are one move apart.
+        for (y in listOf(0.0, 8.0)) {
+            val left = aimAt(StagePoint(0.0, 4.0, 6.0), 0.0, 180.0, StagePoint(-0.01, y, 1.7), pan540Front180, tilt270)
+            val right = aimAt(StagePoint(0.0, 4.0, 6.0), 0.0, 180.0, StagePoint(0.01, y, 1.7), pan540Front180, tilt270)
+            assertIs<AimSolution.Aimed>(left)
+            assertIs<AimSolution.Aimed>(right)
+            assertTrue(abs(left.panDeg - right.panDeg) < 1.0, "y $y: pan ${left.panDeg} vs ${right.panDeg}")
+            assertTrue(abs(left.tiltDeg - right.tiltDeg) < 1.0, "y $y: tilt ${left.tiltDeg} vs ${right.tiltDeg}")
+        }
+    }
 }
