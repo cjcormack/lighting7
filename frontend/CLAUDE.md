@@ -4277,8 +4277,8 @@ D14's degrees). `lib/positionScale.ts` is the one conversion every surface takes
 entry — the programmer's cells, the fixture sheet, cue values, Spread, the FX editor and palettes:
 `-128..127` on each axis, 0 at the centre of travel (DMX 128), one unit a coarse step, so DMX 1 reads
 -127, 255 reads +127 and 0 reads -128 (Chris's call: exact, with -128 typeable). The fine channel is
-not part of the scale — no surface but aim writes it, as before. `PositionCell` draws a 120px XY pad
-beside Pan · Tilt — a drag writes both axes in one commit — the cell itself reads `-20,+40`, the
+not part of the scale — only aim and the pads' Stage jog (through aim's route) write it. `PositionCell`
+draws a 120px XY pad (a 100px jog pad in Stage mode, below) beside Pan · Tilt — a drag writes both axes in one commit — the cell itself reads `-20,+40`, the
 read-out keeps the DMX bytes underneath, and the commit carries **`panCentre` / `tiltCentre`**, which
 `clampCommitToResolution` resolves to **each head's own byte** as the same fraction of its own axis
 range: `128 + value` on every 0–255 axis this rig has, so a batch never splits into two units and a
@@ -4286,6 +4286,27 @@ head with no degree annotation takes the same scale. The literal on the wire is 
 programmer entry, cue row or Look row is still `"pan,tilt"` bytes. `lib/axisDegrees.ts` is no longer
 for display or entry: it stays for the Stage view, aim (*Aim…* is offered where both axes annotate,
 `sheetRows`' `aimable`) and `positionOnScale`'s one read of a palette stored in degrees.
+
+**Every position pad has a *Pan/Tilt | Stage* switch** (`components/editor/StageJog.tsx`): the
+grid's `PositionCell`, the fixture sheet's `PositionRow` and its pick row (`PickPositionControls`, so
+the busk Position tab too), drawn while the row is open; Stage replaces the XY pad with a 100px jog
+pad (64px folded). The mode is one fact for all three, per viewer in `localStorage`
+(`lib/positionPadMode.ts`). In *Stage* the pad is a **jog**: edges *Upstage* at the top, *Downstage*
+at the bottom, *SR* left and *SL* right, as the Plan draws them (*US · DS* on the fixture sheet's
+folded 64px pad); a drag sends its whole offset from where it began, 0.035 m a pixel, and the dot
+springs back on release; the arrow keys nudge 0.25 m, a run of presses one gesture. The desk solves
+every head (`POST /programmer/aim`, `mode: JOG`; lighting7 `docs/fixtures-engineering.md` §"Jogging
+heads across the stage"); `lib/stageJog.ts`'s `JogQueue` keeps one request in flight with the latest
+offset winning — across every pad in the window, no faster than every 50 ms, and a new press leaving
+the last gesture's let-go offset to land first — and sends back each head's first answered `base`
+and its last answered degrees as `near`, so a drag is measured from its start. The sheet hosts send
+the groups their pick is from (`pickGroups`), so the writes carry their source group as the XY pad's
+do. The fields and sliders read the result. Live hosts refuse as
+*Aim…* does — the project not on the rig, Output, a focused palette layer, no head annotating its
+degrees; the cell's draft hosts (a focused Look layer, the cue editor's Values) send `write: false`
+with the rows as `base` and land each head's literal in the draft (`usePositionJog`). The desk's
+skips read *1 head has no stage jog · skipped* under the pad — *1 head out of reach* for one only
+past its travel this step — by name on its hover.
 
 **Widths by content** (D17): `w-72` for level, position, text and address (the busk endpoint editors'
 two fields plus a gutter, up from `w-64`), `w-64` for the setting and option lists and `w-[352px]`

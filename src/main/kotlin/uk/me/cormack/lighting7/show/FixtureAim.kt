@@ -63,6 +63,10 @@ sealed interface AimSolution {
  * the same rig every time and the switch between the two families never falls on the front. Straight
  * along the body axis, pan is arbitrary and is left at its zero.
  *
+ * [near] scores the candidates against a signed pan and tilt instead of the zero, and is where pan
+ * is left straight along the axis: [jogAim] passes where the head already is, so a head moved a
+ * little at a time never jumps to the other family half a turn away.
+ *
  * Aimed from the fixture's placement point. The drawn head pivots a few centimetres from it along
  * the body axis, so the drawn beam passes that close to the point rather than exactly through it;
  * a real head is only as close as the placement was measured.
@@ -75,6 +79,7 @@ fun aimAt(
     pan: AimAxis,
     tilt: AimAxis,
     baseRollDeg: Double? = null,
+    near: SignedAim? = null,
 ): AimSolution {
     // The direction in three.js space: (x, z, −y).
     var dx = target.x - from.x
@@ -100,15 +105,17 @@ fun aimAt(
     val alongAxis = sqrt(lx * lx + lz * lz) < 1e-9
 
     // Signed degrees about each axis's zero, the geometry's own reference.
+    val nearPan = near?.panDeg ?: 0.0
+    val nearTilt = near?.tiltDeg ?: 0.0
     data class Candidate(val panSigned: Double, val tiltSigned: Double) {
-        val cost: Double get() = abs(panSigned) + abs(tiltSigned)
+        val cost: Double get() = abs(panSigned - nearPan) + abs(tiltSigned - nearTilt)
         val excess: Double get() = pan.excessDeg(panSigned) + tilt.excessDeg(tiltSigned)
     }
 
     val candidates = buildList {
         for (sign in intArrayOf(1, -1)) {
             val t = sign * tilt0
-            val p0 = if (alongAxis) 0.0 else Math.toDegrees(atan2(sign * lx, sign * lz))
+            val p0 = if (alongAxis) nearPan else Math.toDegrees(atan2(sign * lx, sign * lz))
             for (turns in -PAN_TURNS..PAN_TURNS) add(Candidate(p0 + 360.0 * turns, t))
         }
     }
@@ -123,6 +130,9 @@ fun aimAt(
         tiltDeg = (tilt.zeroDeg + best.tiltSigned).coerceIn(minOf(tilt.degMin, tilt.degMax), maxOf(tilt.degMin, tilt.degMax)),
     )
 }
+
+/** A pan and tilt as signed degrees about each axis's [AimAxis.zeroDeg]. */
+data class SignedAim(val panDeg: Double, val tiltDeg: Double)
 
 /**
  * The beam direction, as a unit vector in stage coordinates, of a head with base orientation
@@ -158,6 +168,75 @@ fun beamDirection(
     // Back to stage coordinates from three.js's (x, z, −y).
     return StagePoint(x = x3, y = -z3, z = y2)
 }
+
+/**
+ * Where a head's beam lands for a jog: on the horizontal working plane at [planeZ] when the beam
+ * goes down onto it from above within [JOG_MAX_LANDING_M], else a point on the beam ([onPlane]
+ * false) — [JOG_MAX_LANDING_M] along it for a beam just below level, whose landing would be so far
+ * off that a drag barely turned it, and [JOG_FAR_M] for a head below the plane or one pointing at or
+ * above the horizon, so every head still has a point to move.
+ */
+data class JogLanding(val point: StagePoint, val onPlane: Boolean)
+
+/** [jogLanding] for a head at [from] turned [base] (signed pan and tilt) from its zero. */
+fun jogLanding(
+    from: StagePoint,
+    baseYawDeg: Double?,
+    basePitchDeg: Double?,
+    base: SignedAim,
+    planeZ: Double,
+    baseRollDeg: Double? = null,
+): JogLanding {
+    val d = beamDirection(baseYawDeg, basePitchDeg, base.panDeg, base.tiltDeg, baseRollDeg)
+    fun along(k: Double) = StagePoint(from.x + k * d.x, from.y + k * d.y, from.z + k * d.z)
+    if (d.z < 0.0 && from.z > planeZ) {
+        val k = (planeZ - from.z) / d.z
+        return if (k <= JOG_MAX_LANDING_M) {
+            JogLanding(StagePoint(from.x + k * d.x, from.y + k * d.y, planeZ), onPlane = true)
+        } else {
+            JogLanding(along(JOG_MAX_LANDING_M), onPlane = false)
+        }
+    }
+    return JogLanding(along(JOG_FAR_M), onPlane = false)
+}
+
+/** What a jog came to: the aim, and the point it was aimed at. */
+data class JogResult(val solution: AimSolution, val target: JogLanding)
+
+/**
+ * A **stage-relative jog**: the head's landing point at [base] ([jogLanding]) moved by [dx] (+x,
+ * audience-right — stage left) and [dy] (+y, upstage) metres, and the head aimed at the moved point
+ * by [aimAt], choosing the candidate nearest [near] — the previous step of the gesture — else
+ * nearest [base]. So every head's landing point moves by the same distance whatever its mount, yaw
+ * or declared front, and a drag across a hung head's front never flips it half a turn.
+ */
+fun jogAim(
+    from: StagePoint,
+    baseYawDeg: Double?,
+    basePitchDeg: Double?,
+    base: SignedAim,
+    dx: Double,
+    dy: Double,
+    planeZ: Double,
+    pan: AimAxis,
+    tilt: AimAxis,
+    near: SignedAim? = null,
+    baseRollDeg: Double? = null,
+): JogResult {
+    val start = jogLanding(from, baseYawDeg, basePitchDeg, base, planeZ, baseRollDeg)
+    val target = StagePoint(start.point.x + dx, start.point.y + dy, start.point.z)
+    val solution = aimAt(from, baseYawDeg, basePitchDeg, target, pan, tilt, baseRollDeg, near ?: base)
+    return JogResult(solution, JogLanding(target, start.onPlane))
+}
+
+/** The working plane a jog moves landing points across when none is given: head height. */
+const val JOG_DEFAULT_PLANE_Z = 1.7
+
+/** How far along the beam a jog's point is taken when the beam does not land on the plane. */
+const val JOG_FAR_M = 12.0
+
+/** The farthest a jog lands a beam on the plane — a long throw from a balcony is well inside it. */
+const val JOG_MAX_LANDING_M = 40.0
 
 /** Closer than this, a point is the fixture itself. */
 private const val MIN_AIM_DISTANCE_M = 1e-3

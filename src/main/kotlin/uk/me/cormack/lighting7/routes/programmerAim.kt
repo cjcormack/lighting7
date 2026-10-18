@@ -28,6 +28,10 @@ import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.AimAxis
 import uk.me.cormack.lighting7.show.AimSolution
+import uk.me.cormack.lighting7.show.JOG_DEFAULT_PLANE_Z
+import uk.me.cormack.lighting7.show.SignedAim
+import uk.me.cormack.lighting7.show.dmxToTravel
+import uk.me.cormack.lighting7.show.jogAim
 import uk.me.cormack.lighting7.show.RiggingPose
 import uk.me.cormack.lighting7.show.StagePoint
 import uk.me.cormack.lighting7.show.travelToDmx
@@ -66,7 +70,19 @@ internal fun Route.routeApiRestProgrammerAim(state: State) {
     post<ProgrammerAimResource> { resource ->
         withCurrentProject(state, resource.projectId) { project ->
             val request = call.receive<AimRequest>()
-            when (val outcome = aimIntoProgrammer(state, project, request.targets, request.x, request.y, request.z, request.fadeMs)) {
+            val outcome = when (request.mode?.trim()?.uppercase() ?: AIM_MODE_POINT) {
+                AIM_MODE_POINT -> {
+                    val (x, y, z) = Triple(request.x, request.y, request.z)
+                    when {
+                        request.targets.isEmpty() -> AimOutcome.Invalid("An aim needs fixtures to point", CODE_AIM_NEEDS_SELECTION)
+                        x == null || y == null || z == null -> AimOutcome.Invalid("An aim at a point needs x, y and z")
+                        else -> aimIntoProgrammer(state, project, request.targets, x, y, z, request.fadeMs, request.write)
+                    }
+                }
+                AIM_MODE_JOG -> jogIntoProgrammer(state, project, request)
+                else -> AimOutcome.Invalid("Mode '${request.mode}' is not one of [$AIM_MODE_POINT, $AIM_MODE_JOG]")
+            }
+            when (outcome) {
                 is AimOutcome.Invalid ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
                 is AimOutcome.Done -> call.respond(outcome.response)
@@ -75,24 +91,63 @@ internal fun Route.routeApiRestProgrammerAim(state: State) {
     }
 }
 
+private const val AIM_MODE_POINT = "POINT"
+private const val AIM_MODE_JOG = "JOG"
+
 @Resource("/{projectId}/programmer/aim")
 internal data class ProgrammerAimResource(val projectId: String)
 
 @Serializable
 internal data class AimRequest(
     val targets: List<CueTargetDto> = emptyList(),
-    /** The point, metres, stage coordinates. */
-    val x: Double,
-    val y: Double,
-    val z: Double,
+    /** `POINT` (absent): aim at [x], [y], [z]. `JOG`: move each head's landing point by [dx], [dy]. */
+    val mode: String? = null,
+    /** `POINT`: the point, metres, stage coordinates. */
+    val x: Double? = null,
+    val y: Double? = null,
+    val z: Double? = null,
     val fadeMs: Long? = null,
+    /** False resolves and answers without writing, for a host that holds a draft. */
+    val write: Boolean = true,
+    /** `JOG`: metres to move the landing points — +x audience-right (stage left), +y upstage. */
+    val dx: Double? = null,
+    val dy: Double? = null,
+    /** `JOG`: the working plane's height, metres; absent is head height. */
+    val planeZ: Double? = null,
+    /**
+     * `JOG`: where each head starts — the answer's own [AimResponse.base] sent back for the rest
+     * of a gesture, or the row being edited. A head absent here is read by the desk.
+     */
+    val base: List<AimBaseDto>? = null,
+    /** `JOG`: the previous step's answer, so each head's solve stays on the same side. */
+    val near: List<AimNearDto>? = null,
+    /**
+     * `JOG`: the groups the heads were picked from — a fixture sheet's or a busk tab's — so a head in
+     * one writes with it as its source group, as that pick's own writes do. Names no head of its own.
+     */
+    val groups: List<String>? = null,
 )
 
 @Serializable
 internal data class AimResponse(
     val written: List<AimWriteDto> = emptyList(),
     val skipped: List<SpreadSkipDto> = emptyList(),
+    /** `JOG`: where each head started — the gesture's anchor a later request sends back. */
+    val base: List<AimBaseDto> = emptyList(),
 )
+
+/** A head's position as a jog reads it: its `"pan,tilt"` literal and, where it has them, its fine bytes. */
+@Serializable
+internal data class AimBaseDto(
+    val target: CueTargetDto,
+    val value: String,
+    val panFine: Int? = null,
+    val tiltFine: Int? = null,
+)
+
+/** A head's pan and tilt in travel degrees — an [AimWriteDto]'s, sent back. */
+@Serializable
+internal data class AimNearDto(val target: CueTargetDto, val panDeg: Double, val tiltDeg: Double)
 
 /**
  * One head's aim: its `position` literal (`"pan,tilt"`, coarse DMX — what a Look row or a
@@ -168,6 +223,139 @@ internal fun aimIntoProgrammer(
 }
 
 /**
+ * `mode = JOG`, the relative arm: each head's beam is landed on the working plane from where it
+ * starts ([jogLanding]), that point is moved by `dx`, `dy` metres, and the head is aimed at the moved
+ * point nearest where it was ([jogAim]). So a drag moves every landing point the same distance
+ * across the stage, whatever each head's mount, yaw or declared front.
+ *
+ * A head starts from the request's `base` where it names one, else — unless `write` is false,
+ * whose rows are another context's — from Local's own position, else from what the desk is
+ * sending; the answer's `base` says where each started, fine bytes included, so a client sends it
+ * back for the rest of the gesture and a drag is always measured from its start. `near` is the
+ * previous step's answer, so each solve stays on the side the head is on.
+ */
+internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRequest): AimOutcome {
+    if (request.targets.isEmpty()) return AimOutcome.Invalid("A jog needs fixtures to move", CODE_AIM_NEEDS_SELECTION)
+    val dx = request.dx
+    val dy = request.dy
+    if (dx == null || dy == null) return AimOutcome.Invalid("A jog needs dx and dy")
+    for ((field, value) in listOf("dx" to dx, "dy" to dy, "planeZ" to request.planeZ)) {
+        checkStageCoord(field, value)?.let { return AimOutcome.Invalid(it) }
+    }
+    if (request.fadeMs != null && request.fadeMs < 0) return AimOutcome.Invalid("fadeMs must not be negative")
+    val given = LinkedHashMap<String, JogStart>()
+    for (entry in request.base.orEmpty()) {
+        given[entry.target.key] = jogStartOf(entry) ?: return AimOutcome.Invalid(
+            "base for '${entry.target.key}' (${entry.value}) is not a pan,tilt position with fine bytes 0..255",
+        )
+    }
+    val near = LinkedHashMap<String, AimNearDto>()
+    for (entry in request.near.orEmpty()) {
+        if (!entry.panDeg.isFinite() || !entry.tiltDeg.isFinite()) {
+            return AimOutcome.Invalid("near for '${entry.target.key}' must be finite degrees")
+        }
+        near[entry.target.key] = entry
+    }
+    val planeZ = request.planeZ ?: JOG_DEFAULT_PLANE_Z
+
+    val fixtures = state.show.fixtures
+    val skipped = ArrayList<SpreadSkipDto>()
+    val heads = headsOf(state, request.targets, skipped)
+    val placements = aimPlacements(state, project, heads.keys)
+    val hints = groupHintsForTargets(
+        fixtures,
+        request.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) } + request.groups.orEmpty().map(TargetRef::Group),
+    )
+
+    val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
+    val written = ArrayList<AimWriteDto>()
+    val bases = ArrayList<AimBaseDto>()
+    for ((key, head) in heads) {
+        val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
+        val aimable = when (val a = aimableHead(head, placements[key])) {
+            is HeadAim.Skip -> {
+                skipped += SpreadSkipDto(target, a.reason)
+                continue
+            }
+            is AimableHead -> a
+        }
+        val start = given[key] ?: readJogStart(state, aimable, readLocal = request.write)
+        if (start == null) {
+            skipped += SpreadSkipDto(target, "no position to jog from")
+            continue
+        }
+        bases += AimBaseDto(target, start.position.serialize(), start.panFine?.toInt(), start.tiltFine?.toInt())
+        val base = SignedAim(
+            dmxToTravel(start.position.pan, start.panFine, aimable.pan, aimable.panSlider) - aimable.panAxis.zeroDeg,
+            dmxToTravel(start.position.tilt, start.tiltFine, aimable.tilt, aimable.tiltSlider) - aimable.tiltAxis.zeroDeg,
+        )
+        val previous = near[key]?.let { SignedAim(it.panDeg - aimable.panAxis.zeroDeg, it.tiltDeg - aimable.tiltAxis.zeroDeg) }
+        val p = aimable.placement
+        val jog = jogAim(
+            aimable.from, p.baseYawDeg, p.basePitchDeg, base, dx, dy, planeZ,
+            aimable.panAxis, aimable.tiltAxis, previous, p.baseRollDeg,
+        )
+        when (val aim = aimable.aimed(jog.solution)) {
+            is HeadAim.Skip -> skipped += SpreadSkipDto(target, aim.reason)
+            is HeadAim.Aimed -> {
+                val sourceGroup = hints[key]
+                writes += ProgrammerWriter.PropertyWrite(head, "position", aim.position, sourceGroup)
+                aim.fines.forEach { (name, value) -> writes += ProgrammerWriter.PropertyWrite(head, name, value, sourceGroup) }
+                written += AimWriteDto(target, aim.position.serialize(), roundTenth(aim.panDeg), roundTenth(aim.tiltDeg))
+            }
+        }
+    }
+    if (request.write && writes.isNotEmpty()) {
+        state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = request.fadeMs ?: 0)
+    }
+    return AimOutcome.Done(AimResponse(written, skipped, bases))
+}
+
+/** Where a jogged head starts: its coarse position and, where known, its fine bytes. */
+private data class JogStart(
+    val position: CueAssignmentResolver.PropertyValue.Position,
+    val panFine: UByte?,
+    val tiltFine: UByte?,
+)
+
+private fun jogStartOf(entry: AimBaseDto): JogStart? {
+    val position = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", entry.value)
+        as? CueAssignmentResolver.PropertyValue.Position ?: return null
+    fun fine(value: Int?): UByte? = value?.takeIf { it in 0..255 }?.toUByte()
+    if (entry.panFine != null && fine(entry.panFine) == null) return null
+    if (entry.tiltFine != null && fine(entry.tiltFine) == null) return null
+    return JogStart(position, fine(entry.panFine), fine(entry.tiltFine))
+}
+
+/**
+ * A head's starting position, axis by axis: Local's where [readLocal] and Local holds the axis — its
+ * fine entry with it, else the fine the desk is sending when the coarse it is sending is Local's — else
+ * what the desk is sending on the coarse and fine channels. Null when there is nothing to read.
+ */
+private fun readJogStart(state: State, head: AimableHead, readLocal: Boolean): JogStart? {
+    val store = state.show.programmerStore
+    val local = if (readLocal) localPosition(store, head.head) else null
+    fun read(slider: DmxSlider): UByte? = state.show.fixtures.controllerOrNull(slider.universe)?.getValue(slider.channelNo)
+    fun localFine(fine: Pair<String, DmxSlider>?): UByte? =
+        fine?.let { (store.get(head.head.targetKey, it.first)?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value }
+    fun axis(localCoarse: UByte?, coarse: DmxSlider, fine: Pair<String, DmxSlider>?): Pair<UByte, UByte?>? =
+        jogAxisStart(localCoarse, localFine(fine), read(coarse), fine?.second?.let(::read))
+    val (pan, panFine) = axis(local?.pan, head.panSlider, head.panFine) ?: return null
+    val (tilt, tiltFine) = axis(local?.tilt, head.tiltSlider, head.tiltFine) ?: return null
+    return JogStart(CueAssignmentResolver.PropertyValue.Position(pan, tilt), panFine, tiltFine)
+}
+
+/**
+ * One axis's start for [readJogStart]: Local's coarse with Local's fine, else with the fine being
+ * sent while the coarse being sent is Local's (a coarse-only Local value over a cue's fine), else
+ * what is being sent. Null when nothing is.
+ */
+internal fun jogAxisStart(localCoarse: UByte?, localFine: UByte?, sentCoarse: UByte?, sentFine: UByte?): Pair<UByte, UByte?>? {
+    if (localCoarse == null) return sentCoarse?.let { it to sentFine }
+    return localCoarse to (localFine ?: sentFine?.takeIf { sentCoarse == localCoarse })
+}
+
+/**
  * The heads [targets] name — a group to its members in member order, a fixture to itself, distinct
  * by key — with a target that names nothing patched added to [skipped] as `not patched`. Shared by
  * aim and focus.
@@ -223,7 +411,7 @@ internal fun aimPlacements(state: State, project: DaoProject, keys: Collection<S
 }
 
 private sealed interface HeadAim {
-    data class Skip(val reason: String) : HeadAim
+    data class Skip(val reason: String) : HeadAim, Aimability
     data class Aimed(
         val position: CueAssignmentResolver.PropertyValue.Position,
         /** Fine pan / tilt, by property name, on a head that has them. */
@@ -233,7 +421,26 @@ private sealed interface HeadAim {
     ) : HeadAim
 }
 
-private fun aimHead(head: GroupableFixture, placement: AimPlacement?, point: StagePoint): HeadAim {
+/** A head as something to aim ([AimableHead]), or why it cannot be aimed ([HeadAim.Skip]). */
+private sealed interface Aimability
+
+/** A head [aimAt] can solve for: its axes, their DMX, and where it hangs. */
+private class AimableHead(
+    val head: Fixture,
+    val pan: Fixture.Property,
+    val tilt: Fixture.Property,
+    val panSlider: DmxSlider,
+    val tiltSlider: DmxSlider,
+    val panAxis: AimAxis,
+    val tiltAxis: AimAxis,
+    val from: StagePoint,
+    val placement: AimPlacement,
+) : Aimability {
+    val panFine = fineSlider(head, PropertyCategory.PAN_FINE)
+    val tiltFine = fineSlider(head, PropertyCategory.TILT_FINE)
+}
+
+private fun aimableHead(head: GroupableFixture, placement: AimPlacement?): Aimability {
     if (head is FixtureElement<*>) return HeadAim.Skip("a cell has no placement of its own — aim its fixture")
     if (head !is Fixture || head !is WithPosition) return HeadAim.Skip("fixed head — no pan or tilt")
     val catalogue = head.fixtureProperties
@@ -247,28 +454,36 @@ private fun aimHead(head: GroupableFixture, placement: AimPlacement?, point: Sta
     val panAxis = aimAxis(pan) ?: return HeadAim.Skip("pan has no degree range annotated")
     val tiltAxis = aimAxis(tilt) ?: return HeadAim.Skip("tilt has no degree range annotated")
     val from = placement?.world ?: return HeadAim.Skip("not placed on the stage")
+    return AimableHead(head, pan, tilt, panSlider, tiltSlider, panAxis, tiltAxis, from, placement)
+}
 
-    return when (val solution = aimAt(from, placement.baseYawDeg, placement.basePitchDeg, point, panAxis, tiltAxis, placement.baseRollDeg)) {
-        AimSolution.AtFixture -> HeadAim.Skip("the point is where the fixture is")
-        is AimSolution.OutOfReach -> HeadAim.Skip(
-            "out of reach — needs pan ${formatSigned(solution.panSignedDeg)}° and tilt ${formatSigned(solution.tiltSignedDeg)}° " +
-                "from centre; travel is ±${formatTenth(panAxis.halfSpanDeg)}° pan and ±${formatTenth(tiltAxis.halfSpanDeg)}° tilt",
-        )
-        is AimSolution.Aimed -> {
-            val panFine = fineSlider(head, PropertyCategory.PAN_FINE)
-            val tiltFine = fineSlider(head, PropertyCategory.TILT_FINE)
-            val panDmx = travelToDmx(solution.panDeg, pan, panSlider, panFine?.second)
-            val tiltDmx = travelToDmx(solution.tiltDeg, tilt, tiltSlider, tiltFine?.second)
-            HeadAim.Aimed(
-                CueAssignmentResolver.PropertyValue.Position(panDmx.coarse, tiltDmx.coarse),
-                buildList {
-                    if (panFine != null && panDmx.fine != null) add(panFine.first to CueAssignmentResolver.PropertyValue.Slider(panDmx.fine))
-                    if (tiltFine != null && tiltDmx.fine != null) add(tiltFine.first to CueAssignmentResolver.PropertyValue.Slider(tiltDmx.fine))
-                },
-                solution.panDeg,
-                solution.tiltDeg,
-            )
+private fun aimHead(head: GroupableFixture, placement: AimPlacement?, point: StagePoint): HeadAim =
+    when (val aimable = aimableHead(head, placement)) {
+        is HeadAim.Skip -> aimable
+        is AimableHead -> with(aimable.placement) {
+            aimable.aimed(aimAt(aimable.from, baseYawDeg, basePitchDeg, point, aimable.panAxis, aimable.tiltAxis, baseRollDeg))
         }
+    }
+
+/** A solution as the writes and the answer for it, or the skip that says why there is none. */
+private fun AimableHead.aimed(solution: AimSolution): HeadAim = when (solution) {
+    AimSolution.AtFixture -> HeadAim.Skip("the point is where the fixture is")
+    is AimSolution.OutOfReach -> HeadAim.Skip(
+        "out of reach — needs pan ${formatSigned(solution.panSignedDeg)}° and tilt ${formatSigned(solution.tiltSignedDeg)}° " +
+            "from centre; travel is ±${formatTenth(panAxis.halfSpanDeg)}° pan and ±${formatTenth(tiltAxis.halfSpanDeg)}° tilt",
+    )
+    is AimSolution.Aimed -> {
+        val panDmx = travelToDmx(solution.panDeg, pan, panSlider, panFine?.second)
+        val tiltDmx = travelToDmx(solution.tiltDeg, tilt, tiltSlider, tiltFine?.second)
+        HeadAim.Aimed(
+            CueAssignmentResolver.PropertyValue.Position(panDmx.coarse, tiltDmx.coarse),
+            buildList {
+                if (panFine != null && panDmx.fine != null) add(panFine.first to CueAssignmentResolver.PropertyValue.Slider(panDmx.fine))
+                if (tiltFine != null && tiltDmx.fine != null) add(tiltFine.first to CueAssignmentResolver.PropertyValue.Slider(tiltDmx.fine))
+            },
+            solution.panDeg,
+            solution.tiltDeg,
+        )
     }
 }
 

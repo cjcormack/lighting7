@@ -446,10 +446,47 @@ export interface SpreadResponse {
 export interface AimRequest {
   projectId: number
   targets: CueTarget[]
-  x: number
-  y: number
-  z: number
+  /** The point; absent on a jog, which moves landing points instead. */
+  x?: number
+  y?: number
+  z?: number
   fadeMs?: number
+  /**
+   * `JOG` is the stage-relative jog: every head's landing point on the working plane moved by
+   * [dx], [dy] metres (+x audience-right — stage left — and +y upstage), each head solved on the
+   * desk nearest where it is. Absent is a point aim — and absent whenever it is, as `write` below.
+   */
+  mode?: 'JOG'
+  dx?: number
+  dy?: number
+  /** `JOG`: the working plane's height in metres; absent is head height. */
+  planeZ?: number
+  /** `JOG`: where each head starts — the desk's own `base` sent back, or the row being edited. */
+  base?: AimBase[]
+  /** `JOG`: the previous step's answer, so each head's solve stays on the side it is on. */
+  near?: AimNear[]
+  /** `JOG`: the groups the heads were picked from, so each head writes with its group as its source. */
+  groups?: string[]
+  /**
+   * `false` answers without writing, for a host holding a draft. **Present only when false**, for
+   * `SpreadRequest.write`'s reason.
+   */
+  write?: false
+}
+
+/** A jogged head's starting position: its `"pan,tilt"` literal and, where it has them, its fine bytes. */
+export interface AimBase {
+  target: CueTarget
+  value: string
+  panFine?: number | null
+  tiltFine?: number | null
+}
+
+/** A head's pan and tilt in travel degrees — an [AimWrite]'s, sent back as a jog's `near`. */
+export interface AimNear {
+  target: CueTarget
+  panDeg: number
+  tiltDeg: number
 }
 
 /** One head's aim: its `"pan,tilt"` literal and the travel degrees it came from. */
@@ -464,6 +501,8 @@ export interface AimWrite {
 export interface AimResponse {
   written?: AimWrite[]
   skipped?: SpreadSkip[]
+  /** `JOG`: where each head started — the gesture's anchor, sent back with the next request. */
+  base?: AimBase[]
 }
 
 /**

@@ -33,7 +33,10 @@ import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.UserRole
+import uk.me.cormack.lighting7.show.JOG_DEFAULT_PLANE_Z
 import uk.me.cormack.lighting7.show.RiggingPose
+import uk.me.cormack.lighting7.show.SignedAim
+import uk.me.cormack.lighting7.show.jogLanding
 import uk.me.cormack.lighting7.show.StagePoint
 import uk.me.cormack.lighting7.show.beamDirection
 import uk.me.cormack.lighting7.show.worldPosition
@@ -233,6 +236,177 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.BadRequest, both.status)
         assertTrue(both.bodyAsText().contains(CODE_AIM_NEEDS_SELECTION), both.bodyAsText())
         assertTrue(state.show.programmerStore.entries().isEmpty())
+    }
+
+    // ─── mode = JOG ────────────────────────────────────────────────────────
+
+    /** Where an answered head lands on the head-height plane, from its answered travel degrees. */
+    private fun landing(written: AimWriteDto, from: StagePoint, panZero: Double, tiltZero: Double, pitchDeg: Double = 180.0) =
+        jogLanding(from, null, pitchDeg, SignedAim(written.panDeg - panZero, written.tiltDeg - tiltZero), JOG_DEFAULT_PLANE_Z)
+
+    private fun seedJogRig() {
+        seed()
+        // A hung Shehds, its pan's front declared at 180°, and a spot moved out front of house.
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "shehds", 120)
+        place("shehds", -3.0, 2.5, 6.0)
+        place("spot-coarse", 0.0, -3.0, 7.0)
+        LocateTestSupport.reloadFixtures(state, projectId)
+        state.show.fixtures.patchListChanged()
+    }
+
+    private val jogFrom = mapOf(
+        "shehds" to StagePoint(-3.0, 2.5, 6.0),
+        "spot-fine" to StagePoint(0.0, 4.0, 6.0),
+        "spot-coarse" to StagePoint(0.0, -3.0, 7.0),
+    )
+
+    /** Each head's travel zero: the spots' centres, the Shehds' declared pan front. */
+    private val jogZero = mapOf("shehds" to (180.0 to 135.0), "spot-fine" to (270.0 to 105.0), "spot-coarse" to (270.0 to 105.0))
+
+    /** Focus the three heads somewhere on the plane, as a jog finds them. */
+    private suspend fun HttpClient.jogRig() {
+        for ((key, point) in listOf("shehds" to StagePoint(-2.0, 2.2, 1.7), "spot-fine" to StagePoint(0.0, 3.5, 1.7), "spot-coarse" to StagePoint(0.6, 1.4, 1.7))) {
+            run(AimRequest(targets = listOf(fixture(key)), x = point.x, y = point.y, z = point.z))
+        }
+    }
+
+    /**
+     * [coarseSlack] is the tolerance for a head with no fine channels when the jog starts from what it
+     * was last written: its coarse byte is a 2° step of a 540° pan, up to a fifth of a metre here.
+     */
+    private fun assertMoved(before: AimResponse, after: AimResponse, dx: Double, dy: Double, coarseSlack: Double = 0.05) {
+        val was = before.written.associateBy { it.target.key }
+        assertEquals(jogFrom.keys, after.written.map { it.target.key }.toSet(), after.skipped.toString())
+        for (written in after.written) {
+            val key = written.target.key
+            val (panZero, tiltZero) = jogZero.getValue(key)
+            val from = jogFrom.getValue(key)
+            val start = landing(was.getValue(key), from, panZero, tiltZero)
+            val end = landing(written, from, panZero, tiltZero)
+            assertTrue(start.onPlane && end.onPlane, key)
+            // Answered to a tenth of a degree: a centimetre or so at these throws.
+            val tolerance = if (after.base.single { it.target.key == key }.panFine == null) coarseSlack else 0.05
+            assertEquals(start.point.x + dx, end.point.x, tolerance, "$key x")
+            assertEquals(start.point.y + dy, end.point.y, tolerance, "$key y")
+        }
+    }
+
+    private fun jog(dx: Double, dy: Double, base: List<AimBaseDto>? = null, near: List<AimNearDto>? = null, write: Boolean = true) =
+        AimRequest(targets = jogFrom.keys.map(::fixture), mode = "JOG", dx = dx, dy = dy, base = base, near = near, write = write)
+
+    @Test
+    fun `a jog moves every head's landing point the same distance, from where the gesture started`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.jogRig()
+        val start = client.run(jog(0.0, 0.0))
+        assertEquals(jogFrom.keys, start.base.map { it.target.key }.toSet())
+        // The Shehds and the 15ch spot have fine channels, and the base carries them.
+        assertNotNull(start.base.single { it.target.key == "shehds" }.panFine)
+        assertNull(start.base.single { it.target.key == "spot-coarse" }.panFine)
+
+        // Towards SL and upstage: every landing point moves by the same metres.
+        val moved = client.run(jog(1.0, 0.5, base = start.base))
+        assertMoved(start, moved, 1.0, 0.5)
+        assertEquals(start.base, moved.base, "a base sent is the base answered")
+        // A later frame of the same gesture is measured from its start, not from the last frame.
+        assertMoved(start, client.run(jog(2.0, 1.0, base = start.base)), 2.0, 1.0)
+        // With no base the desk reads Local, which the last frame wrote: a new gesture from there.
+        assertMoved(start, client.run(jog(-1.0, 0.0)), 1.0, 1.0, coarseSlack = 0.3)
+        // Fine channels are written, as an aim writes them.
+        assertNotNull(entry("shehds", "panFine"))
+    }
+
+    @Test
+    fun `near keeps a head on the side it is on`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.jogRig()
+        val start = client.run(jog(0.0, 0.0))
+        val plain = client.run(jog(0.4, 0.0, base = start.base)).written.single { it.target.key == "spot-fine" }
+        // The same point, reached from the other family: pan half a turn round and tilt mirrored.
+        val other = AimNearDto(fixture("spot-fine"), plain.panDeg + if (plain.panDeg < 270.0) 180.0 else -180.0, 210.0 - plain.tiltDeg)
+        val steered = client.run(jog(0.4, 0.0, base = start.base, near = listOf(other))).written.single { it.target.key == "spot-fine" }
+        assertEquals(other.panDeg, steered.panDeg, 0.2)
+        assertEquals(other.tiltDeg, steered.tiltDeg, 0.2)
+        val from = jogFrom.getValue("spot-fine")
+        assertEquals(landing(plain, from, 270.0, 105.0).point.x, landing(steered, from, 270.0, 105.0).point.x, 0.05)
+    }
+
+    @Test
+    fun `write false answers the jog and writes nothing`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.jogRig()
+        val start = client.run(jog(0.0, 0.0))
+        val before = state.show.programmerStore.entries().map { it.fixtureKey to it.slots.firstOrNull()?.value?.resolved }
+        val answer = client.run(jog(1.0, 0.0, base = start.base, write = false))
+        assertMoved(start, answer, 1.0, 0.0)
+        assertEquals(before, state.show.programmerStore.entries().map { it.fixtureKey to it.slots.firstOrNull()?.value?.resolved })
+    }
+
+    @Test
+    fun `a jog refuses a malformed request and skips what cannot move by name`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        suspend fun refused(request: AimRequest, code: String) {
+            val response = client.post(request)
+            assertEquals(HttpStatusCode.BadRequest, response.status)
+            assertTrue(response.bodyAsText().contains(code), response.bodyAsText())
+        }
+        refused(AimRequest(targets = emptyList(), mode = "JOG", dx = 1.0, dy = 0.0), CODE_AIM_NEEDS_SELECTION)
+        refused(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 1.0), CODE_AIM_INVALID)
+        refused(AimRequest(targets = listOf(fixture("spot-fine")), mode = "SIDEWAYS", dx = 1.0, dy = 0.0), CODE_AIM_INVALID)
+        refused(
+            AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 1.0, dy = 0.0, base = listOf(AimBaseDto(fixture("spot-fine"), "half"))),
+            CODE_AIM_INVALID,
+        )
+        refused(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 1.0, dy = 0.0, planeZ = 900.0), CODE_AIM_INVALID)
+        // A point aim still needs its point.
+        refused(AimRequest(targets = listOf(fixture("spot-fine")), x = 1.0), CODE_AIM_INVALID)
+
+        client.jogRig()
+        val out = client.run(
+            AimRequest(targets = listOf(fixture("par-1"), fixture("spot-unplaced"), fixture("nope"), fixture("spot-fine")), mode = "JOG", dx = 0.5, dy = 0.0),
+        )
+        val reasons = out.skipped.associate { it.target.key to it.reason }
+        assertTrue(reasons.getValue("par-1").contains("no pan or tilt"), reasons.toString())
+        assertTrue(reasons.getValue("spot-unplaced").contains("not placed"), reasons.toString())
+        assertEquals("not patched", reasons.getValue("nope"))
+        assertEquals(listOf("spot-fine"), out.written.map { it.target.key })
+        assertTrue(state.show.programmerStore.entries().none { it.fixtureKey == "par-1" })
+    }
+
+    @Test
+    fun `a jog's start keeps the fine being sent under a coarse-only Local value`() {
+        // Local holds 128 (the XY pad writes coarse only); a cue is sending 128 with fine 200.
+        assertEquals(128.toUByte() to 200.toUByte(), jogAxisStart(128u, null, 128u, 200u))
+        // Local's own fine wins.
+        assertEquals(128.toUByte() to 7.toUByte(), jogAxisStart(128u, 7u, 128u, 200u))
+        // Mid-fade the coarse being sent is not Local's, so its fine says nothing about Local's.
+        assertEquals(128.toUByte() to null, jogAxisStart(128u, null, 120u, 200u))
+        assertEquals(120.toUByte() to 200.toUByte(), jogAxisStart(null, null, 120u, 200u))
+        assertNull(jogAxisStart(null, null, null, null))
+    }
+
+    @Test
+    fun `a jog from a group's pick writes with the group as its source`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.jogRig()
+        fun sourceGroup(key: String) = state.show.programmerStore.entries()
+            .first { it.fixtureKey == key && it.propertyName == "position" }.slots.first().sourceGroup
+        client.run(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 0.2, dy = 0.0))
+        assertNull(sourceGroup("spot-fine"))
+        client.run(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 0.2, dy = 0.0, groups = listOf("spots")))
+        assertEquals("spots", sourceGroup("spot-fine"))
+        // A group names no head: spot-coarse, in it, was not moved.
+        assertTrue(state.show.programmerStore.entries().none { it.fixtureKey == "spot-coarse" && it.slots.first().sourceGroup == "spots" })
     }
 
     // ─── aim_fixtures ──────────────────────────────────────────────────────

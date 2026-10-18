@@ -13,7 +13,9 @@ import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
 import { whiteMixColour, type Rgb } from '@/lib/whiteMix'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
 import type { CellCommit } from '../fixtures-list/rowModel'
-import { AxisControl, LevelControl, OpenToggle, openKey, PositionPad } from './PropertyRow'
+import { AxisControl, JOG_OPEN_SIZE, LevelControl, OpenToggle, openKey, PositionPad, READ_ONLY_JOG } from './PropertyRow'
+import { LiveJogPad, PadModeSwitch } from '../editor/StageJog'
+import { usePositionPadMode } from '@/lib/positionPadMode'
 import { MIXED_EDGE_CLASS, SOURCE_EDGE_CLASS, SourceChip } from './SourceChip'
 import { FINGER_BUTTON_CLASS, FINGER_HEIGHT_CLASS, FINGER_ROW_HEAD_CLASS, ROW_HEAD_CLASS, useFingerSized, useFixtureSheet } from './sheetContext'
 import { usePickSource } from './useRowSource'
@@ -479,12 +481,18 @@ function PositionPickRow({ pickRow, heads, write }: { pickRow: PickRow; heads: H
       parked={parked}
       trailing={<OpenToggle row={pickRow.row} headKey={PICK_HEAD} label={pickRow.row.label} />}
     >
-      <PickPositionControls heads={targets} open={open} readOnly={readOnly} onCommit={onCommit} />
+      <PickPositionControls heads={targets} groups={pickGroups(write)} open={open} readOnly={readOnly} onCommit={onCommit} />
     </PickFrame>
   )
 }
 
 type PositionCommit = Extract<CellCommit, { kind: 'position' }>
+
+/** The group a pick's writes name — its own on a group's *All*, its source on a subset — for a stage jog's. */
+export function pickGroups(write: PickWrite): string[] | undefined {
+  const group = write.kind === 'group' ? write.group : write.sourceGroup
+  return group != null ? [group] : undefined
+}
 
 /**
  * Pan and tilt over a pick of heads: the XY pad, each other head a hollow dot on it so a spread pick
@@ -494,11 +502,14 @@ type PositionCommit = Extract<CellCommit, { kind: 'position' }>
  */
 export function PickPositionControls({
   heads,
+  groups,
   open,
   readOnly,
   onCommit,
 }: {
   heads: readonly { key: string; resolution: PositionResolution }[]
+  /** The groups the pick is from, for the stage jog's writes (`pickGroups`). */
+  groups?: readonly string[]
   open: boolean
   readOnly: boolean
   onCommit: (commit: PositionCommit | ((r: PositionResolution) => PositionCommit), typed: boolean) => void
@@ -509,56 +520,72 @@ export function PickPositionControls({
   const tilts = heads.map((_, i) => values[i * 2 + 1] ?? 0)
   const lead = heads[0].resolution
   const mixed = new Set(pans).size > 1 || new Set(tilts).size > 1
-  return (
-    <div className="flex min-w-0 flex-1 items-start gap-2">
-      <div className="relative shrink-0">
-        <PositionPad
-          size={open ? 120 : 64}
-          pan={norm(pans[0], lead.panMin, lead.panMax)}
-          tilt={norm(tilts[0], lead.tiltMin, lead.tiltMax)}
-          readOnly={readOnly}
-          onMove={(x, y) =>
-            onCommit(
-              (r) => ({
-                kind: 'position',
-                pan: Math.round(r.panMin + x * (r.panMax - r.panMin)),
-                tilt: Math.round(r.tiltMin + y * (r.tiltMax - r.tiltMin)),
-              }),
-              false,
-            )
-          }
+  const padMode = usePositionPadMode()
+  const jogKeys = useMemo(() => heads.map((h) => h.key), [heads])
+  const xyPad = (
+    <div className="relative shrink-0">
+      <PositionPad
+        size={open ? 120 : 64}
+        pan={norm(pans[0], lead.panMin, lead.panMax)}
+        tilt={norm(tilts[0], lead.tiltMin, lead.tiltMax)}
+        readOnly={readOnly}
+        onMove={(x, y) =>
+          onCommit(
+            (r) => ({
+              kind: 'position',
+              pan: Math.round(r.panMin + x * (r.panMax - r.panMin)),
+              tilt: Math.round(r.tiltMin + y * (r.tiltMax - r.tiltMin)),
+            }),
+            false,
+          )
+        }
+      />
+      {heads.slice(1).map((h, i) => (
+        <span
+          key={h.key}
+          aria-hidden
+          data-testid="position-head-dot"
+          className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary"
+          style={{
+            left: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(pans[i + 1], h.resolution.panMin, h.resolution.panMax)))})`,
+            top: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(tilts[i + 1], h.resolution.tiltMin, h.resolution.tiltMax)))})`,
+          }}
         />
-        {heads.slice(1).map((h, i) => (
-          <span
-            key={h.key}
-            aria-hidden
-            data-testid="position-head-dot"
-            className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full border border-primary"
-            style={{
-              left: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(pans[i + 1], h.resolution.panMin, h.resolution.panMax)))})`,
-              top: `calc(5px + (100% - 10px) * ${Math.max(0, Math.min(1, norm(tilts[i + 1], h.resolution.tiltMin, h.resolution.tiltMax)))})`,
-            }}
-          />
-        ))}
-      </div>
-      {open ? (
-        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <AxisControl label="Pan" byte={pans[0]} min={lead.panMin} max={lead.panMax} readOnly={readOnly} onCommit={onCommit} axis="pan" />
-          <AxisControl label="Tilt" byte={tilts[0]} min={lead.tiltMin} max={lead.tiltMax} readOnly={readOnly} onCommit={onCommit} axis="tilt" />
-          {mixed && <p className="text-[10.5px] text-muted-foreground">The heads differ; a value set here lands on all {heads.length}.</p>}
-        </div>
-      ) : (
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
-          <span>
-            <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
-            {rangeText(pans, heads.map((h) => ({ min: h.resolution.panMin, max: h.resolution.panMax })))}
-          </span>
-          <span>
-            <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
-            {rangeText(tilts, heads.map((h) => ({ min: h.resolution.tiltMin, max: h.resolution.tiltMax })))}
-          </span>
+      ))}
+    </div>
+  )
+  return (
+    <div className="flex min-w-0 flex-1 flex-col gap-2">
+      {open && (
+        <div className="flex justify-end">
+          <PadModeSwitch mode={padMode} />
         </div>
       )}
+      <div className="flex min-w-0 flex-1 items-start gap-2">
+        {padMode === 'STAGE' ? (
+          <LiveJogPad keys={jogKeys} groups={groups} size={open ? JOG_OPEN_SIZE : 64} readOnly={readOnly ? READ_ONLY_JOG : null} />
+        ) : (
+          xyPad
+        )}
+        {open ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <AxisControl label="Pan" byte={pans[0]} min={lead.panMin} max={lead.panMax} readOnly={readOnly} onCommit={onCommit} axis="pan" />
+            <AxisControl label="Tilt" byte={tilts[0]} min={lead.tiltMin} max={lead.tiltMax} readOnly={readOnly} onCommit={onCommit} axis="tilt" />
+            {mixed && <p className="text-[10.5px] text-muted-foreground">The heads differ; a value set here lands on all {heads.length}.</p>}
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1 font-mono text-xs">
+            <span>
+              <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Pan</span>
+              {rangeText(pans, heads.map((h) => ({ min: h.resolution.panMin, max: h.resolution.panMax })))}
+            </span>
+            <span>
+              <span className="mr-1.5 text-[9px] font-bold tracking-wider text-muted-foreground uppercase">Tilt</span>
+              {rangeText(tilts, heads.map((h) => ({ min: h.resolution.tiltMin, max: h.resolution.tiltMax })))}
+            </span>
+          </div>
+        )}
+      </div>
     </div>
   )
 }

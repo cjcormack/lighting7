@@ -25,3 +25,19 @@ internal fun travelToDmx(degrees: Double, property: Fixture.Property, coarse: Dm
     val fineValue = (sixteen % 256).coerceIn(fine.min.toInt(), fine.max.toInt())
     return AxisDmx((sixteen / 256).toUByte(), fineValue.toUByte())
 }
+
+/**
+ * [travelToDmx] backwards: an axis's DMX — the coarse byte and, where the head has one, the fine —
+ * to its travel degrees. With no fine, the coarse byte is taken as exact, which is what
+ * [travelToDmx] rounds a coarse-only head to.
+ */
+internal fun dmxToTravel(coarse: UByte, fine: UByte?, property: Fixture.Property, coarseSlider: DmxSlider): Double {
+    val degMin = property.degMin!!
+    val degMax = property.degMax!!
+    val min = coarseSlider.min.toInt()
+    val max = coarseSlider.max.toInt()
+    val exact = coarse.toInt() + (fine?.toInt() ?: 0) / 256.0
+    val effective = ((exact - min) / (max - min).coerceAtLeast(1)).coerceIn(0.0, 1.0)
+    val fraction = if (property.inverted) 1.0 - effective else effective
+    return degMin + fraction * (degMax - degMin)
+}

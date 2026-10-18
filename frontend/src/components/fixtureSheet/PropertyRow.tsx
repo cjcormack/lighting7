@@ -13,6 +13,8 @@ import { useColourAppearance } from '@/hooks/useColourAppearance'
 import { useVirtualDimmer } from '@/hooks/useVirtualDimmer'
 import { usePropertyParkStatus } from '@/hooks/usePropertyParkStatus'
 import { EditorLabel } from '../editor/EditorLabel'
+import { LiveJogPad, PadModeSwitch } from '../editor/StageJog'
+import { usePositionPadMode } from '@/lib/positionPadMode'
 import { ColourEditor } from '../editor/ColourEditor'
 import { WarmthEditor, warmthReading } from '../editor/WarmthEditor'
 import { SettingCell } from '../fixtures-list/cells/SettingCell'
@@ -463,6 +465,10 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
     [headKey, resolution, sourceGroup],
   )
 
+  const padMode = usePositionPadMode()
+  const jogKeys = useMemo(() => [headKey], [headKey])
+  const jogGroups = useMemo(() => (sourceGroup != null ? [sourceGroup] : undefined), [sourceGroup])
+
   const panNorm = (pan - resolution.panMin) / Math.max(1, resolution.panMax - resolution.panMin)
   const tiltNorm = (tilt - resolution.tiltMin) / Math.max(1, resolution.tiltMax - resolution.tiltMin)
 
@@ -486,23 +492,32 @@ function PositionRow({ row, headKey, headName, sourceGroup }: { row: Extract<She
   return (
     <RowFrame row={row} headKey={headKey} headName={headName} source={source} readOnly={readOnly} parked={parked} trailing={<OpenToggle row={row} headKey={headKey} label={row.label} />}>
       <div className="flex min-w-0 flex-1 flex-col gap-2">
+        {open && (
+          <div className="flex justify-end">
+            <PadModeSwitch mode={padMode} />
+          </div>
+        )}
         <div className="flex min-w-0 items-start gap-2">
-          <PositionPad
-            size={open ? 120 : 64}
-            pan={panNorm}
-            tilt={tiltNorm}
-            readOnly={readOnly}
-            onMove={(x, y) =>
-              write(
-                {
-                  kind: 'position',
-                  pan: Math.round(resolution.panMin + x * (resolution.panMax - resolution.panMin)),
-                  tilt: Math.round(resolution.tiltMin + y * (resolution.tiltMax - resolution.tiltMin)),
-                },
-                false,
-              )
-            }
-          />
+          {padMode === 'STAGE' ? (
+            <LiveJogPad keys={jogKeys} groups={jogGroups} size={open ? JOG_OPEN_SIZE : 64} readOnly={readOnly ? READ_ONLY_JOG : null} />
+          ) : (
+            <PositionPad
+              size={open ? 120 : 64}
+              pan={panNorm}
+              tilt={tiltNorm}
+              readOnly={readOnly}
+              onMove={(x, y) =>
+                write(
+                  {
+                    kind: 'position',
+                    pan: Math.round(resolution.panMin + x * (resolution.panMax - resolution.panMin)),
+                    tilt: Math.round(resolution.tiltMin + y * (resolution.tiltMax - resolution.tiltMin)),
+                  },
+                  false,
+                )
+              }
+            />
+          )}
           {open ? (
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
               <AxisControl
@@ -591,6 +606,12 @@ export function AxisControl({
     </div>
   )
 }
+
+/** The jog pad's side in an open row: its edge labels take the rest of the XY pad's room. */
+export const JOG_OPEN_SIZE = 100
+
+/** A read-only row's jog refusal: the pad is inert for the reason the row is. */
+export const READ_ONLY_JOG = 'Read-only — the desk is offline, or this position is parked'
 
 /** The XY pad: a press or a drag writes both axes in one `setPosition`. */
 export function PositionPad({
