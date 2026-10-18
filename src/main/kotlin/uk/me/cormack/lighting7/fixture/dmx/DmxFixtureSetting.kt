@@ -54,6 +54,18 @@ interface DmxFixtureZoomSettingValue : DmxFixtureSettingValue {
 }
 
 /**
+ * A position of a **RING** setting: what the LED ring around a head's lens does in this band. Off is
+ * neither a colour nor a chase. The ring is drawn beside the beam, never in it.
+ */
+interface DmxFixtureRingSettingValue : DmxFixtureSettingValue {
+    /** The colour the ring shows in this band, `#RRGGBB`, or null where it shows no single colour. */
+    val ringColour: String?
+
+    /** True for a band that chases light round the ring, at the rate of the type's RING_SPEED slider. */
+    val ringChase: Boolean get() = false
+}
+
+/**
  * A position of a **setting-backed STROBE channel** (fixture optics plan D12): what its band does
  * to the light — the option's band runs from its level to the next option's. The same vocabulary a
  * STROBE slider declares per band with `@FixtureProperty(strobe = […])` ([StrobeBand]): a flashing

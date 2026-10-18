@@ -87,6 +87,8 @@ const FAMILY_BY_CATEGORY: Record<PropertyCategory, AttributeFamily> = {
   shutter_rotation: 'BEAM',
   led_macro: 'BEAM',
   movement_macro: 'BEAM',
+  ring: 'BEAM',
+  ring_speed: 'BEAM',
   speed: 'BEAM',
   setting: 'BEAM',
   other: 'BEAM',

@@ -36,6 +36,7 @@ class FixtureCommandsTest {
             "varytec-easymove-xl-60-spot-11ch" to setOf("reset"),
             "shehds-led19-rgbw-24ch" to setOf("reset"),
             "shehds-led19-rgbw-16ch" to setOf("reset"),
+            "show-sound-ledbeamring-14ch" to setOf("reset"),
         ).forEach { (typeKey, names) ->
             val commands = commandsOf(typeKey)
             assertEquals(names, commands.keys, typeKey)

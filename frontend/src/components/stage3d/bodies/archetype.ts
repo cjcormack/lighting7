@@ -14,6 +14,7 @@ import {
 import {
   findColourSource,
   findDimmerProperty,
+  findRingProperty,
   findTiltProperty,
   resolveFixtureKind,
   type ElementDescriptor,
@@ -23,6 +24,7 @@ import {
   type FixtureTypeInfo,
 } from '../../../store/fixtures'
 import { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE } from '../emitterLayout'
+import { RING_INNER } from '../../../lib/ringEffect'
 
 export { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE }
 
@@ -93,6 +95,27 @@ export interface Cell {
   element: number | null
 }
 
+/**
+ * An LED ring around a single lens, in the head's frame: centred on the lens, on its face, out to
+ * [outerR] — its inner edge is `RING_INNER` of that, clear of the lens. Only a mover's single lens
+ * takes one, bounded by its face.
+ */
+export interface RingSpec {
+  x: number
+  y: number
+  z: number
+  outerR: number
+}
+
+/** A ring's outer radius over its lens's: its inner edge then clears the lens by a sixth. */
+const RING_OVER_LENS = 1.45
+
+/** A ring round [lens] no wider than [maxR], or null where that leaves no room clear of the lens. */
+function ringRound(lens: Cell, maxR: number): RingSpec | null {
+  const outerR = Math.min(lens.halfWidthM * RING_OVER_LENS, maxR)
+  return outerR * RING_INNER > lens.halfWidthM ? { x: lens.x, y: lens.y, z: lens.z, outerR } : null
+}
+
 export interface BodySpec {
   archetype: Archetype
   /** A mover's head; null for everything else. */
@@ -132,6 +155,8 @@ export interface BodySpec {
   }
   /** The lantern it is drawn as, for a type hung with one; null otherwise. */
   lantern: Lantern | null
+  /** An LED ring around the lens, for a fixture with a ring channel; null otherwise. */
+  ring: RingSpec | null
   /**
    * An oval beam's narrow axis over its wide one, as the tangents of their half-angles — a PAR
    * lamp's (`Lantern.oval`); null for a round beam. The field angle is the wide axis's.
@@ -263,6 +288,8 @@ export interface BodyInput {
   /** The type's manufacturer and model, joined; read for the words that pick a head. */
   typeName: string
   hasTilt: boolean
+  /** Whether the fixture has an LED ring around its lens (a `ring` setting). */
+  hasRing?: boolean
   /** How many of the fixture's elements carry a colour or a level of their own. */
   colourElements: number[]
   acceptsBeamAngle: boolean
@@ -318,6 +345,7 @@ export function bodyInputFor(
     typeKey: fixtureType?.typeKey ?? fixture?.typeKey ?? '',
     typeName: [fixtureType?.manufacturer, fixtureType?.model].filter(Boolean).join(' '),
     hasTilt: findTiltProperty(fixture?.properties) != null,
+    hasRing: findRingProperty(fixture?.properties) != null,
     colourElements: colourElementsOf(fixture),
     acceptsBeamAngle: fixtureType?.acceptsBeamAngle === true,
     acceptsLength: fixtureType?.acceptsLength === true,
@@ -448,6 +476,7 @@ export function bodySpecFor(input: BodyInput): BodySpec {
     declaredLens != null && Number.isFinite(declaredLens) && declaredLens > 0 ? Math.min(declaredLens / 2, D * 0.49) : fallback
   let cells: Cell[] = []
   let emitAxis: 1 | -1 = -1
+  let ring: RingSpec | null = null
   let yoke = true
   const accessories = { shutters: false, barnDoors: false, colourFrame: false }
 
@@ -504,6 +533,7 @@ export function bodySpecFor(input: BodyInput): BodySpec {
       } else {
         const r = headDia * (head === 'wash' ? 0.42 : head === 'profile' ? 0.33 : 0.28)
         cells = [disc(front, declaredLens != null && declaredLens > 0 ? Math.min(declaredLens / 2, headDia * 0.49) : r)]
+        if (input.hasRing === true) ring = ringRound(cells[0], headDia * 0.47)
       }
       break
     }
@@ -584,6 +614,7 @@ export function bodySpecFor(input: BodyInput): BodySpec {
         : DEPTH_OF_FIELD[family],
     accessories,
     lantern,
+    ring,
     ovalRatio,
     frameTurnDeg,
     blades,
@@ -625,7 +656,8 @@ function specKey(spec: Omit<BodySpec, 'key'>): string {
     .map((c) => `${c.shape[0]}${round4(c.x)},${round4(c.y)},${round4(c.halfWidthM)},${round4(c.halfDepthM)}`)
     .join(';')
   const acc = `${+spec.accessories.shutters}${+spec.accessories.barnDoors}${+spec.accessories.colourFrame}`
-  return `${spec.archetype}:${spec.head ?? '-'}:${round4(spec.lengthM)}x${round4(spec.widthM)}x${round4(spec.heightM)}:${acc}:${cells}`
+  const ring = spec.ring ? `:r${round4(spec.ring.outerR)}` : ''
+  return `${spec.archetype}:${spec.head ?? '-'}:${round4(spec.lengthM)}x${round4(spec.widthM)}x${round4(spec.heightM)}:${acc}:${cells}${ring}`
 }
 
 /**

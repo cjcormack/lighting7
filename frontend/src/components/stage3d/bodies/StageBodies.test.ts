@@ -17,6 +17,7 @@ import { applyHousingWorkLights, buildBodies, buildBodyLayout, flushBodies, make
 import { HOUSING_COLOR, HOUSING_FILL } from './palette'
 import { litByFill } from '../scene/surfaceShader'
 import { WORK_LIGHT_LEVELS } from '../scene/workLights'
+import { RING_SEGMENTS } from '../../../lib/ringEffect'
 
 function spec(kind: 'PROFILE' | 'FRESNEL', lengthM: number | null = null): BodySpec {
   return bodySpecFor({
@@ -97,6 +98,39 @@ describe('the instanced bodies', () => {
     const before = head.mesh.instanceColor!.getX(head.index)
     handle.setActive(0, true)
     expect(head.mesh.instanceColor!.getX(head.index)).toBeGreaterThan(before)
+  })
+})
+
+describe('a lens ring', () => {
+  const ringed = (): BodySpec => {
+    const s = spec('PROFILE')
+    return { ...s, ring: { x: 0, y: s.cells[0].y, z: 0, outerR: 0.1 }, key: `${s.key}:ring` }
+  }
+
+  it('instances its segments for the ringed bodies alone', () => {
+    const b = build([spec('PROFILE'), ringed(), ringed()])
+    expect(b.rings.count).toBe(2 * RING_SEGMENTS)
+    expect(b.addresses[0].ringBase).toBeNull()
+    expect(b.addresses[2].ringBase).toBe(RING_SEGMENTS)
+  })
+
+  it('draws the ring at full detail only, and paints it a segment at a time', () => {
+    const b = build([ringed()])
+    const handle = makeBodiesHandle(b)
+    const pose = makeBodyPose()
+    pose.ring = new Matrix4().makeTranslation(0, 3, 0)
+    const at = (k: number) => new Matrix4().fromArray(b.rings.instanceMatrix.array, k * 16)
+    handle.writePose(0, pose)
+    expect(at(0).elements[13]).toBe(3)
+    // Each segment is the next share of the turn.
+    expect(at(1).elements).not.toEqual(at(0).elements)
+    pose.shown = 'simple'
+    handle.writePose(0, pose)
+    expect(at(0).determinant()).toBe(0)
+    handle.setRing(0, 5, new Color(0, 1, 0))
+    expect(b.rings.instanceColor!.getY(5)).toBe(1)
+    handle.hide(0)
+    expect(at(5).determinant()).toBe(0)
   })
 })
 

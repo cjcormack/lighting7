@@ -39,7 +39,7 @@ export function isAnimatedBand(option: SettingOption | undefined): boolean {
  * `resolveSettingOption`'s rule (`hooks/usePropertyValues.ts`), restated here so this pure module
  * reaches no hook module. Options are level-ascending, as the desk sorts them.
  */
-function bandOption(options: readonly SettingOption[], level: number): SettingOption | undefined {
+export function bandOption(options: readonly SettingOption[], level: number): SettingOption | undefined {
   for (let i = options.length - 1; i >= 0; i--) if (level >= options[i].level) return options[i]
   return options[0]
 }
@@ -51,7 +51,8 @@ export function isAnimatedAt(options: readonly SettingOption[], level: number): 
 
 const HEX = /^#([0-9a-f]{6})$/i
 
-function parse(hex: string): [number, number, number] | null {
+/** A `#RRGGBB` colour as its three bytes, or null. */
+export function parseHex(hex: string): [number, number, number] | null {
   const m = HEX.exec(hex.trim())
   if (!m) return null
   return [parseInt(m[1].slice(0, 2), 16), parseInt(m[1].slice(2, 4), 16), parseInt(m[1].slice(4, 6), 16)]
@@ -63,7 +64,7 @@ function toHex(r: number, g: number, b: number): string {
 
 /** True for a pure-black preview: a blackout band (the Slender bar's), not a colour. */
 export function isBlackout(hex: string | undefined): boolean {
-  const c = hex ? parse(hex) : null
+  const c = hex ? parseHex(hex) : null
   return c != null && c[0] === 0 && c[1] === 0 && c[2] === 0
 }
 
@@ -81,7 +82,7 @@ export function wheelPalette(options: readonly SettingOption[]): readonly string
   const seen = new Set<string>()
   const out: string[] = []
   for (const o of options) {
-    const c = o.colourPreview ? parse(o.colourPreview) : null
+    const c = o.colourPreview ? parseHex(o.colourPreview) : null
     if (!c || (c[0] === 0 && c[1] === 0 && c[2] === 0)) continue
     const hex = toHex(c[0], c[1], c[2])
     if (seen.has(hex)) continue
@@ -108,8 +109,8 @@ export function cycleColour(palette: readonly string[], timeS: number): string |
   if (f <= hold) return palette[i]
   const t = (f - hold) / BAND_MOVE
   const e = t * t * (3 - 2 * t)
-  const a = parse(palette[i])!
-  const b = parse(palette[(i + 1) % n])!
+  const a = parseHex(palette[i])!
+  const b = parseHex(palette[(i + 1) % n])!
   return toHex(a[0] + (b[0] - a[0]) * e, a[1] + (b[1] - a[1]) * e, a[2] + (b[2] - a[2]) * e)
 }
 

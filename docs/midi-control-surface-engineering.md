@@ -618,7 +618,7 @@ can show. It is the one place in this class where the compiler is not the safety
 | Fader → GroupProperty | `ProgrammerWriter.writeProperties` | **Layer 2 (programmer)** | Fanned to members, slots tagged with the source group |
 | Flash press | `ProgrammerWriter.writeProperty` (owner `flash`) | **Layer 2 (programmer)** | Cleared on release; cascade republished |
 | Blackout toggle | `GlobalScalerState` (`TransmitModifier`) | **post-composition mask** | Dimmer, UV, strobe, and a dimmerless head's colour mix |
-| Grand Master fader / toggle | Same as Blackout | **post-composition scale** | The level multiplies the same channels; a strobe is cut only at 0 |
+| Grand Master fader / toggle | Same as Blackout | **post-composition scale** | The level multiplies the same channels; a strobe or an LED ring is cut only at 0 |
 | Bank-button press | `ActiveBankState.setBank` | *(no layer — routing state)* | Swaps the binding resolution axis |
 | Cue stack buttons | `CueStackManager.*` | *(Layer 4 via cue apply)* | Same path as REST / UI; uuid resolved to the project's row first |
 | Fire cue | `CueHolds.toggleLooseCue` | *(Layer 4)* | |

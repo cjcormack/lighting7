@@ -26,11 +26,13 @@ import {
   LENS_DISC,
   LENS_SEGMENT,
   releaseBodyGeometry,
+  RING_SEGMENT,
   releaseUnheldBodyGeometry,
   type BodyGeometry,
   type BodyLod,
 } from './bodyGeometry'
 import type { Mount } from './mount'
+import { RING_SEGMENTS } from '../../../lib/ringEffect'
 import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_ACTIVE_FILL, HOUSING_COLOR, HOUSING_FILL } from './palette'
 
 /**
@@ -48,7 +50,9 @@ import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_ACTIVE_FILL, HOUSING_COL
  * **The housings are lit like any surface**: the surface shader's receiver, tinted per instance, so
  * a beam that crosses a lantern lights it and the room's fill keeps the rig readable against the
  * dark. The selection tints the housing. **A lens is dark glass until its cell is lit** (`palette.ts`),
- * one instance per cell, painted from the cell's own colour and level by the colour sync.
+ * one instance per cell, painted from the cell's own colour and level by the colour sync. **An LED
+ * ring round a lens** is [RING_SEGMENTS] instances of one arc on the lens material, painted segment
+ * by segment by the ring sync and drawn only at full detail.
  *
  * Nothing here takes the pointer: a fixture is pressed through the invisible hit proxy its
  * `FixtureModel` carries, so the gizmo, the hover and the click keep their old plumbing.
@@ -95,6 +99,8 @@ export interface BodyPose {
   head: Matrix4
   /** Each cell's lens, world, in cell order; entries past the spec's cell count are ignored. */
   lenses: Matrix4[]
+  /** The lens ring's world matrix (a unit ring at the ring's outer radius), or null for none. */
+  ring: Matrix4 | null
   /** The hanger's world matrix, or null for none. */
   hanger: Matrix4 | null
   /** The billboard's centre (three.js) and size across, metres. */
@@ -111,6 +117,7 @@ export function makeBodyPose(): BodyPose {
     yoke: new Matrix4(),
     head: new Matrix4(),
     lenses: [],
+    ring: null,
     hanger: null,
     centreX: 0,
     centreY: 0,
@@ -124,6 +131,8 @@ export interface BodiesHandle {
   writePose(slot: number, pose: BodyPose): void
   /** Paint a cell's lens (already the dark-glass-to-hue colour — `palette.lensColour`). */
   setLens(slot: number, cell: number, colour: Color): void
+  /** Paint one segment of the slot's lens ring (already `palette.lensColour`'s). */
+  setRing(slot: number, segment: number, colour: Color): void
   /** Tint the slot's housing for the selection or a hover. */
   setActive(slot: number, active: boolean): void
   /** Park every part of a slot — its fixture unmounted. */
@@ -143,6 +152,10 @@ const HOUSING = new Color(HOUSING_COLOR)
 const HOUSING_ACTIVE = new Color(HOUSING_ACTIVE_COLOR).multiplyScalar(HOUSING_ACTIVE_FILL / HOUSING_FILL)
 
 const LENS_OFF = new Color(BODY_LENS_COLOR)
+
+/** Each ring segment's turn about the lens's axis, and a scratch for its world matrix. */
+const RING_TURNS = Array.from({ length: RING_SEGMENTS }, (_, k) => new Matrix4().makeRotationZ((k * Math.PI * 2) / RING_SEGMENTS))
+const RING_TMP = new Matrix4()
 
 /**
  * The housings under [levels] (stage-view menu plan D6): the instanced housing material's own fill
@@ -168,6 +181,8 @@ interface SlotAddress {
   lensMesh: InstancedMesh | null
   lensBase: number
   cells: number
+  /** The slot's first segment in the ring mesh, or null for a body with no ring. */
+  ringBase: number | null
 }
 
 export interface BuiltBodies {
@@ -183,6 +198,7 @@ export interface BuiltBodies {
   billboardActive: InstancedBufferAttribute
   discLenses: InstancedMesh
   segmentLenses: InstancedMesh
+  rings: InstancedMesh
   /** Meshes written since the last flush. */
   dirty: Set<InstancedMesh>
   /** Billboard attributes written since the last flush. */
@@ -253,6 +269,7 @@ export function buildBodies(
     lensMesh: null,
     lensBase: 0,
     cells: s.spec.cells.length,
+    ringBase: null,
   }))
   const geometries: Array<{ key: string; geometry: BodyGeometry }> = []
   for (const { slots } of groups.values()) {
@@ -292,6 +309,14 @@ export function buildBodies(
   layout.slots.forEach((s, i) => {
     if (s.spec.cells.length > 0) addresses[i].lensMesh = s.spec.cells[0].shape === 'disc' ? discLenses : segmentLenses
   })
+  let ringSegments = 0
+  layout.slots.forEach((s, i) => {
+    if (!s.spec.ring) return
+    addresses[i].ringBase = ringSegments
+    ringSegments += RING_SEGMENTS
+  })
+  const rings = instanced(RING_SEGMENT, lensMaterial, ringSegments)
+  for (let i = 0; i < Math.max(1, ringSegments); i++) rings.setColorAt(i, LENS_OFF)
   const n = layout.slots.length
   const hangers = instanced(HANGER, housingMaterial, n)
   for (let i = 0; i < Math.max(1, n); i++) hangers.setColorAt(i, HOUSING)
@@ -313,7 +338,7 @@ export function buildBodies(
   return {
     layout,
     geometries,
-    meshes: [...meshes, discLenses, segmentLenses, hangers],
+    meshes: [...meshes, discLenses, segmentLenses, rings, hangers],
     addresses,
     hangers,
     billboards,
@@ -322,6 +347,7 @@ export function buildBodies(
     billboardActive,
     discLenses,
     segmentLenses,
+    rings,
     dirty: new Set(),
     billboardDirty: false,
   }
@@ -382,11 +408,19 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
     }
   }
 
+  function writeRing(a: SlotAddress, ring: Matrix4 | null): void {
+    if (a.ringBase == null) return
+    for (let k = 0; k < RING_SEGMENTS; k++) {
+      writeMatrix(b.rings, a.ringBase + k, ring ? RING_TMP.multiplyMatrices(ring, RING_TURNS[k]) : ZERO)
+    }
+  }
+
   function hide(slot: number): void {
     if (!known(slot)) return
     const a = b.addresses[slot]
     parkParts(a, null)
     if (a.lensMesh) for (let c = 0; c < a.cells; c++) writeMatrix(a.lensMesh, a.lensBase + c, ZERO)
+    writeRing(a, null)
     writeMatrix(b.hangers, slot, ZERO)
     writeBillboard(slot, 0, 0, 0, 0)
   }
@@ -398,6 +432,7 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
       if (pose.shown === 'billboard') {
         parkParts(a, null)
         if (a.lensMesh) for (let c = 0; c < a.cells; c++) writeMatrix(a.lensMesh, a.lensBase + c, ZERO)
+        writeRing(a, null)
         writeMatrix(b.hangers, slot, ZERO)
         writeBillboard(slot, pose.centreX, pose.centreY, pose.centreZ, pose.sizeM)
         return
@@ -412,6 +447,7 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
           writeMatrix(a.lensMesh, a.lensBase + c, pose.lenses[c] ?? ZERO)
         }
       }
+      writeRing(a, pose.shown === 'full' ? pose.ring : null)
       writeMatrix(b.hangers, slot, pose.hanger ?? ZERO)
       writeBillboard(slot, 0, 0, 0, 0)
     },
@@ -426,6 +462,13 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
         b.billboardLens.setXYZ(slot, colour.r, colour.g, colour.b)
         b.billboardDirty = true
       }
+    },
+    setRing(slot, segment, colour) {
+      if (!known(slot)) return
+      const base = b.addresses[slot].ringBase
+      if (base == null || segment < 0 || segment >= RING_SEGMENTS) return
+      b.rings.setColorAt(base + segment, colour)
+      b.dirty.add(b.rings)
     },
     setActive(slot, active) {
       if (!known(slot)) return

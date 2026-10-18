@@ -29,7 +29,7 @@ export const SHEET_FAMILY_LABELS: Record<SheetFamily, string> = {
 }
 
 /** Categories a sheet files under Controls rather than the family vocabulary's Beam catch-all. */
-const CONTROL_CATEGORIES = new Set(['setting', 'other', 'speed', 'led_macro', 'movement_macro'])
+const CONTROL_CATEGORIES = new Set(['setting', 'other', 'speed', 'led_macro', 'movement_macro', 'ring', 'ring_speed'])
 
 /** The position row's resolution — the grid's own (`resolveCell(…, 'position')`). */
 export type PositionResolution = Extract<NonNullable<CellResolution>, { kind: 'position' }>

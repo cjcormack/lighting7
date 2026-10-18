@@ -46,6 +46,7 @@ object FixtureTypeRegistry {
         RobeColorSpot575Fixture::class,
         Scantastic4Fixture::class,
         ShehdsLed19RgbwFixture::class,
+        ShowSoundLedBeamRingFixture::class,
         SlenderBeamBarQuadFixture::class,
         Source4RevolutionFixture::class,
         StarClusterFixture::class,
