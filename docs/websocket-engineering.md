@@ -82,11 +82,15 @@ The request messages (`channelState`, `fxState`, `programmer.state`, `speedMaste
 coming back from the background, a client that thinks it has drifted. They are not the way
 initial state arrives, and a client that still asks on open just gets the frame twice.
 
-Two mechanisms satisfy the rule, and only two:
+Three mechanisms satisfy the rule, and only three:
 
-- an explicit `scope.sendSnapshot { … }` in the family's `setupXxxSubscriptions`, or
+- an explicit `scope.sendSnapshot { … }` in the family's `setupXxxSubscriptions`, for state that
+  outlives a project switch;
 - a subscription to a **`StateFlow`** (or a `combine` of them), which always carries a current
-  value.
+  value; or
+- for state on the show, a cold `flow { emit(snapshot) }` handed to `scope.subscribeShow`, which
+  sends it at connect and again for every show a switch or reload brings in (`programmer.state`
+  with `provenanceState`, `speedMasters.state`).
 
 A **replay-1 `MutableSharedFlow` does not count.** Its replay cache is empty until something has
 happened, so the snapshot arrives only on a desk where the thing has already happened once —
@@ -203,6 +207,20 @@ engine, programmer) and must wait for `isShowReady`.
 instance is replaced wholesale on project switch, so `setupBroadcastSubscriptions` re-registers on
 `projectChangedFlow` and returns an unregister function for teardown. Machine-scoped state
 (accounts, install row, updates) deliberately does **not** ride it — see `MachineSocket.kt`.
+
+**A flow on the show is subscribed through `SocketScope.subscribeShow`, never `subscribe`.** A
+project switch, and a reload, build a new `Show`, and the browser keeps its socket open across
+both, so `scope.subscribe(state.show.x.flow)` binds the show that was live at connect and goes
+quiet when it is replaced — until the tab reloads. `subscribeShow({ show -> flow }) { frame -> … }`
+asks for the flow again on every `projectChangedFlow` event (`flatMapLatest`, behind a rendezvous
+buffer so a slow tab still skips frames upstream). A family whose snapshot is an explicit push gives
+it its own `subscribeShow` of a one-frame flow, so a switch re-sends it — concurrently with, and
+unordered against, the family's live frames: `programmer.state` with `provenanceState`, and
+`speedMasters.state`. The programmer's resync matters beyond the values: the incoming show's
+`programmerRevision` counts from zero again, and a client compares revisions for change, so the
+snapshot is what lands it on the new count. `grandMaster.state`,
+`stackEffectSize.state` and `surfaceScaler.state` predate the helper and spell the same
+`flatMapLatest` out by hand. `ShowFollowingSubscriptionsTest` holds a socket open across a switch.
 
 ## Domain families
 
@@ -977,7 +995,7 @@ Nothing is persisted; a same-project reload carries the sizes (`ShowCarry`).
 
 | Message | Payload | When |
 |---|---|---|
-| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, usage?, followNum?, followDen?}]` | Connect snapshot, on request, and as the reply to every write |
+| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, usage?, followNum?, followDen?}]` | Connect snapshot, again on every project switch and reload, on request, and as the reply to every write |
 | `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate — a follower's derived moves ride this like any other |
 | `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat`, plus the first beat after that master's tempo moves |
 | `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`) or a dropped one (`SPEED_MASTER_UNKNOWN`); always followed by the state reply |
@@ -1041,7 +1059,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 
 | Message | Payload | Cast |
 |---|---|---|
-| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | Connect snapshot + reply |
+| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | Connect snapshot, again on every project switch and reload, + reply |
 | `programmer.entryChanged` | `targetType`, `targetKey`, `propertyName`, `value` | Unicast reply |
 | `programmer.entryCleared` | `targetType`, `targetKey`, `propertyName` | Unicast reply |
 | `programmer.cleared` | `cleared: Int`, `effectsCleared: Int` | Unicast reply |
@@ -1310,7 +1328,8 @@ One file, five edits:
    leaf messages and their `@SerialName`s.
 2. Add `handleXxx(scope, message)` with an exhaustive `when`.
 3. Add `setupXxxSubscriptions(scope)` if the family has live state — and push its connect snapshot
-   there, per §"Snapshot rule".
+   there, per §"Snapshot rule". A flow on the show goes through `scope.subscribeShow`, never
+   `subscribe`, or it goes quiet at the first project switch.
 4. Add one arm to the `dispatch` `when` in `Sockets.kt` and one call to setup.
 5. Classify each new inbound frame in `TraceSampling.WS_MESSAGES` — continuous, snapshot or
    gesture; `TraceSamplingTest` fails until it has a row.
@@ -1323,7 +1342,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | File | Purpose |
 |---|---|
 | `plugins/Sockets.kt` | Plugin config, `/api` endpoint, auth + warm-up gates, frame dispatch, teardown |
-| `plugins/SocketScope.kt` | Per-connection context: `send`, `subscribe`, `sendSnapshot`, `cancelAll` |
+| `plugins/SocketScope.kt` | Per-connection context: `send`, `subscribe`, `subscribeShow`, `sendSnapshot`, `cancelAll` |
 | `plugins/SocketMessages.kt` | The `InMessage` / `OutMessage` sealed roots |
 | `plugins/SentryTracing.kt` | `traceMessage`: a gesture frame as a Sentry transaction (and the HTTP plugin) |
 | `plugins/BootSocket.kt` | `bootProgressState` |
