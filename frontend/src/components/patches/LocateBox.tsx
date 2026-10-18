@@ -36,7 +36,7 @@ export function LocateBox({ patch, projectId }: LocateBoxProps) {
     <div className="space-y-2.5 rounded-md border border-border p-3" aria-label="Locate">
       <p className="text-xs font-medium text-muted-foreground">Locate</p>
       {entries.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Centre of travel — every unit locates to its middle.</p>
+        <p className="text-sm text-muted-foreground">Default — every unit locates to the middle of its travel, or to the front its type declares.</p>
       ) : (
         <ul className="space-y-1 text-sm">
           {entries.map((entry) => (
@@ -67,10 +67,10 @@ export function LocateBox({ patch, projectId }: LocateBoxProps) {
           title={
             reason ??
             (entries.length === 0
-              ? 'Nothing stored — Locate already centres it'
+              ? 'Nothing stored — Locate already uses its default'
               : venueInShow
                 ? 'Clear this show’s locate — the venue’s stays as it is'
-                : 'Locate centres it again')
+                : 'Locate goes back to its default')
           }
           onClick={() => actions.clearLocate(target)}
         >

@@ -250,6 +250,9 @@ export type SliderPropertyDescriptor = {
   degMin?: number
   /** Slider max in degrees (mapped to DMX max). */
   degMax?: number
+  /** A pan slider: the travel position (degrees) at which the head faces the body's front — signed
+   *  pan 0. Absent means the middle of `degMin`..`degMax`. */
+  forwardDeg?: number
   /** Reverse the direction of the slider→degrees mapping; on a focus slider, DMX min is far focus. */
   inverted?: boolean
   /** Focus slider: the nearest focal distance (m from the aperture), at DMX min unless inverted.

@@ -21,7 +21,7 @@ export function fromThree(v: Vector3): { x: number; y: number; z: number } {
 }
 
 // Build a unit beam direction (in R3F space) from *signed* pan and tilt angles
-// — angles about each axis's own mechanical centre, as produced by
+// — angles about each axis's own zero (`axisZeroDeg`), as produced by
 // `dmxToSignedDegrees`. Not raw travel positions, and not base orientation:
 // `baseYawDeg`/`basePitchDeg` are the body's mount pose and are carried by the
 // fixture's body group, so folding them in here would apply them twice.
@@ -87,18 +87,18 @@ export function rigEuler(
 import { dmxToDegrees } from './axisDegrees'
 export { dmxToDegrees }
 
-// Mechanical centre of a pan/tilt axis, in travel degrees. Because degMin/degMax
-// describe travel rather than a signed angle, the DMX-centre position is the
-// midpoint — never 0, and never the 270° that used to be hardcoded here (that
-// was only ever correct for the 0–540 pan movers, and wrong for tilt on all of
-// them, for Scantastic 4's 0–180 pan and for Varytec's 0–630).
-export function axisCentreDeg(slider: SliderPropertyDescriptor): number | null {
+// Where a pan/tilt axis sits at a signed angle of 0, in travel degrees: a pan's
+// declared front (`forwardDeg`, the Shehds' 180° of 540°), else the axis's
+// mechanical centre, the midpoint of degMin..degMax — travel, not a signed angle,
+// so never 0 and never a fixed 270.
+export function axisZeroDeg(slider: SliderPropertyDescriptor): number | null {
   if (slider.degMin == null || slider.degMax == null) return null
-  return (slider.degMin + slider.degMax) / 2
+  return slider.forwardDeg ?? (slider.degMin + slider.degMax) / 2
 }
 
-// Travel position expressed as a signed angle about the axis centre — what the
-// scene graph wants. Mid-DMX ⇒ 0 ⇒ head sitting on the fixture's own axis.
+// Travel position expressed as a signed angle about the axis zero — what the
+// scene graph wants. Mid-DMX ⇒ 0 ⇒ head sitting on the fixture's own axis,
+// facing its front unless the pan declares the front elsewhere.
 //
 // Centring is a subtraction applied after the interpolation, so a fractional
 // coarse value from `combineFine` (16-bit pan/tilt) survives untouched.
@@ -109,7 +109,7 @@ export function dmxToSignedDegrees(
   const travel = dmxToDegrees(dmx, slider)
   if (travel == null) return null
   // Non-null whenever dmxToDegrees was: both read the same two bounds.
-  return travel - axisCentreDeg(slider)!
+  return travel - axisZeroDeg(slider)!
 }
 
 // Normalise an angle in degrees to (-180, 180]. The backend validates

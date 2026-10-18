@@ -379,6 +379,7 @@ annotation class FixtureProperty(
     // … composition, bundleWithColour, compactDisplay, axis …
     val degMin: Double = Double.NaN,
     val degMax: Double = Double.NaN,
+    val forwardDeg: Double = Double.NaN,
     val inverted: Boolean = false,
     val focusNearM: Double = Double.NaN,
     val focusFarM: Double = Double.NaN,
@@ -420,6 +421,16 @@ null, and reflects as null:
 
 - `degMin` / `degMax`: a PAN or TILT slider's travel in degrees (with `axis`), or a ZOOM slider's
   full beam angle, at DMX min / max.
+- `forwardDeg`: on a PAN slider, the travel position at which the head faces the body's front — where
+  tilt swings the beam towards the body's own +Z, which is upstage and downstage on a mover hung or
+  stood with yaw 0. Unset, it is the middle of the range, where most yokes sit at DMX centre. A type
+  whose yoke sits elsewhere there declares it: the Shehds LED 19 × 15W, whose mid-pan (270°) faces a
+  quarter turn round, so hung it behaved as if yawed −90°, declares 180. It is a fact of the product,
+  never of a hang — a unit hung turned is its patch's `baseYawDeg`. Three things read it, and agree:
+  the Stage view's signed pan (`axisZeroDeg` in `frontend/src/lib/stageCoords.ts`), the aim solve
+  (`AimAxis.zeroDeg`, §"Aiming a head at a point") and Locate's default pan (§"Stored locate").
+  A `pos:` position is still a fraction of travel about DMX centre, so `0,0` on such a head is not
+  where it locates. `PanFrontTest` holds every declaration to a PAN slider, inside its range.
 - `focusNearM` / `focusFarM`: a FOCUS slider's nearest and farthest focal distance, in metres from
   the aperture, at DMX min / max. The Stage view focuses at that fixed distance wherever the head
   points; a slider that declares neither racks over the beam's own throw instead
@@ -570,6 +581,7 @@ bar's), which the view draws dark and a palette never snaps to.
 | Field | On | Means |
 |---|---|---|
 | `degMin` / `degMax` | PAN, TILT, ZOOM, SHUTTER_ROTATION | Degrees at DMX min / max: travel, a zoom's full beam angle, a blade's turn. |
+| `forwardDeg` | PAN | The travel position facing the body's front; absent is the middle of the range. |
 | `inverted` | any of those, FOCUS, SHUTTER | Reverses the mapping. |
 | `focusNearM` / `focusFarM` | FOCUS | The focal range in metres from the aperture (`FocusRangeTest`). |
 | `rpmMax` / `indexDegMax` | GOBO_ROTATION with a mode channel | Speed at DMX max in a rotate band; angle at DMX max when indexing. |
@@ -1649,7 +1661,7 @@ and kind (`frontend/src/lib/lamp.ts`, `frontend/docs/stage-vis-engineering.md` �
 ### Stored locate
 
 **A unit's stored locate is where Locate points it** (venue-visit plan D6, D17): pan and tilt, coarse
-and fine, in place of the centre of travel. Every other property Locate writes keeps its category
+and fine, in place of its default — the centre of travel, or a pan's declared front. Every other property Locate writes keeps its category
 default — full, open, white, the zoom at its middle — stored locate or not. It is
 `fixture_patches.locate`, canonical JSON `[{head?, pan, tilt, panFine?, tiltFine?}]`
 (`fixture/locate/StoredLocate.kt`, `DaoFixturePatch.storedLocate`), one entry per **unit** that pans
@@ -1663,7 +1675,8 @@ no fine byte stored locates with fine 0, as the default does.
 - **The resolver.** `LocateValueResolver.resolve(fixture, media, locate)` takes the patch's entries —
   the parent's for a head (`Fixtures.storedLocateFor`, the patch metadata the loader fills) — and a
   unit with an entry gets its `position` and fine sliders from it, clamped into each slider's range; a
-  unit without one centres. `LocateValueResolver.axesOf` is the one statement of a unit's axes (its
+  unit without one centres — but for a pan that declares its front (`forwardDeg`), which locates
+  there, fine included, so tilt runs up and downstage as on any other mover. `LocateValueResolver.axesOf` is the one statement of a unit's axes (its
   `WithPosition` sliders and its `PAN_FINE` / `TILT_FINE` properties), which the store reads and
   `StoredLocate.unitsOf` checks against. Locate over a group resolves per member, as it always has,
   so each member takes its own patch's entry.
@@ -2093,11 +2106,11 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
 `basePitchDeg` is its focus, not its mount, so it is never flagged.
 
 - **Travel degrees come from the annotation.** A head aims only where both its pan and tilt carry
-  `@FixtureProperty(degMin =, degMax =)`; the mechanical centre is the middle of the range, as the
-  view's `axisCentreDeg` reads it. Pan repeats every 360°, and tilting either way off the axis
+  `@FixtureProperty(degMin =, degMax =)`; signed angles are about the axis's zero — a pan's
+  declared `forwardDeg`, else the middle of the range — as the view's `axisZeroDeg` reads them. Pan repeats every 360°, and tilting either way off the axis
   reaches the same direction with pan half a turn apart, so every candidate inside the travel is
-  tried and the one nearest the centre of both wins — never the long way round, and the same answer
-  for the same rig each time. Pan turns about the body axis, so it never changes how far off that
+  tried and the one nearest both zeros wins — never the long way round, the same answer for the same
+  rig each time, and on a declared front never a flip between the two families as a point crosses it. Pan turns about the body axis, so it never changes how far off that
   axis a direction is: a 0–270° tilt misses only the 45° cone behind the base, a 0–180° one the whole
   hemisphere behind it.
 - **Fine channels are written.** A head with `PAN_FINE` / `TILT_FINE` sliders gets 16 bits

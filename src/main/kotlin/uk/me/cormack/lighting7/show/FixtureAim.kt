@@ -10,11 +10,19 @@ import kotlin.math.sqrt
 /**
  * One pan or tilt axis's **travel**, in degrees, as its `@FixtureProperty(degMin =, degMax =)`
  * declares it — a mover's pan 0–540, tilt 0–270. The mechanical centre (the DMX midpoint) is the
- * middle of the range, exactly as the Stage view's `axisCentreDeg` reads it.
+ * middle of the range. [zeroDeg] is where the head sits at a signed angle of 0, exactly as the
+ * Stage view's `axisZeroDeg` reads it: the declared `forwardDeg`, else the centre.
  */
-data class AimAxis(val degMin: Double, val degMax: Double) {
+data class AimAxis(val degMin: Double, val degMax: Double, val forwardDeg: Double? = null) {
     val centreDeg: Double get() = (degMin + degMax) / 2
     val halfSpanDeg: Double get() = abs(degMax - degMin) / 2
+    val zeroDeg: Double get() = forwardDeg ?: centreDeg
+
+    /** How far a signed angle about [zeroDeg] lies outside the travel; 0 inside it. */
+    fun excessDeg(signedDeg: Double): Double {
+        val travel = zeroDeg + signedDeg
+        return (minOf(degMin, degMax) - travel).coerceAtLeast(0.0) + (travel - maxOf(degMin, degMax)).coerceAtLeast(0.0)
+    }
 }
 
 /** What aiming a head at a point came to. Degrees are **travel** degrees, the axis's own scale. */
@@ -39,8 +47,9 @@ sealed interface AimSolution {
  * at the fixture's world position, rotated by the patch's base orientation — `Euler(pitch, yaw, roll,
  * 'YXZ')`, i.e. `Ry(yaw) · Rx(pitch) · Rz(roll)` in three.js space — then a yoke panning about the body's
  * own +Y and a head tilting about X inside it (`panTiltToDir` / `headQuaternionFor` in
- * `lib/stageCoords.ts`). At signed pan 0 / tilt 0 (DMX mid-travel) the beam runs up the body's
- * +Y axis; a hung mover is `basePitchDeg = 180`. A rigging's pose places the body (through
+ * `lib/stageCoords.ts`). At signed pan 0 / tilt 0 (each axis's [AimAxis.zeroDeg], DMX mid-travel
+ * unless the type declares a front) the beam runs up the body's +Y axis; a hung mover is
+ * `basePitchDeg = 180`. A rigging's pose places the body (through
  * [worldPosition]) but does **not** rotate it — the view draws it that way, so so does this.
  *
  * So the beam direction is `Ry(yaw) · Rx(pitch) · Rz(roll) · Ry(pan) · Rx(tilt) · (0, 1, 0)`, and this
@@ -49,9 +58,10 @@ sealed interface AimSolution {
  *
  * That has two families of answers — tilt one way and pan to it, or tilt the other way and pan
  * half a turn further — and pan repeats every 360°. Every candidate inside both axes' travel is
- * considered and the one nearest the centre of travel (least `|pan| + |tilt|`) wins, which leaves
- * the most room to move either way and is the same answer for the same rig every time. Straight
- * along the body axis, pan is arbitrary and is left at its centre.
+ * considered and the one nearest each axis's zero (least `|pan| + |tilt|`) wins — the centre of
+ * travel, or a pan's declared front, where Locate leaves the head — so the answer is the same for
+ * the same rig every time and the switch between the two families never falls on the front. Straight
+ * along the body axis, pan is arbitrary and is left at its zero.
  *
  * Aimed from the fixture's placement point. The drawn head pivots a few centimetres from it along
  * the body axis, so the drawn beam passes that close to the point rather than exactly through it;
@@ -89,11 +99,10 @@ fun aimAt(
     val tilt0 = Math.toDegrees(acos(ly.coerceIn(-1.0, 1.0)))
     val alongAxis = sqrt(lx * lx + lz * lz) < 1e-9
 
-    // Signed degrees about each axis's centre.
+    // Signed degrees about each axis's zero, the geometry's own reference.
     data class Candidate(val panSigned: Double, val tiltSigned: Double) {
         val cost: Double get() = abs(panSigned) + abs(tiltSigned)
-        val excess: Double get() =
-            (abs(panSigned) - pan.halfSpanDeg).coerceAtLeast(0.0) + (abs(tiltSigned) - tilt.halfSpanDeg).coerceAtLeast(0.0)
+        val excess: Double get() = pan.excessDeg(panSigned) + tilt.excessDeg(tiltSigned)
     }
 
     val candidates = buildList {
@@ -105,17 +114,19 @@ fun aimAt(
     }
     val reachable = candidates.filter { it.excess <= RANGE_EPSILON_DEG }
     val best = reachable.minByOrNull { it.cost }
-        ?: return candidates.minBy { it.excess }.let { AimSolution.OutOfReach(it.panSigned, it.tiltSigned) }
+        ?: return candidates.minBy { it.excess }.let {
+            AimSolution.OutOfReach(it.panSigned + pan.zeroDeg - pan.centreDeg, it.tiltSigned + tilt.zeroDeg - tilt.centreDeg)
+        }
 
     return AimSolution.Aimed(
-        panDeg = (pan.centreDeg + best.panSigned).coerceIn(minOf(pan.degMin, pan.degMax), maxOf(pan.degMin, pan.degMax)),
-        tiltDeg = (tilt.centreDeg + best.tiltSigned).coerceIn(minOf(tilt.degMin, tilt.degMax), maxOf(tilt.degMin, tilt.degMax)),
+        panDeg = (pan.zeroDeg + best.panSigned).coerceIn(minOf(pan.degMin, pan.degMax), maxOf(pan.degMin, pan.degMax)),
+        tiltDeg = (tilt.zeroDeg + best.tiltSigned).coerceIn(minOf(tilt.degMin, tilt.degMax), maxOf(tilt.degMin, tilt.degMax)),
     )
 }
 
 /**
  * The beam direction, as a unit vector in stage coordinates, of a head with base orientation
- * [baseYawDeg] / [basePitchDeg] / [baseRollDeg] at **signed** pan and tilt (degrees about each axis's centre) —
+ * [baseYawDeg] / [basePitchDeg] / [baseRollDeg] at **signed** pan and tilt (degrees about each axis's [AimAxis.zeroDeg]) —
  * the forward half of [aimAt], and the Stage view's `panTiltToDir` composed with the body's base
  * rotation.
  */

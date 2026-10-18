@@ -232,6 +232,12 @@ enum class CompactDisplayRole {
  *               [Double.NaN] meaning "unset" — Kotlin annotations can't carry null Double
  *               defaults, so NaN is the sentinel and is converted to null at reflect time.
  * @param degMax Slider max in degrees (mapped to the slider's DMX max). Defaults [Double.NaN].
+ * @param forwardDeg On a PAN slider, the travel position in degrees at which the head faces the
+ *                   body's front — where tilt swings the beam towards the body's own +Z, as the Stage
+ *                   view draws a head at pan 0. [Double.NaN] — the default — means the middle of
+ *                   [degMin]..[degMax], which is where most movers' yokes sit at DMX centre. Declared
+ *                   by a type whose yoke sits elsewhere there (the Shehds, a quarter turn round), so
+ *                   the view, an aim and Locate all turn with it; it lies inside the range.
  * @param inverted Reverse the direction of the slider→degrees mapping. Used for fixtures
  *                  whose tilt is mechanically inverted from the DMX-up = stage-up convention.
  *                  On a FOCUS slider it reverses the focus range instead: DMX min is far focus.
@@ -295,6 +301,7 @@ annotation class FixtureProperty(
     val axis: PanTiltAxis = PanTiltAxis.NONE,
     val degMin: Double = Double.NaN,
     val degMax: Double = Double.NaN,
+    val forwardDeg: Double = Double.NaN,
     val inverted: Boolean = false,
     val focusNearM: Double = Double.NaN,
     val focusFarM: Double = Double.NaN,

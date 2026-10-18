@@ -5,7 +5,7 @@ import {
   fromThree,
   panTiltToDir,
   headQuaternionFor,
-  axisCentreDeg,
+  axisZeroDeg,
   dmxToSignedDegrees,
   normaliseSignedDeg,
   patchPlacementFromWorld,
@@ -196,7 +196,7 @@ describe("headQuaternionFor", () => {
   })
 })
 
-describe("axisCentreDeg / dmxToSignedDegrees", () => {
+describe("axisZeroDeg / dmxToSignedDegrees", () => {
   // Every pan/tilt range declared in the lighting7 fixture library.
   const RANGES: [number, number][] = [
     [0, 540], // pan, most movers
@@ -212,7 +212,7 @@ describe("axisCentreDeg / dmxToSignedDegrees", () => {
 
   it("centres on the midpoint of the declared travel", () => {
     for (const [degMin, degMax] of RANGES) {
-      expect(axisCentreDeg(baseSlider({ degMin, degMax }))).toBeCloseTo(
+      expect(axisZeroDeg(baseSlider({ degMin, degMax }))).toBeCloseTo(
         (degMin + degMax) / 2,
         9,
       )
@@ -220,8 +220,8 @@ describe("axisCentreDeg / dmxToSignedDegrees", () => {
   })
 
   it("is null without both bounds", () => {
-    expect(axisCentreDeg(baseSlider())).toBeNull()
-    expect(axisCentreDeg(baseSlider({ degMin: 0 }))).toBeNull()
+    expect(axisZeroDeg(baseSlider())).toBeNull()
+    expect(axisZeroDeg(baseSlider({ degMin: 0 }))).toBeNull()
     expect(dmxToSignedDegrees(128, baseSlider({ degMax: 540 }))).toBeNull()
   })
 
@@ -233,6 +233,15 @@ describe("axisCentreDeg / dmxToSignedDegrees", () => {
       expect(dmxToSignedDegrees(0, s)).toBeCloseTo(-half, 9)
       expect(dmxToSignedDegrees(255, s)).toBeCloseTo(half, 9)
     }
+  })
+
+  it("measures from a declared front instead of the centre", () => {
+    const s = baseSlider({ degMin: 0, degMax: 540, forwardDeg: 180 })
+    expect(axisZeroDeg(s)).toBe(180)
+    expect(dmxToSignedDegrees(255 / 3, s)).toBeCloseTo(0, 9)
+    expect(dmxToSignedDegrees(127.5, s)).toBeCloseTo(90, 9)
+    expect(dmxToSignedDegrees(0, s)).toBeCloseTo(-180, 9)
+    expect(dmxToSignedDegrees(255, s)).toBeCloseTo(360, 9)
   })
 
   it("flips sign when inverted", () => {

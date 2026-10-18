@@ -438,6 +438,7 @@ abstract class DmxFixture(
         axis = prop.axis.serialized(),
         degMin = prop.degMin,
         degMax = prop.degMax,
+        forwardDeg = prop.forwardDeg,
         inverted = prop.inverted.takeIf { it },
         focusNearM = prop.focusNearM,
         focusFarM = prop.focusFarM,

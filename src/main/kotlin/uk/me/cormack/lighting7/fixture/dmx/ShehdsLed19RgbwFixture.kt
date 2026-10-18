@@ -26,6 +26,9 @@ import uk.me.cormack.lighting7.fixture.trait.WithWhite
  * elements, matching the [SlenderBeamBarQuadFixture] pattern.
  *
  * 16ch mode collapses the three zones to a single global RGBW.
+ *
+ * Its mid-pan (270°) faces a quarter turn off the body's front — hung, as if yawed −90° — so pan
+ * declares its front at 180° (`forwardDeg`).
  */
 sealed class ShehdsLed19RgbwFixture(
     universe: Universe,
@@ -148,7 +151,7 @@ sealed class ShehdsLed19RgbwFixture(
             Mode24Ch(this, transaction)
 
         @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
-            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0, forwardDeg = 180.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
@@ -276,7 +279,7 @@ sealed class ShehdsLed19RgbwFixture(
             Mode16Ch(this, transaction)
 
         @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
-            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
+            axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0, forwardDeg = 180.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
         @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)

@@ -39,7 +39,7 @@ data class UnitLocate(
 
 /**
  * A patch's stored locate: one [UnitLocate] per unit that has one, in canonical order (the fixture's
- * own first, then heads by index), one per unit. Empty is none — every unit locates to its centre.
+ * own first, then heads by index), one per unit. Empty is none — every unit locates to its default (`LocateValueResolver`).
  */
 object StoredLocate {
     private val json = Json {
