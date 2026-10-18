@@ -498,7 +498,9 @@ sealed class RobeColorSpot575Fixture(
         @FixtureCommand(label = "Total reset", description = "Re-homes every motor, pan and tilt included. The head swings through its travel and the beam moves while it runs.", holdMs = HOLD_MS, role = CommandRole.RESET)
         val reset = control(TOTAL_RESET_LEVEL, 200u, 209u)
 
-        @FixtureCommand(label = "Lamp off", description = "Douses the discharge lamp. It is a cold-restrike lamp: it must cool before it can be struck again, so this head is dark until then.", holdMs = HOLD_MS, role = CommandRole.LAMP_OFF)
+        // Estimate: a 5-minute cool-down before the mains is cut — checked on the rig by
+        // FU-MANUAL-VENUE-VISIT-S6.
+        @FixtureCommand(label = "Lamp off", description = "Douses the discharge lamp. It is a cold-restrike lamp: it must cool before it can be struck again, so this head is dark until then.", holdMs = HOLD_MS, role = CommandRole.LAMP_OFF, coolDownMs = 300_000)
         val lampOff = control(LAMP_OFF_LEVEL, 230u, 239u)
 
         companion object {

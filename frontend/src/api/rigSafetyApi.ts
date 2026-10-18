@@ -45,13 +45,17 @@ export interface LampOff {
   fixture: string
   offAt: string
   restrikeRemainingMs: number
+  /** Time left at the frame until this lamp's mains can be cut; absent from a desk that predates it. */
+  coolRemainingMs?: number
 }
 
 export interface RigSafetyState {
   projectId: number | null
-  /** Lamped off and blacked out by *Make rig safe*, and nothing has sent output since. */
+  /** Lamped off and blacked out by *Make rig safe*, nothing has sent output since, and every lamp has cooled. */
   ready: boolean
   readySince: string | null
+  /** Made safe, but a lamp is still cooling: the time left at the frame until the rig is [ready]. */
+  coolingRemainingMs: number | null
   /** *Make rig safe*'s blackout holds on this project. */
   blackout: boolean
   /** The units *Undo* would strike. */
@@ -70,6 +74,7 @@ export const NOTHING_SAFE: RigSafetyState = {
   projectId: null,
   ready: false,
   readySince: null,
+  coolingRemainingMs: null,
   blackout: false,
   undo: [],
   notOff: [],
@@ -88,6 +93,7 @@ export function parseRigSafetyFrame(raw: unknown, receivedAt: number): RigSafety
     projectId: typeof r.projectId === 'number' ? r.projectId : null,
     ready: r.ready === true,
     readySince: typeof r.readySince === 'string' ? r.readySince : null,
+    coolingRemainingMs: typeof r.coolingRemainingMs === 'number' ? r.coolingRemainingMs : null,
     blackout: r.blackout === true,
     undo: Array.isArray(r.undo) ? (r.undo as RigSafetyState['undo']) : [],
     notOff: Array.isArray(r.notOff) ? (r.notOff as string[]) : [],

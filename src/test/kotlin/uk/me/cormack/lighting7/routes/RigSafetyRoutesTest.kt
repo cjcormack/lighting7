@@ -38,8 +38,9 @@ import kotlin.test.assertTrue
 
 /**
  * Bulk commands, *Make rig safe*, *Undo* and *Quit desk* (venue-visit plan S6) over a real desk with
- * patched fixtures on a MOCK universe. Holds are cut to 50 ms through `CommandOutput.holdMsFor`, and
- * the service's clock is moved past a lamp's restrike time rather than waiting it out.
+ * patched fixtures on a MOCK universe. Holds are cut to 50 ms through `CommandOutput.holdMsFor`, a
+ * lamp's cool-down to nothing (but in the test of cooling), and the service's clock is moved past a
+ * lamp's restrike time rather than waiting it out.
  *
  * Patched: two MAC 250s (lamp on, lamp off, reset — 8-minute restrike) at 1 and 20, a Varytec (a
  * reset, no lamp) at 40.
@@ -61,6 +62,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         patch("martin-mac-250-mode-4", "mac2", 20)
         patch("varytec-easymove-xl-60-spot-11ch", "vary", 40)
         state.show.commandOutput.holdMsFor = { 50 }
+        rig.coolDownMsFor = { 0 }
     }
 
     private suspend fun HttpClient.json(path: String, body: String = "{}"): HttpResponse =
@@ -112,6 +114,66 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
         val message = safe.toMessage(quitAllowed = true)
         assertTrue(message.ready && message.blackout && message.quitAllowed)
         assertTrue(message.lampsOff.all { it.restrikeRemainingMs in 470_000..480_000 })
+    }
+
+    @Test
+    fun `made safe, the rig is cooling until its last lamp has cooled, and only then ready`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        val exited = kotlinx.coroutines.CompletableDeferred<Unit>()
+        state.exitDesk = { exited.complete(Unit) }
+        val t0 = System.currentTimeMillis()
+        var now = t0
+        rig.clock = { now }
+        rig.coolDownMsFor = { 600_000 }
+
+        client.json("projects/$projectId/rig-safe")
+        val cooling = awaitSnapshot("cooling") { it.coolingUntilMs != null }
+        assertFalse(cooling.ready)
+        assertTrue(cooling.blackout)
+        assertEquals(t0 + 600_000, cooling.coolingUntilMs)
+        val message = cooling.toMessage(quitAllowed = true, nowMs = t0 + 100_000)
+        assertEquals(500_000, message.coolingRemainingMs)
+        assertTrue(message.lampsOff.all { it.coolRemainingMs == 500_000L })
+
+        val quit = client.json("install/quit")
+        assertEquals(HttpStatusCode.Accepted, quit.status, quit.bodyAsText())
+        assertTrue(quit.body<QuitDeskResponse>().rigWasSafe, "quitting cuts no fixture's power")
+        withTimeout(5_000) { exited.await() }
+
+        now = t0 + 600_000
+        val ready = awaitSnapshot("ready once cooled") { it.ready }
+        assertNull(ready.coolingUntilMs)
+        assertEquals(t0 + 600_000, ready.readySinceMs)
+    }
+
+    @Test
+    fun `output during the cool-down drops it, and making safe again keeps each lamp's cool time`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        client.rig()
+        val t0 = System.currentTimeMillis()
+        var now = t0
+        rig.clock = { now }
+        rig.coolDownMsFor = { 600_000 }
+
+        client.json("projects/$projectId/rig-safe")
+        awaitSnapshot("cooling") { it.coolingUntilMs != null }
+        now = t0 + 240_000
+        ProgrammerHandler.set(state, TargetRef.Fixture("vary"), "dimmer", "200", 0)
+        val after = awaitSnapshot("a programmer change ends the rig's cool-down") { it.coolingUntilMs == null }
+        assertFalse(after.ready)
+        assertTrue(
+            after.toMessage(quitAllowed = true, nowMs = now).lampsOff.all { it.coolRemainingMs == 360_000L },
+            "each lamp still says when its mains can be cut",
+        )
+
+        client.json("projects/$projectId/rig-safe")
+        val again = awaitSnapshot("cooling again") { it.coolingUntilMs != null && it.run?.finished == true }
+        assertEquals(t0 + 600_000, again.coolingUntilMs, "the lamps were already off and cooling")
+        assertTrue(again.lampsOff.all { it.offAtMs == t0 })
+        assertEquals(listOf("mac1", "mac2"), again.undo.map { it.first }, "the first run's lamps, remembered once")
     }
 
     @Test

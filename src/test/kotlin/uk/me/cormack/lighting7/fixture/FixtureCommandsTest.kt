@@ -86,7 +86,7 @@ class FixtureCommandsTest {
     }
 
     @Test
-    fun `roles are one per type, and only a strike declares a restrike and a spacing`() {
+    fun `roles are one per type, only a strike declares a restrike and a spacing, and only a douse a cool-down`() {
         for ((typeKey, _, commands) in library) {
             for ((role, withRole) in commands.groupBy { it.spec.role }) {
                 if (role != CommandRole.OTHER) assertEquals(1, withRole.size, "$typeKey: one ${role.name} command, not ${withRole.map { it.name }}")
@@ -98,6 +98,11 @@ class FixtureCommandsTest {
                 } else {
                     assertEquals(0, c.spec.restrikeMs, "$typeKey ${c.name}: only a strike has a restrike")
                     assertEquals(0, c.spec.strikeSpacingMs, "$typeKey ${c.name}: only a strike has a spacing")
+                }
+                if (c.spec.role == CommandRole.LAMP_OFF) {
+                    assertTrue(c.spec.coolDownMs in 60_000..1_800_000, "$typeKey ${c.name}: a cool-down of ${c.spec.coolDownMs} ms")
+                } else {
+                    assertEquals(0, c.spec.coolDownMs, "$typeKey ${c.name}: only a lamp-off has a cool-down")
                 }
             }
             val roles = commands.map { it.spec.role }

@@ -18,7 +18,8 @@ import uk.me.cormack.lighting7.state.State
  * - **Admin only, and never remote**: 403 [CODE_QUIT_LOCAL_ONLY] on the public listener, whatever
  *   the role — a tunnel must not be able to switch the desk off.
  * - **It warns when the rig is not marked safe**: 409 [CODE_RIG_NOT_SAFE] unless *Ready to switch
- *   off* holds or the caller sends `force`, which the confirm sends once the operator has read why.
+ *   off* holds, the rig is made safe and only cooling (quitting cuts no fixture's mains), or the
+ *   caller sends `force`, which the confirm sends once the operator has read why.
  *
  * Making the rig safe and quitting are separate (D9): this never lamps off or blacks out.
  */
@@ -32,7 +33,7 @@ internal fun Route.routeApiRestInstallQuit(state: State) {
             )
         }
         val request = call.receive<QuitDeskRequest>()
-        val ready = state.rigSafety.snapshot.value.ready
+        val ready = state.rigSafety.snapshot.value.let { it.ready || it.coolingUntilMs != null }
         if (!ready && !request.force) {
             return@post call.respond(
                 HttpStatusCode.Conflict,

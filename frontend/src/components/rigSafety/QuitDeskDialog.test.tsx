@@ -11,7 +11,7 @@ vi.mock('@/store/rigSafety', () => ({
   useQuitDeskMutation: () => [quitDesk, { isLoading: false }],
 }))
 const markDeskQuit = vi.fn()
-vi.mock('./deskQuit', () => ({ markDeskQuit: () => markDeskQuit() }))
+vi.mock('./deskQuit', () => ({ markDeskQuit: (coolsAt: number | null) => markDeskQuit(coolsAt) }))
 
 import { QuitDeskDialog } from './QuitDeskDialog'
 
@@ -32,6 +32,19 @@ describe('QuitDeskDialog', () => {
     expect(quitDesk).toHaveBeenCalledWith({ force: false })
     expect(markDeskQuit).toHaveBeenCalled()
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it('quits a cooling rig without force, and says how long to leave the power on', async () => {
+    rig = { ...NOTHING_SAFE, blackout: true, coolingRemainingMs: 125_000, receivedAt: Date.now() }
+    render(<QuitDeskDialog open onOpenChange={() => {}} />)
+    expect(screen.queryByTestId('quit-not-safe')).toBeNull()
+    expect(screen.getByTestId('quit-cooling').textContent).toContain('another 2:05')
+    const before = Date.now()
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Quit desk' })))
+    expect(quitDesk).toHaveBeenCalledWith({ force: false })
+    const coolsAt = markDeskQuit.mock.calls[0][0] as number
+    expect(coolsAt).toBeGreaterThanOrEqual(before + 120_000)
+    expect(coolsAt).toBeLessThanOrEqual(Date.now() + 125_000)
   })
 
   it('warns when the rig is not marked safe, and quits anyway only on the press', async () => {

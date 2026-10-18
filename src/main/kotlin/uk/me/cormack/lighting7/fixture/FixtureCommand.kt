@@ -38,6 +38,9 @@ import kotlin.reflect.full.memberProperties
  *   struck again reliably — the manual's time, marked `// Estimate:` where it gives none.
  * @param strikeSpacingMs A [CommandRole.LAMP_ON]'s only: how long a bulk strike waits after striking
  *   this unit before the next, to spread the inrush current (D19).
+ * @param coolDownMs A [CommandRole.LAMP_OFF]'s only: how long the fixture's fan must run after the
+ *   lamp goes off before its mains can be cut — what *Ready to switch off* waits out. The manual's
+ *   time, marked `// Estimate:` where it gives none.
  */
 @Target(AnnotationTarget.PROPERTY)
 @Retention(AnnotationRetention.RUNTIME)
@@ -49,6 +52,7 @@ annotation class FixtureCommand(
     val role: CommandRole = CommandRole.OTHER,
     val restrikeMs: Long = 0,
     val strikeSpacingMs: Long = 0,
+    val coolDownMs: Long = 0,
 )
 
 /** What a fixture command is across types — what a bulk run and Make rig safe ask for. */
@@ -65,6 +69,7 @@ data class CommandSpec(
     val role: CommandRole,
     val restrikeMs: Long,
     val strikeSpacingMs: Long,
+    val coolDownMs: Long,
     internal val classProperty: KProperty1<*, *>,
 )
 
@@ -106,7 +111,7 @@ object FixtureCommands {
     private fun scan(klass: KClass<*>): List<CommandSpec> =
         klass.memberProperties.mapNotNull { p ->
             val ann = p.annotations.filterIsInstance<FixtureCommand>().firstOrNull() ?: return@mapNotNull null
-            CommandSpec(p.name, ann.label, ann.description, ann.holdMs, ann.confirm, ann.role, ann.restrikeMs, ann.strikeSpacingMs, p)
+            CommandSpec(p.name, ann.label, ann.description, ann.holdMs, ann.confirm, ann.role, ann.restrikeMs, ann.strikeSpacingMs, ann.coolDownMs, p)
         }.sortedBy { it.name }
 
     /** [fixture]'s commands with their channels, in name order; empty for every fixture that has none. */

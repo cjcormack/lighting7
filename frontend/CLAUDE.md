@@ -5738,14 +5738,19 @@ frame:
   Refusals toast through `errorToastMiddleware`.
 - **`RigSafetyBanner`**, in `Layout`'s band slot after the venue banners, never on the header (its
   375px budget is spent): a run's progress, the next lamp waiting on its restrike counted down,
-  *Details* and *Cancel*; green *Ready to switch off* with *Undo* and, where `quitAllowed`, *Quit
-  desk…*; amber *Blacked out by Make rig safe, not ready* with why, *Undo* and *Release blackout*; a
-  run that ended with something not done until this window dismisses it. Immersive, the `ShowHeader`
+  *Details* and *Cancel*; neutral *Lamps off, cooling — safe to power down in 4:12* while the frame's
+  `coolingRemainingMs` holds (`coolingLeft`), with *Undo* and *Quit desk…*; green *Ready to switch
+  off* with *Undo* and, where `quitAllowed`, *Quit desk…*; amber *Blacked out by Make rig safe, not ready* with why, *Undo* and *Release blackout*; a
+  run that ended with something not done until this window dismisses it. The amber banner also says
+  *Lamps still cooling: mains safe in m:ss* from the lamps' own `coolRemainingMs` (`lampsCoolingLeft`)
+  when output moved during the cool-down. Immersive, the `ShowHeader`
   draws `RigSafetyImmersiveChip` instead, a readout. *Undo* asks first everywhere
   (`UndoRigSafeDialog`): a stray press would strike still-cooling lamps minutes later.
 - **Quit desk** — the user menu's last item and the banner's, both only where the frame's
   `quitAllowed` holds (an admin on the desk's own listener). `QuitDeskDialog` warns when the rig is
-  not ready and sends `force` only then (*Quit anyway*); it shows refusals inline (`quitDesk` is in
+  not ready and sends `force` only then (*Quit anyway*); a cooling rig quits plainly, the dialog saying
+  how long to leave the rig's power on, and `markDeskQuit(coolsAt)` hands that time to `DeskQuitScreen`,
+  which counts it out once no window hears the desk; it shows refusals inline (`quitDesk` is in
   `SILENT_ENDPOINTS`). On success `markDeskQuit()` raises `DeskQuitScreen`, mounted in `App` beside
   the gates so the reconnect screens they draw once the socket closes never cover it.
 

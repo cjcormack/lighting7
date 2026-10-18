@@ -350,12 +350,15 @@ sealed class MartinMac250Fixture(
         val lampOn = DmxCommand(universe, firstChannel, LAMP_ON_LEVEL, bandMin = 228u, bandMax = 237u)
 
         // The manual: 248–255 "Lamp off: time > 5 seconds". Held a second past it.
+        // Estimate: a 5-minute cool-down before the mains is cut — checked on the rig by
+        // FU-MANUAL-VENUE-VISIT-S6.
         @FixtureCommand(
             label = "Lamp off",
             description = "Douses the discharge lamp. It cannot be struck again for 8 minutes, so this head " +
                 "is dark until then.",
             holdMs = 6_000,
             role = CommandRole.LAMP_OFF,
+            coolDownMs = 300_000,
         )
         val lampOff = DmxCommand(
             universe, firstChannel, LAMP_OFF_LEVEL, bandMin = 248u, bandMax = 255u, alongside = menuSafeCombination,

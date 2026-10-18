@@ -51,6 +51,8 @@ class BulkCommandRun(
         val command: String,
         val restrikeMs: Long = 0,
         val strikeSpacingMs: Long = 0,
+        /** A lamp-off's: how long after it the fixture's mains can be cut. */
+        val coolDownMs: Long = 0,
     )
 
     /** What starting one unit's command came to. */

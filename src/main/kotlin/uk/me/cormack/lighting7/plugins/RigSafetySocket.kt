@@ -49,9 +49,12 @@ data class CommandRunDto(
     val cancelled: Boolean = false,
 )
 
-/** A unit whose lamp went off on this desk; [restrikeRemainingMs] is 0 once it can be struck. */
+/**
+ * A unit whose lamp went off on this desk; [restrikeRemainingMs] is 0 once it can be struck, and
+ * [coolRemainingMs] 0 once its mains can be cut.
+ */
 @Serializable
-data class LampOffDto(val fixture: String, val offAt: String, val restrikeRemainingMs: Long)
+data class LampOffDto(val fixture: String, val offAt: String, val restrikeRemainingMs: Long, val coolRemainingMs: Long)
 
 /** A unit *Undo* would strike. */
 @Serializable
@@ -72,6 +75,8 @@ data class RigSafetyStateOutMessage(
     val projectId: Int? = null,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS) val ready: Boolean = false,
     val readySince: String? = null,
+    /** Made safe, but a lamp is still cooling: how long until the last has and the rig is [ready]. */
+    val coolingRemainingMs: Long? = null,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS) val blackout: Boolean = false,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS) val undo: List<RigUnitDto> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.ALWAYS) val notOff: List<String> = emptyList(),
@@ -105,11 +110,19 @@ internal fun RigSafetyService.Snapshot.toMessage(quitAllowed: Boolean, nowMs: Lo
     projectId = projectId,
     ready = ready,
     readySince = readySinceMs?.let { Instant.ofEpochMilli(it).toIsoUtc() },
+    coolingRemainingMs = coolingUntilMs?.let { (it - nowMs).coerceAtLeast(0) },
     blackout = blackout,
     undo = undo.map { (key, name) -> RigUnitDto(key, name) },
     notOff = notOff,
     run = run?.toDto(nowMs),
-    lampsOff = lampsOff.map { LampOffDto(it.fixtureKey, Instant.ofEpochMilli(it.offAtMs).toIsoUtc(), (it.restrikeAtMs - nowMs).coerceAtLeast(0)) },
+    lampsOff = lampsOff.map {
+        LampOffDto(
+            it.fixtureKey,
+            Instant.ofEpochMilli(it.offAtMs).toIsoUtc(),
+            (it.restrikeAtMs - nowMs).coerceAtLeast(0),
+            (it.coolAtMs - nowMs).coerceAtLeast(0),
+        )
+    },
     quitAllowed = quitAllowed,
 )
 
