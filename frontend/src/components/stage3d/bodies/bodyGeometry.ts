@@ -7,9 +7,11 @@ import {
   Matrix4,
   PlaneGeometry,
   Quaternion,
+  RingGeometry,
   Vector3,
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { RING_INNER, RING_SEGMENTS } from '../../../lib/ringEffect'
 import type { BodySpec } from './archetype'
 import type { Mount } from './mount'
 
@@ -180,7 +182,9 @@ function headParts(spec: BodySpec, lod: BodyLod): Part[] {
         parts.push([cyl(headDia * 0.5, headDia * 0.44, headLen, seg), at(0, 0)])
       } else {
         parts.push([cyl(headDia * 0.5, headDia * 0.5, headLen * 0.65, seg), at(0, -headLen * 0.17 * e)])
-        parts.push([cyl(headDia * 0.45, lensR * 1.4, headLen * 0.35, seg), at(0, headLen * 0.33 * e)])
+        // The nose's lens face is its top; a ringed head's is wide enough to carry the ring.
+        const faceR = spec.ring ? Math.min(headDia * 0.5, Math.max(headDia * 0.45, spec.ring.outerR * 1.06)) : headDia * 0.45
+        parts.push([cyl(faceR, lensR * 1.4, headLen * 0.35, seg), at(0, headLen * 0.33 * e)])
       }
       break
     }
@@ -362,6 +366,21 @@ function disposeEntry(key: string): void {
 /** A unit lens face: a disc of radius 1, or a 2 × 2 square a segment scales, facing +Z. */
 export const LENS_DISC = new CircleGeometry(1, 24)
 export const LENS_SEGMENT = new PlaneGeometry(2, 2)
+/** The gap between two of a ring's segments, radians — enough to read the segments at close range. */
+const RING_SEGMENT_GAP = 0.02
+
+/**
+ * One segment of a lens ring at unit outer radius, facing +Z: its share of the turn less a hairline
+ * gap, starting at angle 0. A ring is [RING_SEGMENTS] of these, each turned on by its share.
+ */
+export const RING_SEGMENT = new RingGeometry(
+  RING_INNER,
+  1,
+  4,
+  1,
+  RING_SEGMENT_GAP / 2,
+  (Math.PI * 2) / RING_SEGMENTS - RING_SEGMENT_GAP,
+)
 /** A hanger: a unit-tall rod, base at its origin, scaled to its length. */
 export const HANGER = (() => {
   const g = new CylinderGeometry(0.012, 0.012, 1, 6)

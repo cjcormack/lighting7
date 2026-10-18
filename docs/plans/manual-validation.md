@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S12`](#fu-manual-venue-visit-s12) | real movers fan out and back in about their own positions from the programmer's Spread, the busk Spread tab and an X-Touch encoder — the middle head still, a group in its member order, Live never fanning a fan, a typed Look's rows the start of a fan into it | Venue visit S12, 2026-10-17 |
@@ -131,6 +132,40 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-FX-TEMPLATE-PADS`](#fu-manual-fx-template-pads) | a template that holds an effect is authored, busked and tracked exactly as a value template is | FX templates, 2026-09-02 |
 | [`FU-MANUAL-BUSK-LAYOUT`](#fu-manual-busk-layout) | the page the operator built runs a show: banks, solo across all three kinds, and pads placed from elsewhere | Busk layout, 2026-09-05 |
 | [`FU-MANUAL-TEMPLATE-EMITTERS`](#fu-manual-template-emitters) | an explicitly-set white / amber / UV reaches the light, and a colour template that names one refuses as a whole | Template emitters, 2026-09-09 |
+
+---
+
+## `FU-MANUAL-SHOWSOUND-BEAMRING`
+
+**What it proves**: *the four Show-Sound LEDBEAMRINGs on LX3 (heads 62–65) behave as the type says*,
+and the Stage view's LED ring reads like the real one.
+
+**Why it is here**: the type (`ShowSoundLedBeamRingFixture`) has no manual behind it — its channels
+are a ChamSys head file a Show-Sound colleague wrote by hand (`SHOW-SOUND_LEDBEAMRING_14CHNEW.hed`) —
+so several values are marked `// Estimate:` at their source: the gobo patterns but Flower, Stars and
+Squares, the prism's eight facets, the pulse rate (0.5–2 Hz; the strobe's 1–13 Hz is the head file's),
+the reset's 5 s hold, the 3° beam, the pan front at 180° (from the head file's locate, pan 86), and
+the ring's colour band drawn white. The ring's chase rate (0.25–1.5 turns a second over the speed's
+range) and drawing it beside the beam, untouched by the dimmer, are the view's guesses.
+
+**Test**, on the rig with the four patched (universe 0, 310 / 352 / 366 / 380):
+
+1. **Position and Locate**: Locate one head — it faces front, beam out of the head's face towards
+   the stage. If it faces a quarter or half turn round, change `forwardDeg` (or drop it).
+2. **Wheels**: step the colour wheel through its seven colours and each rotation band, the gobo wheel
+   through its seven gobos and shakes, and the prism in, then rotating. Name the four unnamed gobos
+   and correct the patterns; count the prism's facets.
+3. **Strobe**: 0–3 open, 4–99 pulses, 100–200 strobes, 201–250 random, 251–255 open (the head file
+   types it "Strobe F>S" but draws it open). Time each band's ends against the declared rates.
+4. **Reset** from the *Commands* menu re-homes within its 5 s hold.
+5. **The ring**: set *LED ring* to Colour and sweep 5–74 — note the colours it steps through, and
+   whether the dimmer at 0 darkens it. Then Chase and Chase 2 at ring speed 0, 128 and 255: what each
+   chase looks like, which way and how fast it runs. Compare with the Stage view at full detail.
+
+Where a value is wrong, change it and its comment and drop the `Estimate:` marker; where the ring's
+colour band holds several colours, split `RingFx.COLOUR` into one option per colour.
+
+30 minutes.
 
 ---
 

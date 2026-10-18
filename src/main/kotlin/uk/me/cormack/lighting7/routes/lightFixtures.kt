@@ -517,6 +517,10 @@ data class SettingOption(
     val hzMax: Double? = null,
     /** On a flashing STROBE option, true where the rate falls as the value rises. */
     val strobeInverted: Boolean? = null,
+    /** On a RING setting, the colour the ring shows in this band. Null on every other option. */
+    val ringColour: String? = null,
+    /** On a RING setting, true for a band that chases round the ring. Null on every other option. */
+    val ringChase: Boolean? = null,
 )
 
 @Serializable

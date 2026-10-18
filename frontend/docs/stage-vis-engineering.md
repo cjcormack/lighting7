@@ -2185,6 +2185,30 @@ fixture's colour. At most `MAX_CELLS` (16).
   mean — so a 12-pixel bar takes four of the surface shader's lights, not twelve. The air keeps a
   beam per cell.
 
+### A ring round the lens
+
+A fixture with a **`ring`** setting has an LED ring round its lens, drawn on the body and never as a
+cell: it is the head's second emitter, beside the beam (the Show-Sound LEDBEAMRING's, lighting7
+`docs/fixtures-engineering.md` §"Beam vocabulary"). `bodySpecFor` gives a mover's single lens a
+`ring` (`RingSpec`: centred on the lens, its outer radius 1.45 of the lens's but no wider than its
+face, its inner edge `RING_INNER` of that, so it clears the glass — a lens too large to leave room
+gets none) and keys it into the spec, so a ringed head is its own geometry; its lens face widens to
+carry the ring. `StageBodies` instances `RING_SEGMENTS` (24) arcs of
+one `RING_SEGMENT` geometry per ringed body on the lens material, each the ring's world matrix turned
+by its share, and draws them at full detail only — under 44 px the ring is too small to read.
+
+`RingSync` (in `FixtureModel`) paints the segments from the ring setting and its `ring_speed` slider
+through `lib/ringEffect.ts`, a pure decode with time passed in: an option with `ringColour` lights
+every segment that colour, one with `ringChase` runs an arc a quarter of the ring long round it — its
+head bright, fading behind, in the band's colour or else each segment the hue of its place — at
+0.25–1.5 turns a second over the speed's range, and any other band is dark glass. A chase registers
+with the colour ticker while it runs and the ring is drawn (the body director reports when its level
+of detail changes), as an animated colour band does; a still or distant ring asks for no frames. The
+beam's dimmer and strobe do not reach the ring; blackout and the grand master at 0 cut its channel
+on output, so the view draws it dark then too. No type declares its chase patterns or the colours within a colour band, so
+every chase is drawn alike and the rates are estimates (`FU-MANUAL-SHOWSOUND-BEAMRING`). Like cells,
+the ring is 3D only: the 2D dispatch and the Positions chips draw the beam alone.
+
 ### A beam leaves its aperture
 
 Item 8: a beam leaves the **aperture** — the lens, or a cell's face — at the aperture's own size and

@@ -546,7 +546,10 @@ value no manufacturer states carries `// Estimate:` at its source (D15).
 `_FINE` bytes, `SPEED`; the beam roles `GOBO`, `GOBO_ROTATION`, `GOBO_ROTATION_MODE` (a wheel's
 function: `INDEX`, `ROTATE_FWD`, `ROTATE_REV` bands), `PRISM`, `PRISM_ROTATION`, `FOCUS`, `ZOOM`,
 `IRIS`, `FROST`, `SHUTTER` / `SHUTTER_ROTATION` (§"Framing shutters"); `LED_MACRO` and
-`MOVEMENT_MACRO`, which the view draws as canned animations; and `SETTING` / `OTHER`, which it never
+`MOVEMENT_MACRO`, which the view draws as canned animations; `RING` and `RING_SPEED`, an LED ring
+round the lens — its effect setting and the rate of its chases — which the view draws on the body
+beside the beam (the Show-Sound LEDBEAMRING's; `frontend/docs/stage-vis-engineering.md` §"A ring
+round the lens"); and `SETTING` / `OTHER`, which it never
 reads. The LED and movement *programs* most heads carry are still `SETTING` — drawing a guessed
 program would be worse than drawing none (`FU-STAGE-PROGRAM-MACROS`).
 
@@ -562,6 +565,7 @@ because one channel mixes bands:
 | `zoomDeg` | `DmxFixtureZoomSettingValue` | A stepped zoom's full beam angle at this position (D2). |
 | `loadable` | `DmxFixtureSettingValue` | On a loadable setting, whether this position takes media (§"Fitted media"). |
 | `strobeKind` / `hzMin` / `hzMax` / `strobeInverted` | `DmxFixtureStrobeSettingValue` | On a STROBE setting, what this position's band does to the light, and a flashing band's rate (D12, below). |
+| `ringColour` / `ringChase` | `DmxFixtureRingSettingValue` | On a RING setting, the colour the ring shows in this band, or that it chases round the ring; neither is off. |
 
 **Every COLOUR option is a colour or a no-colour band** (D8): `ColourPreviewTest` fails any option of
 a COLOUR setting, fixture or cell, that carries neither a `#RRGGBB` preview nor `noColour` — or both
@@ -1332,6 +1336,7 @@ or an effect can find on it — and a type's full beam vocabulary is in its desc
 | `Scantastic4Fixture.Mode8Ch` | `scantastic-4-8ch` | Equinox Scantastic 4 — 8-Channel (Macro/Effect) | 8 | strobe · fixed 11° lens |
 | `ShehdsLed19RgbwFixture.Mode16Ch` | `shehds-led19-rgbw-16ch` | Shehds LED 19x15W RGBW Zoom — 16-Channel | 16 | dimmer, colour, position, white, strobe |
 | `ShehdsLed19RgbwFixture.Mode24Ch` | `shehds-led19-rgbw-24ch` | Shehds LED 19x15W RGBW Zoom — 24-Channel | 24 | dimmer, position, strobe, multi-element, colour |
+| `ShowSoundLedBeamRingFixture.Mode14Ch` | `show-sound-ledbeamring-14ch` | Show-Sound LEDBEAMRING — 14-Channel | 14 | dimmer, position, strobe · fixed 3° lens · LED ring |
 | `SlenderBeamBarQuadFixture.Mode12Ch` | `slender-beam-bar-quad-12ch` | Equinox Slender Beam Bar Quad — 12-Channel (Per-Head) | 12 | multi-element, position |
 | `SlenderBeamBarQuadFixture.Mode14Ch` | `slender-beam-bar-quad-14ch` | Equinox Slender Beam Bar Quad — 14-Channel (Global + Per-Head) | 14 | dimmer, strobe, multi-element, position |
 | `SlenderBeamBarQuadFixture.Mode1Ch` | `slender-beam-bar-quad-1ch` | Equinox Slender Beam Bar Quad — 1-Channel (Show Presets) | 1 | — |

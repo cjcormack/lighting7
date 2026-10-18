@@ -3,12 +3,13 @@
 // jsdom only because store/fixtures imports the API facade, which reads `window` at module load.
 import { describe, expect, it } from 'vitest'
 import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../../store/fixtures'
-import { chan, colourProp, element, sliderProp } from '../../../test/fixtureFactories'
+import { chan, colourProp, element, settingProp, sliderProp } from '../../../test/fixtureFactories'
 import { bodySpecOf } from '../emitterNeeds'
 import {
   apexDistanceM,
   archetypeFor,
   bodyInputFor,
+  bodySpecFor,
   DEPTH_OF_FIELD,
   FIELD_DEG,
   lightRuns,
@@ -20,6 +21,7 @@ import {
 import { beamMask, focusBlur } from '../beamMask'
 import { resolveEdgeHardness } from '../beamOptics'
 import { bodyFrames } from './bodyGeometry'
+import { RING_INNER } from '../../../lib/ringEffect'
 import focusInverse from '../../../../../src/test/resources/stage/focusInverse.fixture.json'
 import { indexLanterns, type Lantern } from '../../../lib/lanterns'
 // The desk's own library resource, read straight from the backend's tree — so the lanterns this
@@ -509,4 +511,55 @@ describe("where a mover's lens sits — the desk's shared vector", () => {
       for (const cell of spec.cells) expect(cell.y * spec.emitAxis).toBeCloseTo(h.lensM, 9)
     })
   }
+})
+
+describe('a lens ring', () => {
+  const ring = settingProp('ringFx', 'ring', chan(13), [
+    { name: 'OFF', level: 0, displayName: 'Off' },
+    { name: 'CHASE', level: 75, displayName: 'Chase', ringChase: true },
+  ])
+  const spot = (props: PropertyDescriptor[]) =>
+    bodySpecFor(
+      bodyInputFor(
+        { kindOverride: null },
+        fixture({ properties: props }),
+        type({ kind: 'MOVING_HEAD', body: { archetype: 'mover', head: 'spot' } }),
+        null,
+      ),
+    )
+
+  it('rings the single lens of a fixture with a ring channel, clear of the lens', () => {
+    const plain = spot([TILT])
+    const ringed = spot([TILT, ring])
+    expect(plain.ring).toBeNull()
+    const lens = ringed.cells[0]
+    expect(ringed.ring).toMatchObject({ x: lens.x, y: lens.y, z: lens.z })
+    expect(ringed.ring!.outerR * RING_INNER).toBeGreaterThan(lens.halfWidthM)
+    // A ring is part of the geometry the body is instanced by.
+    expect(ringed.key).not.toBe(plain.key)
+  })
+
+  it('keeps a ring on its face: a large declared lens leaves no room for one', () => {
+    const big = bodySpecFor(
+      bodyInputFor(
+        { kindOverride: null },
+        fixture({ properties: [TILT, ring] }),
+        type({ kind: 'MOVING_HEAD', body: { archetype: 'mover', head: 'spot', lensDiameterM: 1 } }),
+        null,
+      ),
+    )
+    expect(big.ring).toBeNull()
+    const ringed = spot([TILT, ring])
+    expect(ringed.ring!.outerR).toBeLessThanOrEqual(ringed.widthM * 0.6 * 0.47)
+  })
+
+  it('rings only a mover', () => {
+    expect(bodySpecFor(input({ kind: 'PAR', hasRing: true })).ring).toBeNull()
+  })
+
+  it('draws no ring where there is no single lens to ring', () => {
+    const bar = bodySpecFor(input({ kind: 'MOVING_HEAD', hasTilt: true, hasRing: true, colourElements: [0, 1, 2, 3] }))
+    expect(bar.cells.length).toBeGreaterThan(1)
+    expect(bar.ring).toBeNull()
+  })
 })

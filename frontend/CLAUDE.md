@@ -5677,7 +5677,7 @@ moves the level. It was a chip with its own popover fader and an inline fader on
 and Chris moved the fader behind the toggle: a fader always under the pointer is too easy to move by
 accident. It is the live project's level, 0–100 %, which
 the desk applies at transmit: every dimmer and UV channel, and the colour mix of a head with no
-dimmer; a strobe is cut only at 0. So the Stage view and the channel views draw the rig as the grand
+dimmer; a strobe or an LED ring is cut only at 0. So the Stage view and the channel views draw the rig as the grand
 master leaves it.
 
 - **Every chip on the app header is 28px** (`h-7`, the ARMED chip's): ARMED, Connected (both its

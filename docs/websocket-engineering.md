@@ -975,7 +975,7 @@ because the scaler facade is re-created on a project switch. The level is per pr
 machine-local: persisted in `project_scaler_states` (excluded from sync), so it survives a switch
 away and back and a restart. It scales at transmit, after composition and FX and under park —
 every DIMMER and UV channel, and the colour mix (a `DmxColour`'s RGB, WHITE and AMBER) of a head
-with no dimmer; a STROBE channel is cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
+with no dimmer; a STROBE channel and an LED ring's RING channel are cut only at 0 (`midi/GlobalScalerState.kt`). Every listener
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
 

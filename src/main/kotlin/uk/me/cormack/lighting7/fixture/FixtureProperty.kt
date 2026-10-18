@@ -65,6 +65,11 @@ enum class PropertyCategory(val defaultComposition: CompositionRule) {
     SHUTTER_ROTATION(CompositionRule.LTP),
     LED_MACRO(CompositionRule.LTP),
     MOVEMENT_MACRO(CompositionRule.LTP),
+    // An LED ring around the lens, beside the beam rather than in it: RING is its effect setting, whose
+    // options say what each band shows (`DmxFixtureRingSettingValue`), and RING_SPEED the rate of
+    // its chases.
+    RING(CompositionRule.LTP),
+    RING_SPEED(CompositionRule.LTP),
 
     SETTING(CompositionRule.LTP),
     OTHER(CompositionRule.LTP),

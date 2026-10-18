@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
+import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
@@ -26,7 +27,9 @@ import kotlin.math.roundToInt
  *    blackout does it: the persisted one the MIDI `Blackout` target toggles, or *Make rig safe*'s
  *    runtime one ([GlobalScalerStateHolder.safeBlackout]).
  *  - **Grand Master** — a level, 0–100 %, multiplying every scaled channel. A strobe channel holds
- *    a rate rather than a level, so it passes through unchanged above 0 % and is cut at 0 %.
+ *    a rate rather than a level, so it passes through unchanged above 0 % and is cut at 0 %. So
+ *    does an LED ring's effect channel (RING): it selects a band, 0 being off, and the dimmer does
+ *    not reach it.
  *
  * Which channels are scaled (venue-visit plan D12): every DIMMER and UV channel, and, on a head
  * with no dimmer, its colour-mix channels — a `DmxColour`'s red, green and blue, a
@@ -152,7 +155,7 @@ class GlobalScalerState(
             if (value == null) continue
             when (category) {
                 PropertyCategory.DIMMER, PropertyCategory.UV -> addValueChannels(universe, value, scaled)
-                PropertyCategory.STROBE -> addValueChannels(universe, value, strobe)
+                PropertyCategory.STROBE, PropertyCategory.RING -> addValueChannels(universe, value, strobe)
                 PropertyCategory.COLOUR ->
                     if (dimmerless && (value is DmxColour || value is DmxWhiteMixColour)) addValueChannels(universe, value, scaled)
                 PropertyCategory.WHITE, PropertyCategory.AMBER ->
@@ -165,6 +168,7 @@ class GlobalScalerState(
     private fun addValueChannels(universe: Int, value: Any, into: MutableSet<Long>) {
         when (value) {
             is DmxSlider -> into += packChannelKey(universe, value.channelNo)
+            is DmxFixtureSetting<*> -> into += packChannelKey(universe, value.channelNo)
             is DmxColour -> {
                 into += packChannelKey(universe, value.redSlider.channelNo)
                 into += packChannelKey(universe, value.greenSlider.channelNo)

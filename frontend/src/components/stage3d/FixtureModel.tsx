@@ -10,6 +10,7 @@ import {
   Matrix4,
   MeshBasicMaterial,
   Quaternion,
+  SRGBColorSpace,
   Vector3,
 } from 'three'
 import type { FixturePatch } from '../../api/patchApi'
@@ -42,6 +43,8 @@ import {
   findPrismProperty,
   findPrismRotationProperty,
   findLedMacroProperty,
+  findRingProperty,
+  findRingSpeedProperty,
   findMovementMacroProperty,
   findShutterProperties,
   resolveFixtureKind,
@@ -67,6 +70,7 @@ import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedM
 import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from '../../lib/colourBands'
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
+import { makeRingPaint, ringBandAt, ringFrame, RING_SEGMENTS } from '../../lib/ringEffect'
 import {
   colourTimed,
   findTimingChannels,
@@ -153,6 +157,7 @@ import {
   resolveBeamDeg,
   type BodySpec,
   type Cell,
+  type RingSpec,
 } from './bodies/archetype'
 import { bodyFrames } from './bodies/bodyGeometry'
 import { hangerLengthM, mountFor, type Mount } from './bodies/mount'
@@ -571,6 +576,16 @@ export function staticHeadQuaternion(pitchRad: number, rollRad: number, isStatic
   return out.setFromEuler(new Euler(pitchRad, 0, rollRad, 'XYZ')).multiply(STATIC_LEVEL)
 }
 
+/** A lens ring's matrix in the head's frame: the unit ring, scaled to its outer radius, on the lens's face. */
+export function ringLocalMatrix(ring: RingSpec, emitAxis: 1 | -1, out: Matrix4): Matrix4 {
+  const q = new Quaternion().setFromEuler(new Euler(-emitAxis * (Math.PI / 2), 0, 0))
+  return out.compose(
+    new Vector3(ring.x, ring.y + emitAxis * LENS_PROUD_M, ring.z),
+    q,
+    new Vector3(ring.outerR, ring.outerR, 1),
+  )
+}
+
 /** A lens face's matrix in the head's frame: the unit disc or 2 × 2 square, turned to face the beam. */
 export function lensLocalMatrix(cell: Cell, emitAxis: 1 | -1, out: Matrix4): Matrix4 {
   // The unit face lies in XY facing +Z; Rx(−e·90°) turns +Z onto e·Y and keeps X along the head's X.
@@ -772,6 +787,8 @@ export function FixtureModel({
     () => findLedMacroProperty(unitProps),
     [unitProps],
   )
+  const ringProp = useMemo(() => findRingProperty(unitProps), [unitProps])
+  const ringSpeedProp = useMemo(() => findRingSpeedProperty(unitProps), [unitProps])
   const moveMacroProp = useMemo(
     () => findMovementMacroProperty(unitProps),
     [unitProps],
@@ -963,7 +980,9 @@ export function FixtureModel({
     output,
   })
 
-  useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies })
+  // Whether the ring is drawn this frame — at full detail only — so a chase asks for frames only then.
+  const [ringDrawn, setRingDrawn] = useState(false)
+  useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies, onRingDrawn: setRingDrawn })
 
   const hit = geometry.hitBox
   const hitProxy = (
@@ -1020,6 +1039,16 @@ export function FixtureModel({
           travel={colourTravel}
         />
       )}
+      {bodies && ringProp && spec.ring && (
+        <RingSync
+          ringProp={ringProp}
+          speedProp={ringSpeedProp}
+          bodies={bodies}
+          slot={slot}
+          drawn={ringDrawn}
+          ticker={colourTicker}
+        />
+      )}
     </group>
   )
 }
@@ -1060,6 +1089,8 @@ interface BodyDirectorOpts {
   headRef: React.RefObject<Group | null>
   slot: number
   bodies: BodiesHandle | null
+  /** Told when the body's ring starts or stops being drawn. */
+  onRingDrawn: (drawn: boolean) => void
 }
 
 /** Pixels a metre covers on the canvas at [distance] — the camera's own, perspective or section. */
@@ -1079,12 +1110,18 @@ export function pixelsPerMetre(
 // Per-frame: copy the body's frames onto its instanced parts, at the level of detail its size on
 // screen calls for. Runs after the beam director (registered after it), so the yoke and head are
 // already this frame's.
-function useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies }: BodyDirectorOpts) {
+function useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headRef, slot, bodies, onRingDrawn }: BodyDirectorOpts) {
   const pose = useMemo(() => makeBodyPose(), [])
+  const ringDrawnRef = useRef(false)
   const lensLocal = useMemo(
     () => spec.cells.map((cell) => lensLocalMatrix(cell, spec.emitAxis, new Matrix4())),
     [spec],
   )
+  const ringLocal = useMemo(
+    () => (spec.ring ? ringLocalMatrix(spec.ring, spec.emitAxis, new Matrix4()) : null),
+    [spec],
+  )
+  const ringWorld = useMemo(() => new Matrix4(), [])
   const geometry = useMemo(() => bodyFrames(spec, mount), [spec, mount])
   const sizeM = Math.max(spec.lengthM, spec.widthM, spec.heightM)
   useFrame((state) => {
@@ -1103,6 +1140,12 @@ function useBodyDirector({ spec, mount, barY, groupRef, mountRef, yokeRef, headR
     pose.head.copy(head.matrixWorld)
     while (pose.lenses.length < lensLocal.length) pose.lenses.push(new Matrix4())
     for (let c = 0; c < lensLocal.length; c++) pose.lenses[c].multiplyMatrices(head.matrixWorld, lensLocal[c])
+    pose.ring = ringLocal ? ringWorld.multiplyMatrices(head.matrixWorld, ringLocal) : null
+    const ringDrawn = ringLocal != null && pose.shown === 'full'
+    if (ringDrawn !== ringDrawnRef.current) {
+      ringDrawnRef.current = ringDrawn
+      onRingDrawn(ringDrawn)
+    }
     pose.hanger = null
     const attach = geometry.hangerAttach
     if (attach && mount === 'hang' && barY != null) {
@@ -2381,6 +2424,54 @@ function useLiveColour(
       ),
     [channels, source, invalidate],
   )
+}
+
+const RING_HUE = new Color()
+const RING_TMP = new Color()
+
+/**
+ * Paints an LED ring round the lens (`lib/ringEffect.ts`) from its effect setting and its speed
+ * slider, segment by segment, on the instanced ring. Beside the colour sync rather than inside it:
+ * the beam's dimmer and strobe do not reach the ring. A chase registers with the [ticker] while it
+ * runs and the ring is [drawn], as an animated colour band does.
+ */
+function RingSync({
+  ringProp,
+  speedProp,
+  bodies,
+  slot,
+  drawn,
+  ticker,
+}: {
+  ringProp: SettingPropertyDescriptor
+  speedProp: SliderPropertyDescriptor | undefined
+  bodies: BodiesHandle
+  slot: number
+  drawn: boolean
+  ticker: ColourTicker
+}) {
+  const source = useChannelSource()
+  const [paint] = useState(makeRingPaint)
+  const channels = useMemo(
+    () => (speedProp ? [ringProp.channel, speedProp.channel] : [ringProp.channel]),
+    [ringProp, speedProp],
+  )
+  useLiveColour(
+    channels,
+    () => {
+      const option = ringBandAt(ringProp.options, getChannelValue(ringProp.channel, source))
+      const speed = speedProp ? getChannelValue(speedProp.channel, source) : null
+      const animated = ringFrame(option, speed, ticker.now(), paint)
+      for (let s = 0; s < RING_SEGMENTS; s++) {
+        RING_HUE.setRGB(paint.rgb[s * 3], paint.rgb[s * 3 + 1], paint.rgb[s * 3 + 2], SRGBColorSpace)
+        bodies.setRing(slot, s, lensColour(RING_TMP, RING_HUE, paint.level[s]))
+      }
+      return drawn && animated
+    },
+    source,
+    ticker,
+  )
+  return null
 }
 
 function ColourBeamSync({

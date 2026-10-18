@@ -229,6 +229,10 @@ export type PropertyCategory =
   | 'shutter_rotation'
   | 'led_macro'
   | 'movement_macro'
+  // An LED ring around the lens, beside the beam: its effect setting, whose options carry
+  // `ringColour` / `ringChase`, and the rate of its chases. See stage3d's RingSync.
+  | 'ring'
+  | 'ring_speed'
   | 'setting'
   | 'other'
 
@@ -396,6 +400,10 @@ export type SettingOption = {
   hzMax?: number
   /** On a flashing strobe option: the rate falls as the value rises. */
   strobeInverted?: boolean
+  /** On a ring option: the colour the ring shows in this band, `#RRGGBB`. */
+  ringColour?: string
+  /** On a ring option: the band chases light round the ring. */
+  ringChase?: boolean
 }
 
 /** What a loadable setting's slots take (`@FixtureProperty(media =)`, fixture optics plan D6). */
@@ -794,6 +802,22 @@ export function findPrismRotationProperty(properties: PropertyDescriptor[] | und
 
 export function findLedMacroProperty(properties: PropertyDescriptor[] | undefined) {
   return findWheel(properties, 'led_macro')
+}
+
+/** The LED ring's effect setting — a ring around the lens, drawn beside the beam. */
+export function findRingProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SettingPropertyDescriptor | undefined {
+  return properties?.find(
+    (p): p is SettingPropertyDescriptor => p.type === 'setting' && p.category === 'ring',
+  )
+}
+
+/** The rate of the LED ring's chases. */
+export function findRingSpeedProperty(
+  properties: PropertyDescriptor[] | undefined,
+): SliderPropertyDescriptor | undefined {
+  return findSlider(properties, 'ring_speed')
 }
 
 export function findMovementMacroProperty(properties: PropertyDescriptor[] | undefined) {

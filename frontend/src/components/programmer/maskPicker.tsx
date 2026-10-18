@@ -8,10 +8,10 @@ import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
 /**
  * The four attribute families Record / Include / Update can be scoped to.
  *
- * Deliberately coarser than the backend's 22 `PropertyCategory` values: the same physical
+ * Deliberately coarser than the backend's per-category `PropertyCategory`: the same physical
  * attribute is annotated differently across heads (a gobo wheel is a setting on one fixture
  * and a plain slider on another), so a category-level mask would silently miss fixtures. This
- * is the console I/P/C/B vocabulary, and it is four checkboxes rather than twenty-two.
+ * is the console I/P/C/B vocabulary, and it is four checkboxes rather than one per category.
  *
  * Derived from [ATTRIBUTE_FAMILIES] rather than restated: the rows *are* the families, in their
  * order, under the labels the Look library already uses. `maskPicker.test.ts` asserted both facts

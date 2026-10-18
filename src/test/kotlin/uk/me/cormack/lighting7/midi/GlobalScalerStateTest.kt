@@ -14,6 +14,7 @@ import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.KamLiteobar252Fixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripRgbFixture
 import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
+import uk.me.cormack.lighting7.fixture.dmx.ShowSoundLedBeamRingFixture
 import uk.me.cormack.lighting7.fixture.property.WhiteMix
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.models.GRAND_MASTER_FULL
@@ -275,6 +276,34 @@ class GlobalScalerStateTest {
 
         scaler.setBlackout(true)
         for (ch in listOf(1, 3, 12, 13, 21)) assertEquals(0u.toUByte(), controller.getEffectiveValue(ch), "ch $ch")
+    }
+
+    @Test
+    fun `an LED ring is cut by blackout and a grand master at zero, and left alone above it`() {
+        val fixtures = Fixtures()
+        val controller = MockDmxController(Universe(0, 0))
+        fixtures.register(removeUnused = true) {
+            addController(controller)
+            // Ch 6 dimmer, 13 the ring's effect, 14 its speed.
+            addFixture(ShowSoundLedBeamRingFixture.Mode14Ch(Universe(0, 0), "beam", "Beam", firstChannel = 1))
+        }
+        val scaler = GlobalScalerState(fixtures)
+        scaler.attach()
+        controller.setValue(6, 200u, 0)
+        controller.setValue(13, 100u, 0)
+        controller.setValue(14, 80u, 0)
+
+        scaler.setGrandMasterLevel(50.0)
+        assertEquals(100u.toUByte(), controller.getEffectiveValue(6))
+        assertEquals(100u.toUByte(), controller.getEffectiveValue(13), "a band, not a level: scaling it would change the effect")
+
+        scaler.setGrandMasterLevel(0.0)
+        assertEquals(0u.toUByte(), controller.getEffectiveValue(13))
+        assertEquals(80u.toUByte(), controller.getEffectiveValue(14), "the speed is no light")
+
+        scaler.setGrandMasterLevel(GRAND_MASTER_FULL)
+        scaler.setBlackout(true)
+        assertEquals(0u.toUByte(), controller.getEffectiveValue(13))
     }
 
     @Test

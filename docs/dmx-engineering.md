@@ -293,8 +293,8 @@ for each channel:
 
 - [`GlobalScalerState`](midi-control-surface-engineering.md) — Blackout and the Grand
   Master are one `TransmitModifier`. The grand master's level (0–100 %) multiplies every
-  DIMMER and UV channel, and the colour mix of a head with no dimmer; a STROBE channel is
-  cut only at 0, and blackout zeroes them all. A change only moves the modifier's own
+  DIMMER and UV channel, and the colour mix of a head with no dimmer; a STROBE channel and
+  an LED ring's RING channel are cut only at 0, and blackout zeroes them all. A change only moves the modifier's own
   state; the next frame of each universe picks it up. There is no push-to-transmit path — see
   [§Refresh interval](#refresh-interval).
 
