@@ -55,6 +55,27 @@ describe('RigSafetyBanner', () => {
     expect(screen.getByTestId('quit-dialog')).toBeTruthy()
   })
 
+  it('counts the lamps cooling down before the rig is ready, and still offers Undo and Quit', () => {
+    at({ blackout: true, coolingRemainingMs: 252_000, quitAllowed: true })
+    render(<RigSafetyBanner />)
+    const banner = screen.getByRole('status', { name: 'Rig safety' })
+    expect(banner.getAttribute('data-rig-safety')).toBe('cooling')
+    expect(banner.textContent).toContain('Lamps off, cooling')
+    expect(banner.textContent).toContain('safe to power down in 4:12')
+    expect(screen.queryByRole('button', { name: 'Release blackout' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Quit desk/ }))
+    expect(screen.getByTestId('quit-dialog')).toBeTruthy()
+  })
+
+  it('says how long the lamps still need when output moved during their cool-down', () => {
+    at({ blackout: true, lampsOff: [{ fixture: 'mac1', offAt: 'x', restrikeRemainingMs: 300_000, coolRemainingMs: 190_000 }] })
+    render(<RigSafetyBanner />)
+    const banner = screen.getByRole('status', { name: 'Rig safety' })
+    expect(banner.getAttribute('data-rig-safety')).toBe('blackout')
+    expect(banner.textContent).toContain('Lamps still cooling: mains safe in 3:10')
+  })
+
   it('says why a blackout is not ready, and releases it', () => {
     at({ blackout: true, notOff: ['MAC 2'] })
     render(<RigSafetyBanner />)
@@ -107,5 +128,9 @@ describe('RigSafetyImmersiveChip', () => {
     at({ blackout: true })
     render(<RigSafetyImmersiveChip />)
     expect(screen.getByText('Blacked out')).toBeTruthy()
+    cleanup()
+    at({ blackout: true, coolingRemainingMs: 65_000 })
+    render(<RigSafetyImmersiveChip />)
+    expect(screen.getByText('Cooling · 1:05')).toBeTruthy()
   })
 })

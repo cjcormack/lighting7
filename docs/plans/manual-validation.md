@@ -1334,8 +1334,11 @@ estimates, and only a real lamp says whether a strike at that time takes. Whethe
 **Test**, on the hall's rig, two windows open (the desk and an iPad):
 
 1. **Make rig safe.** With a look up, open the Grand Master panel and press *Make rig safe…* → *Make
-   rig safe*. Both windows show the run, then green *Ready to switch off — n lamps off, blacked out*.
-   The MACs and the Robe douse; the LED heads go dark; a parked channel holds.
+   rig safe*. Both windows show the run, then *Lamps off, cooling — safe to power down in 5:00*
+   counting down, then green *Ready to switch off — n lamps off, blacked out*. The MACs and the Robe
+   douse; the LED heads go dark; a parked channel holds. Note whether each fixture's fan has stopped,
+   or its manual says mains may be cut, by the end of the count; if not, lengthen its lamp-off
+   `coolDownMs` (5 minutes on both, an estimate).
 2. **It lasts only while true.** Move a dimmer in the programmer: both banners turn amber (*not ready
    — output has changed*), the rig stays black. *Undo* asks first.
 3. **Undo inside the restrike.** Press *Undo* straight away: the banner counts each lamp down (*MAC 1
@@ -1352,7 +1355,7 @@ estimates, and only a real lamp says whether a strike at that time takes. Whethe
 If a strike at its declared restrike does not take, or the wrapper complains on a clean exit, promote
 it to a `FU-` item in `followups.md`.
 
-20 minutes, plus the restrike wait.
+20 minutes, plus the restrike and cool-down waits.
 
 ---
 

@@ -7,8 +7,10 @@ import type { CommandRole, CommandRun, CommandRunUnit, RigSafetyState } from '@/
 export type RigBanner =
   /** A run is going: its progress, and Cancel. */
   | { kind: 'run'; run: CommandRun }
-  /** *Ready to switch off*: lamped off, blacked out, nothing sent since. */
+  /** *Ready to switch off*: lamped off, blacked out, nothing sent since, every lamp cooled. */
   | { kind: 'ready' }
+  /** Made safe, but a lamp is still cooling: not to be powered down yet. */
+  | { kind: 'cooling' }
   /** *Make rig safe*'s blackout holds, but the rig is not ready: a lamp not known to be off, or output moved. */
   | { kind: 'blackout' }
   /** A run ended with something not done — said until this window dismisses it. */
@@ -19,6 +21,7 @@ export function rigBanner(state: RigSafetyState, dismissed: ReadonlySet<string>)
   const run = state.run
   if (run != null && !run.finished) return { kind: 'run', run }
   if (state.ready) return { kind: 'ready' }
+  if (state.coolingRemainingMs != null) return { kind: 'cooling' }
   if (state.blackout) return { kind: 'blackout' }
   if (run != null && !run.cancelled && !dismissed.has(run.id) && run.units.some((u) => u.status !== 'DONE')) {
     return { kind: 'finished', run }
@@ -104,6 +107,21 @@ export function blackoutReason(state: RigSafetyState): string {
     return `${state.notOff.length === 1 ? 'a lamp is' : `${state.notOff.length} lamps are`} not known to be off: ${names}`
   }
   return 'Output has changed since it was made safe'
+}
+
+/** How long until the last lamp has cooled and the rig can be powered down, or 0. */
+export function coolingLeft(state: RigSafetyState, now: number): number {
+  return remainingAt(state.coolingRemainingMs, state.receivedAt, now)
+}
+
+/** How long until the last lamp the desk knows is off has cooled, whatever the rig's state, or 0. */
+export function lampsCoolingLeft(state: RigSafetyState, now: number): number {
+  return state.lampsOff.reduce((max, l) => Math.max(max, remainingAt(l.coolRemainingMs, state.receivedAt, now)), 0)
+}
+
+/** When, on this browser's clock, the mains can be cut: the later of the rig's cool-down and every lamp's. */
+export function coolsAt(state: RigSafetyState, now: number): number {
+  return now + Math.max(coolingLeft(state, now), lampsCoolingLeft(state, now))
 }
 
 /** A lamp's restrike time left, or 0: what a strike now would meet. */

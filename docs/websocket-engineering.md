@@ -937,15 +937,17 @@ switch re-attaches the service to the new show, which disarms.
 
 | Message | Fields | Cadence |
 |---|---|---|
-| `rigSafety.state` | `projectId?`, `ready`, `readySince?`, `blackout`, `undo: [{fixture, fixtureName}]`, `notOff: [name]`, `run?: {id, role, purpose, startedAt, units: [{fixture, fixtureName, command, status, remainingMs?, code?, message?}], withoutCommand, finished, cancelled}`, `lampsOff: [{fixture, offAt, restrikeRemainingMs}]`, `quitAllowed` | Connect snapshot + broadcast |
+| `rigSafety.state` | `projectId?`, `ready`, `readySince?`, `coolingRemainingMs?`, `blackout`, `undo: [{fixture, fixtureName}]`, `notOff: [name]`, `run?: {id, role, purpose, startedAt, units: [{fixture, fixtureName, command, status, remainingMs?, code?, message?}], withoutCommand, finished, cancelled}`, `lampsOff: [{fixture, offAt, restrikeRemainingMs, coolRemainingMs}]`, `quitAllowed` | Connect snapshot + broadcast |
 
 Bulk fixture commands, *Make rig safe*, its *Undo* and *Ready to switch off* (venue-visit plan S6;
 `state/RigSafetyService.kt`, `docs/fixtures-engineering.md` §"Bulk commands and Make rig safe").
 **Outbound only**: every operation is REST, so the socket gains no operation and
 `FU-AUTH-WS-PER-MESSAGE` stays unfired. `StateFlow`-backed, so the subscription is the snapshot. A
 unit's `status` is `QUEUED`, `WAITING` (a restrike), `RUNNING`, `DONE`, `CUT_SHORT`, `SKIPPED` (with
-the refusal's `code`) or `CANCELLED`; `remainingMs` and `restrikeRemainingMs` are measured when the
-frame is sent, as `effects.armed`'s are, and a client counts down from its receive time. A finished
+the refusal's `code`) or `CANCELLED`; `coolingRemainingMs` is present while the rig is made safe but
+a lamp is still cooling, and `ready` is false until it has, while each lamp's `coolRemainingMs` is
+kept whatever the rig's state; `remainingMs`, `restrikeRemainingMs`, `coolRemainingMs` and
+`coolingRemainingMs` are measured when the frame is sent, as `effects.armed`'s are, and a client counts down from its receive time. A finished
 run stays on the frame until the next. `quitAllowed` is the receiving socket's own — an admin (or a
 desk with no accounts) on the desk's listener — so no window offers *Quit desk* where the route would
 refuse it; the role is the one resolved at upgrade, as `tunnel.state`'s is. Registered in the show

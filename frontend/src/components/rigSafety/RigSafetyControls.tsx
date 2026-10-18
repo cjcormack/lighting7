@@ -134,8 +134,8 @@ export function RigSafetyControls() {
                   <>
                     <p>
                       Lamps off every unit with a lamp, waits for them to go out, then blacks out the rig. The desk keeps
-                      running: every window shows <em>Ready to switch off</em> until something sends output again, and
-                      Undo strikes the lamps again.
+                      running: every window counts down while the lamps cool, then shows <em>Ready to switch off</em>{' '}
+                      until something sends output again, and Undo strikes the lamps again.
                     </p>
                     {targets.length > 0 && (
                       <ToggleGroup

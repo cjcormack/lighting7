@@ -5,9 +5,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CommandRole
+import uk.me.cormack.lighting7.fixture.CommandSpec
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
@@ -37,7 +39,9 @@ private val logger = LoggerFactory.getLogger("RigSafetyService")
  *   time. One run at a time on the desk.
  * - **Make rig safe** ([makeSafe]) is a lamp-off run over every lamped unit (or the selection's),
  *   then *Make rig safe*'s blackout ([uk.me.cormack.lighting7.midi.GlobalScalerStateHolder.safeBlackout],
- *   runtime only), then *Ready to switch off* — but only when every lamp it asked to go off did.
+ *   runtime only), then *Ready to switch off* — but only when every lamp it asked to go off did,
+ *   and only once the last of them has cooled ([uk.me.cormack.lighting7.fixture.FixtureCommand.coolDownMs]):
+ *   until then the rig is *cooling*, counted down on every window.
  * - **Ready lasts only while it is true** (D14): it clears on anything that sends output again — a
  *   change of what the programmer, a cue, an effect or a park contributes (the provenance revision,
  *   which no crossfade tick moves), any command but a lamp-off, the blackout released, or another
@@ -55,6 +59,9 @@ class RigSafetyService(private val state: State) {
     /** Wall clock, millis. A test seam: a route test reaches past a lamp's restrike time without waiting it out. */
     @Volatile internal var clock: () -> Long = System::currentTimeMillis
 
+    /** A lamp-off's cool-down. A test seam, as `CommandOutput.holdMsFor` is for a hold. */
+    @Volatile internal var coolDownMsFor: (CommandSpec) -> Long = { it.coolDownMs }
+
     /** One run, as the frame carries it. */
     data class RunSnapshot(
         val id: String,
@@ -67,14 +74,19 @@ class RigSafetyService(private val state: State) {
         val cancelled: Boolean,
     )
 
-    /** One unit whose lamp went off on this desk, and when it can be struck again. */
-    data class LampOff(val fixtureKey: String, val offAtMs: Long, val restrikeAtMs: Long)
+    /** One unit whose lamp went off on this desk, when it can be struck again, and when its mains can be cut. */
+    data class LampOff(val fixtureKey: String, val offAtMs: Long, val restrikeAtMs: Long, val coolAtMs: Long)
 
     data class Snapshot(
         val projectId: Int? = null,
-        /** The rig is lamped off and blacked out by *Make rig safe*, and nothing has sent output since. */
+        /**
+         * The rig is lamped off and blacked out by *Make rig safe*, nothing has sent output since, and
+         * every lamp on it has cooled.
+         */
         val ready: Boolean = false,
         val readySinceMs: Long? = null,
+        /** Made safe, but a lamp is still cooling: when the last one has, and the rig is ready. */
+        val coolingUntilMs: Long? = null,
         /** *Make rig safe*'s blackout holds on this project. */
         val blackout: Boolean = false,
         /** The units *Undo* would strike, by key and name. */
@@ -105,9 +117,11 @@ class RigSafetyService(private val state: State) {
 
     /** The run in flight, until its end has been acted on — what refuses a second run, *Undo* and *Release*. */
     private var active: BulkCommandRun? = null
-    private var ready = false
-    private var readySinceMs: Long? = null
-    private var readyRevision = 0L
+    /** Made safe and nothing sent since — ready once [coolUntilMs] has passed. */
+    private var safe = false
+    private var safeSinceMs: Long? = null
+    private var coolUntilMs: Long? = null
+    private var safeRevision = 0L
     private var notOff: List<String> = emptyList()
     private val undoByProject = ConcurrentHashMap<Int, Undo>()
 
@@ -127,14 +141,15 @@ class RigSafetyService(private val state: State) {
             show = next
             run = null
             active = null
-            ready = false
-            readySinceMs = null
+            safe = false
+            safeSinceMs = null
+            coolUntilMs = null
             notOff = emptyList()
         }
         val provenance = next.fxEngine.provenance
         scope.launch {
             provenance.flow.collect { update ->
-                val stale = synchronized(lock) { ready && update.programmerRevision > readyRevision }
+                val stale = synchronized(lock) { safe && update.programmerRevision > safeRevision }
                 if (stale) outputResumed("the show's output changed")
             }
         }
@@ -169,8 +184,8 @@ class RigSafetyService(private val state: State) {
     /**
      * *Make rig safe*: every lamped unit off — [targets]' when given — then *Make rig safe*'s
      * blackout, then *Ready to switch off* when every lamped unit on the rig is known off: by this run,
-     * or by an earlier lamp-off the restrike ledger holds. *Undo* remembers only the lamps this run
-     * turned off, never one that was already off.
+     * or by an earlier lamp-off the restrike ledger holds — and once the last of those lamps has
+     * cooled. *Undo* remembers only the lamps this run turned off, never one that was already off.
      */
     fun makeSafe(targets: List<TargetRef>?): Outcome {
         val current = show ?: return closing()
@@ -184,14 +199,35 @@ class RigSafetyService(private val state: State) {
             val knownOff = lampsKnownOff(projectId) + off.map { it.unit.fixtureKey }
             val lamped = unitsFor(current, null, CommandRole.LAMP_OFF).first
             state.scalerHolderFor(projectId).setSafeBlackout(true)
-            synchronized(lock) {
+            val now = clock()
+            // This run's lamp-offs may end before the ledger hears of them, so each is also counted from now.
+            val doused = off.mapTo(HashSet()) { it.unit.fixtureKey } - alreadyOff
+            val coolAt = lamped.filter { it.fixtureKey in knownOff }.maxOfOrNull { unit ->
+                val ledger = lampOffs[projectId to unit.fixtureKey]?.coolAtMs ?: 0L
+                val thisRun = if (unit.fixtureKey in doused) now + unit.coolDownMs else 0L
+                maxOf(ledger, thisRun)
+            }
+            val cooling = synchronized(lock) {
                 val undo = undoByProject.getOrPut(projectId) { Undo() }
                 off.filter { it.unit.fixtureKey !in alreadyOff }.forEach { undo.units[it.unit.fixtureKey] = it.unit.fixtureName }
                 notOff = lamped.filter { it.fixtureKey !in knownOff }.map { it.fixtureName }
                 if (show === current && notOff.isEmpty()) {
-                    ready = true
-                    readySinceMs = clock()
-                    readyRevision = current.fxEngine.provenance.currentProgrammerRevision
+                    safe = true
+                    safeSinceMs = now
+                    coolUntilMs = coolAt?.takeIf { it > now }
+                    safeRevision = current.fxEngine.provenance.currentProgrammerRevision
+                }
+                coolUntilMs
+            }
+            cooling?.let { until ->
+                scope.launch {
+                    // Re-checked against [clock] rather than trusting one long delay: the wall clock can slew.
+                    while (true) {
+                        val left = until - clock()
+                        if (left <= 0) break
+                        delay(left.coerceAtMost(COOLING_RECHECK_MS))
+                    }
+                    publish()
                 }
             }
             logger.info("Rig made safe: {} lamps off by this run, {} on the rig not known off, blacked out", off.size, lamped.count { it.fixtureKey !in knownOff })
@@ -262,7 +298,10 @@ class RigSafetyService(private val state: State) {
         if (running.command.spec.role != CommandRole.LAMP_OFF) outputResumed("'${running.command.spec.label}' ran on '${running.fixtureName}'")
     }
 
-    /** Every hold the show ends: a lamp-off that ran its time is the restrike ledger's, a strike clears it. */
+    /**
+     * Every hold the show ends: a lamp-off that ran its time is the restrike ledger's, a strike clears it.
+     * A lamp-off sent to a lamp the ledger already holds as off keeps the time it went off.
+     */
     fun commandEnded(projectId: Int, running: CommandOutput.Running, ended: CommandOutput.Ended) {
         if (ended != CommandOutput.Ended.COMPLETED) return
         val key = projectId to running.fixtureKey
@@ -273,7 +312,7 @@ class RigSafetyService(private val state: State) {
                         ?.firstOrNull { it.spec.role == CommandRole.LAMP_ON }?.spec?.restrikeMs
                 }.getOrNull() ?: 0L
                 val now = clock()
-                lampOffs[key] = LampOff(running.fixtureKey, now, now + restrike)
+                lampOffs.putIfAbsent(key, LampOff(running.fixtureKey, now, now + restrike, now + coolDownMsFor(running.command.spec)))
             }
             CommandRole.LAMP_ON -> lampOffs.remove(key)
             else -> return
@@ -373,7 +412,7 @@ class RigSafetyService(private val state: State) {
                 without++
                 return@mapNotNull null
             }
-            BulkUnit(fixture.key, fixture.fixtureName, command.name, command.spec.restrikeMs, command.spec.strikeSpacingMs)
+            BulkUnit(fixture.key, fixture.fixtureName, command.name, command.spec.restrikeMs, command.spec.strikeSpacingMs, coolDownMsFor(command.spec))
         }
         return units to (if (targets == null) 0 else without)
     }
@@ -386,9 +425,10 @@ class RigSafetyService(private val state: State) {
 
     private fun outputResumed(why: String) {
         val was = synchronized(lock) {
-            val was = ready
-            ready = false
-            readySinceMs = null
+            val was = safe
+            safe = false
+            safeSinceMs = null
+            coolUntilMs = null
             was
         }
         if (was) {
@@ -404,10 +444,13 @@ class RigSafetyService(private val state: State) {
         // The show built this project's holder, so the read touches no database.
         synchronized(lock) {
             val blackout = projectId?.let { state.scalerHolderFor(it).safeBlackout.value } ?: false
+            val cooling = coolUntilMs?.takeIf { safe && clock() < it }
+            val ready = safe && cooling == null
             _snapshot.value = Snapshot(
                 projectId = projectId,
                 ready = ready,
-                readySinceMs = readySinceMs,
+                readySinceMs = if (ready) maxOf(safeSinceMs ?: 0L, coolUntilMs ?: 0L) else null,
+                coolingUntilMs = cooling,
                 blackout = blackout,
                 undo = projectId?.let { undoByProject[it]?.units?.map { (k, n) -> k to n } }.orEmpty(),
                 notOff = notOff,
@@ -447,5 +490,8 @@ class RigSafetyService(private val state: State) {
         const val CODE_NO_UNITS = "COMMAND_NO_UNITS"
         const val CODE_ROLE_UNKNOWN = "COMMAND_ROLE_UNKNOWN"
         const val CODE_NOTHING_TO_UNDO = "RIG_SAFE_NOTHING_TO_UNDO"
+
+        /** The longest the cooling-to-ready check sleeps before reading the clock again. */
+        internal const val COOLING_RECHECK_MS = 1_000L
     }
 }

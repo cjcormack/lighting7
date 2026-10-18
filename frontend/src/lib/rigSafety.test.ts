@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { NOTHING_SAFE, type CommandRun, type CommandRunUnit, type RigSafetyState } from '@/api/rigSafetyApi'
-import { blackoutReason, clockLabel, remainingAt, restrikeLeft, rigBanner, runOutcome, runProgress, runTitle, unitLine } from './rigSafety'
+import { blackoutReason, clockLabel, coolingLeft, coolsAt, lampsCoolingLeft, remainingAt, restrikeLeft, rigBanner, runOutcome, runProgress, runTitle, unitLine } from './rigSafety'
 
 const unit = (fixtureName: string, status: CommandRunUnit['status'], over: Partial<CommandRunUnit> = {}): CommandRunUnit => ({
   fixture: fixtureName.toLowerCase(), fixtureName, command: 'lampOn', status, ...over,
@@ -17,6 +17,8 @@ describe('rigSafety', () => {
     const going = run([unit('MAC 1', 'RUNNING')])
     expect(rigBanner(state({ run: going, ready: true }), new Set())?.kind).toBe('run')
     expect(rigBanner(state({ ready: true, blackout: true }), new Set())?.kind).toBe('ready')
+    expect(rigBanner(state({ blackout: true, coolingRemainingMs: 60_000 }), new Set())?.kind).toBe('cooling')
+    expect(rigBanner(state({ run: going, coolingRemainingMs: 60_000 }), new Set())?.kind).toBe('run')
     expect(rigBanner(state({ blackout: true }), new Set())?.kind).toBe('blackout')
     const short = run([unit('MAC 1', 'DONE'), unit('MAC 2', 'SKIPPED')], { finished: true })
     expect(rigBanner(state({ run: short }), new Set())?.kind).toBe('finished')
@@ -48,6 +50,24 @@ describe('rigSafety', () => {
     expect(unitLine(r.units[1], 0, 0)).toBe('Skipped — Running reset')
     expect(unitLine(unit('E', 'WAITING', { remainingMs: 65_000 }), 0, 5_000)).toBe('Restrike in 1:00')
     expect(unitLine(unit('F', 'SKIPPED', { code: 'COMMAND_PARKED' }), 0, 0)).toBe('Skipped (COMMAND_PARKED)')
+  })
+
+  it('counts the cool-down down from the frame, never below zero', () => {
+    const s = state({ coolingRemainingMs: 300_000, receivedAt: 1000 })
+    expect(clockLabel(coolingLeft(s, 1000))).toBe('5:00')
+    expect(clockLabel(coolingLeft(s, 61_000))).toBe('4:00')
+    expect(coolingLeft(s, 400_000)).toBe(0)
+    expect(coolingLeft(state({}), 0)).toBe(0)
+  })
+
+  it('takes the last lamp to cool, and the later of the rig and its lamps for when the mains can go', () => {
+    const lamp = (fixture: string, coolRemainingMs?: number) => ({ fixture, offAt: 'x', restrikeRemainingMs: 0, coolRemainingMs })
+    const s = state({ lampsOff: [lamp('a', 60_000), lamp('b', 90_000), lamp('c')], receivedAt: 1000 })
+    expect(lampsCoolingLeft(s, 31_000)).toBe(60_000)
+    expect(lampsCoolingLeft(s, 200_000)).toBe(0)
+    expect(coolsAt(s, 1000)).toBe(91_000)
+    expect(coolsAt(state({ coolingRemainingMs: 120_000, receivedAt: 0 }), 0)).toBe(120_000)
+    expect(coolsAt(state({}), 5)).toBe(5)
   })
 
   it('says why a blackout is not ready', () => {

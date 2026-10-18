@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Loader2, Power, ShieldAlert, ShieldCheck, TriangleAlert } from 'lucide-react'
+import { Loader2, Power, ShieldAlert, ShieldCheck, Timer, TriangleAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { CommandRun } from '@/api/rigSafetyApi'
-import { blackoutReason, rigBanner, runOutcome, runProgress, runTitle, unitLine } from '@/lib/rigSafety'
+import { blackoutReason, clockLabel, coolingLeft, lampsCoolingLeft, rigBanner, runOutcome, runProgress, runTitle, unitLine } from '@/lib/rigSafety'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useCancelBulkCommandMutation, useReleaseRigSafeMutation, useRigSafety } from '@/store/rigSafety'
 import { QuitDeskDialog } from './QuitDeskDialog'
@@ -16,9 +16,11 @@ import { useNow } from './useNow'
  *
  * - **A run going** — its progress, the next lamp waiting on its restrike counted down, the units on
  *   *Details*, and *Cancel*.
+ * - **Cooling** — made safe, but a lamp's fan must run on before the mains is cut: counted down, with
+ *   *Undo* and *Quit desk…* (quitting cuts no fixture's power).
  * - **Ready to switch off** — green: *Undo*, and *Quit desk…* where this window may quit.
- * - **Blacked out, not ready** — amber, with why (a lamp not known to be off, or output that moved):
- *   *Undo* and *Release blackout*.
+ * - **Blacked out, not ready** — amber, with why (a lamp not known to be off, or output that moved),
+ *   and how long the lamps still need before the mains is cut: *Undo* and *Release blackout*.
  * - **A run that ended with something not done** — what happened, until this window dismisses it.
  *
  * Immersive windows draw [RigSafetyImmersiveChip] on the `ShowHeader` instead.
@@ -33,12 +35,22 @@ export function RigSafetyBanner() {
   const [cancel] = useCancelBulkCommandMutation()
   const [release] = useReleaseRigSafeMutation()
   const banner = rigBanner(rig, dismissed)
-  const now = useNow(banner?.kind === 'run')
+  const lampsCooling = banner?.kind === 'blackout' && rig.lampsOff.some((l) => (l.coolRemainingMs ?? 0) > 0)
+  const now = useNow(banner?.kind === 'run' || banner?.kind === 'cooling' || lampsCooling)
   if (banner == null || project == null || rig.projectId !== project.id) return null
   const projectId = project.id
 
-  const tone = banner.kind === 'ready' ? 'green' : banner.kind === 'run' ? 'neutral' : 'amber'
-  const Icon = banner.kind === 'ready' ? ShieldCheck : banner.kind === 'run' ? Loader2 : banner.kind === 'blackout' ? ShieldAlert : TriangleAlert
+  const tone = banner.kind === 'ready' ? 'green' : banner.kind === 'run' || banner.kind === 'cooling' ? 'neutral' : 'amber'
+  const Icon =
+    banner.kind === 'ready'
+      ? ShieldCheck
+      : banner.kind === 'run'
+        ? Loader2
+        : banner.kind === 'cooling'
+          ? Timer
+          : banner.kind === 'blackout'
+            ? ShieldAlert
+            : TriangleAlert
   const run: CommandRun | null = banner.kind === 'run' || banner.kind === 'finished' ? banner.run : null
 
   return (
@@ -71,9 +83,22 @@ export function RigSafetyBanner() {
                 blacked out.
               </>
             )}
+            {banner.kind === 'cooling' && (
+              <>
+                <strong>Lamps off, cooling</strong> — safe to power down in{' '}
+                <span className="tabular-nums">{clockLabel(coolingLeft(rig, now))}</span>. Blacked out.
+              </>
+            )}
             {banner.kind === 'blackout' && (
               <>
                 <strong>Blacked out by Make rig safe</strong>, not ready to switch off — {blackoutReason(rig)}.
+                {lampsCooling && lampsCoolingLeft(rig, now) > 0 && (
+                  <>
+                    {' '}
+                    Lamps still cooling: mains safe in{' '}
+                    <span className="tabular-nums">{clockLabel(lampsCoolingLeft(rig, now))}</span>.
+                  </>
+                )}
               </>
             )}
             {banner.kind === 'run' && (
@@ -100,7 +125,7 @@ export function RigSafetyBanner() {
               Cancel
             </Button>
           )}
-          {(banner.kind === 'ready' || banner.kind === 'blackout') && (
+          {(banner.kind === 'ready' || banner.kind === 'cooling' || banner.kind === 'blackout') && (
             <Button size="sm" variant="outline" className="h-7" onClick={() => setUndoing(true)}>
               Undo
             </Button>
@@ -110,7 +135,7 @@ export function RigSafetyBanner() {
               Release blackout
             </Button>
           )}
-          {(banner.kind === 'ready' || banner.kind === 'blackout') && rig.quitAllowed && (
+          {(banner.kind === 'ready' || banner.kind === 'cooling' || banner.kind === 'blackout') && rig.quitAllowed && (
             <Button size="sm" variant={banner.kind === 'ready' ? 'default' : 'outline'} className="h-7 gap-1.5" onClick={() => setQuitting(true)}>
               <Power className="size-3.5" />
               Quit desk…
@@ -152,8 +177,16 @@ export function RigSafetyBanner() {
 export function RigSafetyImmersiveChip() {
   const rig = useRigSafety()
   const running = rig.run != null && !rig.run.finished
+  const cooling = !running && !rig.ready && rig.coolingRemainingMs != null
+  const now = useNow(cooling)
   if (!rig.ready && !rig.blackout && !running) return null
-  const label = running ? 'Bulk command running' : rig.ready ? 'Ready to switch off' : 'Blacked out'
+  const label = running
+    ? 'Bulk command running'
+    : rig.ready
+      ? 'Ready to switch off'
+      : cooling
+        ? `Cooling · ${clockLabel(coolingLeft(rig, now))}`
+        : 'Blacked out'
   return (
     <span
       data-rig-safety-chip
@@ -161,11 +194,19 @@ export function RigSafetyImmersiveChip() {
       className={cn(
         'inline-flex h-6 shrink-0 items-center gap-1 rounded-md border px-1.5 text-[11px] font-semibold',
         rig.ready && !running && 'border-emerald-500/70 text-emerald-700 dark:text-emerald-300',
-        !rig.ready && !running && 'border-amber-500/70 text-amber-700 dark:text-amber-300',
-        running && 'text-muted-foreground',
+        !rig.ready && !running && !cooling && 'border-amber-500/70 text-amber-700 dark:text-amber-300',
+        (running || cooling) && 'text-muted-foreground',
       )}
     >
-      {running ? <Loader2 className="size-3 animate-spin" /> : rig.ready ? <ShieldCheck className="size-3" /> : <ShieldAlert className="size-3" />}
+      {running ? (
+        <Loader2 className="size-3 animate-spin" />
+      ) : rig.ready ? (
+        <ShieldCheck className="size-3" />
+      ) : cooling ? (
+        <Timer className="size-3" />
+      ) : (
+        <ShieldAlert className="size-3" />
+      )}
       {label}
     </span>
   )
