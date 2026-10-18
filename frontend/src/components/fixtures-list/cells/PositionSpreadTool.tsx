@@ -6,8 +6,8 @@ import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 
 /**
  * Where a position cell's *Spread…* opens the fan — the rail's Spread tab where the rail docks its
- * tabs, else row C's popover. Provided by the programmer's list container, which holds both; null
- * elsewhere, so the plain lists and the cue grid draw no button.
+ * tabs, else row C's popover. Provided by the list container, which holds both. The button sits in
+ * the popup's footer, which only the programmer draws, so the plain lists and the cue grid have none.
  */
 export const PositionFanContext = createContext<(() => void) | null>(null)
 
