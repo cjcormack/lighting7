@@ -176,8 +176,8 @@ describe('ProgrammerSourceStrip', () => {
 
   it('drops the busking count whole, and never the label', () => {
     // What survives of `PD-SOURCE-TRUNCATION`: one rung per arm, in the place each ladder always
-    // ended. The count goes first because it is the part said twice — it is on the rail's Local
-    // values row and in the programmer tile — and the label is the only thing naming the state.
+    // ended. The count goes first because it is the part said twice — it is on the Stack table's
+    // *Your values* row and in the programmer tile — and the label is the only thing naming the state.
     summary = { ...summary, entryCount: 12 }
     draw()
     expect(screen.getByText('12 values').className).toContain('@[450px]:block')

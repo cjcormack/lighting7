@@ -883,7 +883,7 @@ an edit) and with the programmer's own scenery, written on the programmer's sock
 
 Two additions from the scenery-programmer plan (D4, D12), both optional for a client
 (`api/sceneryApi.ts`'s `parseSceneryFrame` reads both since that plan's session 2, and parses a frame
-without them exactly as before — P3). The programmer rail's Scenery band names each row's `source`; the
+without them exactly as before — P3). The programmer's Scenery table names each row's `source`; the
 Stage view draws `staged` from session 4:
 
 - **`source`** on every entry names what holds the piece: `{kind: base | set | cue | cueLook |

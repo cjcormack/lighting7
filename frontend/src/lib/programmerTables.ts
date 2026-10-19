@@ -8,7 +8,7 @@ import { createSyncStore, sessionStorageArea } from './syncStore'
  * starts with a tab per table — **Values · Stack · FX · Scenery** — at `/programmer?table=`. This
  * is the model, with no React beyond the store's hook: which table a window shows, the view each
  * table keeps (sort, filter, partition chip) and how both ride the query string, and the row rules
- * the tables share with the rail.
+ * the tables share.
  *
  * **Which table is a per-window fact** (`programmer.table`, `sessionStorage`), as the busk view's
  * focus is: the Screens sheet sets it on another window through `windows.viewOptions {table}`, the
@@ -230,7 +230,7 @@ export function matchesFilter(q: string, fields: readonly (string | null | undef
 
 // ── Applied FX ──────────────────────────────────────────────────────────────────────────────
 
-/** Where a running effect lives — the rail's home badge, as a partition. */
+/** Where a running effect lives — the FX table's `?home=` chips. */
 export type FxHome = 'yours' | 'layer' | 'cue' | 'base'
 export const FX_HOMES: readonly FxHome[] = ['yours', 'layer', 'cue', 'base']
 export const FX_HOME_LABELS: Readonly<Record<FxHome, string>> = {
@@ -240,7 +240,7 @@ export const FX_HOME_LABELS: Readonly<Record<FxHome, string>> = {
   base: 'Base',
 }
 
-/** The rail's `homeOf`, as a partition: a layer's, the cue's, the programmer band's, or the show's. */
+/** `fxRows`' `homeOf`, as a partition: a layer's, the cue's, the programmer band's, or the show's. */
 export function fxHomeOf(effect: Pick<ActiveEffect, 'programmerLayerId' | 'cueId' | 'programmerOwned'>): FxHome {
   if (effect.programmerLayerId != null) return 'layer'
   if (effect.cueId != null) return 'cue'
@@ -272,10 +272,10 @@ export const FX_STATE_LABELS: Readonly<Record<FxState, string>> = {
 
 // ── Stack ───────────────────────────────────────────────────────────────────────────────────
 
-/** One layer of the programmer's stack, with its place in it — the rail's order badge. */
+/** One layer of the programmer's stack, with its place in it — the Stack table's position badge. */
 export interface AppliedLayer {
   layer: ProgrammerLayer
-  /** 1-based, `sortOrder` ascending — the number the rail's row draws. */
+  /** 1-based, `sortOrder` ascending — the number the badge draws. */
   position: number
 }
 
@@ -288,8 +288,8 @@ export function parseStackKind(raw: string | null): StackKind | null {
 }
 
 /**
- * Every layer **top wins** — the order the rail draws them in (`LookStack`'s dense density reverses
- * the array), each with the position the rail numbers it by.
+ * Every layer **top wins** — the order the Stack table draws them in — each with the position it
+ * numbers it by.
  */
 export function stackLayers(layers: readonly ProgrammerLayer[]): AppliedLayer[] {
   return layers.map((layer, index) => ({ layer, position: index + 1 })).reverse()

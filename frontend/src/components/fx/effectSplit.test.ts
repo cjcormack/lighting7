@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
-import { effectPaintedHeads, effectReaches, splitScopeOf } from './effectSplit'
+import { effectPaintedHeads } from '@/components/fixtures-list/cellEffects'
+import { effectReaches, splitScopeOf } from './effectSplit'
 
 /**
  * The split editor's reading of which heads an edit is for (apply-model plan §3.4, D5): only a Local

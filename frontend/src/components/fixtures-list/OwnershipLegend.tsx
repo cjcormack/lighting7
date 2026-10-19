@@ -1,6 +1,8 @@
+import { Fragment } from 'react'
 import { AudioWaveform, Layers } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
+import { LENS_CHIP_FACE, lensChipTone } from './lensChip'
 import { OWNERSHIP_LABELS, layerCellClass, ownershipCellClass } from './ownership'
 import {
   LAYER_LEGEND_GLOSS,
@@ -8,6 +10,8 @@ import {
   LEGEND_GLOSS,
   LEGEND_ORDER,
   LEGEND_SHORT,
+  LENS_HELD_GLOSS,
+  LENS_HELD_SHORT,
 } from './ownershipLegendModel'
 import type { LayerLegendKey } from './ownershipLegendModel'
 import type { CellState } from './scopedCellValue'
@@ -26,7 +30,7 @@ import type { CellOwnership, CellOwnershipSource } from './useRowOwnership'
  * which is the plan's rule for every sentence this session moved: on hover, not gone.
  *
  * Narrower still, it **drops whole items rather than letting the row clip them**: the header word
- * at `@[420px]`, the trailing layer badge at `@[520px]`. The row is `overflow-hidden` with every
+ * at `@[760px]`, the held-back chip at `@[620px]`, the trailing layer badge at `@[520px]`. The row is `overflow-hidden` with every
  * item `shrink-0`, so anything that does not fit is otherwise sliced off mid-word with no ellipsis
  * and nothing to say it existed — and the counts, which are leftmost and the only thing here that
  * changes minute to minute, are what has to survive to the last.
@@ -52,17 +56,25 @@ export function OwnershipLegend({
 }: LegendCountProps & { className?: string }) {
   return (
     <LegendFooter className={className} fixtureCount={fixtureCount} selectedCount={selectedCount}>
-      <span className="hidden font-medium @[420px]:inline">Owned by</span>
+      <span className="hidden font-medium @[760px]:inline">Owned by</span>
       {LEGEND_ORDER.map((source) => (
-        <span
-          key={source}
-          title={OWNERSHIP_LABELS[source]}
-          className={cn('flex shrink-0 items-center gap-1.5', source === 'baseline' && 'opacity-62')}
-        >
-          <OwnershipSwatch source={source} />
-          <span className="@[1100px]:hidden">{LEGEND_SHORT[source]}</span>
-          <span className="hidden @[1100px]:inline">{LEGEND_GLOSS[source]}</span>
-        </span>
+        <Fragment key={source}>
+          <span
+            title={OWNERSHIP_LABELS[source]}
+            className={cn('flex shrink-0 items-center gap-1.5', source === 'baseline' && 'opacity-62')}
+          >
+            {source === 'effect' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
+            <span className="@[1100px]:hidden">{LEGEND_SHORT[source]}</span>
+            <span className="hidden @[1100px]:inline">{LEGEND_GLOSS[source]}</span>
+          </span>
+          {source === 'effect' && (
+            <span title={LENS_HELD_GLOSS} className="hidden shrink-0 items-center gap-1.5 @[620px]:flex">
+              <LensChipSample held />
+              <span className="@[1100px]:hidden">{LENS_HELD_SHORT}</span>
+              <span className="hidden @[1100px]:inline">{LENS_HELD_GLOSS}</span>
+            </span>
+          )}
+        </Fragment>
       ))}
       {/* Hidden below `@[520px]` rather than left to be clipped: the row is `overflow-hidden` and
           every item is `shrink-0`, so the alternative is this badge sliced off mid-word with
@@ -117,6 +129,15 @@ function LegendFooter({
       )}
       {children}
     </SheetPage.Footer>
+  )
+}
+
+/** The FX lens chip as a cell wears it (`CellFxLens`): what the programmer's cells show for an effect. */
+function LensChipSample({ held }: { held: boolean }) {
+  return (
+    <span aria-hidden className={cn(LENS_CHIP_FACE, 'shrink-0', lensChipTone(held))}>
+      <AudioWaveform className="size-2" />½
+    </span>
   )
 }
 
@@ -194,10 +215,18 @@ export function OwnershipKey() {
   return (
     <KeyList heading="Owned by">
       {LEGEND_ORDER.map((source) => (
-        <li key={source} className="flex items-center gap-2">
-          <OwnershipSwatch source={source} />
-          <span className={cn(source === 'baseline' && 'opacity-62')}>{LEGEND_GLOSS[source]}</span>
-        </li>
+        <Fragment key={source}>
+          <li className="flex items-center gap-2">
+            {source === 'effect' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
+            <span className={cn(source === 'baseline' && 'opacity-62')}>{LEGEND_GLOSS[source]}</span>
+          </li>
+          {source === 'effect' && (
+            <li className="flex items-center gap-2">
+              <LensChipSample held />
+              {LENS_HELD_GLOSS}
+            </li>
+          )}
+        </Fragment>
       ))}
       <li className="flex items-center gap-2">
         <Layers aria-hidden="true" className="size-3 shrink-0" />

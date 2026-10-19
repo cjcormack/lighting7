@@ -31,8 +31,8 @@ import { useClaimedFocus } from './useClaimedFocus'
  * (`ScopedEditorContextProvider`, around the rail's tabs), because the raw Speed arm writes
  * through `useCellWriters`.
  *
- * Memoised on `projectId`: `ProgrammerRail` re-renders on every desk-selection change (its add-effect
- * offer subscribes to it), and the tab has its own subscription to the marquee for everything else.
+ * Memoised on `projectId`: the tab subscribes to the marquee itself, so the dock's own re-renders
+ * stop at it.
  */
 export const RailSpreadTab = memo(function RailSpreadTab({ projectId }: { projectId: number }) {
   const marquee = useMarquee()

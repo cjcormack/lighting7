@@ -1,4 +1,4 @@
-import { useCallback, useMemo, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SelectionBar } from '@/components/sheet/SelectionBar'
@@ -6,6 +6,7 @@ import { SheetPage } from '@/components/sheet/SheetPage'
 import { SheetTable, type SheetSort, type SheetTableProps } from '@/components/sheet/SheetTable'
 import { LibraryRow } from '@/components/sheet/LibraryRow'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import type { RowId } from '@/components/sheet/cellSelectionModel'
 import { useSheet } from '@/components/sheet/useSheet'
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { ProgrammerTableTabs } from '@/components/programmer/ProgrammerTableTabs'
@@ -62,7 +63,7 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   /** What a row is called — `effect`, `look`, `palette`. */
   noun: string
   rowName: (row: Row) => string
-  /** ⏎ over one row, and the name's double click: what the rail's row opens. */
+  /** ⏎ over one row, and the name's double click. */
   onOpenRow: (row: Row) => void
   /**
    * Draw the sheet's pencil for [onOpenRow]. False where the row already carries the button that
@@ -71,6 +72,13 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   pencil?: boolean
   /** The verbs over the selected rows, after the count and before Deselect. */
   verbs: (selected: readonly Row[]) => ReactNode
+  /**
+   * The selected rows, reported as they change — the FX table publishes them for the Values grid's
+   * rings — and the rows to select on mount, so a selection made before a tab switch is still the
+   * table's when it comes back.
+   */
+  onSelectionChange?: (rows: readonly Row[]) => void
+  initialSelection?: readonly RowId[]
   /** Drawn in place of the sheet while there is nothing applied at all. */
   emptyNote: string
   /** The rows are still being read: the spinner, not [emptyNote]. */
@@ -84,9 +92,9 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
  * the selection bar with the table's verbs, the sheet and the footer — the library sheets' anatomy
  * over the live programmer.
  *
- * **Every column is a read-out.** What a row can change it changes through its actions, which are
- * the rail's own (`ProgrammerFxList`, `ProgrammerLookStack`) calling the rail's mutations, so a
- * later change to what a row can do moves the actions and never the table. The sheet still
+ * **Every column is a read-out.** What a row can change it changes through its actions, which call
+ * the desk's mutations (`useEffectControls`, the stack's `LayerHandlers`), so a later change to what
+ * a row can do moves the actions and never the table. The sheet still
  * selects rows — a click, a drag down the name column, ⌘A, ↑ / ↓ — for the bar's verbs over several.
  *
  * Sort, filter and chip are the page's (`ProgrammerTables`), handed in as [view]; a header press is
@@ -113,6 +121,8 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   onOpenRow,
   pencil = true,
   verbs,
+  onSelectionChange,
+  initialSelection,
   emptyNote,
   loading = false,
   footer,
@@ -134,7 +144,19 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
     rowName,
     onOpenRow,
   })
-  const { selectedRows, clearByLadder } = sheet
+  const { selectedRows, clearByLadder, setRows } = sheet
+
+  // Once, on mount: `setRows` changes identity with the rows, and re-applying the initial
+  // selection on a refetch or a filter keystroke would snap the operator's selection back to it.
+  const initial = useRef(initialSelection)
+  useEffect(() => {
+    const ids = initial.current
+    initial.current = undefined
+    if (ids != null && ids.length > 0) setRows(ids)
+  }, [setRows])
+  useEffect(() => {
+    onSelectionChange?.(selectedRows)
+  }, [onSelectionChange, selectedRows])
 
   const sort = useMemo<SheetSort>(
     () => ({

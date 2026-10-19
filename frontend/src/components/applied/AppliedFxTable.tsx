@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { ArrowDownUp, Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pause, Pencil, Play, Plus, Square } from 'lucide-react'
+import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pause, Pencil, Play, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -28,7 +28,7 @@ import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { useStopEffect, useToggleFxPause } from '@/components/fx/useEffectControls'
 import { NewTemplateFromEffectSheet } from '@/components/programmer/NewTemplateFromEffectSheet'
-import { homeOf, layerHomesOf, saveAsTemplateOffer } from '@/components/programmer/ProgrammerFxList'
+import { homeOf, layerHomesOf, saveAsTemplateOffer } from './fxRows'
 import { ProgrammerAddEffectSheet, useProgrammerAddEffect } from '@/components/programmer/ProgrammerAddEffect'
 import {
   FX_HOMES,
@@ -44,7 +44,9 @@ import {
   type SortValue,
   type TableView,
 } from '@/lib/programmerTables'
+import { useFxSelectionStore } from '@/components/fixtures-list/fxSelection'
 import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
+import { EffectsBelowRule } from './EffectsBelowRule'
 
 type FxColumnKey = 'property' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'size' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
 
@@ -63,21 +65,21 @@ const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 's
 
 /**
  * **The FX table** (venue-visit plan S14's Applied FX, the programmer's FX tab since tables-colours
- * plan D1): every running effect, one row per instance, exactly as the
- * rail's FX band lists them (`ProgrammerFxList`) — an effect over a selection one row with its reach
- * from `lib/effectTargets.ts`, a split edit one row per head copy, a step effect naming its palettes
- * or slots.
+ * plan D1): every running effect, one row per instance in the desk's order — an effect over a
+ * selection one row with its reach from `lib/effectTargets.ts`, a split edit one row per head copy,
+ * a step effect naming its palettes or slots.
  *
  * **It reads what the desk reports and computes nothing**: timing is *Seconds* or the master the
  * instance names (`seconds`, `speedMasterUuid`, `rateSpeedMasterUuid`, read against the live bank),
  * size, direction and runs are the instance's fields, *spent* is its `spent`, and *held · Blind* is
- * `isHeldByBlind`, the rail's read.
+ * `isHeldByBlind`.
  *
- * **A row's actions are the rail's** — *Edit…* (`FxEditorPopover`, so the split edit and pause come
- * with it), *Save as palette…* with the rail's gate, *Stop* — plus *Pause* / *Resume*, the editor's
- * own, lifted onto the row (`useToggleFxPause`). ⏎ and the name's double click open the editor.
+ * **A row's actions** — *Edit…* (`FxEditorPopover`, so the split edit and pause come with it),
+ * *Save as palette…* behind `saveAsTemplateOffer`'s gate, *Stop* — plus *Pause* / *Resume*, the
+ * editor's own, lifted onto the row (`useToggleFxPause`). ⏎ and the name's double click open the
+ * editor. The selected rows are published (`fxSelection.ts`): the Values grid rings their cells.
  *
- * **`+ Effect` is the library row's create verb**, the rail footer's own (`useProgrammerAddEffect`):
+ * **`+ Effect` is the library row's create verb** (`useProgrammerAddEffect`):
  * the bare effect press over the selection in Local, into the Look a focused Look layer applies,
  * refused with the reason in Output and over a palette — so effects are made where they are listed.
  */
@@ -101,6 +103,16 @@ export function AppliedFxTable({
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState<ActiveEffect | null>(null)
+  // The selection, published for the Values grid's rings (tables-colours plan D3) and taken back
+  // from the store on mount: the rings are read after a switch away from this table.
+  const fxSelection = useFxSelectionStore()
+  const [initialSelection] = useState(() => [...(fxSelection?.get() ?? [])].map(fxRowId))
+  // Straight into the store, which ignores an equal set, so a refetch that rebuilt the same
+  // selection reaches no ring.
+  const onSelectionChange = useCallback(
+    (rows: readonly FxSheetRow[]) => fxSelection?.set(new Set(rows.map((row) => row.effect.id))),
+    [fxSelection],
+  )
   const editAnchor = useRef<HTMLElement | null>(null)
 
   const templatesByUuid = useMemo(() => new Map((templates ?? []).map((t) => [t.uuid, t])), [templates])
@@ -109,7 +121,7 @@ export function AppliedFxTable({
     return (effects ?? []).map((effect) => {
       const heldByBlind = isHeldByBlind(effect, blind)
       return {
-        id: `fx:${effect.id}`,
+        id: fxRowId(effect.id),
         effect,
         home: homeOf(effect, layerHomes),
         homeKind: fxHomeOf(effect),
@@ -193,6 +205,8 @@ export function AppliedFxTable({
         }
         create={<AddEffectVerb projectId={projectId} />}
         rule={<EffectsBelowRule />}
+        onSelectionChange={onSelectionChange}
+        initialSelection={initialSelection}
         noun="effect"
         rowName={(row) => row.effect.effectType}
         onOpenRow={openEditor}
@@ -235,6 +249,10 @@ export function AppliedFxTable({
       />
     </>
   )
+}
+
+function fxRowId(effectId: number): string {
+  return `fx:${effectId}`
 }
 
 function sortValue(row: FxSheetRow, key: string): SortValue {
@@ -475,7 +493,7 @@ function HomeCell({ row }: { row: FxSheetRow }) {
   )
 }
 
-/** The name, the rail's dot and marks, and the row's menu — the rail row's own items. */
+/** The name, its dot and marks, and the row's menu. */
 function FxNameCell({
   row,
   showProperty,
@@ -528,7 +546,7 @@ function FxNameCell({
               <MoreHorizontal className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          {/* No focus back to the trigger: *Edit…* opens a popover in the same gesture, as on the rail. */}
+          {/* No focus back to the trigger: *Edit…* opens a popover in the same gesture. */}
           <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
             <DropdownMenuItem onClick={onOpen}>
               <Pencil className="size-3.5" />
@@ -634,19 +652,5 @@ function AddEffectVerb({ projectId }: { projectId: number }) {
       </span>
       <ProgrammerAddEffectSheet projectId={projectId} open={open} offer={offer} onClose={() => setOpen(false)} />
     </>
-  )
-}
-
-/** *Values above beat effects below* — the rail's boundary band, whatever order the rows are in. */
-function EffectsBelowRule() {
-  return (
-    <div
-      data-effects-rule
-      className="flex h-7 shrink-0 items-center gap-1.5 border-b border-amber-800/70 bg-amber-950/40 px-3"
-      title="Effects run under the values: a value set above an effect beats it, whatever the layer order. Per-layer stomp is the way round it."
-    >
-      <ArrowDownUp className="size-3 shrink-0 text-amber-300" />
-      <span className="text-[9px] font-bold uppercase tracking-[0.06em] text-amber-300">Values above beat effects below</span>
-    </div>
   )
 }

@@ -8,7 +8,7 @@ import { useCueActionDialogs } from '@/components/runner/cueActionDialogs'
 import { isEditableTarget } from '@/lib/domUtils'
 
 /**
- * The programmer's contexts stop here. The cue editor can open over the programmer — its FX band's
+ * The programmer's contexts stop here. The cue editor can open over the programmer — its FX table's
  * *on Q12* opens it in a sheet portalled from there, and React context flows through a portal — so
  * the programmer's scope, focused layers and rail-tab claim are cleared: none of them is the cue
  * editor's, and each would dim a column, refuse a write or send a gesture to the rail (P2).

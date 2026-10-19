@@ -14,9 +14,9 @@
  * where the space plan puts every sentence it moves. That is the same trade `LEGEND_SHORT` makes
  * for the legend's glosses, and `ProgrammerSourceStrip`'s `Busking` label for its sentence.
  *
- * One module rather than a `const` per field because there are three fields — the shared toolbar
- * control in `FixturesListContainer`, `/fixtures`' own search row and the programmer's `FxSheet` —
- * and three hand-typed copies of one placeholder is how two of them end up saying different things.
+ * One module rather than a `const` per field because there are two fields — the shared toolbar
+ * control in `FixturesListContainer` and `/fixtures`' own search row — and two hand-typed copies of
+ * one placeholder is how they end up saying different things.
  */
 export const FIXTURE_FILTER_PLACEHOLDER = 'Filter fixtures…'
 

@@ -53,23 +53,6 @@ export const SIDE_PANEL_STRIP_CELL_CLASS =
 export const SIDE_PANEL_HEADER_BUTTON_CLASS = 'size-6 text-muted-foreground'
 
 /**
- * A header tab's word: drawn at 400px of tab strip and up, and below that only on the **open** tab
- * (busk-chrome plan D3) — the rail's Stack · Colour · Spread. The strip's **unpadded wrapper** is
- * the `@container` (`sheetFrame.ts`'s convention for a chrome row: a size query measures the content
- * box, and the row's own `px-3` would fire the threshold 24px early). Every tab keeps its glyph at
- * every width. The busk sheet's eight tabs fold by [buskTabWordClass] instead.
- *
- * It lived in the busk sheet until the rail took a strip of its own (editor-kit plan session 4);
- * the rule is the panels' shared chrome, so it moved here rather than being copied. On the rail
- * the strip is narrower than the rail by the mode toggle and the chevron, so at the rail's 480
- * ceiling it is still under 400 — the fold holds at every width the rail has, which is what the
- * board draws.
- */
-export function tabWordClass(open: boolean): string {
-  return open ? 'inline' : 'hidden @[400px]:inline'
-}
-
-/**
  * The busk sheet's **eight** tabs (Level · Colour · Position · Beam · Spread · Effects · Speed ·
  * Show) keep their words only on the open tab, and only from 380px of sheet: eight worded tabs want
  * ~610px of strip, past the panels' 480 ceiling, so a closed tab is its glyph at every width, and below the rung so is the open one,
@@ -240,7 +223,7 @@ export function useSidePanelResize({
   fallback: number
   /**
    * This panel's own floor, where the shared 260 is too narrow for its chrome. The **header** is
-   * usually what sets it, not the body: the rail's is two short labels with badges and fits at
+   * usually what sets it, not the body: the dock's is two tabs, Colour · Spread, and fits at
    * 240, where the sheet's is three labelled tabs plus the mode toggle and the fold chevron and
    * needs 304. Measure it rather than guessing, and leave slack — a minimum sitting on the exact
    * fit clips the moment anything is added to the row.

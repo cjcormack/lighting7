@@ -35,17 +35,16 @@ const NO_SORT: ReadonlySet<string> = new Set()
 
 /**
  * **The Scenery table** (tables-colours plan D6): every scene element, **Venue then Set** and by
- * name under dividers, with the band's three filters — *Set*, *Venue*, *Moving only* — as chips and
+ * name under dividers, with three filters — *Set*, *Venue*, *Moving only* — as chips and
  * *All* their unfiltered state. A piece the scope holds is listed whatever they say, so its release
  * × stays in reach.
  *
- * **One scope reading** (`useSceneryScope`), the rail's band's and the full list's: Local writes the
- * programmer's own scenery, a focused Look layer that Look's, Output and a palette layer nothing —
- * so the table cannot draw an element otherwise than the band beside it. A row's state, what holds
- * it and whether Blind is staging it are read-outs; ⏎ or the row's sliders open the element's own
- * `SceneryElementRow` — the band's row, control and all — at the row.
+ * **One scope reading** (`useSceneryScope`), shared with the Stage view's scenery popover: Local
+ * writes the programmer's own scenery, a focused Look layer that Look's, Output and a palette layer
+ * nothing. A row's state, what holds it and whether Blind is staging it are read-outs; ⏎ or the
+ * row's sliders open the element's own `SceneryElementRow`, control and all, at the row.
  *
- * The filters are the full list's store (`useSceneryFilters`, per window), so the two agree.
+ * The filters are `useSceneryFilters`, per window.
  */
 export function SceneryTable({
   projectId,

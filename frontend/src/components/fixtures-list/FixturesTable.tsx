@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS, columnFamily, columnLabel } from './columns'
-import { rowLocateTarget } from './rowModel'
+import { rowLocateTarget, templateTargetsOf } from './rowModel'
 import { buildCueRowCells, buildRowCells, useRowValues } from './useRowValues'
 import { useScopedRowValues } from './useScopedRowValues'
 import { parsePropertyMask } from '../../lib/attributeFamily'
@@ -33,6 +33,8 @@ import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
 import { useHeldBackReach } from './useHeldBackReach'
 import { cellHoldsBack } from '../../lib/heldBack'
+import { CellFxLens, CellFxLensHost } from './CellFxLens'
+import { useFxSelectionStore } from './fxSelection'
 import { lightingApi } from '../../api/lightingApi'
 import { applyStagedValue, cueSourceCellClass, cueSourceTitle, layerCellClass, ownershipCellClass, ownershipTitle } from './ownership'
 import { cellSelectionClass } from '../sheet/cellSelection'
@@ -239,6 +241,11 @@ export function FixturesTable({
   const deskConnected = useIsDeskConnected()
   // What an effect could be held back on, for the corner dot (D19) — one subscription, every row.
   const heldBackReach = useHeldBackReach(showOwnership)
+  // The FX lens (tables-colours plan D3): on the programmer, where ownership is drawn — Local and
+  // Output, not a focused layer, which marks its own effect palette's cells. The FX table's
+  // selection store is what says this is the programmer.
+  const lensScope = useProgrammerScope()
+  const lensOn = useFxSelectionStore() != null && showOwnership && lensScope?.kind !== 'layer'
 
   const virtualizer = useVirtualizer({
     count: rows.length,
@@ -354,6 +361,7 @@ export function FixturesTable({
        scroller would scroll away with the columns it is meant to be covering, which on a phone
        means the one hint that there are more columns disappears the moment you use it. It also
        is its own flex column so the scroller keeps `min-h-0 flex-1`. */
+    <CellFxLensHost rows={rows} enabled={lensOn}>
     <div className="relative flex min-h-0 flex-1 flex-col">
       <div
         // `attach` rather than `scrollRef` — it fills that ref AND tells `useScrollEdges` the
@@ -572,6 +580,7 @@ export function FixturesTable({
         />
       )}
     </div>
+    </CellFxLensHost>
   )
 }
 
@@ -1014,17 +1023,6 @@ const RowView = React.memo(function RowView({
                   : (cueSourceTitle(state?.source) ?? ownershipTitle(owned))
             }
           >
-            {/* The held-back dot (D19): an amber corner dot in the top-right, inside the ownership
-                ring and absolutely placed, so it never moves the value — the corner the effect badge
-                takes, and never both, since a held-back cell is the programmer's and a badged one
-                the effect's. The cell editor's label line carries the chip that opens the stack. */}
-            {heldBack && (
-              <span
-                data-testid="held-back-dot"
-                aria-hidden
-                className="pointer-events-none absolute top-1 right-1 size-[7px] rounded-full bg-amber-500"
-              />
-            )}
             {/* The winning Look layer, layered around the cell rather than inside it — the same
                 choice `ownershipCellClass` documents. The four cell editors already encode value
                 shape, and a marker drawn inside one of them would have to be drawn four times.
@@ -1038,21 +1036,6 @@ const RowView = React.memo(function RowView({
                   layer.mixed ? 'text-muted-foreground/50' : 'text-muted-foreground'
                 }`}
               />
-            )}
-            {/* An effect-driven cell wears the FX wave as a badge, top-right — the opposite corner
-                from the Layers glyph, so a cell that is both (a Look layer's effect) shows both.
-                The violet ring on its own was too quiet beside the blue ones: at a glance a cell
-                the effect is animating and a cell you set read as one picture, and "this value is
-                moving and Record will not take it" is the fact the operator most needs to see
-                without hovering. A badge and not a louder ring, because the ring vocabulary is
-                six colours already and a seventh weight would not have said *effect*. */}
-            {owned?.source === 'effect' && (
-              <span
-                data-testid="effect-badge"
-                className="pointer-events-none absolute right-1 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"
-              >
-                <AudioWaveform className="size-2.5" />
-              </span>
             )}
             {/* The same corner, and never both: ownership is switched off in layer scope, so the
                 glyph above is undefined exactly where this one draws. Around the cell rather than
@@ -1121,6 +1104,41 @@ const RowView = React.memo(function RowView({
               sourceKeys={owned != null ? cell.keys : undefined}
             />
             {scope?.kind === 'output' && <OwnerJumpOverlay owned={owned} />}
+            {/* The FX lens (tables-colours plan D3): the effects painting this cell as a chip in
+                the marks gutter, and the FX table's selection as a ring. It takes over the corner's
+                two marks below, which say less than it does, and leaves them where it draws
+                nothing (`CellFxLens`). */}
+            <CellFxLens
+              keys={cell.keys}
+              selection={() => templateTargetsOf(batchFor(row, col).targets ?? [])}
+              fallback={
+                <>
+                  {/* The held-back dot (D19): an amber corner dot in the top-right, inside the
+                      ownership ring and absolutely placed, so it never moves the value — the corner
+                      the effect badge takes, and never both, since a held-back cell is the
+                      programmer's and a badged one the effect's. */}
+                  {heldBack && (
+                    <span
+                      data-testid="held-back-dot"
+                      aria-hidden
+                      className="pointer-events-none absolute top-1 right-1 size-[7px] rounded-full bg-amber-500"
+                    />
+                  )}
+                  {/* An effect-driven cell wears the FX wave as a badge, top-right — the opposite
+                      corner from the Layers glyph, so a cell that is both (a Look layer's effect)
+                      shows both. A badge and not a louder ring, because the ring vocabulary is six
+                      colours already and a seventh weight would not have said *effect*. */}
+                  {owned?.source === 'effect' && (
+                    <span
+                      data-testid="effect-badge"
+                      className="pointer-events-none absolute right-1 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"
+                    >
+                      <AudioWaveform className="size-2.5" />
+                    </span>
+                  )}
+                </>
+              }
+            />
           </div>
         )
       })}

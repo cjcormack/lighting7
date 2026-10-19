@@ -19,11 +19,11 @@ import { EnableButton, LayerSettingsPopover, describeStackSource, type LayerHand
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { LookDetailSheet } from '@/components/looks/LookDetailSheet'
 import { useReplacementNotes } from '@/components/programmer/useReplacementNotes'
-import { useProgrammerScopeActions } from '@/components/programmer/ProgrammerScope'
+import { focusedLayerId, useProgrammerScope, useProgrammerScopeActions } from '@/components/programmer/ProgrammerScope'
 import { useProgrammerSheets } from '@/components/programmer/ProgrammerSheets'
 import { useProgrammerTables } from '@/components/programmer/ProgrammerTableTabs'
 import { useLocalValueCount } from '@/components/programmer/useLocalFamilyCounts'
-import { RailApplyPicker } from '@/components/programmer/ProgrammerRail'
+import { ApplyLayerPicker } from '@/components/programmer/ApplyLayerPicker'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useActiveEffectsQuery, type ActiveEffect } from '@/store/fixtureFx'
@@ -53,6 +53,7 @@ import {
   type TableView,
 } from '@/lib/programmerTables'
 import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
+import { EffectsBelowRule } from './EffectsBelowRule'
 
 type StackColumnKey = 'position' | 'kind' | 'targets' | 'amount' | 'blend' | 'mask' | 'stomp' | 'settings' | 'effects' | 'note'
 
@@ -84,15 +85,17 @@ const KIND_LABELS: Readonly<Record<StackKind, string>> = { looks: 'Looks', palet
  * programmer's stack top first — Looks and palettes in one table, because the order between them is
  * what decides who wins. The kind chips (All · Looks · Palettes) give the split back as a filter.
  *
- * **Reorder by drag**, `SheetTable`'s `rowDrag` over the same `programmerMoveLayer` the rail's
- * `ProgrammerLookStack` sends, a drop in the table's top-first order mapped back to the desk's
+ * **Reorder by drag**, `SheetTable`'s `rowDrag` over `programmerMoveLayer`, a drop in the table's top-first order mapped back to the desk's
  * bottom-first index (`layerMoveOf`). The drag is refused while the rows are not the stack as it
  * is — a kind chip, a filter or a sort leaves gaps a drop could not be read against — and the footer
  * says so. *Your values* is pinned: it beats every layer and cannot be dragged.
  *
  * **⏎, the name's double click and *Edit in grid* point the Values grid at the row** — a layer's
  * scope, or Local for *Your values* — and switch to Values. *Make layer* sits on *Your values*'
- * row, as on the rail. Every other action is the rail row's, through its mutations.
+ * row. A layer row's controls are the stack's own — its enable toggle, settings popover (amount,
+ * blend, mask, stomp), *Detach*, *Pick up* and *Remove* — and the Note column names what a later
+ * press took from it (`useReplacementNotes`). This table is the one place the programmer's stack is
+ * listed and reordered (D4).
  */
 export function StackTable({
   projectId,
@@ -110,6 +113,8 @@ export function StackTable({
   const { data: effects } = useActiveEffectsQuery()
   const notes = useReplacementNotes()
   const scopeActions = useProgrammerScopeActions()
+  const scope = useProgrammerScope()
+  const focusedLayer = focusedLayerId(scope)
   const tables = useProgrammerTables()
   const sheets = useProgrammerSheets()
 
@@ -150,6 +155,9 @@ export function StackTable({
     )
     return [local, ...sortRows(shown, view.sort, view.dir, sortValue)]
   }, [all, kindChip, local, view.dir, view.q, view.sort])
+  // *Your values* is always listed, so the shell's own "nothing matches" never draws: the table
+  // says it under the rule instead, with the pinned row still above.
+  const noMatch = all.length > 0 && rows.length === 1
 
   // A drop is read against the stack as it stands: every layer shown, in its own order.
   const dragRefusal =
@@ -246,12 +254,30 @@ export function StackTable({
           />
         }
         create={<AddLayerMenu onAdd={setAdding} />}
+        rule={
+          <>
+            <EffectsBelowRule>
+              <EffectsElsewhere count={effects?.length ?? 0} onShow={() => tables?.select('fx')} />
+            </EffectsBelowRule>
+            {noMatch && (
+              <p data-stack-no-match className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">
+                No layers match the filter.
+              </p>
+            )}
+          </>
+        }
         noun="layer"
         rowName={(row) => (row.kind === 'LOCAL' ? 'your values' : (row.info.name ?? 'layer'))}
         onOpenRow={focusInGrid}
         pencil={false}
         rowDrag={rowDrag}
-        rowClass={(row) => (row.kind === 'LOCAL' ? 'bg-primary/[0.06]' : undefined)}
+        rowClass={(row) =>
+          row.kind === 'LOCAL'
+            ? 'bg-primary/[0.06]'
+            : row.entry.layer.layerId === focusedLayer
+              ? 'bg-teal-500/10 shadow-[inset_3px_0_0_var(--color-teal-500)]'
+              : undefined
+        }
         verbs={(selected) => (
           <StackVerbs
             selected={selected}
@@ -270,7 +296,7 @@ export function StackTable({
           </span>
         }
       />
-      {adding != null && <RailApplyPicker projectId={projectId} library={adding} onClose={() => setAdding(null)} />}
+      {adding != null && <ApplyLayerPicker projectId={projectId} library={adding} onClose={() => setAdding(null)} />}
       <LookDetailSheet
         open={lookForSheet != null}
         onOpenChange={(next) => !next && setLookOpen(null)}
@@ -286,7 +312,7 @@ function layerRowId(layer: ProgrammerLayer): string {
   return `layer:${layer.layerId}`
 }
 
-/** One layer's handlers, as the rail's index-based ones resolve to for that layer. */
+/** One layer's handlers, as `LookStack`'s index-based ones resolve to for that layer. */
 function handlersFor(layer: ProgrammerLayer): LayerHandlers {
   return {
     onRemove: () => programmerRemoveLayer(layer.layerId),
@@ -294,7 +320,8 @@ function handlersFor(layer: ProgrammerLayer): LayerHandlers {
     onSetEnabled: (_, enabled) => programmerPatchLayer(layer.layerId, { enabled }),
     onSetAmount: (_, amount) => programmerPatchLayer(layer.layerId, { amount }),
     onSetBlendMode: (_, blendMode) => programmerPatchLayer(layer.layerId, { blendMode }),
-    // An unmasked layer travels as the empty string, as the rail sends it.
+    // An unmasked layer travels as the empty string: an omitted field means "leave alone", and the
+    // server reads the empty string as "no mask".
     onSetPropertyMask: (_, propertyMask) => programmerPatchLayer(layer.layerId, { propertyMask: propertyMask ?? '' }),
     onSetStomp: (_, stomp) => programmerPatchLayer(layer.layerId, { stomp }),
     onDetach: () => programmerDetachLayer(layer.layerId),
@@ -591,7 +618,7 @@ function LocalNameCell({ compact, onFocus }: { compact: boolean; onFocus: () => 
 }
 
 /**
- * The enable toggle, the name, the settings popover and the menu — the rail row's controls. On the
+ * The enable toggle, the name, the settings popover and the menu — the stack row's controls. On the
  * narrow bands ([compact]) the toggle and the settings button live in the menu, the popover opening
  * at the row, so the name keeps its room; the stack position rides beside it, its column gone.
  */
@@ -700,7 +727,7 @@ function MakeLayerVerb({ onMakeLayer }: { onMakeLayer: () => void }) {
   )
 }
 
-/** *+ Look or palette*: the rail footer's two doors, as one create verb. */
+/** *+ Look or palette*: the two pickers, as one create verb. */
 function AddLayerMenu({ onAdd }: { onAdd: (library: 'looks' | 'palettes') => void }) {
   return (
     <DropdownMenu>
@@ -726,7 +753,7 @@ function AddLayerMenu({ onAdd }: { onAdd: (library: 'looks' | 'palettes') => voi
 
 /**
  * The bar's verbs over the selected rows: *Edit in grid* over one row, *Make layer* with *Your
- * values* selected, and the rail row's verbs over the layers — a one-layer verb refused over several.
+ * values* selected, and the row's verbs over the layers — a one-layer verb refused over several.
  */
 function StackVerbs({
   selected,
@@ -804,5 +831,24 @@ function StackVerbs({
         </>
       )}
     </>
+  )
+}
+
+/** The rule's second half on the Stack table: the effects under the stack, a press away on the FX tab. */
+function EffectsElsewhere({ count, onShow }: { count: number; onShow: () => void }) {
+  return (
+    <span className="min-w-0 truncate text-[11px] text-amber-200/80">
+      ·{' '}
+      {count === 0 ? (
+        'no effects running'
+      ) : (
+        <>
+          {count} effect{count === 1 ? '' : 's'} run under this stack,{' '}
+          <button type="button" className="underline-offset-2 hover:underline" onClick={onShow}>
+            on the FX tab
+          </button>
+        </>
+      )}
+    </span>
   )
 }

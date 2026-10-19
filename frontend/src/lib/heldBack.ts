@@ -19,7 +19,7 @@
  * (`programmer.keyStack`, the sheet's `LayerStack`) is the desk's own answer and names it. The dot
  * is the cheap half — it needs nothing the client does not already hold.
  *
- * `FxSheet`'s struck-through chips and the fixture sheet's amber dot both read this; the grid's
+ * The FX lens's struck-through chips and the fixture sheet's amber dot both read this; the grid's
  * corner dot (session 5) does, through [heldBackReach].
  */
 import { effectAimKeys, type EffectTargetFields } from './effectTargets'
@@ -52,7 +52,7 @@ export function isHeldBack(
  * The client's copy of the desk's `BlindHold.holds` (`fx/BlindHold.kt`), and it is the other half of
  * [isHeldBack]: Blind empties *that* rule (the programmer's values hold nothing back) and holds the
  * band this one names, so the two are never both true of one effect. The FX tray and the programmer's
- * FX band mark a held instance *held · Blind* from it.
+ * FX table mark a held instance *held · Blind* from it.
  */
 export function isHeldByBlind(effect: Pick<HeldBackEffect, 'programmerOwned'>, blind: boolean): boolean {
   return blind && effect.programmerOwned

@@ -1,10 +1,7 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { EditorLabel } from '@/components/editor/EditorLabel'
-import { EditorLabelLine } from '@/components/editor/EditorLabelLine'
-import { EditorReadout } from '@/components/editor/EditorReadout'
 import { BlindDot } from '@/components/busking/BlindMarks'
 import { SceneryControl } from '@/components/scenery/SceneryControl'
 import { ElementIcon } from '@/components/scenery/SceneryReadout'
@@ -23,7 +20,6 @@ import {
   useProgrammerScenery,
 } from '@/store/programmer'
 import { useLiveScenery, useSetLookSceneryMutation } from '@/store/scenery'
-import { useStageElementListQuery } from '@/store/stageElements'
 import type { SceneryChange, SceneryState, SceneryWriteItem } from '@/api/sceneryApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
@@ -32,7 +28,7 @@ import { useProgrammerScope, type ProgrammerScope } from './ProgrammerScope'
 // — filters ————————————————————————————————————————————————————————————————————
 
 /**
- * The list's three filters (scenery-programmer plan D4, the Scenery tab mock-up): *Set* lists the
+ * The Scenery table's three filters (scenery-programmer plan D4, tables-colours plan D6): *Set* lists the
  * Set layer, *Venue* the Venue layer, *Moving only* drops what can only be shown and hidden. A piece
  * the scope holds is listed whatever they say — its release × must stay in reach.
  */
@@ -60,8 +56,8 @@ const sceneryFiltersStore = createSyncStore<SceneryFilters>({
 })
 
 /**
- * This window's filters, one value for the full list and the Scenery table, so a chip pressed in
- * one is the chip lit in the other.
+ * This window's filters — the Scenery table's chips, remembered per window (`sessionStorage`) so a
+ * second mount reads them back.
  */
 export function useSceneryFilters(): [SceneryFilters, (next: SceneryFilters) => void] {
   const filters = useSyncExternalStore(sceneryFiltersStore.subscribe, sceneryFiltersStore.getSnapshot, sceneryFiltersStore.getServerSnapshot)
@@ -74,7 +70,7 @@ export function resetSceneryFiltersStore() {
 }
 
 /**
- * The rows the list draws, **Venue then Set** and by name within each, after the filters — a held
+ * The rows the Scenery table draws, **Venue then Set** and by name within each, after the filters — a held
  * piece always. Pure, so the grouping and the filters are pinned without a store.
  */
 export function sceneryGroups(
@@ -212,13 +208,12 @@ function useLookScenery(projectId: number, lookId: number | null) {
   return { held: items, write, release, ready }
 }
 
-// — the scope, shared by the band and the list ——————————————————————————————————————
+// — the scope, shared by the Scenery table and the Stage view ——————————————————————————————————————
 
 /**
  * Everything a scenery row needs from the programmer's scope (D4), read once per mount: where a
- * gesture lands, what the scope holds, and what each element shows. Shared by the rail's Scenery
- * band (the held pieces) and the full list (`ProgrammerSceneryList`), so the two cannot draw one
- * element two ways.
+ * gesture lands, what the scope holds, and what each element shows. Shared by the programmer's
+ * Scenery table and the Stage view's scenery popover, so the two cannot draw one element two ways.
  */
 export interface SceneryScope {
   arm: SceneryArm
@@ -284,7 +279,7 @@ export function useSceneryScope(projectId: number): SceneryScope {
   return { arm, held, rowOf, write, release, subject, ready: arm.kind !== 'look' || look.ready }
 }
 
-/** How many pieces the programmer holds in [projectId] — what Clear will drop, and the rail's count. */
+/** How many pieces the programmer holds in [projectId] — what Clear will drop, and the Scenery tab's count. */
 export function useHeldSceneryCount(projectId: number): number {
   return heldSceneryIn(useProgrammerScenery(), projectId).length
 }
@@ -341,93 +336,4 @@ export function SceneryElementRow({ element, scope }: { element: StageElementDto
   )
 }
 
-// — the full list ——————————————————————————————————————————————————————————————————
-
-/**
- * Every scene element (scenery-programmer plan D1, D4), **Venue then Set** and by name, each its
- * `SceneryElementRow` — what the rail's Scenery band opens as *All scenery…*, through
- * `EditorSurface`: a `w-72` popover on a desk or iPad, a bottom sheet on an upright phone, a side
- * sheet on a short viewport.
- *
- * **What a row shows is what the stage will**: the live frame's target over the element's base,
- * and — in Local while blind — the staged state over that, since Local is where the operator is
- * writing. Output shows live. Writes go at the programmer's fade (the Clear/Blind picker's), or —
- * at Snap — at the piece's own `travelS`; a release flies the piece home on the same fade. A
- * refusal is the desk's `programmer.error`, which the existing error toast shows.
- */
-export const ProgrammerSceneryList = memo(function ProgrammerSceneryList({
-  projectId,
-  scope,
-}: {
-  projectId: number
-  /**
-   * The opener's scope reading, when it has one. The rail's band passes its own, so the band and
-   * the list it opens edit **one** Look draft: two drafts of one whole-list `PUT` would each send
-   * a list without the other's last change.
-   */
-  scope?: SceneryScope
-}) {
-  return scope != null ? <SceneryList projectId={projectId} scope={scope} /> : <OwnScopeSceneryList projectId={projectId} />
-})
-
-function OwnScopeSceneryList({ projectId }: { projectId: number }) {
-  return <SceneryList projectId={projectId} scope={useSceneryScope(projectId)} />
-}
-
-function SceneryList({ projectId, scope }: { projectId: number; scope: SceneryScope }) {
-  const { data: elements } = useStageElementListQuery(projectId)
-
-  const [filters, setFilters] = useSceneryFilters()
-  const toggle = (key: keyof SceneryFilters) => setFilters({ ...filters, [key]: !filters[key] })
-
-  const heldKeys = useMemo(() => new Set(scope.held.keys()), [scope.held])
-  const groups = useMemo(() => sceneryGroups(elements ?? [], filters, heldKeys), [elements, filters, heldKeys])
-
-  return (
-    <div data-programmer-scenery className="flex min-h-0 flex-col">
-      <div className="shrink-0 space-y-2 border-b px-3 py-2">
-        <EditorLabelLine subject={scope.subject} column="Scenery" />
-        <div role="group" aria-label="Scenery filters" className="flex flex-wrap items-center gap-1">
-          <FilterChip on={filters.set} onClick={() => toggle('set')} label="Set" />
-          <FilterChip on={filters.venue} onClick={() => toggle('venue')} label="Venue" />
-          <FilterChip on={filters.movingOnly} onClick={() => toggle('movingOnly')} label="Moving only" />
-        </div>
-        {scope.arm.kind === 'readOnly' && <EditorReadout>{scope.arm.reason}</EditorReadout>}
-      </div>
-      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-2">
-        {(elements ?? []).length === 0 ? (
-          <p className="text-xs text-muted-foreground">{NO_SCENERY_YET}</p>
-        ) : groups.length === 0 ? (
-          <p className="text-xs text-muted-foreground">Nothing matches the filters.</p>
-        ) : (
-          groups.map((group) => (
-            <section key={group.layer} data-scenery-group={group.layer} className="space-y-1.5">
-              <EditorLabel>{group.layer === 'VENUE' ? 'Venue' : 'Set'}</EditorLabel>
-              {group.elements.map((element) => (
-                <SceneryElementRow key={element.uuid} element={element} scope={scope} />
-              ))}
-            </section>
-          ))
-        )}
-      </div>
-    </div>
-  )
-}
-
 export const NO_SCENERY_YET = 'The stage has no scenery yet — place some from the Stage view (Edit → + Scenery).'
-
-function FilterChip({ on, onClick, label }: { on: boolean; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      onClick={onClick}
-      className={cn(
-        'inline-flex h-6 items-center rounded-md border px-2 text-[11px] font-medium transition-colors',
-        on ? 'border-primary/50 bg-primary/10 text-foreground' : 'text-muted-foreground hover:text-foreground',
-      )}
-    >
-      {label}
-    </button>
-  )
-}

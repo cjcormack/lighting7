@@ -25,7 +25,7 @@ export function useToggleFxPause(): (effect: ActiveEffect) => void {
   )
 }
 
-/** Stop one running effect — the programmer rail's and the applied tables' *Stop*, as `useToggleFxPause` is their pause. */
+/** Stop one running effect — the FX table's *Stop*, as `useToggleFxPause` is its pause. */
 export function useStopEffect(): (effect: ActiveEffect) => void {
   const [removeFx] = useRemoveFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()

@@ -57,8 +57,8 @@ import { useClaimedFocus } from './useClaimedFocus'
  *
  * **No Palettes band** (D11): the tab exists only in the docked arm, where row C's strip is on screen.
  *
- * Memoised on `projectId`: `ProgrammerRail` re-renders on every desk-selection change (its add-effect
- * offer subscribes to it), and the tab has its own subscription to the marquee for everything else.
+ * Memoised on `projectId`: the tab subscribes to the marquee itself, so the dock's own re-renders
+ * stop at it.
  */
 export const RailColourTab = memo(function RailColourTab({ projectId }: { projectId: number }) {
   const marquee = useMarquee()

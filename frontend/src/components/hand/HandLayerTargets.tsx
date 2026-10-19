@@ -41,7 +41,7 @@ import { HandPlaceStrip, useHandOffer } from './HandTarget'
  * while a placeable record is actually held.
  *
  * Written flat, both hooks ran unconditionally in an always-mounted component: the programmer's
- * strip sits in the rail footer on every visit to `/programmer`, so every marquee that crossed a
+ * strip sits under the programmer's tables on every visit to `/programmer`, so every marquee that crossed a
  * row boundary re-rendered it to refresh a `targets` array for a strip that was rendering `null`;
  * and the cue strip is mounted once per **expanded** cue card, multiplying the same cost by however
  * many the operator has open.
@@ -62,23 +62,23 @@ function layerSource(held: HeldRecord): { templateId: number } | { lookId: numbe
 }
 
 /**
- * *Place “X” here* on the **programmer's** layer stack, drawn in the rail's footer: the press, with
- * the window's pair (apply-model plan §5).
+ * *Place “X” here* on the **programmer's** layer stack, drawn at the foot of the programmer's tables
+ * whichever is showing: the press, with the window's pair (apply-model plan §5).
  *
  * **No Undo**, and that is a decision rather than an omission. A press answers no layer id — the
  * stack comes back whole on `programmer.layerState` — so this window cannot address the layer it
  * just made. The only way to find it would be to diff the stack before and after, and the stack is
  * *shared*: another window or a busking pad pressing in the same moment would have Undo remove
  * someone else's, on a live rig. A wrong inverse is worse than none, and the row this just added is
- * one click from its own remove in the rail above.
+ * one click from its own remove on the Stack table.
  */
-export function HandProgrammerLayerStrip() {
+export function HandProgrammerLayerStrip({ className }: { className?: string }) {
   // The cheap question first: nothing placeable held means no selection subscription at all.
   const offer = useHandOffer('layer-stack')
-  return offer == null ? null : <ProgrammerLayerStripBody />
+  return offer == null ? null : <ProgrammerLayerStripBody className={className} />
 }
 
-function ProgrammerLayerStripBody() {
+function ProgrammerLayerStripBody({ className }: { className?: string }) {
   const { projectId } = useParams()
   const { press, into } = useWindowPress(Number(projectId))
   const placeFromHand = useHandPlace()
@@ -105,7 +105,7 @@ function ProgrammerLayerStripBody() {
     [placeFromHand, press, where],
   )
 
-  return <HandPlaceStrip target="layer-stack" where={where} onPlace={onPlace} />
+  return <HandPlaceStrip target="layer-stack" where={where} onPlace={onPlace} className={className} />
 }
 
 /**

@@ -1,8 +1,11 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
 import { useWindowEffectPair } from '@/components/fx/selectionEffectTarget'
 import { useWindowPaletteFit, type PressPair } from '@/hooks/usePress'
 import { useLookRowStore } from './LookRowStore'
 import { useProgrammerScope } from './ProgrammerScope'
+import { registerAddEffectDoor } from './addEffectDoor'
 
 /** What `+ Effect` can do right now, and why not when it cannot. */
 export interface AddEffectOffer {
@@ -29,10 +32,8 @@ export interface AddEffectOffer {
  *   so there is nowhere for a new effect to go. The tooltip names the two places that can take one,
  *   because "disabled" on its own teaches nobody.
  *
- * A hook plus a picker rather than one button component, since session 3 of the space plan: the
- * rail's footer and the collapsed strip's `+` menu are two doors onto one gesture, and the picker
- * has to be mounted once, above both, where it outlives the rail body. `ProgrammerRail` calls the
- * hook, hands the offer to both doors and mounts `ProgrammerAddEffectSheet` beside them. The
+ * A hook plus a picker rather than one button component: the FX table's *+ Effect* and ⌘K's
+ * *Apply FX → On the selection* ([ProgrammerAddEffectDoor]) are two doors onto one gesture. The
  * authoring UI is the one picker's effects arm (`ApplyPicker`, `library="effects"`): `FxPicker` and
  * the live editor, above the effect palettes.
  */
@@ -68,7 +69,7 @@ export function useProgrammerAddEffect(): AddEffectOffer {
 
 /**
  * The picker for `+ Effect`, mounted only while open — its pair is a marquee subscription and it
- * reads the fixture list, and the rail is always on screen.
+ * reads the fixture list.
  */
 export function ProgrammerAddEffectSheet({
   projectId,
@@ -101,4 +102,28 @@ function AddEffectPicker({ projectId, pair, onClose }: { projectId: number; pair
       offerNew={false}
     />
   )
+}
+
+/**
+ * ⌘K's *Apply FX → On the selection* on the programmer (`addEffectDoor.ts`): *+ Effect*, whichever
+ * table is showing. Mounted by the tables' frame for the page's life, it holds **no** selection
+ * subscription until the door is asked — the offer is read then, and a refusal is said as a toast.
+ */
+export function ProgrammerAddEffectDoor({ projectId }: { projectId: number }) {
+  const [asked, setAsked] = useState(0)
+  useEffect(() => registerAddEffectDoor(() => setAsked((n) => n + 1)), [])
+  const done = useCallback(() => setAsked(0), [])
+  return asked === 0 ? null : <AskedAddEffect key={asked} projectId={projectId} onDone={done} />
+}
+
+function AskedAddEffect({ projectId, onDone }: { projectId: number; onDone: () => void }) {
+  const offer = useProgrammerAddEffect()
+  // The offer as it stood when the door was asked; a later move of the selection is the picker's.
+  const asked = useRef(offer)
+  useEffect(() => {
+    if (!asked.current.disabled) return
+    toast.warning(asked.current.reason)
+    onDone()
+  }, [onDone])
+  return <ProgrammerAddEffectSheet projectId={projectId} open offer={offer} onClose={onDone} />
 }

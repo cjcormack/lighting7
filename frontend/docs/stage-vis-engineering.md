@@ -2637,7 +2637,7 @@ a refetch landing mid-save (or while a time is typed) never puts an older list b
 **A click on a piece moves it** (scenery-programmer plan session 4, D11). With Edit off, in every
 camera, a click on a drawn drape, a flown piece or anything on the Set layer (`isSceneryPickable`)
 opens `stage3d/SceneryPopover.tsx`: the piece's `SceneryControl` writing `programmer.setScenery` at
-the window's programmer fade — the overlay the rail's Scenery band writes, through the band's own
+the window's programmer fade — the overlay the programmer's Scenery table writes, through the table's own
 `useSceneryScope` (the Stage view has no programmer scope, so it is always the Local arm) — saying
 what holds the piece (`source`, the top tier) and, in Blind, showing the staged state; *Release*
 while the programmer holds it; *Edit element…* where the window has Edit (tablet width and up),

@@ -21,7 +21,7 @@ import type { CueTarget } from '@/api/cuesApi'
  * layer's grid became a read, an untargeted row there is painted dashed and non-editable, and
  * without this button that tone would name a state with no way out of it.
  *
- * No optimistic update, matching `ProgrammerLookStack` — the programmer's layer state is a
+ * No optimistic update, matching the Stack table — the programmer's layer state is a
  * broadcast, and the row un-dims when it lands. Restating it here would be a second opinion on a
  * stack this client does not own.
  */

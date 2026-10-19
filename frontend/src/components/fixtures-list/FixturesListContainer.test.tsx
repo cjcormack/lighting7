@@ -517,12 +517,12 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
 })
 
 /**
- * **A rail tab claims its own column's open gesture** (editor-kit plan session 4, call 9). With the
- * programmer rail's Colour tab open it is the Colour column's editor: Enter, a typed character and
+ * **A dock tab claims its own column's open gesture** (editor-kit plan session 4, call 9). With the
+ * programmer dock's Colour tab open and docked it is the Colour column's editor: Enter, a typed character and
  * Set over a marquee whose first editable cell is a Colour cell land in the tab, and no popover is
  * asked for. Every other column opens its popover as before — the tab claims its column only.
  */
-describe('FixturesListContainer with the rail Colour tab open', () => {
+describe('FixturesListContainer with the dock’s Colour tab open', () => {
   function claim(tab: RailTabClaim['tab']): RailTabClaim {
     return { tab, focusColour: vi.fn(), focusSpread: vi.fn(), spreadFrom: vi.fn(), spreadFan: vi.fn() }
   }
@@ -557,8 +557,8 @@ describe('FixturesListContainer with the rail Colour tab open', () => {
     expect(table.keyboardOpens.map((open) => open.col)).toEqual(['dimmer'])
   })
 
-  it('claims nothing while the rail rests on Stack', () => {
-    const rail = claim('stack')
+  it('claims nothing where the dock is not docked — collapsed, an overlay or the phone sheet', () => {
+    const rail = claim(null)
     drawWith(rail)
     fireEvent.click(screen.getByTestId('colour-cell'))
     fireEvent.keyDown(window, { key: 'Enter' })

@@ -467,7 +467,7 @@ export function rangeFromField(range: SceneryRange, typed: number): number {
 /**
  * What the programmer holds of [projectId]'s scenery: the overlay's elements when the overlay is
  * that project's — or names no project yet, before its first frame — and nothing otherwise. The one
- * rule for every reader (Clear's count, the rail's, Record's gates and the Record sheets' row), so a
+ * rule for every reader (Clear's count, the Scenery tab's, Record's gates and the Record sheets' row), so a
  * switch mid-frame cannot leave Record enabled on one surface and not another.
  */
 export function heldSceneryIn(scenery: ProgrammerScenery, projectId: number): readonly ProgrammerSceneryEntry[] {

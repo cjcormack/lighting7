@@ -5,6 +5,7 @@ import type { AttributeFamily } from '../../lib/attributeFamily'
 import type { ColumnKey } from './columns'
 import type { CellBatch, CellCommit, WriteTarget } from './rowModel'
 import type { SpreadColumn } from './SpreadPopover'
+import { createValueStore, type ValueStore } from './valueStore'
 
 /**
  * The programmer's marquee, **published** outside the list for the rail's Colour and Spread tabs
@@ -46,9 +47,9 @@ export interface MarqueeSnapshot {
   /**
    * Where a press from this window lands — the palette strip's own targets (`templateTargetsFor`)
    * — and the families the marquee names, null for rows alone. `usePress`'s pair on the
-   * programmer, so a door outside the list (the rail's hand place, *+ Look*, *+ Palette*) presses
-   * what the strip would. `targetFamilies` and `targetEmitters` are what those heads can take, the
-   * strip's offer, so the rail's picker offers what its `All · n` does.
+   * programmer, so a door outside the list (the hand's place on the stack, the Stack table's
+   * *+ Look or palette*) presses what the strip would. `targetFamilies` and `targetEmitters` are what
+   * those heads can take, the strip's offer, so that picker offers what the strip's `All · n` does.
    */
   press: {
     targets: readonly CueTarget[]
@@ -58,27 +59,10 @@ export interface MarqueeSnapshot {
   }
 }
 
-export interface MarqueeStore {
-  get: () => MarqueeSnapshot | null
-  set: (next: MarqueeSnapshot | null) => void
-  subscribe: (listener: () => void) => () => void
-}
+export type MarqueeStore = ValueStore<MarqueeSnapshot | null>
 
 export function createMarqueeStore(): MarqueeStore {
-  let current: MarqueeSnapshot | null = null
-  const listeners = new Set<() => void>()
-  return {
-    get: () => current,
-    set: (next) => {
-      if (next === current) return
-      current = next
-      for (const listener of listeners) listener()
-    },
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-  }
+  return createValueStore<MarqueeSnapshot | null>(null)
 }
 
 export const MarqueeStoreContext = createContext<MarqueeStore | null>(null)

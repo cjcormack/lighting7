@@ -7,6 +7,7 @@ import { EditorContextProvider } from '@/components/programmer/EditorContext'
 import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar'
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
+import { createFxSelectionStore, FxSelectionStoreContext } from '@/components/fixtures-list/fxSelection'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
@@ -55,7 +56,7 @@ export function ProgrammerRedirect() {
  * `/programmer/fx` → the programmer's FX tab.
  *
  * FX was a route of its own when the FX sheet was a destination, then a band of the rail, and is a
- * tab of the page again (tables-colours plan D1). Kept only so a bookmark lands.
+ * tab of the page now (tables-colours plan D1). Kept only so a bookmark lands.
  */
 export function ProgrammerFxRedirect() {
   const { projectId } = useParams()
@@ -104,12 +105,16 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   const { showHeaderProps } = useShowBarProps(projectIdNum, {
     frameRateProgress: false,
   })
-  // The marquee's store (editor-kit plan session 4): the grid publishes into it, and the rail's
+  // The marquee's store (editor-kit plan session 4): the grid publishes into it, and the dock's
   // Colour and Spread tabs read it. It is provided here, above the sheets as well as the body, so
   // that a sheet taking a mask opens on an unlinked window's marquee (apply-model plan D3,
   // `useWindowMaskReader`). A stable store rather than state: the marquee moves at pointer rate, and
   // the store re-renders only a subscribed reader, never this page or the body's memo barrier.
   const [marqueeStore] = useState(createMarqueeStore)
+  // The FX table's selection, which the Values grid rings (tables-colours plan D3): the table
+  // publishes into it and each ringable cell reads it, so it outlives the table's mount and a
+  // selection change re-renders only the cells whose ring moves.
+  const [fxSelectionStore] = useState(createFxSelectionStore)
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the grid
@@ -138,6 +143,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
 
   return (
     <MarqueeStoreContext.Provider value={marqueeStore}>
+      <FxSelectionStoreContext.Provider value={fxSelectionStore}>
       <ProgrammerSheetsProvider projectId={projectIdNum}>
         <div className="flex h-full flex-col">
           <ShowHeader
@@ -177,13 +183,14 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
                - **The speed masters are not resident on this page**, and `PD-SPEED-OVERLAY` did not
                  change that: the bank is *summoned*, from the app header's Speed Masters overview
                  panel, which hangs over every route and is nobody's view chrome. Nothing was added
-                 to this page for it. `ProgrammerFxList`'s own rows still name each effect's master,
+                 to this page for it. The FX table's Timing column still names each effect's master,
                  and `/speed-masters` still manages the bank. The panel's toggle persists app-wide,
                  so an operator who opens it here has a tempo band on screen until they close it —
                  by their own door, which is what makes it not session 5's band returning. */}
           <ProgrammerBody projectId={projectIdNum} />
         </div>
       </ProgrammerSheetsProvider>
+      </FxSelectionStoreContext.Provider>
     </MarqueeStoreContext.Provider>
   )
 })
@@ -273,14 +280,15 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
 
   return (
     <ProgrammerScopeProvider>
-      {/* The outer editor context stays `live` for the *rail* — its FX controls write the
-          programmer whatever the grid is pointed at. `ProgrammerGrid` provides its own inner
-          context derived from the scope. */}
-      {/* The rail's width, collapsed flag and overlay flag are `ProgrammerWorkspace`'s, below
+      {/* The outer editor context stays `live` for the tables beside the grid — the FX table's
+          controls write the programmer whatever the grid is pointed at. `ProgrammerGrid` provides
+          its own inner context derived from the scope, and the dock takes the grid's
+          (`ScopedEditorContextProvider`). */}
+      {/* The dock's width, collapsed flag and overlay flag are `ProgrammerWorkspace`'s, below
           this barrier — deliberately not state of this component or of `ProgrammerPage`, where a
-          drag on the rail's handle would re-render the grid per pointer move. */}
-      {/* Above the workspace, not inside the grid: the rail's own layer chrome reads the same
-          store, and one fetch per focused layer is the point of it living here. The **scope band is
+          drag on the dock's handle would re-render the grid per pointer move. */}
+      {/* Above the workspace, not inside the grid: the dock's editors read the same store, and one
+          fetch per focused layer is the point of it living here. The **scope band is
           inside it too**, and must stay there: it reads `useLookSaveState()`, which outside the
           provider silently answers the context default — so "Unsaved", "Saving…" and, worst of the
           three, "Save failed" could never appear. */}

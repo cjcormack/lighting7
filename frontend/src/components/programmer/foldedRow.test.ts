@@ -43,9 +43,17 @@ describe("the folded row's layout contract", () => {
     // the grid asks for the minimum only when folded, and the shell's `minHeight` is what swaps
     // the fixed height for it.
     expect(programmerGridSrc).toContain(
-      "<SheetPage.Row minHeight={!!leading} className={cn(leading && 'flex-wrap gap-y-1.5')}>",
+      "<SheetPage.Row minHeight={!!leading} className={cn(PHONE_ROW_B, leading && 'flex-wrap gap-y-1.5')}>",
     )
     expect(sheetPageSrc).toContain("minHeight && 'h-auto min-h-10'")
+  })
+
+  it("squares the phone row's icon buttons, leaving the table tabs alone", () => {
+    // Below 600px of row B the four table tabs, the scope picker and five icon buttons share 369px
+    // only as 32px squares on 6px gaps; the tabs keep their own 22px.
+    expect(programmerGridSrc).toContain(
+      "const PHONE_ROW_B = '@max-[600px]:gap-1.5 @max-[600px]:[&_button:not([role=tab])]:has-[>svg]:px-2'",
+    )
   })
 
   it("keeps row B's tools together, and out of the way when the row is not folded", () => {

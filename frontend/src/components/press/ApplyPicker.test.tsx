@@ -358,7 +358,7 @@ describe('ApplyPicker — palettes', () => {
     expect(within(panel()).getByText(/⌥click/)).toBeInTheDocument()
     second.unmount()
 
-    // The rail's doors: a footer, a strip and a handle, none of which a popover could hang from.
+    // A door with no anchor, as the Stack table's *+ Look or palette* is.
     render(picker({ anchorRef: undefined }))
     expect(panel()).toHaveAttribute('data-slot', 'sheet-content')
   })
@@ -461,7 +461,7 @@ describe('ApplyPicker — Looks', () => {
 })
 
 /**
- * The effects arm (apply-model plan §8 session 6): what ⌘K *Apply FX*, the rail's *+ Effect* and a
+ * The effects arm (apply-model plan §8 session 6): what ⌘K *Apply FX*, the FX table's *+ Effect* and a
  * band's *+ Effect …* open — `FxPicker` on the bare effect press over the door's pair, above the
  * effect palettes; under a focused Look the effect starts on `/fx/add` and is absorbed on close.
  */

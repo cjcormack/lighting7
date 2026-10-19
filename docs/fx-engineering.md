@@ -1346,7 +1346,7 @@ element filter `ALL`.
   names one head.
 
 **The client's side** (apply-model plan session 6; `frontend/CLAUDE.md`'s FX paragraphs). ⌘K *Apply
-FX*, the rail's *+ Effect*, a cell popup's Effects band and the picker's Effects section start a
+FX*, the FX table's *+ Effect*, a cell popup's Effects band and the picker's Effects section start a
 library effect through `FxPicker`'s `press` arm, the bare effect press above with the door's
 selection pair; a tap swaps the auditioned effect through `updateFx`, phase kept. The fixture sheet's
 FX tray is not one of them: it starts on its own pick of heads through `POST /fx/add`. A focused Look

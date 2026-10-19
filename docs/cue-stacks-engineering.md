@@ -810,8 +810,8 @@ resolves there (`docs/cues-engineering.md` §"Copying").
 with their clocks, the stacks whose set holds it, the Looks that show it — each owner's own row and
 never what a cue only tracks (`elementSceneryOf`, `routes/projectScenery.kt`). It is the Stage
 view's *Moves with*: the popover a click on a piece opens, and the element form, whose entries open
-each owner's editor. The popover itself writes the programmer's overlay (tier 5), as the rail's band
-does; in Blind the Stage view's programmer sources draw `staged` (D12).
+each owner's editor. The popover itself writes the programmer's overlay (tier 5), as the programmer's
+Scenery table does; in Blind the Stage view's programmer sources draw `staged` (D12).
 
 ## Events
 

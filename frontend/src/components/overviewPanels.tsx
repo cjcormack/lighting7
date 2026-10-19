@@ -111,7 +111,7 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
  * tile; Busk has the same bank in its side sheet's Speed tab and the tempo chip on its Show tab's
  * strip — so the panel was a second, narrower answer to "what tempo is the desk at", and one
  * that only ever spoke for master 1. It went, and the count and Kill All went with it rather than
- * moving: the programmer's FX band and the busk view's presence rings say what is running, and
+ * moving: the programmer's FX table and the busk view's presence rings say what is running, and
  * each lists the effects individually so they can be removed by name. If a "stop everything"
  * gesture is wanted again it belongs beside blackout in the bar, not in a panel the operator has
  * to open first.

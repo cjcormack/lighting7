@@ -152,46 +152,14 @@ interface LookStackProps<T extends LookStackLayer> {
   /** False while the libraries are in flight, so a layer is never painted as missing mid-fetch. */
   looksLoaded: boolean
   handlers: LayerHandlers
-  /** Not drawn at the `dense` density — the host's footer owns the add gesture there. */
   onAdd?: () => void
   /**
    * The one-line statement of what the order means. A prop rather than fixed copy because the two
    * consumers' *last* layer differs — a cue's own assignments, the operator's own programmer
    * values — and naming the wrong one would be worse than saying nothing.
-   *
-   * Not drawn at the `dense` density: the programmer rail's `VALUES · top wins` label states the
-   * rule in two words above the rows, and the sentence is that label's hover.
    */
   precedenceNote?: React.ReactNode
   emptyNote: React.ReactNode
-  /**
-   * The programmer rail's density: two lines per row — order badge, name and family on the first,
-   * kind · targets · amount on the second — with the amount, blend, mask, stomp and remove behind
-   * one popover per row rather than inline. Rows only: no section chrome, no add button and no
-   * precedence paragraph, because the rail draws its own header, label and footer around them.
-   *
-   * A variant of the same row rather than a fork, so it keeps the same `LayerHandlers`, the same
-   * drag handle and the same focus-by-name-badge. The cue editor's rows keep the wide density
-   * (`LayerRow`), which is the one `CueDetailContent` renders read-only.
-   */
-  dense?: boolean
-  /** Rendered under the list. The programmer puts its read-only preview layer here. */
-  footer?: React.ReactNode
-  /**
-   * Stable dnd-kit id per row. Defaults to the index, which is all a cue can offer — a layer
-   * carries no uuid on the wire and `lookId` is not unique, since one cue may legitimately layer
-   * the same Look twice at two delays. The programmer passes its `layerId`, which is better: its
-   * layer state is a *broadcast*, so another tab's reorder can land between renders and
-   * index-derived ids would reshuffle underneath the drag.
-   */
-  keyFor?: (layer: T, index: number) => string
-  /** Which row the value grid is pointed at, if any. Ringed rather than selected-looking. */
-  focusedIndex?: number | null
-  /**
-   * A row's passing note, drawn as its second line at the dense density — the programmer's
-   * *lost Hex 3–4 to Amber* (apply-model plan §4.6), which the host reads from two frames.
-   */
-  noteFor?: (layer: T) => string | null
   /** The wide list's header action, in place of the single Add — the cue editor's *+ Look · + Palette*. */
   addActions?: React.ReactNode
   /** Why [LayerHandlers.onSetTargets] does nothing now, drawn as its disabled title; null while it works. */
@@ -205,10 +173,10 @@ interface LookStackProps<T extends LookStackLayer> {
  * which is what the cue editor and the programmer actually share.
  *
  * That sharing is the point rather than a saving: a cue *is* a saved programmer stack, so a layer
- * list that looked different in the two places would be describing one structure twice. The
- * programmer renders this component at its `dense` density, and the cue editor's Looks tab
- * (`CueLooksTab`) at the wide one; the phone card's and the Prompt Book's read-out
- * (`CueDetailContent`) renders the wide `LayerRow` directly and read-only, outside any stack.
+ * list that looked different in the two places would be describing one structure twice. The cue
+ * editor's Looks tab (`CueLooksTab`) renders this list; the programmer's Stack table renders its own
+ * rows with this file's controls (`EnableButton`, `LayerSettingsPopover`), and the phone card's and
+ * the Prompt Book's read-out (`CueDetailContent`) renders `LayerRow` directly and read-only.
  *
  * Editable here: order, enabled, amount, blend mode, property mask and stomp — and a cue layer's
  * timing and masters, in the wide row's settings popover ([LayerHandlers.onSetTiming]). A read-only row
@@ -229,14 +197,9 @@ export function LookStack<T extends LookStackLayer>({
   onAdd,
   precedenceNote,
   emptyNote,
-  footer,
-  keyFor,
-  focusedIndex,
-  noteFor,
   addActions,
   targetsRefusal,
   readOnly = false,
-  dense = false,
 }: LookStackProps<T>) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -244,89 +207,42 @@ export function LookStack<T extends LookStackLayer>({
   )
 
   const ids = useMemo(
-    () => layers.map((layer, i) => keyFor?.(layer, i) ?? `layer-${i}`),
-    [layers, keyFor],
+    () => layers.map((_, i) => `layer-${i}`),
+    [layers],
   )
-
-  // **The dense density draws the stack top-wins — the last layer first.** Array order is the
-  // desk's: `sortOrder` ascending, later wins (`ProgrammerLayerStack.renumber` stamps index as
-  // `sortOrder`, and the cook applies ascending). The wide row list follows the array and says
-  // "later layers win" under it; the programmer rail instead puts the operator's own values — the
-  // layer that beats every other — at the top and says *top wins*, so the rows under it have to
-  // run strongest to weakest or the column contradicts its own label, and a layer dragged to the
-  // top would land in the weakest slot. The order badge still says `index + 1`, so the FX band's
-  // "layer 3" names the same row at either density. Only the *rendering* reverses: every index a
-  // handler receives is still the array's.
-  const renderOrder = useMemo(() => {
-    const order = layers.map((_, i) => i)
-    return dense ? order.reverse() : order
-  }, [layers, dense])
-  const renderedIds = useMemo(() => renderOrder.map((i) => ids[i]), [renderOrder, ids])
 
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event
       if (!over || active.id === over.id) return
-      // Positions in the list as drawn, mapped back to array indices before the handler sees
-      // them: a drop at the top of a top-wins list is a move to the *end* of the array.
-      const oldPos = renderedIds.indexOf(String(active.id))
-      const newPos = renderedIds.indexOf(String(over.id))
-      if (oldPos === -1 || newPos === -1) return
-      handlers.onMove(renderOrder[oldPos], renderOrder[newPos])
+      const oldIndex = ids.indexOf(String(active.id))
+      const newIndex = ids.indexOf(String(over.id))
+      if (oldIndex === -1 || newIndex === -1) return
+      handlers.onMove(oldIndex, newIndex)
     },
-    [renderedIds, renderOrder, handlers],
+    [ids, handlers],
   )
 
-  // One sortable list at either density: the rows differ, the drag does not.
   const list = (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={renderedIds} strategy={verticalListSortingStrategy}>
-        {renderOrder.map((i) => {
-          const layer = layers[i]
-          const info = describeStackSource(layer.source, looksById, templatesById, looksLoaded)
-          return dense ? (
-            <DenseLayerRow
-              key={ids[i]}
-              sortableId={ids[i]}
-              layer={layer}
-              index={i}
-              info={info}
-              handlers={handlers}
-              focused={focusedIndex === i}
-              note={noteFor?.(layer) ?? null}
-            />
-          ) : (
-            <LayerRow
-              key={ids[i]}
-              sortableId={ids[i]}
-              layer={layer}
-              index={i}
-              info={info}
-              handlers={handlers}
-              sortable={!readOnly}
-              showTargets
-              readOnly={readOnly}
-              targetsRefusal={targetsRefusal}
-              focused={focusedIndex === i}
-            />
-          )
-        })}
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        {layers.map((layer, i) => (
+          <LayerRow
+            key={ids[i]}
+            sortableId={ids[i]}
+            layer={layer}
+            index={i}
+            info={describeStackSource(layer.source, looksById, templatesById, looksLoaded)}
+            handlers={handlers}
+            sortable={!readOnly}
+            showTargets
+            readOnly={readOnly}
+            targetsRefusal={targetsRefusal}
+          />
+        ))}
       </SortableContext>
     </DndContext>
   )
-
-  if (dense) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        {layers.length === 0 ? (
-          <p className="px-1 text-[11px] text-muted-foreground">{emptyNote}</p>
-        ) : (
-          list
-        )}
-        {footer}
-      </div>
-    )
-  }
 
   return (
     <Section
@@ -345,7 +261,6 @@ export function LookStack<T extends LookStackLayer>({
           {list}
         </>
       )}
-      {footer}
     </Section>
   )
 }
@@ -372,12 +287,6 @@ export interface StackSourceInfo {
    * chip is the honest answer there.
    */
   templateKind?: 'value' | 'effect'
-  /**
-   * How many effects the Look carries, for the dense row's `· 1 effect` note — the thing a layer
-   * brings that the grid cannot show. Set only for a Look the library holds; a template's one
-   * effect is already said by `templateKind`.
-   */
-  effectCount?: number
 }
 
 export function describeStackSource(
@@ -410,7 +319,6 @@ export function describeStackSource(
     families: look?.families ?? [],
     missing: librariesLoaded && look == null,
     isTemplate: false,
-    effectCount: look?.effectCount,
   }
 }
 
@@ -644,174 +552,10 @@ export function LayerRow({
 }
 
 /**
- * The programmer rail's row: the same layer on two lines in ~280px.
- *
- * Line one is the order badge, the name badge (the focus control, as on the wide row) and the
- * family badges; line two is *kind · targets · amount*, plus the mask, the blend and the Look's
- * effect count when any of them is worth a word. The wide row lays every control out inline and
- * wraps; at 300px that was a row three lines tall with its one real control pushed off the edge.
- * Here the two things an operator reaches for at a glance — enable, and the settings popover —
- * stay on the row, and the amount, blend, mask, stomp and remove sit behind the popover. A
- * stomping row still says so on the row itself, as a badge, because that is the one setting
- * that changes what the rows *below* it do.
- *
- * Focus is drawn in violet — the layer-scope colour the desk-simplification artboards gave the
- * scope band — rather than the wide row's primary ring: on this page `--primary` means *you own
- * this value* (space plan D4), and the Local values row beside these is painted in it for exactly
- * that reason.
- */
-function DenseLayerRow({
-  layer,
-  index,
-  info,
-  handlers,
-  sortableId,
-  focused,
-  note,
-}: {
-  layer: LookStackLayer
-  index: number
-  info: StackSourceInfo
-  handlers: LayerHandlers
-  sortableId: string
-  focused: boolean
-  /** Drawn in place of the detail line while present; the detail stays on the hover. */
-  note: string | null
-}) {
-  const enabled = layer.enabled !== false
-  const { name, missing, isTemplate, templateKind, families, effectCount } = info
-  const isEffect = templateKind === 'effect'
-  const mask = parsePropertyMask(layer.propertyMask)
-  const blendMode = layer.blendMode ?? 'OVERRIDE'
-  const amount = Math.round((layer.amount ?? 1) * 100)
-
-  // What the wide row spreads across chips, as one truncating line. Targets read as the one key
-  // when there is one, as a count otherwise, and the full list rides the line's title.
-  const targetsLabel =
-    layer.targets.length === 0
-      ? 'own targets'
-      : layer.targets.length === 1
-        ? layer.targets[0].key
-        : `${layer.targets.length} targets`
-  const detail = [
-    isTemplate ? 'Palette' : 'Look',
-    targetsLabel,
-    `${amount}%`,
-    mask.length > 0 ? `[${formatFamilyList(mask)}]` : null,
-    blendMode !== 'OVERRIDE' ? blendMode : null,
-    effectCount != null && effectCount > 0
-      ? `${effectCount} effect${effectCount === 1 ? '' : 's'}`
-      : null,
-  ]
-    .filter((part) => part != null)
-    .join(' · ')
-  const detailTitle = [
-    layer.targets.length === 0
-      ? "No targets on the layer, so the look's own rows decide where it lands"
-      : `On ${layer.targets.map((t) => t.key).join(', ')}`,
-    `${amount}% amount`,
-    mask.length > 0 ? `asserts ${formatFamilyList(mask)}` : 'asserts every attribute',
-    `${blendMode} blend`,
-  ].join(' · ')
-
-  return (
-    <SortableShell sortable sortableId={sortableId}>
-      {(dragHandle) => (
-        <div
-          className={cn(
-            'flex items-center gap-1.5 rounded-md border bg-card px-2 py-1.5 text-xs',
-            !enabled && 'opacity-55',
-            focused && 'border-violet-500/70 bg-violet-500/10 ring-1 ring-violet-500/50',
-          )}
-        >
-          {dragHandle}
-          <span
-            className={cn(
-              'flex size-[17px] shrink-0 items-center justify-center rounded bg-muted text-[9.5px] font-bold tabular-nums',
-              focused && 'bg-violet-500 text-background',
-            )}
-          >
-            {index + 1}
-          </span>
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex min-w-0 items-center gap-1.5">
-              {/* The name badge is the focus control, exactly as on the wide row and for the same
-                  reason: it is already the row's subject, and this row only ever renders where
-                  there is a grid to point. Absent the handler it stays a plain badge. */}
-              {/* The name has a floor and the family badge gives first: a Look spanning two
-                  families beside a `shrink-0` badge each squeezed "Lark 2" to "L…" in 280px. */}
-              {handlers.onFocus ? (
-                <button
-                  type="button"
-                  onClick={() => handlers.onFocus?.(index)}
-                  className="min-w-[4.5rem] shrink rounded focus-visible:ring-1 focus-visible:ring-ring"
-                  aria-pressed={focused}
-                  title={focused ? 'The grid is showing this look' : 'Show this look in the grid'}
-                >
-                  <LookNameBadge
-                    name={name}
-                    missing={missing}
-                    isTemplate={isTemplate}
-                    isEffect={isEffect}
-                  />
-                </button>
-              ) : (
-                <LookNameBadge
-                  name={name}
-                  missing={missing}
-                  isTemplate={isTemplate}
-                  isEffect={isEffect}
-                  className="min-w-[4.5rem] shrink"
-                />
-              )}
-              {/* One badge, not one per family: the wide row has a line to spend on several. */}
-              {families.length > 0 && (
-                <Badge
-                  variant="outline"
-                  className="min-w-0 shrink px-1.5 py-0 text-[10px]"
-                  title={families.length > 1 ? formatFamilyList(families, ' · ') : undefined}
-                >
-                  <span className="truncate">{formatFamilyList(families, ' · ')}</span>
-                </Badge>
-              )}
-            </span>
-            {note != null ? (
-              <span
-                className="truncate text-[10px] text-amber-600 dark:text-amber-400"
-                title={`${note} · ${detailTitle}`}
-                data-layer-note
-              >
-                {note}
-              </span>
-            ) : (
-              <span className="truncate text-[10px] text-muted-foreground" title={detailTitle}>
-                {detail}
-              </span>
-            )}
-          </span>
-          {layer.stomp && (
-            <Badge
-              variant="outline"
-              className="shrink-0 gap-0.5 border-amber-700 bg-amber-950/60 px-1 py-0 text-[10px] text-amber-300"
-              title="Stomping: the effects of every layer below this one are switched off on the properties it sets"
-            >
-              <Footprints className="size-3" />
-              stomp
-            </Badge>
-          )}
-          <EnableButton enabled={enabled} onToggle={() => handlers.onSetEnabled(index, !enabled)} />
-          <LayerSettingsPopover layer={layer} index={index} handlers={handlers} />
-        </div>
-      )}
-    </SortableShell>
-  )
-}
-
-/**
- * Everything the dense row has no room for, behind one trigger: amount, blend, mask, stomp and
- * remove. The wide row's `LayerBlendMaskPopover` holds the middle two; this one holds the same
- * two fields plus the three controls the wide row draws inline, so a layer is fully editable at
- * either density without a fork in what each control does.
+ * A layer's settings behind one trigger — the programmer's Stack table row: amount, blend, mask,
+ * stomp and remove. The wide row's `LayerBlendMaskPopover` holds the middle two; this one holds the
+ * same two fields plus the three controls the wide row draws inline, so a layer is fully editable
+ * from the table without a fork in what each control does.
  */
 export function LayerSettingsPopover({
   layer,
@@ -942,7 +686,7 @@ export function EnableButton({ enabled, onToggle }: { enabled: boolean; onToggle
 }
 
 /**
- * The stomp toggle. Icon-only on the wide row, icon-and-word inside the dense row's popover.
+ * The stomp toggle. Icon-only on the wide row, icon-and-word inside the settings popover.
  *
  * Nothing sits below the bottom layer, so its stomp suppresses nothing — the server's suppression
  * is built from the layers *strictly* below the stomper, and at rank 0 that set is empty. Said in

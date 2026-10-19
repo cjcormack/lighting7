@@ -1083,7 +1083,7 @@ as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templa
 four-point version of that reasoning.
 
 **An edit to a pad's running effect is the instance's alone** (fixture-fx-sheets plan D20, sessions
-1 and 5). The busk view's Effects tab, the fixture sheet's tray and the rail's *Edit…* all edit the
+1 and 5). The busk view's Effects tab, the fixture sheet's tray and the programmer's FX table's *Edit…* all edit the
 **instance** the layer spawned, through `updateFx` (`FxEngine.updateEffect`: id and phase kept), and
 never the palette. The layer stack keys that instance by the `EffectEntry` it was spawned from
 (`ProgrammerLayerEffectKey`), and `updateEffect` carries the key across its swap, so the edit

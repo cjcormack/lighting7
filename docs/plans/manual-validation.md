@@ -15,7 +15,8 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
-| [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, the tables agree with the rail while it is busked, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
+| [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back effect's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
+| [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
 | [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
@@ -30,7 +31,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R4-4`](#fu-manual-venue-visit-r4-4) | effects fade with their cue on the rig — over a 3 s GO the outgoing chase shrinks to nothing as the incoming grows, an effect both cues run carries on untouched, an effect-only cue fades, and a pad pressed at a programmer fade grows its effect | Venue visit R4.4 (filed at K4), 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the rail's *+ Look* and *+ Palette* press onto the selection | Venue-visit R3.5, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the Stack table's *+ Look or palette* presses onto the selection | Venue-visit R3.5, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | *superseded by `FU-MANUAL-TABLES-COLOURS-S1`, which runs its checks on the programmer's tabs* — the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
@@ -334,7 +335,7 @@ another window, an Intensity palette *Full*, a Beam palette *Wide* and a running
    on one row with nothing clipped, each glyph naming its tab on hover. Widen it past 380: the open
    tab gains its word, and only that one.
 2. **Level.** Select the hex group on the rig band, open Level: *Full* in the Palettes band lights the
-   group's dimmers at full as a layer (the rail's stack shows it, **not** the focused Look), the slider
+   group's dimmers at full as a layer (the programmer's Stack table shows it, **not** the focused Look), the slider
    moves all four live, and *Save as palette…* opens on Intensity.
 3. **Colour.** The picker at the top, then the Palettes band and the Effects band at the foot; *+
    Effect…* there starts a colour effect on the selection.
@@ -491,15 +492,67 @@ a real sync pull leaving a tapped tempo alone mid-show.
 
 ---
 
+## `FU-MANUAL-TABLES-COLOURS-S2`
+
+**What it proves**: *the FX lens and the dock at the desk* — tables-colours S2: a Values cell an
+effect drives carries a violet chip with the division, struck through with the reason where the
+effect is held back, opening the live editor; an FX row selected rings its cells on Values; the
+rail's Stack body, strip counts and doors are gone and the right side is the Colour · Spread dock;
+everything the rail's lists offered is on the Stack and FX tables.
+
+**Why it is here**: the tests run the lens over stubbed effects and provenance, and the dock's arms
+under jsdom, which lays nothing out. Only a desk shows the chip agreeing with what the rig does —
+above all the stomp, which the lens reads off provenance rather than being told — the chip clear of
+the value in its corner on real cells, the rings, which are this window's FX selection and no other
+screen's, and the dock's three arms on real screens.
+
+**Test**, on Sleeping Beauty, the programmer holding a few palettes and Looks, a cue running an
+effect on the front wash, and a busked Local effect:
+
+1. **The lens.** On Values (Local), the wash's dimmer cells carry the cue effect's chip with its
+   division; the busked effect's cells carry its own. Set the wash's dimmer in the programmer: the
+   cue effect's chip is struck through, its tooltip *your value holds it back*, and the rig shows your
+   value. Release it: the chip is whole and the effect paints again. Go Blind: the busked effect's
+   chip reads *held · Blind*; leave Blind. Apply a Look layer with **stomp** over the wash's colour,
+   above a palette layer running a colour effect: that effect's chip is struck through, *a layer
+   above stomps it*. Set the cue's stack to FX size 0: the chip is *not* struck through.
+2. **The editor.** Click a chip: the live editor opens beside it on that effect; edit its size — the
+   rig follows. On a group row whose members run one effect over a selection, change one head only:
+   the split edit splits it. On a cell two effects paint, the chip says `+1` and a click offers both.
+   The click selects no cell and starts no marquee.
+3. **Rings.** On FX select the cue's effect, switch to Values: the cells it paints are ringed violet,
+   no others. Select another row and come back: the rings follow. Back on FX the row is still
+   selected. Deselect: the rings go.
+4. **The dock.** At 1440 the right side is Colour · Spread, on Colour, at the width you left it, and
+   lists nothing. Marquee four colour cells, pick a colour in the dock: the four take it, and a
+   double click on a colour cell lands in the dock. Collapse it: a strip of a chevron and two doors;
+   the Spread door opens it on Spread. On the iPad (1180×820) the strip opens the dock over the grid,
+   a press on the grid shuts it, and a colour cell's double click opens the cell's own popover. On a
+   phone the handle's *Colour* opens it in a bottom sheet. Across all of it the grid keeps its
+   selection.
+5. **Nothing was lost.** On Stack: a layer's settings popover (amount, blend, mask, stomp), *Detach*,
+   *Pick up*, *Remove*, the enable toggle, a drag, *Make layer*, *+ Look or palette*, and a palette
+   press that takes heads off another layer showing *lost … to …* in its Note — pressed on Values,
+   then read on Stack. ⏎ on a layer and back to Stack: that layer's row is marked. Filter Stack to
+   nothing: *No layers match the filter*, with *Your values* still listed. On FX: *Edit…*, *Pause*,
+   *Save as palette…*, *Stop*, *+ Effect*, *held · Blind*. Pick a Look up on Screen 2 and place it
+   with *Place “…” here* under the programmer's tables, on Values. ⌘K *Apply FX → On the selection*
+   opens *+ Effect* on any table. Clear's tooltip still counts held scenery.
+6. **Folds.** On a phone (393) the four tabs are glyphs with their counts on the corners, with
+   two-digit counts too, and row B fits on every table; on the landscape phone (852×393) too.
+
+---
+
 ## `FU-MANUAL-TABLES-COLOURS-S1`
 
 **What it proves**: *the programmer's tables at the desk* — tables-colours S1: the applied tables
-became the programmer's tabs, Values · Stack · FX · Scenery on row B, with the rail left as it was
-for one session.
+became the programmer's tabs, Values · Stack · FX · Scenery on row B. (Since S2 the rail is the
+Colour · Spread dock, so where a step below says *the rail*, read *the tables*; S2's own checks are
+`FU-MANUAL-TABLES-COLOURS-S2`.)
 
-**Why it is here**: the tests mount one grid across a stubbed switch and compare the tables with the
-rail over stubbed state; only a desk shows the selection surviving a real switch, a drag reordering
-the rig's layers, the folds on real screens and the tables keeping up while another screen busks.
+**Why it is here**: the tests mount one grid across a stubbed switch over stubbed state; only a desk
+shows the selection surviving a real switch, a drag reordering the rig's layers, the folds on real
+screens and the tables keeping up while another screen busks.
 
 **Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks, effects and a held piece
 of scenery:
@@ -512,13 +565,14 @@ of scenery:
    *Looks* chip: the grips go and the footer says why. ⏎ on a layer: Values, focused on that layer.
    *Make layer* on *Your values* makes one.
 3. **FX and Scenery.** *+ Effect* over the selection starts a Local effect, listed at once. Pause,
-   *Edit…* and *Stop* act as on the rail. On Scenery, move a held drape from its row's sliders and
-   release it with its ×; the rail's band follows.
+   *Edit…* and *Stop* act on it. On Scenery, move a held drape from its row's sliders and release it
+   with its ×; the Stage view follows.
 4. **Address and screens.** Sort FX by Home, filter *wash*, reload: the same tab and view. Put Screen 2
    on the Programmer from Screen 1's Screens sheet, set its *Table* to *Stack*: it switches. ⌘K's
    *Programmer › Scenery* opens that tab; an old `/programmer/applied?table=looks` link lands on Stack.
-5. **Folds.** On the iPad (1180×820) the tabs keep their counts and the open one its word; at 768 and
-   on a phone they are one menu button and row B fits, Lit and Columns as icons. On a landscape
+5. **Folds.** On the iPad (1180×820) the tabs keep their counts and the open one its word; at 768 the
+   closed ones are glyph and count, and on a phone all four are, the count on the glyph's corner
+   (S2), row B fitting, Lit and Columns as icons. On a landscape
    phone (852×393), off Values, row A keeps its own row.
 6. **The rig.** Open the programmer on TCH Test, not on the rig, with `?table=stack`: *TCH Test isn't
    on the rig*, the address keeping its table.
@@ -611,13 +665,13 @@ in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palet
 (Slot Steps) palette:
 
 1. **The band.** Select Hex 1–4's Dimmer cells and open one: below the slider, *Effects* with *+
-   Effect…*. Press *+ Effect…*, tap Pulse: the four hexes pulse as **one** chase (one row in the
-   rail's FX list), and the band lists Pulse, lit.
+   Effect…*. Press *+ Effect…*, tap Pulse: the four hexes pulse as **one** chase (one row on the
+   programmer's FX table), and the band lists Pulse, lit.
 2. **Replacement.** Start Colour Cycle on Hex 1–4 from a colour cell's *+ Effect…*, then select Hex 3–4
    only and start Rainbow Cycle from their colour cell: Hex 3–4 run the rainbow, Hex 1–2 keep cycling,
    and nothing else on the rig moves.
-3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and open it from the rail's
-   *Edit…*: the editor says *Hex 1–2 of Hex 1–4*. Drag Max down — nothing on the rig moves — then
+3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and open it from the FX
+   table's *Edit…*: the editor says *Hex 1–2 of Hex 1–4*. Drag Max down — nothing on the rig moves — then
    press *Apply to Hex 1–2*: Hex 1–2 take the new Max **at the phase they had**, Hex 3–4 run on
    untouched, and no head jumps. Drag Max again: both Hex 1 and Hex 2 follow. Repeat on a step-timed
    chase and on a ping-pong one.
@@ -645,7 +699,7 @@ in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palet
 **What it proves**: *the palette popup and the one picker* — venue-visit R3.5, apply-model plan
 session 5 (§4.2, §4.3, §4.6, D4): the colour, level and position editors carry their family's palettes
 round them in every form, a band press lands on the cell batch under the cell's family, and every
-library door — `All · n`, a band's *All …*, the rail's *+ Look* and *+ Palette* — is one picker that
+library door — `All · n`, a band's *All …*, the Stack table's *+ Look or palette* — is one picker that
 presses onto the selection and stays open.
 
 **Why it is here**: the tests pin the offer, the press and the sections against mocks; nothing
@@ -668,7 +722,7 @@ Colour, Beam (one with a zoom row, one with a frost row) and Position palettes, 
    three palettes in a row: it stays open and each lands. Escape closes the picker, then the popover.
 5. **Outside the mask.** Pick *Position* on row C's pill, open `All · n` on a rows selection: the
    colour palettes sit under *Outside the mask*, dimmed, *Colour — the selection is Position*.
-6. **The rail.** With Hex 1–2 selected, press *+ Palette* on the rail: the picker opens as a side sheet
+6. **The Stack table.** With Hex 1–2 selected, press *+ Look or palette* → *Palette…* on the Stack table: the picker opens as a side sheet
    and a press lands on Hex 1–2. *+ Look* lists the Looks; press one on the selection, then switch to
    *On its own fixtures* and press another: it lands on its own fixtures.
 7. **The iPad.** Repeat 1 and 4 on the iPad: the editor is a bottom sheet with the band above the
@@ -871,7 +925,7 @@ on synthetic ticks, and the route tests read the instances. Nothing watched a sp
 a real tempo, where a jump of one head out of a chase is what an operator would see.
 
 **Test**, on Sleeping Beauty. Drive them from the doors R3.6 built — a cell's Effects band or the
-rail's *+ Effect* for the press, the live editor's *Apply to …* for the split — or with `curl` against
+FX table's *+ Effect* for the press, the live editor's *Apply to …* for the split — or with `curl` against
 `http://localhost:8413/api/rest` (signed in; the bodies are in CLAUDE.md's FX REST endpoints), and
 watch the stage and the programmer's FX list:
 
@@ -967,7 +1021,7 @@ screens, watched a finger's hold on the iPad, or looked at the stage while a lay
 2. **⌥click and the menu.** ⌥click Red on Hex 1: literals in Local, no new layer. On the iPad, hold a
    chip: the menu opens (*Put on* or *Take off these heads*, *Apply as values*, *Pick up*, *Edit
    palette…*) and nothing changes on stage; *Edit palette…* opens that palette's editor.
-3. **Detach.** In the rail, a layer's settings → *Detach*: the row goes, nothing on stage moves, the
+3. **Detach.** On the Stack table, a layer's settings → *Detach*: the row goes, nothing on stage moves, the
    values read as Local and its effect keeps running in phase.
 4. **Into a Look.** Focus a Look layer, tap Red: the Look's rows take Red on the selected heads and
    save; no programmer layer appears. Place a held Look on the programmer's stack from the hand there:
@@ -1095,7 +1149,7 @@ walk across loose fixtures in the order they were marqueed, or a recorded one co
 
 **Test**, on Sleeping Beauty, from the programmer:
 
-1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX band
+1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX table
    shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
    *Spread* shows eight dials.
 2. **With a group.** Select those eight rows and a group of four below them: one chase, twelve
@@ -1262,7 +1316,7 @@ provenance from the desk. Nothing in review watched a held pulse land back in st
 2. **Blind on.** Turn Blind on from the programmer's action bar. The busked pulse stops on the rig;
    the cue's keeps pulsing. The busk band's `BLIND` pill, the Show glyph's dot and the app header's
    programmer chip say *values and effects held* on hover; the fixture sheet's FX tray and the
-   programmer rail's FX band mark the busked Pulse *held · Blind*; its row's stack says *Blind holds
+   programmer's FX table mark the busked Pulse *held · Blind*; its row's stack says *Blind holds
    it*.
 3. **Blind off.** Turn Blind off. The busked pulse comes back in step with the cue's, not from the top
    of its cycle, growing from nothing over the programmer fade (R4.4); at a 0 s fade it paints at once.
@@ -1325,7 +1379,7 @@ or a desk's own masters stamp a new effect.
 6. **Record and run.** Record the Seconds Pulse into a cue, clear, GO the cue: it runs on Seconds at
    the same cycle. Include the cue: the editor reads *Seconds*. Make an effect palette from it: the
    pad reads `Pulse · 2.67 s`.
-7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer rail says the
+7. **The words.** Every chip on the busk pads, the fixture sheet and the programmer's FX table says the
    speed as the editor's segment does (`½ beat`, `1 bar`), never `1/4`.
 
 If a Seconds effect drifts with the tempo anywhere (a cue layer over it, a busk press), promote it to
@@ -1944,11 +1998,10 @@ condition on the design was iPhone, iPad and desktop taken into account (D17).
 `travelS`), a stack *Act 1* of a few cues, a Prompt Book with anchors, the desk at the Mac and an iPad
 and an iPhone signed in to it:
 
-1. **Programmer, desk**: the rail's Scenery band moves the tabs and flies the moon; Blind holds a move
+1. **Programmer, desk**: the programmer's Scenery table moves the tabs and flies the moon; Blind holds a move
    and the Stage view's Programmer source draws it staged; leaving Blind lands it; Clear flies it home.
-2. **Programmer, iPad and iPhone**: the overlay rail's band and the phone's handle reach the same
-   list; *All scenery…* opens as a popover on the iPad and a bottom sheet with finger-sized rows on the
-   iPhone; drag the moon's slider by finger — it moves on the stage as it goes and lands on release.
+2. **Programmer, iPad and iPhone**: the Scenery table reaches the same list; a row's sliders open as
+   a popover on the iPad and a bottom sheet with finger-sized rows on the iPhone; drag the moon's slider by finger — it moves on the stage as it goes and lands on release.
 3. **Record and Update**: fly the moon in, Record into a cue (*Record scenery too* ticked); Include it,
    move the tabs, Update; the cue card shows both rows.
 4. **Stage popover**: on the iPad, tap the moon in Orbit and Front — the popover opens beside it, and a

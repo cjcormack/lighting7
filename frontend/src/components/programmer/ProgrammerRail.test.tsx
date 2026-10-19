@@ -1,262 +1,170 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * `PD-SHEET-ICONS-OPEN`: the two counts the collapsed arms draw are doors, not readouts.
+ * The programmer's dock (tables-colours plan D4): **Colour · Spread**, collapsible, at the same
+ * 260 floor and 300 default, listing nothing.
  *
- * jsdom lays nothing out, so which arm is *on screen* cannot be asserted here — that is a browser
- * check, and so is where the scroll lands. What is pinned is everything that is JavaScript: that
- * each glyph is a control at all, that the strip's pair write the two arm flags apart (the docked
- * one the stored preference, the overlay one not), that the handle's open the sheet, and that the
- * band a press asks for is the one the body scrolls to. The arm-splitting is the same contract
- * `ProgrammerWorkspace.test.tsx` states from the frames' side.
+ * jsdom evaluates no container query, so which arm is on screen is a browser check; what is pinned
+ * is everything that is JavaScript — the tab fact and where it rests, that each door opens its tab
+ * in its own arm and writes only that arm's flag, that the strip and the handle carry no counts and
+ * no `+`, and that only a docked, expanded dock claims a grid gesture.
  */
-vi.mock('react-router', () => ({ useParams: () => ({ projectId: '6' }) }))
-vi.mock('@/store/programmer', () => ({
-  useProgrammerLayersQuery: () => ({ data: [] }),
+vi.mock('./RailColourTab', () => ({ RailColourTab: () => <div data-testid="colour-tab" /> }))
+vi.mock('./RailSpreadTab', () => ({ RailSpreadTab: () => <div data-testid="spread-tab" /> }))
+vi.mock('./ScopedEditorContext', () => ({
+  ScopedEditorContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
-vi.mock('./FxSheet', () => ({ FxSheet: () => null }))
-vi.mock('./ProgrammerAddEffect', () => ({
-  ProgrammerAddEffectSheet: () => null,
-  useProgrammerAddEffect: () => ({ canAdd: true, reason: '', add: () => {} }),
-}))
-// *+ Look* and *+ Palette* open the one picker on the window's pair; what it does with a press is
-// `ApplyPicker.test.tsx`'s. Here it is the props it is opened with.
-const pickerProps = vi.hoisted(() => ({ last: null as null | Record<string, unknown> }))
-vi.mock('@/components/press/ApplyPicker', () => ({
-  ApplyPicker: (props: Record<string, unknown>) => {
-    pickerProps.last = props
-    return null
-  },
-}))
-const WINDOW_PAIR = vi.hoisted(() => ({ targets: [{ type: 'fixture', key: 'hex-1' }], families: ['COLOUR'] }))
-const WINDOW_FIT = vi.hoisted(() => ({ families: ['COLOUR'], emitters: [] }))
-vi.mock('@/hooks/usePress', () => ({
-  useWindowPressPair: () => WINDOW_PAIR,
-  useWindowPaletteFit: () => WINDOW_FIT,
-}))
-vi.mock('./ProgrammerFxList', () => ({ ProgrammerFxList: () => null }))
-vi.mock('./ProgrammerLookStack', () => ({ ProgrammerLookStack: () => null }))
-// The hand's place target in the footer. Mocked for the reason every store-touching child here
-// is: it reads the desk selection and the hand through RTK Query, and this suite renders the
-// rail without a Provider.
-vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
-vi.mock('./ProgrammerScope', () => ({
-  useProgrammerScope: () => null,
-  useProgrammerScopeActions: () => ({ focusLocal: () => {} }),
-}))
-vi.mock('./ProgrammerSheets', () => ({
-  useProgrammerSheets: () => ({ openMakeLayer: () => {} }),
-}))
-vi.mock('./useLocalFamilyCounts', () => ({ useLocalValueCount: () => 0 }))
-// The Scenery band has a suite of its own (`RailSceneryBand.test.tsx`); here it is a landmark with
-// a ref, and the held count is a value the test sets.
-vi.mock('./RailSceneryBand', async () => {
-  const { forwardRef } = await import('react')
-  return {
-    RailSceneryBand: forwardRef<HTMLDivElement>(function Band(_, ref) {
-      return <div ref={ref} data-testid="scenery-band" />
-    }),
-  }
-})
-vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
-const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
 
-import { ProgrammerRail } from './ProgrammerRail'
-import { ProgrammerWorkspace } from './ProgrammerWorkspace'
+import { ProgrammerRail, RAIL_TABS } from './ProgrammerRail'
+import { ProgrammerWorkspace, RAIL_DEFAULT_WIDTH, RAIL_MIN_WIDTH } from './ProgrammerWorkspace'
+import { useRailTabClaim } from './railTab'
+import { SPREAD_COMPACT_WORD_CLASS } from '@/components/editor/SpreadPanel'
+import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
+import { resetSidePanelModeStore, setSidePanelMode } from '@/lib/sidePanelMode'
 
 const COLLAPSED_KEY = 'programmer.rail.collapsed'
 
-/** What `scrollIntoView` was called on, since the element itself is the assertion. */
-let scrolledTo: Element[] = []
-let realScrollIntoView: Element['scrollIntoView']
-
 beforeEach(() => {
-  scrolledTo = []
-  window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(true))
-  // `src/test/setup.ts` already stubs `scrollIntoView` to a no-op for every jsdom test, since
-  // jsdom implements none. Replacing it with a recorder is what makes the band request
-  // observable — the same swap `StackDetail.test.tsx` makes, and restored below so it cannot
-  // follow this file into another.
-  realScrollIntoView = Element.prototype.scrollIntoView
-  Element.prototype.scrollIntoView = function scrollIntoView(this: Element) {
-    scrolledTo.push(this)
-  }
+  window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(false))
 })
 
 afterEach(() => {
   cleanup()
   window.localStorage.clear()
-  Element.prototype.scrollIntoView = realScrollIntoView
+  window.sessionStorage.clear()
+  resetSidePanelModeStore()
+  vi.unstubAllGlobals()
 })
 
+/** The grid's half of the claim, as the grid reads it. */
+function ClaimProbe() {
+  return <div data-testid="claim">{useRailTabClaim()?.tab ?? 'none'}</div>
+}
+
 function draw() {
-  render(
-    <ProgrammerWorkspace grid={<div />} rail={<ProgrammerRail projectId={6} />} />,
-  )
+  return render(<ProgrammerWorkspace grid={<ClaimProbe />} rail={<ProgrammerRail projectId={6} />} />)
 }
 
-/** The frame a child is drawn in — the element carrying the arms' container-query classes. */
-function frameOf(child: Element): Element {
-  const frame = child.closest('div[class*="flex"]')
-  if (frame == null) throw new Error('no frame')
-  return frame
-}
+const tab = (name: string) => within(screen.getByRole('tablist', { name: 'Dock' })).getByRole('tab', { name })
+const claim = () => screen.getByTestId('claim').textContent
 
-describe('ProgrammerRail — the collapsed arms', () => {
-  it('draws each count as a control, with a name per arm', () => {
-    // Both arms are in the DOM at once (they are hidden by container queries, not by JS), so the
-    // four strip buttons and the two handle buttons must not be announced by the same words —
-    // the rule the two chevrons already keep.
+describe('the dock', () => {
+  it('is Colour and Spread, resting on Colour, and lists nothing', () => {
     draw()
-    const names = [
-      'Expand the rail at the layers',
-      'Expand the rail at the effects',
-      'Open the rail at the layers',
-      'Open the rail at the effects',
-      'Show the layers',
-      'Show the effects',
-      // Scenery's doors (scenery-programmer plan D17): the strip's pair and the handle's one.
-      'Expand the rail at the scenery',
-      'Open the rail at the scenery',
-      'Show the scenery',
-    ]
-    for (const name of names) {
-      expect(screen.getAllByRole('button', { name })).toHaveLength(1)
-    }
+    expect(RAIL_TABS.map((t) => t.label)).toEqual(['Colour', 'Spread'])
+    expect(tab('Colour')).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByTestId('colour-tab')).toBeInTheDocument()
+    // No counts, no doors onto the stack: those are row B's tables now.
+    expect(screen.queryByText(/^Layers$/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /Add a/ })).toBeNull()
+    expect(screen.queryByText('Per-fixture FX')).toBeNull()
   })
 
-  it("the strip's docked count expands the rail, writing the stored preference", () => {
+  it('swaps its panel on a tab press, the claim following the drawn tab', () => {
     draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Expand the rail at the layers' }))
-    // `collapsed` is what the strip frame hides itself on at ≥1200, and it is persisted — the
-    // observable difference from the overlay arm below.
+    expect(claim()).toBe('colour')
+    fireEvent.click(tab('Spread'))
+    expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
+    expect(screen.queryByTestId('colour-tab')).toBeNull()
+    expect(claim()).toBe('spread')
+  })
+
+  it('is not persisted: every arrival rests on Colour', () => {
+    const first = draw()
+    fireEvent.click(tab('Spread'))
+    first.unmount()
+    draw()
+    expect(tab('Colour')).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps its tab across a collapse, claiming nothing while collapsed', () => {
+    draw()
+    fireEvent.click(tab('Spread'))
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse the dock' }))
+    expect(screen.queryByTestId('spread-tab')).toBeNull()
+    expect(claim()).toBe('none')
+    expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Expand the dock' }))
+    expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
+    expect(claim()).toBe('spread')
+  })
+
+  it('expands a collapsed dock onto a tab from the strip’s docked door, writing the stored preference', () => {
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(true))
+    draw()
+    const door = screen.getByRole('button', { name: 'Expand the dock on Spread' })
+    expect(door.className).toContain('@max-[1200px]:hidden')
+    fireEvent.click(door)
+    expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
     expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe('false')
   })
 
-  it("the strip's overlay count opens the overlay and leaves the preference alone", () => {
+  it('opens the overlay on a tab from the strip’s narrow door, leaving the preference alone', () => {
+    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(true))
     draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Open the rail at the effects' }))
-    // The body is up either way; what must not happen is an iPad's press writing "expanded" into
-    // the preference a wide desk reads tomorrow.
+    const door = screen.getByRole('button', { name: 'Open the dock on Spread' })
+    expect(door.className).toContain('@min-[1200px]:hidden')
+    fireEvent.click(door)
+    expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
     expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe('true')
-    expect(screen.getByText('Values above beat effects below')).toBeTruthy()
   })
 
-  it("the handle's counts open the sheet", () => {
+  it('opens the phone’s sheet on a tab from the handle, the panel in one place', () => {
     draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Show the effects' }))
-    expect(window.localStorage.getItem(COLLAPSED_KEY)).toBe('true')
-    expect(screen.getByText('Values above beat effects below')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Show Spread' }))
+    expect(screen.getAllByTestId('spread-tab')).toHaveLength(1)
+    expect(screen.queryByRole('complementary', { name: 'Colour and spread' })).toBeNull()
+    expect(within(screen.getByRole('dialog')).getByRole('tablist', { name: 'Dock' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Open Colour and Spread', hidden: true })).toHaveAttribute('aria-expanded', 'true')
   })
 
-  it('scrolls to the band the press named, and to the rule above the effects', () => {
+  it('draws its tabs in overlay mode too, one chevron and one door per tab', () => {
+    setSidePanelMode('overlay')
     draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Show the effects' }))
-    expect(scrolledTo).toHaveLength(1)
-    // The anchor is the amber boundary rather than the `Effects` label below it: the bar is what
-    // introduces the half, so landing on the label would open the band with the one rule that
-    // explains it just above the fold.
-    expect(scrolledTo[0].textContent).toContain('Values above beat effects below')
-
-    cleanup()
-    scrolledTo = []
-    draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Show the layers' }))
-    expect(scrolledTo).toHaveLength(1)
-    expect(scrolledTo[0].textContent).toContain('top wins')
+    expect(screen.getAllByRole('button', { name: 'Open the dock on Colour' })).toHaveLength(1)
+    expect(screen.queryByRole('button', { name: 'Expand the dock on Colour' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Spread' }))
+    expect(tab('Spread')).toHaveAttribute('aria-selected', 'true')
+    // Overlay mode floats the panel over the grid, which shuts on a press there: it claims nothing.
+    expect(claim()).toBe('none')
   })
 
-  it('opens the rail at the Scenery band from the handle, the band being the top of the body', () => {
-    sceneryHeld.count = 2
+  it('claims nothing where push mode does not dock it', () => {
+    // The docked-arm probe is drawn only where the dock docks; a zero box is the narrow arm.
+    let report: () => void = () => {}
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: () => void) {
+          report = cb
+        }
+        observe() {}
+        disconnect() {}
+        unobserve() {}
+      },
+    )
     draw()
-    const handle = screen.getByRole('button', { name: 'Show the scenery' })
-    expect(handle.textContent).toBe('2')
-    fireEvent.click(handle)
-    expect(scrolledTo).toHaveLength(1)
-    expect(scrolledTo[0].getAttribute('data-testid')).toBe('scenery-band')
-    // Above the values, as the top tier: the band comes before the Values label in the body.
-    const band = screen.getByTestId('scenery-band')
-    const values = screen.getByText('top wins')
-    expect(band.compareDocumentPosition(values) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    // …and the sheet's title counts it beside the layers and the effects.
-    expect(screen.getByRole('dialog').textContent).toContain('Scenery2')
-    sceneryHeld.count = 0
+    expect(claim()).toBe('colour')
+    const probe = document.querySelector('span[aria-hidden].size-px')!
+    expect(probe.className).toContain('@max-[1200px]:hidden')
+    act(() => report())
+    expect(claim()).toBe('none')
   })
 
-  it('counts held scenery on the strip, which opens the rail at the band', () => {
-    sceneryHeld.count = 1
+  it('keeps its header level with row B at 40px', () => {
     draw()
-    const strip = screen.getByRole('button', { name: 'Open the rail at the scenery' })
-    expect(strip.textContent).toBe('1')
-    expect(strip.getAttribute('title')).toBe('1 held piece of scenery')
-    fireEvent.click(strip)
-    expect(scrolledTo[0].getAttribute('data-testid')).toBe('scenery-band')
-    sceneryHeld.count = 0
+    const header = screen.getByRole('tablist', { name: 'Dock' }).parentElement!
+    expect(header.className).toBe(CHROME_ROW_CLASS)
+    expect(screen.getByRole('button', { name: 'Collapse the dock' }).className).toContain('size-6')
   })
 
-  it('honours a band request once, and again on the next press', () => {
-    // A one-shot request, not a stored position: were it kept, the operator's own scrolling
-    // afterwards would be undone by the next unrelated re-render of the body — and were it not
-    // released, a second press on an already-open rail would do nothing. Driven from the strip
-    // rather than the handle because the sheet is a Radix modal, which `aria-hidden`s the handle
-    // behind it: pressing it twice is not a gesture that exists on that arm.
-    draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Open the rail at the effects' }))
-    expect(scrolledTo).toHaveLength(1)
-    expect(scrolledTo[0].textContent).toContain('Values above beat effects below')
-    fireEvent.click(screen.getByRole('button', { name: 'Open the rail at the layers' }))
-    expect(scrolledTo).toHaveLength(2)
-    expect(scrolledTo[1].textContent).toContain('top wins')
-  })
-
-  it('keeps the strip and the handle in separate frames', () => {
-    // Sanity on the mount points the arms' CSS is written against, so a refactor that folded the
-    // two into one frame would fail here rather than on a phone.
-    draw()
-    const strip = frameOf(screen.getByRole('button', { name: 'Expand the rail at the layers' }))
-    const handle = frameOf(screen.getByRole('button', { name: 'Show the layers' }))
-    expect(strip).not.toBe(handle)
-  })
-
-  it('keeps the rail header and the strip chevrons level with row B at 40px', () => {
-    // The chrome system: row B is `h-10` on a 12px gutter, and this header's bottom border meets
-    // that row's across the seam. `h-9 px-2.5` was four pixels short and two in. Expanded, since
-    // the docked frame is what draws the header.
-    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(false))
-    draw()
-    const expand = screen.getByRole('button', { name: 'Expand the rail' })
-    expect(expand.className).toContain('h-10')
-    // **And the `+` at the foot of the same column.** It was left at `h-9` by the chrome tidy-up
-    // and only the chevron was pinned, so the one control that had missed the system was also the
-    // one the test could not see. Every fixed-height cell of the strip is asserted here now.
-    const add = screen.getByRole('button', { name: 'Add a layer or an effect' })
-    expect(add.className).toContain('h-10')
-    // The header is the one 40px row with the gutter; `0 layers` is also the strip count's title.
-    const header = document.querySelector('div.h-10.border-b.px-3')!
-    expect(header).not.toBeNull()
-    expect(header.textContent).toContain('Layers')
-    expect(header.className).toContain('px-3')
-    expect(header.className).toContain('gap-2')
-  })
-})
-
-describe('ProgrammerRail — the library doors', () => {
-  it('opens the one picker on the window’s selection from + Palette and + Look', () => {
-    // §4.6: the picker presses the selection the strip would, so the rail's door hands it the
-    // window's pair rather than a target of its own.
-    window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(false))
-    pickerProps.last = null
-    draw()
-    // Not mounted while shut: its pair is a marquee subscription.
-    expect(pickerProps.last).toBeNull()
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add a palette layer' })[0])
-    expect(pickerProps.last).toMatchObject({ open: true, library: 'palettes', pair: WINDOW_PAIR, fit: WINDOW_FIT })
-
-    fireEvent.click(screen.getAllByRole('button', { name: 'Add a look layer' })[0])
-    expect(pickerProps.last).toMatchObject({ open: true, library: 'looks', pair: WINDOW_PAIR })
+  it('starts the Spread panel’s compact curve row between the dock’s floor and its default', () => {
+    // The docked panel is the dock less its 1px edge, and `@max-[n]` is a strict `<`: compact
+    // below 300 of dock, worded at the 300 default, compact at the 260 floor.
+    const below = Number(/@max-\[(\d+)px\]/.exec(SPREAD_COMPACT_WORD_CLASS)![1])
+    expect(RAIL_MIN_WIDTH - 1).toBeLessThan(below)
+    expect(RAIL_DEFAULT_WIDTH - 1).toBeGreaterThanOrEqual(below)
   })
 })
