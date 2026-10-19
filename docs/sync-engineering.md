@@ -67,6 +67,8 @@ showOverrides/{uuid}.json      # v24+ (venue plan session 5): a show's facet ove
                                # patches (recordUuid, facet, value, base)
 showParkReleases/{uuid}.json   # v27+: a show on a venue's releases of venue parks (universe,
                                # channel)
+showColours/{uuid}.json        # v36+: a show on a venue's recolours of venue patches and groups
+                               # (recordUuid, colour)
 venueVersion.json              # v24+, a venue repo only: which version the tagged commit is
 showEntries/{uuid}.json
 cueStacks/{uuid}.json          # v20+: its set embedded as `scenery` (elementUuid, state)
@@ -249,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 35`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 36`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -316,6 +318,30 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 36 — fixture colours
+
+Tables-colours plan session 3 (D7, D10; `docs/fixtures-engineering.md` §"Fixture colours"):
+`FixturePatchJson` and `FixtureGroupJson` gain `colour`, one of the desk's ten keys, omitted when
+none, and a show on a venue's recolours of its venue's patches and groups travel as
+**`showColours/{uuid}.json`** (`ShowColourJson`: `uuid`, `recordUuid` — the venue patch or group —
+`colour`). `show_colours` is `Portable("showColours")` in `SyncCoverageTest`, read from
+`seedShowOnVenue`'s export like the hides. A project with no colours exports byte-for-byte as at v35
+(only `formatVersion.json` says 36). `SUPPORTED_FORMAT_VERSION = 36`; `MIN_SUPPORTED_FORMAT_VERSION`
+**stays 5** — a missing colour is none, so every older archive imports as before. The writer's number
+moves by the sharp-edge rule: a v35 reader would import every patch and group without its colour, and
+every show without its recolours, and its next wipe-then-export push would write them away for every
+peer.
+
+**Imported as stored**, as a gel code is: a key this desk does not know (another desk's) is kept, reads
+as none here (`FixtureColours.read`) and is written back unchanged, so it survives a round trip
+through an older or newer desk; one longer than the column (16) is dropped with a warning. A recolour
+naming a record the pinned version lacks is kept, as a hide is, one an archive repeats for a record is
+kept once, and one in a project on no venue is dropped. The recolour names a venue record, never one
+of the show's archive, so a clone remaps only its own `uuid`. `replaceFromWorkingTree` and the
+project delete sweep the show's recolours with its hides and overrides. `RichProjectFixture` colours
+`hex-1` and `front-wash`; `seedShowOnVenue` recolours its overridden venue patch and the venue's
+first group.
 
 ### Version 35 — speed masters on a cue
 
@@ -602,7 +628,7 @@ another kind than the local project (`PROJECT_MISMATCH`), a show pinned to a ver
 since session 5, which reads `showOverrides/`). Moving the
 tree first would let the next snapshot write the old pin back over the remote's.
 `replaceFromWorkingTree` takes the pin from the tree (a peer's Update moves it, venue plan session 6),
-refuses an archive of another kind, sweeps the show's hides and facet overrides, and now also deletes a show's cue events and scenery **through
+refuses an archive of another kind, sweeps the show's hides, facet overrides and recolours, and now also deletes a show's cue events and scenery **through
 their owners** (cue, stack, Look) — they may name venue patches and elements, which the old sweep
 through the project's own patches and elements never reached, leaving orphans with
 `PRAGMA foreign_keys` off. The project delete takes the same sweep.
@@ -622,7 +648,7 @@ rows, uuids kept, and clears its pin, so the next export is the v24 layout of a 
 `venueUuid` / `venueVersion` / `venueRepo` in `project.json`, no `showHides/` or `showOverrides/`, the
 venue's records among the show's own. A peer still pinned pulls it as any change: `mergeProjectPin`
 takes the remote's pin (none) when its own is the merge base's, `replaceFromWorkingTree` writes the
-show's rows and the empty pin and sweeps its hides and overrides, and the importer seeds no maps from
+show's rows and the empty pin and sweeps its hides, overrides and recolours, and the importer seeds no maps from
 a snapshot because the archive names none. A desk that never had the venue imports it as any
 standalone show (`VenueRepoSyncTest`). The venue's repo is not touched.
 

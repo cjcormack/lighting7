@@ -119,6 +119,8 @@ class RigBriefing(private val state: State) {
         // Each unit's fitted media (fixture optics plan session 3): which gel a scroller frame holds is
         // the unit's, so "frame 9" says nothing until the model can see what is loaded there.
         val media = patchMedia()
+        // Each fixture's and group's colour (tables-colours plan D7), so "the red fixtures" means something.
+        val (patchColours, groupColours) = rigColours()
         for (fixture in lighting) {
             val groups = state.show.fixtures.groupsForFixture(fixture.key)
             // Parenthesised deliberately: without it `+ ")"` binds inside the else branch, so the
@@ -127,6 +129,7 @@ class RigBriefing(private val state: State) {
                     "key=`${fixture.key}`, type=`${fixture.typeKey}`" +
                     (lanterns[fixture.key]?.let { ", $it" } ?: "") +
                     (media[fixture.key]?.let { ", $it" } ?: "") +
+                    (patchColours[fixture.key]?.let { ", colour=$it" } ?: "") +
                     (if (groups.isNotEmpty()) ", groups=${groups.joinToString(",")}" else "") +
                     cellLabel(fixture) +
                     triggerLabel(fixture) +
@@ -155,6 +158,7 @@ class RigBriefing(private val state: State) {
             val caps = group.detectCapabilities()
             sb.appendLine(
                 "- **${group.name}** (${group.allMembers.size} members, capabilities=${caps.joinToString(",")}" +
+                    (groupColours[group.name]?.let { ", colour=$it" } ?: "") +
                     ownerLabel({ it.groups }, group.name) + ")",
             )
         }
@@ -614,6 +618,16 @@ class RigBriefing(private val state: State) {
             RigScope.of(project).patches()
                 .mapNotNull { p -> p.headNumber?.let { p.key to it } }
                 .toMap()
+        }
+    }
+
+    /** Every patch's colour by key, and every group's by name, as the current project's rig draws them. */
+    private fun rigColours(): Pair<Map<String, String>, Map<String, String>> {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            val rig = RigScope.of(project)
+            rig.patches().mapNotNull { p -> rig.colourOf(p)?.let { p.key to it } }.toMap() to
+                rig.groups().mapNotNull { g -> rig.colourOf(g)?.let { g.name to it } }.toMap()
         }
     }
 

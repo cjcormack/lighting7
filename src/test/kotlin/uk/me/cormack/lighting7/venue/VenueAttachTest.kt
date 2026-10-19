@@ -56,6 +56,8 @@ import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoParkedChannels
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
+import uk.me.cormack.lighting7.models.DaoShowColour
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
@@ -636,7 +638,7 @@ class VenueAttachTest : RouteIntegrationTest() {
                     e.uuid, e.key, e.displayName, e.fixtureTypeKey, e.headNumber, e.universeConfig.uuid, e.universeConfig.subnet,
                     e.universeConfig.universe, e.startChannel, e.rigging?.uuid, e.stageX, e.stageY, e.stageZ, e.baseYawDeg,
                     e.basePitchDeg, e.baseRollDeg, e.lengthM, e.focus, e.beamAngleDeg, e.lampWatts, e.lampKelvin, e.locate,
-                    e.kindOverride, e.gelCode, e.fittedMedia, e.overridden, e.stageHidden, e.infrastructure,
+                    e.kindOverride, e.gelCode, e.fittedMedia, e.overridden, e.stageHidden, e.infrastructure, rig.colourOf(p),
                     rig.effectivePlacements(p, extraPlacementsOf(p)).map { pl ->
                         listOf(pl.uuid, pl.label, pl.rigging?.uuid, pl.stageX, pl.stageY, pl.stageZ, pl.baseYawDeg, pl.basePitchDeg, pl.baseRollDeg, pl.lengthM, pl.focus, pl.fittedMedia)
                     },
@@ -649,7 +651,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             "elements" to rig.stageElements().map { listOf(it.uuid, it.name, it.kind, it.layer, it.params) }.sortedBy { it[1] as String },
             "viewpoints" to rig.stageViewpoints().map { listOf(it.uuid, it.name, it.seatElementUuid) }.sortedBy { it[1] as String },
             "groups" to rig.groups().map { g ->
-                listOf(g.uuid, g.name, rig.members(g).map { listOf(it.fixturePatch.uuid, it.panOffset, it.tiltOffset) })
+                listOf(g.uuid, g.name, rig.colourOf(g), rig.members(g).map { listOf(it.fixturePatch.uuid, it.panOffset, it.tiltOffset) })
             }.sortedBy { it[1] as String },
             "stage" to rig.stageBounds(),
         )
@@ -661,6 +663,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             "hides" to DaoShowHide.find { DaoShowHides.project eq projectId }.map { "${it.recordKind}:${it.recordUuid}" }.toSet(),
             "overrides" to DaoShowOverride.find { DaoShowOverrides.project eq projectId }.map { "${it.recordUuid}:${it.facet}=${it.value}@${it.base}" }.toSet(),
             "releases" to DaoShowParkRelease.find { DaoShowParkReleases.project eq projectId }.map { "${it.universe}-${it.channel}" }.toSet(),
+            "colours" to DaoShowColour.find { DaoShowColours.project eq projectId }.map { "${it.recordUuid}=${it.colour}" }.toSet(),
         )
     }
 

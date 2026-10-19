@@ -9,7 +9,10 @@ import io.ktor.server.resources.get
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.Route
+import io.ktor.serialization.kotlinx.json.DefaultJson
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
@@ -49,14 +52,38 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
         }
     }
 
-    // PUT /{projectId}/patch-groups/{groupId} - Update group (rename, reorder members)
+    // PUT /{projectId}/patch-groups/{groupId} - Update group (rename, reorder members, colour)
     put<ProjectPatchGroupResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
-            val request = call.receive<UpdatePatchGroupRequest>()
+            // Read as an object so an explicit `colour: null` (clear) is told from an absent one, and the
+            // colour checked by its own parser before the rest of the body is decoded.
+            val body = call.receive<JsonObject>()
+            val colourSent = FixtureColours.FIELD in body
+            val colour = if (colourSent) {
+                FixtureColours.parse(body[FixtureColours.FIELD]).getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, colourError(it.message))
+                    return@withProject
+                }
+            } else null
+            val request = try {
+                DefaultJson.decodeFromJsonElement(UpdatePatchGroupRequest.serializer(), JsonObject(body - FixtureColours.FIELD))
+            } catch (e: SerializationException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Invalid group update"))
+                return@withProject
+            }
+            val colourOnly = ShowColours.isRecolour(body.keys)
             val result = transaction(state.database) {
                 val rig = RigScope.of(project)
+                val found = DaoFixtureGroup.findById(resource.groupId)
+                // A venue group in a show takes the show's recolour (tables-colours plan D10), and nothing else.
+                if (found != null && colourOnly && rig.ownerOf(found.project.id) == RigOwner.VENUE &&
+                    !rig.isHidden(HideKind.GROUP, found.uuid)
+                ) {
+                    ShowColours.put(project.id, found.uuid, colour)
+                    return@transaction Pair<PatchGroupDetailDto?, String?>(found.toDetailDto(rig), null)
+                }
                 val group = VenueRigGuard.ownForWrite(
-                    rig, DaoFixtureGroup.findById(resource.groupId), { it.project.id }, { "Group '${it.name}'" },
+                    rig, found, { it.project.id }, { "Group '${it.name}'" },
                 ) ?: return@transaction Pair<PatchGroupDetailDto?, String?>(null, "Group not found")
 
                 // Rename
@@ -72,6 +99,8 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                 // Reorder members (patch ids in the order wanted; a member not named keeps its place)
                 request.memberOrder?.let { reorderGroupMembers(group, it) }
 
+                if (colourSent) group.colour = colour
+
                 Pair<PatchGroupDetailDto?, String?>(group.toDetailDto(rig), null)
             }
 
@@ -82,11 +111,18 @@ internal fun Route.routeApiRestProjectPatchGroups(state: State) {
                 return@withProject
             }
 
-            // Reload fixtures if project is current (group order affects runtime)
+            // Reload fixtures if project is current (group order affects runtime). A colour is never built
+            // from, but the live group list carries it, so a colour-only edit announces that list instead.
             if (state.isCurrentProject(project)) {
-                DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+                if (colourOnly) {
+                    state.show.fixtures.announceFixturesChanged()
+                } else {
+                    DbFixtureLoader.loadFixtures(project.id.value, state.show.fixtures, state.database, parkSource = state.show.outputSource, hold = state.show.rigHold)
+                }
             }
             state.show.fixtures.patchListChanged()
+            // A busk rig tile embeds its group's colour.
+            if (colourSent) state.show.fixtures.buskRigChanged()
 
             call.respond(groupDto!!)
         }
@@ -147,6 +183,10 @@ data class PatchGroupDto(
     val memberCount: Int,
     /** Whose the group is in this rig (venue plan D12): a show's may hold venue patches, a venue's never a show's. */
     val owner: RigOwner = RigOwner.SHOW,
+    /** The group's colour as this rig draws it (tables-colours plan D7, D10); null is none. Never its members'. */
+    val colour: String? = null,
+    /** On a venue group in a show: whether [colour] is the show's recolour or the venue's own. Null otherwise. */
+    val colourOwner: ColourOwner? = null,
 )
 
 @Serializable
@@ -155,6 +195,8 @@ data class PatchGroupDetailDto(
     val name: String,
     val members: List<PatchGroupMemberDto>,
     val owner: RigOwner = RigOwner.SHOW,
+    val colour: String? = null,
+    val colourOwner: ColourOwner? = null,
 )
 
 @Serializable
@@ -174,6 +216,11 @@ data class UpdatePatchGroupRequest(
      * a member left out — a venue patch the show hides — keeps its own ([reorderGroupMembers]).
      */
     val memberOrder: List<Int>? = null,
+    /**
+     * One of `FixtureColours.KEYS`; null clears it, absent leaves it (400 `COLOUR_UNKNOWN` otherwise). On a
+     * venue group in a show, a body naming only `colour` is the show's recolour; null takes the venue's back.
+     */
+    val colour: String? = null,
 )
 
 // Helpers
@@ -182,12 +229,16 @@ private fun DaoFixtureGroup.toSummaryDto(rig: RigScope) = PatchGroupDto(
     name = name,
     memberCount = rig.members(this).count().toInt(),
     owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
+    colour = rig.colourOf(this),
+    colourOwner = rig.colourOwnerOf(project.id, uuid),
 )
 
 private fun DaoFixtureGroup.toDetailDto(rig: RigScope) = PatchGroupDetailDto(
     id = id.value,
     name = name,
     owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
+    colour = rig.colourOf(this),
+    colourOwner = rig.colourOwnerOf(project.id, uuid),
     members = rig.members(this)
         .sortedBy { it.sortOrder }
         .map { PatchGroupMemberDto(

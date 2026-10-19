@@ -76,6 +76,13 @@ data class FormatVersionJson(
     // moves by the sharp-edge rule: a v34 reader would import every cue without its tempos and its next
     // wipe-then-export push would write them away for every peer. `minReader` stays at **5** — a missing
     // list sets nothing. See `docs/sync-engineering.md` §"Version 35 — speed masters on a cue".
+    // v36: fixture colours (tables-colours plan D7, D10). `FixturePatchJson` and `FixtureGroupJson` gain
+    // `colour` (default null, omitted), and a show's recolours of its venue's patches and groups travel as
+    // `showColours/{uuid}.json` ([ShowColourJson]). A project with no colours exports byte-for-byte as at
+    // v35. The writer's number moves by the sharp-edge rule: a v35 reader would import every patch and
+    // group without its colour and its next wipe-then-export push would write them away for every peer.
+    // `minReader` stays at **5** — a missing colour is none. See `docs/sync-engineering.md`
+    // §"Version 36 — fixture colours".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -292,7 +299,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 35,
+    val formatVersion: Int = 36,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -346,6 +353,18 @@ data class ShowHideJson(
     val uuid: String,
     val recordKind: HideKind,
     val recordUuid: String,
+)
+
+/**
+ * v36: one of a show's recolours of a venue patch or group, `showColours/{uuid}.json` (tables-colours
+ * plan D10). `recordUuid` names a record of the pinned venue, never of the show's own archive, so a clone
+ * keeps it (only `uuid`, the recolour's own identity, is remapped). `colour` is carried as stored.
+ */
+@Serializable
+data class ShowColourJson(
+    val uuid: String,
+    val recordUuid: String,
+    val colour: String,
 )
 
 /**
@@ -674,6 +693,9 @@ data class FixturePatchJson(
     /** The unit's fitted media (v22); null is the type's stock in every slot. See
      *  `docs/sync-engineering.md` §"Version 22 — fitted media". */
     val media: FittedMedia? = null,
+    /** The unit's colour (v36), carried as stored — a key this desk does not know survives a round
+     *  trip. See `docs/sync-engineering.md` §"Version 36 — fixture colours". */
+    val colour: String? = null,
     /**
      * The other places this fixture hangs — a paired dimmer's second lantern. Embedded in
      * list order (so no `sortOrder`), like a group's `members`, and omitted by canonical JSON
@@ -822,6 +844,8 @@ data class FixtureGroupJson(
     val uuid: String,
     val name: String,
     val members: List<FixtureGroupMemberJson> = emptyList(),
+    /** The group's colour (v36), as stored, like a patch's. */
+    val colour: String? = null,
 )
 
 @Serializable

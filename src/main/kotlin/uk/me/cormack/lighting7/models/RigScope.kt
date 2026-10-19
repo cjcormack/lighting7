@@ -76,6 +76,36 @@ class RigScope private constructor(
             .mapValues { it.value.toMap() }
     }
 
+    /**
+     * The show's recolours of venue patches and groups (tables-colours plan D10), by record uuid. Empty
+     * for [own], a standalone show, a venue and a version.
+     */
+    val colours: Map<UUID, String> by lazy {
+        if (venue == null) return@lazy emptyMap()
+        DaoShowColour.find { DaoShowColours.project eq projectId }.associate { it.recordUuid to it.colour }
+    }
+
+    /**
+     * [patch]'s colour as this rig draws it: a venue patch's recolour by the show when it has one, else
+     * the row's own. A key this desk does not know reads as none ([FixtureColours.read]).
+     */
+    fun colourOf(patch: DaoFixturePatch): String? = colourOf(patch.readValues[DaoFixturePatches.project], patch.uuid, patch.colour)
+
+    /** [group]'s colour as this rig draws it, as for a patch. A group's colour never reaches its members (D9). */
+    fun colourOf(group: DaoFixtureGroup): String? = colourOf(group.readValues[DaoFixtureGroups.project], group.uuid, group.colour)
+
+    /** Whose a row's colour is: null for a row this project owns, else the show's recolour or the venue's. */
+    fun colourOwnerOf(rowProject: EntityID<Int>, uuid: UUID): ColourOwner? = when {
+        rowProject == projectId -> null
+        rowProject == venue?.snapshotId -> if (uuid in colours) ColourOwner.SHOW else ColourOwner.VENUE
+        else -> null
+    }
+
+    private fun colourOf(rowProject: EntityID<Int>, uuid: UUID, stored: String?): String? {
+        val recolour = if (rowProject == venue?.snapshotId) colours[uuid] else null
+        return FixtureColours.read(recolour ?: stored)
+    }
+
     private val universesByUuid: Map<UUID, DaoUniverseConfig> by lazy { universeConfigs().associateBy { it.uuid } }
     private val riggingsByUuid: Map<UUID, DaoRigging> by lazy { riggings().associateBy { it.uuid } }
 

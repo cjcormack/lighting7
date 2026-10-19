@@ -82,7 +82,7 @@ export type UpdateAnswer = 'KEEP_BOTH' | 'READDRESS_MINE' | 'HIDE_VENUES' | 'REM
 
 /** One line of the review: a record carried over, dropped, or blocking. */
 export interface UpdateItem {
-  /** `OVERRIDE | HIDE | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+  /** `OVERRIDE | HIDE | COLOUR | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
   kind: string
   name: string
   detail: string
@@ -341,6 +341,8 @@ export interface DetachResult {
   /** `key: facet, facet` for each venue patch whose overrides were written in. */
   overridesApplied: string[]
   hidesDropped: number
+  /** The show's recolours of venue patches and groups, written into the copies' own colour. */
+  coloursApplied?: number
   /** The show's releases of venue parks, gone with the venue; absent when none. */
   parkReleasesDropped?: number
   relinked: Record<string, number>

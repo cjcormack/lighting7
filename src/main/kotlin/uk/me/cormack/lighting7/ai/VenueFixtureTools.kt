@@ -24,10 +24,13 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.FacetValue
+import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.FocusFacet
 import uk.me.cormack.lighting7.models.HideKind
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.SentColour
+import uk.me.cormack.lighting7.models.ShowColours
 import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.extraPlacementsOf
 import uk.me.cormack.lighting7.models.facetElement
@@ -63,6 +66,8 @@ internal class VenueFixtureTools(private val state: State) {
         val facets: Map<PatchFacet, Use>,
         val hidden: Boolean?,
         val address: JsonObject?,
+        /** The colour the row sends, when it sends one (a null value takes the venue's back). */
+        val colour: SentColour? = null,
     ) {
         val where get() = "fixtures[$index] ('$key')"
     }
@@ -172,7 +177,7 @@ internal class VenueFixtureTools(private val state: State) {
         val where = "fixtures[$index] ('$key')"
         val before = problems.size
         if (key.isEmpty()) problems += "fixtures[$index]: key is required"
-        problems += unknownFields(row, listOf("key", "facets", "hidden", "address"), where)
+        problems += unknownFields(row, listOf("key", "facets", "hidden", "address", "colour"), where)
 
         val facets = linkedMapOf<PatchFacet, Use>()
         when (val e = row["facets"]) {
@@ -208,8 +213,11 @@ internal class VenueFixtureTools(private val state: State) {
         if (hidden == true && facets.values.any { it != Use.VENUE }) {
             problems += "$where: a hidden fixture takes no override — only facets set to VENUE may go with hidden: true"
         }
-        if (facets.isEmpty() && hidden == null) problems += "$where: nothing to change — send facets, address or hidden"
-        return if (problems.size == before) Row(index, key, facets, hidden, address) else null
+        val colourSent = FixtureColours.FIELD in row
+        val colour = if (colourSent) FixtureColours.parseSent(row[FixtureColours.FIELD], where, problems) else null
+        if (hidden == true && colourSent) problems += "$where: a hidden fixture takes no colour — leave colour out"
+        if (facets.isEmpty() && hidden == null && !colourSent) problems += "$where: nothing to change — send facets, address, colour or hidden"
+        return if (problems.size == before) Row(index, key, facets, hidden, address, colour) else null
     }
 
     /**
@@ -253,6 +261,18 @@ internal class VenueFixtureTools(private val state: State) {
                 done.warnings += addressOverlaps(ShowOverrides.target(project, patch.id.value))
             }
         }
+        row.colour?.let { sent ->
+            // As the REST patch PUT refuses any write to a hidden venue patch.
+            if (RigScope.of(project).isHidden(HideKind.PATCH, patch.uuid)) {
+                throw VenueException.conflict(
+                    VenueRigGuard.CODE_VENUE_OWNED,
+                    "the fixture is hidden in this show, and a hidden fixture takes no colour: bring it back with hidden: false first",
+                )
+            }
+            if (ShowColours.put(project.id, patch.uuid, sent.value)) {
+                done.changed += sent.value?.let { "colour: $it" } ?: "colour: venue's"
+            }
+        }
         if (row.hidden == true && ShowHides.setHiddenByUuid(project, HideKind.PATCH, patch.uuid, true)) {
             done.changed += "hidden"
             done.reloads = true
@@ -274,8 +294,11 @@ internal class VenueFixtureTools(private val state: State) {
 
     // ─── place_fixtures on a venue fixture ──────────────────────────────
 
-    /** One venue fixture's `place_fixtures` row, resolved: each facet it touches as the show will hold it. */
-    class VenuePlacement(val patchId: Int, val key: String, val values: List<FacetValue>) {
+    /**
+     * One venue fixture's `place_fixtures` row, resolved: each facet it touches as the show will hold it,
+     * and its colour when the row sends one ([colour]'s value null takes the venue's back).
+     */
+    class VenuePlacement(val patchId: Int, val key: String, val values: List<FacetValue>, val colour: SentColour? = null) {
         val reloads: Boolean get() = values.any { it.facet == PatchFacet.MEDIA }
     }
 
@@ -316,8 +339,10 @@ internal class VenueFixtureTools(private val state: State) {
             return riggingUuids[name]?.let(::JsonPrimitive)
                 ?: run { problems += "$at: no rigging named '$name' (known: ${riggingUuids.keys.joinToString()})"; null }
         }
+        var colour: SentColour? = null
         for ((name, value) in row) {
             when (name) {
+                FixtureColours.FIELD -> colour = FixtureColours.parseSent(value, where, problems)
                 "rigging" -> rigging(value, "$where: rigging")?.let { field(PatchFacet.POSITION, "riggingUuid", it) }
                 in POSITION_NAMES -> field(PatchFacet.POSITION, POSITION_NAMES.getValue(name), value)
                 in LanternFocus.KEYS, "beamAngleDeg", "lampWatts", "lampKelvin", "locate" -> field(PatchFacet.FOCUS, name, value)
@@ -389,7 +414,7 @@ internal class VenueFixtureTools(private val state: State) {
                 null
             }
         }
-        return if (problems.size == before) VenuePlacement(patch.id.value, key, values) else null
+        return if (problems.size == before) VenuePlacement(patch.id.value, key, values, colour) else null
     }
 
     /** [base] with [fields] laid over it, and each placement's [placementFields] over its entry — the venue's when [base] names none. */

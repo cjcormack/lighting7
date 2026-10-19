@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back effect's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
 | [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
@@ -489,6 +490,38 @@ a real sync pull leaving a tapped tempo alone mid-show.
    another master is free): the GO goes, M3 keeps
    following, and the row says it is skipped. Tap M2, then pull Sleeping Beauty from its repo with a
    change waiting: the show carries across and M2 keeps the tap.
+
+---
+
+## `FU-MANUAL-TABLES-COLOURS-S3`
+
+**What it proves**: *a show's recolour of its venue on the desk* — tables-colours S3 (D10): a colour
+written through a show onto a venue patch or group is the show's own (`show_colours`), the venue's row
+untouched; a venue colour change published under a running show is drawing only, so it holds nothing;
+and clearing the recolour takes the venue's back. Session 3 is backend only, so the colour is read over
+REST here; session 4 puts it on the screen.
+
+**Why it is here**: the tests run each path on a seeded venue, a desk at a time. Only a real venue,
+published from its own draft while a show on it runs, shows the venue's colour, the show's recolour and
+the hold judgement agreeing across a publish — and a second desk pulling the show reading its
+recolours.
+
+**Test**, on a show on TCH venue, live, with the venue's draft open as an admin:
+
+1. **Recolour.** `PUT /projects/{show}/patches/{venue patch}` `{"colour":"pink"}`: 200, `colour: pink`,
+   `colourOwner: SHOW`; the venue's own patch list still reads its colour. The same with
+   `{"colour":"pink","gelCode":"L106"}` is 409 `VENUE_OWNED`. `PUT …/patch-groups/{venue group}`
+   `{"colour":"lime"}` recolours the group.
+2. **Publish under it.** In the venue, set that patch's colour to `orange` and publish: the History
+   draft said 1 change, 0 output; the show is *not* held (`venue.hold`), and after *Update* the show
+   still reads `pink`, `SHOW`.
+3. **Take it back.** `PUT` the patch with `{"colour":null}`: it reads `orange`, `colourOwner: VENUE`;
+   the group likewise reads the venue's.
+4. **Hide.** Recolour another venue patch, hide it in the show, bring it back: the recolour is back
+   with it.
+5. **Sync.** Sync the show and pull it on a second desk holding the venue: the recolours read there.
+   Detach the show: each patch keeps the colour it was drawn in, and the show's `showColours/` folder
+   is empty on the next sync.
 
 ---
 

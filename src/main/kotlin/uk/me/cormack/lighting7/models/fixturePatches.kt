@@ -103,6 +103,10 @@ object DaoFixturePatches : IntIdTable("fixture_patches") {
      *  Part of the Focus facet; portable. The loader never builds a fixture from it, but the runtime
      *  patch metadata carries it for Locate. See `docs/fixtures-engineering.md` §"Stored locate". */
     val locate = text("locate").nullable()
+    /** The unit's colour, one of [FixtureColours.KEYS]; null is none. Identity only — drawn beside its
+     *  name, never output. A key this desk does not know reads as none. See
+     *  `docs/fixtures-engineering.md` §"Fixture colours". */
+    val colour = varchar("colour", FixtureColours.MAX_LENGTH).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -145,6 +149,7 @@ class DaoFixturePatch(id: EntityID<Int>) : IntEntity(id) {
     var lampKelvin by DaoFixturePatches.lampKelvin
     var media by DaoFixturePatches.media
     var locate by DaoFixturePatches.locate
+    var colour by DaoFixturePatches.colour
     var uuid by DaoFixturePatches.uuid
 }
 

@@ -122,7 +122,7 @@ object VenueAttachRows {
                 val members = DaoFixtureGroupMember.find { DaoFixtureGroupMembers.group eq g.id }
                     .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
                     .map { GroupMemberRow(it.fixturePatch.uuid, it.panOffset, it.tiltOffset) }
-                GroupRow(g.id.value, g.uuid, g.name, members)
+                GroupRow(g.id.value, g.uuid, g.name, members, g.colour)
             },
             parks = VenueParks.rowsOf(projectId),
             machineOverrides = DaoMachineOverride.find { DaoMachineOverrides.project eq overridesOf }.sortedBy { it.id.value }
@@ -150,6 +150,7 @@ object VenueAttachRows {
                 put("kindOverride", patch.kindOverride.takeIf { patch.lanternType == null })
                 put("placementLabels", placements.joinToString("|") { it.label.orEmpty() })
             },
+            colour = patch.colour,
         )
     }
 

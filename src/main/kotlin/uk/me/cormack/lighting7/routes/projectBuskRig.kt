@@ -376,6 +376,7 @@ private fun liveCells(fixtures: Fixtures, patchKey: String): List<BuskRigElement
 internal fun rigDto(fixtures: Fixtures, project: DaoProject): BuskRigDto {
     val rows = rigRowsOf(project)
     val tilesByRow = rigTilesOf(rows.map { it.id.value }).values.groupBy { it.readValues[DaoBuskRigTiles.row].value }
+    val rig = RigScope.of(project)
     return BuskRigDto(
         rows.map { row ->
             BuskRigRowDto(
@@ -388,21 +389,21 @@ internal fun rigDto(fixtures: Fixtures, project: DaoProject): BuskRigDto {
                 width = if (row.width in BUSK_WIDTHS) row.width else 12,
                 tiles = tilesByRow[row.id.value].orEmpty()
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
-                    .mapNotNull { it.toDto(fixtures) },
+                    .mapNotNull { it.toDto(fixtures, rig) },
             )
         },
     )
 }
 
 /** Null for a malformed tile, which every reader treats as absent (`buskRigTileKind`). */
-private fun DaoBuskRigTile.toDto(fixtures: Fixtures): BuskRigTileDto? {
+private fun DaoBuskRigTile.toDto(fixtures: Fixtures, rig: RigScope): BuskRigTileDto? {
     val kind = kind ?: run { warnMalformedBuskRigTile { uuid.toString() }; return null }
     return when (kind) {
         BuskRigTileKind.GROUP -> {
             val dao = group!!
             BuskRigTileDto(
                 id = id.value, uuid = uuid.toString(), kind = kind.name,
-                group = groupSummary(fixtures, dao),
+                group = groupSummary(fixtures, dao).copy(colour = rig.colourOf(dao)),
                 cellMode = cellMode, label = label,
             )
         }

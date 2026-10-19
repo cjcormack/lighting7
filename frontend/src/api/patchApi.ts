@@ -112,7 +112,18 @@ export interface FixturePatch extends LanternFocus {
    * show takes whole — and from a desk older than facet overrides.
    */
   facets?: PatchFacetState[];
+  /**
+   * The unit's colour (tables-colours plan D7), one of the desk's ten keys, as this rig draws it — a
+   * venue patch's recolour by this show when it has one. Absent or null is none, and so is a key the
+   * desk does not know. Identity only: never output. Absent from a desk older than colours.
+   */
+  colour?: string | null;
+  /** On a venue patch in a show: whether `colour` is this show's recolour or the venue's own (D10). */
+  colourOwner?: ColourOwner | null;
 }
+
+/** Whose a venue record's colour is in a show (tables-colours plan D10). */
+export type ColourOwner = 'SHOW' | 'VENUE';
 
 /** The four parts of a venue patch a show can make its own (venue plan D4), each whole. */
 export type PatchFacet = 'ADDRESS' | 'POSITION' | 'FOCUS' | 'MEDIA';
@@ -318,6 +329,8 @@ export interface CreatePatchRequest {
   lampKelvin?: number | null;
   /** Only for a type with loadable settings; see `FixturePatch.media`. */
   media?: FittedMedia | null;
+  /** One of the desk's colour keys; anything else is 400 `COLOUR_UNKNOWN`. */
+  colour?: string | null;
 }
 
 export interface UpdatePatchRequest extends LanternFocus {
@@ -349,6 +362,11 @@ export interface UpdatePatchRequest extends LanternFocus {
   extraPlacements?: PatchPlacementInput[] | null;
   /** The whole fitted media, replacing the stored; null clears it, absent keeps it. */
   media?: FittedMedia | null;
+  /**
+   * A colour key; null clears it, absent keeps it. On a venue patch in a show it is the show's
+   * recolour, and null takes the venue's back.
+   */
+  colour?: string | null;
 }
 
 export interface PatchGroup {
@@ -357,6 +375,9 @@ export interface PatchGroup {
   memberCount: number;
   /** A venue's group holds venue fixtures only; a show's may hold the venue's too (venue plan D12). */
   owner?: RigOwner;
+  /** The group's colour as this rig draws it; never its members'. Absent from an older desk. */
+  colour?: string | null;
+  colourOwner?: ColourOwner | null;
 }
 
 export interface PatchGroupDetail {
@@ -364,6 +385,8 @@ export interface PatchGroupDetail {
   name: string;
   members: PatchGroupMember[];
   owner?: RigOwner;
+  colour?: string | null;
+  colourOwner?: ColourOwner | null;
 }
 
 export interface PatchGroupMember {
@@ -377,6 +400,8 @@ export interface PatchGroupMember {
 export interface UpdatePatchGroupRequest {
   name?: string;
   memberOrder?: number[]; // list of patch IDs in desired order
+  /** A colour key; null clears it. On a venue group in a show, sent alone it is the show's recolour. */
+  colour?: string | null;
 }
 
 export interface PatchApi {

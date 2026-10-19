@@ -19,7 +19,9 @@ put anything durable in `testing-engineering.md`.
 
 ## Open
 
-None.
+| Test | Seen failing | Suspected cause |
+|---|---|---|
+| `StageRenderJob.test.tsx` (frontend), an unhandled `ReferenceError: cancelAnimationFrame is not defined` after its tests pass | local `npm run check:quick` on `claude/fixture-colours` before its first commit (2026-10-19), 1 of 2 runs; passes alone | Suspected, not traced: an RTK Query auto-batch timer (`redux-toolkit.modern.mjs`'s rAF fallback) firing after the file's jsdom environment is torn down. The tests pass; Vitest fails the run on the unhandled error |
 
 ## Fixed
 

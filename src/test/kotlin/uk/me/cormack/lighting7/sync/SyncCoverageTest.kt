@@ -6,6 +6,7 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.DaoVenueVersions
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverrides
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
@@ -225,6 +226,9 @@ class SyncCoverageTest {
         // Venue parks, formatVersion 27: a show's releases of its venue's parks, a show on a venue's
         // alone, read from `seedShowOnVenue`'s export like the hides.
         DaoShowParkReleases to Disposition.Portable("showParkReleases"),
+        // Fixture colours, formatVersion 36: a show's recolours of its venue's patches and groups, a
+        // show on a venue's alone, read from `seedShowOnVenue`'s export like the hides.
+        DaoShowColours to Disposition.Portable("showColours"),
     )
 
     private lateinit var state: State

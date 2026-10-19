@@ -9,6 +9,8 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
 object DaoFixtureGroups : IntIdTable("fixture_groups") {
     val project = reference("project_id", DaoProjects)
     val name = varchar("name", 100)
+    /** The group's colour, one of [FixtureColours.KEYS]; null is none. Its members never inherit it. */
+    val colour = varchar("colour", FixtureColours.MAX_LENGTH).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
@@ -21,6 +23,7 @@ class DaoFixtureGroup(id: EntityID<Int>) : IntEntity(id) {
 
     var project by DaoProject referencedOn DaoFixtureGroups.project
     var name by DaoFixtureGroups.name
+    var colour by DaoFixtureGroups.colour
     var uuid by DaoFixtureGroups.uuid
 
     val members by DaoFixtureGroupMember referrersOn DaoFixtureGroupMembers.group
