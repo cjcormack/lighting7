@@ -1,6 +1,6 @@
 # Programmer tables and fixture colours
 
-> **Document status: IN PROGRESS — calls decided 2026-10-18; sessions 1 (`4b61df1`), 2 (`2601fff`) and 3 (`8712716`) done.** The visual design is
+> **Document status: IN PROGRESS — calls decided 2026-10-18; sessions 1 (`4b61df1`), 2 (`2601fff`), 3 (`8712716`) and 4 (`c012601`) done.** The visual design is
 > checked in beside this plan at [`tables-colours-design/`](tables-colours-design/INDEX.md), three
 > hand-written artboards. The live copy at <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi> is a
 > convenience, private to Chris; the checked-in files are the authority. Where this plan and the
@@ -145,7 +145,7 @@ One PR per session.
 - Docs: `docs/sync-engineering.md` (v36), `docs/fixtures-engineering.md` (§"Fixture colours"), the
   root `CLAUDE.md`.
 
-### Session 4 — colour in the tables
+### Session 4 — colour in the tables — done, `c012601`
 
 - `index.css`: `--tag-<key>` in `:root` and `.dark`. `lib/fixtureColours.ts` holds keys, labels and
   the 1–9 / 0 keymap.
