@@ -60,7 +60,7 @@ export function useHeldSceneryNames(projectId: number): string[] {
 }
 
 /**
- * What a Record did to the scenery, as notes for the result panel — `1 scenery change`, `1 scenery
+ * What a Record did to the scenery, as notes for its toast — `1 scenery change`, `1 scenery
  * row removed`, `2 pieces already tracked` — each only where it happened.
  */
 export function describeSceneryWrite(written = 0, removed = 0, alreadyTracked = 0): string[] {

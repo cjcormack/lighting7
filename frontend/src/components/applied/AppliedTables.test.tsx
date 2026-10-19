@@ -8,7 +8,7 @@ import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import type { LookSummary } from '@/api/looksApi'
 import type { TemplateSummary } from '@/api/templatesApi'
 import type { StageElementDto } from '@/api/stageElementApi'
-import type { ProgrammerScenery } from '@/api/sceneryApi'
+import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
 
 /**
  * The programmer's Stack, FX and Scenery tables (tables-colours plan D1, the applied tables of
@@ -40,6 +40,7 @@ const mocks = vi.hoisted(() => ({
   localValues: 0,
   elements: [] as StageElementDto[],
   programmerScenery: { projectId: 1, elements: [] } as ProgrammerScenery,
+  liveScenery: { projectId: 1, entries: {} } as LiveScenery,
   setScenery: vi.fn(),
   clearScenery: vi.fn(),
   notes: new Map<string, string>(),
@@ -74,7 +75,7 @@ vi.mock('@/store/programmer', () => ({
 }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: mocks.elements }) }))
 vi.mock('@/store/scenery', () => ({
-  useLiveScenery: () => ({ projectId: 1, entries: {} }),
+  useLiveScenery: () => mocks.liveScenery,
   useSetLookSceneryMutation: () => [vi.fn()],
 }))
 vi.mock('@/components/programmer/ProgrammerSheets', () => ({ useProgrammerSheets: () => ({ openMakeLayer: mocks.openMakeLayer }) }))
@@ -306,6 +307,7 @@ beforeEach(() => {
   mocks.localValues = 0
   mocks.notes = new Map()
   mocks.programmerScenery = { projectId: 1, elements: [] }
+  mocks.liveScenery = { projectId: 1, entries: {} }
   mocks.elements = [
     element('e-tabs', 'Tabs', 'VENUE', 'DRAPE', { role: 'TABS', operation: 'DRAW' }),
     element('e-cloth', 'Backcloth', 'VENUE', 'DRAPE', { role: 'BACKCLOTH', operation: 'FLY' }),
@@ -585,6 +587,19 @@ describe('the Scenery table', () => {
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: 'All' }))
     expect(tableRows()).toHaveLength(5)
+  })
+
+  it('keeps under Changed only what something on stage has moved', () => {
+    mocks.liveScenery = {
+      projectId: 1,
+      entries: {
+        'e-cloth': { elementUuid: 'e-cloth', state: { visible: false }, from: { visible: true }, startedAtMs: 0, durationMs: 0, source: { kind: 'cue', cueId: 3, label: '3' } },
+      },
+    }
+    drawRoute('?table=scenery')
+    fireEvent.click(screen.getByRole('button', { name: 'Changed' }))
+    expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['divider:VENUE', 'e-cloth'])
+    expect(screen.getByRole('button', { name: 'All' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('keeps a held piece whatever the filters say, and releases it through the programmer', () => {

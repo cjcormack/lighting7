@@ -22,6 +22,7 @@ import { AUTO_CUE_NUMBER_CLASS } from '@/lib/cueNumber'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS } from '@/lib/attributeFamily'
 import { LookPreviewSwatches } from '@/components/looks/lookValueChips'
 import { useInclude } from './useInclude'
+import { announceWrite, includeNote } from './writeToasts'
 import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 
@@ -42,9 +43,21 @@ export interface IncludeSheetProps {
 export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProps) {
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: looks } = useLookListQuery({ projectId })
-  const { include, isLoading, error, result, resetInclude } = useInclude(projectId, {
+  const { include, isLoading, error, resetInclude } = useInclude(projectId, {
     toastErrors: false,
   })
+
+  // Set by an Include that landed, until the next open: the sheet animates out still mounted, and its
+  // rows must not take a second press meanwhile.
+  const [done, setDone] = useState(false)
+  const includeAndClose = async (...args: Parameters<typeof include>) => {
+    if (done) return
+    const response = await include(...args)
+    if (response == null) return
+    setDone(true)
+    announceWrite(includeNote(response))
+    onOpenChange(false)
+  }
 
   const [filter, setFilter] = useState('')
   const [mask, setMask] = useState<MaskValue>(null)
@@ -53,8 +66,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
   const readSelectionMask = useWindowMaskReader()
 
   // Once per open — `resetInclude` closes over RTK Query's `reset`, whose identity changes
-  // with the mutation's state, so re-running on its identity would clear the "Included …"
-  // confirmation the moment it appeared.
+  // with the mutation's state, so re-running on its identity would clear a failed Include's
+  // error the moment it appeared.
   const openedRef = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -65,6 +78,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
     openedRef.current = true
     setFilter('')
     setMask(readSelectionMask())
+    setDone(false)
     resetInclude()
   }, [open, resetInclude, readSelectionMask])
 
@@ -138,24 +152,6 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
             </Alert>
           )}
 
-          {result && (
-            <Alert>
-              <AlertDescription>
-                Included “{result.name}” — {result.entriesWritten} value
-                {result.entriesWritten === 1 ? '' : 's'}
-                {result.fxSpawned > 0 ? `, ${result.fxSpawned} effect(s)` : ''}
-                {/* The source's own scenery rows, now held in the programmer (scenery-programmer D8) —
-                    a cue that only moves scenery would otherwise read as "0 values". */}
-                {(result.sceneryIncluded ?? 0) > 0
-                  ? `, ${result.sceneryIncluded} scenery change${result.sceneryIncluded === 1 ? '' : 's'}`
-                  : ''}
-                {result.fxAlreadyRunning > 0
-                  ? `. ${result.fxAlreadyRunning} effect(s) were already running on stage.`
-                  : '.'}
-              </AlertDescription>
-            </Alert>
-          )}
-
           <Tabs defaultValue="cues">
             <TabsList className="w-full">
               <TabsTrigger value="cues">Cues</TabsTrigger>
@@ -170,8 +166,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                     <button
                       key={cue.id}
                       type="button"
-                      disabled={isLoading || maskIsEmpty(mask)}
-                      onClick={() => include({ kind: 'CUE', cueId: cue.id }, maskToWire(mask))}
+                      disabled={isLoading || done || maskIsEmpty(mask)}
+                      onClick={() => void includeAndClose({ kind: 'CUE', cueId: cue.id }, maskToWire(mask))}
                       className="flex w-full items-baseline gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
                     >
                       {cue.cueNumber && (
@@ -209,8 +205,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                     <button
                       key={look.id}
                       type="button"
-                      disabled={isLoading || maskIsEmpty(mask)}
-                      onClick={() => include({ kind: 'LOOK', lookId: look.id }, maskToWire(mask))}
+                      disabled={isLoading || done || maskIsEmpty(mask)}
+                      onClick={() => void includeAndClose({ kind: 'LOOK', lookId: look.id }, maskToWire(mask))}
                       className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-accent disabled:opacity-50"
                     >
                       <span className="min-w-0 flex-1 truncate">{look.name}</span>
@@ -233,7 +229,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
 
         <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            {result ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
           {isLoading && (
             <Button disabled>

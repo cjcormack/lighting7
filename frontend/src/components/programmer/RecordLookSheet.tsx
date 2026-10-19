@@ -29,13 +29,13 @@ import { useLookListQuery } from '@/store/looks'
 import { useRecordLookMutation } from '@/store/programmerOps'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
-  RecordLookResponse,
   RecordMode,
   RecordSource,
 } from '@/store/programmerOps'
-import { MaskPicker, describeSkips, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
-import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
+import { RecordSceneryRow } from './RecordSceneryRow'
+import { announceWrite, recordLookNote } from './writeToasts'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
 import { useActiveEffectsQuery } from '@/store/fixtureFx'
@@ -137,11 +137,13 @@ export function RecordLookSheet({
   const [lookId, setLookId] = useState<string>('')
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
-  const [result, setResult] = useState<RecordLookResponse | null>(null)
+  // Set by a Record that landed, until the next open: the sheet animates out still mounted, and its
+  // Record must not take a second press meanwhile.
+  const [done, setDone] = useState(false)
 
   // Once per open. RTK Query's `reset` changes identity whenever the mutation's state does, so an
-  // effect depending on it *and* calling it re-fires — here that would wipe the result panel and
-  // the operator's form the instant a Record completed.
+  // effect depending on it *and* calling it re-fires — here that would wipe the operator's form
+  // the instant a Record failed.
   const openedRef = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -166,7 +168,7 @@ export function RecordLookSheet({
     setLookId(targetLookId != null ? String(targetLookId) : '')
     setName('')
     setNotes('')
-    setResult(null)
+    setDone(false)
     reset()
   }, [open, targetLookId, reset, readSelectionMask])
 
@@ -177,6 +179,7 @@ export function RecordLookSheet({
   const scoped = selectedOnly && selection.length > 0
 
   const submit = async () => {
+    if (done) return
     try {
       const response = await record({
         projectId,
@@ -190,7 +193,9 @@ export function RecordLookSheet({
         effectIds: effectIds.length > 0 ? effectIds : undefined,
         scenery: includeScenery,
       }).unwrap()
-      setResult(response)
+      setDone(true)
+      announceWrite(recordLookNote(response))
+      onOpenChange(false)
     } catch {
       // Rendered inline from the mutation's own `error` — `recordLook` is in SILENT_ENDPOINTS.
     }
@@ -331,15 +336,13 @@ export function RecordLookSheet({
               <AlertDescription>{formatError(error)}</AlertDescription>
             </Alert>
           )}
-
-          {result && <RecordLookResult result={result} />}
         </SheetBody>
 
         <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            {result ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
-          <Button onClick={submit} disabled={!canSubmit || isLoading}>
+          <Button onClick={submit} disabled={!canSubmit || isLoading || done}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Recording…' : 'Record'}
           </Button>
@@ -435,42 +438,5 @@ function RecordableEffects({
         An effect you leave out keeps running in the programmer — leaving it out is not stopping it.
       </p>
     </div>
-  )
-}
-
-/**
- * What actually landed. Reported rather than assumed: a silent Record reads as "everything went
- * in", which is exactly the impression the old lossy snapshot gave.
- */
-function RecordLookResult({ result }: { result: RecordLookResponse }) {
-  const notes: string[] = []
-  if (result.groupRowsEmitted > 0) {
-    notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
-  }
-  if (result.programmerKeysRefreshed > 0) {
-    notes.push(`${result.programmerKeysRefreshed} live programmer value(s) re-resolved`)
-  }
-  notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved))
-  if (result.cuesRepublished.length > 0) {
-    notes.push(`${result.cuesRepublished.length} live cue(s) moved with it`)
-  }
-
-  const skipNote = describeSkips(result.skipped)
-
-  return (
-    <Alert>
-      <AlertDescription className="space-y-1">
-        <p className="font-medium">
-          {result.created ? 'Created' : 'Updated'} “{result.look.name}” — {result.rowsWritten} row
-          {result.rowsWritten === 1 ? '' : 's'} written
-          {result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : ''}
-          {result.effectsWritten
-            ? `, ${result.effectsWritten} effect${result.effectsWritten === 1 ? '' : 's'} moved in`
-            : ''}.
-        </p>
-        {notes.length > 0 && <p className="text-xs text-muted-foreground">{notes.join(' · ')}</p>}
-        {skipNote && <p className="text-xs text-amber-600 dark:text-amber-500">{skipNote}</p>}
-      </AlertDescription>
-    </Alert>
   )
 }

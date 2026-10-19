@@ -19,6 +19,7 @@ const createState = { error: undefined as unknown }
 
 // The desk selection's frame is what the sheet opens its mask on (apply-model plan D3).
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
@@ -32,6 +33,7 @@ vi.mock('@/store/programmerOps', () => ({
   useRecordProgrammerMutation: () => [record, { isLoading: false, error: undefined, reset: () => {} }],
 }))
 
+import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { RecordSheet } from './RecordSheet'
 
@@ -42,6 +44,8 @@ afterEach(() => {
 })
 
 beforeEach(() => {
+  vi.mocked(toast.success).mockClear()
+  vi.mocked(toast.warning).mockClear()
   createState.error = undefined
   record.mockClear()
   createStack.mockClear()
@@ -266,5 +270,33 @@ describe('the mask', () => {
     rerender(<RecordSheet open onOpenChange={() => {}} projectId={6} />)
     expect(screen.getByRole('checkbox', { name: 'Intensity' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Colour' })).not.toBeChecked()
+  })
+})
+
+describe('the end of a Record', () => {
+  it('closes once the cue is recorded, and says what went in', async () => {
+    record.mockImplementationOnce(() =>
+      Promise.resolve({
+        data: {
+          cue: { name: 'Storm' }, created: true, assignmentsWritten: 4, assignmentsRemoved: 0, groupRowsEmitted: 0,
+          fxWritten: 0, skipped: [], preserved: {}, warnings: [], republishedLive: false, sceneryWritten: 0,
+        },
+      } as never),
+    )
+    const onOpenChange = vi.fn()
+    render(<RecordSheet open onOpenChange={onOpenChange} projectId={6} />)
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(toast.success).toHaveBeenCalledWith('Created “Storm” — 4 values written.', { description: undefined })
+  })
+
+  it('stays open when the desk refuses the Record', async () => {
+    const onOpenChange = vi.fn()
+    render(<RecordSheet open onOpenChange={onOpenChange} projectId={6} />)
+    fireEvent.click(recordButton())
+    await waitFor(() => expect(record).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalled()
   })
 })

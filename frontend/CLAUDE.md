@@ -1248,8 +1248,10 @@ no scenery and ticked on every open while it holds some**, its hint naming the h
 order first held (`useHeldSceneryNames`, *a piece* for one the element list has not loaded) and saying
 what the destination does with them: a cue gets a row for each piece it would not already show, a
 Look keeps every held piece. It sends `scenery` on the request; neither the mask nor *Selected
-fixtures only* narrows it (D3), so the hint does not mention them. The result panels add
-`describeSceneryWrite`'s notes (*1 scenery change*, *2 held pieces already shown there*). The action
+fixtures only* narrows it (D3), so the hint does not mention them. **Record, Record look, Include and
+Update close once the write lands** and say what it wrote as a toast (`programmer/writeToasts.ts`,
+amber where the desk skipped or warned; a refusal keeps the sheet open with its error inline), and
+the Record toasts add `describeSceneryWrite`'s notes (*1 scenery change*, *2 held pieces already shown there*). The action
 bar's **Record is enabled for a programmer holding only scenery** (`hasContent` counts it) — a Look of
 only the moon is the busk pad that flies it. Include needs nothing on this side: the desk loads the
 source's rows into the overlay and the band shows them. **Update's dirty count adds the desk's**
@@ -1257,9 +1259,9 @@ source's rows into the overlay and the band shows them. **Update's dirty count a
 read by `useIncludeBaseline`), because a client snapshot of the overlay at the include transition
 could land on either side of the overlay's Include — the two frames are unordered — and without it a
 moved tab after Include left Update disabled as *in sync*. `null` stays `null`: a tab that did not
-see the Include still claims nothing. `UpdateDialog`'s result line adds *, 1 scenery change* where one
+see the Include still claims nothing. `UpdateDialog`'s toast adds *, 1 scenery change* where one
 was written, so a scenery-only Update does not read as *0 values written* and nothing else; the
-Include sheet's result line counts `sceneryIncluded` the same way, Record's menu heading names held
+Include sheet's toast counts `sceneryIncluded` the same way, Record's menu heading names held
 scenery (`recordMenuLabel`), and a busk pad's face counts a Look's scenery (`padFace.ts`'s
 `describeLookContents`, *1 scenery*), so a scenery Look is never an *empty* pad. A Record or Update
 that wrote scenery invalidates every `Cue` entry, as `setCueScenery` does, since a row moves what
@@ -5153,7 +5155,9 @@ lists** since session 2: the right side is the Colour · Spread dock (§The dock
   the effects' count and a press to the FX tab after it.
 - **Scenery** (`applied/SceneryTable.tsx`, D6): every element, **Venue then Set** by name under
   divider rows, with the scenery filters as chips — *All* (their unfiltered state) · *Set* · *Venue*
-  · *Moving only*, one per-window store (`useSceneryFilters`, `sessionStorage` under
+  · *Moving only* · *Changed* (the Values grid's *Lit* for scenery: only what something on stage holds
+  off its base, judged by each listed piece's state against its base — the frame also lists pieces a
+  cue tracks back to their base), one per-window store (`useSceneryFilters`, `sessionStorage` under
   `programmer.scenery.filters`) — and a held piece listed whatever they say. **One scope reading**,
   `useSceneryScope` (`programmer/ProgrammerSceneryList.tsx`, shared with the Stage view's scenery
   popover): State, *Held by* and Kind are read-outs; a row's sliders (and ⏎) open its
