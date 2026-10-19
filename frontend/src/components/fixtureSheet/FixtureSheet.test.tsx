@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
@@ -53,6 +53,8 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
+const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
+vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
 vi.mock('./effectLabels', () => ({
   useEffectDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
@@ -136,6 +138,7 @@ function hold(entries: ProgrammerEntry[], provenance: ProvenanceEntry[]) {
 const row = (id: string) => document.querySelector(`[data-row="${id}"]`) as HTMLElement
 
 beforeEach(() => {
+  sheetColours.current = new Map()
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -416,6 +419,19 @@ describe('FixtureSheet — the shape', () => {
     expect(screen.queryByTestId('owner-editor')).toBeNull()
     expect(document.querySelector('[data-fx-tray]')?.getAttribute('data-open')).toBe('true')
     expect(document.querySelector('[data-effect-row="9"]')).not.toBeNull()
+  })
+
+  it('carries the fixture’s colour beside its name, and nothing without one (tables-colours plan D8)', () => {
+    sheetColours.current = new Map([[SPOT.key, 'red']])
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    const mark = document.querySelector<HTMLElement>('[data-sheet-colour]')
+    expect(mark?.dataset.sheetColour).toBe('red')
+    expect(mark?.className).toContain('fixture-tag-red')
+    expect(mark?.querySelector('[data-tag-mark]')).toHaveAttribute('aria-label', 'Colour: Red')
+    cleanup()
+    sheetColours.current = new Map()
+    render(<FixtureSheet fixture={SPOT} host="popup" />)
+    expect(document.querySelector('[data-sheet-colour]')).toBeNull()
   })
 
   it('has no Edit toggle', () => {

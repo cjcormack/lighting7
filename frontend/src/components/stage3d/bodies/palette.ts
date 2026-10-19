@@ -1,4 +1,5 @@
 import { Color, SRGBColorSpace } from 'three'
+import type { FixtureColour } from '../../../lib/fixtureColours'
 
 // Shared palette for fixture bodies. Pull tonal changes through here so a rig-wide nudge is one
 // edit.
@@ -17,6 +18,28 @@ export const HOUSING_ACTIVE_COLOR = '#4262d0'
 export const HOUSING_FILL = 0.225
 /** A selected housing's fill. One material draws every housing, so the difference rides the tint. */
 export const HOUSING_ACTIVE_FILL = 0.4
+
+/**
+ * A housing under *Bodies · By colour* (tables-colours plan D12): each key's dark `--tag-<key>` from
+ * `index.css` — the canvas is dark whatever the theme — pinned to it by `palette.test.ts`.
+ */
+export const TAG_HOUSING_COLORS: Readonly<Record<FixtureColour, string>> = {
+  red: '#f87171',
+  orange: '#fb923c',
+  yellow: '#facc15',
+  lime: '#a3e635',
+  green: '#4ade80',
+  cyan: '#67e8f9',
+  pink: '#f472b6',
+  brown: '#c08457',
+  white: '#e4e4e7',
+  grey: '#8b8b94',
+}
+/**
+ * How much of its colour a tinted housing reflects: low enough that the brightest key, white, is
+ * still dimmer than a selected housing's blue (`palette.test.ts`), so selection reads first.
+ */
+export const TAG_HOUSING_ALBEDO = 0.28
 
 const DARK_SRGB = new Color(BODY_LENS_COLOR).getRGB(new Color(), SRGBColorSpace)
 const HUE_SRGB = new Color()

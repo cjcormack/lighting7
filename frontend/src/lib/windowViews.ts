@@ -3,6 +3,7 @@ import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskW
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
 import { VIEW_OPTION_SOURCE, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
 import { VIEW_OPTION_WORK_LIGHTS, WORK_LIGHTS } from '../components/stage3d/scene/workLights'
+import { BODY_COLOURS, BODY_COLOURS_LABELS, VIEW_OPTION_BODIES } from '../components/stage3d/scene/bodyColours'
 import { PROGRAMMER_TABLES, PROGRAMMER_TABLE_LABELS, VIEW_OPTION_PROGRAMMER_TABLE } from './programmerTables'
 
 /**
@@ -35,7 +36,8 @@ export interface WindowView {
    * ride the announce as a free string map. Every live view carries [IMMERSIVE_OPTION]
    * (busk-chrome plan D9): immersive is a window's fact, but it rides *here* because a top-level
    * announce key would drop the frame, and it is drawn on the row as the view's Chrome segment.
-   * Stage carries [STAGE_VIEWPOINT_OPTION], [STAGE_SOURCE_OPTION] and [STAGE_WORK_LIGHTS_OPTION].
+   * Stage carries [STAGE_VIEWPOINT_OPTION], [STAGE_SOURCE_OPTION], [STAGE_WORK_LIGHTS_OPTION] and
+   * [STAGE_BODIES_OPTION].
    */
   options?: readonly WindowViewOption[]
   /**
@@ -174,6 +176,19 @@ export const STAGE_WORK_LIGHTS_OPTION: WindowViewOption = {
 }
 
 /**
+ * The Stage view's *Bodies · Plain | By colour* on the row (tables-colours plan D12): a second
+ * screen can tint its housings by colour while the hall screen keeps them plain. Applied through
+ * `lib/stageViewpoint.ts`'s `applyStageViewOptions`.
+ */
+export const STAGE_BODIES_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_BODIES,
+  label: 'Bodies',
+  kind: 'enum',
+  values: BODY_COLOURS,
+  valueLabels: BODY_COLOURS_LABELS,
+}
+
+/**
  * The Programmer's *Table · Values | Stack | FX | Scenery* (tables-colours plan D1): which of its
  * four tables a window on it shows. The target applies it through `lib/programmerTables.ts`'s
  * `applyProgrammerViewOptions` and the page mirrors it into `?table=`.
@@ -214,7 +229,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     label: 'Stage',
     segment: '/stage',
     needsRig: true,
-    options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION],
+    options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION, STAGE_BODIES_OPTION],
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'cues', label: 'Cues', segment: '/cues' },
@@ -223,7 +238,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
 
 /**
  * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
- * on the busk view, the viewpoint, the source and the work lights on the Stage view, the table on
+ * on the busk view, the viewpoint, the source, the work lights and the bodies on the Stage view, the table on
  * the Programmer, and
  * `immersive` under every live view; nothing at all — the key absent, not an empty map — for a view
  * that contributes none, so a window on a library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which

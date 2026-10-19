@@ -14,6 +14,7 @@ import { DESK_OFFLINE_LABEL } from "../api/wsGesture"
 import { useGetUniverseQuery } from "../store/universes"
 import { CHANNELS_VIEW_KEY, ChannelsViewSwitcher, setStoredCardsListView } from "../components/ViewSwitcher"
 import { DmxSheet } from "../components/channels/DmxSheet"
+import { useFixtureColourIndex } from "../hooks/useFixtureColourIndex"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 
 /**
@@ -58,6 +59,7 @@ export function ProjectChannelsTable() {
 
 function ChannelsTableContent({ projectId, projectName, universe }: { projectId: number; projectName: string; universe: number }) {
   const navigate = useNavigate()
+  const colours = useFixtureColourIndex(projectId)
   const connected = useIsDeskConnected()
   const { data: parkStateList } = useGetParkStateListQuery()
   const { data: releasedList } = useGetReleasedParkListQuery()
@@ -162,6 +164,7 @@ function ChannelsTableContent({ projectId, projectName, universe }: { projectId:
         parkValueMap={parkValueMap}
         parks={parks}
         released={released}
+        colours={colours}
       />
     </SheetPage>
   )

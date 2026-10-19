@@ -17,6 +17,8 @@ import { clearDeskSelection, setDeskSelection, toggleDeskSelection, useDeskSelec
 import { setStageViewpoint } from '../../lib/stageViewpoint'
 import type { CueTarget } from '../../api/cuesApi'
 import type { FixturePatch } from '../../api/patchApi'
+import { readColour, tagClass, type FixtureColour } from '../../lib/fixtureColours'
+import { TagMark } from '../fixtureColours/ColourSwatches'
 import {
   findColourSource,
   findDimmerProperty,
@@ -173,6 +175,7 @@ function PositionsPanelBody({ tab, onTabChange, groupFilter: storedFilter, onGro
               active={groupFilter === g.id}
               onClick={() => setGroupFilter(groupFilter === g.id ? null : g.id)}
             >
+              <ColourMark colour={readColour(g.colour)} className="mr-1.5" />
               {g.name}
               <span className="ml-1 font-mono text-[10px] opacity-70">{g.memberCount}</span>
             </ChipButton>
@@ -297,6 +300,7 @@ function Row({
               chip={chip}
               fixture={fixture}
               fixtureType={fixtureType}
+              colour={readColour(chip.patch.colour)}
               selected={isSelected(chip.patch)}
               dimmed={isDimmed(chip.patch)}
               onPress={onPress}
@@ -312,6 +316,7 @@ function UnitChip({
   chip,
   fixture,
   fixtureType,
+  colour,
   selected,
   dimmed,
   onPress,
@@ -319,6 +324,8 @@ function UnitChip({
   chip: PositionChip
   fixture: Fixture | undefined
   fixtureType: FixtureTypeInfo | undefined
+  /** The unit's colour (tables-colours plan D8), its swatch before the name; null for none. */
+  colour: FixtureColour | null
   selected: boolean
   dimmed: boolean
   onPress: (patch: FixturePatch, extend: boolean) => void
@@ -354,6 +361,7 @@ function UnitChip({
         {(appearance) => (
           <>
             <ChipLive appearance={hasLevel ? appearance : UNLIT} />
+            <ColourMark colour={colour} />
             <span className="max-w-[10rem] truncate">{chip.label}</span>
             {chip.count > 1 && <span className="font-mono text-[10px] text-muted-foreground">×{chip.count}</span>}
             {hasLevel && <ChipLevel intensity={appearance.intensity} />}
@@ -365,6 +373,19 @@ function UnitChip({
 }
 
 const UNLIT: FixtureAppearance = { color: '#000', intensity: 0 }
+
+/**
+ * Which fixture or group a chip is (D8, D9): the name mark's 10px square, beside the live swatch
+ * rather than in it — that one is what the light is doing, and the two never mix.
+ */
+function ColourMark({ colour, className }: { colour: FixtureColour | null; className?: string }) {
+  if (colour == null) return null
+  return (
+    <span data-chip-colour={colour} className={cn('flex shrink-0', tagClass(colour), className)}>
+      <TagMark colour={colour} />
+    </span>
+  )
+}
 
 /**
  * The swatch: the unit's colour at its level, dark at zero like the Stage view's lenses. A

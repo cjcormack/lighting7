@@ -89,6 +89,7 @@ import {
 } from '../components/stage3d/scene/sceneView'
 import { createStageStats } from '../components/stage3d/scene/stageStats'
 import { setWorkLights, useWorkLights } from '../components/stage3d/scene/workLights'
+import { setBodyColours, useBodyColours } from '../components/stage3d/scene/bodyColours'
 import type { SeatPicking } from '../components/stage3d/scene/StageSceneElements'
 import { isElementShown } from '../components/stage3d/scene/sceneParts'
 import { defaultOrbitPose } from '../components/stage3d/stageCameras'
@@ -286,6 +287,8 @@ export function Stage() {
   const boxShadows = useBoxShadows()
   // Work lights (stage-view menu plan D8): this window's, announced beside the source.
   const workLights = useWorkLights()
+  // Bodies · Plain | By colour (tables-colours plan D12): this window's, announced like work lights.
+  const bodies = useBodyColours()
   // What the canvas is doing, for the View popover's Performance tab. Never read here: a route that
   // re-rendered on it would hand the canvas new props and ask for the frames it measures.
   const [stageStats] = useState(createStageStats)
@@ -1380,6 +1383,8 @@ export function Stage() {
             setBoxShadows={setBoxShadows}
             workLights={workLights}
             setWorkLights={setWorkLights}
+            bodies={bodies}
+            setBodies={setBodyColours}
             stats={stageStats}
             frameRateReadout={frameRateReadout}
             setFrameRateReadout={setFrameRateReadout}
@@ -1426,6 +1431,7 @@ export function Stage() {
                 goboSurfaces={goboSurfaces}
                 boxShadows={boxShadows}
                 workLights={workLights}
+                bodies={bodies}
                 seatPicking={seatPicking}
                 planAim={planAimCanvas}
                 framingRef={framingRef}

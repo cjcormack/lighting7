@@ -14,6 +14,9 @@ import { findGel } from '@/lib/gels'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { ActiveEffect } from '@/store/fixtureFx'
 import type { ChannelRef } from '@/store/fixtures'
+import { useCurrentProjectQuery } from '@/store/projects'
+import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
+import { readColour } from '@/lib/fixtureColours'
 import { CannonPanel } from '../effects/CannonPanel'
 import { FixtureCommandsMenu } from '../fixtures/FixtureCommandsMenu'
 import { FixtureParkButton, ParkButton } from '../fixtures/FixtureParkButton'
@@ -538,10 +541,16 @@ function SheetChrome({
 }) {
   const held = useHeldOnTarget(target, effects)
   const release = useRelease(target)
+  const { data: project } = useCurrentProjectQuery()
+  const fixtureColours = useFixtureColourIndex(project?.id)
+  // D9: a group's own colour, never its members'.
+  const colour =
+    target.type === 'group' ? readColour(target.group.colour) : (fixtureColours.get(target.fixture.key) ?? null)
   return (
     <>
       <SheetHeader
         name={name}
+        colour={colour}
         model={model}
         views={views}
         view={view}

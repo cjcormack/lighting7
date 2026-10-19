@@ -156,6 +156,20 @@ describe('the View tab', () => {
     ).toBeInTheDocument()
   })
 
+  it('shows Bodies after the work lights, plain by default, announced, and sets them (tables-colours plan D12)', () => {
+    const props = setup({ workLights: 'off', setWorkLights: vi.fn(), bodies: 'plain', setBodies: vi.fn() })
+    open()
+    const regions = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    expect(regions.slice(-2)).toEqual(['Work lights', 'Bodies'])
+    const bodies = group('Bodies')
+    expect(within(bodies).getByText('this window')).toBeInTheDocument()
+    expect(within(bodies).getByText('Screens')).toBeInTheDocument()
+    expect(within(bodies).getAllByRole('radio').map((i) => i.textContent)).toEqual(['Plain', 'By colour'])
+    expect(within(bodies).getAllByRole('radio').filter(isOn).map((i) => i.textContent)).toEqual(['Plain'])
+    fireEvent.click(within(bodies).getByRole('radio', { name: 'By colour' }))
+    expect(props.setBodies).toHaveBeenCalledWith('colour')
+  })
+
   it('draws no Work lights group where the host has none to set', () => {
     setup({ workLights: undefined, setWorkLights: undefined })
     open()

@@ -11,6 +11,7 @@ import type {
 import { buildBindingIndex } from '@/lib/surfaceResolve'
 import { SurfacePanel } from './SurfacePanel'
 import { EMPTY_RECORD_OPTIONS } from './recordOptions'
+import type { TargetColours } from '@/lib/targetColours'
 
 /**
  * Each state in `midi-surface-design/Legend.dc.html`, produced the only way the panel will ever
@@ -131,6 +132,7 @@ function renderPanel({
   encoderBank = bank('colour'),
   pickups = {},
   selectedControlId = null as string | null,
+  colours = undefined as TargetColours | undefined,
 } = {}) {
   const onSelect = vi.fn()
   render(
@@ -147,6 +149,7 @@ function renderPanel({
       lifted={null}
       onRemoveBinding={() => {}}
       records={EMPTY_RECORD_OPTIONS}
+      colours={colours}
     />,
   )
   return onSelect
@@ -197,6 +200,43 @@ describe('SurfacePanel — what a control says it is', () => {
     })
     const label = within(cell('fader-1')).getByText('Gone.dimmer')
     expect(label.className).toContain('text-destructive')
+  })
+})
+
+describe('SurfacePanel — the target’s colour (tables-colours plan D8)', () => {
+  const colours: TargetColours = {
+    fixtures: new Map([['par-1', 'red'], ['bar.pixel-0', 'cyan']]),
+    groups: new Map([['Movers', 'lime']]),
+  }
+  const band = (controlId: string) => cell(controlId).querySelector<HTMLElement>('[data-target-band]')
+
+  it('bands the label in the colour of the fixture or group the control drives', () => {
+    renderPanel({
+      colours,
+      bindings: [
+        binding(9, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
+        binding(10, 'enc-9', { type: 'fixtureProperty', fixtureKey: 'bar.pixel-0', propertyName: 'colour' }),
+      ],
+    })
+    // The strip's fader and encoder are the group's — its own colour, never a member's.
+    expect(band('fader-1')?.dataset.targetBand).toBe('lime')
+    expect(band('fader-1')?.style.background).toBe('var(--tag-lime)')
+    expect(band('enc-1')?.dataset.targetBand).toBe('lime')
+    // A head takes its fixture's.
+    expect(band('enc-9')?.dataset.targetBand).toBe('cyan')
+  })
+
+  it('draws no band for a target with no colour, a target that names no fixture, or an unbound control', () => {
+    renderPanel({
+      colours,
+      bindings: [
+        binding(9, 'fader-1', { type: 'groupProperty', groupName: 'Front', propertyName: 'dimmer' }),
+        binding(10, 'enc-9', { type: 'blackout' }),
+      ],
+    })
+    expect(band('fader-1')).toBeNull()
+    expect(band('enc-9')).toBeNull()
+    expect(band('enc-1')).toBeNull()
   })
 })
 

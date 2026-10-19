@@ -120,6 +120,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-BUSK-SUMMARY-SPLIT`](#fu-busk-summary-split) | Trigger | Busk | the selection summary is missed in Split with the rows scrolled out of view |
 | [`FU-SELECTION-NAMED`](#fu-selection-named) | Trigger | Desk | a second operator works the desk from their own screen |
 | [`FU-SURFACE-SELECTION-FOLLOW-SET`](#fu-surface-selection-follow-set) | Trigger | MIDI | a desk button should take a named window off the desk selection, or put it back |
+| [`FU-SURFACE-SCRIBBLE-COLOUR`](#fu-surface-scribble-colour) | Trigger | MIDI | a surface with colour scribble strips is attached |
 | [`FU-SCRIPT-USED-BY`](#fu-script-used-by) | Trigger | FE | an operator needs to know which cues hook a script before editing or deleting it |
 | [`FU-STAGE-HAZE-FOLLOWS-HAZER`](#fu-stage-haze-follows-hazer) | Trigger | Stage | a rig can say which fixture is its hazer |
 | [`FU-LANTERN-LIBRARY-HALL`](#fu-lantern-library-hall) | Trigger | Stage | Chris answers which lanterns the Commemoration Hall owns (stage-view plan §11 Q4) |
@@ -970,6 +971,20 @@ window whose focus forces following (plan D2). Not built: the Screens sheet on a
 the touch-only case.
 
 **Trigger**: a desk button should take a named window off the desk selection, or put it back.
+
+### `FU-SURFACE-SCRIBBLE-COLOUR`
+
+**A real scribble strip does not take its target's colour** · Trigger · Tables-colours plan §5,
+2026-10-19
+
+The Surfaces view draws a band in the bound fixture's or group's colour across the label under each
+control (`TargetLabel`, `components/surfaces/targetColour.ts`). The hardware shows nothing: no profile
+declares a scribble strip, `ControlStateTracker` has no colour in its state and the feedback publisher
+sends none. Driving one means a profile field for the strip and its palette (the X-Touch's is eight
+colours, so the ten keys need a mapping), a colour in the control state resolved from the binding's
+target the way the view does, and a SysEx writer.
+
+**Trigger**: a surface with colour scribble strips is attached.
 
 ### `FU-SCRIPT-USED-BY`
 

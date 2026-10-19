@@ -54,6 +54,15 @@ vi.mock('@/store/fixtures', () => ({
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: patches }) }))
+// The colours the tiles are handed (`useTargetColours`), set per test; the store mocks above ignore
+// `selectFromResult`, so the real hook cannot read them.
+const tagColours = vi.hoisted(() => ({
+  current: { fixtures: new Map<string, string>(), groups: new Map<string, string>() },
+}))
+vi.mock('@/hooks/useTargetColours', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useTargetColours')>()),
+  useTargetColours: () => tagColours.current,
+}))
 // Release stops a selection effect it released whole through the REST delete; nothing here runs one.
 vi.mock('@/store/fixtureFx', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
@@ -250,6 +259,7 @@ beforeEach(() => {
     { id: 12, key: 'par-1', displayName: 'PAR 1', stageHidden: false, groups: [] },
   ]
   rigData = { rows: [] }
+  tagColours.current = { fixtures: new Map(), groups: new Map() }
   commit.mockClear()
 })
 
@@ -1348,5 +1358,46 @@ describe('Fixture sheet… on a rig tile (fixture-fx-sheets plan D21)', () => {
     expect(items).toEqual(['Group sheet…', 'Rename tile…', 'Remove from rig'])
     fireEvent.click(screen.getByRole('menuitem', { name: 'Group sheet…' }))
     expect(screen.getByTestId('fixture-sheet')).toHaveAttribute('data-target', 'group:Front wash')
+  })
+})
+
+describe('a tile’s colour (tables-colours plan D8, D9)', () => {
+  const bands = () =>
+    [...document.querySelectorAll<HTMLElement>('[data-rig-tile-id]')].map((el) => ({
+      name: el.querySelector('button')?.getAttribute('aria-label'),
+      band: el.querySelector('[data-rig-tile-band]')?.getAttribute('data-rig-tile-band') ?? null,
+    }))
+
+  it('draws a 4px band in the fixture’s colour, on every tile cut from it, and the group’s own on a group tile', () => {
+    // Bar L is red and a member of Front wash, which is lime: the group tile is lime, never red.
+    tagColours.current = {
+      fixtures: new Map([['bar-1', 'red'], ...barCells.map((c) => [c.key, 'red'] as [string, string])]),
+      groups: new Map([['Front wash', 'lime']]),
+    }
+    rigData = builtRig()
+    draw()
+    const drawn = bands()
+    expect(drawn.find((t) => t.name === 'Front wash')?.band).toBe('lime')
+    expect(drawn.filter((t) => t.name?.startsWith('Bar L')).map((t) => t.band)).toEqual(Array(8).fill('red'))
+    // PAR 1 has none, and draws no band.
+    expect(drawn.filter((t) => t.name === 'PAR 1').map((t) => t.band)).toEqual([null, null])
+    const band = document.querySelector<HTMLElement>('[data-rig-tile-band="red"]')!
+    expect(band.className).toContain('h-1')
+    expect(band.style.background).toBe('var(--tag-red)')
+  })
+
+  it('keeps the live bar at the bottom and the selection on the border and fill', () => {
+    tagColours.current = { fixtures: new Map([['par-1', 'red']]), groups: new Map() }
+    draw([{ type: 'fixture', key: 'par-1', fixture: parFixture }])
+    const tile = screen.getByRole('button', { name: 'PAR 1' }).closest<HTMLElement>('[data-rig-tile-id]')!
+    expect(tile.querySelector('[data-rig-tile-band]')).not.toBeNull()
+    expect(tile.querySelector('[data-rig-tile-bar]')?.className).toContain('bottom-px')
+    expect(screen.getByRole('button', { name: 'PAR 1' }).className).toContain('border-primary')
+  })
+
+  it('draws no band on a group with no colour of its own, whatever its members carry', () => {
+    tagColours.current = { fixtures: new Map([['bar-1', 'red']]), groups: new Map() }
+    draw()
+    expect(bands().find((t) => t.name === 'Front wash')?.band).toBeNull()
   })
 })

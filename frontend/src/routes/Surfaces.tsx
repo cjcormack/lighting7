@@ -43,6 +43,7 @@ import { targetKey } from "@/lib/targetKey"
 import { lightingApi } from "@/api/lightingApi"
 import { cn } from "@/lib/utils"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
+import { useTargetColours } from "@/hooks/useTargetColours"
 
 /**
  * Settings › Surfaces — a picture of the attached desk, and an inspector for whichever control
@@ -80,6 +81,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
   // (one CSS-hidden by breakpoint, not unmounted — see the layout below), and both want a
   // record's name where `describeTarget` can only give a uuid.
   const records = useRecordBindingOptions(projectId)
+  const colours = useTargetColours(projectId)
   // Edit mode is **local state**, deliberately not the busk view's Redux slice: that one exists
   // because the cue-slot overlay is a sibling of the routed page and could never read a context
   // provided inside it. Here the library and the picture are both inside this route, so a slice
@@ -313,6 +315,7 @@ export function SurfacesContent({ projectId }: { projectId: number }) {
                       lifted={lifted}
                       onRemoveBinding={removeBinding}
                       records={records}
+                      colours={colours}
                     />
                   </div>
                   <div className="md:hidden">

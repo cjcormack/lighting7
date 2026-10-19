@@ -70,7 +70,9 @@ import { EditorLabel } from '../editor/EditorLabel'
 import { NameField } from './NameField'
 import { RigEditProvider, useRigEdit } from './RigEditProvider'
 import { PAGE_MIN_HEIGHT_PX, RIG_MIN_HEIGHT_PX, RigHandle, clampRigHeight, lineEdges } from './RigHandle'
-import { RigDropSlot, RigTile, type TileLookup } from './RigTile'
+import { RigDropSlot, RigTile, tileColour, type TileLookup } from './RigTile'
+import { useTargetColours } from '@/hooks/useTargetColours'
+import type { TargetColours } from '@/lib/targetColours'
 import { BuskFixtureSheet, BuskFixtureSheetContext, type BuskSheetTarget } from './BuskFixtureSheet'
 import { BuskFamilyPill } from './BuskFamilyPill'
 import { buskReleaseTargets, summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
@@ -387,6 +389,8 @@ function RigBandBody({
   const { data: patches } = usePatchListQuery(projectId)
   const { fixtures, fixtureByKey, typeByKey } = useFixtureLookup()
   const placeFromHand = useHandPlace()
+
+  const colours = useTargetColours(projectId)
 
   const lookup = useMemo<TileLookup>(() => {
     const patchByKey = new Map(patches?.map((patch) => [patch.key, patch]) ?? [])
@@ -772,6 +776,7 @@ function RigBandBody({
                   compact={compact}
                   stacked={stackRows && focus === 'rig' && !editing}
                   lookup={lookup}
+                  colours={colours}
                   presenceOf={presenceOf}
                   wholeSelected={wholeSelected}
                   selectedCells={selectedCells}
@@ -1057,6 +1062,7 @@ function RigRow({
   compact,
   stacked,
   lookup,
+  colours,
   presenceOf,
   wholeSelected,
   selectedCells,
@@ -1077,6 +1083,8 @@ function RigRow({
   /** Rig focus below `md`: the tiles in a two-column grid that scrolls with the band, not a sideways row. */
   stacked: boolean
   lookup: TileLookup
+  /** The rig's colours, each tile's resolved to the key it is handed (`tileColour`). */
+  colours: TargetColours
   presenceOf: (tile: RenderTile) => EffectPresence
   wholeSelected: (tile: RenderTile) => boolean
   selectedCells: ReadonlySet<string>
@@ -1121,6 +1129,7 @@ function RigRow({
           at={inDocument ? at : null}
           stored={inDocument ? stored : null}
           presence={presenceOf(rendered)}
+          colour={tileColour(rendered, colours)}
           wholeSelected={wholeSelected(rendered)}
           selectedCells={selectedCells}
           editing={editing}

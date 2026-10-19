@@ -1429,6 +1429,26 @@ housing turns the desk's blue (`HOUSING_ACTIVE_COLOR`, its brighter fill folded 
 tint) and its label the same blue chip; there is no ring, no outline and no change to any beam, which
 always shows true output. Hover lights a body only while editing; in view mode it changes the cursor.
 
+**Bodies · By colour** (tables-colours plan D12, `scene/bodyColours.ts`) tints each housing in its
+fixture's colour: `TAG_HOUSING_COLORS` in `bodies/palette.ts`, each key's dark `--tag-<key>` (the
+canvas is dark in either theme; `palette.test.ts` reads `index.css` to pin them) at
+`TAG_HOUSING_ALBEDO`, lit by the surface shader like the plain housing. Selection outranks it: a
+selected body is the blue whatever its colour, and that albedo keeps every tint, white included,
+dimmer than the selected blue (`palette.test.ts`), so a selection still reads first. It is a window's view option, off by default,
+announced and set from a Screens row like the work lights, and a `render_view` capture draws plain.
+
+**Written on change, never per frame.** `FixtureModel` hands its slot a colour key (`setTag`, an
+effect on the key, so a patch refetch writes nothing), the selection as before (`setActive`), and
+`StageBodies` the option (`setByColour`, a layout effect, so a rebuilt handle has it before the
+bodies' own effects run). The handle keeps each slot's three inputs and the tint it last painted,
+and calls `setColorAt` only when they resolve to another tint: one write per housing instance on a
+recolour, every coloured slot once on a switch, none on an idle frame (`StageBodies.test.ts` counts
+them). The billboard glyphs take the tint through one more per-instance attribute beside `aActive`:
+`aTag`, 0 for none, else 1 + the colour's index into a `uTag[10]` uniform of the ten tints lit by
+`litByFill`, read in the vertex stage (where indexing a uniform array is always allowed) and rewritten
+with the work lights. **A fixture's label carries its colour's swatch** whether the bodies are plain
+or not: a span before the text, rewritten only when the colour or the text moves.
+
 ### The label layer
 
 Labels were a drei `<Html>` each — a React root and a `backdrop-blur` per label, sixty-odd over the

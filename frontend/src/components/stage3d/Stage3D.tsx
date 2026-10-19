@@ -21,6 +21,7 @@ import { useStageData } from './useStageData'
 import { MAX_BEAM_REGIONS, StageEmitters, computeRegionGeometry } from './StageEmitters'
 import { SurfaceLightingProvider, useSurfaceMaterial } from './scene/SurfaceLighting'
 import { DEFAULT_WORK_LIGHTS, type WorkLights } from './scene/workLights'
+import { DEFAULT_BODY_COLOURS, type BodyColours } from './scene/bodyColours'
 import { FINISH_LOBES, type PartFinish } from './scene/sceneParts'
 import { SCENE_ELEMENT_UUID, StageSceneElements, type SeatPicking } from './scene/StageSceneElements'
 import { SceneryPopover } from './SceneryPopover'
@@ -239,6 +240,11 @@ interface Stage3DProps {
    * the request's for a capture. Off by default — the room as lit.
    */
   workLights?: WorkLights
+  /**
+   * *Bodies · By colour* (`scene/bodyColours.ts`): each housing in its fixture's colour. The window's
+   * for the Stage view and the Positions plan; plain for a capture.
+   */
+  bodies?: BodyColours
   /** *Sit in a seat…* while it is armed: the seats take the pointer and answer a click. */
   seatPicking?: SeatPicking | null
   /**
@@ -297,6 +303,7 @@ export function Stage3D({
   goboSurfaces = DEFAULT_GOBO_SURFACES,
   boxShadows = DEFAULT_BOX_SHADOWS,
   workLights = DEFAULT_WORK_LIGHTS,
+  bodies = DEFAULT_BODY_COLOURS,
   seatPicking = null,
   planAim = null,
   framingRef,
@@ -835,7 +842,7 @@ export function Stage3D({
         />
       )}
       {view.fixtures && (
-        <StageBodies layout={bodyLayout}>
+        <StageBodies layout={bodyLayout} byColour={bodies === 'colour'}>
           {view.beamCones ? (
             <StageEmitters
               layout={emitterLayout}

@@ -1,5 +1,6 @@
 import { Vector3, type Camera, type Object3D, type OrthographicCamera } from 'three'
 import { sightBlocked, type Collider } from './scene/beamReach'
+import { colourVar, type FixtureColour } from '../../lib/fixtureColours'
 
 /**
  * The Stage view's labels: one DOM layer over the canvas, positioned once per frame and
@@ -9,7 +10,8 @@ import { sightBlocked, type Collider } from './scene/beamReach'
  * over a WebGL canvas, and one of the memory findings in the stage-view design record. Nothing
  * here is React: the scene registers an anchor (`useStageLabel`), this store owns one `<div>`
  * per label, and `layout` projects, decides and writes transforms. A label whose anchor is hidden
- * behind scenery — the colliders beams stop at — is not shown. See
+ * behind scenery — the colliders beams stop at — is not shown. A fixture's label always carries its
+ * colour's swatch (tables-colours plan D12), whatever the bodies show. See
  * `docs/stage-vis-engineering.md` §"The label layer".
  */
 
@@ -90,6 +92,10 @@ export function labelPriority(kind: StageLabelKind, emphasised: boolean): number
 
 const BASE_CLASS =
   'pointer-events-none absolute left-0 top-0 whitespace-nowrap rounded border px-1.5 py-px shadow-sm will-change-transform'
+/** The swatch before a coloured label's text (`Colours.dc.html` §C), an 8px square. */
+const SWATCH_CLASS = 'mr-1 inline-block size-2 rounded-[2px] align-[-0.5px]'
+/** The swatch's width and gap, for a label laid out before it can be measured. */
+const SWATCH_WIDTH = 12
 const KIND_CLASS: Record<StageLabelKind, string> = {
   position: 'font-mono text-[10px] font-semibold tracking-wider',
   fixture: 'text-[11px] font-medium',
@@ -99,10 +105,14 @@ const RESTING_CLASS: Record<StageLabelKind, string> = {
   position: 'border-amber-500/40 bg-background/85 text-amber-600 dark:text-amber-400',
   fixture: 'border-border/60 bg-background/85 text-foreground',
 }
-/** Selected or hovered: the prototype's blue chip, on the dark canvas whatever the theme. */
+/**
+ * Selected or hovered: the prototype's blue chip, on the dark canvas whatever the theme. The swatch
+ * takes a light ring there, since a light theme's dark grey or brown would vanish on the navy.
+ */
 const EMPHASISED_CLASS: Record<StageLabelKind, string> = {
   position: 'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-amber-400',
-  fixture: 'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-white',
+  fixture:
+    'border-primary bg-[oklch(0.3_0.09_260/0.9)] text-white [&_[data-label-swatch]]:shadow-[0_0_0_1px_rgb(255_255_255/0.6)]',
 }
 
 export interface StageLabelEntry {
@@ -111,6 +121,7 @@ export interface StageLabelEntry {
   kind: StageLabelKind
   text: string
   emphasised: boolean
+  colour: FixtureColour | null
   /** Measured box; 0 until the label has been laid out while visible in a sized container. */
   w: number
   h: number
@@ -228,7 +239,7 @@ export class StageLabelStore {
     this.invalidate()
   }
 
-  add(kind: StageLabelKind, text: string, emphasised: boolean): StageLabelEntry {
+  add(kind: StageLabelKind, text: string, emphasised: boolean, colour: FixtureColour | null = null): StageLabelEntry {
     const el = document.createElement('div')
     const entry: StageLabelEntry = {
       el,
@@ -236,13 +247,14 @@ export class StageLabelStore {
       kind,
       text,
       emphasised,
+      colour,
       w: 0,
       h: 0,
       lastX: NaN,
       lastY: NaN,
       shown: false,
     }
-    el.textContent = text
+    writeContent(entry)
     el.style.display = 'none'
     applyClass(entry)
     this.entries.push(entry)
@@ -251,11 +263,18 @@ export class StageLabelStore {
     return entry
   }
 
-  update(entry: StageLabelEntry, kind: StageLabelKind, text: string, emphasised: boolean): void {
+  update(
+    entry: StageLabelEntry,
+    kind: StageLabelKind,
+    text: string,
+    emphasised: boolean,
+    colour: FixtureColour | null = null,
+  ): void {
     let changed = false
-    if (entry.text !== text) {
+    if (entry.text !== text || entry.colour !== colour) {
       entry.text = text
-      entry.el.textContent = text
+      entry.colour = colour
+      writeContent(entry)
       entry.w = 0
       changed = true
     }
@@ -409,6 +428,17 @@ function hiddenFrom(eye: Vector3, view: Vector3, ortho: boolean, anchor: Vector3
   return sightBlocked(eye.x, eye.y, eye.z, dx / len, dy / len, dz / len, len, colliders, LABEL_CLEAR_M)
 }
 
+/** The label's text, after its colour's swatch when it has one. */
+function writeContent(e: StageLabelEntry): void {
+  e.el.textContent = e.text
+  if (e.colour == null) return
+  const swatch = document.createElement('span')
+  swatch.className = SWATCH_CLASS
+  swatch.style.background = colourVar(e.colour)
+  swatch.dataset.labelSwatch = e.colour
+  e.el.prepend(swatch)
+}
+
 function applyClass(e: StageLabelEntry): void {
   e.el.className = `${BASE_CLASS} ${KIND_CLASS[e.kind]} ${(e.emphasised ? EMPHASISED_CLASS : RESTING_CLASS)[e.kind]}`
 }
@@ -437,6 +467,6 @@ function measure(e: StageLabelEntry): void {
 
 /** A stand-in box for a label that could not be measured: ~6px a character at 11px. */
 function estimatedWidth(e: StageLabelEntry): number {
-  return e.text.length * 6 + 12
+  return e.text.length * 6 + 12 + (e.colour == null ? 0 : SWATCH_WIDTH)
 }
 const ESTIMATED_HEIGHT = 16
