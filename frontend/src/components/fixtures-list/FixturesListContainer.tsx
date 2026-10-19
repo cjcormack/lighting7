@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { labelUnlessCompact } from '@/lib/utils'
 import { FIXTURE_FILTER_HINT, FIXTURE_FILTER_PLACEHOLDER } from '@/lib/fixtureFilterCopy'
+import { filterTerms, hasColourTerm } from '@/lib/fixtureSearch'
+import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 import { Lightbulb, Search } from 'lucide-react'
 import { useVisibleFixtureListQuery } from '../../store/fixtures'
 import { useGroupListQuery } from '../../store/groups'
@@ -315,6 +317,9 @@ export function FixturesListContainer({
   )
 
   const litFixtureKeys = useLitFixtureKeys(onlyLit ? fixtures : EMPTY_FIXTURES)
+  const fixtureColours = useFixtureColourIndex(Number.isFinite(projectId) ? projectId : undefined)
+  // The rows read the colours only while a `colour:` term filters by them.
+  const filterColours = hasColourTerm(filterTerms(filter)) ? fixtureColours : undefined
 
   const rows = useMemo(
     () =>
@@ -326,8 +331,9 @@ export function FixturesListContainer({
         textFilter: filter,
         litFixtureKeys: onlyLit ? litFixtureKeys : undefined,
         groupByGroups: grouped,
+        fixtureColours: filterColours,
       }),
-    [fixtures, groups, expandedGroups, expandedFixtures, filter, onlyLit, litFixtureKeys, grouped],
+    [fixtures, groups, expandedGroups, expandedFixtures, filter, onlyLit, litFixtureKeys, grouped, filterColours],
   )
 
   // Dividers aren't selectable — they're excluded from the selection order so
@@ -1533,6 +1539,7 @@ export function FixturesListContainer({
           projectId={selectionScope === 'programmer' ? routeProjectId : undefined}
           onSpread={onSpreadFromColour}
           onShowInfo={handleShowInfo}
+          fixtureColours={fixtureColours}
           scrollToRowId={scrollToRowId}
           onScrolledToRow={() => setScrollToRowId(null)}
           revealCell={revealCell}

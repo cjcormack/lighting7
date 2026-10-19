@@ -151,6 +151,12 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
    * for one reason, and the reason is the column's to know.
    */
   skipNote?: (rows: readonly Row[]) => string
+  /**
+   * A character typed at the grid that commits a value **without opening the editor** — the patch
+   * list's Colour, whose 1–9 and 0 pick one of ten colours. Undefined for a key the editor should
+   * open on instead, as every column without this does.
+   */
+  typed?: (key: string) => unknown
   /** Clear these rows' cells. Absent means Clear is refused here, with [clearRefusal] as the reason. */
   clear?: (rows: readonly Row[]) => void
   clearRefusal?: string

@@ -43,6 +43,7 @@ import type { CueTarget } from '@/api/cuesApi'
 import { useCueRowStore, type CueRowStoreValue } from './CueRowStore'
 import { useCueValuesView, type CueValuesView } from './CueValuesView'
 import { CueEditorIsolation } from './editorIsolation'
+import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
 
 type CueCellRef = CellRef<ColumnKey>
 
@@ -128,6 +129,7 @@ function CueValuesGridBody({
     rowById,
   } = view
   const [pickerOpen, setPickerOpen] = useState(false)
+  const fixtureColours = useFixtureColourIndex(store.projectId)
   const visibleColumns = useMemo(() => {
     const taken = new Set<ColumnKey>()
     for (const row of rows) {
@@ -470,6 +472,7 @@ function CueValuesGridBody({
             batchFor={batchFor}
             scopeLabel={scopeLabel}
             onShowInfo={noop}
+            fixtureColours={fixtureColours}
             scrollToRowId={scrollToRowId}
             onScrolledToRow={() => setScrollToRowId(null)}
             revealCell={revealCell}

@@ -49,6 +49,7 @@ import {
   MIN_REFRESH_INTERVAL_MS,
 } from "../api/patchApi"
 import { parseNullableNumber } from "@/lib/utils"
+import { filterPatches } from "@/lib/patchFilter"
 import { CurrentProjectRedirect } from "@/components/CurrentProjectRedirect"
 import { Breadcrumbs } from "@/components/Breadcrumbs"
 import { SheetPage } from "@/components/sheet/SheetPage"
@@ -113,6 +114,7 @@ const CHIP_CLASS =
   'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors hover:bg-accent'
 
 const DEFAULT_COLUMNS: Record<PatchColumnKey, boolean> = {
+  colour: true,
   head: true,
   address: true,
   type: true,
@@ -375,9 +377,9 @@ function PatchListContent({
         <div className="relative min-w-0 max-w-[340px] flex-[999_1_0%]">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Filter…"
-            title="Filter by name, head number, key, type or address"
-            aria-label="Filter by name, head number, key, type or address"
+            placeholder="Filter… try colour:red"
+            title="Filter by name, head number, key, type or address, or by colour:red"
+            aria-label="Filter by name, head number, key, type, address or colour"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="h-8 pl-9"
@@ -449,6 +451,7 @@ function PatchListContent({
           rows={rows}
           allPatches={patches ?? []}
           riggings={riggings ?? []}
+          groups={patchGroups}
           lanterns={lanterns}
           visibleColumns={visibleColumns}
           onEditPatch={onEditPatch}
@@ -789,24 +792,6 @@ function UniverseChip({
 }
 
 // ─── Data transformation ──────────────────────────────────────────────
-
-/** The universe toggle and the text filter, over patches — the sheet's rows and the removed heads alike. */
-function filterPatches(
-  patches: readonly FixturePatch[],
-  universeFilter: 'all' | number,
-  filter: string,
-): FixturePatch[] {
-  const needle = filter.trim().toLowerCase()
-  return patches
-    .filter((p) => universeFilter === 'all' || p.universe === universeFilter)
-    .filter((p) => {
-      if (needle === '') return true
-      const address = `${p.universe}-${String(p.startChannel).padStart(3, '0')}`
-      const head = p.headNumber == null ? null : String(p.headNumber)
-      return [p.displayName, p.key, head, p.manufacturer, p.model, p.modeName, address]
-        .some((field) => field?.toLowerCase().includes(needle))
-    })
-}
 
 function buildPatchRows(
   patches: FixturePatch[] | undefined,

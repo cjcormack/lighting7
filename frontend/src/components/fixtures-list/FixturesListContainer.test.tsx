@@ -104,6 +104,7 @@ vi.mock('@/api/lightingApi', async () => {
 })
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() } }))
 vi.mock('./useLitFixtureKeys', () => ({ useLitFixtureKeys: () => new Set<string>() }))
+vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => new Map() }))
 vi.mock('./useDeskSelectionBridge', () => ({ useDeskSelectionBridge: () => {} }))
 // The plain lists' row C reads the press mask through the store; there is no Provider here, and
 // on these routes the answer is the marquee's own families anyway (they never bridge).

@@ -137,6 +137,7 @@ export default [
       "src/components/projectHome/useHomeCounts.ts",
       "src/components/surfaces/BindingTargetPicker.tsx",
       "src/components/surfaces/SurfaceInspector.tsx",
+      "src/hooks/useFixtureColourIndex.ts",
       "src/routes/Patches.tsx",
       "src/routes/Stage.tsx",
     ],

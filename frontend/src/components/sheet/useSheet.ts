@@ -327,6 +327,17 @@ export function useSheet<Row extends SheetRow, C extends string>({
     [cellSelection.cells, columnOrder, columns, rows, selectableOrder],
   )
   const requests = useCellEditorRequests<C>({ firstEditableCell: firstEditable, onScrollTo: setScrollToRowId })
+  const { openCellEditor } = requests
+  /** A typed character: the first selected cell's column commits it (`SheetColumn.typed`), or its editor opens. */
+  const openOrType = useCallback(
+    (seed: string) => {
+      const origin = seed === '' ? undefined : firstEditable()
+      const value = origin ? columnByKey.get(origin.col)?.typed?.(seed) : undefined
+      if (origin && value !== undefined) commitToCells(origin.col, value)
+      else openCellEditor(seed)
+    },
+    [columnByKey, commitToCells, firstEditable, openCellEditor],
+  )
   const setButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const clearSelectedCells = useCallback(() => {
@@ -421,7 +432,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     permission: effective,
     isCellSelected,
     onEscape: clearByLadder,
-    onOpen: requests.openCellEditor,
+    onOpen: openOrType,
     onClear: clearSelectedCells,
     onRefused,
     // The visible rows, not the selection's raw count: a selected id whose row has since gone (a

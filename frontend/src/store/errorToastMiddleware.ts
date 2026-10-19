@@ -37,6 +37,8 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // The rig's commit queue reports its own refusal **by code** (`rigWriteFailureMessage`) after
   // restoring the last confirmed rig; a second, generic toast from here would say less, twice.
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
+  // A refused colour (COLOUR_UNKNOWN from a desk that knows other keys) is toasted by the sheet by code.
+  'setPatchColours', // src/components/patches/PatchSheet.tsx
   // Update stage's confirm draws a refused dry run (CUE_NOT_LIVE: the cue went off) and toasts a refused send itself.
   'updateCueStage', // src/components/cues/UpdateStageDialog.tsx
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command

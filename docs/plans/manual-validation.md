@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back effect's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
@@ -490,6 +491,38 @@ a real sync pull leaving a tapped tempo alone mid-show.
    another master is free): the GO goes, M3 keeps
    following, and the row says it is skipped. Tap M2, then pull Sleeping Beauty from its repo with a
    change waiting: the show carries across and M2 keeps the tap.
+
+---
+
+## `FU-MANUAL-TABLES-COLOURS-S4`
+
+**What it proves**: *colour in the tables at the desk* — tables-colours S4: the patch list's Colour
+column sets a colour by key and popover, one request per marquee; the name mark reads on every list
+on a real desk; *Colour from group* copies a group's colour; and a show recolours a venue patch and
+takes the venue's back.
+
+**Why it is here**: the tests run the gestures in jsdom, and the browser check ran on an isolated
+desk in a pane. Only the desk's own screens, the iPad and a blacked-out room say whether ten swatches
+and a 16 % wash read at a glance, and whether cyan reads as a cue (the plan's §5).
+
+**Test**, on a show on TCH venue, live, on the desk's two screens and the iPad:
+
+1. **Keymap.** On the Patch list, marquee down the Colour column over six heads and press `1` … `9`
+   and `0` in turn: each lands on all six at once (one `PUT …/patches/placements` in the network
+   panel); ⌫ clears them. Double-click a cell and pick from the popover; on the iPad it opens as a
+   sheet and a tap picks.
+2. **The name mark.** Colour a group's heads, then look at the programmer, Fixtures › List,
+   Groups › List and the cue editor's Values grid on both screens and the iPad, in the dark room with
+   the house lights out and again in light: each row's name carries the swatch and wash, no value
+   cell takes the colour, and a selected row still reads selected first.
+3. **Colour from group.** Give a group a colour in *Edit Group*, select its heads with one of them
+   already coloured, press *Colour from group*: the rest take it and the toast names the one it left;
+   ⌥-press: that one takes it too.
+4. **A venue patch.** Press `6` on a venue head's Colour cell: it reads *Cyan · yours*, nothing is
+   refused, and the venue's own patch list keeps its colour. Open it and press *Take venue's*: the
+   venue's colour is back. The same through *Edit Group* on a venue group.
+5. **Selecting.** ⌘K, *select red*: the red heads are the desk selection on both screens; with ⌥ held
+   it reads *Add to selection* and adds them.
 
 ---
 

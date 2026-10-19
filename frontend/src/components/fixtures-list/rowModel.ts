@@ -10,6 +10,7 @@ import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../
 import { EMITTER_PROPERTIES, templatePropertyFor, type TemplateProperty } from '../../lib/templateIntent'
 import { spreadPropertiesFor } from '../../lib/spreadIntent'
 import { centreToDmx } from '../../lib/positionScale'
+import { readColour, splitColourTerms, type FixtureColour } from '../../lib/fixtureColours'
 
 /**
  * Stable row identity: `group:` and `fixture:` rows are top-level; `member:`
@@ -49,6 +50,8 @@ export type GroupRow = {
    *  then stands for the group itself, which [wholeGroupOf] reads. False where the desk sent no
    *  `memberKeys`, a filter hides a member, or the list leaves one out (an infrastructure head). */
   whole?: boolean
+  /** The group's own colour (tables-colours plan D9: never its members'). */
+  colour?: FixtureColour | null
 }
 
 export type FixtureRow = {
@@ -102,6 +105,23 @@ export interface BuildRowsOptions {
    *  member rows, no Ungrouped divider. Multi-head element expansion still
    *  applies. Default true. */
   groupByGroups?: boolean
+  /**
+   * Each fixture's colour by key, read by a `colour:` term in [textFilter] alone. Pass it only while
+   * the filter has one (`hasColourTerm`), so a recolour rebuilds the rows only when it can change
+   * which are shown.
+   */
+  fixtureColours?: ReadonlyMap<string, FixtureColour>
+}
+
+/**
+ * A row's colour: a group's own, else its fixture's — an element row is a head of its fixture and
+ * wears that fixture's. Read per row by the tables from one index (`useFixtureColourIndex`), so a
+ * recolour re-renders only the rows whose colour moved.
+ */
+export function rowColour(row: Row, fixtureColours: ReadonlyMap<string, FixtureColour>): FixtureColour | null {
+  if (row.kind === 'divider') return null
+  if (row.kind === 'group') return row.colour ?? null
+  return fixtureColours.get(row.fixture.key) ?? null
 }
 
 /**
@@ -111,17 +131,21 @@ export interface BuildRowsOptions {
  * the group's own order, when expanded), then an "Ungrouped" divider and every fixture that belongs to no
  * group. Membership comes from `fixture.groups` — no per-group properties
  * fetch. A group survives the filters if any member does; when expanded, only
- * surviving members are shown.
+ * surviving members are shown. A `colour:` term also keeps a group of that colour (its own, D9), its
+ * members then filtered by the other terms alone.
  */
 export function buildRows(opts: BuildRowsOptions): Row[] {
   const { fixtures, groups, expandedGroups, expandedFixtures, textFilter, litFixtureKeys } = opts
   const terms = filterTerms(textFilter)
 
   const visible = (fixture: Fixture): boolean => {
-    if (!fixtureMatchesTerms(fixture, terms)) return false
+    if (!fixtureMatchesTerms(fixture, terms, opts.fixtureColours?.get(fixture.key))) return false
     if (litFixtureKeys && !litFixtureKeys.has(fixture.key)) return false
     return true
   }
+  const { colours: colourTerms, rest: textTerms } = splitColourTerms(terms)
+  const visibleByText = (fixture: Fixture): boolean =>
+    fixtureMatchesTerms(fixture, textTerms) && (litFixtureKeys == null || litFixtureKeys.has(fixture.key))
 
   const rows: Row[] = []
 
@@ -170,11 +194,13 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
       .map((fixture, i) => ({ fixture, at: position.get(fixture.key) ?? position.size + i }))
       .sort((a, b) => a.at - b.at)
       .map(({ fixture }) => fixture)
-    const visibleMembers = members.filter(visible)
+    const colour = readColour(group.colour)
+    const colourMatch = colourTerms != null && colour != null && colourTerms.includes(colour)
+    const visibleMembers = members.filter(colourMatch ? visibleByText : visible)
     // A group is hidden only when filters excluded all its members; a group
     // that is genuinely empty still gets a row (it exists, and deep-links can
     // point at it).
-    if (members.length > 0 && visibleMembers.length === 0) continue
+    if (members.length > 0 && visibleMembers.length === 0 && !colourMatch) continue
     const isExpanded = expandedGroups.has(group.name)
     rows.push({
       kind: 'group',
@@ -183,6 +209,7 @@ export function buildRows(opts: BuildRowsOptions): Row[] {
       members: visibleMembers,
       isExpanded,
       whole: group.memberKeys != null && group.memberKeys.length > 0 && visibleMembers.length === group.memberKeys.length,
+      colour: colour ?? undefined,
     })
     if (isExpanded) {
       for (const member of visibleMembers) {
