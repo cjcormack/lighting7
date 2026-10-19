@@ -224,9 +224,9 @@ export function useSidePanelResize({
   /**
    * This panel's own floor, where the shared 260 is too narrow for its chrome. The **header** is
    * usually what sets it, not the body: the dock's is two tabs, Colour · Spread, and fits at
-   * 240, where the sheet's is three labelled tabs plus the mode toggle and the fold chevron and
-   * needs 304. Measure it rather than guessing, and leave slack — a minimum sitting on the exact
-   * fit clips the moment anything is added to the row.
+   * 240, where the sheet's is eight glyph tabs (only the open one's word, from 380px) plus the
+   * mode toggle and the fold chevron, held at 320. Measure it rather than guessing, and leave
+   * slack — a minimum sitting on the exact fit clips the moment anything is added to the row.
    */
   min?: number
 }): SidePanelResize {
