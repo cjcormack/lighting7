@@ -12,7 +12,7 @@ ChamSys-style colours for fixtures, which also reach the patch list and other vi
 responsiveness.
 
 **Status: calls decided 2026-10-18** (Chris answered all nine as recommended). The implementation
-plan is [`../tables-colours-plan.md`](../tables-colours-plan.md). The live copy is at
+plan is [`../completed/tables-colours-plan.md`](../completed/tables-colours-plan.md). The live copy is at
 <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi>, private to Chris; the files here are the
 authority. Where a board and the plan disagree, the plan wins on behaviour and the boards on layout
 and copy.
