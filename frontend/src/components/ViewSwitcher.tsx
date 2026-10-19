@@ -2,11 +2,8 @@ import { type ReactNode } from 'react'
 import {
   AudioWaveform,
   BookOpenText,
-  Layers,
   LayoutGrid,
-  Palette,
   SlidersVertical,
-  Sparkles,
   TableProperties,
   Theater,
 } from 'lucide-react'
@@ -14,7 +11,6 @@ import { Link } from 'react-router'
 import { cn } from '@/lib/utils'
 import { parseFamilySlug, type AttributeFamily } from '@/lib/attributeFamily'
 import { useShowViewPath } from '@/lib/showPosition'
-import { APPLIED_TABLES, APPLIED_TABLE_TABS, appliedTablePath, type AppliedTable } from '@/lib/appliedTables'
 
 export type ShowView = 'programmer' | 'show' | 'prompt-book' | 'busk'
 
@@ -311,34 +307,6 @@ export function ShowStackViewSwitcher({
   )
 }
 
-const APPLIED_TABLE_ICONS: Readonly<Record<AppliedTable, ReactNode>> = {
-  fx: <Sparkles className="size-3.5" />,
-  looks: <Layers className="size-3.5" />,
-  palettes: <Palette className="size-3.5" />,
-}
-
-/**
- * FX · Looks · Palettes on the applied tables' header (venue-visit plan S14) — one route, a tab
- * per table, so a switch replaces rather than pushes, as a busk page's tab does. Each tab lands on
- * that table's remembered view.
- */
-export function AppliedTableSwitcher({ current, projectId }: { current: AppliedTable; projectId: number }) {
-  return (
-    <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5" aria-label="Applied tables">
-      {APPLIED_TABLES.map((table) => (
-        <Segment
-          key={table}
-          active={table === current}
-          to={appliedTablePath(projectId, table)}
-          icon={APPLIED_TABLE_ICONS[table]}
-          label={APPLIED_TABLE_TABS[table]}
-          replace
-        />
-      ))}
-    </nav>
-  )
-}
-
 /**
  * localStorage key remembering which attribute family the **template** library was last filtered to,
  * so the sidebar's single "Templates" row lands where you left it.
@@ -393,7 +361,6 @@ function Segment({
   label,
   state,
   onClick,
-  replace,
   labelClass = LABEL_AT_560,
 }: {
   active: boolean
@@ -402,8 +369,6 @@ function Segment({
   label: string
   state?: unknown
   onClick?: () => void
-  /** A switch that is not a history entry — the applied tables' tabs. */
-  replace?: boolean
   labelClass?: string
 }) {
   if (active) {
@@ -418,7 +383,6 @@ function Segment({
     <Link
       to={to}
       state={state}
-      replace={replace}
       aria-label={label}
       onClick={onClick}
       className={cn(ITEM, 'text-muted-foreground hover:text-foreground')}

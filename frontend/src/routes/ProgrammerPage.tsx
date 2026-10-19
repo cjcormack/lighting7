@@ -18,6 +18,8 @@ import {
 } from '@/components/programmer/ProgrammerSheets'
 import { ProgrammerSourceStrip } from '@/components/programmer/ProgrammerSourceStrip'
 import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace'
+import { ProgrammerTables } from '@/components/programmer/ProgrammerTables'
+import { useValuesTableShown } from '@/lib/programmerTables'
 import { useInclude } from '@/components/programmer/useInclude'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -50,14 +52,14 @@ export function ProgrammerRedirect() {
 }
 
 /**
- * `/programmer/fx` → `/programmer`.
+ * `/programmer/fx` → the programmer's FX tab.
  *
- * FX was a route of its own when the FX sheet was a destination, then a tab, and is now a band of
- * the page that is always on screen. Kept only so a bookmark lands.
+ * FX was a route of its own when the FX sheet was a destination, then a band of the rail, and is a
+ * tab of the page again (tables-colours plan D1). Kept only so a bookmark lands.
  */
 export function ProgrammerFxRedirect() {
   const { projectId } = useParams()
-  return <Navigate to={projectId ? `/projects/${projectId}/programmer` : '/programmer'} replace />
+  return <Navigate to={projectId ? `/projects/${projectId}/programmer?table=fx` : '/programmer'} replace />
 }
 
 /**
@@ -81,7 +83,14 @@ export function ProgrammerFxRedirect() {
  */
 export function ProgrammerPage() {
   const { projectId } = useParams()
-  const projectIdNum = Number(projectId)
+  return <ProgrammerView projectIdNum={Number(projectId)} />
+}
+
+/**
+ * The page under its route, memoised on the project: the address changes with every table tab and
+ * table filter (`?table=`, `?q=`), and only the route's own hook should hear that.
+ */
+const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectIdNum: number }) {
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
   // Only `showHeaderProps` is read: this page draws no `ShowBar` (see the note beside the header
   // below). The hook is still the right source for the header's Start/Stop — the same derivation
@@ -177,7 +186,7 @@ export function ProgrammerPage() {
       </ProgrammerSheetsProvider>
     </MarqueeStoreContext.Provider>
   )
-}
+})
 
 /**
  * Split from `ProgrammerPage` only so it sits *inside* `ProgrammerSheetsProvider` and can call
@@ -210,6 +219,10 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // `ProgrammerWorkspace`/`ProgrammerGrid` elements keep their slots either way, so the grid
   // re-renders and never remounts — the rule `ProgrammerPage.test.tsx` gates on.
   const shortViewport = useMediaQuery(SHORT_VIEWPORT)
+  // Row A folds into row B only while row B is the grid's: the other three tables have a row B of
+  // their own and the grid's is hidden under them, so there row A keeps its row. Read only while
+  // short, so a tab switch at an ordinary height never re-renders this barrier.
+  const rowAInRowB = useValuesTableShown(shortViewport) && shortViewport
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
   // in that order are what the operator means: throw away the busk, load the cue again.
@@ -251,7 +264,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
       <span
         className={cn(
           'h-[22px] w-px shrink-0 self-center bg-border',
-          !shortViewport && 'ml-auto',
+          !rowAInRowB && 'ml-auto',
         )}
       />
       <ProgrammerActionBar projectId={projectId} />
@@ -299,19 +312,24 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
                 // The shell's chrome row, with the one ground any row has: row A keeps its
                 // `bg-card/50` wash by decision (list-shell-design, called 2026-09-15) — the
                 // verbs' own band.
-                shortViewport ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
+                rowAInRowB ? null : <SheetPage.Row className="@container bg-card/50">{rowA}</SheetPage.Row>
               }
               grid={
-                <ProgrammerGrid
+                <ProgrammerTables
                   projectId={projectId}
-                  grouped={grouped}
-                  onGroupedChange={setGrouped}
-                  columnVisibility={columnVisibility}
-                  onColumnVisibilityChange={setColumnVisibility}
-                  leading={shortViewport ? rowA : null}
+                  values={
+                    <ProgrammerGrid
+                      projectId={projectId}
+                      grouped={grouped}
+                      onGroupedChange={setGrouped}
+                      columnVisibility={columnVisibility}
+                      onColumnVisibilityChange={setColumnVisibility}
+                      leading={rowAInRowB ? rowA : null}
+                    />
+                  }
                 />
               }
-              rail={<ProgrammerRail />}
+              rail={<ProgrammerRail projectId={projectId} />}
             />
           </EditorContextProvider>
         </FocusedTemplateLayerProvider>

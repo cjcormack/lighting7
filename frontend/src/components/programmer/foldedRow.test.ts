@@ -94,10 +94,11 @@ describe("the folded row's layout contract", () => {
     //
     // The folded arm keeps a plain `flex-1` — it shares the slack with the leading block by
     // design — where the unfolded arm is `flex-[999_1_0%]` so the field takes the slack before
-    // the row's spacer does, and has its field from `@[360px]` (the chrome tidy-up).
+    // the row's spacer does, and has its field from `@[600px]` (the chrome tidy-up's 360, moved
+    // when the table tabs led the row — tables-colours plan D1).
     expect(programmerGridSrc).toContain("'flex-1 @[840px]:flex @[840px]:min-w-[132px]'")
-    expect(programmerGridSrc).toContain("'max-w-[340px] flex-[999_1_0%] @[360px]:flex'")
-    expect(programmerGridSrc).toContain("leading ? '@[840px]:hidden' : '@[360px]:hidden'")
+    expect(programmerGridSrc).toContain("'max-w-[340px] flex-[999_1_0%] @[600px]:flex'")
+    expect(programmerGridSrc).toContain("leading ? '@[840px]:hidden' : '@[600px]:hidden'")
   })
 
   it('keeps the `Groups` word off the folded row', () => {

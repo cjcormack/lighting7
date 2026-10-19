@@ -5,7 +5,7 @@ import { describe, it, expect, vi } from "vitest"
 import { Box } from "lucide-react"
 import {
   navItems,
-  appliedTableNavItems,
+  programmerTableNavItems,
   templateFamilyNavItems,
   filterNavItems,
   commandLabelOf,
@@ -51,10 +51,9 @@ describe("filterNavItems", () => {
   })
 })
 
-/** The views D4 talks about — nine, and S14's applied tables: each reads or drives the live show. */
+/** The views D4 talks about — nine: each reads or drives the live show. */
 const NEEDS_RIG = [
   "programmer",
-  "programmer-applied",
   "program",
   "prompt-book",
   "fx",
@@ -66,13 +65,13 @@ const NEEDS_RIG = [
 ]
 
 describe("off the rig (navigation plan D4)", () => {
-  it("is exactly the ten views, each with the sentence NotOnRig says", () => {
+  it("is exactly the nine views, each with the sentence NotOnRig says", () => {
     const needsRig = navItems.filter((i) => i.needsRig != null)
     expect(needsRig.map((i) => i.id).sort()).toEqual([...NEEDS_RIG].sort())
     for (const item of needsRig) expect(item.needsRig).toMatch(/rig that's live/)
   })
 
-  it("keeps every row on a project that is not current, and dots the ten", () => {
+  it("keeps every row on a project that is not current, and dots the nine", () => {
     const off = filterNavItems(navItems, false, true)
     expect(off.map((i) => i.id)).toEqual(filterNavItems(navItems, true, true).map((i) => i.id))
     expect(off.filter((i) => i.offRig).map((i) => i.id).sort()).toEqual([...NEEDS_RIG].sort())
@@ -84,7 +83,7 @@ describe("off the rig (navigation plan D4)", () => {
 
   it("dots a venue's rail the same way, less the views a venue never has", () => {
     const off = filterNavItems(navItems, false, true, true).filter((i) => i.offRig).map((i) => i.id)
-    expect(off.sort()).toEqual(["channels", "fixtures", "groups", "programmer", "programmer-applied", "stage-view", "surfaces"])
+    expect(off.sort()).toEqual(["channels", "fixtures", "groups", "programmer", "stage-view", "surfaces"])
   })
 })
 
@@ -140,9 +139,8 @@ describe("sections", () => {
   // out here. Stage follows them: a view used both building and running a show.
   it("starts Run with the four live views in ViewSwitcher order, then Stage", () => {
     // Historic ids: `program` is Show, `fx` is Busk. Both are deliberately stable handles. The
-    // applied tables are the Programmer row's child (venue-visit plan S14, K3).
-    expect(idsIn("run")).toEqual(["programmer", "programmer-applied", "program", "prompt-book", "fx", "stage-view"])
-    expect(navItems.find((i) => i.id === "programmer-applied")?.parent).toBe("programmer")
+    // applied tables are the Programmer's tabs, not a row (tables-colours plan D1).
+    expect(idsIn("run")).toEqual(["programmer", "program", "prompt-book", "fx", "stage-view"])
   })
 
   it("puts the rig in one section, Regions and Rigging included", () => {
@@ -196,7 +194,6 @@ describe("venue mode's rail", () => {
     expect([...sections]).toEqual(["run", "rig", "project", "desk"])
     expect(filterNavItems(navItems, true, true, true).filter((i) => i.section === "run").map((i) => i.id)).toEqual([
       "programmer",
-      "programmer-applied",
       "stage-view",
     ])
   })
@@ -429,11 +426,11 @@ describe("window commands", () => {
     const labels = commands.map((c) => c.label)
     expect(labels.slice(0, 2)).toEqual(["Go full screen", "Screens…"])
     expect(labels.at(-1)).toBe("Stop following the desk selection in this window")
-    // Nine views × two other windows (the iPad on an install route takes the viewed project),
+    // Eight views × two other windows (the iPad on an install route takes the viewed project),
     // plus the focus arm on each Busk show and the immersive arm on each live-view show.
     const shows = commands.filter((c) => c.id.startsWith("window-show-") && !/-busk-(split|pads|rig)$/.test(c.id) && !/-immersive$/.test(c.id))
-    expect(shows).toHaveLength(18)
-    expect(shows.map((c) => c.label)).toContain("Show Applied on Screen 2")
+    expect(shows).toHaveLength(16)
+    expect(shows.map((c) => c.label)).toContain("Show Programmer on Screen 2")
     expect(shows.map((c) => c.label)).toContain("Show Busk on Screen 2")
     // The Stage view (a hall screen on a viewpoint) is a view like any other, with no immersive arm.
     expect(shows.map((c) => c.label)).toContain("Show Stage on Screen 2")
@@ -463,29 +460,28 @@ describe("window commands", () => {
     commands.find((c) => c.id === "window-show-s-2-busk")!.run()
     commands.find((c) => c.id === "window-show-s-2-stage")!.run()
     commands.find((c) => c.id === "window-show-s-2-looks")!.run()
-    commands.find((c) => c.id === "window-show-s-2-applied")!.run()
+    commands.find((c) => c.id === "window-show-s-2-programmer")!.run()
     commands.find((c) => c.id === "window-open-programmer")!.run()
     expect(inputs.actions.show).toHaveBeenNthCalledWith(1, "s-2", "/projects/9/busk")
     expect(inputs.actions.show).toHaveBeenNthCalledWith(2, "s-2", "/projects/9/stage")
     // A library is stored data: it stays on the window's own project.
     expect(inputs.actions.show).toHaveBeenNthCalledWith(3, "s-2", "/projects/4/looks")
-    // The applied tables read the live programmer (venue-visit plan S14).
-    expect(inputs.actions.show).toHaveBeenNthCalledWith(4, "s-2", "/projects/9/programmer/applied")
+    expect(inputs.actions.show).toHaveBeenNthCalledWith(4, "s-2", "/projects/9/programmer")
     expect(inputs.actions.openOnDisplay).toHaveBeenCalledWith("/projects/9/programmer")
   })
 
-  it("offers ⌘K the three applied tables as `?table=` on the one route, each needing the rig (S14)", () => {
-    expect(appliedTableNavItems.map((i) => [i.label, i.path(42)])).toEqual([
-      ["Applied FX", "/projects/42/programmer/applied?table=fx"],
-      ["Applied Looks", "/projects/42/programmer/applied?table=looks"],
-      ["Applied Palettes", "/projects/42/programmer/applied?table=palettes"],
+  it("offers ⌘K the Programmer's FX, Stack and Scenery tables as `?table=` on its route, each needing the rig (tables-colours plan D1)", () => {
+    expect(programmerTableNavItems.map((i) => [i.label, i.path(42)])).toEqual([
+      ["Programmer › FX", "/projects/42/programmer?table=fx"],
+      ["Programmer › Stack", "/projects/42/programmer?table=stack"],
+      ["Programmer › Scenery", "/projects/42/programmer?table=scenery"],
     ])
-    for (const item of appliedTableNavItems) {
-      expect(item.pathMatch).toBe("/programmer/applied")
-      expect(item.needsRig).toBe(navItems.find((i) => i.id === "programmer-applied")!.needsRig)
+    for (const item of programmerTableNavItems) {
+      expect(item.pathMatch).toBe("/programmer")
+      expect(item.needsRig).toBe(navItems.find((i) => i.id === "programmer")!.needsRig)
     }
     // A venue keeps them, as it keeps the Programmer.
-    expect(filterNavItems(appliedTableNavItems, true, true, true)).toHaveLength(3)
+    expect(filterNavItems(programmerTableNavItems, true, true, true)).toHaveLength(3)
   })
 
   it("marks exactly the window views whose nav row needs the rig", () => {
@@ -519,7 +515,6 @@ describe("window commands", () => {
       "Open Prompt Book on another display",
       "Open Busk on another display",
       "Open Stage on another display",
-      "Open Applied on another display",
       "Open Looks on another display",
       "Open Cues on another display",
       "Open Palettes on another display",

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -23,6 +23,7 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
   // itself is the real one: the assertions below are about which scope the page is in, and a
   // second fake would only pin the fake.
   const { ProgrammerScopeBand } = await import('@/components/programmer/ProgrammerScopeBand')
+  const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
   return {
     ProgrammerGrid: ({
       grouped,
@@ -41,6 +42,7 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
           {/* Row A's two halves, in the short-height arm. The stand-in has to render them or the
               fold is invisible to this suite while being a real change of place in the page. */}
           {leading}
+          <ProgrammerTableTabs />
           <ProgrammerScopeBand />
           <button
             type="button"
@@ -91,6 +93,20 @@ vi.mock('@/components/programmer/RailSceneryBand', async () => {
   }
 })
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
+// The three tables have their suite (`AppliedTables.test.tsx`); here each is its own row B's tabs
+// and a landmark, mounted on demand beside the one grid.
+vi.mock('@/components/applied/StackTable', async () => {
+  const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
+  return { StackTable: () => <div data-testid="stack-table"><ProgrammerTableTabs /></div> }
+})
+vi.mock('@/components/applied/AppliedFxTable', async () => {
+  const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
+  return { AppliedFxTable: () => <div data-testid="fx-table"><ProgrammerTableTabs /></div> }
+})
+vi.mock('@/components/applied/SceneryTable', async () => {
+  const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
+  return { SceneryTable: () => <div data-testid="scenery-table"><ProgrammerTableTabs /></div> }
+})
 const sceneryHeld = vi.hoisted(() => ({ count: 0 }))
 vi.mock('@/components/press/ApplyPicker', () => ({ ApplyPicker: () => null }))
 vi.mock('@/hooks/usePress', async (importOriginal) => ({
@@ -161,6 +177,7 @@ vi.mock('@/store/fixtures', () => ({
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { ProgrammerPage } from './ProgrammerPage'
+import { resetProgrammerTableStore } from '@/lib/programmerTables'
 
 /**
  * jsdom has no `matchMedia`, and `ProgrammerBody` asks it whether the viewport is short enough to
@@ -175,6 +192,8 @@ const mediaListeners = new Set<(event: MediaQueryListEvent) => void>()
 beforeEach(() => {
   shortViewport = false
   mediaListeners.clear()
+  sessionStorage.clear()
+  resetProgrammerTableStore()
   vi.stubGlobal('matchMedia', (query: string) => ({
     get matches() {
       return query === '(max-height: 500px)' ? shortViewport : false
@@ -205,14 +224,27 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
-function draw() {
+function Where() {
+  const { pathname, search } = useLocation()
+  return <div data-testid="where">{pathname + search}</div>
+}
+
+function draw(path = '/projects/1/programmer') {
   return render(
-    <MemoryRouter initialEntries={['/projects/1/programmer']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/projects/:projectId/programmer" element={<ProgrammerPage />} />
       </Routes>
+      <Where />
     </MemoryRouter>,
   )
+}
+
+/** The visible row B's tab for [table]. Every table draws the tabs; only the shown one counts. */
+function tableTab(name: RegExp) {
+  const lists = screen.getAllByRole('tablist', { name: 'Programmer tables' }).filter((list) => list.closest('[inert]') == null)
+  expect(lists).toHaveLength(1)
+  return within(lists[0]).getByRole('tab', { name })
 }
 
 describe('ProgrammerPage', () => {
@@ -244,21 +276,77 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('header')).toBeTruthy()
   })
 
-  it('puts no tab between values, layers and effects — the one strip is the rail header, resting on Stack', () => {
-    // The three are readings of ONE live object. A switcher between them is the thing this view
-    // exists to delete. Editor-kit session 4 gave the *rail* a tab strip — Stack · Colour · Spread —
-    // and Stack is the layers and the effects together, beside the grid, as they always were: the
-    // strip adds two docked editors, it separates none of the three readings. Every arrival rests
-    // on Stack (call 10), so all three are on screen on arrival.
+  it('rests on Values, with the rail as it was beside it — values, layers and effects on screen at once', () => {
+    // Tables-colours plan D1 gives row B the tables — Values · Stack · FX · Scenery — and session 1
+    // leaves the rail exactly as it was, so for one session both homes exist: the rail's strip
+    // still rests on Stack (call 10), and the layers and effects are still beside the grid.
     draw()
-    const tablists = screen.getAllByRole('tablist')
-    expect(tablists).toHaveLength(1)
-    expect(tablists[0].getAttribute('aria-label')).toBe('Rail')
-    expect(screen.getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))).toEqual(['Stack', 'Colour', 'Spread'])
-    expect(screen.getByRole('tab', { name: 'Stack' }).getAttribute('aria-selected')).toBe('true')
+    expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables', 'Rail'])
+    expect(tableTab(/^Values/).getAttribute('aria-selected')).toBe('true')
+    const rail = screen.getByRole('tablist', { name: 'Rail' })
+    expect(within(rail).getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))).toEqual(['Stack', 'Colour', 'Spread'])
+    expect(within(rail).getByRole('tab', { name: 'Stack' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('grid')).toBeTruthy()
     expect(screen.getByTestId('layers')).toBeTruthy()
     expect(screen.getByTestId('fx')).toBeTruthy()
+  })
+
+  it('mounts the value grid exactly once across a tab switch, hidden and inert under the other tables', () => {
+    // The load-bearing rule for the tabs: `useListSelection` clears the scoped selection on
+    // unmount, so the grid stays mounted under Stack, FX and Scenery, which mount on demand.
+    draw()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+    const values = () => screen.getByTestId('grid').closest('[data-programmer-table="values"]')!
+
+    for (const [tab, testId, table] of [
+      [/^Stack/, 'stack-table', 'stack'],
+      [/^FX/, 'fx-table', 'fx'],
+      [/^Scenery/, 'scenery-table', 'scenery'],
+    ] as const) {
+      fireEvent.click(tableTab(tab))
+      expect(screen.getByTestId(testId)).toBeTruthy()
+      expect(screen.getByTestId('where').textContent).toBe(`/projects/1/programmer?table=${table}`)
+      expect(values()).toHaveAttribute('inert')
+      expect(values()).toHaveClass('hidden')
+      expect(gridMounts).toHaveBeenCalledTimes(1)
+    }
+
+    fireEvent.click(tableTab(/^Values/))
+    expect(screen.queryByTestId('scenery-table')).toBeNull()
+    expect(values()).not.toHaveAttribute('inert')
+    expect(values()).not.toHaveClass('hidden')
+    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer?table=values')
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves between the tables from the keyboard, one tab stop, focus following the table', async () => {
+    draw()
+    const values = tableTab(/^Values/)
+    expect(values).toHaveAttribute('tabindex', '0')
+    expect(tableTab(/^Stack/)).toHaveAttribute('tabindex', '-1')
+    expect(values).toHaveAttribute('aria-controls', 'programmer-table-values')
+    expect(document.getElementById('programmer-table-values')).toHaveAttribute('role', 'tabpanel')
+
+    values.focus()
+    fireEvent.keyDown(values, { key: 'ArrowRight' })
+    expect(screen.getByTestId('stack-table')).toBeTruthy()
+    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer?table=stack')
+    await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
+    // jsdom lays nothing out, so the segment's tabs read as folded and the menu button takes focus.
+    expect(document.activeElement?.closest('#programmer-table-stack')).not.toBeNull()
+
+    fireEvent.keyDown(tableTab(/^Stack/), { key: 'End' })
+    expect(screen.getByTestId('scenery-table')).toBeTruthy()
+    fireEvent.keyDown(tableTab(/^Scenery/), { key: 'ArrowRight' })
+    expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer?table=values')
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('opens on the table the address names', () => {
+    draw('/projects/1/programmer?table=fx')
+    expect(screen.getByTestId('fx-table')).toBeTruthy()
+    expect(tableTab(/^FX/).getAttribute('aria-selected')).toBe('true')
+    expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
   it('mounts the value grid exactly once across a rail tab change', () => {
@@ -416,6 +504,22 @@ describe('ProgrammerPage', () => {
 
     setShortViewport(false)
     expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(false)
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps row A on a row of its own under another table, folded or not', () => {
+    // Row A folds into the grid's row B, and the grid's row B is hidden under the other tables —
+    // so there it keeps its own row, and the source box and verbs never leave the page.
+    draw()
+    setShortViewport(true)
+    expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(true)
+
+    fireEvent.click(tableTab(/^Stack/))
+    expect(screen.getAllByTestId('source-strip')).toHaveLength(1)
+    expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(false)
+
+    fireEvent.click(tableTab(/^Values/))
+    expect(screen.getByTestId('grid').contains(screen.getByTestId('source-strip'))).toBe(true)
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 

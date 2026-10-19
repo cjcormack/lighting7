@@ -62,6 +62,7 @@ export function ProjectGroupsList() {
       </SheetPage.Header>
       <Suspense fallback={<SheetPage.Empty loading />}>
         <FixturesListContainer
+          projectId={projectIdNum}
           grouped
           selectionScope="groups"
           renderFooter={({ fixtureCount, groupCount, selectedCount }) => (

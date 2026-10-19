@@ -53,7 +53,7 @@ import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { resetStageViewpointStore, setStageViewpoint, stageViewpoint } from '@/lib/stageViewpoint'
 import { resetVisSourceStore, setVisSource, visSource } from '@/hooks/useVisSource'
 import { resetWorkLightsStore, setWorkLights } from '@/components/stage3d/scene/workLights'
-import { getAppliedTable, resetAppliedTableStore, setAppliedTable } from '@/lib/appliedTables'
+import { getProgrammerTable, resetProgrammerTableStore, setProgrammerTable } from '@/lib/programmerTables'
 import { store } from './index'
 import { restApi } from './restApi'
 import { coPagedWindowNames, thisWindowRow, useCoPagedWindowNames, useDeskWindows, useThisWindow } from './windows'
@@ -103,7 +103,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   resetBuskPageFollowStores()
   resetImmersiveStore()
-  resetAppliedTableStore()
+  resetProgrammerTableStore()
 })
 
 describe('the cache entry', () => {
@@ -194,14 +194,15 @@ describe('the announce', () => {
   it('goes out on mount with the five keys plus viewOptions on a live view, and again on a route change', async () => {
     const view = mountBridge()
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
-    // On the programmer the sixth key carries `immersive` alone (busk-chrome plan D9).
+    // On the programmer the sixth key carries its table and `immersive` (busk-chrome plan D9,
+    // tables-colours plan D1).
     expect(windowsWs.announced[0]).toEqual({
       windowId: 'w-1',
       name: 'Screen 1',
       view: '/projects/1/programmer',
       fullscreen: false,
       follows: true,
-      viewOptions: { immersive: 'off' },
+      viewOptions: { table: 'values', immersive: 'off' },
     })
     expect(Object.keys(windowsWs.announced[0] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
 
@@ -278,13 +279,13 @@ describe('the announce', () => {
     expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
   })
 
-  it('carries the applied tables’ table, and re-announces when it moves (venue-visit plan S14)', async () => {
-    mountBridge('/projects/1/programmer/applied')
+  it('carries the Programmer’s table, and re-announces when it moves (tables-colours plan D1)', async () => {
+    mountBridge('/projects/1/programmer')
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
-    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'fx' })
-    act(() => setAppliedTable('palettes'))
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'values', immersive: 'off' })
+    act(() => setProgrammerTable('scenery'))
     await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
-    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'palettes' })
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ table: 'scenery', immersive: 'off' })
   })
 
   it('keeps the five-key frame on a view that contributes no options — a library', async () => {
@@ -451,18 +452,17 @@ describe('handleWindowCommand — the Stage view’s viewpoint (stage-view plan 
   })
 })
 
-describe('handleWindowCommand — the applied tables (venue-visit plan S14)', () => {
+describe('handleWindowCommand — the Programmer’s table (tables-colours plan D1)', () => {
   const ctx = (currentView: string) => ({ myRowId: 's-1', currentView, navigate: vi.fn() })
   const frame = (view: string, options: Record<string, string>) => ({ type: 'viewOptions' as const, targetId: 's-1', view, options })
 
-  it('sets the table on a window on the applied view, and only there', () => {
-    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'looks' }), ctx('/projects/1/programmer/applied'))).toBe('applied')
-    expect(getAppliedTable()).toBe('looks')
-    // The programmer page is another view, though the path is a prefix of this one.
-    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'fx' }), ctx('/projects/1/programmer'))).toBe('ignored')
-    expect(getAppliedTable()).toBe('looks')
-    expect(handleWindowCommand(frame('/projects/1/programmer/applied', { table: 'cues' }), ctx('/projects/1/programmer/applied'))).toBe('applied')
-    expect(getAppliedTable()).toBe('looks')
+  it('sets the table on a window on the Programmer, and only there', () => {
+    expect(handleWindowCommand(frame('/projects/1/programmer', { table: 'stack' }), ctx('/projects/1/programmer'))).toBe('applied')
+    expect(getProgrammerTable()).toBe('stack')
+    expect(handleWindowCommand(frame('/projects/1/programmer', { table: 'fx' }), ctx('/projects/1/show'))).toBe('ignored')
+    expect(getProgrammerTable()).toBe('stack')
+    expect(handleWindowCommand(frame('/projects/1/programmer', { table: 'looks' }), ctx('/projects/1/programmer'))).toBe('applied')
+    expect(getProgrammerTable()).toBe('stack')
   })
 })
 

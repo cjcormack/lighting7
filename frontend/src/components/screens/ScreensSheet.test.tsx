@@ -354,19 +354,14 @@ describe('ScreensSheet', () => {
       expect(rowFor('Hall')).toHaveTextContent('Viewpointside')
     })
 
-    it('puts the applied tables on a window, and sets its table from the row’s Table segment (venue-visit plan S14)', () => {
-      render(<ScreensSheet />)
-      fireEvent.change(screen.getByRole('combobox', { name: 'View on Screen 2' }), { target: { value: 'applied' } })
-      expect(sent).toEqual([{ type: 'show', targetId: 's-2', view: '/projects/1/programmer/applied' }])
-      sent.length = 0
-      cleanup()
-
-      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/programmer/applied', viewOptions: { table: 'fx' } })
+    it('sets a Programmer window’s table from the row’s Table segment — Values, Stack, FX or Scenery (tables-colours plan D1)', () => {
+      registry.windows[2] = row('s-3', 'w-3', 'Hall', { view: '/projects/1/programmer', viewOptions: { table: 'values', immersive: 'off' } })
       render(<ScreensSheet />)
       const table = within(rowFor('Hall')).getByRole('radiogroup', { name: 'Table on Hall' })
-      expect(within(table).getByRole('radio', { name: 'FX' })).toHaveAttribute('aria-checked', 'true')
-      fireEvent.click(within(table).getByRole('radio', { name: 'Palettes' }))
-      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/programmer/applied', options: { table: 'palettes' } }])
+      expect(within(table).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Values', 'Stack', 'FX', 'Scenery'])
+      expect(within(table).getByRole('radio', { name: 'Values' })).toHaveAttribute('aria-checked', 'true')
+      fireEvent.click(within(table).getByRole('radio', { name: 'Scenery' }))
+      expect(sent).toEqual([{ type: 'viewOptions', targetId: 's-3', view: '/projects/1/programmer', options: { table: 'scenery' } }])
     })
 
     it('draws nothing at all on a library row', () => {

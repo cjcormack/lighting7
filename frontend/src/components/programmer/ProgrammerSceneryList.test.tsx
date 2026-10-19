@@ -58,7 +58,13 @@ vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => store.b
 vi.mock('./ProgrammerScope', () => ({ useProgrammerScope: () => store.scope }))
 
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
-import { DEFAULT_SCENERY_FILTERS, ProgrammerSceneryList, SCENERY_FILTERS_KEY, sceneryGroups } from './ProgrammerSceneryList'
+import {
+  DEFAULT_SCENERY_FILTERS,
+  ProgrammerSceneryList,
+  SCENERY_FILTERS_KEY,
+  resetSceneryFiltersStore,
+  sceneryGroups,
+} from './ProgrammerSceneryList'
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -76,6 +82,7 @@ afterEach(() => {
   vi.unstubAllGlobals()
   window.sessionStorage.clear()
   window.localStorage.clear()
+  resetSceneryFiltersStore()
   resetProgrammerFadeStore()
   store.live = { projectId: 6, entries: {} }
   store.programmer = { projectId: 6, elements: [] }

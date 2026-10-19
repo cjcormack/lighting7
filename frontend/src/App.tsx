@@ -36,11 +36,11 @@ import {
   ProgrammerRedirect,
   ProgrammerFxRedirect,
 } from "./routes/ProgrammerPage";
-import { ProgrammerApplied } from "./routes/ProgrammerApplied";
 // Redirects for paths that no longer name a view — see the module header for why they are
 // collected rather than parked in whichever module happens to be the destination.
 import {
   CuesLegacyRedirect,
+  LegacyAppliedRedirect,
   LegacyCueStacksRedirect,
   LegacyFxRedirect,
   LegacyProgramRedirect,
@@ -388,23 +388,23 @@ function getAppRouter() {
         // readings of one live object and could never be seen together, which is the whole point.
         {
           path: "projects/:projectId/programmer",
-          element: <RigGate navId="programmer"><ProgrammerPage /></RigGate>,
+          element: (
+            <RigGate navId="programmer" to={(p, { search }) => `/projects/${p}/programmer${search}`}>
+              <ProgrammerPage />
+            </RigGate>
+          ),
         },
         {
           path: "programmer",
           element: <ProgrammerRedirect />,
         },
-        // The applied tables (venue-visit plan S14): one route, a tab per table in `?table=`.
+        // The applied tables were a route of their own until they became the programmer's tabs
+        // (tables-colours plan D1); `/programmer/fx` was one when the FX sheet was a destination.
+        // Both paths survive only to land a bookmark on the tab that took their place.
         {
           path: "projects/:projectId/programmer/applied",
-          element: (
-            <RigGate navId="programmer-applied" to={(p, { search }) => `/projects/${p}/programmer/applied${search}`}>
-              <ProgrammerApplied />
-            </RigGate>
-          ),
+          element: <LegacyAppliedRedirect />,
         },
-        // `/programmer/fx` was a route when the FX sheet was a destination. It is a section of the
-        // page now, so the path survives only to land a bookmark.
         {
           path: "projects/:projectId/programmer/fx",
           element: <ProgrammerFxRedirect />,

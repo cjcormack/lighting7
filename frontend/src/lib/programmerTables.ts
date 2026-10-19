@@ -4,74 +4,80 @@ import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 
 /**
- * **The applied tables** (venue-visit plan S14): the programmer's running effects and its layer
- * stack drawn full width, one route with a tab per table — `/programmer/applied?table=fx`. This is
- * the model, with no React beyond the store's hook: which table a window shows, the view each table
- * keeps (sort, filter, partition chip) and how both ride the query string, and the row rules the
- * three tables share with the rail.
+ * **The programmer's tables** (tables-colours plan D1): the programmer is one page whose row B
+ * starts with a tab per table — **Values · Stack · FX · Scenery** — at `/programmer?table=`. This
+ * is the model, with no React beyond the store's hook: which table a window shows, the view each
+ * table keeps (sort, filter, partition chip) and how both ride the query string, and the row rules
+ * the tables share with the rail.
  *
- * **Which table is a per-window fact** (`applied.table`, `sessionStorage`), as the busk view's
+ * **Which table is a per-window fact** (`programmer.table`, `sessionStorage`), as the busk view's
  * focus is: the Screens sheet sets it on another window through `windows.viewOptions {table}`, the
- * announce carries it, and the route mirrors it into `?table=` with `replace`. A `?table=` arriving
+ * announce carries it, and the page mirrors it into `?table=` with `replace`. A `?table=` arriving
  * (a ⌘K deep link, a copied link) wins and is remembered.
  *
  * **A table's view rides the query string and is remembered per window** — `?sort=`, `?dir=`, `?q=`
- * and the table's chip (`?home=` on Applied FX, `?family=` on Applied Palettes). A change is
- * remembered and mirrored with `replace`; arriving with any of them is the view, and arriving with
- * none takes the remembered one. Scroll is remembered beside it and kept out of the URL, so a
- * copied link does not land half way down someone else's list.
+ * and the table's chip (`?kind=` on Stack, `?home=` on FX). A change is remembered and mirrored with
+ * `replace`; arriving with any of them is the view, and arriving with none takes the remembered one.
+ * Scroll is remembered beside it and kept out of the URL, so a copied link does not land half way
+ * down someone else's list. Values keeps no view here: its filter and columns are the grid's own.
  */
 
-export type AppliedTable = 'fx' | 'looks' | 'palettes'
-export const APPLIED_TABLES: readonly AppliedTable[] = ['fx', 'looks', 'palettes']
+export type ProgrammerTable = 'values' | 'stack' | 'fx' | 'scenery'
+export const PROGRAMMER_TABLES: readonly ProgrammerTable[] = ['values', 'stack', 'fx', 'scenery']
 
-export const APPLIED_TABLE_LABELS: Readonly<Record<AppliedTable, string>> = {
-  fx: 'Applied FX',
-  looks: 'Applied Looks',
-  palettes: 'Applied Palettes',
-}
-
-/** The tab's own word, with *Applied* on the header's breadcrumb. */
-export const APPLIED_TABLE_TABS: Readonly<Record<AppliedTable, string>> = {
+export const PROGRAMMER_TABLE_LABELS: Readonly<Record<ProgrammerTable, string>> = {
+  values: 'Values',
+  stack: 'Stack',
   fx: 'FX',
-  looks: 'Looks',
-  palettes: 'Palettes',
+  scenery: 'Scenery',
 }
 
 /** The `viewOptions` key the announce carries and `windows.viewOptions` sets. */
-export const VIEW_OPTION_APPLIED_TABLE = 'table'
+export const VIEW_OPTION_PROGRAMMER_TABLE = 'table'
 
-export function parseAppliedTable(raw: unknown): AppliedTable | null {
-  return raw === 'fx' || raw === 'looks' || raw === 'palettes' ? raw : null
+export function parseProgrammerTable(raw: unknown): ProgrammerTable | null {
+  return raw === 'values' || raw === 'stack' || raw === 'fx' || raw === 'scenery' ? raw : null
 }
 
-const tableStore = createSyncStore<AppliedTable>({
-  key: 'applied.table',
-  fallback: 'fx',
-  parse: (parsed) => parseAppliedTable(parsed) ?? 'fx',
+const tableStore = createSyncStore<ProgrammerTable>({
+  key: 'programmer.table',
+  fallback: 'values',
+  parse: (parsed) => parseProgrammerTable(parsed) ?? 'values',
   storage: sessionStorageArea,
 })
 
-export function useAppliedTable(): AppliedTable {
+export function useProgrammerTable(): ProgrammerTable {
   return useSyncExternalStore(tableStore.subscribe, tableStore.getSnapshot, tableStore.getServerSnapshot)
 }
 
-export function getAppliedTable(): AppliedTable {
+/**
+ * Whether this window shows the Values table, asked only while [asking]: a boolean subscription,
+ * so a move between the other three wakes nobody, and none at all while the caller does not care.
+ */
+export function useValuesTableShown(asking: boolean): boolean {
+  return useSyncExternalStore(
+    tableStore.subscribe,
+    () => !asking || tableStore.getSnapshot() === 'values',
+    () => !asking || tableStore.getServerSnapshot() === 'values',
+  )
+}
+
+export function getProgrammerTable(): ProgrammerTable {
   return tableStore.getSnapshot()
 }
 
-export function setAppliedTable(table: AppliedTable): void {
+export function setProgrammerTable(table: ProgrammerTable): void {
   tableStore.set(table)
 }
 
-/** A `windows.viewOptions` frame aimed at this window's applied view: `{table}`, ignored when unknown. */
-export function applyAppliedViewOptions(options: Readonly<Record<string, string>>): void {
-  const table = parseAppliedTable(options[VIEW_OPTION_APPLIED_TABLE])
-  if (table != null) setAppliedTable(table)
+/** A `windows.viewOptions` frame aimed at this window's programmer: `{table}`, ignored when unknown. */
+export function applyProgrammerViewOptions(options: Readonly<Record<string, string>>): void {
+  const table = parseProgrammerTable(options[VIEW_OPTION_PROGRAMMER_TABLE])
+  if (table != null) setProgrammerTable(table)
 }
 
 /** Test seam. */
-export function resetAppliedTableStore(): void {
+export function resetProgrammerTableStore(): void {
   tableStore.reset()
 }
 
@@ -79,30 +85,33 @@ export function resetAppliedTableStore(): void {
 
 export type SortDir = 'asc' | 'desc'
 
-export interface AppliedView {
-  /** A column key, or null for the rail's own order. */
+export interface TableView {
+  /** A column key, or null for the desk's own order. */
   sort: string | null
   dir: SortDir
   /** The filter field. */
   q: string
-  /** The partition chip — an FX home, a palette family — or null for *All*. */
+  /** The partition chip — a layer kind, an FX home — or null for *All*. */
   chip: string | null
 }
 
-export const DEFAULT_APPLIED_VIEW: AppliedView = { sort: null, dir: 'asc', q: '', chip: null }
+export const DEFAULT_TABLE_VIEW: TableView = { sort: null, dir: 'asc', q: '', chip: null }
 
 /** The query-string name of each table's chip, or null for a table that has none. */
-export const CHIP_PARAM: Readonly<Record<AppliedTable, string | null>> = {
+export const CHIP_PARAM: Readonly<Record<ProgrammerTable, string | null>> = {
+  values: null,
+  stack: 'kind',
   fx: 'home',
-  looks: null,
-  palettes: 'family',
+  scenery: null,
 }
 
 /**
  * The view a query string states for [table], or null when it states none — no `sort`, `q` or chip —
  * which is what tells an arrival that should take the remembered view from one that brings its own.
+ * Values states none: its filter and columns are the grid's.
  */
-export function viewFromSearch(params: URLSearchParams, table: AppliedTable): AppliedView | null {
+export function viewFromSearch(params: URLSearchParams, table: ProgrammerTable): TableView | null {
+  if (table === 'values') return null
   const chipParam = CHIP_PARAM[table]
   const states =
     params.has('sort') || params.has('dir') || params.has('q') || (chipParam != null && params.has(chipParam))
@@ -117,9 +126,10 @@ export function viewFromSearch(params: URLSearchParams, table: AppliedTable): Ap
 }
 
 /** The query string for [table] showing [view]: `table`, then only what differs from the default. */
-export function appliedSearch(table: AppliedTable, view: AppliedView): string {
+export function programmerSearch(table: ProgrammerTable, view: TableView): string {
   const params = new URLSearchParams()
   params.set('table', table)
+  if (table === 'values') return `?${params.toString()}`
   if (view.sort != null) {
     params.set('sort', view.sort)
     if (view.dir === 'desc') params.set('dir', 'desc')
@@ -130,7 +140,7 @@ export function appliedSearch(table: AppliedTable, view: AppliedView): string {
   return `?${params.toString()}`
 }
 
-/** A header press: ascending, then descending, then back to the rail's order. */
+/** A header press: ascending, then descending, then back to the desk's order. */
 export function nextSort<V extends { sort: string | null; dir: SortDir }>(view: V, key: string): V {
   if (view.sort !== key) return { ...view, sort: key, dir: 'asc' }
   if (view.dir === 'asc') return { ...view, dir: 'desc' }
@@ -155,10 +165,10 @@ function writeSession(key: string, value: unknown): void {
 }
 
 /** The view this window last left [table] on, or the default. */
-export function rememberedView(table: AppliedTable): AppliedView {
-  const stored = readSession(`applied.view.${table}`)
-  if (stored == null || typeof stored !== 'object') return DEFAULT_APPLIED_VIEW
-  const v = stored as Partial<AppliedView>
+export function rememberedView(table: ProgrammerTable): TableView {
+  const stored = table === 'values' ? null : readSession(`programmer.view.${table}`)
+  if (stored == null || typeof stored !== 'object') return DEFAULT_TABLE_VIEW
+  const v = stored as Partial<TableView>
   return {
     sort: typeof v.sort === 'string' && v.sort !== '' ? v.sort : null,
     dir: v.dir === 'desc' ? 'desc' : 'asc',
@@ -167,22 +177,22 @@ export function rememberedView(table: AppliedTable): AppliedView {
   }
 }
 
-export function rememberView(table: AppliedTable, view: AppliedView): void {
-  writeSession(`applied.view.${table}`, view)
+export function rememberView(table: ProgrammerTable, view: TableView): void {
+  writeSession(`programmer.view.${table}`, view)
 }
 
-export function rememberedScroll(table: AppliedTable): number {
-  const stored = readSession(`applied.scroll.${table}`)
+export function rememberedScroll(table: ProgrammerTable): number {
+  const stored = readSession(`programmer.scroll.${table}`)
   return typeof stored === 'number' && Number.isFinite(stored) && stored > 0 ? stored : 0
 }
 
-export function rememberScroll(table: AppliedTable, top: number): void {
-  writeSession(`applied.scroll.${table}`, Math.max(0, Math.round(top)))
+export function rememberScroll(table: ProgrammerTable, top: number): void {
+  writeSession(`programmer.scroll.${table}`, Math.max(0, Math.round(top)))
 }
 
 /** The address of [table] on [projectId] with this window's remembered view for it. */
-export function appliedTablePath(projectId: number, table: AppliedTable, view: AppliedView = rememberedView(table)): string {
-  return `/projects/${projectId}/programmer/applied${appliedSearch(table, view)}`
+export function programmerTablePath(projectId: number, table: ProgrammerTable, view: TableView = rememberedView(table)): string {
+  return `/projects/${projectId}/programmer${programmerSearch(table, view)}`
 }
 
 // ── Sorting and filtering ───────────────────────────────────────────────────────────────────
@@ -260,7 +270,7 @@ export const FX_STATE_LABELS: Readonly<Record<FxState, string>> = {
   leaving: 'Leaving',
 }
 
-// ── Applied Looks and Palettes ──────────────────────────────────────────────────────────────
+// ── Stack ───────────────────────────────────────────────────────────────────────────────────
 
 /** One layer of the programmer's stack, with its place in it — the rail's order badge. */
 export interface AppliedLayer {
@@ -269,15 +279,43 @@ export interface AppliedLayer {
   position: number
 }
 
+/** The Stack table's kind chips. */
+export type StackKind = 'looks' | 'palettes'
+export const STACK_KINDS: readonly StackKind[] = ['looks', 'palettes']
+
+export function parseStackKind(raw: string | null): StackKind | null {
+  return raw === 'looks' || raw === 'palettes' ? raw : null
+}
+
 /**
- * The layers of one kind, **top wins** — the order the rail draws them in (`LookStack`'s dense
- * density reverses the array), each with the position the rail numbers it by.
+ * Every layer **top wins** — the order the rail draws them in (`LookStack`'s dense density reverses
+ * the array), each with the position the rail numbers it by.
  */
-export function layersOfKind(layers: readonly ProgrammerLayer[], kind: 'LOOK' | 'TEMPLATE'): AppliedLayer[] {
-  return layers
-    .map((layer, index) => ({ layer, position: index + 1 }))
-    .filter((entry) => entry.layer.source?.kind === kind)
-    .reverse()
+export function stackLayers(layers: readonly ProgrammerLayer[]): AppliedLayer[] {
+  return layers.map((layer, index) => ({ layer, position: index + 1 })).reverse()
+}
+
+/**
+ * The one layer a drag moved, read off the table's row ids in their new order ([ids], top first,
+ * other rows among them ignored), and the index in the desk's bottom-first array it goes to — what
+ * `programmerMoveLayer` takes. Null when the order is the stack's as it stands, or not one move.
+ */
+export function layerMoveOf(
+  layers: readonly ProgrammerLayer[],
+  ids: readonly string[],
+  idOf: (layer: ProgrammerLayer) => string,
+): { layerId: number; toIndex: number } | null {
+  const byId = new Map(layers.map((layer) => [idOf(layer), layer]))
+  const before = [...layers].reverse().map(idOf)
+  const after = ids.filter((id) => byId.has(id))
+  if (after.length !== before.length) return null
+  const without = (list: readonly string[], id: string) => list.filter((other) => other !== id).join('\u0000')
+  for (const id of before) {
+    const to = after.indexOf(id)
+    if (to === before.indexOf(id) || without(before, id) !== without(after, id)) continue
+    return { layerId: byId.get(id)!.layerId, toIndex: before.length - 1 - to }
+  }
+  return null
 }
 
 /**

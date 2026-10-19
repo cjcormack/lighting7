@@ -127,3 +127,24 @@ export function LegacyTemplatesRedirect() {
   }
   return <TemplatesRedirect />
 }
+
+/**
+ * `/projects/:id/programmer/applied?table=fx | looks | palettes` → the programmer's FX or Stack tab.
+ *
+ * The applied tables were a route of their own beside the programmer (venue-visit plan S14) until
+ * they became its tabs (tables-colours plan D1), Looks and Palettes merged into one Stack table. An
+ * FX address keeps its view — sort, filter and the home chip mean the same on the tab; a Looks or
+ * Palettes one lands on the stack filtered to that kind, its other parameters dropped since the
+ * stack's columns are not theirs. No table was FX, the route's default.
+ */
+export function LegacyAppliedRedirect() {
+  const { projectId } = useParams()
+  const { search } = useLocation()
+  const params = new URLSearchParams(search)
+  const table = params.get('table')
+  const next =
+    table === 'looks' || table === 'palettes'
+      ? new URLSearchParams({ table: 'stack', kind: table })
+      : new URLSearchParams([['table', 'fx'], ...[...params].filter(([key]) => key !== 'table')])
+  return <Navigate to={`/projects/${projectId}/programmer?${next.toString()}`} replace />
+}

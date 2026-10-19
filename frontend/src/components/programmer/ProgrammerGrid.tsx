@@ -15,8 +15,15 @@ import { SheetPage } from '@/components/sheet/SheetPage'
 import { ScopedEditorContextProvider } from './ScopedEditorContext'
 import { LayerRowNotices } from './LayerRowNotices'
 import { ProgrammerScopeBand } from './ProgrammerScopeBand'
+import { ProgrammerTableTabs } from './ProgrammerTableTabs'
 import { SelectionBar } from './SelectionBar'
 import { useProgrammerScope } from './ProgrammerScope'
+
+/**
+ * Lit and Columns as icons below 760px of an unfolded row B: the table tabs fold into their menu
+ * there, and the room the menu needs is these two words. The folded arm has its own rules.
+ */
+const WORDLESS_BELOW_760 = 'contents @max-[760px]:[&_.control-label]:hidden'
 
 /**
  * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
@@ -45,9 +52,9 @@ import { useProgrammerScope } from './ProgrammerScope'
  * **Row B has a phone arm and a folded arm, and they are different questions.** Below `@[600px]`
  * of *this column* a key button appears, because the 22px ownership footer is not rendered at that
  * width (space plan D8) — outside layer scope only; see the note beside `ScopedKeyPopover` below.
- * The filter becomes a search icon over a popover too, but at `@[360px]` and not here — the two
- * used to be one threshold and are now two, because one is about a footer being absent and the
- * other about a field having room (see the note beside the field). The folded arm
+ * The filter becomes a search icon over a popover at the same width, for a different reason — one
+ * is about a footer being absent, the other about a field having room (see the note beside the
+ * field). The folded arm
  * is about *height*: under `@media (max-height: 500px)` `ProgrammerBody` stops drawing row A and
  * hands its two halves here as `leading`, so the page's two rows of chrome are one 40px line —
  * which on an 852×393 landscape phone is the difference between three fixture rows and eight.
@@ -120,12 +127,13 @@ function ProgrammerGridBody({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <FixturesListContainer
+        projectId={projectId}
         grouped={grouped}
         selectionScope="programmer"
         showOwnership
         columnVisibility={columnVisibility}
         onColumnVisibilityChange={onColumnVisibilityChange}
-        // The one word: this row keeps the field down to 360px of its own width, where the long
+        // The one word: this row keeps the field down to 600px of its own width, where the long
         // placeholder clipped mid-word (`lib/fixtureFilterCopy.ts`). The hint rides the field's
         // `title` and `aria-label` at every width.
         filterPlaceholder={FIXTURE_FILTER_PLACEHOLDER_SHORT}
@@ -323,6 +331,7 @@ function ProgrammerGridBody({
                       : 'contents',
                   )}
                 >
+                  <ProgrammerTableTabs compact={!!leading} />
                   <ProgrammerScopeBand compact={!!leading} />
                   {/* The filter gives before anything else does: it is the one control here whose
                       width is a preference rather than a size — **and for the same reason it is
@@ -380,26 +389,20 @@ function ProgrammerGridBody({
                       *unfolded* row B has no second line to give it — the folded one wraps, but
                       this arm does not — so the field gives instead — and session 4 replaces it
                       with a search icon at the width where even that stops being enough. */}
-                  {/* Two arms of one control. From `@[360px]` the field is on the row; below it
+                  {/* Two arms of one control. From `@[600px]` the field is on the row; below it
                       the field is a search icon that opens the same node in a popover — the icon
                       arm session 4 promised, and the real answer to the squeeze the old 192px floor
                       caused (the note above). Radix mounts popover content only while it is open, so there is
                       one filter input in the document except during the moment it is being used.
 
-                      **The threshold is `@[360px]`, and two things make it that low.** It was
-                      `@[600px]`, then `@[800px]`, and both were about a placeholder: the desk pass
-                      found `Filter fixtures…` clipping mid-word at 600 (`PD-FILTER-PLACEHOLDER-CLIP`
-                      — ~72px of room behind a 36px search icon for a placeholder needing 96), and
-                      800 was the first width that cleared it. That constraint is retired: the
-                      programmer's field says `Filter…` at every width
+                      **The threshold is `@[600px]`.** The field says `Filter…` at every width
                       (`FIXTURE_FILTER_PLACEHOLDER_SHORT`, since a placeholder cannot switch by
                       container query), which fits behind the icon at the field's 132px floor, and
-                      the whole hint rides the field's `title` and `aria-label`. The second thing
-                      is the slack rule below. What 360 is: the row's furniture without the field
-                      is ~250 (two pills, Lit, Groups, Columns, the gaps and the 24px inset), so 360
-                      is the first width with a legible field beside it — and a row narrower than
-                      that is the phone's, where the icon arm and its `w-72` popover are the right
-                      answer anyway. Above 360 the middle of the row is never a hole.
+                      the whole hint rides the field's `title` and `aria-label`. The row's furniture
+                      without the field — the table tabs' 101px menu below 760, two pills, Lit,
+                      Groups and Columns iconic, the gaps and the inset — is ~420, so 600 is the
+                      first width that leaves the field its 132 (measured at 157 there). Above 600
+                      the middle of the row is never a hole.
 
                       **The field takes the slack before the spacer does.** It is `flex: 999 1 0%`
                       against the spacer's `flex: 1 1 0%` below, so it grows to its 340px cap first
@@ -428,15 +431,15 @@ function ProgrammerGridBody({
                       'hidden min-w-0 items-center gap-2',
                       leading
                         ? 'flex-1 @[840px]:flex @[840px]:min-w-[132px]'
-                        : 'max-w-[340px] flex-[999_1_0%] @[360px]:flex',
+                        : 'max-w-[340px] flex-[999_1_0%] @[600px]:flex',
                     )}
                   >
                     {filter}
                   </div>
-                  <FilterPopover className={leading ? '@[840px]:hidden' : '@[360px]:hidden'}>
+                  <FilterPopover className={leading ? '@[840px]:hidden' : '@[600px]:hidden'}>
                     {filter}
                   </FilterPopover>
-                  {lit}
+                  <span className={leading ? 'contents' : WORDLESS_BELOW_760}>{lit}</span>
                   {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
                       competing `flex-1` siblings is the bug session 2 found on this very row. */}
                   <span className={cn('flex-1', leading && 'hidden')} />
@@ -459,7 +462,7 @@ function ProgrammerGridBody({
                         rendering a 156px bordered rectangle with nothing in it. */}
                     <span className={labelUnlessCompact(!!leading, '@[800px]:inline')}>Groups</span>
                   </Button>
-                  {columns}
+                  <span className={leading ? 'contents' : WORDLESS_BELOW_760}>{columns}</span>
                   {/* The key, exactly where the 22px footer that normally carries it is not drawn
                       (see `renderFooter`) — narrow, or short. A grid whose tints are *navigational*
                       has to keep them learnable somewhere, so the two conditions are written as

@@ -1,6 +1,6 @@
 # Programmer tables and fixture colours
 
-> **Document status: DRAFT — calls decided 2026-10-18, no session started.** The visual design is
+> **Document status: IN PROGRESS — calls decided 2026-10-18; session 1 done (`4b61df1`).** The visual design is
 > checked in beside this plan at [`tables-colours-design/`](tables-colours-design/INDEX.md), three
 > hand-written artboards. The live copy at <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi> is a
 > convenience, private to Chris; the checked-in files are the authority. Where this plan and the
@@ -88,7 +88,7 @@ session whose numbers regress does not merge. The numbers go in its commit messa
 Sessions 1 and 2 are frontend only. Session 3 is backend only. Sessions 4 and 5 need session 3.
 One PR per session.
 
-### Session 1 — the tabs
+### Session 1 — the tabs — done, `4b61df1`
 
 - `routes/ProgrammerPage.tsx`, `programmer/ProgrammerWorkspace.tsx`: the tab segment on row B, and
   `?table=` read and written with `replace`. The grid stays mounted and the other three mount on

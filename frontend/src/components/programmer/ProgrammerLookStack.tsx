@@ -1,5 +1,4 @@
 import { memo, useCallback, useMemo } from 'react'
-import { useParams } from 'react-router'
 import { LookStack, type LayerHandlers } from '@/components/looks/LookStack'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
@@ -34,9 +33,7 @@ import { useReplacementNotes } from './useReplacementNotes'
  * broadcast, so there is no optimistic update here and none is wanted: the stack is shared between
  * tabs and surfaces, and the server's ordering is the only one that composes.
  */
-export const ProgrammerLookStack = memo(function ProgrammerLookStack() {
-  const { projectId: projectIdParam } = useParams()
-  const projectId = Number(projectIdParam)
+export const ProgrammerLookStack = memo(function ProgrammerLookStack({ projectId }: { projectId: number }) {
   const { data: layerList } = useProgrammerLayersQuery()
   const { data: lookList } = useLookListQuery({ projectId }, { skip: !projectId })
   // Both libraries, because a layer can apply either — and a row that could not find its entry

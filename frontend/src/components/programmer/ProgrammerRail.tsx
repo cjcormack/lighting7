@@ -1,5 +1,4 @@
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useParams } from 'react-router'
 import { toast } from 'sonner'
 import {
   ArrowDownUp,
@@ -135,9 +134,7 @@ type RailBand = 'scenery' | 'layers' | 'fx'
  * while the operator drags a fader. Behind one click it costs nothing until it is asked for, and
  * it is still the only place per-fixture suppression and programmer-ownership are visible.
  */
-export function ProgrammerRail() {
-  const { projectId: projectIdParam } = useParams()
-  const projectId = Number(projectIdParam)
+export function ProgrammerRail({ projectId }: { projectId: number }) {
   const arm = useRailArm()
   const overlay = useSidePanelMode() === 'overlay'
   const { data: layers } = useProgrammerLayersQuery()
@@ -296,7 +293,7 @@ export function ProgrammerRail() {
  * the rail lands where a press from row C would, with the same gestures. Mounted only while open:
  * its pair is a marquee subscription, which a shut picker in the rail's footer must not hold.
  */
-function RailApplyPicker({
+export function RailApplyPicker({
   projectId,
   library,
   onClose,
@@ -597,7 +594,7 @@ const RailBody = memo(function RailBody({
         </span>
       </div>
       <LocalValuesRow />
-      <ProgrammerLookStack />
+      <ProgrammerLookStack projectId={projectId} />
       {/* Layer order does not govern the value/effect boundary: effects are Layer 3 and values
           Layer 4, so a value above beats an effect below whatever the rows say. Drawn as a band
           across the rail rather than a caption, because it is the one thing dragging cannot
@@ -617,7 +614,7 @@ const RailBody = memo(function RailBody({
       <div className="flex items-center gap-1.5 px-0.5 pt-0.5">
         <span className={cn(LABEL_CLASS, 'text-violet-400')}>Effects</span>
       </div>
-      <ProgrammerFxList />
+      <ProgrammerFxList projectId={projectId} />
       <div className="mt-auto pt-2">
         <button
           type="button"

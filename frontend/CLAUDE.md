@@ -802,7 +802,7 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The programmer rail's *Edit…*, the applied FX table's, `FxSheet`'s chips and a cell popup's
+  The programmer rail's *Edit…*, the programmer's FX table's, `FxSheet`'s chips and a cell popup's
   Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), and the busk Effects tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
   popover hosts, so the two cannot split two ways; the copies a split follows (`SplitSession`) are
@@ -3673,8 +3673,9 @@ trip from a first visit).
 
 ### List shell
 
-**Every list view is one column, stated once.** Fixtures › List, Groups › List, the programmer,
-Show › Table, Channels › Table and the patch list share one anatomy — a 48px header row (the
+**Every list view is one column, stated once.** Fixtures › List, Groups › List, the programmer (its
+Values grid and its Stack, FX and Scenery tables alike), Show › Table, Channels › Table and the patch
+list share one anatomy — a 48px header row (the
 programmer's is the `ShowHeader`, a 40px chrome row since the busk-chrome plan's session B), any
 number of 40px chrome rows, the 40px `SelectionBar`, the sheet, a 22px footer — and the whole of it
 is two files: `components/sheet/sheetFrame.ts` holds the class strings (`PAGE_HEADER_CLASS`,
@@ -3788,8 +3789,9 @@ cue action set — §"The Cues table"):
   `EditorReadout` — the column's `skipNote` where it knows *why* (*M2 and M4 follow M1*), else the
   rows by the sheet's `rowName`. It changed what `write` receives on the existing sheets too: a snap
   cue's Curve and a head without a beam angle or gel no longer reach their writers.
-- **`LibraryRow.tsx`** (the library row) and **`PartitionChips`**, `LookFamilyFilterBar`
-  generalised (it is gone) and still controlled, folding to a select below its `fold` of its
+- **`LibraryRow.tsx`** (the library row) — whose `leading` slot, before the filter, is where the
+  programmer's tables put their tabs (§The programmer's tables) — and **`PartitionChips`**,
+  `LookFamilyFilterBar` generalised (it is gone) and still controlled, folding to a select below its `fold` of its
   **own** `@container` — so it works inside `ApplyPicker`'s portalled popover, which has no row.
   **Measured folds, chosen per chip set**: **400**, the default — the palette family's five
   chips with counts are 361–367px, and the first cut's 600 folded them on the 1180×820 frame where
@@ -4790,7 +4792,9 @@ rests on: Output (the cook, read-only), Local (what *you* set, and nothing else)
 layer. Same grid, same cell editors, same drag-select in all three — that sameness is the point,
 because it is what makes editing a Look feel local rather than like a trip to the library.
 `components/programmer/ProgrammerScope.tsx` owns it; the band above the grid is
-`ProgrammerScopeBand`, and a layer is focused by clicking its name badge in the stack rail.
+`ProgrammerScopeBand`, on the Values table's row B after the table tabs, and a layer is focused by
+clicking its name badge in the stack rail or by ⏎ / *Edit in grid* on the Stack table, which
+switches to Values (§The programmer's tables).
 
 **The programmer's chrome is one spacing system**, and every number in it is stated once here so a
 row cannot drift from its neighbours (design record: `../docs/plans/programmer-chrome-design/`,
@@ -4805,8 +4809,8 @@ a control (`h-7`: Update and Revert in the source box, a palette chip, `New`), 2
 item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
 under 500 — it was 48 (`py-2`) until the busk-chrome plan's session B made it the shell's chrome row
 too (D12). 8px
-between controls on a row (`gap-2`), 6px inside a control. Row B's filter is a field from 360px of
-row B up, says `Filter…` (`FIXTURE_FILTER_PLACEHOLDER_SHORT` — a placeholder cannot switch by
+between controls on a row (`gap-2`), 6px inside a control. Row B's filter is a field from 600px of
+row B up (360 until the table tabs led the row — §The programmer's tables), says `Filter…` (`FIXTURE_FILTER_PLACEHOLDER_SHORT` — a placeholder cannot switch by
 container query, and the two plain list routes keep the long form) with the whole hint on its
 `title` and `aria-label`, and takes the row's slack before the spacer does (`flex-[999_1_0%]`
 against the spacer's `flex-1`; the folded arm keeps plain `flex-1`, since there the spacer is
@@ -4954,6 +4958,12 @@ yours. It is a sequence, so a failure part-way leaves the Look and says so.
 
 ### The rail's tabs
 
+**Two homes for one session.** Tables-colours session 1 put Values · Stack · FX · Scenery on row B
+(§The programmer's tables) and left this rail exactly as it was; session 2 takes its Stack body,
+strip counts and phone doors away and leaves the Colour · Spread dock. Until then the rail's Stack
+and the Stack, FX and Scenery tables list the same programmer, the rail still reorders a layer and
+focuses one from its name badge, and the two are kept agreeing by `AppliedTables.test.tsx`.
+
 **The rail's header is a tab strip — Stack · Colour · Spread** (editor-kit plan session 4,
 `../docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail's body and
 footer — since the scenery-programmer plan's session 2 the Scenery band, the layers and the effects —
@@ -5052,58 +5062,112 @@ read-out is the frame's `source`, the top tier only — *held by the programmer*
 pressed*, *tracked from Q14*, *held by Main's set*, *at its base* — because nothing on the wire says
 what the tier below would hold. The list's filters *Set*, *Venue* and *Moving only* are three
 independent toggles (Set layer, Venue layer, only what draws or flies; Set and Venue on by default),
-stored per window in `sessionStorage` under `programmer.scenery.filters` inside a `try/catch`, and a
-held piece is listed whatever they say, so its × stays in reach.
+one per-window store (`useSceneryFilters`, `sessionStorage` under `programmer.scenery.filters`) that
+the Scenery table reads too, and a held piece is listed whatever they say, so its × stays in reach.
 
 **Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
 scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —
 the desk's `programmer.cleared` reply counts values and effects only, so the count is
 `programmer.sceneryState`'s (`useHeldSceneryCount`).
 
-### The applied tables
+### The programmer's tables
 
-**What the programmer runs and holds, full width** (venue-visit plan S14; Chris's calls of
-2026-10-17: one route with tabs, a child of the Programmer row, a row opening what the rail's row
-opens). `/projects/:id/programmer/applied?table=fx | looks | palettes` (`routes/ProgrammerApplied.tsx`
-behind `RigGate`, so off the rig it draws `NotOnRig`) draws **Applied FX**, **Applied Looks** and
-**Applied Palettes** on one shell, `components/applied/AppliedTableShell.tsx`: the library row (filter
-and chips), the selection bar with the table's verbs, `SheetTable`, the footer. The header carries
-`AppliedTableSwitcher` (`ViewSwitcher.tsx`), whose tabs replace rather than push.
+**The programmer is the table** (tables-colours plan D1, session 1; the design record is
+`../docs/plans/tables-colours-design/`, whose `Programmer.dc.html` strips A–D are this session's
+layout). Row B starts with a tab segment, **Values · Stack · FX · Scenery**
+(`programmer/ProgrammerTableTabs.tsx`), Stack, FX and Scenery each with its live count — layers,
+running effects, held scenery. The tables were the applied tables (venue-visit plan S14) at
+`/programmer/applied`, a route of their own beside the programmer; that route now redirects
+(`LegacyAppliedRedirect`: `?table=fx` keeps its view, `looks` and `palettes` land on `stack`
+filtered to that kind), and `/programmer/fx` lands on the FX tab. **The rail is unchanged for one session**: its Stack lists the
+same layers, effects and scenery until session 2 makes it the Colour · Spread dock, so for now there
+are two homes, and `AppliedTables.test.tsx` compares them.
 
-- **The rows are the rail's.** Applied FX is `fx/active`, one row per instance in the desk's order, as
-  `ProgrammerFxList` lists them: an effect over a selection one row (`lib/effectTargets.ts`), a split
-  edit a row per head copy, a step effect naming its palettes or slots. Applied Looks and Palettes are
-  `programmer.layerState` split by source kind, top wins, numbered by the place in the whole stack
-  (`layersOfKind`), with `useReplacementNotes`' *lost Hex 3–4 to Amber* as the Note.
-  `AppliedTables.test.tsx` renders the rail and the tables over one state and compares them.
-- **Applied FX reads the desk and computes nothing**: timing is *Seconds* or the master the instance
-  names, read off the live bank (a beat effect's null is M1); size, direction and runs are the
-  instance's fields, *spent* its `spent`; *held · Blind* is `isHeldByBlind`. Applied Palettes marks a
-  layer whose effect is spent: every instance it spawned reports `spent` (`layerEffectState`).
-- **Every cell is a read-out, and a row acts through the rail's actions and mutations.** An effect
-  row's menu is *Edit…* (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*
-  (`useToggleFxPause`, the editor's own), *Save as palette…* (`saveAsTemplateOffer`, the rail's gate)
-  and *Stop* (`useStopEffect`, the rail's). A layer row has the rail row's enable toggle and its
-  settings popover (`LayerSettingsPopover`: amount, blend, mask, stomp, *Detach*, *Remove*, *Pick up*)
-  plus *Edit look…* (`LookDetailSheet` in place) / *Edit palette…* (`/palettes?edit=`). The bar
-  carries the same verbs over a selection, a one-row verb disabled over several with the reason.
-  **⏎ and the name's double click open what the rail's row opens**: the live editor, or the
-  settings popover. Reorder stays in the rail.
-- **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480):
-  band 0 draws every column; band 1 (the 1180×820 iPad's 940) merges Timing with Speed, Size · Dir ·
-  Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2 and 3 (a 768 tablet's
-  528, a phone) put the property, or the stack position, in the name column and let the rest scroll
-  sideways under it, and a layer row's toggle and settings button move into its menu
-  (`anchorOnly`). Nothing is hidden. Each band's floor fits its width, measured on the desk; Applied
-  Palettes' Note scrolls in at 1180.
-- **The table is a per-window fact; a table's view is the address.** `lib/appliedTables.ts`'s
-  `applied.table` (`sessionStorage`) is what the Screens sheet's *Table* segment sets and the announce
-  carries; the route mirrors it into `?table=`, and a `?table=` arriving wins. Sort (`?sort=`,
-  `?dir=`), filter (`?q=`) and the chip (`?home=` on Applied FX, `?family=` on Applied Palettes) ride
-  the address with `replace` and are remembered per window and table, so a tab lands where it was
-  left and an address with no view takes the remembered one; scroll is remembered beside them and
-  kept out of the URL. A header press sorts ascending, descending, then back to the rail's order
-  (`SheetTable`'s `sort`); `SheetTable`'s `scroll` restores and reports the scroller.
+- **The Values grid never unmounts.** `components/programmer/ProgrammerTables.tsx` is the frame: the
+  grid, created above it by `ProgrammerBody`, stays mounted under the other three, `hidden` and
+  `inert`, and Stack, FX and Scenery mount on demand. `useListSelection` clears the scoped selection
+  on unmount, so a conditional grid would throw away what Record scopes on; `ProgrammerPage.test.tsx`
+  asserts `gridMounts` across a tab switch. **`inert` is also what silences the hidden grid's
+  keyboard**: `FixturesListContainer`'s window listener returns when its root is inside an `[inert]`
+  ancestor, or ⌫ on the Stack tab would clear the hidden marquee's values. Hidden, its virtual rows
+  are gone, so a programmer event under another table costs a fifth of one on Values.
+- **Nothing on the page listens to the address but what must.** A tab, a filter keystroke and a
+  sort all replace the URL, and every `useParams`, `useSearchParams` and `useNavigate` below the route
+  re-renders on any location change (React Router's route context is a fresh object per location).
+  So `FixturesListContainer` takes `projectId` as a prop and keeps the `?select=` deep link in a child
+  (`DeepLinkSelect`) that only the two plain lists mount, and the rail's `ProgrammerRail`,
+  `ProgrammerLookStack` and `ProgrammerFxList` take `projectId` from `ProgrammerBody`: measured on a
+  profiling build, those two subscriptions were 11 ms of every tab switch. `ProgrammerPage` is a
+  route wrapper round a memoised `ProgrammerView`, the frame's `select` is a stable callback, and the
+  tabs' counts are read once by the frame (`useProgrammerTableCounts`) and handed down in its
+  context, so a table's own tab segment mounts subscribing to nothing. Keep it that way — a router
+  hook in the grid or the rail is paid on every keystroke in a table's filter.
+- **The table is a per-window fact; a table's view is the address.** `lib/programmerTables.ts`'s
+  `programmer.table` (`sessionStorage`; it was `applied.table`, renamed, one store) is what the
+  Screens sheet's *Table* segment sets (`windows.viewOptions {table}` under the Programmer view, now
+  `[PROGRAMMER_TABLE_OPTION, IMMERSIVE_OPTION]`) and the announce carries; the frame mirrors it into
+  `?table=` with `replace`, and a `?table=` arriving wins. A tab's press replaces the address with that
+  table and the view the window left it on. Sort (`?sort=`, `?dir=`), filter (`?q=`) and the chip
+  (`?kind=` on Stack, `?home=` on FX) ride the address with `replace` and are remembered per window and
+  table; scroll beside them, out of the URL. **Values keeps no view there** — its filter and columns
+  are the grid's — so a bare `/programmer` on Values stays bare. `RigGate` carries the search across a
+  follow.
+- **The scope picker is the Values tab's alone**: it is on the grid's row B, hidden with the grid.
+  The other three draw their own row B — `AppliedTableShell`'s library row, led by the same tabs
+  (`LibraryRow`'s `leading`) — over the selection bar, the sheet and the footer.
+- **The segment folds by row B's width, words before counts.** From 1040px of the row every tab has
+  its word; below it a closed tab is its glyph and count. **Below 760 the four are one menu button**
+  (`data-programmer-tables-menu`: the open table's glyph, its word from 480, a radio menu with the
+  counts), and on the Values row Lit and Columns go to their icons (`WORDLESS_BELOW_760`) — four tabs
+  could not join a row that was already full at 768. The short-height row draws that button glyph-only
+  at every width (`compact`). The Values row's filter is a field from **600** of row B, not 360, for
+  the same room; measured with Playwright at 1440, 1180, 1024, 900, 768, 700, 600, 393 and the folded
+  852×393, no row overflows. **Row A folds into row B only on Values**: under the other tables the
+  grid's row B is hidden, so `ProgrammerBody` gives row A its own row there (`useValuesTableShown`,
+  asked only while the viewport is short, so a tab switch at an ordinary height never re-renders the
+  memo barrier).
+- **The rows are the rail's, and every cell is a read-out**; a row acts through the rail's actions
+  and mutations, the bar carrying the same verbs over a selection, a one-row verb disabled over
+  several with the reason. **FX** (`applied/AppliedFxTable.tsx`, Applied FX moved, unchanged
+  columns, bands and verbs): `fx/active`, one row per instance in the desk's order, as
+  `ProgrammerFxList` lists them; timing *Seconds* or the instance's master off the live bank, size,
+  direction, runs and *spent* the instance's fields, *held · Blind* `isHeldByBlind`; *Edit…*
+  (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*, *Save as palette…*, *Stop*; ⏎ opens
+  the editor. Its library row's create verb is **+ Effect**, the rail footer's own offer
+  (`useProgrammerAddEffect`: the bare effect press over the selection in Local, into the Look a
+  focused Look layer applies, refused with the reason in Output and over a palette), in its own
+  component so only the button hears the selection; under the selection bar the rule row
+  ***Values above beat effects below***.
+- **Stack** (`applied/StackTable.tsx`, D5): *Your values* pinned on top — its value count, its Local
+  effects, *Make layer* in its Note — then every layer top first (`stackLayers`), Looks and palettes
+  in one table, numbered as the rail numbers them, with `useReplacementNotes`' *lost Hex 3–4 to
+  Amber* as the Note and a palette whose effect is spent marked. Kind chips **All · Looks ·
+  Palettes** filter, *Your values* staying pinned. **Reorder by `SheetTable`'s `rowDrag`**, positioned
+  with `top`, calling `programmerMoveLayer` as `ProgrammerLookStack`'s `onMove` does — the drop read
+  back from top-first ids to the desk's bottom-first index by `layerMoveOf`. *Your values* is pinned
+  (`rowDrag.canDrag`: no grip and no drop onto it, so the top layer is as high as a drag goes).
+  **The drag is refused while the rows are not the stack as it is** — a kind chip, a filter or a
+  sort — and the footer says which. **⏎, the name's double click and *Edit in grid*** (menu and bar) point the Values
+  grid's scope at the layer, or at Local from *Your values*, and switch to Values. A layer row keeps
+  the rail row's enable toggle and settings popover (`LayerSettingsPopover`), and its menu adds
+  *Edit look…* (`LookDetailSheet`) / *Edit palette…*. *+ Look or palette* is the rail footer's two
+  pickers behind one menu.
+- **Scenery** (`applied/SceneryTable.tsx`, D6): every element, **Venue then Set** by name under
+  divider rows, with `ProgrammerSceneryList`'s filters as chips — *All* (their unfiltered state) ·
+  *Set* · *Venue* · *Moving only*, the full list's own store (`useSceneryFilters`), so a chip
+  pressed in one is lit in the other — and a held piece listed whatever they say. **One scope reading**, `useSceneryScope`, the band's and the list's: State, *Held by* and Kind
+  are read-outs; a row's sliders (and ⏎) open the band's own `SceneryElementRow` at the row through
+  `EditorSurface`, and the × releases. *Release* on the bar releases the selection's held pieces —
+  one at a time from a focused Look, whose scenery is written whole per gesture.
+- **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480,
+  memo rows, overscan 8, all unchanged): band 0 draws every column; band 1 merges FX's Timing with
+  Speed and Size · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2
+  and 3 put the property, or the stack position, in the name column and let the rest scroll sideways
+  under it. **The sheet is the programmer's column now, beside the rail**, so a 1440 desk with the
+  sidebar open and the rail docked gives it ~900 — band 1, where FX's 914px floor scrolls 14px — and
+  the 1180×820 iPad, the rail a strip, ~900 too. On a programmer table the partition chips carry
+  `PROGRAMMER_CHIPS_CLASS` (`min-w-32`): with the tabs leading the row, the filter would otherwise
+  take the slack and the chips' folded select would run under the create verb.
 
 ### Speed Masters
 
@@ -5463,8 +5527,8 @@ fact is per-tab and not in the URL. Not a floating button: the header's row, min
 D11 holds.
 
 **Nothing new on the wire** (D9): `immersive` rides `viewOptions` under every live view — the
-Programmer, Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `options` descriptor
-(`IMMERSIVE_OPTION`) and Busk carries it fourth — because the desk's Json is bare and a sixth
+Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `options` descriptor
+(`IMMERSIVE_OPTION`), the Programmer carries it after its table and Busk carries it fourth — because the desk's Json is bare and a sixth
 top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
 the libraries, carrying three options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
@@ -5486,14 +5550,14 @@ supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (
 `StageViewpointRowPicker` for `viewpoint`), so the sheet draws the cameras, saved views and seats
 without importing the Stage view or learning its vocabulary, and the scene queries load only when a
 Stage row is drawn. A key with no control reads its value as text.
-**The applied tables are an eighth entry** (venue-visit plan S14), `applied` on the segment
-`/programmer/applied` — between Stage and the libraries, `needsRig`, the longer segment winning over
-`/programmer` — carrying one option, `table` (`APPLIED_TABLE_OPTION`, *Table · FX | Looks |
-Palettes*, an `enum`) and no immersive. It is announced from `lib/appliedTables.ts`'s per-window
-store as `announcedViewOptions`' fifth argument, applied by `applyAppliedViewOptions`, and carried by
-`windowSetupUrl` as `table=`, which the route reads on arrival like any `?table=`.
+**The Programmer carries its table** (tables-colours plan D1): `table` (`PROGRAMMER_TABLE_OPTION`,
+*Table · Values | Stack | FX | Scenery*, an `enum`) beside `immersive`. It is announced from
+`lib/programmerTables.ts`'s per-window store as `announcedViewOptions`' fifth argument, applied by
+`applyProgrammerViewOptions`, and carried by `windowSetupUrl` as `table=`, which the page reads on
+arrival like any `?table=`. The applied tables were an entry of their own, `applied` on
+`/programmer/applied`, until they became the Programmer's tabs; the route redirects.
 `announcedViewOptions` in `lib/windowViews.ts` is the one place that says which keys go out under
-which view; the three libraries still send the five-key frame. **The Cues table is a ninth entry**
+which view; the three libraries still send the five-key frame. **The Cues table is an eighth entry**
 (cue model plan session 5), `cues` on `/cues` between Looks and Palettes, the sidebar's order: a
 library, so no options, no `needsRig`, and a command that puts a window on it keeps the window's own
 project. `windows.viewOptions {immersive}` is
@@ -6602,8 +6666,8 @@ path may quietly change where it lands.
 - When adding a new page/route, add an entry to the `navItems` array in `src/navigation.ts`
 - This automatically registers the page in both the sidebar and the Cmd+K command palette
 - Dynamic items (e.g. universes) are handled by the `useUniverseNavItems()` hook (`useNavItems()` just returns the static `navItems`)
-- **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer, with
-  Applied as its child · Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
+- **The sidebar is five named sections, by job** (navigation plan D3, Nav.1): **Run** (Programmer ·
+  Show · Prompt Book · Busk · Stage), **Rig** (Patch List · Fixtures · Groups · Regions · Rigging ·
   Channels), **Library** (Looks · Cues · Palettes · Effects · Speed Masters · Scripts), **Project**
   (Settings · Surfaces · Sync) and **Desk** (Projects, then Install Settings and its tabs). A row's
   `section` is a `NavSection`, `NAV_SECTIONS` holds the labels, and the array is declared in section
@@ -6620,18 +6684,19 @@ path may quietly change where it lands.
   unique — `navigation.test.ts` pins it. `keywords` are extra words ⌘K matches a row on, each
   scored whole (*fx library* finds Effects). The Actions group's *Project Settings* and the Projects
   group's *View All Projects* went, being the Settings and Projects rows a second time.
-- **The applied tables are one sidebar row and three ⌘K items** (venue-visit plan S14, §The applied
-  tables). *Applied* is the Programmer row's child (`parent: "programmer"`, drawn indented and marked
-  `data-nav-child`), so a show's home — which lists each section's top rows — leaves it off (Chris,
-  2026-10-17, K3). ⌘K drops that row (`APPLIED_NAV_ID`) and lists `appliedTableNavItems` in its
-  place — *Applied FX*, *Applied Looks*, *Applied Palettes* — as `?table=` on the one route,
-  `pathMatch` the route's, the way the palette families are `?family=` on `/palettes`.
+- **The Programmer's tables are three ⌘K items and no sidebar row** (tables-colours plan D1,
+  §The programmer's tables). ⌘K lists `programmerTableNavItems` beside the Programmer row —
+  *Programmer › FX*, *Programmer › Stack*, *Programmer › Scenery* — as `?table=` on the one route,
+  `pathMatch` the route's, the way the palette families are `?family=` on `/palettes`; the Programmer
+  row itself lands on the window's own table. The *Applied* row that was the Programmer's child is
+  gone with its route; a row's `parent` (drawn indented, `data-nav-child`, left off a show's home)
+  is still honoured, and no row uses it now.
 - **The ⌘K window commands are actions, not `NavItem`s.** `useWindowCommands()` in
   `src/navigation.ts` builds ⌘K's *Screens* group from the windows registry the way
   `useTemplateFamilyNavItems` builds its four from the family list, and `buildWindowCommands` is the
   pure half `navigation.test.ts` pins: *Go full screen* / *Exit full screen* (⇧F, absent where the
   browser has no Fullscreen API), *Screens…* with the window count, *Show <view> on <window>* for
-  every **other** window × the nine views in `lib/windowViews.ts` (this window has the Navigation
+  every **other** window × the eight views in `lib/windowViews.ts` (this window has the Navigation
   group already), *Open <view> on another display* (Chrome only, absent elsewhere — D13's rule that a
   missing feature is quiet, never a disabled row saying "use Chrome"), *<Window> · own selection* /
   *<Window> · follow the desk selection* for every other Busk or Programmer window (desk-follow D4,
@@ -6930,8 +6995,8 @@ path may quietly change where it lands.
   opens General, which is the row the sidebar lights there. A new tab gets its row's predicate by
   being in the map; a tab with no row is always drawn.
 - **Off the rig, every row stays** (navigation plan D4, Nav.2). A row whose view reads or drives the
-  live show carries `needsRig` — the ten are Programmer, its Applied tables, Show, Prompt Book, Busk,
-  Stage, Fixtures, Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
+  live show carries `needsRig` — the nine are Programmer, Show, Prompt Book, Busk, Stage, Fixtures,
+  Groups, Channels and Surfaces, which `navigation.test.ts` pins — and the field is the sentence
   `NotOnRig` says (*The Stage view draws the rig that's live*). On a project that is not on the rig
   `filterNavItems` keeps those rows and marks them `offRig`, and three places draw the mark, all
   from that one answer:

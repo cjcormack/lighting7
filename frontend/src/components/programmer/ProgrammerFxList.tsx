@@ -1,5 +1,4 @@
 import { memo, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router'
 import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pencil, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -56,16 +55,14 @@ import { effectTargetLabel, selectionItems } from '@/lib/effectTargets'
  * *Save as template…* needs to read an effect's category: a single shared cache entry the whole app
  * already subscribes to, not a fetch per row.
  */
-export const ProgrammerFxList = memo(function ProgrammerFxList() {
+export const ProgrammerFxList = memo(function ProgrammerFxList({ projectId }: { projectId: number }) {
   const { data: effects } = useActiveEffectsQuery()
   const { data: layers } = useProgrammerLayersQuery()
   const { data: library } = useEffectLibraryQuery()
   // A step effect's family is its palettes' or its setting's, not its library category's (effects
   // plan §3.6), so *Save as palette…* reads the palette list too — one shared cache entry, and only
-  // the project in the route's.
-  const { projectId } = useParams<{ projectId: string }>()
-  const projectIdNum = projectId ? Number(projectId) : NaN
-  const { data: templates } = useTemplateListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
+  // the programmer's project.
+  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !Number.isFinite(projectId) })
   // One read for the band, not one per row: Blind holds every programmer effect (show-cue-editing
   // plan D7), and each held row says so.
   const blind = useProgrammerBlind()
@@ -127,6 +124,7 @@ export const ProgrammerFxList = memo(function ProgrammerFxList() {
         />
       )}
       <NewTemplateFromEffectSheet
+        projectId={projectId}
         open={saving != null}
         onOpenChange={(next) => !next && setSaving(null)}
         effect={saving}

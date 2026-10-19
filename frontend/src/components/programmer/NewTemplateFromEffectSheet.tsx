@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router'
 import {
   Sheet,
   SheetBody,
@@ -49,19 +48,17 @@ import type { TemplateEffect } from '@/api/templatesApi'
  * the effect and all its tuning come from the instance — so all that is left is a name.
  */
 export function NewTemplateFromEffectSheet({
+  projectId: projectIdNum,
   open,
   onOpenChange,
   effect,
 }: {
+  projectId: number
   open: boolean
   onOpenChange: (open: boolean) => void
   /** The running effect being captured. Null closes the sheet. */
   effect: ActiveEffect | null
 }) {
-  // From the route, not a prop, for `useColourTemplates`' reason: the FX band is mounted from the
-  // programmer page, which has a project, and nothing threads one down to a row.
-  const { projectId } = useParams<{ projectId: string }>()
-  const projectIdNum = projectId ? Number(projectId) : NaN
   const [create, { isLoading, error, reset }] = useCreateTemplateMutation()
   const { data: library } = useEffectLibraryQuery()
 

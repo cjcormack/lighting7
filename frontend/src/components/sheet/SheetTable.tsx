@@ -117,6 +117,8 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   rowDrag?: {
     enabled: boolean
     onReorder: (ids: RowId[]) => void
+    /** False pins a row in place: no grip, no drag, and no drop onto it. */
+    canDrag?: (row: Row) => boolean
   }
   cellSelection: CellSelection<C>
   onRowMarquee?: (ids: RowId[]) => void
@@ -431,6 +433,7 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   start={virtualRow.start}
                   height={rowHeight}
                   disabled={!rowDrag.enabled}
+                  pinned={rowDrag.canDrag?.(row) === false}
                   render={view}
                 />
               ) : (
@@ -558,16 +561,18 @@ function SortableVirtualRow({
   start,
   height,
   disabled,
+  pinned,
   render,
 }: {
   id: RowId
   start: number
   height: number
   disabled: boolean
+  pinned: boolean
   render: (handle?: SheetDragHandle) => React.ReactNode
 }) {
   const { setNodeRef, setActivatorNodeRef, listeners, attributes, transform, transition, isDragging } =
-    useSortable({ id, disabled })
+    useSortable({ id, disabled: { draggable: disabled || pinned, droppable: disabled || pinned } })
   return (
     <div
       ref={setNodeRef}
@@ -591,7 +596,7 @@ function SortableVirtualRow({
           `disabled` on the sortable is what makes the drag genuinely impossible rather than merely
           unadvertised — both halves are needed, as `StackDetail` found. */}
       {render(
-        disabled
+        disabled || pinned
           ? undefined
           : {
               ref: setActivatorNodeRef,

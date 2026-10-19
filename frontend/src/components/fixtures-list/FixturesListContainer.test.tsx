@@ -145,10 +145,13 @@ vi.mock('./SpreadPopover', async (importOriginal) => ({
 }))
 vi.mock('../groups/FixtureDetailModal', () => ({ FixtureDetailModal: () => null }))
 vi.mock('../fixtures/GroupDetailModal', () => ({ GroupDetailModal: () => null }))
+const router = vi.hoisted(() => ({ search: '', setSearchParams: vi.fn(), searchParamReads: 0 }))
 vi.mock('react-router', () => ({
   useNavigate: () => vi.fn(),
-  useParams: () => ({ projectId: '1' }),
-  useSearchParams: () => [new URLSearchParams(), vi.fn()],
+  useSearchParams: () => {
+    router.searchParamReads++
+    return [new URLSearchParams(router.search), router.setSearchParams]
+  },
 }))
 
 /**
@@ -211,6 +214,9 @@ vi.mock('./FixturesTable', () => ({
 const { FixturesListContainer } = await import('./FixturesListContainer')
 
 beforeEach(() => {
+  router.search = ''
+  router.setSearchParams.mockClear()
+  router.searchParamReads = 0
   releaseFrames.calls = []
   rowSelection.ids = new Set()
   rowSelection.select.mockClear()
@@ -226,16 +232,32 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+describe('the ?select= deep link', () => {
+  it('selects the fixture a plain list is linked to, and consumes the param', () => {
+    router.search = '?select=fixture:a'
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
+    expect(rowSelection.select).toHaveBeenCalledWith('fixture:a', 'replace')
+    expect(router.setSearchParams).toHaveBeenCalled()
+  })
+
+  it('holds no router subscription where the list takes no deep links — the programmer’s grid', () => {
+    router.search = '?select=fixture:a'
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" enableDeepLinkSelect={false} />)
+    expect(router.searchParamReads).toBe(0)
+    expect(rowSelection.select).not.toHaveBeenCalled()
+  })
+})
+
 describe('FixturesListContainer on the plain list routes', () => {
   it('lists no infrastructure fixture', () => {
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     const keys = (table.rows ?? []).flatMap((row) => ('fixture' in row ? [row.fixture.key] : []))
     expect(keys).toContain('a')
     expect(keys).not.toContain('hazer-power')
   })
 
   it('hands the table a cell selection, the way the programmer sheet always was', () => {
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(table.cellSelection).toBeDefined()
     expect(table.cellSelection!.count).toBe(0)
   })
@@ -243,7 +265,7 @@ describe('FixturesListContainer on the plain list routes', () => {
   it('answers a click on a value cell by selecting that cell, not its row', () => {
     // The row rule this replaced: a click there used to select the clicked *row*, because there
     // was no cell selection for the toolbar, `commitNow` or `batchCountFor` to read.
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     fireEvent.click(screen.getByTestId('cell'))
     expect(screen.getByTestId('cell')).toHaveTextContent('1 cells')
     expect(rowSelection.select).not.toHaveBeenCalled()
@@ -251,7 +273,7 @@ describe('FixturesListContainer on the plain list routes', () => {
 
   it('swaps the row Spread for the cell verbs once a cell is selected', () => {
     rowSelection.ids = new Set(['fixture:a'])
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(screen.getByTestId('row-spread')).toBeInTheDocument()
     fireEvent.click(screen.getByTestId('cell'))
     expect(screen.getByTestId('cell-verbs')).toBeInTheDocument()
@@ -263,9 +285,9 @@ describe('FixturesListContainer on the plain list routes', () => {
     // rectangle over one of their columns is worth keeping; the programmer trades it away, because
     // there the marquee *is* what a selection is for.
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
-    const { rerender } = render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    const { rerender } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(screen.getByTestId('row-spread')).toBeInTheDocument()
-    rerender(<FixturesListContainer grouped={false} selectionScope="fixtures" showOwnership />)
+    rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" showOwnership />)
     expect(screen.queryByTestId('row-spread')).toBeNull()
   })
 
@@ -275,7 +297,7 @@ describe('FixturesListContainer on the plain list routes', () => {
     // Colour cell did nothing; it has both rungs now, and a blank cell is grid background wearing a
     // cell's position. Pinned because the refusal was explicit, so its reversal should be too.
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     fireEvent.click(screen.getByTestId('blank-cell'))
     expect(rowSelection.clear).toHaveBeenCalled()
   })
@@ -283,7 +305,7 @@ describe('FixturesListContainer on the plain list routes', () => {
   it('drops the cells first, leaving the rows, when a marquee is what is selected', () => {
     // The other rung: with cells selected the same click narrows rather than clearing the rows,
     // which is what makes `clearByLadder` a ladder and not a blanket deselect.
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     fireEvent.click(screen.getByTestId('cell'))
     expect(screen.getByTestId('cell')).toHaveTextContent('1 cells')
     fireEvent.click(screen.getByTestId('blank-cell'))
@@ -295,7 +317,7 @@ describe('FixturesListContainer on the plain list routes', () => {
     // `useProgrammerScope` is null on these two routes, so the scope effect fires once on mount and
     // finds no marquee. Pinned because the conversion below writes through the row door, and a
     // mount-time write there would be a `set([])` published to the desk by the programmer's bridge.
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(rowSelection.setSelection).not.toHaveBeenCalled()
   })
 
@@ -303,7 +325,7 @@ describe('FixturesListContainer on the plain list routes', () => {
     // Gated on `showOwnership` until this session, which would have left ⌫ here clearing the
     // values while the effect driving them kept running — indistinguishable, on the rig, from the
     // key having done nothing.
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(clearCellEffects.enabled).toBe(true)
   })
 })
@@ -319,7 +341,7 @@ describe('FixturesListContainer cell arrows', () => {
   const press = (key: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key, ...init })
 
   it('moves a selected cell with every arrow and brings it into view, without touching the rows', () => {
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     fireEvent.click(screen.getByTestId('cell'))
     expect(cells()).toEqual(['fixture:a·dimmer'])
     press('ArrowRight')
@@ -334,8 +356,24 @@ describe('FixturesListContainer cell arrows', () => {
     expect(rowSelection.select).not.toHaveBeenCalled()
   })
 
+  it('hears no key while the grid sits inside an inert ancestor — the programmer’s other tables', () => {
+    render(
+      <div inert>
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
+      </div>,
+    )
+    fireEvent.click(screen.getByTestId('cell'))
+    expect(cells()).toEqual(['fixture:a·dimmer'])
+    press('ArrowRight')
+    press('Enter')
+    press('Backspace')
+    press('Escape')
+    expect(cells()).toEqual(['fixture:a·dimmer'])
+    expect(table.keyboardOpens).toEqual([])
+  })
+
   it('extends a rectangle with Shift and shrinks it back towards the anchor', () => {
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     fireEvent.click(screen.getByTestId('cell'))
     press('ArrowRight', { shiftKey: true })
     // The head steps past `b`'s blank row, but the rectangle still covers it, as a marquee's does.
@@ -356,7 +394,7 @@ describe('FixturesListContainer cell arrows', () => {
 
   it('leaves → and ← over a row selection to the tree: they open and close a multi-head fixture', () => {
     rowSelection.ids = new Set(['fixture:c'])
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     const closed = table.rows.length
     press('ArrowRight')
     expect(table.rows.length).toBe(closed + 2)
@@ -366,7 +404,7 @@ describe('FixturesListContainer cell arrows', () => {
   })
 
   it('leaves ⌥ / ⌘ / Ctrl arrows alone, and an arrow with no cells selected to the rows', () => {
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     press('ArrowRight')
     expect(table.cellSelection!.count).toBe(0)
     press('ArrowDown')
@@ -392,14 +430,14 @@ describe('FixturesListContainer across a programmer scope switch', () => {
   it('drops a marquee to its rows rather than to nothing', () => {
     programmerScope.value = { kind: 'local' }
     const { rerender } = render(
-      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />,
+      <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />,
     )
     fireEvent.click(screen.getByTestId('cell'))
     expect(screen.getByTestId('cell')).toHaveTextContent('1 cells')
     expect(rowSelection.setSelection).not.toHaveBeenCalled()
 
     programmerScope.value = { kind: 'output' }
-    rerender(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    rerender(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
 
     expect(rowSelection.setSelection).toHaveBeenCalledWith(['fixture:a'])
     expect(rowSelection.clear).not.toHaveBeenCalled()
@@ -414,7 +452,7 @@ describe('FixturesListContainer across a programmer scope switch', () => {
     // scope here is read through a mocked hook rather than through context, so a bail-out would
     // mean the switch never reached the component at all and the test would pass vacuously.
     const view = () => (
-      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+      <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
     )
     const { rerender } = render(view())
     fireEvent.click(screen.getByTestId('cell'))
@@ -448,7 +486,7 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
     programmerScope.value = { kind: 'local' }
     table.editorOpen = true
     const view = () => (
-      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+      <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
     )
     const { rerender } = render(view())
     fireEvent.click(screen.getByTestId('cell'))
@@ -466,7 +504,7 @@ describe('FixturesListContainer closes an open cell editor on a scope switch', (
     programmerScope.value = { kind: 'local' }
     table.editorOpen = false
     const view = () => (
-      <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+      <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
     )
     const { rerender } = render(view())
     fireEvent.click(screen.getByTestId('cell'))
@@ -494,7 +532,7 @@ describe('FixturesListContainer with the rail Colour tab open', () => {
     table.editorOpen = true
     return render(
       <RailTabClaimContext.Provider value={rail}>
-        <FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
       </RailTabClaimContext.Provider>,
     )
   }
@@ -532,7 +570,7 @@ describe('FixturesListContainer with the rail Colour tab open', () => {
 describe('Release over a row selection on the programmer (fixture-fx-sheets plan D18)', () => {
   it('sends one programmer.clearTarget per selected row, at the programmer fade', async () => {
     rowSelection.ids = new Set(['fixture:a', 'fixture:b'])
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     // A rows-only selection on the programmer: Release is row C's verb there, counting the rows.
     fireEvent.click(screen.getByRole('button', { name: 'Release 2' }))
     await vi.waitFor(() => expect(releaseFrames.calls).toHaveLength(2))
@@ -542,19 +580,19 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
   it('is refused, with its reason, while a Look or palette layer is focused — live in Output (Chris’s call)', () => {
     rowSelection.ids = new Set(['fixture:a'])
     programmerScope.value = { kind: 'layer', layerId: 3 } as ProgrammerScope
-    const { unmount } = render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    const { unmount } = render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     const release = screen.getByRole('button', { name: 'Release 1' })
     expect(release).toBeDisabled()
     expect(release.getAttribute('title')).toMatch(/Release clears Local/)
     unmount()
     programmerScope.value = { kind: 'output' } as ProgrammerScope
-    render(<FixturesListContainer grouped={false} selectionScope="programmer" showOwnership />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
     expect(screen.getByRole('button', { name: 'Release 1' })).toBeEnabled()
   })
 
   it('is not on the plain lists — the programmer is what it releases', () => {
     rowSelection.ids = new Set(['fixture:a'])
-    render(<FixturesListContainer grouped={false} selectionScope="fixtures" />)
+    render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
     expect(screen.queryByRole('button', { name: /^Release/ })).toBeNull()
   })
 })
@@ -569,7 +607,7 @@ describe('FixturesListContainer — what a palette press lands on (venue-visit p
       last = parts
       return null
     }
-    const props = { grouped: false, selectionScope: 'programmer' as const, showOwnership: true, renderToolbar }
+    const props = { projectId: 1, grouped: false, selectionScope: 'programmer' as const, showOwnership: true, renderToolbar }
     const { rerender } = render(<FixturesListContainer {...props} />)
     // Open the pixel bar so its cells have rows, then select one cell alone.
     rowSelection.ids = new Set(['fixture:c'])

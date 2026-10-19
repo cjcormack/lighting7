@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import { TRACKED_HATCH_CLASS } from '@/components/scenery/trackedHatch'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { formatError } from '@/lib/formatError'
 import { useProgrammerFade } from '@/lib/programmerFade'
+import { createSyncStore, sessionStorageArea } from '@/lib/syncStore'
 import { describeScenerySource, heldSceneryIn, sceneryKindLabel, sceneryMoves, shownSceneryState } from '@/lib/scenery'
 import { cn } from '@/lib/utils'
 import { useLookQuery } from '@/store/looks'
@@ -46,28 +47,30 @@ export const DEFAULT_SCENERY_FILTERS: SceneryFilters = { set: true, venue: true,
 /** Per window, as the busk sheet's tab is: `sessionStorage`, so a second window keeps its own. */
 export const SCENERY_FILTERS_KEY = 'programmer.scenery.filters'
 
-function readFilters(): SceneryFilters {
-  try {
-    const raw = window.sessionStorage.getItem(SCENERY_FILTERS_KEY)
-    if (raw == null) return DEFAULT_SCENERY_FILTERS
-    const parsed = JSON.parse(raw) as Partial<SceneryFilters>
-    return {
-      set: typeof parsed.set === 'boolean' ? parsed.set : DEFAULT_SCENERY_FILTERS.set,
-      venue: typeof parsed.venue === 'boolean' ? parsed.venue : DEFAULT_SCENERY_FILTERS.venue,
-      movingOnly: typeof parsed.movingOnly === 'boolean' ? parsed.movingOnly : DEFAULT_SCENERY_FILTERS.movingOnly,
-    }
-  } catch {
-    // A private window, blocked storage, or a value an older build wrote: the defaults.
-    return DEFAULT_SCENERY_FILTERS
-  }
+const sceneryFiltersStore = createSyncStore<SceneryFilters>({
+  key: SCENERY_FILTERS_KEY,
+  fallback: DEFAULT_SCENERY_FILTERS,
+  storage: sessionStorageArea,
+  parse: (parsed) => {
+    if (parsed == null || typeof parsed !== 'object') return DEFAULT_SCENERY_FILTERS
+    const stored = parsed as Partial<Record<keyof SceneryFilters, unknown>>
+    const flag = (key: keyof SceneryFilters) => (typeof stored[key] === 'boolean' ? stored[key] : DEFAULT_SCENERY_FILTERS[key])
+    return { set: flag('set'), venue: flag('venue'), movingOnly: flag('movingOnly') }
+  },
+})
+
+/**
+ * This window's filters, one value for the full list and the Scenery table, so a chip pressed in
+ * one is the chip lit in the other.
+ */
+export function useSceneryFilters(): [SceneryFilters, (next: SceneryFilters) => void] {
+  const filters = useSyncExternalStore(sceneryFiltersStore.subscribe, sceneryFiltersStore.getSnapshot, sceneryFiltersStore.getServerSnapshot)
+  return [filters, sceneryFiltersStore.set]
 }
 
-function writeFilters(filters: SceneryFilters) {
-  try {
-    window.sessionStorage.setItem(SCENERY_FILTERS_KEY, JSON.stringify(filters))
-  } catch {
-    // Storage refused: the filters still hold for this mount.
-  }
+/** Test seam. */
+export function resetSceneryFiltersStore() {
+  sceneryFiltersStore.reset()
 }
 
 /**
@@ -374,12 +377,8 @@ function OwnScopeSceneryList({ projectId }: { projectId: number }) {
 function SceneryList({ projectId, scope }: { projectId: number; scope: SceneryScope }) {
   const { data: elements } = useStageElementListQuery(projectId)
 
-  const [filters, setFilters] = useState<SceneryFilters>(readFilters)
-  const toggle = (key: keyof SceneryFilters) => {
-    const next = { ...filters, [key]: !filters[key] }
-    setFilters(next)
-    writeFilters(next)
-  }
+  const [filters, setFilters] = useSceneryFilters()
+  const toggle = (key: keyof SceneryFilters) => setFilters({ ...filters, [key]: !filters[key] })
 
   const heldKeys = useMemo(() => new Set(scope.held.keys()), [scope.held])
   const groups = useMemo(() => sceneryGroups(elements ?? [], filters, heldKeys), [elements, filters, heldKeys])

@@ -3,22 +3,21 @@ import { BUSK_FOCUSES, LIVE_SHEET_TABS, VIEW_OPTION_PAGE_FOLLOWS } from './buskW
 import { IMMERSIVE_VALUES, VIEW_OPTION_IMMERSIVE, type Immersive } from './immersive'
 import { VIEW_OPTION_SOURCE, VIEW_OPTION_VIEWPOINT } from './stageViewpoint'
 import { VIEW_OPTION_WORK_LIGHTS, WORK_LIGHTS } from '../components/stage3d/scene/workLights'
-import { APPLIED_TABLES, APPLIED_TABLE_TABS, VIEW_OPTION_APPLIED_TABLE } from './appliedTables'
+import { PROGRAMMER_TABLES, PROGRAMMER_TABLE_LABELS, VIEW_OPTION_PROGRAMMER_TABLE } from './programmerTables'
 
 /**
  * The views one window can put on another (multi-screen plan §4, `Screens.dc.html` §2): the four
- * live views, the Stage view, the applied tables and the three libraries. A `windows.show` carries a **route path**, so
+ * live views, the Stage view and the three libraries. A `windows.show` carries a **route path**, so
  * this is the vocabulary that turns a picker's choice into one and a row's `view` back into a label.
  *
- * Nine literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
+ * Eight literals rather than a read of `navigation.ts`, for `lib/liveViews.ts`'s reason: a nav
  * entry's `pathMatch` answers "which sidebar row is lit" and has already diverged from "what is
  * this view called" once (`/palettes` carries four ⌘K entries on one `pathMatch`). The order is
  * `ViewSwitcher`'s for the four, then Stage (stage-view plan session 1, a hall screen on a
- * viewpoint), then the applied tables (venue-visit plan S14), then the three libraries — Looks, Cues
- * (cue model plan §3.7) and Palettes, in the sidebar's order. Stage is not a
- * live view — it has no `ShowHeader` and no immersive — so it carries its viewpoint, its source and
- * its work lights, and nothing else; the applied tables carry which table, and nothing else.
- * `/programmer/applied` sits under `/programmer`, and the longest segment wins (`windowViewOf`).
+ * viewpoint), then the three libraries — Looks, Cues (cue model plan §3.7) and Palettes, in the
+ * sidebar's order. Stage is not a live view — it has no `ShowHeader` and no immersive — so it
+ * carries its viewpoint, its source and its work lights, and nothing else. The Programmer carries
+ * its table beside immersive (tables-colours plan D1).
  *
  * Matching is [pathHasSegment], never `startsWith`: `/programmer` must not answer for `/program`
  * (the legacy redirect) and `/fx-library` must not answer for `/busk`'s old `/fx`.
@@ -175,20 +174,26 @@ export const STAGE_WORK_LIGHTS_OPTION: WindowViewOption = {
 }
 
 /**
- * The applied tables' *Table · FX | Looks | Palettes* (venue-visit plan S14): which of the three a
- * window on that route shows. The target applies it through `lib/appliedTables.ts`'s
- * `applyAppliedViewOptions` and the route mirrors it into `?table=`.
+ * The Programmer's *Table · Values | Stack | FX | Scenery* (tables-colours plan D1): which of its
+ * four tables a window on it shows. The target applies it through `lib/programmerTables.ts`'s
+ * `applyProgrammerViewOptions` and the page mirrors it into `?table=`.
  */
-export const APPLIED_TABLE_OPTION: WindowViewOption = {
-  key: VIEW_OPTION_APPLIED_TABLE,
+export const PROGRAMMER_TABLE_OPTION: WindowViewOption = {
+  key: VIEW_OPTION_PROGRAMMER_TABLE,
   label: 'Table',
   kind: 'enum',
-  values: APPLIED_TABLES,
-  valueLabels: APPLIED_TABLE_TABS,
+  values: PROGRAMMER_TABLES,
+  valueLabels: PROGRAMMER_TABLE_LABELS,
 }
 
 export const WINDOW_VIEWS: readonly WindowView[] = [
-  { id: 'programmer', label: 'Programmer', segment: '/programmer', options: [IMMERSIVE_OPTION], needsRig: true },
+  {
+    id: 'programmer',
+    label: 'Programmer',
+    segment: '/programmer',
+    options: [PROGRAMMER_TABLE_OPTION, IMMERSIVE_OPTION],
+    needsRig: true,
+  },
   { id: 'show', label: 'Show', segment: '/show', options: [IMMERSIVE_OPTION], needsRig: true },
   { id: 'prompt-book', label: 'Prompt Book', segment: '/prompt-book', options: [IMMERSIVE_OPTION], needsRig: true },
   {
@@ -211,13 +216,6 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
     needsRig: true,
     options: [STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION],
   },
-  {
-    id: 'applied',
-    label: 'Applied',
-    segment: '/programmer/applied',
-    needsRig: true,
-    options: [APPLIED_TABLE_OPTION],
-  },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'cues', label: 'Cues', segment: '/cues' },
   { id: 'templates', label: 'Palettes', segment: '/palettes' },
@@ -225,7 +223,8 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
 
 /**
  * What this window announces as `viewOptions` for [view] (busk-chrome plan §3.2): the busk facts
- * on the busk view, the viewpoint, the source and the work lights on the Stage view, and
+ * on the busk view, the viewpoint, the source and the work lights on the Stage view, the table on
+ * the Programmer, and
  * `immersive` under every live view; nothing at all — the key absent, not an empty map — for a view
  * that contributes none, so a window on a library still sends the five-key frame it always did. Pure, so `windowsApi.test.ts` can pin which
  * views carry the key without a router.
@@ -235,7 +234,7 @@ export function announcedViewOptions(
   buskOptions: Readonly<Record<string, string>>,
   immersive: Immersive,
   stageOptions: Readonly<Record<string, string>> = {},
-  appliedOptions: Readonly<Record<string, string>> = {},
+  programmerOptions: Readonly<Record<string, string>> = {},
 ): Record<string, string> | undefined {
   if (view?.options == null) return undefined
   const options: Record<string, string> =
@@ -243,8 +242,8 @@ export function announcedViewOptions(
       ? { ...buskOptions }
       : view.id === 'stage'
         ? { ...stageOptions }
-        : view.id === 'applied'
-          ? { ...appliedOptions }
+        : view.id === 'programmer'
+          ? { ...programmerOptions }
           : {}
   if (view.options.some((option) => option.key === VIEW_OPTION_IMMERSIVE)) options[VIEW_OPTION_IMMERSIVE] = immersive
   return options
@@ -264,7 +263,7 @@ export function windowViewProject(view: WindowView, projectId: number, currentPr
 }
 
 /**
- * Which of the nine a route path is showing, or null for any other page. Longest segment wins so
+ * Which of the eight a route path is showing, or null for any other page. Longest segment wins so
  * a future `/show/…` sibling still reads as Show, not as whatever shorter segment it also ends in.
  */
 export function windowViewOf(pathname: string): WindowView | null {
@@ -276,7 +275,7 @@ export function windowViewOf(pathname: string): WindowView | null {
   return best
 }
 
-/** A label for any route: one of the nine by name, else the path itself. */
+/** A label for any route: one of the eight by name, else the path itself. */
 export function windowViewLabel(pathname: string): string {
   return windowViewOf(pathname)?.label ?? pathname
 }

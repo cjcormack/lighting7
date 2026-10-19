@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1) | the programmer's Values · Stack · FX · Scenery tabs on the desk, the iPad frame and a second screen: the grid keeps its selection across a switch, the Stack table reorders the rig's layers and points the grid at one, the tables agree with the rail while it is busked, and the Screens sheet and ⌘K set the tab | Tables and colours S1, 2026-10-18 |
 | [`FU-MANUAL-SHOWSOUND-BEAMRING`](#fu-manual-showsound-beamring) | the Show-Sound LEDBEAMRING's channels do what its hand-written ChamSys head file says — the colour wheel, gobos, prism, strobe bands, reset and pan front — and the Stage view's ring matches the unit's: colour band, chases, speed, and whether the dimmer reaches it | Show-Sound LEDBEAMRING type, 2026-10-18 |
 | [`FU-MANUAL-VENUE-VISIT-R3-8`](#fu-manual-venue-visit-r3-8) | into the cue editor at the desk — a palette and a Look pressed into Q4's cells and Looks tab while the show runs locked-then-unlocked move nothing on stage, Blue takes Red's heads in the stored cue, the next GO lands them, and a layer's delay and master set from its settings popover take effect on that GO | Venue-visit R3.8, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-ATT-3`](#fu-manual-venue-visit-att-3) | *Attach to venue…* reads and works on the desk's two screens and the iPad: its pick, its review's groups and answers at each width, and a real attach of a running show end to end that closes on its home with the pin | Venue visit Att.3, 2026-10-17 |
@@ -30,7 +31,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-VENUE-VISIT-R3-6`](#fu-manual-venue-visit-r3-6) | effects in the popup at the desk — a cell's Effects band lights what runs on its heads on the desk and on the iPad's bottom sheet, *+ Effect* over four hexes starts one chase and takes them off the colour effect they ran, and an edit for two heads of a running chase splits them off with no head jumping | Venue-visit R3.6, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-S16`](#fu-manual-venue-visit-s16) | a cue's speed masters set the rig's tempo on every GO, GO TO and GO BACK into it, from either stack it sits in and from a busk pad, a tap afterwards wins until the next cue, and a sync pull mid-show keeps the tap | Venue visit S16, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-R3-5`](#fu-manual-venue-visit-r3-5) | the palette popup and the one picker at the desk — a dimmer, zoom and colour cell each offer their family's palettes round the editor on the desk and in the iPad's bottom sheet, a band press lands on the cells under the cell's family, a press from the picker leaves it open, and the rail's *+ Look* and *+ Palette* press onto the selection | Venue-visit R3.5, 2026-10-17 |
-| [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
+| [`FU-MANUAL-VENUE-VISIT-S14`](#fu-manual-venue-visit-s14) | *superseded by `FU-MANUAL-TABLES-COLOURS-S1`, which runs its checks on the programmer's tabs* — the applied tables on a second screen list what the programmer's rail lists while it is busked, sort and filter where the address says, act through the rail's own actions, and take their table from the Screens sheet | Venue visit S14, 2026-10-17 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-5`](#fu-manual-venue-visit-nav-5) | a venue's home on the desk's screens says where the venue stands — its version and note, the draft counted as the band counts it, its sync — and lists its shows with how far behind each is, opening one and making it current through the confirmation, with no *Make current* for a show whose version is not here | Venue visit Nav.5, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-R3-4`](#fu-manual-venue-visit-r3-4) | one mask at the desk — the family pill picked on the busk screen masks the programmer's next press and its row C pill reads it, *All attributes* clears it on both, the marquee and a row click still move it, and Record opens on it while a change there leaves the pill alone | Venue-visit R3.4, 2026-10-16 |
 | [`FU-MANUAL-VENUE-VISIT-NAV-4`](#fu-manual-venue-visit-nav-4) | a show's home on the desk's screens says where the show stands — its venue pin with *Run against* while held, its sync, its live cues — and every place a show's actions are offered offers the same ones, with no *Make current* for a show whose venue is not here | Venue visit Nav.4, 2026-10-16 |
@@ -490,7 +491,45 @@ a real sync pull leaving a tapped tempo alone mid-show.
 
 ---
 
+## `FU-MANUAL-TABLES-COLOURS-S1`
+
+**What it proves**: *the programmer's tables at the desk* — tables-colours S1: the applied tables
+became the programmer's tabs, Values · Stack · FX · Scenery on row B, with the rail left as it was
+for one session.
+
+**Why it is here**: the tests mount one grid across a stubbed switch and compare the tables with the
+rail over stubbed state; only a desk shows the selection surviving a real switch, a drag reordering
+the rig's layers, the folds on real screens and the tables keeping up while another screen busks.
+
+**Test**, on Sleeping Beauty, the programmer holding a few palettes, Looks, effects and a held piece
+of scenery:
+
+1. **The grid keeps its selection.** Select four hexes on Values, switch to Stack, FX and Scenery and
+   back: the four are still selected, here and on the busk screen. On Stack, press ⌫: nothing on the
+   rig changes.
+2. **Stack.** *Your values* is on top, then every layer as the rail lists it, top first. Drag the
+   bottom layer to the top: the rig changes as if dragged on the rail, and the rail follows. Pick the
+   *Looks* chip: the grips go and the footer says why. ⏎ on a layer: Values, focused on that layer.
+   *Make layer* on *Your values* makes one.
+3. **FX and Scenery.** *+ Effect* over the selection starts a Local effect, listed at once. Pause,
+   *Edit…* and *Stop* act as on the rail. On Scenery, move a held drape from its row's sliders and
+   release it with its ×; the rail's band follows.
+4. **Address and screens.** Sort FX by Home, filter *wash*, reload: the same tab and view. Put Screen 2
+   on the Programmer from Screen 1's Screens sheet, set its *Table* to *Stack*: it switches. ⌘K's
+   *Programmer › Scenery* opens that tab; an old `/programmer/applied?table=looks` link lands on Stack.
+5. **Folds.** On the iPad (1180×820) the tabs keep their counts and the open one its word; at 768 and
+   on a phone they are one menu button and row B fits, Lit and Columns as icons. On a landscape
+   phone (852×393), off Values, row A keeps its own row.
+6. **The rig.** Open the programmer on TCH Test, not on the rig, with `?table=stack`: *TCH Test isn't
+   on the rig*, the address keeping its table.
+
+---
+
 ## `FU-MANUAL-VENUE-VISIT-S14`
+
+**Superseded by [`FU-MANUAL-TABLES-COLOURS-S1`](#fu-manual-tables-colours-s1)** (2026-10-18): the
+route below is gone and its tables are the programmer's tabs; that procedure runs these checks
+there.
 
 **What it proves**: *the applied tables at the desk* — venue-visit S14: Applied FX, Applied Looks
 and Applied Palettes read the live programmer as the rail does, their rows act through the rail's
