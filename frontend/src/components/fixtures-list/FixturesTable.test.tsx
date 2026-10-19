@@ -2,15 +2,19 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const rowRenders = vi.hoisted(() => ({ count: 0 }))
+
 // Everything store-connected is mocked away: the point of this suite is the GESTURE, not the data.
 // `aggregateCellValue` is passed through to the real thing: the scoped-value path runs a staged
 // value through the *same* aggregation the live read uses, and stubbing it would test nothing.
 vi.mock('./useRowValues', async () => ({
   aggregateCellValue: (await vi.importActual<typeof import('./useRowValues')>('./useRowValues'))
     .aggregateCellValue,
-  useRowValues: () => ({
-    dimmer: { kind: 'slider', min: 0.5, max: 0.5, isUniform: true },
-  }),
+  useRowValues: () => {
+    // One call per row render — how the colour test counts which rows a recolour re-rendered.
+    rowRenders.count++
+    return { dimmer: { kind: 'slider', min: 0.5, max: 0.5, isUniform: true } }
+  },
   buildRowCells: () => [
     {
       col: 'dimmer',
@@ -166,6 +170,7 @@ import { useCellSelection } from '../sheet/useCellSelection'
 import type { Row } from './rowModel'
 import { lookRowKey } from '../programmer/lookRowKey'
 import type { ColumnKey } from './columns'
+import type { FixtureColour } from '../../lib/fixtureColours'
 
 const ROWS: Row[] = [
   {
@@ -1417,5 +1422,54 @@ describe('FixturesTable — the FX lens', () => {
     lookStore.current = layerStore({})
     render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
     expect(chips()).toEqual([])
+  })
+})
+
+describe('FixturesTable name mark (tables-colours plan D8)', () => {
+  // Stable props, so a re-render of the table re-renders only the rows whose own props moved.
+  const noop = () => {}
+  const isSelected = () => false
+  const batchFor = () => ({ count: 1, skipped: 0, resolutions: [] })
+  const columns: ColumnKey[] = ['dimmer']
+  const rowIds = new Set(ROWS.map((r) => r.id))
+
+  function Marked({ colours }: { colours: ReadonlyMap<string, FixtureColour> }) {
+    const cellSelection = useCellSelection<ColumnKey>(rowIds)
+    return (
+      <FixturesTable
+        rows={ROWS}
+        visibleColumns={columns}
+        isSelected={isSelected}
+        onRowClick={noop}
+        onToggleExpand={noop}
+        onBeginCellEdit={noop}
+        onCellCommit={noop}
+        batchFor={batchFor}
+        scopeLabel="Local"
+        onShowInfo={noop}
+        fixtureColours={colours}
+        cellSelection={cellSelection}
+      />
+    )
+  }
+
+  const rowOf = (name: string) => screen.getByText(name).closest('[data-row-id]') as HTMLElement
+
+  it('draws a swatch and the row class that washes the name cell, from the index it is handed', () => {
+    render(<Marked colours={new Map([['a', 'red' as const]])} />)
+    expect(rowOf('SL Wash 1').className).toContain('fixture-tag-red')
+    expect(screen.getByRole('img', { name: 'Colour: Red' })).toBeInTheDocument()
+    expect(rowOf('SL Wash 1').querySelector(':scope > [data-name-cell]')).not.toBeNull()
+    expect(rowOf('SL Wash 2').className).not.toContain('fixture-tag')
+    // Identity only: no value cell carries the colour.
+    expect(rowOf('SL Wash 1').querySelector('[data-cell] .fixture-tag, [data-cell] [data-tag-mark]')).toBeNull()
+  })
+
+  it('re-renders only the rows whose colour moved', () => {
+    const { rerender } = render(<Marked colours={new Map([['a', 'red' as const]])} />)
+    rowRenders.count = 0
+    rerender(<Marked colours={new Map([['a', 'red' as const], ['b', 'lime' as const]])} />)
+    expect(rowOf('SL Wash 2').className).toContain('fixture-tag-lime')
+    expect(rowRenders.count).toBe(1)
   })
 })

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Sheet,
   SheetContent,
@@ -35,7 +35,9 @@ import {
   useDeletePatchGroupMutation,
   useUpdatePatchMutation,
 } from '@/store/patches'
-import type { FixturePatch, PatchGroupMember, RigOwner } from '@/api/patchApi'
+import type { ColourOwner, FixturePatch, PatchGroupMember, RigOwner } from '@/api/patchApi'
+import { ColourSwatchGrid } from '@/components/fixtureColours/ColourSwatches'
+import { readColour, type FixtureColour } from '@/lib/fixtureColours'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { VENUE_ADMIN_ORDER_REASON } from '@/components/groups/useGroupMemberReorder'
 
@@ -64,34 +66,33 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
   const [deleteGroup, { isLoading: isDeleting }] = useDeletePatchGroupMutation()
   const [updatePatch] = useUpdatePatchMutation()
 
-  const [name, setName] = useState(initialName)
-  const [members, setMembers] = useState<PatchGroupMember[]>([])
+  // The drafts are overlays on the stored group, so a refetch (a recolour, a member renamed) shows
+  // through them and never throws an unsaved rename or reorder away; each opening starts clean.
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [orderDraft, setOrderDraft] = useState<number[] | null>(null)
+  const [opened, setOpened] = useState({ open, groupId })
+  if (opened.open !== open || opened.groupId !== groupId) {
+    setOpened({ open, groupId })
+    setNameDraft(null)
+    setOrderDraft(null)
+  }
+  const name = nameDraft ?? groupDetail?.name ?? initialName
+  const stored = useMemo(
+    () => [...(groupDetail?.members ?? [])].sort((a, b) => a.sortOrder - b.sortOrder),
+    [groupDetail],
+  )
+  const members = useMemo(() => withOrder(stored, orderDraft), [stored, orderDraft])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
-  useEffect(() => {
-    if (groupDetail) {
-      setName(groupDetail.name)
-      setMembers([...groupDetail.members].sort((a, b) => a.sortOrder - b.sortOrder))
-    }
-  }, [groupDetail])
-
-  useEffect(() => {
-    setName(initialName)
-  }, [initialName])
-
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
-    setMembers((prev) => {
-      const oldIndex = prev.findIndex((m) => m.patchId === active.id)
-      const newIndex = prev.findIndex((m) => m.patchId === over.id)
-      return arrayMove(prev, oldIndex, newIndex)
-    })
+    const ids = members.map((m) => m.patchId)
+    setOrderDraft(arrayMove(ids, ids.indexOf(Number(active.id)), ids.indexOf(Number(over.id))))
   }
 
   if (!groupId) return null
@@ -108,7 +109,7 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
       : null
   const locked = lockedReason != null || (groupDetail == null && owner == null)
 
-  const originalOrder = groupDetail?.members.map(m => m.patchId) ?? []
+  const originalOrder = stored.map((m) => m.patchId)
   const currentOrder = members.map(m => m.patchId)
   const orderChanged = JSON.stringify(originalOrder) !== JSON.stringify(currentOrder)
   const nameChanged = name !== (groupDetail?.name ?? initialName)
@@ -127,6 +128,16 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
       return
     }
     onOpenChange(false)
+  }
+
+  // A colour is written as it is picked, alone, so a venue's group takes the show's recolour where
+  // the rest of it is locked (tables-colours plan D10). Only a venue looked at by an operator refuses.
+  const colourEditable = !readOnly && groupOwner != null
+  // The colour it already draws is no pick: on a venue's group it would pin the venue's colour as
+  // the show's own.
+  const setColour = (colour: FixtureColour | null) => {
+    if (colour === readColour(groupDetail?.colour)) return
+    void updateGroup({ projectId, groupId, colour }).unwrap().catch(ignoreReportedError)
   }
 
   const handleDelete = async () => {
@@ -151,11 +162,19 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
             <Input
               id="group-name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => setNameDraft(e.target.value)}
               autoFocus={!locked}
               disabled={locked}
             />
           </div>
+
+          <GroupColourField
+            colour={readColour(groupDetail?.colour)}
+            owner={groupDetail?.colourOwner ?? null}
+            venueGroup={groupOwner === 'VENUE'}
+            disabled={!colourEditable}
+            onPick={setColour}
+          />
 
           <Separator />
 
@@ -236,6 +255,55 @@ export function EditGroupSheet({ open, onOpenChange, groupId, groupName: initial
       </SheetContent>
     </Sheet>
   )
+}
+
+/**
+ * The group's colour (tables-colours plan D7, D9): it marks the group's row and tile and never its
+ * members — *Colour from group* on the patch list copies it onto them. On a venue's group in a show
+ * a pick is the show's recolour, drawn *yours*, and *Take venue's* takes the venue's back (D10).
+ */
+function GroupColourField({
+  colour,
+  owner,
+  venueGroup,
+  disabled,
+  onPick,
+}: {
+  colour: FixtureColour | null
+  owner: ColourOwner | null
+  venueGroup: boolean
+  disabled: boolean
+  onPick: (colour: FixtureColour | null) => void
+}) {
+  const yours = owner === 'SHOW'
+  const clear = !venueGroup ? (colour != null ? 'None' : null) : yours ? 'Take venue’s' : null
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-2">
+        <Label>Colour</Label>
+        {yours && <span className="text-[10px] text-primary">yours</span>}
+        <span className="flex-1" />
+        {clear != null && !disabled && (
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => onPick(null)}>
+            {clear}
+          </Button>
+        )}
+      </div>
+      <ColourSwatchGrid value={colour} onPick={onPick} disabled={disabled} />
+      <p className="text-xs text-muted-foreground">
+        Marks the group, never its members — <span className="font-medium">Colour from group</span> on the
+        patch list copies it onto them.
+      </p>
+    </div>
+  )
+}
+
+/** [stored] members in [order], a member the draft does not name (just added) at the end. */
+function withOrder(stored: PatchGroupMember[], order: readonly number[] | null): PatchGroupMember[] {
+  if (order == null) return stored
+  const byId = new Map(stored.map((m) => [m.patchId, m]))
+  const placed = order.flatMap((id) => byId.get(id) ?? [])
+  return [...placed, ...stored.filter((m) => !order.includes(m.patchId))]
 }
 
 function AddFixturesToGroup({

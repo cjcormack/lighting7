@@ -18,7 +18,9 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS, columnFamily, columnLabel } from './columns'
-import { rowLocateTarget, templateTargetsOf } from './rowModel'
+import { rowColour, rowLocateTarget, templateTargetsOf } from './rowModel'
+import { tagClass, type FixtureColour } from '../../lib/fixtureColours'
+import { TagMark } from '../fixtureColours/ColourSwatches'
 import { buildCueRowCells, buildRowCells, useRowValues } from './useRowValues'
 import { useScopedRowValues } from './useScopedRowValues'
 import { parsePropertyMask } from '../../lib/attributeFamily'
@@ -103,6 +105,12 @@ export interface FixturesTableProps {
   /** Open the detail sheet for a row (group → group sheet, fixture/element →
    *  fixture sheet). */
   onShowInfo: (row: InfoRow) => void
+  /**
+   * Each fixture's colour by key (`useFixtureColourIndex`), drawn as the name mark (tables-colours
+   * plan D8). Resolved per row into a key the row view compares, so a recolour re-renders only the
+   * rows whose colour moved. Absent draws no mark.
+   */
+  fixtureColours?: ReadonlyMap<string, FixtureColour>
   /** Row to scroll into view (deep-link); cleared via onScrolledToRow. */
   scrollToRowId?: RowId | null
   onScrolledToRow?: () => void
@@ -221,6 +229,7 @@ export function FixturesTable({
   projectId,
   onSpread,
   onShowInfo,
+  fixtureColours = NO_COLOURS,
   scrollToRowId,
   onScrolledToRow,
   revealCell,
@@ -491,6 +500,7 @@ export function FixturesTable({
                     visibleColumns={visibleColumns}
                     gridTemplateColumns={gridTemplateColumns}
                     selected={row.kind !== 'divider' && isSelected(row.id)}
+                    tag={rowColour(row, fixtureColours)}
                     onRowClick={onRowClick}
                     onToggleExpand={onToggleExpand}
                     onBeginCellEdit={onBeginCellEdit}
@@ -589,6 +599,8 @@ interface RowViewProps {
   visibleColumns: readonly ColumnKey[]
   gridTemplateColumns: string
   selected: boolean
+  /** The row's colour (`rowColour`), a key so the memo compares it by value. */
+  tag: FixtureColour | null
   onRowClick: (id: RowId, e: React.MouseEvent) => void
   onToggleExpand: (row: GroupRow | FixtureRow) => void
   onBeginCellEdit: (row: Row, col: ColumnKey) => void
@@ -681,6 +693,8 @@ function useInertColumns(visibleColumns: readonly ColumnKey[]): ReadonlySet<Colu
   }, [inLayerScope, mask, visibleColumns])
 }
 
+const NO_COLOURS: ReadonlyMap<string, FixtureColour> = new Map()
+
 /** Name-cell indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
@@ -695,6 +709,7 @@ const RowView = React.memo(function RowView({
   visibleColumns,
   gridTemplateColumns,
   selected,
+  tag,
   onRowClick,
   onToggleExpand,
   onBeginCellEdit,
@@ -812,6 +827,7 @@ const RowView = React.memo(function RowView({
       className={cn(
         SHEET_ROW_CLASS,
         selected ? (selectionDimmed ? 'bg-foreground/[0.03]' : 'bg-foreground/[0.06]') : 'hover:bg-accent/30',
+        tagClass(tag),
       )}
       style={{ gridTemplateColumns }}
       data-state={selected ? 'selected' : undefined}
@@ -823,6 +839,7 @@ const RowView = React.memo(function RowView({
       <div
         className={cn(SHEET_STICKY_CELL_CLASS, 'flex h-full cursor-pointer items-center gap-1.5 px-2')}
         onClick={(e) => onRowClick(row.id, e)}
+        data-name-cell
       >
         {/* Selection tint needs to survive the opaque sticky background — and so does the 3px
             edge, which is why it is here and not on the row. An inset shadow on the row paints on
@@ -882,6 +899,7 @@ const RowView = React.memo(function RowView({
             {row.memberPosition}
           </span>
         )}
+        {tag && <TagMark colour={tag} />}
         {/* `font-semibold` when selected is the third of D4's three neutral signals, and the one
             that survives a colour-blind read and a badly calibrated house monitor: a 6% wash and a
             3px edge are both easy to lose, weight is not. It beats a group row's `font-medium`

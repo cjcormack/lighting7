@@ -158,6 +158,23 @@ export const patchesApi = restApi.injectEndpoints({
       invalidatesTags: ['Patch'],
     }),
 
+    // Colour a marquee of patches (tables-colours plan D7) — the bulk route once more, one atomic
+    // request: every entry is `{patchId, colour}` alone, which on a venue patch in a show is the
+    // show's recolour (D10) rather than `VENUE_OWNED`. `null` clears, and on a venue patch takes the
+    // venue's colour back. A colour never rebuilds the rig, so only the patch list is stale after it.
+    // The sheet toasts a refusal itself, by code (`COLOUR_UNKNOWN`), so it is a silent endpoint.
+    setPatchColours: build.mutation<
+      BulkPlacementResponse,
+      { projectId: number; colours: ReadonlyArray<{ patchId: number; colour: string | null }> }
+    >({
+      query: ({ projectId, colours }) => ({
+        url: `projects/${projectId}/patches/placements`,
+        method: 'PUT',
+        body: { updates: colours, atomic: true },
+      }),
+      invalidatesTags: ['Patch'],
+    }),
+
     // Delete a patch
     deletePatch: build.mutation<void, { projectId: number; patchId: number }>({
       query: ({ projectId, patchId }) => ({
@@ -263,6 +280,7 @@ export const {
   useCreatePatchMutation,
   useUpdatePatchMutation,
   useSetHeadNumbersMutation,
+  useSetPatchColoursMutation,
   useDeletePatchMutation,
   useHiddenPatchListQuery,
   useSetPatchHiddenMutation,

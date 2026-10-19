@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Crosshair, EyeOff, Flashlight, Info, Landmark, Plug, Ticket, Trash2, X } from 'lucide-react'
+import { Crosshair, EyeOff, Flashlight, Info, Landmark, PaintBucket, Plug, Ticket, Trash2, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -22,7 +22,13 @@ import {
   type NumberedHead,
 } from '@/lib/headNumber'
 import { toast } from 'sonner'
-import { useDeletePatchMutation, useSetHeadNumbersMutation, useSetPatchHiddenMutation, useUpdatePatchMutation } from '@/store/patches'
+import {
+  useDeletePatchMutation,
+  useSetHeadNumbersMutation,
+  useSetPatchColoursMutation,
+  useSetPatchHiddenMutation,
+  useUpdatePatchMutation,
+} from '@/store/patches'
 import { useFixtureListQuery, type Fixture } from '@/store/fixtures'
 import { useLocateStateQuery, useToggleLocateMutation, type LocateTarget } from '@/store/locate'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
@@ -40,17 +46,29 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { AddressCell, type CellAddress } from '@/components/sheet/cells/AddressCell'
 import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
 import { TextCell } from '@/components/sheet/cells/TextCell'
+import { FixtureColourCell, type ColourClear, type ColourFromGroup } from '@/components/sheet/cells/FixtureColourCell'
+import { TagMark } from '@/components/fixtureColours/ColourSwatches'
+import { reportSheetWriteFailure } from '@/components/sheet/reportSheetWriteFailure'
+import { colourForDigit, readColour, tagClass, type FixtureColour } from '@/lib/fixtureColours'
+import {
+  colourFromGroupLabel,
+  colourFromGroupNote,
+  colourFromGroupRefusal,
+  planColourFromGroup,
+  type ColourFromGroupHead,
+} from '@/lib/colourFromGroup'
 import { GelCell } from './GelCell'
 import { mountFor } from '@/components/stage3d/bodies/mount'
 import { EMPTY_LANTERNS, lanternFieldLabel, type LanternIndex } from '@/lib/lanterns'
 import { PHONE_FOLDED_CLASS, STRIP_MID_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { firstColumnCellProps, listNames, skippedNote, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
-import { isVenueOwned, type FixturePatch } from '@/api/patchApi'
+import { isVenueOwned, type FixturePatch, type PatchGroup } from '@/api/patchApi'
 import type { VenueChange } from '@/api/venueApi'
 import { draftMarker } from '@/lib/venue'
 import { FACET_LABEL, facetChips } from '@/lib/patchFacets'
 
 export type PatchColumnKey =
+  | 'colour'
   | 'head'
   | 'address'
   | 'type'
@@ -72,6 +90,7 @@ export type PatchColumnKey =
   | 'facets'
 
 export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
+  colour: 'Colour',
   head: 'Head',
   address: 'Address',
   type: 'Type',
@@ -91,6 +110,7 @@ export const PATCH_COLUMN_LABELS: Record<PatchColumnKey, string> = {
 }
 
 export const PATCH_COLUMN_ORDER: PatchColumnKey[] = [
+  'colour',
   'head',
   'address',
   'type',
@@ -142,6 +162,36 @@ function keyedHeads(batch: readonly SheetRow[]): KeyedHead[] {
 /** A patch as the head-number arithmetic sees it. */
 function numberedHead(patch: FixturePatch): NumberedHead {
   return { id: patch.id, name: patch.displayName, headNumber: patch.headNumber ?? null }
+}
+
+/** A head as *Colour from group* reads it. */
+function colourHead(row: PatchSheetRow): ColourFromGroupHead {
+  return {
+    patchId: row.patch.id,
+    name: row.patch.displayName,
+    colour: readColour(row.patch.colour),
+    groupIds: row.patch.groups.map((g) => g.id),
+  }
+}
+
+/** A venue head in a show whose colour is the venue's own: there is no recolour of the show's to clear. */
+function venueColourOnly(patch: FixturePatch): boolean {
+  return isVenueOwned(patch) && patch.colourOwner !== 'SHOW'
+}
+
+/**
+ * What the Colour editor's clear does over [batch], named by its effect (tables-colours plan D10):
+ * *None* clears the show's own heads, *Take venue's* gives a recoloured venue head its venue's colour
+ * back — a show cannot recolour one to none — and *Clear* does both. Null where it would change nothing.
+ */
+function colourClear(batch: readonly PatchSheetRow[]): ColourClear | null {
+  const clears = batch.some((row) => !isVenueOwned(row.patch) && readColour(row.patch.colour) != null)
+  const restores = batch.some((row) => isVenueOwned(row.patch) && row.patch.colourOwner === 'SHOW')
+  if (clears && restores) {
+    return { label: 'Clear', title: 'Your fixtures lose their colour; the venue’s take the venue’s colour back' }
+  }
+  if (restores) return { label: 'Take venue’s', title: 'Give the venue’s fixtures the venue’s colour back' }
+  return clears ? { label: 'None', title: 'Take the colour off' } : null
 }
 
 function headOf(patch: FixturePatch): AddressedHead {
@@ -204,6 +254,7 @@ export function PatchSheet({
   rows,
   allPatches,
   riggings,
+  groups = NO_GROUPS,
   lanterns = EMPTY_LANTERNS,
   visibleColumns,
   onEditPatch,
@@ -217,6 +268,8 @@ export function PatchSheet({
   /** Every patch on the project, filtered or not — the overlap check needs the whole rig. */
   allPatches: readonly FixturePatch[]
   riggings: readonly { uuid: string; name: string }[]
+  /** The project's groups with their colours — *Colour from group* reads them. */
+  groups?: readonly PatchGroup[]
   /** The lantern library — the Lantern column's options. */
   lanterns?: LanternIndex
   visibleColumns: readonly PatchColumnKey[]
@@ -233,6 +286,7 @@ export function PatchSheet({
 }) {
   const [updatePatch] = useUpdatePatchMutation()
   const [setHeadNumbers] = useSetHeadNumbersMutation()
+  const [setPatchColours] = useSetPatchColoursMutation()
   const [deletePatch] = useDeletePatchMutation()
   const { data: fixtures } = useFixtureListQuery()
   const { data: locateState } = useLocateStateQuery()
@@ -278,6 +332,74 @@ export function PatchSheet({
       return { lines: landing.lines, error: landing.error }
     },
     [allNumbered],
+  )
+
+  /**
+   * One request for a marquee's colours (tables-colours plan D7): the bulk route, atomic, each entry
+   * `{patchId, colour}` alone, so a venue head in a show is the show's recolour (D10). Only the
+   * heads whose colour moves are sent; `null` on a venue head takes the venue's back.
+   */
+  const writeColours = useCallback(
+    (colours: { patchId: number; colour: FixtureColour | null }[]): Promise<boolean> => {
+      if (colours.length === 0) return Promise.resolve(true)
+      return setPatchColours({ projectId, colours })
+        .unwrap()
+        .then(
+          () => true,
+          (err: unknown) => {
+            reportSheetWriteFailure(err, {
+              key: 'patches:colour',
+              messages: {
+                COLOUR_UNKNOWN: (message) => `The desk refused the colour: ${message}`,
+              },
+            })
+            return false
+          },
+        )
+    },
+    [projectId, setPatchColours],
+  )
+  /** [colour] onto [batch], or its clear with null: a venue head's own colour is not the show's to clear. */
+  const colourBatch = useCallback(
+    (batch: readonly PatchSheetRow[], colour: FixtureColour | null) =>
+      void writeColours(
+        batch.flatMap((row): { patchId: number; colour: FixtureColour | null }[] => {
+          const current = readColour(row.patch.colour)
+          if (colour != null) return colour === current ? [] : [{ patchId: row.patch.id, colour }]
+          return current == null || venueColourOnly(row.patch) ? [] : [{ patchId: row.patch.id, colour: null }]
+        }),
+      ),
+    [writeColours],
+  )
+  const groupColours = useMemo(
+    () => new Map(groups.map((g) => [g.id, { name: g.name, colour: readColour(g.colour) }])),
+    [groups],
+  )
+  /** *Colour from group* (D9) over [batch]: onto the heads with none, or onto all of them with ⌥. */
+  const colourFromGroup = useCallback(
+    async (batch: readonly PatchSheetRow[], all: boolean) => {
+      const plan = planColourFromGroup(batch.map(colourHead), groupColours, all)
+      const landed = await writeColours(plan.writes)
+      const note = colourFromGroupNote(plan)
+      if (note == null || !landed) return
+      if (plan.writes.length > 0) {
+        toast.info(`Coloured ${plan.writes.length} of ${batch.length} fixtures from their groups`, {
+          id: 'patches:colour-from-group',
+          description: note,
+        })
+      } else {
+        toast.info('No colour copied', { id: 'patches:colour-from-group', description: note })
+      }
+    },
+    [groupColours, writeColours],
+  )
+  const colourFromGroupOf = useCallback(
+    (batch: readonly PatchSheetRow[]): ColourFromGroup | null => {
+      const plan = planColourFromGroup(batch.map(colourHead), groupColours, true)
+      if (plan.writes.length === 0 && plan.from.length === 0) return null
+      return { label: colourFromGroupLabel(plan), run: (all) => void colourFromGroup(batch, all) }
+    },
+    [colourFromGroup, groupColours],
   )
 
   const put = useCallback(
@@ -378,6 +500,37 @@ export function PatchSheet({
 
   const columns = useMemo<SheetColumn<PatchSheetRow, PatchColumnKey>[]>(() => {
     const all: SheetColumn<PatchSheetRow, PatchColumnKey>[] = [
+      {
+        // The fixture's colour (tables-colours plan D7): identity, never output. Every head takes
+        // one, a venue head in a show too — as the show's recolour (D10) — so this column is the one
+        // a venue's head is not locked out of.
+        key: 'colour',
+        label: 'Colour',
+        kind: 'colour',
+        width: '120px',
+        value: (row) => readColour(row.patch.colour) ?? '',
+        cell: (row, props) => (
+          <FixtureColourCell
+            {...(props as React.ComponentProps<typeof FixtureColourCell>)}
+            yours={row.patch.colourOwner === 'SHOW'}
+            clear={() => colourClear(props.batchRows() as readonly PatchSheetRow[])}
+            fromGroup={() => colourFromGroupOf(props.batchRows() as readonly PatchSheetRow[])}
+          />
+        ),
+        typed: (key) => colourForDigit(key),
+        write: (batch, value) => {
+          if (typeof value !== 'string') return false
+          colourBatch(batch, readColour(value))
+          return true
+        },
+        clear: (batch) => colourBatch(batch, null),
+        cellTitle: (row) =>
+          row.patch.colourOwner === 'SHOW'
+            ? "This show's colour — Take venue's gives the venue's back"
+            : row.patch.colourOwner === 'VENUE' && row.patch.colour != null
+              ? "The venue's colour — set one to recolour it for this show"
+              : undefined,
+      },
       {
         key: 'head',
         label: 'Head',
@@ -802,13 +955,15 @@ export function PatchSheet({
     // (session 5) — is set from the fixture sheet, never a cell. So in a rig holding any, each editable
     // column draws a venue head's cell inert and drops it from a commit, naming it on the editor's
     // read-out, as the kit drops a row with nothing to set. A standalone show's columns are untouched.
-    const locked = hasVenueRows ? all.map(lockVenueRows) : all
+    const locked = hasVenueRows ? all.map((c) => (c.key === 'colour' ? c : lockVenueRows(c))) : all
     return visibleColumns.map((key) => locked.find((c) => c.key === key)!).filter(Boolean)
   }, [
     allHeads,
     allNumbered,
     allPatches,
     applyKeyWrites,
+    colourBatch,
+    colourFromGroupOf,
     hasVenueRows,
     headClashes,
     headLanding,
@@ -900,6 +1055,14 @@ export function PatchSheet({
     sheet.clearByLadder()
   }
 
+  const fromGroupRefusal = useMemo(
+    () =>
+      selectedRows.length === 0
+        ? null
+        : colourFromGroupRefusal(planColourFromGroup(selectedRows.map(colourHead), groupColours, false)),
+    [groupColours, selectedRows],
+  )
+
   const verbs =
     selectedRows.length > 0 ? (
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
@@ -912,6 +1075,21 @@ export function PatchSheet({
             onClear={sheet.clearSelectedCells}
             spread={<SpreadPanel host="popover" plans={sheet.spreadPlans} drivableHint="address" className={PHONE_FOLDED_CLASS} />}
           />
+        )}
+        {!readOnly && (
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={fromGroupRefusal != null}
+            onClick={(e) => void colourFromGroup(selectedRows, e.altKey)}
+            title={
+              fromGroupRefusal ??
+              "Copy each fixture's group colour onto those with none — hold ⌥ for all of them"
+            }
+          >
+            <PaintBucket className="size-3.5" />
+            <span className={WORD_CLASS}>Colour from group</span>
+          </Button>
         )}
         <Tooltip>
           <TooltipTrigger asChild>
@@ -998,12 +1176,14 @@ export function PatchSheet({
       </div>
       <SheetTable<PatchSheetRow, PatchColumnKey>
         {...sheet.tableProps}
+        rowClass={patchRowClass}
         minWidth={`${220 + columns.reduce((n, c) => n + trackFloor(c.width), 0)}px`}
         firstColumn={{
           label: 'Fixture',
           width: '220px',
           render: (row, selected) => readOnly || isVenueOwned(row.patch) ? (
             <>
+              <PatchTagMark patch={row.patch} />
               <span className={cn('mx-1 min-w-0 flex-1 truncate text-sm', selected ? 'font-semibold' : 'font-medium')}>
                 {row.patch.displayName}
               </span>
@@ -1011,6 +1191,7 @@ export function PatchSheet({
             </>
           ) : (
             <>
+              <PatchTagMark patch={row.patch} />
               {/* **A double click renames the head — in the same popover every value cell opens.**
                   A single click on this column is the row selection and a press on it starts the
                   row marquee, so the rename is the second gesture, the split the value cells make
@@ -1064,6 +1245,19 @@ export function PatchSheet({
     </div>
   )
 }
+
+/** A head's colour on its row: `--tag` and the name cell's wash. */
+function patchRowClass(row: PatchSheetRow): string | undefined {
+  return tagClass(readColour(row.patch.colour))
+}
+
+/** The name mark's swatch (D8), beside the head's name. */
+function PatchTagMark({ patch }: { patch: FixturePatch }) {
+  const colour = readColour(patch.colour)
+  return colour ? <TagMark colour={colour} /> : null
+}
+
+const NO_GROUPS: readonly PatchGroup[] = []
 
 /** A head's name in a skip read-out — an Angle over a head with no beam angle, say. */
 function patchRowName(row: PatchSheetRow): string {

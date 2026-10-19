@@ -39,6 +39,7 @@ import { useProjectActions } from "@/components/projectActions/ProjectActions"
 import ProjectSwitchConfirmDialog from "@/ProjectSwitchConfirmDialog"
 import CreateProjectDialog from "@/CreateProjectDialog"
 import ImportProjectDialog from "@/ImportProjectDialog"
+import { SelectByColourItems } from "@/components/fixtureColours/SelectByColour"
 
 export interface ToggleState {
   label: string
@@ -169,6 +170,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const { data: projects } = useProjectListQuery(undefined, closed)
   const { data: fixtures } = useVisibleFixtureListQuery(closed)
   const { data: groups } = useGroupListQuery(undefined, closed)
+  const fixtureKeys = useMemo(() => new Set((fixtures ?? []).map((f) => f.key)), [fixtures])
   // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
   // on the programmer, the desk's or the busk view's own elsewhere.
   const { pathname } = useLocation()
@@ -534,6 +536,17 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                 ))}
               </Command.Group>
             )}
+
+            {/* The fixtures of a colour as the desk selection, ⌥ adding to it (tables-colours plan D11). */}
+            {isViewingActiveProject && viewedProject && fixtures?.length ? (
+              <SelectByColourItems
+                projectId={viewedProject.id}
+                visibleKeys={fixtureKeys}
+                itemClassName={itemClassName}
+                groupClassName={groupClassName}
+                onRun={runAction}
+              />
+            ) : null}
 
             {/* Fixtures & Groups */}
             {isViewingActiveProject && (fixtures?.length || groups?.length) ? (

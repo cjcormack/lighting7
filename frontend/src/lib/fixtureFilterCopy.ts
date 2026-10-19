@@ -33,4 +33,4 @@ export const FIXTURE_FILTER_PLACEHOLDER = 'Filter fixtures…'
 export const FIXTURE_FILTER_PLACEHOLDER_SHORT = 'Filter…'
 
 /** The whole sentence, for the `title`, the `aria-label`, and any control that stands in for the field. */
-export const FIXTURE_FILTER_HINT = 'Filter fixtures by name, manufacturer, or type'
+export const FIXTURE_FILTER_HINT = 'Filter fixtures by name, manufacturer, or type, or by colour:red'

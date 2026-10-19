@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import {
+  rowColour,
   buildRows,
   clampCommitToResolution,
   commitMatchesResolution,
@@ -174,6 +175,67 @@ describe('buildRows', () => {
       textFilter: '',
     })
     expect(rows.map((r) => r.id)).toEqual(['fixture:loose'])
+  })
+})
+
+describe('a row\'s colour (tables-colours plan D8, D9)', () => {
+  const red = makeFixture('red', dimmerOnly(), { groups: ['Front'] })
+  const plain = makeFixture('plain', dimmerOnly(), { groups: ['Front'] })
+  const bar = makePixelBar('bar', 2)
+  const colours = new Map([
+    ['red', 'red' as const],
+    ['bar', 'lime' as const],
+  ])
+
+  it('is a group\'s own, never its members\'; a fixture\'s from the index; a head wears its fixture\'s', () => {
+    const rows = buildRows({
+      fixtures: [red, plain, bar],
+      groups: [{ ...groupSummary('Front', 2), colour: 'cyan' }],
+      expandedGroups: new Set(['Front']),
+      expandedFixtures: new Set(['bar']),
+      textFilter: '',
+    })
+    const colourOf = (id: string) => rowColour(rows.find((r) => r.id === id)!, colours)
+    expect(colourOf('group:Front')).toBe('cyan')
+    expect(colourOf('member:Front:red')).toBe('red')
+    expect(colourOf('member:Front:plain')).toBeNull()
+    expect(colourOf('fixture:bar')).toBe('lime')
+    expect(rows.filter((r) => r.kind === 'element').map((r) => rowColour(r, colours))).toEqual(['lime', 'lime'])
+    expect(rowColour({ kind: 'divider', id: 'divider:ungrouped', label: 'Ungrouped' }, colours)).toBeNull()
+  })
+
+  it('reads a key the desk does not know as none', () => {
+    const rows = buildRows({ fixtures: [red], groups: [{ ...groupSummary('Front', 1), colour: 'magenta' }], expandedGroups: new Set(), textFilter: '' })
+    expect(rowColour(rows[0], colours)).toBeNull()
+  })
+
+  it('keeps a group of the colour a colour: term names, its members by the other terms', () => {
+    const groups = [
+      { ...groupSummary('Front', 2), colour: 'red' },
+      { ...groupSummary('Side', 1), colour: 'cyan' },
+    ]
+    const side = makeFixture('side', dimmerOnly(), { groups: ['Side'] })
+    const rows = buildRows({
+      fixtures: [red, plain, side],
+      groups,
+      expandedGroups: new Set(['Front']),
+      textFilter: 'colour:red',
+      fixtureColours: colours,
+    })
+    // Front is red itself, so both members show; Side is cyan with no red member, so it goes.
+    expect(rows.map((r) => r.id)).toEqual(['group:Front', 'member:Front:red', 'member:Front:plain'])
+  })
+
+  it('filters by colour: through the index it is handed', () => {
+    const rows = buildRows({
+      fixtures: [red, plain, bar],
+      groups: [],
+      expandedGroups: new Set(),
+      textFilter: 'colour:red',
+      groupByGroups: false,
+      fixtureColours: colours,
+    })
+    expect(rows.map((r) => r.id)).toEqual(['fixture:red'])
   })
 })
 

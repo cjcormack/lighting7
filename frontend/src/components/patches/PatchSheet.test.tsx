@@ -19,9 +19,11 @@ import type { FixturePatch } from '@/api/patchApi'
 const updatePatch = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setHeadNumbers = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
 const setPatchHidden = vi.fn(() => ({ unwrap: () => Promise.resolve() }))
+const setPatchColours = vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve() }))
 vi.mock('@/store/patches', () => ({
   useUpdatePatchMutation: () => [updatePatch],
   useSetHeadNumbersMutation: () => [setHeadNumbers],
+  useSetPatchColoursMutation: () => [setPatchColours],
   useSetPatchHiddenMutation: () => [setPatchHidden],
   useDeletePatchMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve() }))],
 }))
@@ -58,7 +60,9 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 
+import { toast } from 'sonner'
 import { PatchSheet, patchRowId, type PatchSheetRow } from './PatchSheet'
+import type { PatchGroup } from '@/api/patchApi'
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 import { indexLanterns, type Lantern } from '@/lib/lanterns'
 import libraryJson from '../../../../src/main/resources/lanterns/library.json'
@@ -153,6 +157,8 @@ afterEach(() => {
   updatePatch.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
   setHeadNumbers.mockClear()
   setPatchHidden.mockClear()
+  setPatchColours.mockClear()
+  setPatchColours.mockImplementation(() => ({ unwrap: () => Promise.resolve() }))
 })
 
 /**
@@ -166,6 +172,7 @@ function stubFlatLayout() {
   const bands: Record<string, [number, number]> = {
     // Only ever drawn alone, so it may share the Address column's band.
     head: [240, 312],
+    colour: [240, 360],
     address: [240, 344],
     type: [344, 600],
     key: [600, 740],
@@ -599,6 +606,221 @@ describe('PatchSheet', () => {
     fireEvent.change(field, { target: { value: '90' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(updatePatch).toHaveBeenCalledWith({ projectId: 1, patchId: 3, startChannel: 90 })
+  })
+
+  describe('the Colour column (tables-colours plan session 4)', () => {
+    // PAR 1 pink, PAR 2 and PAR 3 none, Bar SL lime. Front wash (red) holds PAR 1–3, Side (cyan)
+    // holds PAR 3 as well, and Bar SL is only in Plain, which has no colour.
+    const GROUPS: PatchGroup[] = [
+      { id: 10, name: 'Front wash', memberCount: 3, colour: 'red' },
+      { id: 11, name: 'Side', memberCount: 1, colour: 'cyan' },
+      { id: 12, name: 'Plain', memberCount: 1, colour: null },
+    ]
+    const COLOURED = RIG.map((p) => ({
+      ...p,
+      colour: p.id === 1 ? 'pink' : p.id === 4 ? 'lime' : null,
+      groups:
+        p.id === 3
+          ? [{ id: 10, name: 'Front wash' }, { id: 11, name: 'Side' }]
+          : p.id === 4
+            ? [{ id: 12, name: 'Plain' }]
+            : [{ id: 10, name: 'Front wash' }],
+    }))
+    const colouredRows: PatchSheetRow[] = rows.map((r) => ({ ...r, patch: COLOURED.find((p) => p.id === r.patch.id)! }))
+    const drawColours = (over: Partial<React.ComponentProps<typeof PatchSheet>> = {}) =>
+      draw({ rows: colouredRows, allPatches: COLOURED, groups: GROUPS, visibleColumns: ['colour'], ...over })
+
+    const colourCell = (name: string) => row(name).querySelector('[data-cell="colour"] button') as HTMLElement
+
+    /** A marquee down the Colour column over rows `from`..`to` (indices into the drawn rows). */
+    function dragColours(from: number, to: number) {
+      const cell = colourCell(screen.getAllByText(/^(PAR \d|Bar SL)$/)[from].textContent!)
+      fireEvent.pointerDown(cell, { button: 0, clientX: 260, clientY: from * 36 + 10 })
+      fireEvent.pointerMove(cell, { button: 0, buttons: 1, clientX: 300, clientY: to * 36 + 26 })
+      fireEvent.pointerUp(cell, { button: 0, clientX: 300, clientY: to * 36 + 26 })
+      fireEvent.click(cell)
+    }
+
+    const sent = () => (setPatchColours.mock.calls as unknown as [{ colours: Record<string, unknown>[] }][]).map(([a]) => a.colours)
+
+    it('picks a colour from a digit over a marquee: one request, every entry its patch and colour alone', () => {
+      drawColours()
+      dragColours(0, 2)
+      expect(screen.getByText('3 cells')).toBeInTheDocument()
+      fireEvent.keyDown(window, { key: '3' })
+      expect(setPatchColours).toHaveBeenCalledTimes(1)
+      expect(setPatchColours).toHaveBeenCalledWith({
+        projectId: 1,
+        colours: [
+          { patchId: 1, colour: 'yellow' },
+          { patchId: 2, colour: 'yellow' },
+          { patchId: 3, colour: 'yellow' },
+        ],
+      })
+      for (const entry of sent()[0]) expect(Object.keys(entry).sort()).toEqual(['colour', 'patchId'])
+      // A digit commits without opening the editor.
+      expect(screen.queryByRole('group', { name: 'Colours' })).toBeNull()
+      expect(updatePatch).not.toHaveBeenCalled()
+    })
+
+    it('keys 1–9 and 0 are the ten colours in order, and ⌫ clears only the heads that have one', () => {
+      drawColours()
+      dragColours(0, 1)
+      fireEvent.keyDown(window, { key: '1' })
+      fireEvent.keyDown(window, { key: '9' })
+      fireEvent.keyDown(window, { key: '0' })
+      expect(sent().map((colours) => colours.map((c) => c.colour))).toEqual([
+        ['red', 'red'],
+        ['white', 'white'],
+        ['grey', 'grey'],
+      ])
+      setPatchColours.mockClear()
+      fireEvent.keyDown(window, { key: 'Backspace' })
+      expect(setPatchColours).toHaveBeenCalledWith({ projectId: 1, colours: [{ patchId: 1, colour: null }] })
+    })
+
+    it('opens the ten swatches on Set and picks one; the same colour again sends nothing', async () => {
+      drawColours()
+      fireEvent.click(colourCell('PAR 1'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const swatches = await screen.findByRole('group', { name: 'Colours' })
+      expect(within(swatches).getAllByRole('button')).toHaveLength(10)
+      expect(within(swatches).getByRole('button', { name: /Pink/ })).toHaveAttribute('aria-pressed', 'true')
+      fireEvent.click(within(swatches).getByRole('button', { name: /Pink/ }))
+      expect(setPatchColours).not.toHaveBeenCalled()
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      fireEvent.click(within(await screen.findByRole('group', { name: 'Colours' })).getByRole('button', { name: /Cyan/ }))
+      expect(setPatchColours).toHaveBeenCalledWith({ projectId: 1, colours: [{ patchId: 1, colour: 'cyan' }] })
+    })
+
+    it('toasts a refused colour by its code (COLOUR_UNKNOWN), once per column', async () => {
+      const error = vi.spyOn(toast, 'error')
+      setPatchColours.mockImplementationOnce(() => ({
+        unwrap: () =>
+          Promise.reject({
+            status: 400,
+            data: { error: "patch 2: 'blue' is reserved (the desk draws your values in it)", code: 'COLOUR_UNKNOWN' },
+          }),
+      }))
+      drawColours()
+      fireEvent.click(colourCell('PAR 2'))
+      fireEvent.keyDown(window, { key: '2' })
+      await act(async () => {})
+      expect(error).toHaveBeenCalledWith(
+        expect.stringMatching(/^The desk refused the colour: .*reserved/),
+        { id: 'sheet-write:patches:colour' },
+      )
+    })
+
+    it('copies a group colour onto the selected heads with none, and onto all of them with ⌥ (D9)', async () => {
+      const info = vi.spyOn(toast, 'info')
+      drawColours()
+      fireEvent.click(row('PAR 1').querySelector('[data-first-column]')!)
+      fireEvent.click(row('PAR 2').querySelector('[data-first-column]')!, { metaKey: true })
+      fireEvent.click(row('PAR 3').querySelector('[data-first-column]')!, { metaKey: true })
+      fireEvent.click(row('Bar SL').querySelector('[data-first-column]')!, { metaKey: true })
+      const press = screen.getByRole('button', { name: /Colour from group/ })
+      fireEvent.click(press)
+      await act(async () => {})
+      // PAR 1 keeps its pink; PAR 3's two groups disagree; Bar SL's group has no colour.
+      expect(sent()).toEqual([[{ patchId: 2, colour: 'red' }]])
+      expect(info).toHaveBeenCalledWith('Coloured 1 of 4 fixtures from their groups', {
+        id: 'patches:colour-from-group',
+        description: 'PAR 1 already had a colour — ⌥ for all of them · PAR 3 in groups of different colours · Bar SL in no coloured group',
+      })
+      fireEvent.click(press, { altKey: true })
+      expect(sent()[1]).toEqual([
+        { patchId: 1, colour: 'red' },
+        { patchId: 2, colour: 'red' },
+      ])
+    })
+
+    it('says nothing of a copy the desk refused — the refusal is the sheet\'s own toast', async () => {
+      const info = vi.spyOn(toast, 'info')
+      const error = vi.spyOn(toast, 'error')
+      setPatchColours.mockImplementationOnce(() => ({
+        unwrap: () => Promise.reject({ status: 400, data: { error: 'At most 500 placements per request' } }),
+      }))
+      drawColours()
+      fireEvent.click(row('PAR 2').querySelector('[data-first-column]')!)
+      fireEvent.click(row('PAR 3').querySelector('[data-first-column]')!, { metaKey: true })
+      fireEvent.click(screen.getByRole('button', { name: /Colour from group/ }))
+      await act(async () => {})
+      expect(setPatchColours).toHaveBeenCalledTimes(1)
+      expect(error).toHaveBeenCalledWith('At most 500 placements per request', { id: 'sheet-write:patches:colour' })
+      expect(info).not.toHaveBeenCalled()
+    })
+
+    it('offers no clear where nothing would change', async () => {
+      drawColours()
+      fireEvent.click(colourCell('PAR 2'))
+      fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+      const popover = (await screen.findByRole('group', { name: 'Colours' })).parentElement!
+      expect(within(popover).queryByRole('button', { name: /^(None|Clear|Take venue)/ })).toBeNull()
+    })
+
+    it('marks the name with the colour — a swatch, and the row class that washes the name cell', () => {
+      drawColours()
+      const par1 = row('PAR 1')
+      expect(par1.className).toContain('fixture-tag-pink')
+      expect(within(par1).getByRole('img', { name: 'Colour: Pink' })).toBeInTheDocument()
+      expect(par1.querySelector(':scope > [data-name-cell]')).not.toBeNull()
+      expect(row('PAR 2').className).not.toContain('fixture-tag')
+      expect(within(row('PAR 2')).queryByRole('img', { name: /^Colour:/ })).toBeNull()
+    })
+
+    describe('a venue head in a show (D10)', () => {
+      // PAR 2 is the venue's, recoloured green by this show; Bar SL is the venue's own lime.
+      const VENUE_COLOURED = COLOURED.map((p) =>
+        p.id === 2
+          ? { ...p, owner: 'VENUE' as const, colour: 'green', colourOwner: 'SHOW' as const }
+          : p.id === 4
+            ? { ...p, owner: 'VENUE' as const, colourOwner: 'VENUE' as const }
+            : { ...p, owner: 'SHOW' as const },
+      )
+      const venueRows: PatchSheetRow[] = rows.map((r) => ({ ...r, patch: VENUE_COLOURED.find((p) => p.id === r.patch.id)! }))
+      const drawVenue = () => drawColours({ rows: venueRows, allPatches: VENUE_COLOURED })
+
+      it("draws yours beside a show's recolour, and Take venue's gives the venue's back", async () => {
+        drawVenue()
+        expect(within(colourCell('PAR 2')).getByText('yours')).toBeInTheDocument()
+        expect(within(colourCell('Bar SL')).queryByText('yours')).toBeNull()
+        fireEvent.click(colourCell('PAR 2'))
+        fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+        await screen.findByRole('group', { name: 'Colours' })
+        expect(screen.queryByRole('button', { name: 'None' })).toBeNull()
+        fireEvent.click(screen.getByRole('button', { name: 'Take venue’s' }))
+        expect(setPatchColours).toHaveBeenCalledWith({ projectId: 1, colours: [{ patchId: 2, colour: null }] })
+      })
+
+      it("names a mixed clear Clear: the show's heads lose their colour, the recoloured venue head takes the venue's back", async () => {
+        drawVenue()
+        dragColours(0, 1)
+        fireEvent.click(screen.getByRole('button', { name: 'Set' }))
+        await screen.findByRole('group', { name: 'Colours' })
+        const clear = screen.getByRole('button', { name: 'Clear' })
+        expect(clear).toHaveAttribute('title', expect.stringMatching(/^Your fixtures lose their colour; the venue’s take/))
+        fireEvent.click(clear)
+        expect(setPatchColours).toHaveBeenCalledWith({
+          projectId: 1,
+          colours: [
+            { patchId: 1, colour: null },
+            { patchId: 2, colour: null },
+          ],
+        })
+      })
+
+      it("recolours a venue head, where every other column is the venue's — and ⌫ leaves its own colour", () => {
+        drawVenue()
+        expect(colourCell('Bar SL')).not.toBeDisabled()
+        fireEvent.click(colourCell('Bar SL'))
+        fireEvent.keyDown(window, { key: '6' })
+        expect(setPatchColours).toHaveBeenLastCalledWith({ projectId: 1, colours: [{ patchId: 4, colour: 'cyan' }] })
+        setPatchColours.mockClear()
+        fireEvent.keyDown(window, { key: 'Backspace' })
+        expect(setPatchColours).not.toHaveBeenCalled()
+      })
+    })
   })
 
   describe('the Head column', () => {

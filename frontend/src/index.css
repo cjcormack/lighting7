@@ -56,6 +56,19 @@
   --surface-track: oklch(0.8 0.006 286);
   --surface-led: oklch(0.72 0.17 60);
   --surface-led-off: oklch(0.86 0.006 286);
+
+  /* Fixture colours (tables-colours plan D7): one per key in `lib/fixtureColours.ts`, light here and
+     dark under `.dark`. Identity only — a name, a tile's band, a label — never a value or a ring. */
+  --tag-red: #dc2626;
+  --tag-orange: #ea580c;
+  --tag-yellow: #ca8a04;
+  --tag-lime: #65a30d;
+  --tag-green: #16a34a;
+  --tag-cyan: #0891b2;
+  --tag-pink: #db2777;
+  --tag-brown: #92400e;
+  --tag-white: #71717a;
+  --tag-grey: #3f3f46;
 }
 
 .dark {
@@ -102,6 +115,17 @@
   --surface-track: oklch(0.3 0.006 286);
   --surface-led: oklch(0.8 0.17 65);
   --surface-led-off: oklch(0.3 0.006 286);
+
+  --tag-red: #f87171;
+  --tag-orange: #fb923c;
+  --tag-yellow: #facc15;
+  --tag-lime: #a3e635;
+  --tag-green: #4ade80;
+  --tag-cyan: #67e8f9;
+  --tag-pink: #f472b6;
+  --tag-brown: #c08457;
+  --tag-white: #e4e4e7;
+  --tag-grey: #8b8b94;
 }
 
 @theme inline {
@@ -162,6 +186,26 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* A row marked with a fixture colour (`tagClass` in `lib/fixtureColours.ts`): `--tag` for the name's
+   swatch, and a wash on the sticky name cell, mixed with the sheet ground because that cell has to
+   stay opaque over the cells sliding under it. Unlayered, so it beats the cell's `bg-background`
+   utility; the selection overlay is drawn over it. Mixed in oklab, not oklch: the ground is a
+   near-grey at hue 286, and an oklch mix interpolates hue, so red's wash came out purple. */
+.fixture-tag-red { --tag: var(--tag-red); }
+.fixture-tag-orange { --tag: var(--tag-orange); }
+.fixture-tag-yellow { --tag: var(--tag-yellow); }
+.fixture-tag-lime { --tag: var(--tag-lime); }
+.fixture-tag-green { --tag: var(--tag-green); }
+.fixture-tag-cyan { --tag: var(--tag-cyan); }
+.fixture-tag-pink { --tag: var(--tag-pink); }
+.fixture-tag-brown { --tag: var(--tag-brown); }
+.fixture-tag-white { --tag: var(--tag-white); }
+.fixture-tag-grey { --tag: var(--tag-grey); }
+
+.fixture-tag > [data-name-cell] {
+  background-color: color-mix(in oklab, var(--tag) 16%, var(--background));
 }
 
 /* react-colorful colour picker styles.

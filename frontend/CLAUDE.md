@@ -3235,10 +3235,16 @@ no `data-column-header`, so a marquee never selects it. `useSheet` is the contai
 requests, the throttled commit, the batch count — and `SheetTable` the anatomy: 30px uppercase
 header, 36px rows (56 on the DMX sheet), a sticky first column with the 3px selection edge, the
 same DOM contract as `FixturesTable` (`data-grid-header`, `data-column-header`,
-`data-grid-name-header`, `data-row-id`, `data-cell`). Four kit cells go through
+`data-grid-name-header`, `data-row-id`, `data-cell`). Five kit cells go through
 `EditorSurface`, so they get the three forms and the double click for free: `TextCell`
 (commit on ⏎, Escape reverts), `LevelCell` (the DMX value, live like `SliderCell`), `OptionCell`
-(`SettingCell`'s type-ahead over plain options) and `AddressCell`.
+(`SettingCell`'s type-ahead over plain options), `AddressCell` and `FixtureColourCell` (the patch
+list's Colour, §Fixture colours — not `fixtures-list/cells/ColourCell`, which edits a light's
+output). **A column may commit a typed character without opening its editor**:
+`SheetColumn.typed(key)` answers a value for the first selected cell's column, and `useSheet`
+commits it over the selection as the editor would (the Colour column's 1–9 and 0); undefined opens
+the editor as before. A surface marks a row with `SheetTable`'s `rowClass`, and the sticky name cell
+carries `data-name-cell` for the colour's wash.
 
 **`SelectionBar` is a shell** — counts · family pill · ⏎/⌫ hints · a `strip` slot · a `verbs`
 slot — and the programmer's `SelectionBar` wraps it with the palette strip in the slot.
@@ -3454,7 +3460,10 @@ Three surface rules, each pinned by its test:
   network failure; both are lighting7 work and Chris's call. Clear is refused on Address, Fixture,
   Key and Stage; offered on Mount, Lantern, Angle and Gel. It is a routed page again (§List shell); row B is
   universe toggle · filter · spacer · Groups · Columns · + Patch, and the universe chips carry a
-  fill bar on a 40px chrome row of their own.
+  fill bar on a 40px chrome row of their own. **Colour is the first value column** (§Fixture
+  colours): the one column a venue's head is not locked out of in a show (`lockVenueRows` skips it),
+  written in one atomic bulk request, with *Colour from group* on row C; `colour:red` filters the
+  list (`lib/patchFilter.ts`).
   **A double click on a fixture's name opens a rename popover — the kit's `TextCell`, mounted with
   `firstColumnCellProps`** (`sheetModel.ts`), so the first column edits in the same popover, in the
   same three forms, as every value cell; the single click underneath still selects the row and a
@@ -5190,6 +5199,57 @@ reads a boolean through `useFxRinged`, so a selection change re-renders only the
 moves — and the hidden grid, whose rows are not drawn, none. The store outlives the FX table, which
 mounts on demand: the rings show after a switch to Values, and the table takes its selection back
 when it mounts again (`AppliedTableShell`'s `initialSelection`).
+
+### Fixture colours
+
+**A fixture or group carries one of ten named colours, as identity only** (tables-colours plan
+D7–D11; the design record is `../docs/plans/tables-colours-design/`, `Colours.dc.html` §B and §C;
+the desk's contract is lighting7 `docs/fixtures-engineering.md` §"Fixture colours"). The keys,
+labels, the reserved hues and the digit keymap are `lib/fixtureColours.ts`, pinned against the
+desk's `models/fixtureColours.kt` by `fixtureColours.test.ts`, which reads the Kotlin source; each key
+is `--tag-<key>` in `index.css`, light in `:root` and dark in `.dark`. A key this client does not
+know reads as none (`readColour`). The colour marks a name, never a value cell or a ring: those say
+who owns a value, and a red name must not look like a red value.
+
+- **The name mark is a swatch and a wash** (D8), drawn by `FixturesTable` (the programmer, Fixtures
+  › List, Groups › List and the cue editor's Values grid) and the patch sheet. The row takes
+  `tagClass(colour)` — `fixture-tag fixture-tag-red`, whole strings — which sets `--tag`; the
+  name's `TagMark` reads it, and `.fixture-tag > [data-name-cell]` washes the opaque sticky cell with
+  `color-mix(in oklab, var(--tag) 16%, var(--background))`. **Oklab, not the plan's oklch**: the
+  sheet ground is a near-grey at hue 286, and an oklch mix interpolates hue, so red's wash drew
+  purple. The selection overlay draws over the wash, and the swatch keeps the colour readable there.
+- **Resolved once, compared by value** (§3 of the plan). `hooks/useFixtureColourIndex` turns the
+  cached patch list into a key → colour map whose identity changes only when a colour does (a
+  selector over a per-list signature), so a patch refetch for an address re-renders nothing.
+  `FixturesTable` resolves each row's colour into a primitive `tag` prop (`rowColour`: a group's own,
+  a fixture's from the index, an element row its fixture's), so a recolour re-renders only the rows
+  whose colour moved — `FixturesTable.test.tsx` counts them. Group colours ride `GroupSummary`. The
+  rows read the index only while a `colour:` term filters (`hasColourTerm`).
+- **Setting a patch's colour is the patch list's Colour column** — `FixtureColourCell` and its ten
+  swatches in the cell editor's three forms. Over a selection of its cells, **1–9 and 0** pick the
+  ten in order without opening it and ⌫ is Clear; inside the popover the same keys pick and close.
+  Every write is **one** atomic request on the bulk route (`setPatchColours`), entries of
+  `{patchId, colour}` alone, only where the colour moves; a refusal (`COLOUR_UNKNOWN`) is toasted by
+  the sheet by code, so the endpoint is silent to the middleware.
+- **No inheritance** (D9). A group's colour marks the group. *Colour from group* (row C, and the
+  popover's *From group · name*) copies each head's coloured group's colour onto the selected heads
+  that have none, onto all of them with ⌥ (`lib/colourFromGroup.ts`); a head whose coloured groups
+  disagree is left and named in the toast. **A group's colour is set in Patches' *Edit Group* sheet**,
+  written as it is picked and alone; the sheet's name and order drafts survive the refetch.
+- **On a venue in a show** (D10) a pick on a venue head or group is the show's recolour, drawn
+  *yours*; *Take venue's* sends `null`, which takes the venue's back — a show cannot recolour one to
+  none. **The clear is named by what it does over the batch** (decided with Chris 2026-10-19):
+  *None* where it only clears the show's own heads, *Take venue's* where it only restores recoloured
+  venue heads, *Clear* where it does both (its title says which), and no clear where it would change
+  nothing. A pick equal to the colour already drawn writes nothing — on a venue record it would pin
+  the venue's colour as the show's.
+- **`colour:red`** joins the fixture filter (`lib/fixtureSearch.ts`, the Fixtures cards and lists)
+  and the patch list's (`lib/patchFilter.ts`); a term matches a key or label by prefix, several are
+  any of them, and a bare `colour:` being typed filters nothing. On a grouped list a group of that
+  colour stays too — its own colour, its members then filtered by the other terms (decided with
+  Chris 2026-10-19) — beside the existing rule that a group stays while a member matches. ⌘K's
+  *Select colour · Red* (`fixtureColours/SelectByColour.tsx`) writes the desk selection, and held ⌥
+  turns it into *Add to selection*, keeping the desk's heads and mask.
 
 ### Speed Masters
 

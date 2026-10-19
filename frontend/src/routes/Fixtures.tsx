@@ -8,6 +8,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { Search, Loader2, Settings2, SlidersHorizontal } from "lucide-react"
 import { Fixture, useVisibleFixtureListQuery } from "../store/fixtures"
 import { filterTerms, fixtureMatchesTerms } from "../lib/fixtureSearch"
+import { useFixtureColourIndex } from "../hooks/useFixtureColourIndex"
 import { FxBadge } from "../components/fx/FxBadge"
 import { FixtureParkButton } from "../components/fixtures/FixtureParkButton"
 import { LocateButton } from "../components/fixtures/LocateButton"
@@ -79,14 +80,15 @@ export function ProjectFixtures() {
         <FixturesViewSwitcher current="cards" projectId={projectIdNum} />
       </div>
       <Suspense fallback={<div>Loading...</div>}>
-        <FixturesContainer />
+        <FixturesContainer projectId={projectIdNum} />
       </Suspense>
     </Card>
   )
 }
 
-function FixturesContainer() {
+function FixturesContainer({ projectId }: { projectId: number }) {
   const { data: maybeFixtureList, isLoading } = useVisibleFixtureListQuery()
+  const fixtureColours = useFixtureColourIndex(projectId)
   const [filter, setFilter] = useState("")
   const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
 
@@ -95,8 +97,8 @@ function FixturesContainer() {
   const filteredFixtures = useMemo(() => {
     const terms = filterTerms(filter)
     if (terms.length === 0) return fixtureList
-    return fixtureList.filter((fixture) => fixtureMatchesTerms(fixture, terms))
-  }, [fixtureList, filter])
+    return fixtureList.filter((fixture) => fixtureMatchesTerms(fixture, terms, fixtureColours.get(fixture.key)))
+  }, [fixtureList, filter, fixtureColours])
 
   if (isLoading) {
     return <div>Loading...</div>

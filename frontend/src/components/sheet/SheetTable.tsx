@@ -103,7 +103,7 @@ export interface SheetTableProps<Row extends SheetRow, C extends string> {
   batchNoun?: string
   /** The surface has made this cell inert — a locked show, an offline desk. */
   cellDisabled?: (row: Row, col: C) => boolean
-  /** Classes on the whole row — the cue sheet's live green and next blue. */
+  /** Classes on the whole row — the cue sheet's live green and next blue, a fixture's colour (`tagClass`). */
   rowClass?: (row: Row) => string | undefined
   /**
    * Reorder rows by dragging a grip in the first column. Present makes this sheet sortable; the
@@ -759,6 +759,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
       <div
         // The ⏎-opens-row arm's exemption reads this mark — see `firstColumnOwnsKeyTarget`.
         data-first-column
+        // A colour's wash, under a row a surface marks with `tagClass` (`index.css`).
+        data-name-cell
         className={cn(
           SHEET_STICKY_CELL_CLASS,
           'flex h-full items-center gap-1.5 px-2',
