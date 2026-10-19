@@ -113,8 +113,7 @@ export interface OverviewPanel extends OverviewPanelDescriptor {
  * that only ever spoke for master 1. It went, and the count and Kill All went with it rather than
  * moving: the programmer's FX band and the busk view's presence rings say what is running, and
  * each lists the effects individually so they can be removed by name. If a "stop everything"
- * gesture is wanted again it belongs beside blackout in the bar, not in a panel the operator has
- * to open first.
+ * gesture is wanted again it belongs in the bar, not in a panel the operator has to open first.
  *
  * **Speed Masters is not that panel coming back, and the difference is the whole of why it is
  * allowed** (`PD-SPEED-OVERLAY`). Effects Overview drew a tempo readout *of its own*, narrower

@@ -652,8 +652,8 @@ export function withCueEffectDraft<E extends CueEffectFields>(effect: E, draft: 
 /**
  * **A cue's effect is read-only in the tray** (Fx board, *Open*; fixture-fx-sheets session 5): it
  * names its cue and has no editor, pause or stop — its home is the cue, whose next GO would put
- * back anything changed here (W5 refuses a cue's instance for the same reason). Session 3 left it
- * editable, as `ActiveEffectSheet` had; a *pad's* instance is edited (D20), being the programmer's.
+ * back anything changed here (W5 refuses a cue's instance for the same reason). A *pad's* instance
+ * is edited (D20), being the programmer's.
  * The open row's naming of the cue is the board's *opens it*: a button that opens the cue's **cue
  * editor** in place, through `OwnerEditor` — the Stage view's *Moves with* path, not a second one.
  */
