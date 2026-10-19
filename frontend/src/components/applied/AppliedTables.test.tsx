@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
 import type { ActiveEffect } from '@/store/fixtureFx'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import type { LookSummary } from '@/api/looksApi'
@@ -11,10 +12,12 @@ import type { ProgrammerScenery } from '@/api/sceneryApi'
 
 /**
  * The programmer's Stack, FX and Scenery tables (tables-colours plan D1, the applied tables of
- * venue-visit plan S14 moved onto the programmer's tabs): each lists exactly what the rail lists for
- * the same programmer state — the rail stays until session 2, and this is what keeps the two homes
- * agreeing — every row action reaches the rail's own mutation, and sort, filter and chip ride the
- * query string beside `?table=`.
+ * venue-visit plan S14 moved onto the programmer's tabs). Since session 2 they are the only place
+ * the programmer's layers, effects and scenery are listed — the rail is the Colour · Spread dock
+ * (D4) — so this suite pins everything the rail used to offer that the tables now carry alone: a
+ * layer's settings, Detach, the replacement notes, + Look / + Palette, + Effect, *held · Blind*,
+ * *Edit…* on an effect, the values-beat-effects rule, the hand's place on the stack and ⌘K's
+ * *+ Effect* door. Sort, filter and chip ride the query string beside `?table=`.
  */
 const mocks = vi.hoisted(() => ({
   effects: [] as ActiveEffect[],
@@ -39,6 +42,7 @@ const mocks = vi.hoisted(() => ({
   programmerScenery: { projectId: 1, elements: [] } as ProgrammerScenery,
   setScenery: vi.fn(),
   clearScenery: vi.fn(),
+  notes: new Map<string, string>(),
 }))
 
 const mutation = (spy: (arg: unknown) => void) => () => [
@@ -76,10 +80,26 @@ vi.mock('@/store/scenery', () => ({
 vi.mock('@/components/programmer/ProgrammerSheets', () => ({ useProgrammerSheets: () => ({ openMakeLayer: mocks.openMakeLayer }) }))
 vi.mock('@/components/programmer/useLocalFamilyCounts', () => ({ useLocalValueCount: () => mocks.localValues }))
 // The pickers behind the create verbs have their own suites; here they only have to be there.
-vi.mock('@/components/programmer/ProgrammerRail', () => ({ RailApplyPicker: () => null }))
-vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
-  useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an effect to the programmer.', pair: { targets: [], families: null } }),
-  ProgrammerAddEffectSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
+vi.mock('@/components/programmer/ApplyLayerPicker', () => ({
+  ApplyLayerPicker: ({ library }: { library: string }) => <div data-testid="apply-picker">{library}</div>,
+}))
+vi.mock('@/components/programmer/ProgrammerAddEffect', async () => {
+  const { useEffect, useState } = await import('react')
+  const { registerAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
+  return {
+    useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an effect to the programmer.', pair: { targets: [], families: null } }),
+    ProgrammerAddEffectSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
+    ProgrammerAddEffectDoor: () => {
+      const [asked, setAsked] = useState(false)
+      useEffect(() => registerAddEffectDoor(() => setAsked(true)), [])
+      return asked ? <div data-testid="add-effect-door" /> : null
+    },
+  }
+})
+vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => <div data-testid="hand-layer-strip" /> }))
+vi.mock('@/components/programmer/useReplacementNotes', () => ({
+  ReplacementNotesProvider: ({ children }: { children: ReactNode }) => children,
+  useReplacementNotes: () => mocks.notes,
 }))
 vi.mock('@/store/fixtureFx', () => ({
   useActiveEffectsQuery: () => ({ data: mocks.effects }),
@@ -122,14 +142,14 @@ vi.mock('@/components/looks/LookDetailSheet', () => ({
     open ? <div data-testid="look-sheet">{look?.name}</div> : null,
 }))
 
-const { ProgrammerFxList } = await import('@/components/programmer/ProgrammerFxList')
-const { ProgrammerLookStack } = await import('@/components/programmer/ProgrammerLookStack')
 const { ProgrammerTables } = await import('@/components/programmer/ProgrammerTables')
 const { ProgrammerScopeProvider, useProgrammerScope } = await import('@/components/programmer/ProgrammerScope')
 const { resetProgrammerTableStore, setProgrammerTable } = await import('@/lib/programmerTables')
 const { DEFAULT_SCENERY_FILTERS, SCENERY_FILTERS_KEY, resetSceneryFiltersStore } = await import(
   '@/components/programmer/ProgrammerSceneryList'
 )
+const { FxSelectionStoreContext, createFxSelectionStore } = await import('@/components/fixtures-list/fxSelection')
+const { openAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
 
 function effect(id: number, over: Partial<ActiveEffect> = {}): ActiveEffect {
   return {
@@ -241,30 +261,22 @@ function ScopeProbe() {
   return <div data-testid="scope">{scope == null ? '' : scope.kind === 'layer' ? `layer:${scope.layerId}` : scope.kind}</div>
 }
 
-function drawRoute(search: string) {
+function drawRoute(search: string, fxSelection = createFxSelectionStore()) {
   return render(
     <MemoryRouter initialEntries={[`/projects/1/programmer${search}`]}>
       <Routes>
         <Route
           path="/projects/:projectId/programmer"
           element={
-            <ProgrammerScopeProvider>
-              <ProgrammerTables projectId={1} values={<ScopeProbe />} />
-            </ProgrammerScopeProvider>
+            <FxSelectionStoreContext.Provider value={fxSelection}>
+              <ProgrammerScopeProvider>
+                <ProgrammerTables projectId={1} values={<ScopeProbe />} />
+              </ProgrammerScopeProvider>
+            </FxSelectionStoreContext.Provider>
           }
         />
       </Routes>
       <Where />
-    </MemoryRouter>,
-  )
-}
-
-function drawRail(node: React.ReactNode) {
-  return render(
-    <MemoryRouter initialEntries={['/projects/1/programmer']}>
-      <Routes>
-        <Route path="/projects/:projectId/programmer" element={node} />
-      </Routes>
     </MemoryRouter>,
   )
 }
@@ -292,6 +304,7 @@ beforeEach(() => {
   resetSceneryFiltersStore()
   mocks.blind = false
   mocks.localValues = 0
+  mocks.notes = new Map()
   mocks.programmerScenery = { projectId: 1, elements: [] }
   mocks.elements = [
     element('e-tabs', 'Tabs', 'VENUE', 'DRAPE', { role: 'TABS', operation: 'DRAW' }),
@@ -317,14 +330,9 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('the FX table', () => {
-  it('lists the rail’s rows, in the rail’s order', () => {
-    drawRail(<ProgrammerFxList projectId={1} />)
-    const rail = screen.getAllByRole('button', { name: /^Actions for / }).map((b) => b.getAttribute('aria-label'))
-    act(() => document.body.replaceChildren())
-
+  it('lists every running effect, one row per instance in the desk’s order', () => {
     drawRoute('?table=fx')
     const table = tableRows().map((r) => within(r).getByRole('button', { name: /^Actions for / }).getAttribute('aria-label'))
-    expect(table).toEqual(rail)
     expect(table).toEqual(['Actions for Pulse', 'Actions for Circle', 'Actions for Lightning', 'Actions for Breathe'])
   })
 
@@ -344,19 +352,38 @@ describe('the FX table', () => {
     expect(rowOf('fx:4')).toHaveTextContent('Paused')
   })
 
-  it('stops through the rail’s mutation, a group’s by its group', () => {
-    drawRail(<ProgrammerFxList projectId={1} />)
-    openMenu(screen.getByRole('button', { name: 'Actions for Pulse' }))
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Stop' }))
-    const rail = mocks.removeGroupFx.mock.calls.slice()
-    act(() => document.body.replaceChildren())
-    mocks.removeGroupFx.mockClear()
-
+  it('stops a group’s effect by its group, and a head’s by its head', () => {
     drawRoute('?table=fx')
     openMenu(within(rowOf('fx:1')).getByRole('button', { name: 'Actions for Pulse' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Stop' }))
-    expect(mocks.removeGroupFx.mock.calls).toEqual(rail)
-    expect(rail).toEqual([[{ id: 1, groupName: 'front' }]])
+    expect(mocks.removeGroupFx.mock.calls).toEqual([[{ id: 1, groupName: 'front' }]])
+    openMenu(within(rowOf('fx:2')).getByRole('button', { name: 'Actions for Circle' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Stop' }))
+    expect(mocks.removeFx.mock.calls).toEqual([[{ id: 2, fixtureKey: 'par-2' }]])
+  })
+
+  it('opens the live editor from Edit… in the row’s menu', () => {
+    drawRoute('?table=fx')
+    openMenu(within(rowOf('fx:3')).getByRole('button', { name: 'Actions for Lightning' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit…' }))
+    expect(screen.getByTestId('fx-editor')).toHaveTextContent('3')
+  })
+
+  it('publishes its selection for the Values grid’s rings, and takes it back when it mounts again', () => {
+    const fxSelection = createFxSelectionStore()
+    const first = drawRoute('?table=fx', fxSelection)
+    fireEvent.click(rowOf('fx:2').querySelector('[data-first-column]')!)
+    fireEvent.click(rowOf('fx:4').querySelector('[data-first-column]')!, { metaKey: true })
+    expect([...fxSelection.get()]).toEqual([2, 4])
+    // The table mounts on demand: leaving it keeps what the rings read.
+    first.unmount()
+    expect([...fxSelection.get()]).toEqual([2, 4])
+
+    drawRoute('?table=fx', fxSelection)
+    expect(rowOf('fx:2')).toHaveAttribute('data-state', 'selected')
+    expect(rowOf('fx:4')).toHaveAttribute('data-state', 'selected')
+    fireEvent.click(screen.getByRole('button', { name: /Deselect/ }))
+    expect(fxSelection.get().size).toBe(0)
   })
 
   it('pauses and resumes through the editor’s own mutations', () => {
@@ -391,16 +418,44 @@ describe('the Stack table', () => {
   const badges = (root: ParentNode) =>
     [...root.querySelectorAll('[title^="Look “"], [title^="Palette “"], [title^="Effect palette “"]')].map((el) => el.getAttribute('title'))
 
-  it('lists the rail’s layers in the rail’s order, top wins, under your values pinned on top', () => {
-    drawRail(<ProgrammerLookStack projectId={1} />)
-    const rail = badges(document)
-    act(() => document.body.replaceChildren())
-
+  it('lists every layer top wins, Looks and palettes in one order, under your values pinned on top', () => {
     drawRoute('?table=stack')
-    expect(rail).toEqual(['Look “Thunder”', 'Effect palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
-    expect(tableRows().flatMap((r) => badges(r))).toEqual(rail)
+    expect(tableRows().flatMap((r) => badges(r))).toEqual(['Look “Thunder”', 'Effect palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['local', 'layer:13', 'layer:12', 'layer:11', 'layer:10'])
     expect(rowOf('local')).toHaveTextContent('Your values')
+  })
+
+  it('names what a later press took from a layer in its Note', () => {
+    mocks.notes = new Map([['LOOK:1', 'lost Hex 3–4 to Amber']])
+    drawRoute('?table=stack')
+    expect(rowOf('layer:10').querySelector('[data-layer-note]')).toHaveTextContent('lost Hex 3–4 to Amber')
+    expect(rowOf('layer:11').querySelector('[data-layer-note]')).toBeNull()
+  })
+
+  it('opens the Look and palette pickers from + Look or palette', () => {
+    drawRoute('?table=stack')
+    openMenu(screen.getByRole('button', { name: /Look or palette/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Palette…' }))
+    expect(screen.getByTestId('apply-picker')).toHaveTextContent('palettes')
+  })
+
+  it('draws the values-beat-effects rule with the effects under the stack, a press from the FX tab', () => {
+    drawRoute('?table=stack')
+    const rule = document.querySelector('[data-effects-rule]')!
+    expect(rule).toHaveTextContent('Values above beat effects below')
+    expect(rule).toHaveTextContent('4 effects run under this stack')
+    fireEvent.click(within(rule as HTMLElement).getByRole('button', { name: 'on the FX tab' }))
+    expect(where()).toBe('/projects/1/programmer?table=fx')
+  })
+
+  it('says when the filter matches no layer, your values still listed', () => {
+    drawRoute('?table=stack&q=nothing-like-this')
+    expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['local'])
+    expect(document.querySelector('[data-stack-no-match]')).toHaveTextContent('No layers match the filter.')
+    cleanup()
+    drawRoute('?table=stack&q=storm')
+    expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['local', 'layer:10'])
+    expect(document.querySelector('[data-stack-no-match]')).toBeNull()
   })
 
   it('narrows by kind, your values staying pinned', () => {
@@ -432,7 +487,7 @@ describe('the Stack table', () => {
     expect(rowOf('layer:11').querySelector('[data-spent]')).toBeNull()
   })
 
-  it('detaches, disables, picks up and removes through the rail’s mutations', () => {
+  it('detaches, disables, picks up and removes through the stack’s mutations', () => {
     drawRoute('?table=stack')
     const storm = rowOf('layer:10')
     const menu = () => openMenu(within(storm).getByRole('button', { name: 'Actions for Storm' }))
@@ -457,6 +512,16 @@ describe('the Stack table', () => {
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(screen.getByTestId('scope')).toHaveTextContent('layer:11')
     expect(where()).toBe('/projects/1/programmer?table=values')
+  })
+
+  it('marks the layer the Values grid is pointed at', () => {
+    drawRoute('?table=stack')
+    expect(rowOf('layer:11').className).not.toContain('bg-teal-500/10')
+    fireEvent.click(rowOf('layer:11').querySelector('[data-first-column]')!)
+    fireEvent.keyDown(window, { key: 'Enter' })
+    act(() => setProgrammerTable('stack'))
+    expect(rowOf('layer:11').className).toContain('bg-teal-500/10')
+    expect(rowOf('layer:12').className).not.toContain('bg-teal-500/10')
   })
 
   it('points it at Local from your values, and from Edit in grid on the bar', () => {
@@ -486,7 +551,7 @@ describe('the Stack table', () => {
     expect(mocks.openMakeLayer).toHaveBeenCalledTimes(1)
   })
 
-  it('opens the settings popover from the row’s menu, whose Detach is the rail’s', () => {
+  it('opens the settings popover from the row’s menu, with Detach in it', () => {
     drawRoute('?table=stack')
     openMenu(within(rowOf('layer:10')).getByRole('button', { name: 'Actions for Storm' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Settings…' }))
@@ -538,6 +603,27 @@ describe('the FX table’s create verb and rule', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add an effect' }))
     expect(screen.getByTestId('add-effect')).toBeInTheDocument()
     expect(document.querySelector('[data-effects-rule]')).toHaveTextContent('Values above beat effects below')
+  })
+})
+
+describe('what the tables’ frame carries for every table', () => {
+  it('places the hand on the stack under whichever table shows, Values included', () => {
+    for (const search of ['', '?table=stack', '?table=fx', '?table=scenery']) {
+      const view = drawRoute(search)
+      expect(screen.getAllByTestId('hand-layer-strip'), search).toHaveLength(1)
+      view.unmount()
+    }
+  })
+
+  it('holds ⌘K’s + Effect door while it is mounted, on any table', () => {
+    const view = drawRoute('')
+    expect(screen.queryByTestId('add-effect-door')).toBeNull()
+    act(() => {
+      expect(openAddEffectDoor()).toBe(true)
+    })
+    expect(screen.getByTestId('add-effect-door')).toBeInTheDocument()
+    view.unmount()
+    expect(openAddEffectDoor()).toBe(false)
   })
 })
 

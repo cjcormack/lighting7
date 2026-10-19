@@ -70,7 +70,7 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
   let touched = false
   for (const { state } of states) {
     // A slot only a pressed layer holds is not the operator's to clear — `clearEntry` leaves layer
-    // slots, so the × would do nothing (the layer is released from the rail or the pad).
+    // slots, so the × would do nothing (the layer is released from the Stack table or the pad).
     const owners = state.entry ? (state.entry.owners?.length ? state.entry.owners : [state.entry.owner]) : []
     if (owners.some((o) => o !== 'layers')) {
       holds = true

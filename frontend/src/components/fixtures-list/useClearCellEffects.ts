@@ -13,7 +13,7 @@ import { effectsToStop, membersByGroupOf, partialSweepMessage } from './cellEffe
  *  - **[enabled] gates the subscription, not the sweep.** `activeEffects` is invalidated by every
  *    `fxChanged` frame, so a list that cannot clear a cell must not mount it — today that is
  *    Output and a focused template layer, where `cellKeyboardPermission` refuses ⌫. On the
- *    programmer `ProgrammerFxList` is subscribed to the same cache entry already, so this adds a
+ *    programmer the table tabs' counts subscribe to the same cache entry already, so this adds a
  *    reader rather than a request; the two plain lists do pay for a subscription of their own,
  *    which is the price of ⌫ meaning one thing on every list. It is not frame-rate traffic —
  *    `fxChanged` fires when an effect starts or stops — and the alternative was worse: clearing
@@ -30,10 +30,10 @@ import { effectsToStop, membersByGroupOf, partialSweepMessage } from './cellEffe
  *    identity would re-bind that document-level listener at frame rate for as long as anything is
  *    running. So the two values the sweep reads are held in refs and read at press time — which is
  *    also when they should be read, since the question is what is running *now*.
- *  - **The stop is the same pair of mutations the rail's own Stop calls**, including the `.catch`:
+ *  - **The stop is the same pair of mutations the FX table's Stop calls**, including the `.catch`:
  *    `errorToastMiddleware` reports the failure, and this only stops the unhandled rejection.
  *  - **Group membership comes from the fixture list**, the entry the grid is built from, through
- *    the same helper `FxSheet` expands a group-targeted effect with.
+ *    the same helper the FX lens expands a group-targeted effect with.
  */
 export function useClearCellEffects(enabled: boolean): (cleared: ReadonlySet<string>) => void {
   const { data: effects } = useActiveEffectsQuery(undefined, { skip: !enabled })
@@ -59,7 +59,7 @@ export function useClearCellEffects(enabled: boolean): (cleared: ReadonlySet<str
         : removeFx({ id: effect.id, fixtureKey: effect.targetKey })
       request.unwrap().catch(() => {})
     }
-    // Nothing is said about the ones that went — the rig and the rail both show it. The ones
+    // Nothing is said about the ones that went — the rig and the FX table both show it. The ones
     // that did not are the half that would otherwise look like the key misfiring.
     if (partial.length > 0) toast.warning(partialSweepMessage(partial))
     // The two mutation triggers are stable for the mount; everything else is read from the ref

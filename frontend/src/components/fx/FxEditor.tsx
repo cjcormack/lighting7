@@ -33,8 +33,8 @@ import { useEffectScope } from './useEffectScope'
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
  * `EffectParameterForm`'s parameter inputs rebuilt on the editor kit, and the one editor every
- * running effect is edited in: the FX tray's rows (inline), the programmer rail's *Edit…* and
- * `FxSheet`'s chips (both through `EditorSurface`), the add sheet after the picker, and the busk
+ * running effect is edited in: the FX tray's rows (inline), the FX table's *Edit…* and the FX
+ * lens's chips (both through `EditorSurface`), the add sheet after the picker, and the busk
  * view's Effects tab. Its fields (`FxEffectFields`) are `TemplateEditor`'s too, over a draft.
  *
  * **There is no Apply.** Every control writes as it moves through `useLivePush` — a 50 ms floor, a
@@ -236,8 +236,7 @@ export function FxEditor({
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.propertyName}</span>
         {edited && <EditedMark template={spawning?.template.name} />}
         <span className="flex-1" />
-        {/* Pause and resume, which every host's editor carries — the rail's and `FxSheet`'s had them
-            on `ActiveEffectSheet`, and their rows have no other. */}
+        {/* Pause and resume in every host: the FX lens's chips have no other. */}
         <button
           type="button"
           aria-label={effect.isRunning ? `Pause ${name}` : `Resume ${name}`}

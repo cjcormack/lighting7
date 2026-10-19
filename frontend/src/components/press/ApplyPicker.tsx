@@ -49,15 +49,15 @@ import type { CueAdHocEffect } from '@/api/cuesApi'
 
 /**
  * Which library the picker draws. `effects` is the bare effects (`FxPicker` on the bare effect
- * press) above the effect palettes that fit — ⌘K *Apply FX*, the rail's *+ Effect* and a band's
+ * press) above the effect palettes that fit — ⌘K *Apply FX*, the FX table's *+ Effect* and a band's
  * *+ Effect …*; the palettes' own Effects section reaches it too.
  */
 export type ApplyLibrary = 'palettes' | 'looks' | 'effects'
 
 /**
  * The one picker (apply-model plan §4.2): every library door opens it — the palette strip's
- * `All · n` and the rail's *+ Palette* on every family the selection fits, a popup band's *All …* on
- * the cell's one family, the rail's *+ Look* on the Looks.
+ * `All · n` and the Stack table's *Palette…* on every family the selection fits, a popup band's
+ * *All …* on the cell's one family, the Stack table's *Look…* on the Looks.
  *
  * Decisions rather than detail:
  *
@@ -80,7 +80,7 @@ export type ApplyLibrary = 'palettes' | 'looks' | 'effects'
  *    a pad is ringed where the cue layers its record. Nothing reaches the stage.
  *  - **Three forms, from the cell editor** (`useEditorForm`): a popover under the door on a desk, a
  *    bottom sheet on an upright phone, a right-hand sheet where the viewport is short. A door with no
- *    anchor of its own (the rail's footer, strip and handle) takes the right-hand sheet on a desk.
+ *    anchor of its own (the Stack table's *+ Look or palette*) takes the right-hand sheet on a desk.
  */
 export function ApplyPicker({
   projectId,

@@ -1,15 +1,11 @@
 import { createContext, useContext } from 'react'
 
 /**
- * Which face the programmer rail draws (editor-kit plan session 4, `RailTabs.dc.html`): **Stack**
- * — the layers and effects, the rail as it always was — **Colour** or **Spread**, the busk
- * sheet's two docked editors hosted over the marquee.
- *
- * Held in `ProgrammerWorkspace` beside `collapsed`, and **never persisted** (call 10): every
- * arrival rests on Stack, because a rail that opened on a picker for a marquee that does not exist
- * yet would be a panel saying nothing.
+ * Which editor the programmer's dock draws (tables-colours plan D4): **Colour** or **Spread**, the
+ * busk sheet's two docked editors hosted over the marquee. Held in `ProgrammerWorkspace` beside
+ * `collapsed`, and never persisted: every arrival rests on Colour.
  */
-export type RailTab = 'stack' | 'colour' | 'spread'
+export type RailTab = 'colour' | 'spread'
 
 /** A gesture made at the grid, landed in an open tab — R focused and `seed` typed, or From focused. */
 export interface RailFocusRequest {
@@ -33,8 +29,11 @@ export interface RailFocusRequest {
  * cue grid claim nothing.
  */
 export interface RailTabClaim {
-  /** The tab on screen: `'stack'` whenever the rail is not docked, since only the docked arm draws the tabs. */
-  tab: RailTab
+  /**
+   * The tab that claims, or null: only the docked, expanded dock does. An overlay or a bottom sheet
+   * shuts on a press on the grid, so there a cell's own popover is the form.
+   */
+  tab: RailTab | null
   /** The Colour tab takes the open: focus its R, seeded. */
   focusColour: (seed: string) => void
   /** The Spread tab takes row C's Spread: focus its From. */
@@ -43,7 +42,7 @@ export interface RailTabClaim {
   spreadFrom: (from: { r: number; g: number; b: number }) => void
   /**
    * A position cell's *Spread…*: open the Spread tab on Position, in Fan, at no fan (venue-visit plan
-   * S12). False where the rail draws no tabs — overlay mode, or push mode's narrow arm — and the
+   * S12). False where the dock does not dock — overlay mode, or push mode's narrow arm — and the
    * caller opens row C's popover instead.
    */
   spreadFan: () => boolean

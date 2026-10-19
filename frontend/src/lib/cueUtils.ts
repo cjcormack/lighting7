@@ -165,6 +165,6 @@ export function buildCueInput(cue: Cue): CueInput {
 
 // A client-side reorder of a cue's layers restates every `sortOrder` from array position, so two
 // layers can never tie: the cue editor's Looks tab does (`components/cues/editor/cueListEdits.ts`'s
-// `restated`); the programmer stack leaves that order to the server (`ProgrammerLookStack.onMove`).
+// `restated`); the programmer's Stack table leaves it to the server (`programmerMoveLayer`).
 // `sortOrder` is the authoritative playback order, and a tie in it hands the cook step's precedence
 // to insertion order, which is the accident the layer model exists to remove.

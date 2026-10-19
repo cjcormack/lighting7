@@ -66,7 +66,7 @@ const ZONE_LABEL = 'text-[9px] font-bold uppercase tracking-[0.1em]'
  * content an 852×393 landscape phone has — nine pixels of headroom. A floor of 441 needs 746 and
  * folds that arm onto two lines, which is the row the fold exists to prevent. So this is a real
  * constraint rather than a number to re-tune: at 108px the box chooses between naming the state
- * and giving a count that is *already* on the rail's Local values row and in the programmer tile,
+ * and giving a count that is *already* on the Stack table's *Your values* row and in the programmer tile,
  * and it names the state. The count is still on the `title` and in the `sr-only` sentence.
  */
 const EMPTY_STATE = 'No source'
@@ -255,7 +255,7 @@ export function ProgrammerSourceStrip({
       <Strip tone="neutral" fill={false} title={busking}>
         <span className="sr-only">{busking}</span>
         {/* The label is the state's name and never drops; the count is the part said twice — it is
-            on the rail's Local values row and in the programmer tile — so it is what goes when the
+            on the Stack table's *Your values* row and in the programmer tile — so it is what goes when the
             box is narrow. That order is unchanged from the ladder this replaced. */}
         <span aria-hidden="true" className={cn(ZONE_LABEL, 'shrink-0 text-muted-foreground')}>
           {BUSK_STATE}

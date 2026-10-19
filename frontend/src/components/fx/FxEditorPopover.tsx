@@ -5,8 +5,8 @@ import { EditorSurface } from '../editor/EditorSurface'
 import { SplitFxEditor, type SplitSession } from './SplitFxEditor'
 
 /**
- * `FxEditor` in `EditorSurface` (fixture-fx-sheets plan D17): the programmer rail's *Edit…*, the
- * applied FX table's, `FxSheet`'s chips and a cell popup's Effects band open the live editor beside
+ * `FxEditor` in `EditorSurface` (fixture-fx-sheets plan D17): the programmer's FX table's *Edit…*,
+ * the FX lens's chips and a cell popup's Effects band open the live editor beside
  * what was pressed — a popover anchored at the row or the chip on a desk, a bottom sheet on an
  * upright phone, a side sheet where the viewport is short, the three forms every cell editor takes.
  *

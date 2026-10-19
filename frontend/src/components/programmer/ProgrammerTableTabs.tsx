@@ -68,16 +68,15 @@ const GLYPHS: Readonly<Record<ProgrammerTable, typeof Layers>> = {
 
 /**
  * **Values · Stack · FX · Scenery**, at the start of each table's row B (tables-colours plan D1).
- * Stack, FX and Scenery carry their live counts — layers, running effects, held scenery — which is
- * all the rail's collapsed strip ever said. A press replaces the address's `?table=`; it never
+ * Stack, FX and Scenery carry their live counts — layers, running effects, held scenery. A press replaces the address's `?table=`; it never
  * pushes, as a busk page's tab does not.
  *
- * **Words go before counts, and the segment before the row.** From 1040px of the row every tab has
- * its word; below it a closed tab is its glyph and count, which keeps the Values row's filter wider
- * than its placeholder. Below 760px the four would push the scope pills off the row, so the segment
- * is one menu button — the open table's glyph, its word from 480px, and the four tables with their
- * counts inside — and [compact] (the short-height row) draws that button at every width, glyph
- * only. The widths are the row's: its `@container` is the host's.
+ * **Words go before counts.** From 1040px of the row every tab has its word; below it a closed tab
+ * is its glyph and count, and below 600 the open one is too (tables-colours plan §3, the phone's
+ * `▦ ≡4 ~5 ⛰2`), the count riding the glyph's corner there so a tab is 22px whatever it says —
+ * measured, the phone's Values row has no more room than that. Nothing is hidden at any width. [compact] (the short-height row, which already
+ * carries row A) draws one menu button instead — the open table's glyph, and the four tables with
+ * their counts inside. The widths are the row's: its `@container` is the host's.
  *
  * The segment is one tab stop: ←/→, Home and End move between the tables, and a press from the
  * keyboard lands focus on the new table's own segment. A pointer press leaves focus where the browser
@@ -116,7 +115,7 @@ export function ProgrammerTableTabs({ compact = false }: { compact?: boolean }) 
         aria-label="Programmer tables"
         data-programmer-tabs
         onKeyDown={onTabKeyDown}
-        className={cn('hidden shrink-0 items-center gap-0.5 rounded-lg border bg-card p-0.5', !compact && '@[760px]:inline-flex')}
+        className={cn('shrink-0 items-center gap-0.5 rounded-lg border bg-card p-0.5 @max-[600px]:gap-0', compact ? 'hidden' : 'inline-flex')}
       >
         {PROGRAMMER_TABLES.map((table) => {
           const open = table === choice.table
@@ -136,13 +135,13 @@ export function ProgrammerTableTabs({ compact = false }: { compact?: boolean }) 
               data-programmer-tab={table}
               onClick={(event) => (event.detail === 0 ? selectFromKeys(table) : choice.select(table))}
               className={cn(
-                'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors',
+                'relative inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold transition-colors @max-[600px]:px-1',
                 open ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Glyph className="size-3.5" />
-              <span className={open ? undefined : 'hidden @[1040px]:inline'}>{label}</span>
-              {count != null && <Count count={count} />}
+              <span className={open ? 'hidden @[600px]:inline' : 'hidden @[1040px]:inline'}>{label}</span>
+              {count != null && <Count count={count} corner />}
             </button>
           )
         })}
@@ -152,13 +151,13 @@ export function ProgrammerTableTabs({ compact = false }: { compact?: boolean }) 
           <Button
             variant="outline"
             size="sm"
-            className={cn('shrink-0 gap-1', !compact && '@[760px]:hidden')}
+            className={cn('shrink-0 gap-1', !compact && 'hidden')}
             aria-label={`Table: ${PROGRAMMER_TABLE_LABELS[choice.table]}`}
             title="Values, Stack, FX or Scenery"
             data-programmer-tables-menu
           >
             <OpenGlyph className="size-3.5" />
-            <span className={cn('hidden', !compact && '@[480px]:inline')}>{PROGRAMMER_TABLE_LABELS[choice.table]}</span>
+            <span className="sr-only">{PROGRAMMER_TABLE_LABELS[choice.table]}</span>
             <ChevronDown className="size-3 text-muted-foreground" />
           </Button>
         </DropdownMenuTrigger>
@@ -197,8 +196,21 @@ export function ProgrammerTableTabs({ compact = false }: { compact?: boolean }) 
   )
 }
 
-function Count({ count }: { count: number }) {
-  return <span className="font-mono text-[10px] font-normal tabular-nums text-muted-foreground">{count}</span>
+/**
+ * A table's count. On the segment ([corner]) it rides the glyph's top-right below 600px of the row,
+ * so a tab is its glyph's width whatever the count — the phone's Values row has no other room.
+ */
+function Count({ count, corner = false }: { count: number; corner?: boolean }) {
+  return (
+    <span
+      className={cn(
+        'font-mono text-[10px] font-normal tabular-nums text-muted-foreground',
+        corner && '@max-[600px]:absolute @max-[600px]:top-0 @max-[600px]:right-0 @max-[600px]:rounded-full @max-[600px]:bg-card @max-[600px]:px-0.5 @max-[600px]:text-[9px] @max-[600px]:leading-[11px]',
+      )}
+    >
+      {count}
+    </span>
+  )
 }
 
 function countSentence(table: ProgrammerTable, count: number): string {

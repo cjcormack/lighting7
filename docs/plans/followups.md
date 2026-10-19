@@ -1115,18 +1115,18 @@ cheaper half and needs no personality data — invert the target set and scale.
 
 ### `FU-PROG-FX-HELDBACK-COUNT`
 
-**No held-back *count* in the programmer rail's FX strip** · Trigger · fixture-fx-sheets plan §8,
+**No held-back *count* on the programmer's FX tab** · Trigger · fixture-fx-sheets plan §8,
 recorded at session 6, 2026-10-08
 
-The plan marks a held-back effect in three places, all per effect or per cell: the fixture sheet's
-amber dot on a row, the programmer grid's amber corner dot (D19), and `FxSheet`'s strike-through on
-an effect chip (`isSuppressed`, `lib/heldBack.ts` — the desk's `EffectSuppression` rule copied clause
-for clause). The rail's FX strip (`ProgrammerFxList`) draws no **count** — "2 effects held back" —
-on the strip itself, so a held-back effect is only seen once the operator is looking at the row,
-the cell or the chip that carries it. The plan judged the dot enough and left the count out.
+A held-back effect is marked per effect or per cell: the fixture sheet's amber dot on a row, and the
+Values grid's FX lens chip struck through with the reason (`lib/heldBack.ts` — the desk's
+`EffectSuppression` rule copied clause for clause). Row B's FX tab counts running effects and draws
+no **count** of held-back ones — "2 effects held back" — so a held-back effect is only seen once the
+operator is looking at the row or the cell that carries it. The plan judged the marks enough and
+left the count out.
 
 If it fires, the count is a sum the client can already make: `isHeldBack` over the active-effect
-list against `programmerHolds`, one subscription the strip has, no new frame. Keep it a read-out —
+list against `programmerHolds`, which the tab's count already subscribes to, no new frame. Keep it a read-out —
 a tap on it should open the stack (`LayerStack`) for one of the keys, never clear anything.
 
 **Trigger**: an operator, on the rig, misses that an effect is held back while the dot and the
@@ -1230,14 +1230,14 @@ bank.
 **A programmer layer has no speed or rate master override** · Trigger · apply-model plan session 5
 (venue-visit R3.5)
 
-The rail's *+ Look* and *+ Palette* press through the one picker (`ApplyPicker`), which puts a layer
+The Stack table's *+ Look or palette* presses through the one picker (`ApplyPicker`), which puts a layer
 on through `/looks/{id}/toggle` and `/palettes/{id}/toggle`. Neither takes `speedMasterUuid` or
 `rateSpeedMasterUuid`, so a programmer layer's effects follow their own masters, and the add-layer
 sheet's two *Override … for this layer* controls, its last step on the programmer, went with it. Nothing
 else sets them on a programmer layer (`programmer.patchLayer` carries neither); a cue layer keeps them,
 set in the cue Looks tab's layer settings popover since apply-model plan session 8 (`LayerTimingFields`,
 through `LayerHandlers.onSetTiming`). The fix is the two fields on the toggle routes and on
-`patchLayer`, and the programmer rail's popover passing `onSetTiming` for the masters alone (a
+`patchLayer`, and the Stack table's layer settings popover passing `onSetTiming` for the masters alone (a
 programmer layer has no playback to delay against).
 
 **Trigger**: an operator wants a programmer layer's effects on another speed or rate master.
@@ -2879,7 +2879,7 @@ read it.
 The programmer holds scenery since session 1 of the scenery-programmer plan (`state/ProgrammerScenery.kt`,
 `programmer.setScenery`, `move_scenery`), but a control surface cannot write it: `BindingTarget` has no
 arm for an element, and the plan's D3 keeps scenery out of the desk selection, so no strip, encoder bank
-or `SelectionProperty` reaches it either. The tabs are moved from the programmer rail's Scenery band,
+or `SelectionProperty` reaches it either. The tabs are moved from the programmer's Scenery table,
 the Stage view or the AI. **Trigger**: an operator wants a fader or encoder to ride a tab's `open` or a flown piece's
 `trimM` (a fly cue busked by hand), or a button to toggle a piece's `visible`. **Then**: a
 `BindingTarget.SceneryElement(elementUuid, key)` — by uuid, as `FireCue` carries one beside its id,

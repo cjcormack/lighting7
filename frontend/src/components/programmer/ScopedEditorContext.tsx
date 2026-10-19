@@ -9,11 +9,10 @@ import { useProgrammerScope } from './ProgrammerScope'
  * is why every writer under it gates on `cellKeyboardPermission` rather than on this.
  *
  * **Provided unconditionally** — only the value varies, so a subtree under it never remounts on a
- * scope change (`ProgrammerGrid`'s rule, whose `useListSelection` would clear on an unmount). It
- * was that grid's own derivation until the rail's Colour and Spread tabs needed the same answer
- * (editor-kit plan session 4): the page keeps an outer `live` provider for the rail's FX controls,
- * so a tab that writes a value has to re-enter the grid's arm or its commits would land in Local
- * while the grid showed a focused Look. One derivation, two mounts, so the two cannot disagree.
+ * scope change (`ProgrammerGrid`'s rule, whose `useListSelection` would clear on an unmount). The
+ * page keeps an outer `live` provider for the tables, so the dock's Colour and Spread tabs re-enter
+ * the grid's arm here or their commits would land in Local while the grid showed a focused Look.
+ * One derivation, two mounts, so the two cannot disagree.
  */
 export function ScopedEditorContextProvider({ children }: { children: ReactNode }) {
   const scope = useProgrammerScope()

@@ -118,7 +118,7 @@ export const SIDE_SHEET_TABS: readonly TabSpec[] = [
 
 /**
  * A tab's word on either strip: the open tab's only, from 380px of sheet (`buskTabWordClass`, in
- * `components/sheet/sidePanel.ts` beside the rail's rule; re-exported here, where the sheet's tests
+ * `components/sheet/sidePanel.ts`; re-exported here, where the sheet's tests
  * read it). The strip's **unpadded wrapper** is the `@container`, so 380 is 380 of the sheet — what
  * the operator dragged it to, or the overlay's own width — and not the window's. The overlay strip
  * takes the same rule: its right-hand form is 320, so there every tab is a glyph, clear of
@@ -324,7 +324,7 @@ const SHEET_DEFAULT_WIDTH = 320
  * `SideSheet` itself would re-render `BuskSpeedRail`, `ColourSheet` or `SpreadSheet` sixty times
  * a second, and a colour picker being dragged is not a thing to rebuild per frame. As `children`
  * the element reference is unchanged between the frame's renders, so React skips those subtrees
- * entirely — exactly how `RailBodyFrame` keeps the rail's two lists out of its own drag.
+ * entirely — exactly how `RailBodyFrame` keeps the dock's editors out of its own drag.
  */
 function DockedSideSheet({
   openId,

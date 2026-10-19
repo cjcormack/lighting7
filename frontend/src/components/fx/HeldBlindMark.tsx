@@ -9,7 +9,7 @@ export const HELD_BLIND_TITLE =
 /**
  * *held · Blind* on a running effect the desk is holding because the programmer is blind
  * (show-cue-editing plan D7, `isHeldByBlind` in `lib/heldBack.ts`): the FX tray's rows and the
- * programmer's FX band. A reporter in Blind's amber, the busk band's `BLIND` pill's shape — never a
+ * programmer's FX table. A reporter in Blind's amber, the busk band's `BLIND` pill's shape — never a
  * control: Blind is switched on the programmer's action bar and nowhere else.
  *
  * The host decides whether to draw it (it reads `useProgrammerBlind` once for its list rather than one

@@ -5,6 +5,7 @@ import { useStableCallback } from '@/hooks/useStableCallback'
 import { AppliedFxTable } from '@/components/applied/AppliedFxTable'
 import { SceneryTable } from '@/components/applied/SceneryTable'
 import { StackTable } from '@/components/applied/StackTable'
+import { HandProgrammerLayerStrip } from '@/components/hand/HandLayerTargets'
 import {
   DEFAULT_TABLE_VIEW,
   getProgrammerTable,
@@ -25,6 +26,8 @@ import {
   useProgrammerTableCounts,
   type ProgrammerTablesChoice,
 } from './ProgrammerTableTabs'
+import { ProgrammerAddEffectDoor } from './ProgrammerAddEffect'
+import { ReplacementNotesProvider } from './useReplacementNotes'
 
 /**
  * **The programmer's four tables in one frame** (tables-colours plan D1): the Values grid, always
@@ -76,33 +79,40 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
 
   return (
     <ProgrammerTablesContext.Provider value={choice}>
-      <div
-        className={cn('flex min-h-0 min-w-0 flex-1 flex-col', table !== 'values' && 'hidden')}
-        inert={table !== 'values'}
-        id={programmerTablePanelId('values')}
-        role="tabpanel"
-        aria-label={PROGRAMMER_TABLE_LABELS.values}
-        data-programmer-table="values"
-      >
-        {values}
-      </div>
-      {table !== 'values' && (
+      <ReplacementNotesProvider>
         <div
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
-          id={programmerTablePanelId(table)}
+          className={cn('flex min-h-0 min-w-0 flex-1 flex-col', table !== 'values' && 'hidden')}
+          inert={table !== 'values'}
+          id={programmerTablePanelId('values')}
           role="tabpanel"
-          aria-label={PROGRAMMER_TABLE_LABELS[table]}
-          data-programmer-table={table}
+          aria-label={PROGRAMMER_TABLE_LABELS.values}
+          data-programmer-table="values"
         >
-          {table === 'stack' ? (
-            <StackTable key="stack" projectId={projectId} view={view} onViewChange={setView} />
-          ) : table === 'fx' ? (
-            <AppliedFxTable key="fx" projectId={projectId} view={view} onViewChange={setView} />
-          ) : (
-            <SceneryTable key="scenery" projectId={projectId} view={view} onViewChange={setView} />
-          )}
+          {values}
         </div>
-      )}
+        {table !== 'values' && (
+          <div
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            id={programmerTablePanelId(table)}
+            role="tabpanel"
+            aria-label={PROGRAMMER_TABLE_LABELS[table]}
+            data-programmer-table={table}
+          >
+            {table === 'stack' ? (
+              <StackTable key="stack" projectId={projectId} view={view} onViewChange={setView} />
+            ) : table === 'fx' ? (
+              <AppliedFxTable key="fx" projectId={projectId} view={view} onViewChange={setView} />
+            ) : (
+              <SceneryTable key="scenery" projectId={projectId} view={view} onViewChange={setView} />
+            )}
+          </div>
+        )}
+        {/* The hand's place on the programmer's stack, under whichever table shows — drawn only while
+            something that can become a layer is held — and ⌘K's *+ Effect*, which draws nothing until
+            asked. Both outlive a tab switch. */}
+        <HandProgrammerLayerStrip className="mx-3 my-1.5 w-auto shrink-0" />
+        <ProgrammerAddEffectDoor projectId={projectId} />
+      </ReplacementNotesProvider>
     </ProgrammerTablesContext.Provider>
   )
 }

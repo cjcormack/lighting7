@@ -467,7 +467,7 @@ holds scenery too** (that plan's D1): `programmer.sceneryState` is bridged in
 `api/programmerWsApi.ts` (its own subscription, never `notifyState`) into `store/programmer.ts`'s
 form-3 `programmerScenery` (`useProgrammerScenery`), written by `programmerSetScenery` /
 `programmerClearScenery` as operator gestures (`sendGesture`; a refusal is `programmer.error` and the
-existing toast), and edited in the rail's Scenery band (§"The rail's tabs").
+existing toast), and edited on the programmer's Scenery table (§"The programmer's tables").
 `scenery.state`'s per-entry `source` and blind `staged` list are parsed into `LiveScenery`, both
 optional so an older desk's frame parses as before. **The stage draws Blind** (that plan's D12,
 session 4): the Output + Programmer and Programmer sources lay `staged` over the live scenery
@@ -689,11 +689,12 @@ Release folds to its glyph and the scope line drops the fade.
   something under the winner is held back, by `lib/heldBack.ts` — the desk's
   `EffectSuppression.heldBackByProgrammer` copied clause for clause (blind holds nothing back, a
   programmer-band effect is never held back, otherwise an entry on the effect's **own** key on that
-  head). `FxSheet`'s strike-through reads the same function. A dashed amber *Staged* sits beside the
-  chip while blind and held. **Blind holds the programmer's own effects instead** (show-cue-editing
+  head). The programmer grid's FX lens strikes a chip through by the same function (§The programmer's
+  tables). A dashed amber *Staged* sits beside the chip while blind and held. **Blind holds the programmer's own effects instead** (show-cue-editing
   plan D7): `isHeldByBlind` beside it (the desk's `fx/BlindHold.kt` — blind and in the band, which
-  `programmerOwned` is), never true of an effect `isHeldBack` holds, read by the tray and the rail's
-  FX band (below) for their *held · Blind* mark (`fx/HeldBlindMark.tsx`).
+  `programmerOwned` is), never true of an effect `isHeldBack` holds, read by the tray and the
+  programmer's FX table for their *held · Blind* mark (`fx/HeldBlindMark.tsx`), and by the grid's
+  lens.
 - **The stack** (D5): the chip opens `LayerStack` through `EditorSurface` — `programmer.keyStack`
   asked on open and **again whenever the key's provenance moves** while open, every layer top first,
   the one on stage ticked, held-back layers struck through and said out loud — *why* from the desk's
@@ -711,11 +712,11 @@ Release folds to its glyph and the scope line drops the fade.
   `targets`, and its `targetKey` — the list's canonical JSON — names no fixture or group: every read
   of which heads an effect reaches goes through `lib/effectTargets.ts` (`effectNames`,
   `effectAimKeys`, `effectTargetLabel`, the stored-row `storedEffectTargets`), never a comparison of
-  that key. The tray, the badges, Release's count, the grid's ⌫, the FX band and the busk Effects tab
-  all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
+  that key. The tray, the badges, Release's count, the grid's ⌫ and its FX lens, the programmer's FX
+  table and the busk Effects tab all read it there; it reaches a fixture as *via <its items>*, and its stop asks first.
 - **The tray** (`FxTray`, D9): four states (Fx board) — empty and **folded**, one 40px row (the
   count, a chip per effect dimmed while paused, *+n* past three, the Look picker and **+ Effect**);
-  **open**, the rail's two-line rows with pause and stop, up to half the sheet, scrolling itself; and
+  **open**, two-line rows with pause and stop, up to half the sheet, scrolling itself; and
   **adding**, `FxPicker` in the open tray. While the programmer is blind a programmer effect's chip
   takes Blind's amber dot (its hover adds *held · Blind*) and its row the `HeldBlindMark`: the desk
   is holding it, phase kept, until Blind goes off (show-cue-editing plan D7). A group's effect on the fixture reads *via <group>* (with
@@ -802,8 +803,8 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The programmer rail's *Edit…*, the programmer's FX table's, `FxSheet`'s chips and a cell popup's
-  Effects band open the same editor in `EditorSurface` (`FxEditorPopover`), and the busk Effects tab
+  The programmer's FX table's *Edit…*, the Values grid's lens chips and a cell popup's Effects band
+  open the same editor in `EditorSurface` (`FxEditorPopover`), and the busk Effects tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
   popover hosts, so the two cannot split two ways; the copies a split follows (`SplitSession`) are
   the host's to hold, since the tab's editor moves to the first copy's row. It **follows the
@@ -823,7 +824,7 @@ Release folds to its glyph and the scope line drops the fade.
   ADDED, which names no copy to follow. A palette layer's effect (plan P5), a cue's and a manual one
   never offer a split. Which heads the selection covers is the client's reading, for the words alone
   (`components/fx/effectSplit.ts`, over the cell batch, the busk pair or the window's pair); the
-  split is the desk's, from the heads named. ⌘K *Apply FX*, the rail's `+ Effect` and the busk
+  split is the desk's, from the heads named. ⌘K *Apply FX*, the FX table's `+ Effect` and the busk
   Effects tab's *+ Effect…* open the one picker's
   **effects arm** (`ApplyPicker`, `library="effects"`): `FxPicker` on the **bare effect press**
   (its `press` prop — a tap is `POST /programmer/effects` with the door's pair, one Local effect over
@@ -833,8 +834,8 @@ Release folds to its glyph and the scope line drops the fade.
   the targets `useWindowSelectionTargets` gives — the programmer's rows in grid order, a group row
   kept a group so its effect is one group effect with its distribution, the desk's while following,
   else the busk view's copy — and the mask a press from this window carries. **On the programmer
-  ⌘K's *On the selection* opens the rail's `+ Effect`** (`programmer/addEffectDoor.ts`, the rail
-  registering its door while mounted): the palette lives in `Layout`, outside the programmer's
+  ⌘K's *On the selection* opens the programmer's `+ Effect`** (`programmer/addEffectDoor.ts`,
+  `ProgrammerAddEffectDoor` registering it while the tables are mounted): the palette lives in `Layout`, outside the programmer's
   marquee store and scope, so a picker of its own there could read neither the marquee's mask nor a
   focused Look layer. Elsewhere it opens its own picker on the window's pair, and its per-fixture
   and per-group items press that one target with no mask. In a focused Look layer the bare effect starts
@@ -1082,12 +1083,9 @@ already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the cli
 **Within a cue, later layers win — for every attribute, intensity included**, and the cue's
 own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
 governs intensity. That flip is the change an operator coming from presets is most likely to
-be surprised by, so it is said out loud rather than left implied: the programmer rail draws its
-stack **top wins** — the Local values row first, then the layers strongest to weakest — under a
-`VALUES · top wins` label whose hover is the full sentence, and `LookStack`'s wide density keeps
-the sentence as its `precedenceNote` paragraph (it was `LayersPane` that said so until session 2a
-deleted that pane). The dense density *reverses only the rendering*: the order badge and every
-index a handler receives are still the array's, which is `sortOrder` ascending.
+be surprised by, so it is said out loud rather than left implied: the programmer's Stack table
+lists **top wins** — *Your values* first, then the layers strongest to weakest, its footer saying
+*· top wins* — and `LookStack` keeps the sentence as its `precedenceNote` paragraph.
 A layer's `sortOrder` is authoritative, not its array position: two layers sharing one leaves the
 tie to insertion order in the cook step. The programmer stack asks the server to move a layer and
 takes the order back; the cue editor's Looks tab reorders client-side and so restates **every**
@@ -1099,9 +1097,9 @@ hatch. Effects are Layer 3 and values Layer 4, so a lower layer's colour *effect
 layer's static colour whatever the order says; `stomp` on the higher layer switches off the effects
 of every layer below it, on every property it asserts. It is **suppression, not removal** — the
 instance keeps running, so clearing the stomp brings it back mid-phase — and it applies to the
-programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle; a read-only row
-draws a badge instead, and the dense row draws both — the badge on the row, because stomp is the
-one setting that changes what the rows *below* do, and the toggle in its popover. Backend contract in `../docs/lighting-composition-model.md`
+programmer stack as well as to a cue. `LookStack`'s `onSetStomp` is the toggle, and a read-only row
+draws a badge instead; the Stack table's Settings column and its settings popover carry it for the
+programmer. Backend contract in `../docs/lighting-composition-model.md`
 §Stomp, which is also where the *other* stomp lives — the cue-level, cross-cue, removing one. Don't
 conflate them.
 
@@ -1204,9 +1202,10 @@ cue *is* a saved programmer stack. Its seam is `LayerHandlers`, which is **index
 purpose**: the rows render a list and the operator acts on a position in it, so translating
 index → whatever addresses a layer in that world is the host's job. The cue's host — the cue
 editor's Looks tab — PATCHes the whole `layers` array, built from the cue as the desk holds it
-(§The cue editor); `ProgrammerLookStack`'s maps index → `layerId` and sends
-`programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer`. Adding is the rail's *+ Look* /
-*+ Palette*, which press onto the selection through `ApplyPicker` (§"Applying to a selection"). It must not renumber
+(§The cue editor); the programmer's Stack table (§The programmer's tables) addresses a layer by
+`layerId` itself and sends `programmer.removeLayer` / `moveLayer` / `patchLayer` / `detachLayer`.
+Adding there is *+ Look or palette*, which presses onto the selection through `ApplyPicker`
+(§"Applying to a selection"). It must not renumber
 `sortOrder` client-side the way the cue path does — the server renumbers the stack and re-ranks
 the running effects **in place**, so a drag doesn't restart any effect's phase.
 
@@ -1980,7 +1979,7 @@ would be two effects from one press on a live rig — GO is the footer, a MIDI `
 Show view one pill away; `Busk.test.tsx` and `ShowTab.test.tsx` both pin that `useTransportKeys`
 is never called. **The tab strip is glyphs, and only the open tab gains its word, from 380px of
 sheet** (apply-model plan session 7; `buskTabWordClass` in
-`components/sheet/sidePanel.ts`; the rail's three tabs keep `tabWordClass`'s 400). Eight worded tabs
+`components/sheet/sidePanel.ts`). Eight worded tabs
 want ~610px of strip, past the panel's 480 ceiling, so the five-tab rule — every word from 460, the
 open one's always — went with the eighth tab: a closed tab is its glyph at every width, named by its
 `aria-label` and its `title`, and below the rung so is the open one, marked by its fill. The docked
@@ -2019,10 +2018,9 @@ strip, whose chevron was `p-1` and whose tab glyphs were `p-1.5`, against the ra
 40px header and 40px strip cells. The module states each once (`SIDE_PANEL_BODY_CLASS`,
 `_HEADER_BUTTON_CLASS`, `_STRIP_CLASS`, `_STRIP_CELL_CLASS`, `_ENTER_CLASS`), `sheetFrame.ts`'s
 model — a surface that wants to differ says so at its own import. **Both headers are tab strips
-since the editor kit's session 4**, and the folds their words take are the module's too:
-`tabWordClass` for the rail's Stack · Colour · Spread (§The rail's tabs), moved there from the busk
-sheet when the rail took a strip, and `buskTabWordClass` beside it for the busk sheet's eight tabs,
-so neither strip states its fold itself. **There is no
+since the editor kit's session 4**, and the busk sheet's fold is the module's too
+(`buskTabWordClass`), so the strip does not state it itself; the programmer's dock folds nothing,
+its two tabs fitting its 260 floor whole (§The dock). **There is no
 `SIDE_PANEL_HEADER_CLASS`**: a panel's header is a 40px chrome row like any other, so both
 surfaces take `CHROME_ROW_CLASS` from `sheetFrame.ts` and a panel-specific name for it would have
 been the one measurement stated twice — the drift both modules exist to close. The overlay form's
@@ -2055,7 +2053,7 @@ toggle and the fold chevron inside the chrome row's 12px gutters measured 304px 
 set, so at the shared 260 that row overflowed by 38 and put *both buttons outside the panel* —
 reported from an iPad. The strip holds eight tabs now, and 320 still holds only because each is a
 26px glyph with no word below 380px of sheet (§Focus and the side sheet).
-The rail's header is two short labels with badges and fits at 240, which is why the floor is
+The rail's header — the dock's two tabs today — fits at 240, which is why the floor is
 per-panel rather than one number raised for everyone. 320 and not 304 because a minimum sitting on
 the exact fit clips again the moment anything joins the row, which is how this broke: the row
 fitted until the mode toggle was added to it. A width stored below a panel's floor is lifted on
@@ -2072,7 +2070,7 @@ docks — the rail's narrow push arm is a fixed 300px overlay a drag would not m
 load-bearing.** The width changes at pointer rate, so whatever holds it re-renders at pointer
 rate; `RailBodyFrame` and `DockedSideSheet` both take `children`, so the element references are
 unchanged between their renders and React skips those subtrees — otherwise a drag would rebuild
-the layer list and the FX list, or a colour picker mid-drag, sixty times a second.
+a colour picker or a spread panel mid-drag sixty times a second.
 
 **Never give either panel a bare `duration-*` or `ease-*` class.** `tailwindcss-animate`
 re-declares `duration-*` as `animation-duration` while Tailwind's own still sets
@@ -2093,7 +2091,7 @@ instrument, and a desk where the rail floats while the sheet pushes is two answe
 In overlay mode the rail has **one arm at every width**, so `collapsed` says nothing there — its
 header and strip each draw a single chevron instead of the docked/overlay pair, the resize handle
 is not drawn, and the body is mounted on `overlayOpen` alone (reading `!collapsed` there would hold
-a layer list, an FX list and every subscription under them alive behind a shut panel).
+a colour editor and every subscription under it alive behind a shut panel).
 
 **Neither panel ever draws its strip and its body at once.** The fold *is* the closed state of the
 panel — one control in two shapes — which is what the busk sheet always did and what the rail did
@@ -2129,8 +2127,8 @@ panel whose stored preference is "open" would slide in on every arrival at the r
 reload. It must be computed in a component that *outlives* the panel: `ProgrammerRail` and
 `SideSheet` both render the strip or the body and stay mounted across the swap, so a hook inside
 either subtree would see every appearance as a first render. There is no exit animation because an
-exiting panel has to stay mounted for its duration, which here means holding a layer list, an FX
-list and their subscriptions — or a colour picker mid-drag — alive after the operator asked for
+exiting panel has to stay mounted for its duration, which here means holding a colour picker
+mid-drag, a spread's plans and their subscriptions alive after the operator asked for
 them to go.
 
 **The Colour tab is the docked host of `ColourEditor`, and it writes literals to Local, and only
@@ -2696,7 +2694,7 @@ the window's selection pair (`useWindowPressPair`: the marquee store and the sel
 standing subscription: the outer component asks the narrowed offer
 and renders nothing when the hand holds nothing it can take, so the selection is subscribed to only
 while a placeable record is held. Flat, the programmer's strip re-rendered on every marquee that
-crossed a row boundary — it sits in the rail footer on every visit to `/programmer` — and the cue
+crossed a row boundary — it sits under the programmer's tables on every visit to `/programmer` — and the cue
 strip multiplied that by however many cue cards are expanded.
 
 **A place the desk refused is not a place.** The programmer strip's `run` is the press, which
@@ -2732,9 +2730,8 @@ one row** (library-sheets plan D11): the row menus that carried it are gone with
 sits on the selection bar beside Duplicate and Copy to…, disabled over several rows with the reason,
 and it is drawn only for the project the desk is on — the hand is project-scoped server-side, so a
 pick-up from another project's library resolves nothing.
-`LookStack`'s dense row popover picks up the layer's **referent** and leaves the layer alone; it is
-not a `LayerHandlers` member, because those members are index-based to address *this host's* layer
-while a pick-up names a library record the row already carries. And the programmer's palette chip
+The Stack table's *Pick up* picks up a layer's **referent** and leaves the layer alone. And the
+programmer's palette chip
 offers it in its hold menu — a hold or a right-click, which never presses (§"Applying to a
 selection").
 
@@ -2933,13 +2930,13 @@ slice: that one exists only because the cue-slot overlay is a sibling of the rou
 A press is *source × selection pair → scope*: a palette or a Look, the targets and attribute mask the
 window is acting on, and where the programmer is pointed. **`hooks/usePress.ts`** is the one place
 that turns that into a route, and every door calls it: the palette strip, the one picker
-(`ApplyPicker`, from `All · n`, a band's *All …* and the rail's *+ Look* / *+ Palette*), the popup's
+(`ApplyPicker`, from `All · n`, a band's *All …* and the Stack table's *+ Look or palette*), the popup's
 Palettes bands (the programmer's colour, level and position editors, and the busk Colour, Level,
 Position and Beam tabs), a busk
 pad's *Apply as values*, the hand's place on the programmer's stack, the fixture sheet's Look picker
 (`LookTogglePicker`) and a cue slot's Look. A busk pad's own press stays `POST /busk/pads/{id}/press`,
 which carries its bank's solo siblings. The **bare effect** is the one source `usePress` does not
-take: ⌘K *Apply FX*, the rail's *+ Effect*, a band's *+ Effect …*, the busk Effects tab's
+take: ⌘K *Apply FX*, the FX table's *+ Effect*, a band's *+ Effect …*, the busk Effects tab's
 *+ Effect…* and the picker's Effects section
 press it through `FxPicker`'s `press` arm, `POST /programmer/effects` with the door's pair (one Local
 effect over the selection; the desk takes those heads off the family's other Local effects), or, in a
@@ -2966,9 +2963,9 @@ paragraphs.
   underneath. A busk pad keeps its `ContextMenu`, reached through the synthetic `contextmenu` its hold
   dispatches, and gained *Put on* / *Take off these heads* and *Apply as values* (⌥click too) on a
   palette or Look pad; a cue pad's menu is unchanged, since a cue is playback.
-- **The pair** is the door's: `usePress(projectId, pair)`. A door with none of its own — the rail's
-  hand place, *+ Look* and *+ Palette* — takes the window's through `useWindowPress`
-  (`useWindowPressPair`; the rail's picker reads what those heads can take, the strip's offer, from
+- **The pair** is the door's: `usePress(projectId, pair)`. A door with none of its own — the
+  programmer's hand place and the Stack table's *+ Look or palette* — takes the window's through
+  `useWindowPress` (`useWindowPressPair`; that picker reads what those heads can take, the strip's offer, from
   the same snapshot through `useWindowPaletteFit`): on the programmer
   the list's own, the strip's targets and the marquee's families published through the marquee
   store as `MarqueeSnapshot.press` (held by content, so a rows refetch republishes nothing), an
@@ -3010,7 +3007,7 @@ paragraphs.
   rows vocabulary, and in a focused Look the values that could not reach its draft. It answers what
   happened — `on`, `off`, `into`, or `null` for a refusal — which is how the hand's place says *taken
   off it* when the record was already on every selected head (`HandPlacement.describe`).
-- **The rail** (§4.6): a layer's settings popover has **Detach** on a row of its own
+- **The Stack table** (§4.6): a layer's settings popover has **Detach** on a row of its own
   (`programmer.detachLayer`, the layer becoming Local with nothing on stage moving), and a row's second
   line names a replacement while it stands — *lost Hex 3–4 to Amber* — `lib/replacementNotes.ts`'s
   reading of the last two applied-state frames (heads by the desk's own resolved targets, never a
@@ -3084,8 +3081,8 @@ by name — all or nothing, never one recent padded out by seven, which would mo
 under the operator's hand on the second press.
 
 **`All · n` opens `ApplyPicker`** (`components/press/ApplyPicker.tsx`, apply-model plan §4.2) — the
-one picker every library door opens: on every family the selection fits from `All · n` and the rail's
-*+ Palette*, on one family from a popup band's *All …*, on the Looks from the rail's *+ Look*. It is
+one picker every library door opens: on every family the selection fits from `All · n` and the Stack
+table's *Palette…*, on one family from a popup band's *All …*, on the Looks from its *Look…*. It is
 the offerable library as a searchable pad grid, sections Recent · All A–Z · Per fixture · Effects
 (the effect palettes, and *Effect…*, the way to the bare effects) · **Outside the mask** — what the heads could take but
 the selection's mask leaves out, dimmed with the reason (*Colour — the selection is Position*) and
@@ -3100,13 +3097,13 @@ fixture or group whatever was selected. A Look can land **on its own fixtures** 
 fixtures* kept; a Look whose effects take the layer's targets has none to land on and sits outside
 with that reason. Four things about it: it takes **`useEditorForm`'s three forms** and neither of
 its own media queries, so the picker and a cell editor never disagree about which shape a screen
-gets, and a door with no anchor (the rail's footer, strip and handle) takes the right-hand sheet on a
-desk — the rail mounts it only while open, since its pair is a marquee subscription; **a press does not close it**, because auditioning three colours in a row is the normal case;
+gets, and a door with no anchor (the Stack table's create verb) takes the right-hand sheet on a
+desk — `ApplyLayerPicker` is mounted only while open, since its pair is a marquee subscription; **a press does not close it**, because auditioning three colours in a row is the normal case;
 it computes nothing while shut, since its host re-renders at marquee rate; and its popover width is
 a **media** query rather than a container one — `PopoverContent` is portalled to `body`, so row C's
 `@container` is not an ancestor and a container class there would match nothing, silently.
 **The effects arm** (`library="effects"`, apply-model plan §5, session 6) is what ⌘K *Apply FX*, the
-rail's *+ Effect* and a band's *+ Effect …* open, and the palettes' *Effect…* switches to (with a way
+FX table's *+ Effect* and a band's *+ Effect …* open, and the palettes' *Effect…* switches to (with a way
 back): `FxPicker` over the pair on the bare effect press, opening on the door's family and preferring
 its property (`property`, a cell's), *Edit <name>* putting the live editor in the panel, and below it
 the **effect palettes** that fit, pressed through `usePress`. It retired `FxAddSheet`. Under a focused
@@ -3301,7 +3298,7 @@ and **pressable without it**: the operator's Over survives a marquee moving onto
 cells, which spread as Heads (`effectiveSpreadOver`, one rule for both kinds: the desk request and
 the raw arm both say `HEADS` where the plan counts no cells), so moving from a pixel bar to a par
 and back keeps Cells. It survives an **empty**
-selection too, which unmounts the popover and blanks the rail tab: Over is not the form's but a
+selection too, which unmounts the popover and blanks the dock's tab: Over is not the form's but a
 per-tab store, `lib/spreadOver.ts`, one fact for every host of the panel (`sidePanelMode.ts`'s
 reasoning) that `commit` writes through and a mounting panel reads. A panel mounted *beside* the
 one that moved it follows the store into its form and **never pushes**, since its own Live may be
@@ -3372,9 +3369,9 @@ edited: `useMarqueeSpreadPlans` gives the plan `fanBases` — the layer's draft-
 (`lookPositionOf`) or the cue's `composedValue` per head — sent with the first request, and the
 read-out says *From the layer’s rows · 2 heads from the stage* for the heads the row lacked, and
 names any the desk held at the end of travel (`clamped`); the desk reads those heads from the stage,
-never from Local, which is another context's. The position cell's ***Spread…*** opens the rail's
-Spread tab in Fan at 0 (`FanSpreadSeed`, the claim's `spreadFan`), or row C's popover where the rail
-draws no tabs; see `PaletteBands` below.
+never from Local, which is another context's. The position cell's ***Spread…*** opens the dock's
+Spread tab in Fan at 0 (`FanSpreadSeed`, the claim's `spreadFan`), or row C's popover where the dock
+does not dock; see `PaletteBands` below.
 
 **The row keys are every sheet's, and they are the one half that listens in the bubble phase.**
 Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface passes `useSheet`
@@ -4184,8 +4181,8 @@ each was:
   layer (aim writes Local) and where no head annotates its pan and tilt in degrees; then its
   ***Spread…*** (venue-visit plan S12, `cells/PositionSpreadTool.tsx`), which opens Spread on Position
   in Fan at 0 and closes the cell's editor — no seed, since a fan starts where the heads are. The
-  opener is the list container's (`PositionFanContext`): the rail's Spread tab through the claim's
-  `spreadFan`, which answers false where the rail draws no tabs (overlay mode, push mode's narrow
+  opener is the list container's (`PositionFanContext`): the dock's Spread tab through the claim's
+  `spreadFan`, which answers false where the dock does not dock (overlay mode, push mode's narrow
   arm), and then row C's popover, the colour hand-over's fallback. It is drawn only in the programmer,
   the one list whose popup draws its footer, refused under two heads (a fan of one moves nothing), in Output and on a
   focused palette layer, and live in a focused Look layer, where the fan lands in the layer's draft. At the popup's 288px both fold to their icons, their words the buttons'
@@ -4431,7 +4428,7 @@ Three consequences worth knowing before touching any of it:
   name column or by ⌘A, and spreading across eight whole heads without first drawing a rectangle over
   one of their columns is a gesture those views already offered; the programmer trades it away
   because there the marquee is what a selection is *for*. They also now mount `useClearCellEffects`
-  — a subscription of their own, which the programmer gets free from `ProgrammerFxList` — because
+  — a subscription of their own, which the programmer shares with its tables' counts — because
   ⌫ clearing the values while the effect driving them kept running is, on the rig,
   indistinguishable from the key having done nothing.
 - **A click on a column the row resolves nothing for clears the selection** — a dimmer-only par's
@@ -4596,7 +4593,7 @@ own activation and open *that* cell's editor with nothing focused.
 — **and stops the local effects on them**. That second half is not a new gesture: the programmer's
 whole-desk Clear has always swept values and programmer-band FX together
 (`clearProgrammerCompletely` in lighting7), and three cells under an effect palette's press are
-three instances that were otherwise removable only one at a time in the rail.
+three instances that were otherwise removable only one at a time on the FX table.
 `components/fixtures-list/cellEffects.ts` owns the rule and `useClearCellEffects.ts` the wiring;
 two clauses keep the key inside the rectangle. **Local means unowned** — `programmerOwned` *and*
 no `lookId` / `templateId` / `programmerLayerId` / `cueId`, since an effect that came out of a
@@ -4604,8 +4601,8 @@ Look, a palette layer or a cue is that thing's, and stopping it here would be un
 recook or would quietly edit a library record. And **every head, or none**: an effect drives
 whatever its target names (for a group, every member) and there is no "stop it on these heads
 only", so a partly-covered one is left running and toasts that it was, rather than half vanishing
-from the rig. Matching is on `fixtureKey|propertyName`, the same pairing `FxSheet` places an
-effect on a cell by, and the pairs are **collected by the clear loop itself** rather than
+from the rig. Matching is on `fixtureKey|propertyName` (`cellEffectKey`), the same pairing the
+grid's FX lens places an effect on a cell by, and the pairs are **collected by the clear loop itself** rather than
 re-derived, so the values half and the effects half cannot reach different heads.
 
 The request itself is a **one-shot** on both halves: the container drops it on the commit after it
@@ -4765,7 +4762,7 @@ palette layer show them disabled with the reason, and Spread makes the same two 
 its title names where the value lands (Local, or the focused Look's rows), and that is the scope's
 answer rather than the press's. A "track it" arm the way a palette chip has (its tap) makes no
 sense on a value: a typed number has no referent for a layer to follow, and *Make layer* on the
-rail is how local literals become something trackable afterwards. Set and Clear keep their icons
+Stack table's *Your values* is how local literals become something trackable afterwards. Set and Clear keep their icons
 at every width and only Spread folds on the phone arm, because on a phone Set is the only way into
 a selection's editor now that a drag opens nothing.
 
@@ -4793,8 +4790,8 @@ layer. Same grid, same cell editors, same drag-select in all three — that same
 because it is what makes editing a Look feel local rather than like a trip to the library.
 `components/programmer/ProgrammerScope.tsx` owns it; the band above the grid is
 `ProgrammerScopeBand`, on the Values table's row B after the table tabs, and a layer is focused by
-clicking its name badge in the stack rail or by ⏎ / *Edit in grid* on the Stack table, which
-switches to Values (§The programmer's tables).
+⏎, a double click or *Edit in grid* on the Stack table, which switches to Values (§The programmer's
+tables).
 
 **The programmer's chrome is one spacing system**, and every number in it is stated once here so a
 row cannot drift from its neighbours (design record: `../docs/plans/programmer-chrome-design/`,
@@ -4802,8 +4799,8 @@ whose `INDEX.md` has the reasoning). A 12px gutter on every row, the `ShowHeader
 that header is shared, so Show, the Prompt Book and Busk take it too, and on those three it differs
 from the `ShowBar`'s own `@[440px]:px-4` by 4px, deliberately. Every chrome row is 40px and holds
 32px controls, so the inset is 4px everywhere: row A, row B (`h-10`, `min-h-10` when folded), row
-C (`SelectionBar`), the rail header — a tab strip since the editor kit's session 4, §The rail's
-tabs — and the strip's chevrons, all level. Three control tiers by
+C (`SelectionBar`), the dock's header — a tab strip, §The dock — and the strip's chevrons, all
+level. Three control tiers by
 nesting, and nothing else: 32 for a control on a row (`h-8` / `size="sm"`), 28 for a control inside
 a control (`h-7`: Update and Revert in the source box, a palette chip, `New`), 24 for a toggle
 item, 20 for a pill. The header is 40px (`CHROME_ROW_CLASS`, `h-10 px-3`) at every height, not only
@@ -4915,20 +4912,21 @@ Things that will bite:
   it. Three guards, and the middle one bites — `ProvenanceEntry.layerId` is present for a **cue's**
   layers too, so `focusLayer` checks membership in the programmer's own stack and reports failure.
 
-**The grid says *held back*** (fixture-fx-sheets plan D19, session 5). An **amber corner dot** sits
-in a cell's top-right, inside the ownership ring and absolutely placed, so it never moves the value,
-wherever the cell's value holds an effect back: a non-band effect paints one of the cell's
-`(head, property)` keys and the programmer holds an entry there, never while blind —
-`lib/heldBack.ts`'s rule, the fixture sheet's own (`heldBackReach` from the effect list, one
-subscription for the grid through `useHeldBackReach`; `cellHoldsBack` per cell, asked only where
-ownership is drawn). It takes the corner the effect badge takes, and never both: a held-back cell
-is the programmer's, a badged one the effect's. The cell's hover adds *holds an effect back*. **The
-cell editor's label line carries the source chip** (`CellSourceChip`, the sheet's `SourceChip` over
-the cell's keys, `EditorLabelLine`'s `chip`): on the right, after the column, in the popover form,
-and as a row of its own under the title in both sheet forms. It names what drives the cell — *2 of
-4* where the heads differ — carries the dot, and opens the property's stack (`LayerStack`, which
-takes the cue names and the connection as props outside a sheet). It is mounted inside the editor,
-so it subscribes only while one is open, and only where ownership is drawn — Local; Output's cells
+**The grid says *held back*** (fixture-fx-sheets plan D19, session 5), and since tables-colours
+session 2 it says it with the **FX lens** (§The programmer's tables): a cell an effect paints carries
+a chip with the division, struck through with the reason where the effect is held back. The chip
+takes the top-right corner's two older marks over — the **amber corner dot** (`lib/heldBack.ts`'s
+rule, `heldBackReach` from the effect list through `useHeldBackReach`, `cellHoldsBack` per cell) and
+the **effect badge** (provenance naming an effect) — which stay as the lens's fallback only where no
+indexed effect paints the cell (an effect under a sibling key, which provenance can still name). Both
+are absolutely placed inside the ownership ring, so they never move the value; the cell's hover adds
+*holds an effect back*. **The cell editor's label line carries the source chip** (`CellSourceChip`,
+the sheet's `SourceChip` over the cell's keys, `EditorLabelLine`'s `chip`): on the right, after the
+column, in the popover form, and as a row of its own under the title in both sheet forms. It names
+what drives the cell — *2 of 4* where the heads differ — carries the dot, and opens the property's
+stack (`LayerStack`, which takes the cue names and the connection as props outside a sheet), whose
+`programmer.keyStack` answer is the desk's own word on a stomp. It is mounted inside the editor, so
+it subscribes only while one is open, and only where ownership is drawn — Local; Output's cells
 take no edit (a click still jumps to the owner) and a focused Look layer's draft has no stack (§8's
 follow-up). **Release n** joins row C's verbs after Spread (D18, `CellSelectionActions`' `release`
 slot): over the rows the selection covers — a marquee's rows or a row selection, Locate's targets,
@@ -4938,137 +4936,100 @@ count, a group effect left running named once; on the programmer only, folded on
 Spread, live in Local and Output (a programmer verb, like the action bar's Clear) and refused with
 its reason while a Look or palette layer is focused, where writes go to the layer (Chris's call).
 
-**The FX band's row is two lines**, because one could not hold it (and a programmer effect Blind
-holds says *held · Blind* beside its name, its dot amber — show-cue-editing plan D7): name, tempo and division with
-the menu on the first, and property, **target** and home on a wrapping second. It was one flex line
-of `shrink-0` chips in a 404px rail, so the name — the only thing allowed to give — was squeezed to
-nothing and the menu button was pushed past the rail's edge; a `@[320px]` on the home detail was
-meant to hide it narrow but the nearest `@container` is the whole workspace. The target is new:
-`ActiveEffect` is one instance per target, so eight loose heads under one chase are eight rows, and
-the key is what tells them apart. Only the layer *position* is written out beside the home badge;
-the other two details ride the badge's title.
-
-`+ Effect` follows the same rule as a value edit: focused layer → into that Look (started on
-`/fx/add`, then `POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the
-bare effect press (`POST /programmer/effects`), one Local effect over the selection under its mask,
-which Record writes onto the cue; Output → disabled, naming the two places that can take one.
+`+ Effect` follows the same rule as a value edit, from the FX table's library row or ⌘K's *Apply FX
+→ On the selection*: focused layer → into that Look (started on `/fx/add`, then
+`POST /looks/{id}/absorb-effects`, which *moves* the running instance); Local → the bare effect
+press (`POST /programmer/effects`), one Local effect over the selection under its mask, which Record
+writes onto the cue; Output → disabled, naming the two places that can take one.
 **Make layer** promotes a Local selection into a named Look applied here — record-look, then
 `addLayer`, then `clearEntry` per row taken, so what you promoted leaves Local and the rest stays
 yours. It is a sequence, so a failure part-way leaves the Look and says so.
 
-### The rail's tabs
+### The dock
 
-**Two homes for one session.** Tables-colours session 1 put Values · Stack · FX · Scenery on row B
-(§The programmer's tables) and left this rail exactly as it was; session 2 takes its Stack body,
-strip counts and phone doors away and leaves the Colour · Spread dock. Until then the rail's Stack
-and the Stack, FX and Scenery tables list the same programmer, the rail still reorders a layer and
-focuses one from its name badge, and the two are kept agreeing by `AppliedTables.test.tsx`.
+**The right side of the programmer is a dock** (tables-colours plan D4, session 2): **Colour ·
+Spread**, the busk sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
+`RailSpreadTab.tsx`), collapsible, at the rail's 260 floor and 300 default (260–480, stored in
+`programmer.rail.width` / `.collapsed`). **It lists nothing**: the layers, the effects and the
+scenery are the Stack, FX and Scenery tables on row B (§The programmer's tables), so nothing on it
+competes with the tables for a programmer event. `programmer/ProgrammerRail.tsx` draws it and
+`ProgrammerWorkspace` owns its arms, its state and its geometry; the names stayed `Rail*` in code.
+The rail's Stack body (`ProgrammerLookStack`, `ProgrammerFxList`, `RailSceneryBand`), its strip
+counts, its footer's doors and the phone handle's doors are gone, and so is `FxSheet`'s *Per-fixture
+FX* — the grid's FX lens says per cell what it said.
 
-**The rail's header is a tab strip — Stack · Colour · Spread** (editor-kit plan session 4,
-`../docs/plans/editor-kit-design/RailTabs.dc.html`). **Stack** is the rail's body and
-footer — since the scenery-programmer plan's session 2 the Scenery band, the layers and the effects —
-with `LAYERS n · FX n` its face; **Colour** and **Spread** are the busk
-sheet's two docked editors hosted over the marquee (`programmer/RailColourTab.tsx`,
-`RailSpreadTab.tsx`) — a long busk over one marquee with the grid uncovered, where a cell's popover
-is the quick form. The strip is the header row itself, the mode toggle and the chevron after it; a
-second tab row was declined. Its words fold by `tabWordClass`, which lives in
-`components/sheet/sidePanel.ts` as the panels' shared chrome (the busk sheet's eight tabs take
-`buskTabWordClass` beside it): the strip's unpadded wrapper is the
-`@container`, and below 400px of strip only the open tab keeps its word — every width the rail has,
-the strip being the rail less its toggle and chevron — while the Stack tab folds to the collapsed
-strip's glyph-and-count pairs (layers and effects; scenery's count is the band's own label there,
-§"Scenery is a band" below). `RailTabs.test.tsx` pins that as an
-ordering.
+What went where, so none of it reads as dropped: a layer's settings popover, enable, *Detach*,
+*Pick up*, *Remove*, reorder and focus, the replacement notes, *Make layer* and *+ Look or palette*
+are the Stack table's; *Edit…*, *Save as palette…*, *Stop*, *held · Blind* and *+ Effect* the FX
+table's; the band's held pieces and *All scenery…* the Scenery table's; the *Values above beat
+effects below* rule rides both the FX and the Stack table (the Stack's with a press to FX). The
+hand's *Place “X” here* on the programmer's stack (`HandProgrammerLayerStrip`) sits under the tables
+whichever shows, and ⌘K's *Apply FX → On the selection* (`addEffectDoor.ts`) is registered by
+`ProgrammerAddEffectDoor`, which the tables' frame mounts and which subscribes to nothing until it is
+asked. `AppliedTables.test.tsx` pins each.
 
-Six rules, each with a reason:
+**Every arm the rail had, the dock has.** Docked at ≥1200px of workspace, with a 40px header of
+tabs, the side-panel mode toggle and the collapse chevron, level with row B; collapsed, a 40px strip
+of the chevron and a door per tab. At 704–1200, and in overlay mode, the strip opens a 300px overlay
+(overlay mode: the stored width) over the grid's right edge, which shuts on Escape, its chevron or a
+press on the grid. Below 704 a 44px handle across the bottom — *Colour*, *Spread* and a chevron —
+opens the same panel in a `Sheet side="bottom"` at 80%, its tab strip the sheet's header. The strip
+and the handle carry **no counts and no `+`**: row B's tab segment carries the counts on every
+table. Each strip door is two buttons in push mode, one per arm and hidden by the arms' container
+queries as the chevrons are, so the docked arm's door writes `collapsed` and the narrow arm's only
+opens the overlay. One panel is ever mounted: the sheet and the docked frame are exclusive by
+construction (`sheetOpen` is the handle's alone), and the render states it as a ternary.
 
-- **Docked only.** The push-mode narrow arm (704–1200) and overlay mode both shut on the next press
-  outside the panel, which a picker over the grid has to survive — so the strip carries
-  `@max-[1200px]:hidden`, overlay mode draws the plain face, and the strip writes the tab back to
-  Stack when it sees its own box go to zero (`RailHandleFrame`'s trick). The collapsed strip's
-  colour and wave cells, which expand the rail onto their tab, are docked-only the same way; the
-  phone's bottom sheet keeps the stack.
-- **The fact rests on Stack and is not persisted** (call 10). `railTab` is plain state beside
-  `collapsed` in `RailArm`, a collapse forgets it, and a strip count opens the Stack tab. A rail that
-  opened on a picker for a marquee that does not exist yet would be a panel saying nothing.
+Five rules, each with a reason:
+
+- **The tab fact rests on Colour and is not persisted.** `railTab` is plain state beside `collapsed`
+  in `RailArm`, kept across a collapse; there is no Stack to rest on any more, and a dock that
+  opened on Spread for a marquee that does not exist yet would be a panel saying nothing useful.
+- **Only the docked, expanded dock claims a grid gesture** (`RailTabClaim.tab`, null otherwise). The
+  overlay and the sheet shut on a press on the grid, so there a cell's own popover is the form.
+  Which push-mode arm is drawn is CSS's choice, read off a 1px probe the workspace draws with
+  `@max-[1200px]:hidden` (a zero box is the narrow arm — `RailHandleFrame`'s trick); overlay mode is
+  JS's to know. A position cell's *Spread…* opens the Spread tab in Fan only where the dock docks
+  (`spreadFan`), else row C's popover.
 - **The marquee is published, not moved.** The cells stay local state in `FixturesListContainer`
   (`useCellSelection`'s reason); the container publishes what its own editors are handed —
   `marqueeBatches`, `columnTargets`, the rows' heads for a rows-only selection, the scope's
   `cellKeyboardPermission` and `scopeLabel`, and a throttled `commit(col, …)` — into
   `fixtures-list/marqueeContext.ts`, a **store** `ProgrammerPage` provides above the grid and the
-  rail. A store and not a context value: the marquee moves at pointer rate and only a mounted tab
+  dock. A store and not a context value: the marquee moves at pointer rate and only a mounted tab
   should hear it. The plain lists mount no store, so they publish into nothing.
-- **A tab claims its own column's open gesture** (call 9). With Colour open, Enter, Set, a typed
-  character and a double click on a Colour cell land in the tab — R focused, the character seeded —
-  and no popover opens; with Spread open, row C's Spread focuses the tab's first field (From, or a fan's first
-  amount), a colour cell's *Spread…* seeds the tab rather than the popover, and a position cell's
-  opens it in Fan. Every other column opens its popover. The claim
-  is `programmer/railTab.ts`'s `RailTabClaim`, which `ProgrammerWorkspace` provides around *both*
-  its children, keyed on the drawn tab alone; the keyboard's branch is `useCellEditorRequests`'
+- **A tab claims its own column's open gesture** (editor-kit call 9). With Colour drawn, Enter, Set,
+  a typed character and a double click on a Colour cell land in the tab — R focused, the character
+  seeded — and no popover opens; with Spread drawn, row C's Spread focuses the tab's first field
+  (From, or a fan's first amount), a colour cell's *Spread…* seeds the tab rather than the popover,
+  and a position cell's opens it in Fan. Every other column opens its popover. The claim is
+  `programmer/railTab.ts`'s `RailTabClaim`, which `ProgrammerWorkspace` provides around *both* its
+  children, keyed on the claiming tab alone; the keyboard's branch is `useCellEditorRequests`'
   `intercept`, the double click's is `ColourCell`'s `onOpenChange`.
 - **The tabs write where the grid is pointed.** The page keeps an outer `live` `EditorContext` for
-  the rail's FX controls, so the tabs mount `ScopedEditorContextProvider` — the grid's own
+  the tables beside the grid, so the dock mounts `ScopedEditorContextProvider` — the grid's own
   derivation, extracted — and a value lands in a focused Look layer's draft, not in Local. The
   Colour tab writes through the published commit, which is the container's column commit on its
   ~30 Hz throttle; the Spread tab's plans come from `useMarqueeSpreadPlans`, lifted out of
-  `SpreadPopover` so the two build one plan list. Output and a focused palette layer are
-  read-only in both, with the cell's and the popover's own words (`ColourEditor`'s `readOnly`,
+  `SpreadPopover` so the two build one plan list. Output and a focused palette layer are read-only
+  in both, with the cell's and the popover's own words (`ColourEditor`'s `readOnly`,
   `SpreadPanel`'s docked refusal); Pick stays live.
-- **The Colour tab's emitters start unstated.** Its buffer is its own and seeded by Pick, as the
-  busk tab's is, but an emitter stays `undefined` — which the writer samples from the wire — until
-  the operator states it, and a new set of heads unstates it again: the appearance store has no
-  per-emitter reading, and a 0 would drive every white LED in the marquee dark on the first byte.
-  Each tab draws the label line (*4 heads · Local*, call 11 — `EditorLabelLine`'s `docked`) and no
-  Palettes band (D11: row C's strip is on screen, and the cell's popup draws the band). The rail's floor stays 260 (call 12): the Spread panel
-  takes its compact curve row below 300 of rail (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked
-  panel's root). That root is the busk Spread tab's too, so the busk sheet carries the container as
-  well; it never matches there, because that sheet's floor is 320.
 
-**Scenery is a band of the Stack body, not a tab** (scenery-programmer plan D1, D4; session 2 —
-Chris's call over a docked-only Scenery tab and an action-bar chip, made once both had been built
-and measured). `programmer/RailSceneryBand.tsx` sits at the **top** of `RailBody`, above *Values*,
-because the programmer's scenery is the resolver's top tier (D2) and is drawn rather than output, so
-it is not a row of the value stack. Being a band, it is in every arm the rail has — docked, the
-704–1200 overlay, overlay mode and the phone's bottom sheet — the way the effects band is, which a
-tab (docked only, for the reasons above) could not be; that is what retired the chip, whose 40px the
-phone's row A did not have beside `Q15 · Update · Revert`. The band lists **only what the scope
-holds**, each a `SceneryElementRow` (its `SceneryControl`, the kind's glyph and word, a release ×),
-under a `SCENERY · 2 held · top wins` label whose *All scenery…* opens `ProgrammerSceneryList` — every
-element **Venue then Set**, by name — through `EditorSurface` (a `w-72` popover on a desk or iPad, a
-bottom sheet on an upright phone, a side sheet on a short viewport). **Its count rides the rail like
-FX's**: a `StripCount` on the collapsed strip and a glyph-and-count door on the phone handle, both
-opening the rail at the band (`RailBand` gained `'scenery'`), and `Scenery n` on the tabless faces
-(the overlay header's `StackLabels`, the phone sheet's title). **Not on the docked Stack tab's
-face**: that strip is 211px at the rail's 300px default and its three tabs already need 224 with
-Stack open, so a third glyph-and-count pair would push Colour and Spread out; the band's label,
-first in the body the tab opens on, says it there — except with a Look layer focused, where it names
-the Look (*in Night*) and lists that Look's scenery rather than the programmer's. **A focused Look's
-rows write nothing until its own list has loaded**: a whole-list `PUT` built on an empty draft would
-replace everything the Look holds.
-
-The band and the list share one scope reading, `useSceneryScope` (`ProgrammerSceneryList.tsx`), so
-they cannot draw an element two ways. Neither is under `ScopedEditorContextProvider` or reads the
-marquee — scenery is addressed by element, never through the selection (D3) — but both follow the
-scope band's arm: **Local** writes `programmer.setScenery` at the programmer's fade (the Clear/Blind
-picker's; at Snap the piece moves at its own `travelS`) and the × sends `programmer.clearScenery`; a
-focused **Look** layer lists and writes that Look's scenery **whole** through `setLookScenery` (the
-Look's own scenery `PUT`, on release, its draft held over a refetch as `SceneryEditor`'s is), and
-its × takes the element out of the Look; **Output** and a focused **palette** layer list the
-programmer's holds disabled, with *Output is read-only* or *A palette carries no scenery* —
-disabled, never hidden. A held row wears `ring-primary`; a row that only inherits wears the tracked
-hatch (`scenery/trackedHatch.ts`, shared with the cue card's tracked rows); a row Blind is staging
-wears the `BlindDot` and shows the staged state (`scenery.state`'s `staged`, Local only). The
-read-out is the frame's `source`, the top tier only — *held by the programmer*, *held by Night,
-pressed*, *tracked from Q14*, *held by Main's set*, *at its base* — because nothing on the wire says
-what the tier below would hold. The list's filters *Set*, *Venue* and *Moving only* are three
-independent toggles (Set layer, Venue layer, only what draws or flies; Set and Venue on by default),
-one per-window store (`useSceneryFilters`, `sessionStorage` under `programmer.scenery.filters`) that
-the Scenery table reads too, and a held piece is listed whatever they say, so its × stays in reach.
+**The Colour tab's emitters start unstated.** Its buffer is its own and seeded by Pick, as the busk
+tab's is, but an emitter stays `undefined` — which the writer samples from the wire — until the
+operator states it, and a new set of heads unstates it again: the appearance store has no
+per-emitter reading, and a 0 would drive every white LED in the marquee dark on the first byte.
+Each tab draws the label line (*4 heads · Local* — `EditorLabelLine`'s `docked`) and no Palettes
+band (row C's strip is on screen, and the cell's popup draws the band). The Spread panel takes its
+compact curve row below 300 of dock (`SPREAD_COMPACT_WORD_CLASS`, a query on the docked panel's
+root), which the busk sheet's Spread tab shares and never matches, that sheet's floor being 320.
+Two tabs with their words fit the 260 floor whole, so the dock's strip folds nothing.
 
 **Clear counts held scenery** (`ProgrammerActionBar`): it is enabled for a programmer holding only
 scenery, and its tooltip (`clearSentence`) says *Release … and 2 pieces of held scenery over 2s* —
 the desk's `programmer.cleared` reply counts values and effects only, so the count is
-`programmer.sceneryState`'s (`useHeldSceneryCount`).
+`programmer.sceneryState`'s (`useHeldSceneryCount`, an RTK Query read of its own that no band or
+table has to be mounted for).
 
 ### The programmer's tables
 
@@ -5079,9 +5040,9 @@ layout). Row B starts with a tab segment, **Values · Stack · FX · Scenery**
 running effects, held scenery. The tables were the applied tables (venue-visit plan S14) at
 `/programmer/applied`, a route of their own beside the programmer; that route now redirects
 (`LegacyAppliedRedirect`: `?table=fx` keeps its view, `looks` and `palettes` land on `stack`
-filtered to that kind), and `/programmer/fx` lands on the FX tab. **The rail is unchanged for one session**: its Stack lists the
-same layers, effects and scenery until session 2 makes it the Colour · Spread dock, so for now there
-are two homes, and `AppliedTables.test.tsx` compares them.
+filtered to that kind), and `/programmer/fx` lands on the FX tab. **They are the programmer's only
+lists** since session 2: the right side is the Colour · Spread dock (§The dock), and
+`AppliedTables.test.tsx` pins what the tables carry alone.
 
 - **The Values grid never unmounts.** `components/programmer/ProgrammerTables.tsx` is the frame: the
   grid, created above it by `ProgrammerBody`, stays mounted under the other three, `hidden` and
@@ -5095,13 +5056,13 @@ are two homes, and `AppliedTables.test.tsx` compares them.
   sort all replace the URL, and every `useParams`, `useSearchParams` and `useNavigate` below the route
   re-renders on any location change (React Router's route context is a fresh object per location).
   So `FixturesListContainer` takes `projectId` as a prop and keeps the `?select=` deep link in a child
-  (`DeepLinkSelect`) that only the two plain lists mount, and the rail's `ProgrammerRail`,
-  `ProgrammerLookStack` and `ProgrammerFxList` take `projectId` from `ProgrammerBody`: measured on a
-  profiling build, those two subscriptions were 11 ms of every tab switch. `ProgrammerPage` is a
+  (`DeepLinkSelect`) that only the two plain lists mount, and the dock takes `projectId` from
+  `ProgrammerBody`: measured on a profiling build (session 1), those subscriptions were 11 ms of every
+  tab switch. `ProgrammerPage` is a
   route wrapper round a memoised `ProgrammerView`, the frame's `select` is a stable callback, and the
   tabs' counts are read once by the frame (`useProgrammerTableCounts`) and handed down in its
   context, so a table's own tab segment mounts subscribing to nothing. Keep it that way — a router
-  hook in the grid or the rail is paid on every keystroke in a table's filter.
+  hook in the grid or the dock is paid on every keystroke in a table's filter.
 - **The table is a per-window fact; a table's view is the address.** `lib/programmerTables.ts`'s
   `programmer.table` (`sessionStorage`; it was `applied.table`, renamed, one store) is what the
   Screens sheet's *Table* segment sets (`windows.viewOptions {table}` under the Programmer view, now
@@ -5115,59 +5076,120 @@ are two homes, and `AppliedTables.test.tsx` compares them.
 - **The scope picker is the Values tab's alone**: it is on the grid's row B, hidden with the grid.
   The other three draw their own row B — `AppliedTableShell`'s library row, led by the same tabs
   (`LibraryRow`'s `leading`) — over the selection bar, the sheet and the footer.
-- **The segment folds by row B's width, words before counts.** From 1040px of the row every tab has
-  its word; below it a closed tab is its glyph and count. **Below 760 the four are one menu button**
-  (`data-programmer-tables-menu`: the open table's glyph, its word from 480, a radio menu with the
-  counts), and on the Values row Lit and Columns go to their icons (`WORDLESS_BELOW_760`) — four tabs
-  could not join a row that was already full at 768. The short-height row draws that button glyph-only
-  at every width (`compact`). The Values row's filter is a field from **600** of row B, not 360, for
-  the same room; measured with Playwright at 1440, 1180, 1024, 900, 768, 700, 600, 393 and the folded
-  852×393, no row overflows. **Row A folds into row B only on Values**: under the other tables the
+- **The segment folds by row B's width, words before counts, and is never a menu.** From 1040px of
+  the row every tab has its word; below it a closed tab is its glyph and count; **below 600 the open
+  tab is too**, and every count rides its glyph's top-right corner (`Count`'s `corner`), so a tab is
+  22px whatever its count says and the segment 94 — the phone's `▦ ≡4 ~5 ⛰2`. Session 1 folded the
+  four into a menu below 760; the corner count is what lets them stay a segment there (on the Values
+  row Lit and Columns still go to their icons, `WORDLESS_BELOW_760`), and below 600 the Values row's
+  icon buttons are the chrome rows' 32px squares, its gaps 6px and its spacer a margin
+  (`PHONE_ROW_B`), which is what lets the segment, the scope picker and five buttons share a 393px
+  phone's 369. Only the short-height row draws the menu button (`compact`,
+  `data-programmer-tables-menu`), glyph-only, since that row carries row A as well. The Values row's
+  filter is a field from **600** of row B. Measured with Playwright at 1440, 1180, 1024, 900, 768,
+  700, 600, 393 and the folded 852×393, on all four tables, no row overflows and no two controls
+  overlap. **Row A folds into row B only on Values**: under the other tables the
   grid's row B is hidden, so `ProgrammerBody` gives row A its own row there (`useValuesTableShown`,
   asked only while the viewport is short, so a tab switch at an ordinary height never re-renders the
   memo barrier).
-- **The rows are the rail's, and every cell is a read-out**; a row acts through the rail's actions
-  and mutations, the bar carrying the same verbs over a selection, a one-row verb disabled over
-  several with the reason. **FX** (`applied/AppliedFxTable.tsx`, Applied FX moved, unchanged
-  columns, bands and verbs): `fx/active`, one row per instance in the desk's order, as
-  `ProgrammerFxList` lists them; timing *Seconds* or the instance's master off the live bank, size,
-  direction, runs and *spent* the instance's fields, *held · Blind* `isHeldByBlind`; *Edit…*
-  (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*, *Save as palette…*, *Stop*; ⏎ opens
-  the editor. Its library row's create verb is **+ Effect**, the rail footer's own offer
-  (`useProgrammerAddEffect`: the bare effect press over the selection in Local, into the Look a
-  focused Look layer applies, refused with the reason in Output and over a palette), in its own
-  component so only the button hears the selection; under the selection bar the rule row
-  ***Values above beat effects below***.
+- **Every cell is a read-out**; a row acts through its own actions and the desk's mutations, the bar
+  carrying the same verbs over a selection, a one-row verb disabled over several with the reason.
+  **FX** (`applied/AppliedFxTable.tsx`, Applied FX moved, unchanged columns, bands and verbs):
+  `fx/active`, one row per instance in the desk's order; timing *Seconds* or the instance's master
+  off the live bank, size, direction, runs and *spent* the instance's fields, *held · Blind*
+  `isHeldByBlind`; *Edit…* (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*, *Save
+  as palette…* (`applied/fxRows.ts`' `saveAsTemplateOffer`), *Stop*; ⏎ opens the editor. Its library
+  row's create verb is **+ Effect** (`useProgrammerAddEffect`: the bare effect press over the
+  selection in Local, into the Look a focused Look layer applies, refused with the reason in Output
+  and over a palette), in its own component so only the button hears the selection; under the
+  selection bar the rule row ***Values above beat effects below*** (`applied/EffectsBelowRule.tsx`).
+  **Its selection is published** for the Values grid's rings (below).
 - **Stack** (`applied/StackTable.tsx`, D5): *Your values* pinned on top — its value count, its Local
   effects, *Make layer* in its Note — then every layer top first (`stackLayers`), Looks and palettes
-  in one table, numbered as the rail numbers them, with `useReplacementNotes`' *lost Hex 3–4 to
-  Amber* as the Note and a palette whose effect is spent marked. Kind chips **All · Looks ·
+  in one table, numbered from the bottom (*layer 3* is the third from the weakest), with
+  `useReplacementNotes`' *lost Hex 3–4 to Amber* as the Note and a palette whose effect is spent
+  marked. Kind chips **All · Looks ·
   Palettes** filter, *Your values* staying pinned. **Reorder by `SheetTable`'s `rowDrag`**, positioned
-  with `top`, calling `programmerMoveLayer` as `ProgrammerLookStack`'s `onMove` does — the drop read
-  back from top-first ids to the desk's bottom-first index by `layerMoveOf`. *Your values* is pinned
+  with `top`, calling `programmerMoveLayer` — the drop read back from top-first ids to the desk's
+  bottom-first index by `layerMoveOf`; no client renumbering, since the desk renumbers the stack and
+  re-ranks the running effects in place. *Your values* is pinned
   (`rowDrag.canDrag`: no grip and no drop onto it, so the top layer is as high as a drag goes).
   **The drag is refused while the rows are not the stack as it is** — a kind chip, a filter or a
-  sort — and the footer says which. **⏎, the name's double click and *Edit in grid*** (menu and bar) point the Values
-  grid's scope at the layer, or at Local from *Your values*, and switch to Values. A layer row keeps
-  the rail row's enable toggle and settings popover (`LayerSettingsPopover`), and its menu adds
-  *Edit look…* (`LookDetailSheet`) / *Edit palette…*. *+ Look or palette* is the rail footer's two
-  pickers behind one menu.
+  sort — and the footer says which. The shell's own *No layers match the filter* would never draw,
+  *Your values* always being listed, so the table says it under the rule. **⏎, the name's double
+  click and *Edit in grid*** (menu and bar) point the Values grid's scope at the layer, or at Local
+  from *Your values*, and switch to Values. A layer row has its enable toggle and settings popover
+  (`LayerSettingsPopover` — amount, blend, mask, stomp, *Detach*, remove), and its menu adds *Edit
+  look…* (`LookDetailSheet`) / *Edit palette…*, *Pick up* and *Remove*. *+ Look or palette* is the two
+  pickers behind one menu (`programmer/ApplyLayerPicker.tsx`). The rule row is the FX table's, with
+  the effects' count and a press to the FX tab after it.
 - **Scenery** (`applied/SceneryTable.tsx`, D6): every element, **Venue then Set** by name under
-  divider rows, with `ProgrammerSceneryList`'s filters as chips — *All* (their unfiltered state) ·
-  *Set* · *Venue* · *Moving only*, the full list's own store (`useSceneryFilters`), so a chip
-  pressed in one is lit in the other — and a held piece listed whatever they say. **One scope reading**, `useSceneryScope`, the band's and the list's: State, *Held by* and Kind
-  are read-outs; a row's sliders (and ⏎) open the band's own `SceneryElementRow` at the row through
+  divider rows, with the scenery filters as chips — *All* (their unfiltered state) · *Set* · *Venue*
+  · *Moving only*, one per-window store (`useSceneryFilters`, `sessionStorage` under
+  `programmer.scenery.filters`) — and a held piece listed whatever they say. **One scope reading**,
+  `useSceneryScope` (`programmer/ProgrammerSceneryList.tsx`, shared with the Stage view's scenery
+  popover): State, *Held by* and Kind are read-outs; a row's sliders (and ⏎) open its
+  `SceneryElementRow` at the row through
   `EditorSurface`, and the × releases. *Release* on the bar releases the selection's held pieces —
   one at a time from a focused Look, whose scenery is written whole per gesture.
 - **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480,
   memo rows, overscan 8, all unchanged): band 0 draws every column; band 1 merges FX's Timing with
   Speed and Size · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2
   and 3 put the property, or the stack position, in the name column and let the rest scroll sideways
-  under it. **The sheet is the programmer's column now, beside the rail**, so a 1440 desk with the
-  sidebar open and the rail docked gives it ~900 — band 1, where FX's 914px floor scrolls 14px — and
-  the 1180×820 iPad, the rail a strip, ~900 too. On a programmer table the partition chips carry
+  under it. **The sheet is the programmer's column, beside the dock**, so a 1440 desk with the
+  sidebar open and the dock docked gives it ~900 — band 1, where FX's 914px floor scrolls 14px — and
+  the 1180×820 iPad, the dock a strip, ~900 too. On a programmer table the partition chips carry
   `PROGRAMMER_CHIPS_CLASS` (`min-w-32`): with the tabs leading the row, the filter would otherwise
   take the slack and the chips' folded select would run under the create verb.
+
+**The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an effect
+drives carries a violet chip — the wave and the division (`lensDivision`: `½` for a fraction of a
+beat, else the label, `1 bar`, `4 s`), `+n` where several paint it — in the cell's top-right corner,
+**struck through when the effect is held back there**, the reason on its tooltip in the desk's
+`heldBackReason` words: *your value holds it back* (`isHeldBack`), *held · Blind* (`isHeldByBlind`),
+*a layer above stomps it*. A stomp the client cannot see directly, so it is read off provenance: the
+desk names no effect on a key whose every painter it skipped, so a running, weighted effect under a
+key provenance gives to a cue is stomped there — `lensHeldReason` checks the weight's other factors
+first (paused, spent, leaving, size 0, envelope 0, its stack at FX size 0), so none of those is ever
+called a stomp. A click opens `FxEditorPopover` on that effect, its split edit for the cell's batch;
+with several, a menu names them first. Things that will bite:
+
+- **One index, read per cell, never a subscription per row.** `fixtures-list/cellEffects.ts`'s
+  `buildCellEffectIndex` keys every effect by the `(head, property)` keys it paints —
+  `effectPaintedHeads`, the split editor's reading of the desk's expansion, head filter and element
+  mode included — over the whole rig (`useFixtureLookup`, the rows' own fixtures until it loads), since
+  a group's first member and a head filter's halves are read over members a filter may hide, in the
+  desk's order. `CellFxLensHost`
+  (`fixtures-list/CellFxLens.tsx`) holds the store and the one editor; `LensIndexer`, a *sibling*
+  of the rows mounted only while the lens is on, subscribes to `fx/active` once and rebuilds the
+  index per `fxChanged` into the store before paint. Each cell reads its own effects through
+  `useCellEffects`, a selector that keeps a cell's array while nothing the chip draws has changed
+  (an instance's phase moves on every refetch, so it compares the fields the chip reads, and a
+  reader matching an effect against the index goes by id), so an `fxChanged` re-renders the
+  indexer and the cells whose chips moved.
+- **The chip takes the corner, and the value never moves.** It is absolutely placed where the
+  effect badge was, 12px tall at the cell's top edge — clear of a value drawn on the middle line —
+  and opaque where it widens past the 18px gutter; the board drew it at the end of the cell's line,
+  which in a 107px dimmer cell pushed the value. It takes the corner's badge and amber dot over
+  (§The programmer's scoped grid), which stay as the fallback where no indexed effect paints the
+  cell. It is `pointer-events-auto` and above Output's jump overlay, and stops the pointerdown, so a
+  press on it is neither a marquee nor a cell selection. The grid's footer and the phone's key teach
+  it as the board's footer does, whole beside *Effect* and struck through beside *Held back*, from
+  the cell's own classes (`lensChip.ts`).
+- **Where it draws**: under `ProgrammerPage`'s FX selection store (the plain lists and the cue grid
+  have none) and where ownership is drawn — Local and Output, not a focused layer, whose effect
+  palette marks its own cells bottom-right. The host's tree is the same either way, so a scope
+  switch re-renders the cells and never remounts a row.
+- **Held-back state is read at render**, from `getKeyState` and `isBlind`: the row's ownership
+  subscription already re-renders it on its keys' entries, provenance and Blind.
+
+**FX selection rings.** The FX table publishes its selected rows' effect ids into
+`fixtures-list/fxSelection.ts`, a store on the `marqueeContext.ts` pattern that `ProgrammerPage`
+provides; on the Values tab the cells those effects paint are ringed violet (`data-fx-ring`). A cell
+reads a boolean through `useFxRinged`, so a selection change re-renders only the cells whose ring
+moves — and the hidden grid, whose rows are not drawn, none. The store outlives the FX table, which
+mounts on demand: the rings show after a switch to Values, and the table takes its selection back
+when it mounts again (`AppliedTableShell`'s `initialSelection`).
 
 ### Speed Masters
 
@@ -5912,9 +5934,9 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   `onRequestUnlock`, which the card and the cue sheet's pane pass), or swallows them where the lock
   is not the operator's. A typed `l` still toggles the lock. Escape that clears the selection is
   claimed too, so the right-hand sheet the editor opens in stays open.
-- **The programmer's contexts stop at the grid**: it can open over the programmer (the FX band's
+- **The programmer's contexts stop at the grid**: it can open over the programmer (the FX table's
   *on Q12*), and context flows through the sheet's portal, so it clears the programmer scope, the
-  focused Look and palette layers and the rail-tab claim (`NoProgrammerScope`, `NoLookRowStore`,
+  focused Look and palette layers and the dock-tab claim (`NoProgrammerScope`, `NoLookRowStore`,
   `NoFocusedTemplateLayer`). A group row draws only the columns its own row can take
   (`buildCueRowCells`), a colour with white folds into RGB on a head without a white channel, and a
   drag's commits are throttled at 33 ms as the programmer's are.
@@ -6167,7 +6189,8 @@ do not know it is a decision:
 - **The speed masters are not *resident* on the programmer**, and `PD-SPEED-OVERLAY` did not put
   them there: the bank is summoned from the app header's **Speed Masters overview panel**, which
   hangs over every route and is nobody's view chrome — the programmer gained nothing of its own.
-  `ProgrammerFxList` still names each effect's master, and `/speed-masters` still manages the bank.
+  The FX table's Timing column still names each effect's master, and `/speed-masters` still manages
+  the bank.
 
 `ProgrammerPage.test.tsx` pins the absence; `ProgrammerPage.tsx`'s note beside the header is the
 long form of all three.
@@ -6891,8 +6914,8 @@ path may quietly change where it lands.
   view, each tile with its own beat dot and TAP, so the panel was a second and narrower answer
   to "what tempo is the desk at" — narrower because it only ever spoke for master 1 — and the
   busk view has a speed rail and pad presence rings besides. **The count and Kill All were not
-  moved anywhere.** What is running is listed, effect by effect and removable by name, in the
-  programmer's FX band and in its live editor; a "stop everything" gesture, if it is wanted
+  moved anywhere.** What is running is listed, effect by effect and removable by name, on the
+  programmer's FX table and in its live editor; a "stop everything" gesture, if it is wanted
   again, belongs in the ShowBar rather than in a panel the operator has to open
   first. `store/fx.ts` (the `fxState` RTK Query wrapper) went with it — `api/fxApi` stays, since
   `store/groups.ts` still subscribes to the frame.
@@ -6933,10 +6956,9 @@ path may quietly change where it lands.
   and that a second sidebar row pointing at one page was the `"/program"` vs
   `"/programmer"` collision. The tabs premise held; the *pane* did not. Three readings
   of one object is an argument for showing them **together**, not for a switcher, and
-  a collapsed pane could never do that. So: no tabs, and a page with room. (The rail's
-  Stack · Colour · Spread strip since the editor kit's session 4 is a different thing: Stack *is*
-  the layers and the effects together, and nothing separates the three readings — §The rail's
-  tabs.) Renaming
+  a collapsed pane could never do that. So: a page with room, its tables tabs of one column, and
+  the FX lens and rings draw an effect on the Values grid, where the readings meet — §The
+  programmer's tables. Renaming
   Program to Show removes the near-collision outright.
 
   Two traps that survive both the rename and the merge:
@@ -6949,11 +6971,10 @@ path may quietly change where it lands.
     segment-aware form. It is a trap in both directions: while it pointed at
     `/program`, the sibling `/projects/1/programmer` *did* start with it.
 
-  `/programmer/fx` still redirects — FX was a route, then a tab, and is now a band of
-  the page. The old "reset the FX tab to Values on mount" rule retired with the tabs;
-  the diagnostic-read argument lives on as `FxSheet` being a collapsible under
-  `ProgrammerFxList`, closed by default and **mounted only when open**, because it
-  builds a second full fixture row model and re-renders on every programmer event.
+  `/programmer/fx` still redirects — FX was a route, then a band of the rail, and is the
+  programmer's FX table now (§The programmer's tables). The per-fixture diagnostic
+  (`FxSheet`, a second full fixture row model re-rendered on every programmer event) is
+  gone: the Values grid's FX lens says per cell what it said, from one index.
 - **Two libraries, two entries, and the filter is on the other one now.** `/looks`
   and `/palettes` are separate `navItems` entries and separate routes, because they
   are separate entities (see §Looks, palettes and layers). `/looks` has **no family

@@ -75,8 +75,8 @@ export function effectsOnTarget(effects: readonly ActiveEffect[] | undefined, ta
  * The FX tray (D9): pinned to the foot of the sheet, **outside** the properties' scroller, so the
  * effects never scroll away after the last property — the Stage view's complaint. It has four
  * states (Fx board): **empty** and **folded** are one 40px row — the count, a chip per running
- * effect (dimmed while paused, *+n* past three) and **+ Effect**; **open** lists the programmer
- * rail's two-line rows with pause and stop, up to half the sheet's height, scrolling itself; and
+ * effect (dimmed while paused, *+n* past three) and **+ Effect**; **open** lists two-line rows
+ * with pause and stop, up to half the sheet's height, scrolling itself; and
  * **adding** is `FxPicker` in the open tray. While the programmer is blind, a programmer effect's
  * chip takes Blind's amber dot and its row says *held · Blind* (`HeldBlindMark`): the desk holds it,
  * phase kept, until Blind goes off (show-cue-editing plan D7).

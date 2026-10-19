@@ -68,8 +68,8 @@ export function clampRailWidth(value: unknown): number {
  * arm.
  *
  * **The width is not in here.** It changes sixty times a second under a drag, and `ProgrammerRail`
- * reads this context at its top, above every layer row and every FX row; a width in this object
- * would re-render all of them per pointer move. The width and the drag live in `RailGeometry`,
+ * reads this context at its top, above the dock's open editor; a width in this object would
+ * re-render it per pointer move. The width and the drag live in `RailGeometry`,
  * which only `RailBodyFrame` reads — and that frame's children are elements the rail already
  * rendered, so a re-render of the frame reaches none of them.
  */
@@ -85,19 +85,16 @@ export interface RailArm {
   openSheet: () => void
   closeSheet: () => void
   /**
-   * The face the rail draws — Stack, Colour or Spread (editor-kit plan session 4). **Docked only**:
-   * this reads `'stack'` in overlay mode whatever was chosen, and `RailTabs` writes it back to
-   * `'stack'` when the push-mode narrow arm hides the strip — both arms shut on the next press
-   * outside them, which a picker over the grid has to survive. Collapsing resets it too, so a
-   * collapsed rail never holds a tab it is not drawing.
+   * The dock's tab — Colour or Spread (tables-colours plan D4). Plain state, not persisted: every
+   * arrival rests on Colour. Drawn in every arm; only the docked one claims grid gestures
+   * (`RailTabClaim.tab`).
    */
   railTab: RailTab
-  /** A header tab's press. Writes the tab and nothing else. */
+  /** A header tab's press, or a door's before it opens the overlay or the sheet. Writes the tab and nothing else. */
   setRailTab: (tab: RailTab) => void
   /**
-   * Open the rail onto a tab — the strip's palette and wave cells, and the grid's claims. Expands
-   * a collapsed rail as `expand` does, which is the docked arm's gesture: the strip cells that call
-   * it are drawn only where the rail docks.
+   * Open the docked dock onto a tab — the strip's docked doors, and the grid's claims. Expands a
+   * collapsed dock as `expand` does, which is the docked arm's gesture.
    */
   openTab: (tab: RailTab) => void
   /** A grid gesture a tab has claimed, for the tab to honour once and drop. See `RailTabClaim`. */
@@ -137,11 +134,7 @@ function useRailGeometry(): RailGeometry {
 }
 
 /**
- * The grid and the rail, on one screen.
- *
- * The point of the whole view: values, layers and effects were three tabs of a collapsed pane, so
- * the three readings of one live object could never be seen together, and editing values while
- * watching the layer stack that produced them was impossible by construction.
+ * The grid and the rail — the Colour · Spread dock since tables-colours session 2 — on one screen.
  *
  * **This component owns the rail's state, and it must stay here.** `programmer.rail.width`
  * (260–480, default 300) and `programmer.rail.collapsed` persist per desk; `overlayOpen` is
@@ -161,7 +154,7 @@ function useRailGeometry(): RailGeometry {
  * the child of the `@container` wrapper — see the trap below:
  *
  * - **≥1200px, docked.** The rail sits beside the grid at the stored width, with a 5px handle on
- *   its left edge that sets it. Collapsed, it is a 40px strip carrying the two counts and a `+`.
+ *   its left edge that sets it. Collapsed, it is a 40px strip carrying a door per dock tab.
  * - **≥1200px, collapsed.** The strip alone; the grid takes the rest.
  * - **704–1200px.** The strip always, and opening it mounts the rail as a 300px `absolute` overlay
  *   with a shadow over the grid's right edge, left of the strip. It closes from the strip's
@@ -230,16 +223,24 @@ export function ProgrammerWorkspace({
   const [overlayOpen, setOverlayOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   // The rail's tab (editor-kit plan session 4) — plain state, **not persisted** (call 10): every
-  // arrival rests on Stack. The two one-shots beside it carry a grid gesture a tab claimed and the
+  // arrival rests on Colour. The two one-shots beside it carry a grid gesture a tab claimed and the
   // Colour tab's *Spread…* hand-over; each is dropped by the tab that reads it.
-  const [chosenTab, setChosenTab] = useState<RailTab>('stack')
+  const [railTab, setChosenTab] = useState<RailTab>('colour')
   const [focusRequest, setFocusRequest] = useState<RailFocusRequest | null>(null)
   const [spreadSeed, setSpreadSeed] = useState<SpreadSeed | null>(null)
-  // The tabs are docked-only, and overlay mode is JS's to know — so the fact reads Stack there
-  // outright. Push mode's narrow arm is CSS's, and `RailTabs` writes the fact back when it sees
-  // that arm hide its strip.
   const overlayMode = useSidePanelMode() === 'overlay'
-  const railTab: RailTab = overlayMode ? 'stack' : chosenTab
+  // Whether push mode's docked arm is the one drawn — CSS's choice, read off the probe below. Only
+  // that arm claims a grid gesture: the overlay and the sheet shut on a press on the grid.
+  const [dockedArm, setDockedArm] = useState(true)
+  const probeRef = useRef<HTMLSpanElement>(null)
+  useEffect(() => {
+    const el = probeRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(() => setDockedArm(el.getBoundingClientRect().height > 0))
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+  const claiming = !overlayMode && dockedArm && !collapsed
   // The drag is `useSidePanelResize`'s, shared with the busk view's side sheet — the four rules
   // that make it behave (window listeners, keyed on the boolean, `pointercancel`, the ref written
   // by the handlers) are stated once there rather than once per panel.
@@ -274,17 +275,14 @@ export function ProgrammerWorkspace({
     },
     [openTab],
   )
-  const frameRef = useRef<HTMLDivElement>(null)
   const spreadFan = useCallback(() => {
-    // The tabs are drawn only where the rail docks: not in overlay mode, nor in push mode's narrow
-    // arm, which hides their strip (`RailTabs` reads the same zero box). A collapsed rail draws no
-    // strip yet, and `openTab` expands it.
-    const strip = frameRef.current?.querySelector('[data-rail-tabs]')
-    if (overlayMode || (strip != null && strip.getBoundingClientRect().height === 0)) return false
+    // Where the dock docks — a collapsed one is expanded onto the tab — and nowhere else: an
+    // overlay opened by this press would shut on the next one on the grid.
+    if (overlayMode || !dockedArm) return false
     setSpreadSeed((prev) => ({ fan: true, key: (prev?.key ?? 0) + 1 }))
     openTab('spread')
     return true
-  }, [openTab, overlayMode])
+  }, [dockedArm, openTab, overlayMode])
   const consumeFocusRequest = useCallback(() => setFocusRequest(null), [])
   const consumeSpreadSeed = useCallback(() => setSpreadSeed(null), [])
 
@@ -293,10 +291,7 @@ export function ProgrammerWorkspace({
       collapsed,
       overlayOpen,
       sheetOpen,
-      collapse: () => {
-        setCollapsed(true)
-        setChosenTab('stack')
-      },
+      collapse: () => setCollapsed(true),
       expand: () => setCollapsed(false),
       openOverlay: () => setOverlayOpen(true),
       closeOverlay: () => setOverlayOpen(false),
@@ -313,16 +308,17 @@ export function ProgrammerWorkspace({
     }),
     [collapsed, overlayOpen, sheetOpen, setCollapsed, railTab, openTab, focusRequest, consumeFocusRequest, spreadSeed, consumeSpreadSeed, spreadFrom],
   )
-  // The grid's half, keyed on the drawn tab alone so a rail gesture never re-renders the grid.
+  // The grid's half, keyed on the claiming tab alone so a dock gesture never re-renders the grid.
+  const claimTab = claiming ? railTab : null
   const claim = useMemo<RailTabClaim>(
     () => ({
-      tab: railTab,
+      tab: claimTab,
       focusColour: (seed: string) => setFocusRequest((prev) => ({ tab: 'colour', seed, key: (prev?.key ?? 0) + 1 })),
       focusSpread: () => setFocusRequest((prev) => ({ tab: 'spread', seed: '', key: (prev?.key ?? 0) + 1 })),
       spreadFrom,
       spreadFan,
     }),
-    [railTab, spreadFrom, spreadFan],
+    [claimTab, spreadFrom, spreadFan],
   )
   const geometry = useMemo<RailGeometry>(
     () => ({ width, resizing, onResizeStart }),
@@ -334,7 +330,7 @@ export function ProgrammerWorkspace({
     // rail to know which tab it is drawing. The marquee travels the other way, through
     // `ProgrammerPage`'s marquee store.
     <RailTabClaimContext.Provider value={claim}>
-      <div ref={frameRef} className="@container flex min-h-0 flex-1 flex-col">
+      <div className="@container flex min-h-0 flex-1 flex-col">
         {/* `relative` is the overlay's containing block. `select-none` while resizing keeps the
             drag from painting a text selection across the grid it crosses. */}
         {/* `@max-[704px]:flex-col` is the whole of the phone arm's layout: the same two children,
@@ -365,6 +361,9 @@ export function ProgrammerWorkspace({
               {grid}
             </div>
           </div>
+          {/* The docked-arm probe: a pixel drawn only where push mode docks, so its box tells JS
+              which arm CSS chose without a threshold of its own. */}
+          <span ref={probeRef} aria-hidden className="pointer-events-none absolute top-0 left-0 size-px @max-[1200px]:hidden" />
           <RailArmContext.Provider value={arm}>
             <RailGeometryContext.Provider value={geometry}>{rail}</RailGeometryContext.Provider>
           </RailArmContext.Provider>
@@ -389,8 +388,7 @@ export function ProgrammerWorkspace({
  *
  * Mounted by `ProgrammerRail` only while it can be seen in some arm (`!collapsed || overlayOpen`),
  * and not at all while the phone arm's sheet is open — that arm renders the same body inside the
- * sheet, and mounting it twice would be two layer lists, two FX lists and two subscriptions to
- * each. The one case that leaves it mounted and hidden — an arm where its own flag says show and
+ * sheet, and mounting it twice would be two editors over one marquee, each with its subscriptions. The one case that leaves it mounted and hidden — an arm where its own flag says show and
  * the container query says otherwise — is accepted: nothing in the rail owns a selection, and the
  * alternative is a JS measurement of the width the container query already answers.
  */
@@ -403,7 +401,7 @@ export function RailBodyFrame({ children, enter }: { children: ReactNode; enter:
   return (
     <div
       role="complementary"
-      aria-label="Layers and effects"
+      aria-label="Colour and spread"
       data-rail-mode={overlay ? 'overlay' : 'push'}
       style={style}
       className={cn(

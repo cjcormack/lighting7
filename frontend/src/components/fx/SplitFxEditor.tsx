@@ -22,7 +22,7 @@ export type SplitSession = { session: number; ids: readonly number[] } | null
 
 /**
  * The live effect editor that **follows the selection** (apply-model plan D5, §4.5's split editor),
- * wherever it is drawn: inside `FxEditorPopover` — the rail's *Edit…*, the applied FX table, a
+ * wherever it is drawn: inside `FxEditorPopover` — the FX table's *Edit…*, an FX lens chip, a
  * band's running chip — and inline under a row of the busk Effects tab.
  *
  * The desk answers a split with new ids: the host is told the one to read from now on ([onFollow])

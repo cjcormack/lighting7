@@ -20,10 +20,14 @@ import { SelectionBar } from './SelectionBar'
 import { useProgrammerScope } from './ProgrammerScope'
 
 /**
- * Lit and Columns as icons below 760px of an unfolded row B: the table tabs fold into their menu
- * there, and the room the menu needs is these two words. The folded arm has its own rules.
+ * Lit and Columns as icons below 760px of an unfolded row B, where the table tabs fold to glyphs
+ * and still need these two words' room. The folded arm has its own rules.
  */
 const WORDLESS_BELOW_760 = 'contents @max-[760px]:[&_.control-label]:hidden'
+// Below 600px of row B its icon buttons are the chrome rows' 32px squares, its gaps 6px and its
+// spacer a margin, which costs no gap: with the four table tabs leading it, a 393px phone's row has
+// no more room than that.
+const PHONE_ROW_B = '@max-[600px]:gap-1.5 @max-[600px]:[&_button:not([role=tab])]:has-[>svg]:px-2'
 
 /**
  * The programmer's value grid: the fixtures-list spreadsheet with per-cell ownership colouring,
@@ -32,8 +36,7 @@ const WORDLESS_BELOW_760 = 'contents @max-[760px]:[&_.control-label]:hidden'
  * Writes route through an `EditorContext` this component supplies itself, derived from the scope:
  * `live` for Output and Local — which since the programmer redesign means "write the programmer",
  * not "write DMX" — and `lookLayer` when a Look layer is focused. The page keeps its own outer
- * `live` provider for the *rail*, whose FX controls write the programmer whatever the grid is
- * looking at.
+ * `live` provider for the tables, which write the programmer whatever the grid is looking at.
  *
  * **Unconditionally mounted, and that is load-bearing.** `useListSelection` clears its Redux scope
  * on unmount, so anything that mounts this conditionally — a tab, a collapse, an `{open && …}` —
@@ -174,7 +177,7 @@ function ProgrammerGridBody({
                   so the two can be read apart: at 6px a wrapped folded row is 70px against the
                   80px row A and row B cost unfolded, so the fold still pays for itself at the
                   widths where it has to take a second line. */}
-              <SheetPage.Row minHeight={!!leading} className={cn(leading && 'flex-wrap gap-y-1.5')}>
+              <SheetPage.Row minHeight={!!leading} className={cn(PHONE_ROW_B, leading && 'flex-wrap gap-y-1.5')}>
                 {/* The short-height arm: row A has no row of its own and its two halves lead this
                     one (space plan D8), and they get an `@container` of their own — because the
                     question their thresholds ask ("has this box room for the word `Editing`?") is
@@ -399,7 +402,7 @@ function ProgrammerGridBody({
                       (`FIXTURE_FILTER_PLACEHOLDER_SHORT`, since a placeholder cannot switch by
                       container query), which fits behind the icon at the field's 132px floor, and
                       the whole hint rides the field's `title` and `aria-label`. The row's furniture
-                      without the field — the table tabs' 101px menu below 760, two pills, Lit,
+                      without the field — the table tabs folded to glyphs, two pills, Lit,
                       Groups and Columns iconic, the gaps and the inset — is ~420, so 600 is the
                       first width that leaves the field its 132 (measured at 157 there). Above 600
                       the middle of the row is never a hole.
@@ -442,11 +445,11 @@ function ProgrammerGridBody({
                   <span className={leading ? 'contents' : WORDLESS_BELOW_760}>{lit}</span>
                   {/* Dropped in the folded arm: the leading block is already `flex-1` there, and two
                       competing `flex-1` siblings is the bug session 2 found on this very row. */}
-                  <span className={cn('flex-1', leading && 'hidden')} />
+                  <span className={cn('flex-1 @max-[600px]:hidden', leading && 'hidden')} />
                   <Button
                     variant={grouped ? 'default' : 'outline'}
                     size="sm"
-                    className="shrink-0"
+                    className={cn('shrink-0', !leading && '@max-[600px]:ml-auto')}
                     aria-pressed={grouped}
                     onClick={() => onGroupedChange(!grouped)}
                     title="Show group rows with their members"
@@ -479,9 +482,6 @@ function ProgrammerGridBody({
                     <ScopedKeyPopover className="hidden @max-[600px]:inline-flex [@media(max-height:500px)]:inline-flex" />
                   )}
                 </div>
-                {/* `Make layer` was this row's right end until session 3 of the space plan moved
-                    it onto the rail's Local values row — the row it promotes. See `LocalValuesRow`
-                    in `ProgrammerRail` for the one rule that changed with the move. */}
               </SheetPage.Row>
             </div>
             {/* The layer notices keep their padded block. They are prose, not chrome — a sentence

@@ -15,12 +15,8 @@ vi.mock('@/store/speedMasters', () => ({
 }))
 
 /**
- * The shared component's own contract, driven with plain spies.
- *
- * The cue side of these rows had its own suite in `LayersPane.test.tsx`, asserting the PATCH
- * payload the pane built; session 2a deleted the pane and the suite with it. So this file is now
- * the only coverage of what the rows promise their host — which is what the programmer relies on,
- * and what a changed handler shape would break silently.
+ * The shared component's own contract, driven with plain spies: what the rows promise their hosts,
+ * which a changed handler shape would break silently.
  */
 
 function look(overrides: Partial<LookSummary> = {}): LookSummary {
@@ -350,12 +346,6 @@ describe('LookStack', () => {
 
     renderStack([layer({ source: { kind: 'LOOK', id: 99, uuid: 'u99', name: 'Gone' } })])
     expect(screen.getByTitle(/no longer exists/i)).toBeInTheDocument()
-  })
-
-  it('renders a footer under the list, for a host with something to add', () => {
-    // The programmer's read-only preview layer lives here.
-    renderStack([layer()], { footer: <p>Previewing an unsaved look</p> })
-    expect(screen.getByText('Previewing an unsaved look')).toBeInTheDocument()
   })
 
   it('offers no amount, enable or remove control on a read-only row', () => {

@@ -9,11 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * That suite mount-counted the three tab bodies, because Radix mounts only the active tab's content
  * and `useListSelection` clears its Redux scope on unmount — so glancing at the layer stack silently
  * discarded the fixture selection Record scopes on. The pane needed a `forceMount` escape hatch for
- * exactly that. Here there is nothing to force, and these assertions are what keeps it that way:
- * all three surfaces on screen at once, and the grid mounted exactly once — across a scope
- * switch, a rail collapse, a drag on the rail's handle, an overlay open/close (session 3), and
- * the two ways session 4 added for the page to change shape around it: the phone's bottom sheet,
- * and the short-height fold that moves row A into row B.
+ * exactly that. Here there is nothing to force, and these assertions are what keeps it that way: the
+ * grid mounted exactly once — across a table tab switch, a scope switch, the dock's tab change, its
+ * collapse, a drag on its handle, its overlay open/close, the phone's bottom sheet, and the
+ * short-height fold that moves row A into row B.
  */
 const gridMounts = vi.fn()
 vi.mock('@/components/programmer/ProgrammerGrid', async () => {
@@ -54,44 +53,22 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
     },
   }
 })
-// The hand's place target in the rail footer — store-touching, and this suite renders without a
+// The hand's place target under the tables — store-touching, and this suite renders without a
 // Provider, like every other child mocked here.
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
-vi.mock('@/components/programmer/ProgrammerLookStack', () => ({
-  ProgrammerLookStack: () => <div data-testid="layers" />,
-}))
-vi.mock('@/components/programmer/ProgrammerFxList', () => ({
-  ProgrammerFxList: () => <div data-testid="fx" />,
-}))
-// The rail's `+ Effect` offer reads the Redux selection; the sheets behind the footer drag in the
-// whole picker and the FX authoring form. The rail itself is real — its header, strip and footer
-// are what the collapse and overlay cases below press.
+// ⌘K's `+ Effect` door reads the Redux selection once asked; here it only has to be mounted.
 vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
-  useProgrammerAddEffect: () => ({
-    disabled: true,
-    reason: 'no selection',
-    pair: { targets: [], families: null },
-  }),
-  ProgrammerAddEffectSheet: () => null,
+  ProgrammerAddEffectDoor: () => null,
 }))
-// The rail's two docked editors have their own tests (`RailColourTab.test.tsx`); here they only have
-// to mount and unmount around one grid.
+// The dock's two editors have their own tests (`RailColourTab.test.tsx`); here they only have to
+// mount and unmount around one grid. The dock itself is real — its header, strip and handle are
+// what the collapse, overlay and sheet cases below press.
 vi.mock('@/components/programmer/RailColourTab', () => ({
   RailColourTab: () => <div data-testid="rail-colour" />,
 }))
 vi.mock('@/components/programmer/RailSpreadTab', () => ({
   RailSpreadTab: () => <div data-testid="rail-spread" />,
 }))
-// The Scenery band has a suite of its own (`RailSceneryBand.test.tsx`); here it is a landmark with
-// a ref, and the held count is a value the test sets.
-vi.mock('@/components/programmer/RailSceneryBand', async () => {
-  const { forwardRef } = await import('react')
-  return {
-    RailSceneryBand: forwardRef<HTMLDivElement>(function Band(_, ref) {
-      return <div ref={ref} data-testid="scenery-band" />
-    }),
-  }
-})
 vi.mock('@/components/programmer/ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => sceneryHeld.count }))
 // The three tables have their suite (`AppliedTables.test.tsx`); here each is its own row B's tabs
 // and a landmark, mounted on demand beside the one grid.
@@ -151,9 +128,14 @@ vi.mock('@/hooks/useShowBarProps', () => ({
     showHeaderProps: { isShowActive: true, canStart: false, onStart: vi.fn(), onStop: vi.fn() },
   }),
 }))
+vi.mock('@/components/programmer/useReplacementNotes', () => ({
+  ReplacementNotesProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useReplacementNotes: () => new Map(),
+}))
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: { blind: false, entryCount: 0, lastIncluded: null } }),
   useProgrammerLayersQuery: () => ({ data: [] }),
+  useProgrammerAppliedQuery: () => ({ data: [] }),
   useProgrammerRevision: () => 0,
   programmerClearAll: vi.fn(),
 }))
@@ -248,11 +230,14 @@ function tableTab(name: RegExp) {
 }
 
 describe('ProgrammerPage', () => {
-  it('shows values, layers and effects at once', () => {
+  it('draws the grid beside the dock, the dock resting on Colour', () => {
+    // Tables-colours plan D4: the right side is a dock — Colour · Spread — and lists nothing. The
+    // layers, effects and scenery are the Stack, FX and Scenery tables on row B.
     draw()
     expect(screen.getByTestId('grid')).toBeTruthy()
-    expect(screen.getByTestId('layers')).toBeTruthy()
-    expect(screen.getByTestId('fx')).toBeTruthy()
+    expect(screen.getByRole('complementary', { name: 'Colour and spread' })).toBeTruthy()
+    expect(screen.getByTestId('rail-colour')).toBeTruthy()
+    expect(screen.queryByTestId('rail-spread')).toBeNull()
   })
 
   it('draws no show bar — the one live view without one', () => {
@@ -276,19 +261,17 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('header')).toBeTruthy()
   })
 
-  it('rests on Values, with the rail as it was beside it — values, layers and effects on screen at once', () => {
-    // Tables-colours plan D1 gives row B the tables — Values · Stack · FX · Scenery — and session 1
-    // leaves the rail exactly as it was, so for one session both homes exist: the rail's strip
-    // still rests on Stack (call 10), and the layers and effects are still beside the grid.
+  it('rests on Values, with the dock’s Colour · Spread beside it and nothing that lists', () => {
     draw()
-    expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables', 'Rail'])
+    expect(screen.getAllByRole('tablist').map((list) => list.getAttribute('aria-label'))).toEqual(['Programmer tables', 'Dock'])
     expect(tableTab(/^Values/).getAttribute('aria-selected')).toBe('true')
-    const rail = screen.getByRole('tablist', { name: 'Rail' })
-    expect(within(rail).getAllByRole('tab').map((tab) => tab.getAttribute('aria-label'))).toEqual(['Stack', 'Colour', 'Spread'])
-    expect(within(rail).getByRole('tab', { name: 'Stack' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByTestId('grid')).toBeTruthy()
-    expect(screen.getByTestId('layers')).toBeTruthy()
-    expect(screen.getByTestId('fx')).toBeTruthy()
+    const dock = screen.getByRole('tablist', { name: 'Dock' })
+    expect(within(dock).getAllByRole('tab').map((tab) => tab.textContent)).toEqual(['Colour', 'Spread'])
+    expect(within(dock).getByRole('tab', { name: 'Colour' }).getAttribute('aria-selected')).toBe('true')
+    // The rail's lists, doors and counts are gone with its Stack body.
+    expect(screen.queryByLabelText('Add a look layer')).toBeNull()
+    expect(screen.queryByLabelText('Add a layer or an effect')).toBeNull()
+    expect(screen.queryByText('Per-fixture FX')).toBeNull()
   })
 
   it('mounts the value grid exactly once across a tab switch, hidden and inert under the other tables', () => {
@@ -332,7 +315,6 @@ describe('ProgrammerPage', () => {
     expect(screen.getByTestId('stack-table')).toBeTruthy()
     expect(screen.getByTestId('where').textContent).toBe('/projects/1/programmer?table=stack')
     await act(() => new Promise((resolve) => requestAnimationFrame(() => resolve(undefined))))
-    // jsdom lays nothing out, so the segment's tabs read as folded and the menu button takes focus.
     expect(document.activeElement?.closest('#programmer-table-stack')).not.toBeNull()
 
     fireEvent.keyDown(tableTab(/^Stack/), { key: 'End' })
@@ -349,22 +331,19 @@ describe('ProgrammerPage', () => {
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('mounts the value grid exactly once across a rail tab change', () => {
-    // The load-bearing rule, for the thing session 4 adds: the Colour and Spread tabs are the
-    // rail's, and switching to them must re-render the page around one grid, never remount it —
-    // the marquee they read lives in that grid, and so does the fixture selection Record scopes on.
+  it('mounts the value grid exactly once across the dock’s tab change', () => {
+    // The dock's editors read the marquee, which lives in the grid, and so does the fixture
+    // selection Record scopes on: switching them re-renders the page around one grid.
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Colour' }))
-    expect(screen.getByRole('tab', { name: 'Colour' }).getAttribute('aria-selected')).toBe('true')
-    expect(screen.getByTestId('rail-colour')).toBeTruthy()
-    expect(screen.queryByTestId('layers')).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: 'Spread' }))
+    expect(screen.getByRole('tab', { name: 'Spread' }).getAttribute('aria-selected')).toBe('true')
     expect(screen.getByTestId('rail-spread')).toBeTruthy()
-    fireEvent.click(screen.getByRole('tab', { name: 'Stack' }))
+    expect(screen.queryByTestId('rail-colour')).toBeNull()
+    fireEvent.click(screen.getByRole('tab', { name: 'Colour' }))
+    expect(screen.getByTestId('rail-colour')).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('layers')).toBeTruthy()
   })
 
   it('always names what is loaded, above the verbs that act on it', () => {
@@ -399,25 +378,29 @@ describe('ProgrammerPage', () => {
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('mounts the value grid exactly once across a rail collapse and expand', () => {
-    // Session 3's rule, stated in the plan: the *rail's* contents may unmount freely — nothing in
-    // it owns a selection — but the grid beside it must only re-render as the rail comes and
-    // goes. A `key` on the row, or a conditional around the grid column, would fail this.
+  it('mounts the value grid exactly once across a dock collapse and expand, onto either tab', () => {
+    // The dock's contents may unmount freely — nothing in it owns a selection — but the grid
+    // beside it must only re-render as the dock comes and goes.
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
-    expect(screen.getByTestId('layers')).toBeTruthy()
 
-    fireEvent.click(screen.getByLabelText('Collapse the rail'))
-    expect(screen.queryByTestId('layers')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Collapse the dock'))
+    expect(screen.queryByTestId('rail-colour')).toBeNull()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(screen.getByLabelText('Expand the rail'))
-    expect(screen.getByTestId('layers')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Expand the dock'))
+    expect(screen.getByTestId('rail-colour')).toBeTruthy()
+    expect(gridMounts).toHaveBeenCalledTimes(1)
+
+    // The strip's doors expand it onto their tab.
+    fireEvent.click(screen.getByLabelText('Collapse the dock'))
+    fireEvent.click(screen.getByLabelText('Expand the dock on Spread'))
+    expect(screen.getByTestId('rail-spread')).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('mounts the value grid exactly once across a drag on the rail handle', () => {
-    // The width is state held below the memo barrier and reaches the rail as a CSS variable;
+  it('mounts the value grid exactly once across a drag on the dock’s handle', () => {
+    // The width is state held below the memo barrier and reaches the dock as a CSS variable;
     // every pointer move re-renders the workspace frame and must reach the grid as nothing.
     draw()
     fireEvent.pointerDown(screen.getByRole('separator', { name: 'Resize the rail' }), {
@@ -432,57 +415,50 @@ describe('ProgrammerPage', () => {
   })
 
   it('mounts the value grid exactly once across an overlay open and close', () => {
-    // The narrow arm: the strip opens the rail *over* the grid, and Escape, the rail's own
-    // chevron or a press on the grid close it. Both flags are in the DOM under jsdom (the arms
-    // are container queries), so this drives the narrow arm's controls directly.
+    // The narrow arm: the strip opens the dock *over* the grid, and Escape, its own chevron or a
+    // press on the grid close it. Both arms are in the DOM under jsdom (they are container queries),
+    // so this drives the narrow arm's controls directly.
     draw()
-    fireEvent.click(screen.getByLabelText('Collapse the rail'))
-    const stripToggle = () => screen.getByRole('button', { name: 'Open the rail' })
+    fireEvent.click(screen.getByLabelText('Collapse the dock'))
+    const stripToggle = () => screen.getByRole('button', { name: 'Open the dock' })
     fireEvent.click(stripToggle())
-    expect(screen.getByTestId('layers')).toBeTruthy()
-    // The strip is off screen while the body is up, so its chevron is open-only and carries no
-    // `aria-expanded` — there is no longer a moment when both it and the header's close chevron
-    // are on screen for the state to tell apart.
+    expect(screen.getByTestId('rail-colour')).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(window, { key: 'Escape' })
-    expect(screen.queryByTestId('layers')).toBeNull()
+    expect(screen.queryByTestId('rail-colour')).toBeNull()
 
     fireEvent.click(stripToggle())
     fireEvent.pointerDown(screen.getByTestId('grid'))
-    expect(screen.queryByTestId('layers')).toBeNull()
+    expect(screen.queryByTestId('rail-colour')).toBeNull()
 
-    // The strip's chevron no longer closes it — the strip is off screen while the body is up,
-    // so it is open-only, and a second press on it is the same press as the first. Closing is
-    // Escape, a press on the grid, and the overlay's own header chevron.
-    fireEvent.click(stripToggle())
-    fireEvent.click(stripToggle())
-    expect(screen.getByTestId('layers')).toBeTruthy()
-    fireEvent.click(screen.getByLabelText('Close the rail'))
-    expect(screen.queryByTestId('layers')).toBeNull()
+    // A door opens the overlay on its own tab.
+    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Spread' }))
+    expect(screen.getByTestId('rail-spread')).toBeTruthy()
+    fireEvent.click(screen.getByLabelText('Close the dock'))
+    expect(screen.queryByTestId('rail-spread')).toBeNull()
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
   it('mounts the value grid exactly once across the bottom sheet opening and closing', () => {
-    // Session 4's arm. Below 704px of workspace the rail is a 44px handle across the bottom and
-    // the body moves into a `Sheet side="bottom"` — a change of *place* for the rail, which must
-    // still be no change at all for the grid. Both arms are in the DOM under jsdom (they are
-    // container queries), so this drives the handle's own controls directly.
+    // Below 704px of workspace the dock is a 44px handle across the bottom and the panel moves into
+    // a `Sheet side="bottom"` — a change of *place* for the dock, which must still be no change at
+    // all for the grid. Both arms are in the DOM under jsdom, so this drives the handle directly.
     draw()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
-    const opener = screen.getByRole('button', { name: 'Open the layers and effects' })
+    const opener = screen.getByRole('button', { name: 'Open Colour and Spread' })
     expect(opener).toHaveAttribute('aria-expanded', 'false')
-    fireEvent.click(opener)
-    expect(screen.getByTestId('layers')).toBeTruthy()
-    // One body, not two: the docked frame is not rendered while the sheet holds it.
-    expect(screen.getAllByTestId('layers')).toHaveLength(1)
-    expect(screen.queryByRole('complementary', { name: 'Layers and effects' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Show Spread' }))
+    expect(screen.getByTestId('rail-spread')).toBeTruthy()
+    // One panel, not two: the docked frame is not rendered while the sheet holds it.
+    expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
+    expect(screen.queryByRole('complementary', { name: 'Colour and spread' })).toBeNull()
     expect(gridMounts).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(document.body, { key: 'Escape' })
-    expect(screen.getAllByTestId('layers')).toHaveLength(1)
-    expect(screen.getByRole('complementary', { name: 'Layers and effects' })).toBeTruthy()
+    expect(screen.getAllByTestId('rail-spread')).toHaveLength(1)
+    expect(screen.getByRole('complementary', { name: 'Colour and spread' })).toBeTruthy()
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
@@ -523,15 +499,6 @@ describe('ProgrammerPage', () => {
     expect(gridMounts).toHaveBeenCalledTimes(1)
   })
 
-  it('keeps every door reachable from the strip', () => {
-    // The strip's `+` opens the same three doors as the footer, so nothing is reachable only with
-    // the rail open. `+ Effect` says why it cannot open rather than vanishing.
-    draw()
-    fireEvent.click(screen.getByLabelText('Collapse the rail'))
-    expect(screen.queryByLabelText('Add a look layer')).toBeNull()
-    expect(screen.getByLabelText('Add a layer or an effect')).toBeTruthy()
-  })
-
   it('names what the grid is pointed at', () => {
     draw()
     // Local is the landing scope: the programmer opens on what you are about to busk, not on a
@@ -545,8 +512,8 @@ describe('ProgrammerPage', () => {
   })
 
   it('offers no layer segment while no layer is focused', () => {
-    // Focusing happens on the stack row in the rail. A picker here would be a second way to say
-    // the same thing, and this segment is a read-out of that choice.
+    // Focusing happens on the Stack table. A picker here would be a second way to say the same
+    // thing, and this segment is a read-out of that choice.
     draw()
     expect(screen.queryByLabelText('Show the focused layer')).toBeNull()
   })

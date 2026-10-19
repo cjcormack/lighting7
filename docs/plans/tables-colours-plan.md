@@ -1,6 +1,6 @@
 # Programmer tables and fixture colours
 
-> **Document status: IN PROGRESS — calls decided 2026-10-18; session 1 done (`4b61df1`).** The visual design is
+> **Document status: IN PROGRESS — calls decided 2026-10-18; sessions 1 (`4b61df1`) and 2 (`2601fff`) done.** The visual design is
 > checked in beside this plan at [`tables-colours-design/`](tables-colours-design/INDEX.md), three
 > hand-written artboards. The live copy at <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi> is a
 > convenience, private to Chris; the checked-in files are the authority. Where this plan and the
@@ -110,7 +110,7 @@ One PR per session.
 - Tests: `AppliedTables.test.tsx` is retargeted at the tabs, and the rail-versus-tables comparison
   stays until session 2.
 
-### Session 2 — the lens and the dock
+### Session 2 — the lens and the dock — done, `2601fff`
 
 - `fixtures-list/cellEffects.ts`: the effect index. `FixturesTable` draws the chip in the cell's
   marks gutter, and a click opens `FxEditorPopover`. The FX tab's selection is published as a store

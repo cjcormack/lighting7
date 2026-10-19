@@ -210,7 +210,7 @@ function CueLayersReadout({ cue, projectId, enabled = true }: { cue: Cue; projec
           key={`layer-${index}`}
           layer={layer}
           index={index}
-          // `librariesLoaded` waits for *both*, as `ProgrammerLookStack` does: with only one list
+          // `librariesLoaded` waits for *both*, as the Stack table does: with only one list
           // back, every layer applying the other would paint as missing for the length of a fetch.
           info={describeStackSource(layer.source, looksById, templatesById, looks != null && templates != null)}
           sortable={false}

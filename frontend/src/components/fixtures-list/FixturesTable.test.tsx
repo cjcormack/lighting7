@@ -136,6 +136,21 @@ vi.mock('@tanstack/react-virtual', () => ({
   }),
 }))
 vi.mock('../fixtures/LocateButton', () => ({ LocateButton: () => null }))
+// The FX lens's effect list and the editor its chip opens (tables-colours plan D3). The lens is on
+// only under the FX selection store `ProgrammerPage` provides, so every other case here is the
+// grid with no lens, as the plain lists draw it.
+const lensFx = vi.hoisted(() => ({ effects: [] as unknown[] }))
+vi.mock('@/store/fixtureFx', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/fixtureFx')>()),
+  useActiveEffectsQuery: () => ({ data: lensFx.effects }),
+}))
+// The rig the lens expands an effect over; undefined falls back to the rows' own fixtures.
+const lensRig = vi.hoisted(() => ({ fixtures: undefined as unknown[] | undefined }))
+vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: lensRig.fixtures }) }))
+vi.mock('../fx/useEffectControls', () => ({ useStopEffect: () => () => {} }))
+vi.mock('../fx/FxEditorPopover', () => ({
+  FxEditorPopover: ({ effect }: { effect: { id: number } | null }) => <div data-testid="lens-editor">{effect?.id}</div>,
+}))
 // The socket's readyState, driven directly for the same reason the scope is: the real hook is an
 // RTK Query subscription and this suite deliberately mounts without a Provider.
 const deskConnected = vi.hoisted(() => ({ current: true }))
@@ -144,6 +159,8 @@ vi.mock('../../store/status', () => ({
 }))
 
 import { FixturesTable } from './FixturesTable'
+import { FxSelectionStoreContext, createFxSelectionStore, type FxSelectionStore } from './fxSelection'
+import { chan, makeActiveEffect, sliderProp } from '@/test/fixtureFactories'
 import { EditorContextProvider } from '../programmer/EditorContext'
 import { useCellSelection } from '../sheet/useCellSelection'
 import type { Row } from './rowModel'
@@ -177,7 +194,10 @@ function Harness({
   keyboardOpen = null,
   closeEditorCell = null,
   visibleColumns = ['dimmer'] as ColumnKey[],
+  fxSelection,
 }: {
+  /** The programmer's FX selection store — the lens is drawn only under one. */
+  fxSelection?: FxSelectionStore
   rows?: Row[]
   keyboardOpen?: { rowId: string; col: ColumnKey; seed: string; atButton: boolean } | null
   /** The bar's Set pressed a second time — the close half of the same one-shot channel. */
@@ -191,7 +211,7 @@ function Harness({
 }) {
   const cellSelection = useCellSelection<ColumnKey>(new Set(rows.map(r => r.id)))
   return (
-    <>
+    <FxSelectionStoreContext.Provider value={fxSelection ?? null}>
       <FixturesTable
         rows={rows}
         visibleColumns={visibleColumns}
@@ -213,7 +233,7 @@ function Harness({
       />
       {/* jsdom cannot see the outline a selected cell draws, so the count is the proof. */}
       <span data-testid="cell-count">{cellSelection.count}</span>
-    </>
+    </FxSelectionStoreContext.Provider>
   )
 }
 
@@ -317,6 +337,7 @@ afterEach(() => {
   ownership.current = {}
   deskConnected.current = true
   selectedRows.current = new Set()
+  lensFx.effects = []
 })
 
 /** The value cell's popover trigger — the button the marquee must not fight with. */
@@ -672,8 +693,8 @@ describe('FixturesTable cell gesture', () => {
   })
 })
 
-/** The wrapper the scope classes land on — the cell button's parent. */
-const cellWrapper = () => cellButton().parentElement!
+/** The wrapper the scope classes land on — the cell's `data-cell` element, around the button. */
+const cellWrapper = () => cellButton().closest<HTMLElement>('[data-cell]')!
 
 const jumpButton = () =>
   screen.queryAllByRole('button').find((b) => b.className.includes('cursor-zoom-in'))
@@ -1278,5 +1299,123 @@ describe('FixturesTable two fingers', () => {
     expect(onMarqueeDragChange.mock.calls).toEqual([[true]])
     fireEvent.pointerUp(cell, { pointerType: 'touch', pointerId: 1, button: 0, buttons: 0, clientX: 300, clientY: 10 })
     expect(onMarqueeDragChange.mock.calls).toEqual([[true], [false]])
+  })
+})
+
+/**
+ * **The FX lens** (tables-colours plan D3) on the programmer's grid: a cell an effect paints carries a
+ * violet chip with the division, struck through with the reason where it is held back, and a click
+ * opens the live editor; an FX row selected on the FX tab rings the cells it paints. The chip takes
+ * the corner's badge and dot over, and the plain grid — no FX selection store — draws neither lens.
+ */
+describe('FixturesTable — the FX lens', () => {
+  const cue = (over = {}) => makeActiveEffect({ id: 5, effectType: 'Pulse', targetKey: 'a', programmerOwned: false, cueId: 3, beatDivision: 0.5, ...over })
+  const chips = () => [...document.querySelectorAll<HTMLElement>('[data-fx-lens]')]
+  /** The harness's rows with what the lens reads of a fixture — its groups and its dimmer. */
+  const LENS_ROWS = ROWS.map((row, i) =>
+    row.kind === 'fixture'
+      ? { ...row, fixture: { ...row.fixture, groups: [], properties: [sliderProp('dimmer', 'dimmer', chan(i + 1))] } }
+      : row,
+  ) as Row[]
+
+  it('draws the chip with the division where an effect paints the cell, in place of the badge', () => {
+    ownership.current = { dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] } }
+    lensFx.effects = [cue()]
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    expect(chips().length).toBeGreaterThan(0)
+    expect(chips()[0]).toHaveTextContent('½')
+    expect(chips()[0].closest('[data-cell]')).toHaveAttribute('data-cell', 'dimmer')
+    expect(chips()[0].dataset.heldReason).toBeUndefined()
+    expect(screen.queryByTestId('effect-badge')).toBeNull()
+  })
+
+  it('strikes the chip through where your value holds the effect back, the reason on its tooltip, and draws no dot', () => {
+    ownership.current = { dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'] } }
+    heldBack.reach = new Set(['a\u0000dimmer'])
+    heldBack.holds = new Set(['a|dimmer'])
+    lensFx.effects = [cue()]
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    expect(chips()[0].dataset.heldReason).toBe('PROGRAMMER')
+    expect(chips()[0].className).toContain('line-through')
+    expect(chips()[0].title).toContain('your value holds it back')
+    expect(screen.queryByTestId('held-back-dot')).toBeNull()
+  })
+
+  it('says held · Blind of the programmer’s own effect while blind', () => {
+    ownership.current = { dimmer: { source: 'programmer', touched: true, isUniform: true, owners: ['web'] } }
+    heldBack.blind = true
+    lensFx.effects = [cue({ programmerOwned: true, cueId: null })]
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    expect(chips()[0].dataset.heldReason).toBe('BLIND')
+    expect(chips()[0].title).toContain('held · Blind')
+  })
+
+  it('opens the live editor on the chip’s effect, the click selecting no cell', () => {
+    lensFx.effects = [cue()]
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    fireEvent.pointerDown(chips()[0], { button: 0 })
+    fireEvent.click(chips()[0])
+    expect(screen.getByTestId('lens-editor')).toHaveTextContent('5')
+    expect(cellCount()).toBe(0)
+  })
+
+  it('offers each effect from a menu where several paint the cell', () => {
+    lensFx.effects = [cue(), cue({ id: 6, effectType: 'Strobe', beatDivision: 4 })]
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    expect(chips()[0]).toHaveTextContent('½+1')
+    fireEvent.pointerDown(chips()[0], { button: 0, ctrlKey: false })
+    fireEvent.click(screen.getByRole('menuitem', { name: /Strobe/ }))
+    expect(screen.getByTestId('lens-editor')).toHaveTextContent('6')
+  })
+
+  it('reads a group effect over the whole rig, so a filter hiding its first member moves no chip', () => {
+    // `x` leads the group and carries the dimmer only on its cells, so the desk paints x's cells
+    // and not `a`, which carries it itself. The rows show `a` alone.
+    const a = { key: 'a', name: 'SL Wash 1', groups: ['wash'], properties: [sliderProp('dimmer', 'dimmer', chan(1))] }
+    const x = {
+      key: 'x',
+      name: 'Bar',
+      groups: ['wash'],
+      properties: [],
+      elements: [{ key: 'x.1', displayName: 'Cell 1', index: 0, properties: [sliderProp('dimmer', 'dimmer', chan(9))] }],
+    }
+    const rows = [{ kind: 'fixture', id: 'fixture:a', depth: 0, fixture: a }] as unknown as Row[]
+    lensFx.effects = [cue({ targetKey: 'wash', isGroupTarget: true, targetType: 'group' })]
+    try {
+      lensRig.fixtures = [x, a]
+      render(<Harness rows={rows} fxSelection={createFxSelectionStore()} />)
+      expect(chips()).toHaveLength(0)
+      cleanup()
+      // Read over the rows alone, `a` would lead the group and wear the chip.
+      lensRig.fixtures = undefined
+      render(<Harness rows={rows} fxSelection={createFxSelectionStore()} />)
+      expect(chips()).toHaveLength(1)
+    } finally {
+      lensRig.fixtures = undefined
+    }
+  })
+
+  it('rings the cells an FX row selected on the FX tab paints, and lets the ring go with the selection', () => {
+    lensFx.effects = [cue()]
+    const fxSelection = createFxSelectionStore()
+    render(<Harness rows={LENS_ROWS} fxSelection={fxSelection} />)
+    expect(document.querySelector('[data-fx-ring]')).toBeNull()
+    act(() => fxSelection.set(new Set([5])))
+    expect(document.querySelectorAll('[data-fx-ring]').length).toBe(chips().length)
+    act(() => fxSelection.set(new Set([99])))
+    expect(document.querySelector('[data-fx-ring]')).toBeNull()
+  })
+
+  it('draws no lens without the programmer’s store, nor in a focused layer, leaving the badge', () => {
+    ownership.current = { dimmer: { source: 'effect', touched: false, isUniform: true, owners: [] } }
+    lensFx.effects = [cue()]
+    render(<Harness rows={LENS_ROWS} />)
+    expect(chips()).toEqual([])
+    expect(screen.getAllByTestId('effect-badge').length).toBeGreaterThan(0)
+    cleanup()
+    scopeState.current = { kind: 'layer', layerId: 7 }
+    lookStore.current = layerStore({})
+    render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
+    expect(chips()).toEqual([])
   })
 })

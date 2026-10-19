@@ -37,9 +37,9 @@ const SAVE_LABELS: Record<Exclude<LookSaveState, 'clean'>, string> = {
  * than a sentence on screen. If a desk pass shows nobody finds it, the answer is a first-visit
  * hint (`FU-PROG-OUTPUT-JUMP-HINT`), not the sentence back.
  *
- * The layer segment appears only while a layer is focused. Focusing happens in the rail, on the
- * stack row itself — a picker here would be a second way to say the same thing, and the stack is
- * the one that shows order, mask and amount alongside.
+ * The layer segment appears only while a layer is focused. Focusing happens on the Stack table's
+ * row — a picker here would be a second way to say the same thing, and the table is the one that
+ * shows order, mask and amount alongside.
  *
  * **Below `@[600px]` the layer pill is capped at 120 and carries the save state as a dot.** In
  * layer scope a 369px phone row had two scope pills, the layer pill at up to 220, `Unsaved`, the

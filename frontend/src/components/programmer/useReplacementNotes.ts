@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { createContext, createElement, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
 import type { ProgrammerAppliedSource } from '@/api/programmerWsApi'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -14,7 +14,7 @@ const NO_NOTES: ReadonlyMap<string, string> = new Map()
  * nothing leaves the note up, and the next press or release takes it down. Never stored, and the
  * first frame this window sees says nothing: there is no "before" to compare it with.
  */
-export function useReplacementNotes(): ReadonlyMap<string, string> {
+function useHeldReplacementNotes(): ReadonlyMap<string, string> {
   const { data } = useProgrammerAppliedQuery()
   const { fixtures } = useFixtureLookup()
   const applied = data ?? NO_APPLIED
@@ -34,4 +34,19 @@ export function useReplacementNotes(): ReadonlyMap<string, string> {
     return notes
   }
   return held.notes
+}
+
+const ReplacementNotesContext = createContext<ReadonlyMap<string, string> | null>(null)
+
+/**
+ * Reads the transitions for the programmer's tables whichever one shows, so a press made on the
+ * Values tab is still named when the Stack table opens.
+ */
+export function ReplacementNotesProvider({ children }: { children: ReactNode }) {
+  return createElement(ReplacementNotesContext.Provider, { value: useHeldReplacementNotes() }, children)
+}
+
+/** The notes [ReplacementNotesProvider] holds — none outside it. */
+export function useReplacementNotes(): ReadonlyMap<string, string> {
+  return useContext(ReplacementNotesContext) ?? NO_NOTES
 }

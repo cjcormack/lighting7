@@ -8,7 +8,7 @@ export function formatFade(ms: string | number): string {
 }
 
 /**
- * Where a write goes (Main board, note 2): **Local**, at the programmer fade — the rail's picker,
+ * Where a write goes (Main board, note 2): **Local**, at the programmer fade — the action bar's picker,
  * read here and never set — and, on a group, what a write lands on. A blind programmer turns it amber, *values staged, not on stage*;
  * offline it says the sheet is read-only. On the right, what this fixture holds — what Release
  * takes. Below 400px of sheet the fade drops off (§4).
