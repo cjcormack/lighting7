@@ -396,8 +396,9 @@ drop the frame), and for the Stage view its `viewpoint` — a camera (`orbit` | 
 vis source, `output` | `outputProgrammer` | `programmer` | `nextGo` | `edit` (session 3; the Screens
 row offers Output and Next GO, and *Cue in edit* only while the window shows one) — under `edit` its
 cue rides beside it as `editEntry` or `editCue`, applied only with one (show-cue-editing plan §3.7) —
-and its `workLights` — `off` | `on` (stage-view menu plan D8; the
-Screens row's *Work lights · Off | On*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
+its `workLights` — `off` | `on` (stage-view menu plan D8; the
+Screens row's *Work lights · Off | On*) — and its `bodies` — `plain` | `colour` (tables-colours plan
+D12; the Screens row's *Bodies · Plain | By colour*); the Stage view is not a live view and carries no `immersive`) — announced as a free `String → String` map and carried back on `windows.state`
 verbatim, so the registry and the Screens sheet never learn a view's vocabulary. The
 command sets them on one window **for that view only**: the target applies the options to its own
 tab facts if it is showing `view` and ignores the frame otherwise, then re-announces, which is how

@@ -138,6 +138,7 @@ export default [
       "src/components/surfaces/BindingTargetPicker.tsx",
       "src/components/surfaces/SurfaceInspector.tsx",
       "src/hooks/useFixtureColourIndex.ts",
+      "src/hooks/useTargetColours.ts",
       "src/routes/Patches.tsx",
       "src/routes/Stage.tsx",
     ],

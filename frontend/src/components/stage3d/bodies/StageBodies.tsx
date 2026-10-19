@@ -33,7 +33,16 @@ import {
 } from './bodyGeometry'
 import type { Mount } from './mount'
 import { RING_SEGMENTS } from '../../../lib/ringEffect'
-import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_ACTIVE_FILL, HOUSING_COLOR, HOUSING_FILL } from './palette'
+import {
+  BODY_LENS_COLOR,
+  HOUSING_ACTIVE_COLOR,
+  HOUSING_ACTIVE_FILL,
+  HOUSING_COLOR,
+  HOUSING_FILL,
+  TAG_HOUSING_ALBEDO,
+  TAG_HOUSING_COLORS,
+} from './palette'
+import { FIXTURE_COLOURS, type FixtureColour } from '../../../lib/fixtureColours'
 
 /**
  * Every fixture body on one canvas, **instanced per archetype part** (stage-view plan session 6,
@@ -49,7 +58,9 @@ import { BODY_LENS_COLOR, HOUSING_ACTIVE_COLOR, HOUSING_ACTIVE_FILL, HOUSING_COL
  *
  * **The housings are lit like any surface**: the surface shader's receiver, tinted per instance, so
  * a beam that crosses a lantern lights it and the room's fill keeps the rig readable against the
- * dark. The selection tints the housing. **A lens is dark glass until its cell is lit** (`palette.ts`),
+ * dark. The selection tints the housing, and under *Bodies · By colour* (tables-colours plan D12) so
+ * does the fixture's colour — written per instance when the selection, the colour or the option
+ * changes, never per frame. **A lens is dark glass until its cell is lit** (`palette.ts`),
  * one instance per cell, painted from the cell's own colour and level by the colour sync. **An LED
  * ring round a lens** is [RING_SEGMENTS] instances of one arc on the lens material, painted segment
  * by segment by the ring sync and drawn only at full detail.
@@ -135,6 +146,10 @@ export interface BodiesHandle {
   setRing(slot: number, segment: number, colour: Color): void
   /** Tint the slot's housing for the selection or a hover. */
   setActive(slot: number, active: boolean): void
+  /** The slot's fixture colour, which its housing takes under *By colour*; null for none. */
+  setTag(slot: number, colour: FixtureColour | null): void
+  /** *Bodies · By colour* on or off for the whole canvas: repaints only the slots it changes. */
+  setByColour(on: boolean): void
   /** Park every part of a slot — its fixture unmounted. */
   hide(slot: number): void
 }
@@ -153,6 +168,12 @@ const HOUSING_ACTIVE = new Color(HOUSING_ACTIVE_COLOR).multiplyScalar(HOUSING_AC
 
 const LENS_OFF = new Color(BODY_LENS_COLOR)
 
+/** Each colour's housing tint, in key order — a tagged slot's index into it is its billboard's `aTag − 1`. */
+const TAG_HOUSINGS = FIXTURE_COLOURS.map((colour) => new Color(TAG_HOUSING_COLORS[colour]).multiplyScalar(TAG_HOUSING_ALBEDO))
+const TAG_INDEX: Readonly<Record<FixtureColour, number>> = Object.fromEntries(
+  FIXTURE_COLOURS.map((colour, i) => [colour, i]),
+) as Record<FixtureColour, number>
+
 /** Each ring segment's turn about the lens's axis, and a scratch for its world matrix. */
 const RING_TURNS = Array.from({ length: RING_SEGMENTS }, (_, k) => new Matrix4().makeRotationZ((k * Math.PI * 2) / RING_SEGMENTS))
 const RING_TMP = new Matrix4()
@@ -168,6 +189,12 @@ export function applyHousingWorkLights(housing: ShaderMaterial, billboard: Shade
   housing.uniforms.uFill.value = levels.housing
   billboard.uniforms.uHousing.value = litByFill(HOUSING, levels.housing, 0.5, levels)
   billboard.uniforms.uHousingActive.value = litByFill(HOUSING_ACTIVE, levels.housing, 0.5, levels)
+  if (billboard.uniforms.uTag != null) billboard.uniforms.uTag.value = billboardTags(levels.housing, levels)
+}
+
+/** The billboard glyphs' tagged housings, lit as `litByFill` lights the plain one. */
+function billboardTags(fill: number, room?: WorkLightLevels): Color[] {
+  return TAG_HOUSINGS.map((tint) => litByFill(tint, fill, 0.5, room))
 }
 
 type PartName = 'base' | 'yoke' | 'head'
@@ -196,6 +223,8 @@ export interface BuiltBodies {
   billboardCentre: InstancedBufferAttribute
   billboardLens: InstancedBufferAttribute
   billboardActive: InstancedBufferAttribute
+  /** 0 for none, else 1 + the colour's index into the `uTag` uniform. */
+  billboardTag: InstancedBufferAttribute
   discLenses: InstancedMesh
   segmentLenses: InstancedMesh
   rings: InstancedMesh
@@ -214,17 +243,23 @@ function instanced(geometry: BufferGeometry, material: Material, count: number):
   return mesh
 }
 
+// The tag is looked up in the vertex stage, where indexing a uniform array is always allowed.
 const BILLBOARD_VERTEX = /* glsl */ `
   attribute vec4 aCentreSize;
   attribute vec3 aLens;
   attribute float aActive;
+  attribute float aTag;
+  uniform vec3 uHousing;
+  uniform vec3 uTag[${FIXTURE_COLOURS.length}];
   varying vec2 vUv;
   varying vec3 vLens;
   varying float vActive;
+  varying vec3 vHousing;
   void main() {
     vUv = uv * 2.0 - 1.0;
     vLens = aLens;
     vActive = aActive;
+    vHousing = aTag > 0.5 ? uTag[int(aTag - 0.5)] : uHousing;
     vec4 mv = viewMatrix * vec4(aCentreSize.xyz, 1.0);
     mv.xy += position.xy * aCentreSize.w;
     gl_Position = projectionMatrix * mv;
@@ -232,15 +267,15 @@ const BILLBOARD_VERTEX = /* glsl */ `
 `
 
 const BILLBOARD_FRAGMENT = /* glsl */ `
-  uniform vec3 uHousing;
   uniform vec3 uHousingActive;
   varying vec2 vUv;
   varying vec3 vLens;
   varying float vActive;
+  varying vec3 vHousing;
   void main() {
     float r = length(vUv);
     if (r > 1.0) discard;
-    vec3 housing = mix(uHousing, uHousingActive, vActive);
+    vec3 housing = mix(vHousing, uHousingActive, vActive);
     vec3 c = r < 0.58 ? vLens : housing;
     gl_FragColor = linearToOutputTexel(vec4(c, 1.0));
   }
@@ -326,9 +361,11 @@ export function buildBodies(
   const billboardCentre = new InstancedBufferAttribute(new Float32Array(cap * 4), 4)
   const billboardLens = new InstancedBufferAttribute(new Float32Array(cap * 3), 3)
   const billboardActive = new InstancedBufferAttribute(new Float32Array(cap), 1)
+  const billboardTag = new InstancedBufferAttribute(new Float32Array(cap), 1)
   quad.setAttribute('aCentreSize', billboardCentre)
   quad.setAttribute('aLens', billboardLens)
   quad.setAttribute('aActive', billboardActive)
+  quad.setAttribute('aTag', billboardTag)
   const billboards = new InstancedMesh(quad, billboardMaterial, cap)
   billboards.count = n
   billboards.frustumCulled = false
@@ -345,6 +382,7 @@ export function buildBodies(
     billboardCentre,
     billboardLens,
     billboardActive,
+    billboardTag,
     discLenses,
     segmentLenses,
     rings,
@@ -364,13 +402,55 @@ export function flushBodies(b: BuiltBodies): void {
     b.billboardCentre.needsUpdate = true
     b.billboardLens.needsUpdate = true
     b.billboardActive.needsUpdate = true
+    b.billboardTag.needsUpdate = true
     b.billboardDirty = false
   }
 }
 
+/** What a housing is painted: plain, selected, or `TINT_TAG + ` a colour's index. */
+const TINT_PLAIN = 0
+const TINT_ACTIVE = 1
+const TINT_TAG = 2
+
 export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
   const slotCount = b.layout.slots.length
   const known = (slot: number) => slot >= 0 && slot < slotCount
+
+  // The housing's inputs per slot, and the tint last painted from them: a slot is repainted only
+  // when they resolve to another tint, so a selection, a colour or the option costs one write per
+  // part, and a frame none of them moved costs none. `buildBodies` painted every housing plain.
+  const active = new Uint8Array(slotCount)
+  const tags: (FixtureColour | null)[] = new Array<FixtureColour | null>(slotCount).fill(null)
+  const painted = new Int8Array(slotCount).fill(TINT_PLAIN)
+  let byColour = false
+
+  function tintOf(slot: number): number {
+    if (active[slot] === 1) return TINT_ACTIVE
+    const tag = byColour ? tags[slot] : null
+    return tag == null ? TINT_PLAIN : TINT_TAG + TAG_INDEX[tag]
+  }
+
+  function paintHousing(slot: number): void {
+    const tint = tintOf(slot)
+    if (painted[slot] === tint) return
+    painted[slot] = tint
+    const colour = tint === TINT_PLAIN ? HOUSING : tint === TINT_ACTIVE ? HOUSING_ACTIVE : TAG_HOUSINGS[tint - TINT_TAG]
+    const a = b.addresses[slot]
+    for (const lod of LODS) {
+      for (const part of PARTS) {
+        const p = a.parts[lod][part]
+        if (p) {
+          p.mesh.setColorAt(p.index, colour)
+          b.dirty.add(p.mesh)
+        }
+      }
+    }
+    b.hangers.setColorAt(slot, colour)
+    b.dirty.add(b.hangers)
+    b.billboardActive.setX(slot, tint === TINT_ACTIVE ? 1 : 0)
+    b.billboardTag.setX(slot, tint >= TINT_TAG ? tint - TINT_TAG + 1 : 0)
+    b.billboardDirty = true
+  }
 
   // Every body writes its parts every frame it renders, so a write that stores what the buffer
   // already holds is dropped: a still rig flags nothing, and nothing is re-uploaded (the emitters'
@@ -470,23 +550,20 @@ export function makeBodiesHandle(b: BuiltBodies): BodiesHandle {
       b.rings.setColorAt(base + segment, colour)
       b.dirty.add(b.rings)
     },
-    setActive(slot, active) {
+    setActive(slot, on) {
       if (!known(slot)) return
-      const a = b.addresses[slot]
-      const tint = active ? HOUSING_ACTIVE : HOUSING
-      for (const lod of LODS) {
-        for (const part of PARTS) {
-          const p = a.parts[lod][part]
-          if (p) {
-            p.mesh.setColorAt(p.index, tint)
-            b.dirty.add(p.mesh)
-          }
-        }
-      }
-      b.hangers.setColorAt(slot, tint)
-      b.dirty.add(b.hangers)
-      b.billboardActive.setX(slot, active ? 1 : 0)
-      b.billboardDirty = true
+      active[slot] = on ? 1 : 0
+      paintHousing(slot)
+    },
+    setTag(slot, colour) {
+      if (!known(slot)) return
+      tags[slot] = colour
+      paintHousing(slot)
+    },
+    setByColour(on) {
+      if (on === byColour) return
+      byColour = on
+      for (let slot = 0; slot < slotCount; slot++) paintHousing(slot)
     },
     hide,
   }
@@ -500,11 +577,13 @@ export const BODIES_FLUSH_PRIORITY = 0.4
 
 interface StageBodiesProps {
   layout: BodyLayout
+  /** *Bodies · By colour*: each housing in the colour its `FixtureModel` gives it (`setTag`). */
+  byColour?: boolean
   children: React.ReactNode
 }
 
 /** The canvas's bodies, and the handle every `FixtureModel` writes its own through. */
-export function StageBodies({ layout, children }: StageBodiesProps) {
+export function StageBodies({ layout, byColour = false, children }: StageBodiesProps) {
   const { uniforms } = useSurfaceLighting()
   const workLights = useWorkLightLevels()
   const invalidate = useThree((s) => s.invalidate)
@@ -522,6 +601,7 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
         uniforms: {
           uHousing: { value: litByFill(HOUSING, HOUSING_FILL) },
           uHousingActive: { value: litByFill(HOUSING_ACTIVE, HOUSING_FILL) },
+          uTag: { value: billboardTags(HOUSING_FILL) },
         },
         vertexShader: BILLBOARD_VERTEX,
         fragmentShader: BILLBOARD_FRAGMENT,
@@ -579,6 +659,12 @@ export function StageBodies({ layout, children }: StageBodiesProps) {
   )
 
   const handle = useMemo(() => makeBodiesHandle(built), [built])
+  // A layout effect, so a rebuilt handle has the option before the bodies' own effects give it their
+  // colours, and each paints once.
+  useLayoutEffect(() => {
+    handle.setByColour(byColour)
+    invalidate()
+  }, [handle, byColour, invalidate])
 
   useFrame(() => flushBodies(built), BODIES_FLUSH_PRIORITY)
 

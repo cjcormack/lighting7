@@ -17,6 +17,7 @@ import { VIEW_OPTION_IMMERSIVE, applyImmersiveViewOption, useImmersive } from '@
 import { applyStageViewOptions, stageViewOptions, useStageViewpoint } from '@/lib/stageViewpoint'
 import { VIEW_OPTION_PROGRAMMER_TABLE, applyProgrammerViewOptions, useProgrammerTable } from '@/lib/programmerTables'
 import { useWorkLights } from '@/components/stage3d/scene/workLights'
+import { useBodyColours } from '@/components/stage3d/scene/bodyColours'
 import { useEditTarget, useVisSource } from '@/hooks/useVisSource'
 import { lightingApi } from '@/api/lightingApi'
 import { announceThisWindow, thisWindowRowId } from '@/store/windows'
@@ -99,12 +100,13 @@ export function useWindowsBridge(): void {
   const stageSource = useVisSource()
   const stageEditTarget = useEditTarget()
   const stageWorkLights = useWorkLights()
+  const stageBodies = useBodyColours()
   const programmerTable = useProgrammerTable()
   const announced = announcedViewOptions(
     windowViewOf(view),
     buskOptions,
     immersive ? 'on' : 'off',
-    stageViewOptions(stageViewpoint, stageSource, stageWorkLights, stageEditTarget),
+    stageViewOptions(stageViewpoint, stageSource, stageWorkLights, stageEditTarget, stageBodies),
     { [VIEW_OPTION_PROGRAMMER_TABLE]: programmerTable },
   )
   // A string key rather than the object: the hook mints a fresh map per render, and the effect
@@ -174,7 +176,7 @@ function reannounceThisWindow(): void {
 /**
  * Apply a frame's options for [viewId]: `immersive` on a view whose descriptor carries it (every
  * live view — not Stage, which has no immersive), the busk facts on the busk view, the viewpoint,
- * the source and the work lights on the Stage view. False for a view that contributes none, so a frame aimed at a library is ignored
+ * the source, the work lights and the bodies on the Stage view. False for a view that contributes none, so a frame aimed at a library is ignored
  * rather than half-applied.
  */
 function applyViewOptionsFor(viewId: string, options: Readonly<Record<string, string>>): boolean {

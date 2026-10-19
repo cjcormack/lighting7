@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { Stage3D, type Selection } from '../stage3d/Stage3D'
 import { useWorkLights } from '../stage3d/scene/workLights'
+import { useBodyColours } from '../stage3d/scene/bodyColours'
 import { useSceneLayers } from '../stage3d/scene/sceneView'
 import { StageChannelSourceProvider } from '../../hooks/useChannelSource'
 import { clearDeskSelection, setDeskSelection } from '../../store/selection'
@@ -36,6 +37,7 @@ export default function PositionsPlan({
   soleSelected: boolean
 }) {
   const workLights = useWorkLights()
+  const bodies = useBodyColours()
   // The window's Venue · Set · Haze, as the Stage view's View menu sets them: the plan's drapes and
   // Set pieces follow them like the work lights do (Chris, 2026-10-07).
   const layers = useSceneLayers()
@@ -60,6 +62,7 @@ export default function PositionsPlan({
         selection={selection}
         hidePatchSelectionInfo
         workLights={workLights}
+        bodies={bodies}
         onSelectionChange={onSelectionChange}
       />
     </StageChannelSourceProvider>

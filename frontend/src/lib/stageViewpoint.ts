@@ -18,6 +18,12 @@ import {
   VIEW_OPTION_WORK_LIGHTS,
   type WorkLights,
 } from '../components/stage3d/scene/workLights'
+import {
+  isBodyColours,
+  setBodyColours,
+  VIEW_OPTION_BODIES,
+  type BodyColours,
+} from '../components/stage3d/scene/bodyColours'
 
 /**
  * Where this window's Stage view looks from (stage-view plan sessions 1 and 2; `Stage.dc.html` is
@@ -233,6 +239,7 @@ export interface AppliedStageOptions {
   /** Set with `source: 'edit'`, the cue it draws. */
   editTarget?: EditTarget
   workLights?: WorkLights
+  bodies?: BodyColours
 }
 
 /**
@@ -255,8 +262,9 @@ function applySource(
 }
 
 /**
- * A `windows.viewOptions` frame's Stage keys, applied to this tab: the viewpoint, the source and
- * the work lights (stage-view menu plan D8, `scene/workLights.ts`), each only when its value is in
+ * A `windows.viewOptions` frame's Stage keys, applied to this tab: the viewpoint, the source, the
+ * work lights (stage-view menu plan D8, `scene/workLights.ts`) and the bodies (tables-colours plan
+ * D12, `scene/bodyColours.ts`), each only when its value is in
  * its vocabulary — a value outside it is ignored rather than read as Orbit, as Output or as off, so
  * a frame from a later build cannot move the window somewhere it did not mean. Returns what was
  * applied.
@@ -275,12 +283,17 @@ export function applyStageViewOptions(options: Readonly<Record<string, string>>)
     setWorkLights(workLights)
     applied.workLights = workLights
   }
+  const bodies = options[VIEW_OPTION_BODIES]
+  if (isBodyColours(bodies)) {
+    setBodyColours(bodies)
+    applied.bodies = bodies
+  }
   return applied
 }
 
 /**
- * `?viewpoint=`, `?source=` (with `?editEntry=` or `?editCue=` under `edit`) and `?workLights=` on
- * arrival — a Screens row's *Copy link* carries them: apply the values in their vocabularies, and answer the search with the parameters
+ * `?viewpoint=`, `?source=` (with `?editEntry=` or `?editCue=` under `edit`), `?workLights=` and
+ * `?bodies=` on arrival — a Screens row's *Copy link* carries them: apply the values in their vocabularies, and answer the search with the parameters
  * stripped, so a reload keeps whatever the window has moved to since. Null when there is none, so
  * the caller writes nothing. A value outside its vocabulary is stripped and not applied, as a
  * frame's is.
@@ -289,28 +302,33 @@ export function consumeLaunchStageOptions(search: URLSearchParams): URLSearchPar
   const viewpoint = search.get(VIEW_OPTION_VIEWPOINT)
   const source = search.get(VIEW_OPTION_SOURCE)
   const workLights = search.get(VIEW_OPTION_WORK_LIGHTS)
-  if (viewpoint == null && source == null && workLights == null) return null
+  const bodies = search.get(VIEW_OPTION_BODIES)
+  if (viewpoint == null && source == null && workLights == null && bodies == null) return null
   if (isStageViewpoint(viewpoint)) setStageViewpoint(viewpoint)
   applySource(source, (key) => search.get(key))
   if (isWorkLights(workLights)) setWorkLights(workLights)
+  if (isBodyColours(bodies)) setBodyColours(bodies)
   const next = new URLSearchParams(search)
   next.delete(VIEW_OPTION_VIEWPOINT)
   next.delete(VIEW_OPTION_SOURCE)
   next.delete(VIEW_OPTION_EDIT_ENTRY)
   next.delete(VIEW_OPTION_EDIT_CUE)
   next.delete(VIEW_OPTION_WORK_LIGHTS)
+  next.delete(VIEW_OPTION_BODIES)
   return next
 }
 
 /**
- * What the Stage view announces as its `viewOptions`: the viewpoint, the source and the work lights,
- * and under `edit` its cue — `edit` with no target announces Output, which is what it draws.
+ * What the Stage view announces as its `viewOptions`: the viewpoint, the source, the work lights and
+ * the bodies, and under `edit` its cue — `edit` with no target announces Output, which is what it
+ * draws.
  */
 export function stageViewOptions(
   viewpoint: StageViewpoint,
   source: VisSource,
   workLights: WorkLights,
   editTarget: EditTarget | null = null,
+  bodies: BodyColours = 'plain',
 ): Record<string, string> {
   const shown = source === 'edit' && editTarget == null ? 'output' : source
   return {
@@ -318,6 +336,7 @@ export function stageViewOptions(
     [VIEW_OPTION_SOURCE]: shown,
     ...(shown === 'edit' && editTarget != null ? editTargetOptions(editTarget) : {}),
     [VIEW_OPTION_WORK_LIGHTS]: workLights,
+    [VIEW_OPTION_BODIES]: bodies,
   }
 }
 

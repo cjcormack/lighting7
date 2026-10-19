@@ -6,6 +6,7 @@ import {
   STAGE_SOURCE_OPTION,
   STAGE_VIEWPOINT_OPTION,
   STAGE_WORK_LIGHTS_OPTION,
+  STAGE_BODIES_OPTION,
   WINDOW_VIEWS,
   projectIdOfPath,
   windowViewLabel,
@@ -52,10 +53,18 @@ describe('WINDOW_VIEWS', () => {
     expect(windowViewOf('/projects/1/templates')).toBeNull()
   })
 
-  it('gives Stage its viewpoint, its source and its work lights and nothing else — no immersive, it is not a live view (stage-view plan sessions 1–3, menu plan D8)', () => {
+  it('gives Stage its viewpoint, its source, its work lights and its bodies and nothing else — no immersive, it is not a live view (stage-view plan sessions 1–3, menu plan D8)', () => {
     const stage = WINDOW_VIEWS.find((v) => v.id === 'stage')!
     expect(stage.segment).toBe('/stage')
-    expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION])
+    expect(stage.options).toEqual([STAGE_VIEWPOINT_OPTION, STAGE_SOURCE_OPTION, STAGE_WORK_LIGHTS_OPTION, STAGE_BODIES_OPTION])
+    // Bodies · Plain | By colour (tables-colours plan D12), beside the work lights.
+    expect(STAGE_BODIES_OPTION).toEqual({
+      key: 'bodies',
+      label: 'Bodies',
+      kind: 'enum',
+      values: ['plain', 'colour'],
+      valueLabels: { plain: 'Plain', colour: 'By colour' },
+    })
     // Work lights · Off | On, both values, drawn as a segment beside the source.
     expect(STAGE_WORK_LIGHTS_OPTION).toEqual({
       key: 'workLights',

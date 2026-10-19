@@ -24,6 +24,7 @@ import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import type { ChannelMappingEntry, ChannelPropertyKey } from '@/api/channelMappingApi'
 import type { ProgrammerChannelEntry, ProgrammerKeyState } from '@/api/programmerWsApi'
+import { colourVar, type FixtureColour } from '@/lib/fixtureColours'
 
 /** The row head, 48px, and the floor a cell needs to hold an address, a name, a use and a value. */
 const ROW_HEAD_WIDTH = 48
@@ -65,6 +66,7 @@ function rowsFor(columnCount: number): DmxRow[] {
 
 /** An address no property drives — nothing to subscribe to. */
 const NO_KEYS: readonly ChannelPropertyKey[] = []
+const NO_COLOURS: ReadonlyMap<string, FixtureColour> = new Map()
 
 const PARKED_OWNERSHIP: CellOwnership = { source: 'parked', touched: false, isUniform: true, owners: [] }
 const BASELINE_OWNERSHIP: CellOwnership = { source: 'baseline', touched: false, isUniform: true, owners: [] }
@@ -436,6 +438,7 @@ export function DmxSheet({
   parkValueMap,
   parks,
   released,
+  colours = NO_COLOURS,
 }: {
   universe: number
   /** The desk is reachable — every write here is a WebSocket frame. */
@@ -449,6 +452,8 @@ export function DmxSheet({
   parks?: ReadonlyMap<number, ParkState>
   /** The venue parks the show has released on this universe, which *Restore* takes back. */
   released?: ReadonlyMap<number, ReleasedPark>
+  /** Each fixture's colour by key (`useFixtureColourIndex`), which its run edge takes. */
+  colours?: ReadonlyMap<string, FixtureColour>
 }) {
   const [updateChannel] = useUpdateChannelMutation()
   const [parkChannel] = useParkChannelMutation()
@@ -471,17 +476,18 @@ export function DmxSheet({
 
   // A fixture's footprint is a run of consecutive addresses with one fixture key. Every cell names
   // its fixture, so what is left to mark is where one footprint ends and the next begins — two of
-  // one model side by side (a pair of pars at 001 and 013) read as one run without it.
+  // one model side by side (a pair of pars at 001 and 013) read as one run without it. The edge is
+  // where a fixture's colour goes (tables-colours plan D8); null draws the neutral edge.
   const runStarts = useMemo(() => {
-    const starts = new Set<number>()
+    const starts = new Map<number, FixtureColour | null>()
     let previous: string | undefined
     for (let n = 1; n <= 512; n++) {
       const key = mappings?.[n]?.fixtureKey
-      if (key && key !== previous) starts.add(n)
+      if (key && key !== previous) starts.set(n, colours.get(key) ?? null)
       previous = key
     }
     return starts
-  }, [mappings])
+  }, [mappings, colours])
 
   const write = useCallback(
     (channelNo: number, value: number) => {
@@ -512,6 +518,7 @@ export function DmxSheet({
               channelNo={channelNo}
               mapping={mappings?.[channelNo]}
               runStart={runStarts.has(channelNo)}
+              runColour={runStarts.get(channelNo) ?? null}
               keys={mappings?.[channelNo]?.properties ?? NO_KEYS}
               sideband={sideband.get(channelNo)}
               blind={blind}
@@ -792,6 +799,7 @@ export function DmxSheet({
  */
 function DmxCellWithOwnership({
   runStart,
+  runColour,
   keys,
   sideband,
   blind,
@@ -802,6 +810,8 @@ function DmxCellWithOwnership({
   parkNote: string | undefined
   /** The first address of a fixture's footprint — draws the run edge. */
   runStart: boolean
+  /** The fixture's colour, which the run edge takes; null keeps the neutral edge. */
+  runColour: FixtureColour | null
   /** Every property the desk says drives this address — read by the ownership hook. */
   keys: readonly ChannelPropertyKey[]
   sideband: ProgrammerChannelEntry | undefined
@@ -823,8 +833,12 @@ function DmxCellWithOwnership({
       {runStart && (
         <span
           aria-hidden="true"
-          data-run-edge
-          className="pointer-events-none absolute inset-y-0.5 -left-0.5 w-0.5 rounded-full bg-muted-foreground/60"
+          data-run-edge={runColour ?? ''}
+          className={cn(
+            'pointer-events-none absolute inset-y-0.5 -left-0.5 w-0.5 rounded-full',
+            runColour == null && 'bg-muted-foreground/60',
+          )}
+          style={runColour == null ? undefined : { background: colourVar(runColour) }}
         />
       )}
       <div data-ownership className={cn('h-full', ownershipCellClass(ownership))}>

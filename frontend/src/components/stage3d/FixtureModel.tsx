@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useCursor } from '@react-three/drei'
 import { useFrame, type RootState } from '@react-three/fiber'
 import { StageLabel } from './StageLabel'
+import { readColour } from '../../lib/fixtureColours'
 import {
   Color,
   Euler,
@@ -936,6 +937,14 @@ export function FixtureModel({
     invalidate()
   }, [bodies, slot, active, invalidate])
 
+  // So does the fixture's colour under *Bodies · By colour*; a key, so a patch refetch writes nothing.
+  const colour = readColour(patch.colour)
+  useEffect(() => {
+    if (!bodies) return
+    bodies.setTag(slot, colour)
+    invalidate()
+  }, [bodies, slot, colour, invalidate])
+
   // An animated colour band (a scroll or random wheel band) or a flashing strobe moves with time
   // rather than DMX, so ColourSync registers with this while one is live; it re-applies the colour and
   // level and asks for the next frame — before the beam director runs, so the director reads this
@@ -1008,7 +1017,7 @@ export function FixtureModel({
         {hit.frame === 'mount' && hitProxy}
       </group>
 
-      <StageLabel position={FIXTURE_LABEL_OFFSET} kind="fixture" emphasised={active}>
+      <StageLabel position={FIXTURE_LABEL_OFFSET} kind="fixture" emphasised={active} colour={colour}>
         {patch.displayName}
       </StageLabel>
 

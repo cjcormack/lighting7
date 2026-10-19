@@ -20,6 +20,9 @@ import type { ResolvedControl, SurfaceBindingIndex } from "@/lib/surfaceResolve"
 import { activeBindingAt, resolveControl } from "@/lib/surfaceResolve"
 import { canLand, controlKinds, type SurfaceDragData } from "@/lib/surfaceDrop"
 import { describeBindingTarget, type RecordBindingOptions } from "./recordOptions"
+import { bindingTargetColour } from "./targetColour"
+import { NO_TARGET_COLOURS, type TargetColours } from "@/lib/targetColours"
+import { colourVar, FIXTURE_COLOUR_LABELS, type FixtureColour } from "@/lib/fixtureColours"
 import {
   FADER_FRAME_HEIGHT,
   RING_DOTS,
@@ -66,6 +69,11 @@ export interface SurfacePanelProps {
   onRemoveBinding: (bindingId: number) => void
   /** Resolves a record-addressed binding's uuid to a name — see `SurfaceInspector`'s `describe`. */
   records: RecordBindingOptions
+  /**
+   * The rig's colours (`useTargetColours`), which the label under a control takes from the fixture
+   * or group it drives. Stable until a colour moves, so the memoised cells skip every frame.
+   */
+  colours?: TargetColours
 }
 
 const UNBOUND: ControlState = {
@@ -89,6 +97,7 @@ export function SurfacePanel({
   lifted,
   onRemoveBinding,
   records,
+  colours = NO_TARGET_COLOURS,
 }: SurfacePanelProps) {
   const byControlId = useMemo(() => {
     const map = new Map<string, ControlDescriptor>()
@@ -119,6 +128,7 @@ export function SurfacePanel({
           lifted={lifted}
           onRemoveBinding={onRemoveBinding}
           records={records}
+          colours={colours}
         />
       ))}
     </div>
@@ -144,6 +154,7 @@ function PanelRegion({
   lifted,
   onRemoveBinding,
   records,
+  colours = NO_TARGET_COLOURS,
 }: RegionProps) {
   // A column whose controls all belong to one strip gets a backdrop spanning the whole column —
   // the thing session 3b outlines when a group row is dragged over it. Derived from the strips
@@ -217,6 +228,7 @@ function PanelRegion({
               selected={selectedControlId === cell.controlId}
               onSelect={onSelectControl}
               records={records}
+              colours={colours}
             />
           </ControlZone>
         )
@@ -403,6 +415,7 @@ interface ControlCellProps {
   selected: boolean
   onSelect: (controlId: string) => void
   records: RecordBindingOptions
+  colours: TargetColours
 }
 
 /**
@@ -422,10 +435,12 @@ const ControlCell = memo(function ControlCell({
   selected,
   onSelect,
   records,
+  colours,
 }: ControlCellProps) {
   const dead = resolved != null && resolved.binding.health.type !== "ok"
   const label = resolved ? describeBindingTarget(resolved.target, records) : null
-  const common = { descriptor, state, label, dead, selected, onSelect }
+  const colour = resolved ? bindingTargetColour(resolved.target, colours) : null
+  const common = { descriptor, state, label, colour, dead, selected, onSelect }
 
   switch (descriptor.type) {
     case "fader":
@@ -442,23 +457,40 @@ const ControlCell = memo(function ControlCell({
 interface CellCommon {
   state: ControlState
   label: string | null
+  /** The colour of the fixture or group the binding drives, for the label's top band. */
+  colour: FixtureColour | null
   dead: boolean
   selected: boolean
   onSelect: (controlId: string) => void
 }
 
-/** The binding's short label under a control — `—` dashed when unbound, red when dead. */
-function TargetLabel({ label, dead }: { label: string | null; dead: boolean }) {
+/**
+ * The binding's short label under a control — `—` dashed when unbound, red when dead — with a 3px
+ * band across its top in the colour of the fixture or group it drives (`Colours.dc.html` §C).
+ */
+function TargetLabel({ label, colour, dead }: { label: string | null; colour: FixtureColour | null; dead: boolean }) {
   return (
-    <div
-      className={cn(
-        "min-h-6 overflow-hidden text-center text-[10px] leading-3",
-        label == null && "text-muted-foreground/60",
-        dead && "text-destructive",
+    <div className="relative w-full">
+      {colour != null && label != null && (
+        <span
+          role="img"
+          aria-label={`Colour: ${FIXTURE_COLOUR_LABELS[colour]}`}
+          data-target-band={colour}
+          className="absolute inset-x-1 top-0 h-[3px] rounded-full"
+          style={{ background: colourVar(colour) }}
+        />
       )}
-      style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
-    >
-      {label ?? "—"}
+      <div
+        className={cn(
+          // The band's room on every label, coloured or not, so a row of controls stays aligned.
+          "min-h-7 overflow-hidden pt-1 text-center text-[10px] leading-3",
+          label == null && "text-muted-foreground/60",
+          dead && "text-destructive",
+        )}
+        style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}
+      >
+        {label ?? "—"}
+      </div>
     </div>
   )
 }
@@ -508,6 +540,7 @@ function FaderCell({
   descriptor,
   state,
   label,
+  colour,
   dead,
   selected,
   onSelect,
@@ -563,7 +596,7 @@ function FaderCell({
             </div>
           )}
         </div>
-        <TargetLabel label={label} dead={dead} />
+        <TargetLabel label={label} colour={colour} dead={dead} />
         <ControlName>{descriptor.label}</ControlName>
       </div>
     </CellShell>
@@ -574,6 +607,7 @@ function EncoderCell({
   descriptor,
   state,
   label,
+  colour,
   dead,
   selected,
   onSelect,
@@ -631,7 +665,7 @@ function EncoderCell({
             <circle cx={22} cy={22} r={3} fill="var(--surface-led)" />
           )}
         </svg>
-        <TargetLabel label={label} dead={dead} />
+        <TargetLabel label={label} colour={colour} dead={dead} />
         <ControlName>{descriptor.label}</ControlName>
       </div>
     </CellShell>

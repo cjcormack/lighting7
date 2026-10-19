@@ -53,6 +53,12 @@ describe('windowSetupUrl', () => {
     )
   })
 
+  it('carries a Stage row’s bodies after its work lights (tables-colours plan D12)', () => {
+    expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', workLights: 'off', bodies: 'colour' }, 'http://desk')).toBe(
+      'http://desk/projects/1/stage?window=Hall&viewpoint=plan&workLights=off&bodies=colour',
+    )
+  })
+
   it('carries a Stage row’s work lights beside its source, both values (stage-view menu plan D8)', () => {
     expect(windowSetupUrl('Hall', '/projects/1/stage', { viewpoint: 'plan', source: 'output', workLights: 'on' }, 'http://desk')).toBe(
       'http://desk/projects/1/stage?window=Hall&viewpoint=plan&source=output&workLights=on',

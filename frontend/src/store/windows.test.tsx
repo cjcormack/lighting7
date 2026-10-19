@@ -53,6 +53,7 @@ import { isImmersive, resetImmersiveStore, setImmersive } from '@/lib/immersive'
 import { resetStageViewpointStore, setStageViewpoint, stageViewpoint } from '@/lib/stageViewpoint'
 import { resetVisSourceStore, setVisSource, visSource } from '@/hooks/useVisSource'
 import { resetWorkLightsStore, setWorkLights } from '@/components/stage3d/scene/workLights'
+import { resetBodyColoursStore, setBodyColours } from '@/components/stage3d/scene/bodyColours'
 import { getProgrammerTable, resetProgrammerTableStore, setProgrammerTable } from '@/lib/programmerTables'
 import { store } from './index'
 import { restApi } from './restApi'
@@ -96,6 +97,7 @@ afterEach(() => {
   resetStageViewpointStore()
   resetVisSourceStore()
   resetWorkLightsStore()
+  resetBodyColoursStore()
   resetDeskFollowStores()
   resetFullscreenState()
   resetUnsavedSheets()
@@ -238,21 +240,25 @@ describe('the announce', () => {
     expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toMatchObject({ focus: 'pads' })
   })
 
-  it('carries the Stage view’s viewpoint, source and work lights and re-announces when any moves; none rides another view (stage-view plan sessions 1 and 3, menu plan D8)', async () => {
+  it('carries the Stage view’s viewpoint, source, work lights and bodies and re-announces when any moves; none rides another view (stage-view plan sessions 1 and 3, menu plan D8)', async () => {
     mountBridge('/projects/1/stage')
     await waitFor(() => expect(windowsWs.announced).toHaveLength(1))
-    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'orbit', source: 'output', workLights: 'off' })
+    expect((windowsWs.announced[0] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'orbit', source: 'output', workLights: 'off', bodies: 'plain' })
     act(() => setStageViewpoint('side'))
     await waitFor(() => expect(windowsWs.announced).toHaveLength(2))
-    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'output', workLights: 'off' })
+    expect((windowsWs.announced[1] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'output', workLights: 'off', bodies: 'plain' })
     act(() => setVisSource('nextGo'))
     await waitFor(() => expect(windowsWs.announced).toHaveLength(3))
-    expect((windowsWs.announced[2] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'off' })
+    expect((windowsWs.announced[2] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'off', bodies: 'plain' })
     act(() => setWorkLights('on'))
     await waitFor(() => expect(windowsWs.announced).toHaveLength(4))
-    expect((windowsWs.announced[3] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'on' })
-    // Six keys, never a seventh: the source and the work lights ride inside `viewOptions`.
-    expect(Object.keys(windowsWs.announced[3] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
+    expect((windowsWs.announced[3] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'on', bodies: 'plain' })
+    // Bodies (tables-colours plan D12): plain until set, then announced like the work lights.
+    act(() => setBodyColours('colour'))
+    await waitFor(() => expect(windowsWs.announced).toHaveLength(5))
+    expect((windowsWs.announced[4] as { viewOptions: Record<string, string> }).viewOptions).toEqual({ viewpoint: 'side', source: 'nextGo', workLights: 'on', bodies: 'colour' })
+    // Six keys, never a seventh: the source, the work lights and the bodies ride inside `viewOptions`.
+    expect(Object.keys(windowsWs.announced[4] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])
   })
 
   it('carries the cue in edit beside its source once a cue editor’s Show on stage points the window (show-cue-editing plan §3.7)', async () => {
@@ -274,6 +280,7 @@ describe('the announce', () => {
       source: 'edit',
       editEntry: '170',
       workLights: 'off',
+      bodies: 'plain',
     })
     // Inside `viewOptions`, never beside it: the announce's six keys hold.
     expect(Object.keys(windowsWs.announced[1] as object).sort()).toEqual(['follows', 'fullscreen', 'name', 'view', 'viewOptions', 'windowId'])

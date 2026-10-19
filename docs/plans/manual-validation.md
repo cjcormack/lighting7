@@ -15,6 +15,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 
 | Item | What it proves | Origin |
 |---|---|---|
+| [`FU-MANUAL-TABLES-COLOURS-S5`](#fu-manual-tables-colours-s5) | colour everywhere else at the desk: the busk rig's tile bands and the Stage view's labels and *Bodies · By colour* in a blacked-out room, a second screen set to *By colour* from the Screens sheet, the DMX footprints and a surface's labels, and whether cyan reads as a cue on the rig | Tables and colours S5, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S4`](#fu-manual-tables-colours-s4) | colour in the tables at the desk: the Colour column's keymap and popover on the desk and the iPad, the name mark readable on the desk's two screens and the iPad in a dark room and in light, *Colour from group*, and a venue patch recoloured from a show and taken back | Tables and colours S4, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S3`](#fu-manual-tables-colours-s3) | a colour set on a venue patch and group from a show is the show's recolour, survives a publish of the venue's own recolour, and is taken back; a venue colour change holds no show | Tables and colours S3, 2026-10-19 |
 | [`FU-MANUAL-TABLES-COLOURS-S2`](#fu-manual-tables-colours-s2) | the programmer's FX lens and dock at the desk: a held-back effect's chip struck through with the right reason (your value, Blind, a stomp), the chip opening the live editor, an FX row's cells ringed on Values, the Colour · Spread dock in every arm with the grid's selection kept, the tables carrying everything the rail's lists did, and the phone's tab segment | Tables and colours S2, 2026-10-19 |
@@ -491,6 +492,41 @@ a real sync pull leaving a tapped tempo alone mid-show.
    another master is free): the GO goes, M3 keeps
    following, and the row says it is skipped. Tap M2, then pull Sleeping Beauty from its repo with a
    change waiting: the show carries across and M2 keeps the tap.
+
+---
+
+## `FU-MANUAL-TABLES-COLOURS-S5`
+
+**What it proves**: *colour everywhere else at the desk* — tables-colours S5: a busk tile's 4px band,
+a stage label's swatch, a DMX footprint's run edge and a surface label's band all name the fixture or
+group they draw, a group's never a member's; *Bodies · By colour* tints the Stage view's housings per
+window, a selected one still blue; and none of it fills a value cell or a ring.
+
+**Why it is here**: the browser check ran on an isolated desk in a pane, at the pane's size and with
+no rig in front of it. Only the desk's screens in a blacked-out room say whether a 4px band and a
+tinted housing read at a glance, and whether cyan reads as a cue (plan §5: if it does, it becomes
+magenta before any desk stores it).
+
+**Test**, on a show on TCH venue, live, with half the rig and three groups coloured:
+
+1. **The busk rig.** House lights out. On the busk view's rig band each coloured fixture tile and
+   each coloured group tile carries its band across the top; a group tile is the group's colour
+   though its members carry others; the live-colour bar is still at the bottom, and a selected red
+   tile reads selected first.
+2. **The Stage view, blacked out.** Labels on *All fixtures*: every coloured fixture's label carries
+   its swatch. View › *Bodies · By colour*: the housings take their colours and a selected one is
+   still the desk's blue; *Plain* puts them back. Watch the frame-rate readout across both: it does
+   not move.
+3. **A second screen.** On the desk screen, open the Screens sheet and set the hall screen's Stage
+   row to *Bodies · By colour*: that window tints, the desk's own does not.
+4. **Cyan against a cue.** Colour a row of fronts cyan and GO a cue: on the busk rig, the Stage view
+   and the programmer, does a cyan band or label read as the cue's sky? Note it either way.
+5. **Channels and the surface.** The DMX sheet's footprints start with an edge in their fixture's
+   colour, an uncoloured one the neutral edge, and no ring changes. On the Surfaces view a fader on a
+   coloured group shows the band over its label; the X-Touch's own scribble strip does not
+   (`FU-SURFACE-SCRIBBLE-COLOUR`).
+6. **A venue patch.** Recolour a venue head from the show: the tile, the label, the housing, the
+   footprint and the surface label all take the show's colour.
 
 ---
 

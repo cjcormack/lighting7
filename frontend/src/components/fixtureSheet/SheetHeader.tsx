@@ -3,6 +3,8 @@ import { Eraser } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { Fixture } from '@/store/fixtures'
+import { TagMark } from '@/components/fixtureColours/ColourSwatches'
+import { tagClass, type FixtureColour } from '@/lib/fixtureColours'
 
 export type SheetView = 'values' | 'channels' | 'focus' | 'members'
 
@@ -47,6 +49,7 @@ export const GROUP_VIEWS: readonly { id: SheetView; label: string }[] = [
  */
 export function SheetHeader({
   name,
+  colour = null,
   model,
   views,
   view,
@@ -59,6 +62,8 @@ export function SheetHeader({
   park,
 }: {
   name: string
+  /** The fixture's or group's colour (tables-colours plan D8), a swatch before the name. */
+  colour?: FixtureColour | null
   model: string
   views: readonly { id: SheetView; label: string }[]
   view: SheetView
@@ -79,9 +84,16 @@ export function SheetHeader({
   return (
     <div className="flex flex-none flex-col">
       <div className="min-w-0 px-3 pt-3 pr-10 pb-1.5">
-        <Title className="line-clamp-2 text-[15px] font-semibold break-words text-foreground" title={name}>
-          {name}
-        </Title>
+        <div className="flex items-start gap-2">
+          {colour != null && (
+            <span className={cn('mt-[5px] flex', tagClass(colour))} data-sheet-colour={colour}>
+              <TagMark colour={colour} className="size-3" />
+            </span>
+          )}
+          <Title className="line-clamp-2 min-w-0 text-[15px] font-semibold break-words text-foreground" title={name}>
+            {name}
+          </Title>
+        </div>
         <p className="truncate text-xs text-muted-foreground" title={model}>
           {model}
         </p>

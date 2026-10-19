@@ -150,6 +150,44 @@ describe('StageLabelStore.layout', () => {
   })
 })
 
+describe('a fixture label’s colour (tables-colours plan D12)', () => {
+  const swatch = (el: HTMLElement) => el.querySelector<HTMLElement>('[data-label-swatch]')
+
+  it('carries its fixture’s swatch before the text, and none without a colour', () => {
+    const store = new StageLabelStore()
+    const red = store.add('fixture', 'Par 1', false, 'red')
+    expect(swatch(red.el)?.dataset.labelSwatch).toBe('red')
+    expect(swatch(red.el)?.style.background).toBe('var(--tag-red)')
+    expect(red.el.firstChild).toBe(swatch(red.el))
+    expect(red.el.textContent).toBe('Par 1')
+    const plain = store.add('fixture', 'Par 2', false)
+    expect(swatch(plain.el)).toBeNull()
+  })
+
+  it('rings the swatch on the emphasised chip, which is navy in either theme', () => {
+    const store = new StageLabelStore()
+    const e = store.add('fixture', 'Par 1', false, 'grey')
+    expect(e.el.className).not.toContain('[data-label-swatch]')
+    store.update(e, 'fixture', 'Par 1', true, 'grey')
+    expect(e.el.className).toContain('[&_[data-label-swatch]]:shadow-')
+  })
+
+  it('keeps it through a rename and a hover, and restyles the one element on a recolour', () => {
+    const store = new StageLabelStore()
+    const e = store.add('fixture', 'Par 1', false, 'red')
+    const el = e.el
+    store.update(e, 'fixture', 'Par 1a', true, 'red')
+    expect(swatch(el)?.dataset.labelSwatch).toBe('red')
+    expect(el.textContent).toBe('Par 1a')
+    store.update(e, 'fixture', 'Par 1a', true, 'cyan')
+    expect(swatch(el)?.dataset.labelSwatch).toBe('cyan')
+    expect(el.querySelectorAll('[data-label-swatch]')).toHaveLength(1)
+    store.update(e, 'fixture', 'Par 1a', true, null)
+    expect(swatch(el)).toBeNull()
+    expect(e.el).toBe(el)
+  })
+})
+
 describe('labels behind the scenery', () => {
   it('hides a label a collider stands in front of on a section, and shows the one beside it', () => {
     const store = new StageLabelStore()

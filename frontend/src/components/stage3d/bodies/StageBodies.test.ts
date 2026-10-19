@@ -14,10 +14,11 @@ import {
   releaseUnheldBodyGeometry,
 } from './bodyGeometry'
 import { applyHousingWorkLights, buildBodies, buildBodyLayout, flushBodies, makeBodiesHandle, makeBodyPose } from './StageBodies'
-import { HOUSING_COLOR, HOUSING_FILL } from './palette'
+import { HOUSING_COLOR, HOUSING_FILL, TAG_HOUSING_ALBEDO, TAG_HOUSING_COLORS } from './palette'
 import { litByFill } from '../scene/surfaceShader'
 import { WORK_LIGHT_LEVELS } from '../scene/workLights'
 import { RING_SEGMENTS } from '../../../lib/ringEffect'
+import { FIXTURE_COLOURS } from '../../../lib/fixtureColours'
 
 function spec(kind: 'PROFILE' | 'FRESNEL', lengthM: number | null = null): BodySpec {
   return bodySpecFor({
@@ -163,7 +164,9 @@ describe('the shared geometry', () => {
 describe('the housings under work lights (stage-view menu plan D6)', () => {
   const materials = () => ({
     housing: new ShaderMaterial({ uniforms: { uFill: { value: HOUSING_FILL } } }),
-    billboard: new ShaderMaterial({ uniforms: { uHousing: { value: new Color() }, uHousingActive: { value: new Color() } } }),
+    billboard: new ShaderMaterial({
+      uniforms: { uHousing: { value: new Color() }, uHousingActive: { value: new Color() }, uTag: { value: [] as Color[] } },
+    }),
   })
 
   it('raises the housings’ own fill with the room, and the billboards follow through litByFill', () => {
@@ -189,5 +192,105 @@ describe('the housings under work lights (stage-view menu plan D6)', () => {
       const active = billboard.uniforms.uHousingActive.value as Color
       expect(active.b).toBeGreaterThan(plain.b)
     }
+  })
+})
+
+describe('the housings by colour (tables-colours plan D12)', () => {
+  const tagTint = (colour: (typeof FIXTURE_COLOURS)[number]) =>
+    new Color(TAG_HOUSING_COLORS[colour]).multiplyScalar(TAG_HOUSING_ALBEDO)
+
+  /** Every instance colour the handle writes, counted on the meshes' own `setColorAt`. */
+  function countWrites(b: ReturnType<typeof build>) {
+    let writes = 0
+    for (const mesh of b.meshes) {
+      const original = mesh.setColorAt.bind(mesh)
+      mesh.setColorAt = (index, colour) => {
+        writes++
+        return original(index, colour)
+      }
+    }
+    return () => writes
+  }
+
+  /** Every housing instance of one slot: its parts at both levels and its hanger. */
+  function housingInstances(b: ReturnType<typeof build>, slot: number) {
+    const a = b.addresses[slot]
+    const parts = (['full', 'simple'] as const).flatMap((lod) =>
+      (['base', 'yoke', 'head'] as const).flatMap((part) => (a.parts[lod][part] ? [a.parts[lod][part]!] : [])),
+    )
+    return [...parts, { mesh: b.hangers, index: slot }]
+  }
+
+  /** Equal within the instance buffer's float32. */
+  const same = (a: Color, b: Color) => Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b) < 1e-6
+
+  const colourAt = (p: { mesh: { instanceColor: { getX: (i: number) => number; getY: (i: number) => number; getZ: (i: number) => number } | null }; index: number }) =>
+    new Color(p.mesh.instanceColor!.getX(p.index), p.mesh.instanceColor!.getY(p.index), p.mesh.instanceColor!.getZ(p.index))
+
+  it('is off by default: a colour is held, and the housing stays plain until By colour', () => {
+    const b = build([spec('PROFILE'), spec('PROFILE')])
+    const handle = makeBodiesHandle(b)
+    const writes = countWrites(b)
+    handle.setTag(0, 'red')
+    expect(writes()).toBe(0)
+    expect(b.billboardTag.getX(0)).toBe(0)
+    handle.setByColour(true)
+    for (const p of housingInstances(b, 0)) expect(same(colourAt(p), tagTint('red'))).toBe(true)
+    expect(b.billboardTag.getX(0)).toBe(FIXTURE_COLOURS.indexOf('red') + 1)
+    // The untagged slot is not repainted.
+    expect(writes()).toBe(housingInstances(b, 0).length)
+  })
+
+  it('writes a recolour once per instance, and nothing on an idle frame or a repeat', () => {
+    const b = build([spec('PROFILE')])
+    const handle = makeBodiesHandle(b)
+    handle.setByColour(true)
+    handle.setTag(0, 'red')
+    flushBodies(b)
+    const writes = countWrites(b)
+    const pose = makeBodyPose()
+    pose.head.makeTranslation(0, 3, 0)
+    // A second of idle frames: every body writes its pose, and nothing writes a colour.
+    for (let frame = 0; frame < 60; frame++) {
+      handle.writePose(0, pose)
+      flushBodies(b)
+    }
+    handle.setTag(0, 'red')
+    handle.setActive(0, false)
+    handle.setByColour(true)
+    expect(writes()).toBe(0)
+    handle.setTag(0, 'cyan')
+    expect(writes()).toBe(housingInstances(b, 0).length)
+    for (const p of housingInstances(b, 0)) expect(same(colourAt(p), tagTint('cyan'))).toBe(true)
+  })
+
+  it('still turns a selected housing the desk’s blue, and gives it its colour back', () => {
+    const b = build([spec('PROFILE')])
+    const handle = makeBodiesHandle(b)
+    handle.setByColour(true)
+    handle.setTag(0, 'red')
+    const head = b.addresses[0].parts.full.head!
+    handle.setActive(0, true)
+    expect(same(colourAt(head), tagTint('red'))).toBe(false)
+    expect(colourAt(head).b).toBeGreaterThan(colourAt(head).r)
+    expect(b.billboardActive.getX(0)).toBe(1)
+    expect(b.billboardTag.getX(0)).toBe(0)
+    handle.setActive(0, false)
+    expect(same(colourAt(head), tagTint('red'))).toBe(true)
+    // Off again: plain.
+    handle.setByColour(false)
+    expect(same(colourAt(head), new Color(HOUSING_COLOR))).toBe(true)
+    expect(b.billboardTag.getX(0)).toBe(0)
+  })
+
+  it('lights the billboard glyphs’ colours as the plain housing is lit, at either work-light level', () => {
+    const housing = new ShaderMaterial({ uniforms: { uFill: { value: HOUSING_FILL } } })
+    const billboard = new ShaderMaterial({
+      uniforms: { uHousing: { value: new Color() }, uHousingActive: { value: new Color() }, uTag: { value: [] as Color[] } },
+    })
+    applyHousingWorkLights(housing, billboard, WORK_LIGHT_LEVELS.on)
+    const tags = billboard.uniforms.uTag.value as Color[]
+    expect(tags).toHaveLength(FIXTURE_COLOURS.length)
+    expect(tags[0].equals(litByFill(tagTint('red'), 0.8, 0.5, WORK_LIGHT_LEVELS.on))).toBe(true)
   })
 })

@@ -35,6 +35,7 @@ import {
 } from './scene/sceneView'
 import { LIGHT_BUDGETS } from './scene/lightTable'
 import { isWorkLights, type WorkLights } from './scene/workLights'
+import { BODY_COLOURS, BODY_COLOURS_LABELS, isBodyColours, type BodyColours } from './scene/bodyColours'
 import { HAZE_TIERS } from './scene/hazeGovernor'
 import { isSlowReading } from './scene/frameRate'
 import { useStageStats, type StageStatsStore } from './scene/stageStats'
@@ -67,6 +68,12 @@ const WORK_LIGHT_ITEMS: ReadonlyArray<{ value: WorkLights; label: string; icon: 
   { value: 'off', label: 'Off', icon: Moon, hint: 'The room as lit: what no beam reaches stays dark.' },
   { value: 'on', label: 'On', icon: Sun, hint: 'Lifts the dark, so unlit surfaces show their shape. Pools keep their exposure.' },
 ]
+
+/** Bodies (tables-colours plan D12), with the chosen value's hint. */
+const BODY_COLOUR_HINTS: Record<BodyColours, string> = {
+  plain: 'Housings matt black. Labels still carry each fixture’s colour.',
+  colour: 'Each housing in its fixture’s colour. A selected one is still blue.',
+}
 
 /** The rig's four toggles, then (on a second row) the scene's three. */
 const RIG_TOGGLES: ReadonlyArray<{ key: StageViewToggle; label: string; hint: string }> = [
@@ -122,6 +129,9 @@ interface StageViewMenuProps {
   /** Whether this window lifts the dark (`scene/workLights.ts`), per window and announced. */
   workLights?: WorkLights
   setWorkLights?: (next: WorkLights) => void
+  /** Whether this window tints its housings by colour (`scene/bodyColours.ts`), per window and announced. */
+  bodies?: BodyColours
+  setBodies?: (next: BodyColours) => void
   /** What this window's canvas is doing (`scene/stageStats.ts`), for Performance's live block. */
   stats?: StageStatsStore | null
   /** Whether this window draws the frame-rate readout over its canvas. */
@@ -217,6 +227,8 @@ function ViewTab({
   setHaze,
   workLights,
   setWorkLights,
+  bodies,
+  setBodies,
 }: StageViewMenuProps) {
   const status = sourceStatus?.[visSource]
   return (
@@ -298,6 +310,20 @@ function ViewTab({
             items={WORK_LIGHT_ITEMS}
           />
           <Hint>{WORK_LIGHT_ITEMS.find((item) => item.value === workLights)?.hint}</Hint>
+        </Group>
+      )}
+
+      {bodies != null && setBodies != null && (
+        <Group label="Bodies" scope="window" announced>
+          <Segments
+            label="Bodies"
+            value={bodies}
+            onChange={(v) => {
+              if (isBodyColours(v)) setBodies(v)
+            }}
+            items={BODY_COLOURS.map((value) => ({ value, label: BODY_COLOURS_LABELS[value] }))}
+          />
+          <Hint>{BODY_COLOUR_HINTS[bodies]}</Hint>
         </Group>
       )}
     </div>

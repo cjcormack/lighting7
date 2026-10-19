@@ -88,6 +88,8 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
   useFixtureTypeListQuery: () => ({ data: [] }),
 }))
 vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
+const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
+vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
 vi.mock('./effectLabels', () => ({
   useEffectDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,

@@ -82,6 +82,8 @@ vi.mock('@/components/surfaces/SurfaceLibrary', () => ({
 }))
 vi.mock('@/components/CurrentProjectRedirect', () => ({ CurrentProjectRedirect: () => null }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
+// The rig's colours read the patch list, which these tests serve no store for.
+vi.mock('@/hooks/useTargetColours', () => ({ useTargetColours: () => ({ fixtures: new Map(), groups: new Map() }) }))
 // `@/store/surfaces` is only partially mocked, so its module body still runs — and that body
 // installs the bindings-changed bridge. The stub therefore has to be a whole surfaces API, not
 // just the one method the page calls.

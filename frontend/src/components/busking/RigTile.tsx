@@ -19,6 +19,8 @@ import type { BuskRigCellMode, BuskRigElement, BuskRigTile } from '@/api/buskRig
 import type { Fixture, FixtureTypeInfo } from '@/store/fixtures'
 import { FixtureAppearanceSource, type FixtureAppearance } from '@/components/fixtures/fixtureAppearance'
 import { usePipRun } from '@/hooks/usePipRun'
+import { targetColour, type TargetColours } from '@/lib/targetColours'
+import { colourVar, FIXTURE_COLOUR_LABELS, type FixtureColour } from '@/lib/fixtureColours'
 import { rigTileId, tileOwnName, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
 import { LiveAppearanceReporter } from '@/lib/liveAppearance'
 import type { EffectPresence } from './buskingTypes'
@@ -104,6 +106,13 @@ export interface TileLookup {
   typeByKey: ReadonlyMap<string, FixtureTypeInfo>
 }
 
+/** A tile's colour (D8, D9): a group tile its group's own, every other tile its fixture's. */
+export function tileColour(tile: RenderTile, colours: TargetColours): FixtureColour | null {
+  return tile.kind === 'group'
+    ? targetColour({ type: 'group', key: tile.group.name }, colours)
+    : targetColour({ type: 'fixture', key: tile.patch.key }, colours)
+}
+
 export interface RigTileProps {
   tile: RenderTile
   /** Its address in the built document, or null for a show-all fallback tile (never in the document). */
@@ -111,6 +120,8 @@ export interface RigTileProps {
   /** The stored tile this render tile came from, for the cell-mode menu. Null on a fallback tile. */
   stored: BuskRigTile | null
   presence: EffectPresence
+  /** The tile's colour ([tileColour]), drawn as its 4px top band; null for none. */
+  colour: FixtureColour | null
   /**
    * Is the tile's whole fixture selected as itself. `all` alone cannot say: every cell selected
    * reads `all` too, and the two are different selections with different presses, so the badge keeps
@@ -160,6 +171,7 @@ export function RigTile({
   at,
   stored,
   presence,
+  colour,
   wholeSelected,
   selectedCells,
   editing,
@@ -289,6 +301,7 @@ export function RigTile({
           </span>
         )}
       </button>
+      {colour != null && <TileBand colour={colour} />}
       {!isGroup && (
         <TileLive
           tile={tile}
@@ -337,6 +350,22 @@ export function RigTile({
         </ContextMenuItem>
       </ContextMenuContent>
     </ContextMenu>
+  )
+}
+
+/**
+ * The tile's colour, a 4px band inside its top border (`Colours.dc.html` §C). It marks which
+ * fixture the tile is and nothing more, so the border and fill stay the selection's.
+ */
+function TileBand({ colour }: { colour: FixtureColour }) {
+  return (
+    <span
+      role="img"
+      aria-label={`Colour: ${FIXTURE_COLOUR_LABELS[colour]}`}
+      data-rig-tile-band={colour}
+      className="pointer-events-none absolute inset-x-px top-px h-1 rounded-t-[7px]"
+      style={{ background: colourVar(colour) }}
+    />
   )
 }
 

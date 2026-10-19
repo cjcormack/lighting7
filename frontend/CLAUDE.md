@@ -275,7 +275,7 @@ the region, wall and floor cookie instances are gone. The haze governor gives up
 
 **The View button opens a 320 px popover with two tabs** (stage-view menu plan D1–D5, D10, D11;
 `stage3d/StageViewMenu.tsx`, the boards in `../docs/plans/stage-view-menu-design/`). **View** is
-this window's: Source, Show, Haze, Labels, Work lights. **Performance** is what it costs: a live block (fps and ms
+this window's: Source, Show, Haze, Labels, Work lights, Bodies. **Performance** is what it costs: a live block (fps and ms
 a frame, the lights packed of lit, the haze tier), then the machine's light budget, *Gobos on
 surfaces* and *Box shadows* (their `localStorage` keys unchanged), then Test recovery. Every group
 says whose it is, *this window* or *this machine*. The button names a source that is not Output
@@ -306,6 +306,16 @@ Off | On* segment (`STAGE_WORK_LIGHTS_OPTION`), and `?workLights=` on *Copy link
 the window follows them — the Stage view and the Positions plan. `workLights.ts` is **free of
 three.js** (the off row restates `SURFACE_AMBIENT` and `HOUSING_FILL`, pinned by its test), because
 `lib/stageViewpoint.ts` and `lib/windowViews.ts` import it on the app shell's path.
+
+**Bodies · Plain | By colour** (tables-colours plan D12, `stage3d/scene/bodyColours.ts`) tints each
+housing in its fixture's colour; off by default. It is per window and announced exactly as work
+lights are — `sessionStorage stage.bodies`, `viewOptions.bodies`, the Screens row's segment
+(`STAGE_BODIES_OPTION`), `?bodies=` on *Copy link* — and every canvas in the window follows it; a
+capture draws plain. **A label carries its fixture's swatch either way**, and a selected housing is
+still the desk's blue. `StageBodies` repaints a slot's instance colour only when its selection, its
+colour or the option resolves to another tint, so an idle frame writes none; the billboard glyphs
+take the same through an `aTag` attribute beside `aActive`. See the stage-vis doc's §"Lenses and
+housings".
 
 **The Stage view has five cameras on the one scene** (stage-view plan session 1): Orbit, Eye (look
 around from a point) and the orthographic Plan · Front · Side sections — the header's toggle
@@ -2376,6 +2386,9 @@ alike since the editor kit's session 2), which reports into `lib/liveAppearance.
 (§Focus and the side sheet, §The editor kit) — and a cell or run tile draws its own cells' colours off
 the parent's per-element `segments` by the element's **position in the patch's cell list**, an
 index into a list the desk ordered. A group tile has no channels of its own and draws no bar.
+**A tile's colour is a 4px band inside its top border** (§Fixture colours): a group tile's is the
+group's own, every other tile's its fixture's, resolved by the band (`tileColour`) and handed down as
+a key, so the border and fill stay the selection's.
 
 **Two wire facts the client has to live with, both recorded as session 3 amendments.** The rig GET
 embeds `GroupSummaryDto`, which carries **no id**, while the PUT names every group tile by `groupId`
@@ -2884,6 +2897,11 @@ eligibility dim mirrors a backend rule rather than standing alone**: since sessi
 `ControlSurfaceBindingService.refuseWrongKind` refuses a `fireCue` on a fader at the write boundary
 whichever door it comes through, and `controlKinds` / `targetControlKind` in `lib/surfaceDrop.ts`
 are the client copy of `midi/BindingControlKind.kt`.
+
+**A label under a control carries its target's colour** as a 3px band (§Fixture colours):
+`components/surfaces/targetColour.ts` names the fixture or group a binding drives — a property, a
+flash, a select, a strip, a trigger — and `ControlCell` resolves it beside the label, from the route's
+`useTargetColours`, whose identity holds across frames, so the memo still skips.
 
 **A colour on a continuous control is one of four HSV axes** — hue (the default, and the only one
 a pre-axis row can mean), a fine hue trim, saturation, brightness — carried as an optional
@@ -3525,7 +3543,8 @@ Three surface rules, each pinned by its test:
   owner than the same state beside it. The footprint is the run edge now, drawn in the 2px padding
   outside both the ring and the selection overlay, and as a sibling of the ownership wrapper so the
   baseline dim does not fade it. `DmxSheet.test.tsx` pins that nothing under the ring carries a
-  `bg-` class.
+  `bg-` class. **The run edge is where a fixture's colour goes** (§Fixture colours): `colours`, the
+  route's `useFixtureColourIndex`, paints it inline; an uncoloured fixture keeps the neutral edge.
 
   **A long name or use is cut at its beginning, and fades rather than taking an ellipsis** — the
   end is what tells two apart (a fixture's number, a head's colour). The line is laid out right-to-left so it
@@ -5250,6 +5269,19 @@ who owns a value, and a red name must not look like a red value.
   Chris 2026-10-19) — beside the existing rule that a group stays while a member matches. ⌘K's
   *Select colour · Red* (`fixtureColours/SelectByColour.tsx`) writes the desk selection, and held ⌥
   turns it into *Add to selection*, keeping the desk's heads and mask.
+- **Everywhere else a fixture is drawn** (session 5, `Colours.dc.html` §C), still identity only: a
+  busk rig tile's **4px band** across its top (`RigTile`'s `TileBand`), the DMX sheet's **run
+  edge** (`DmxSheet`), a 3px band over a surface control's **target label** (`SurfacePanel`'s
+  `TargetLabel`), a Stage **label's swatch** (`stageLabels.ts`), a mark on the Positions panel's unit
+  and group chips beside the live swatch, and a swatch before the fixture sheet's name. Each is
+  handed its colour as a key and reads nothing per cell or per frame. The surfaces that name a
+  *target* — a tile, a binding — read `hooks/useTargetColours`, the colour index widened to every
+  head's element key (its fixture's colour) and every group's name (its own), identity stable until
+  a colour moves; `lib/targetColours.ts`'s `targetColour` reads it. A group tile, a group's surface
+  label and a group chip are the **group's** colour, never a member's (D9). A real scribble strip is
+  `FU-SURFACE-SCRIBBLE-COLOUR`.
+- **The Stage view's housings by colour** (D12) are a view option, *Bodies · Plain | By colour*,
+  below.
 
 ### Speed Masters
 
@@ -5613,19 +5645,20 @@ Show and Prompt Book entries in `WINDOW_VIEWS` carry a one-entry `options` descr
 (`IMMERSIVE_OPTION`), the Programmer carries it after its table and Busk carries it fourth — because the desk's Json is bare and a sixth
 top-level announce key would drop the frame (`windowsApi.test.ts` still pins the key set).
 **The Stage view is a seventh `WINDOW_VIEWS` entry** (stage-view plan session 1), between Busk and
-the libraries, carrying three options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
+the libraries, carrying four options — `viewpoint` (`STAGE_VIEWPOINT_OPTION`, *Viewpoint · Orbit | Eye |
 Plan | Front | Side*), since session 3 `source` (`STAGE_SOURCE_OPTION`, *Source · Output | Next
 GO*, an `enum` segment, with *Cue in edit* while the window shows one) and since the stage-view menu plan's session 2 `workLights`
-(`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*) — and **no immersive** — it is a window view,
+(`STAGE_WORK_LIGHTS_OPTION`, *Work lights · Off | On*), and since the tables-colours plan's session 5
+`bodies` (`STAGE_BODIES_OPTION`, *Bodies · Plain | By colour*) — and **no immersive** — it is a window view,
 not a live view, so it has no `ShowHeader` to leave standing. `announcedViewOptions` takes the Stage
-options (`stageViewOptions`: the viewpoint, the source and the work lights) as its fourth argument
+options (`stageViewOptions`: the viewpoint, the source, the work lights and the bodies) as its fourth argument
 and sends them only under Stage; `applyViewOptionsFor` applies `immersive` only on a view whose
-descriptor carries it and the three only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
+descriptor carries it and the four only on Stage (`lib/stageViewpoint.ts`'s `applyStageViewOptions`,
 which ignores a value outside each vocabulary — a camera, a saved view's uuid since session 2 or an
 unsaved seat since session 3; one of the five vis sources, `edit` only beside a positive `editEntry`
-or `editCue`; `off | on`). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
+or `editCue`; `off | on`; `plain | colour`). ⌘K gains *Show Stage on <window>* and *Open Stage on another display* from
 the same list, and `windowSetupUrl` carries `viewpoint=`, `source=` (with `editEntry=` or `editCue=`
-under `edit`) and `workLights=`, which the Stage route applies on arrival and strips
+under `edit`), `workLights=` and `bodies=`, which the Stage route applies on arrival and strips
 (`consumeLaunchStageOptions`). **Since
 session 2 the option is a `picker`**, a third `WindowViewOption` kind whose control the *view*
 supplies: `Layout` hands `ScreensSheet` a lazily-loaded control per option key (`controls`, today

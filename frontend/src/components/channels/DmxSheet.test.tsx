@@ -344,6 +344,26 @@ describe('DmxSheet', () => {
     expect(edge.closest('[data-ownership]')).toBeNull()
   })
 
+  it('gives the run edge the fixture’s colour, and nothing else on the cell (tables-colours plan D8)', () => {
+    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', propertyName: 'rgbColour', ...ENTRY } })
+    // par-1 is red; par-2 carries none; the bar's head takes its fixture's.
+    draw({ colours: new Map([['par-1', 'red'], ['bar', 'cyan']]) })
+    const edgeOf = (channelNo: number) => cell(channelNo).closest('[data-cell]')!.querySelector<HTMLElement>('[data-run-edge]')!
+    expect(edgeOf(1).style.background).toBe('var(--tag-red)')
+    expect(edgeOf(1).className).not.toMatch(/bg-/)
+    expect(edgeOf(17).style.background).toBe('var(--tag-cyan)')
+    // An uncoloured fixture keeps today's neutral edge.
+    expect(edgeOf(7).style.background).toBe('')
+    expect(edgeOf(7).className).toContain('bg-muted-foreground/60')
+    // The ring and the face take none of it: the ring is the owner's, and the face paints nothing.
+    const wrapper = cell(2).closest('[data-ownership]')!
+    expect(wrapper.className).toMatch(/ring-inset/)
+    for (const el of [wrapper, ...wrapper.querySelectorAll<HTMLElement>('*')]) {
+      expect(el.getAttribute('style') ?? '').not.toContain('--tag-')
+      expect(el.getAttribute('class') ?? '').not.toContain('tag')
+    }
+  })
+
   it('paints nothing above the ownership ring, so it reads the same on every run', () => {
     // The ring is an inset box-shadow on the ownership wrapper, which paints beneath the wrapper's
     // children: any background on the face covers it. The alternating footprint tint did, so an

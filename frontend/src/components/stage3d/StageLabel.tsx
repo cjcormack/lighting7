@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import type { Group } from 'three'
 import { StageLabelStore, type StageLabelEntry, type StageLabelKind } from './stageLabels'
+import type { FixtureColour } from '../../lib/fixtureColours'
 
 /**
  * The label layer's store, provided inside the canvas by `Stage3D`. Null outside a Stage3D —
@@ -17,6 +18,8 @@ interface StageLabelProps {
   kind: StageLabelKind
   /** Hovered or selected: shown under *Positions* too, and placed ahead of everything else. */
   emphasised?: boolean
+  /** A fixture's colour, drawn as a swatch before the text (tables-colours plan D12); null for none. */
+  colour?: FixtureColour | null
 }
 
 /**
@@ -24,7 +27,7 @@ interface StageLabelProps {
  * the layer; the text is a `<div>` the layer owns, not a React root (see `stageLabels.ts`).
  * Whether it is shown is the layer's decision, so the call sites mount it unconditionally.
  */
-export function StageLabel({ position, children, kind, emphasised = false }: StageLabelProps) {
+export function StageLabel({ position, children, kind, emphasised = false, colour = null }: StageLabelProps) {
   const store = useContext(StageLabelContext)
   const anchorRef = useRef<Group>(null)
   const entryRef = useRef<StageLabelEntry | null>(null)
@@ -33,22 +36,22 @@ export function StageLabel({ position, children, kind, emphasised = false }: Sta
   // one `<div>`, never tear it down and append a new one.
   useEffect(() => {
     if (!store) return
-    const entry = store.add(kind, children, emphasised)
+    const entry = store.add(kind, children, emphasised, colour)
     entry.anchor = anchorRef.current
     entryRef.current = entry
     return () => {
       store.remove(entry)
       entryRef.current = null
     }
-    // The text, kind and emphasis are applied by the effect below; listing them here would
+    // The text, kind, emphasis and colour are applied by the effect below; listing them here would
     // re-create the element on every hover, which is the churn this component exists to avoid.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store])
 
   useEffect(() => {
     const entry = entryRef.current
-    if (store && entry) store.update(entry, kind, children, emphasised)
-  }, [store, kind, children, emphasised])
+    if (store && entry) store.update(entry, kind, children, emphasised, colour)
+  }, [store, kind, children, emphasised, colour])
 
   // No invalidate for a moved anchor: `position`, and the parent carrying it, are props R3F
   // applies, and an applied prop change already asks the `demand` frameloop for a frame.
