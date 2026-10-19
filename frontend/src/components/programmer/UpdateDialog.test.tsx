@@ -34,10 +34,12 @@ const update = vi.fn((body: Body) => ({ unwrap: () => Promise.resolve(answer.cur
 
 // The desk selection's frame is what the dialog opens its mask on (apply-model plan D3).
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('@/store/programmerOps', () => ({
   useUpdateProgrammerMutation: () => [update, { isLoading: false, error: undefined, reset: () => {} }],
 }))
 
+import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { UpdateDialog } from './UpdateDialog'
 
@@ -51,7 +53,7 @@ function narrowTo(keep: string) {
 }
 
 beforeEach(() => {
-  update.mockClear()
+  vi.clearAllMocks()
   answer.current = () => checklist([1, 2])
 })
 afterEach(() => {
@@ -71,9 +73,10 @@ describe('UpdateDialog mask', () => {
   })
 
   it('fetches the checklist again under a new mask, and commits with it (Mode B)', async () => {
-    render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={null} />)
+    const onOpenChange = vi.fn()
+    render(<UpdateDialog open onOpenChange={onOpenChange} projectId={6} includeTarget={null} />)
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
-    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, mask: undefined })
+    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, preview: true, mask: undefined })
     await screen.findByText('Cue 2')
 
     // An untick survives the re-fetch; a cue the new checklist lacks is gone.
@@ -86,27 +89,36 @@ describe('UpdateDialog mask', () => {
     // and disables Update.
     for (const family of ['Intensity', 'Position', 'Colour', 'Beam']) fireEvent.click(box(family))
     await waitFor(() => expect(update).toHaveBeenCalledTimes(4))
-    expect(update.mock.calls[3][0]).toEqual({ projectId: 6, mask: ['BEAM'] })
+    expect(update.mock.calls[3][0]).toEqual({ projectId: 6, preview: true, mask: ['BEAM'] })
     expect(screen.getByText('Pick at least one attribute.')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^Update/ })).toBeDisabled()
     fireEvent.click(box('Position'))
     await waitFor(() => expect(update).toHaveBeenCalledTimes(5))
-    expect(update.mock.calls[4][0]).toEqual({ projectId: 6, mask: ['POSITION'] })
+    expect(update.mock.calls[4][0]).toEqual({ projectId: 6, preview: true, mask: ['POSITION'] })
     await screen.findByText('Cue 3')
     expect(box(/Cue 1/).checked).toBe(false)
     expect(box(/Cue 3/).checked).toBe(true)
 
-    answer.current = () => ({ applied: true, mode: 'B', results: [], warnings: [] })
+    answer.current = () => ({
+      applied: true,
+      mode: 'B',
+      results: [{ cueId: 3, cueName: 'Cue 3', assignmentsWritten: 2, republishedLive: false }],
+      warnings: [],
+    })
     fireEvent.click(screen.getByRole('button', { name: 'Update 1 cue(s)' }))
     await waitFor(() => expect(update).toHaveBeenCalledTimes(6))
     expect(update.mock.calls[5][0]).toEqual({ projectId: 6, targets: [3], mask: ['POSITION'] })
-    // The write's answer is what the dialog shows: no checklist is fetched after it.
-    await waitFor(() => expect(screen.queryByRole('switch', { name: 'All attributes' })).toBeNull())
+    // A write that landed closes the dialog and says what it wrote; no checklist is fetched after it.
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(toast.success).toHaveBeenCalledWith('Updated “Cue 3” — 2 values written.', { description: undefined })
+    // Still mounted while it animates out, and its Update takes no second press.
+    expect(screen.getByRole('button', { name: 'Update 1 cue(s)' })).toBeDisabled()
     expect(update).toHaveBeenCalledTimes(6)
   })
 
-  it('fetches the checklist again under a new mask after a commit that wrote nothing', async () => {
-    render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={null} />)
+  it('stays open and fetches the checklist again under a new mask after a commit that wrote nothing', async () => {
+    const onOpenChange = vi.fn()
+    render(<UpdateDialog open onOpenChange={onOpenChange} projectId={6} includeTarget={null} />)
     await screen.findByText('Cue 2')
     answer.current = () => ({ applied: false, mode: 'B', results: [], warnings: ['Cue 1 not found'] })
     fireEvent.click(screen.getByRole('button', { name: 'Update 2 cue(s)' }))
@@ -114,7 +126,10 @@ describe('UpdateDialog mask', () => {
     answer.current = () => checklist([5])
     narrowTo('Colour')
     await screen.findByText('Cue 5')
-    expect(update.mock.calls.at(-1)![0]).toEqual({ projectId: 6, mask: ['COLOUR'] })
+    expect(update.mock.calls.at(-1)![0]).toEqual({ projectId: 6, preview: true, mask: ['COLOUR'] })
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(toast.success).not.toHaveBeenCalled()
+    expect(toast.warning).not.toHaveBeenCalled()
   })
 
   /**
@@ -129,11 +144,11 @@ describe('UpdateDialog mask', () => {
     render(<UpdateDialog open onOpenChange={() => {}} projectId={6} includeTarget={null} />)
     await screen.findByText('Cue 2')
     expect(update).toHaveBeenCalledTimes(1)
-    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, mask: ['COLOUR'] })
+    expect(update.mock.calls[0][0]).toEqual({ projectId: 6, preview: true, mask: ['COLOUR'] })
     expect(box('Colour').checked).toBe(true)
     fireEvent.click(box('Beam'))
     await waitFor(() => expect(update).toHaveBeenCalledTimes(2))
-    expect(update.mock.calls[1][0]).toEqual({ projectId: 6, mask: ['COLOUR', 'BEAM'] })
+    expect(update.mock.calls[1][0]).toEqual({ projectId: 6, preview: true, mask: ['COLOUR', 'BEAM'] })
     for (const write of writes) expect(write).not.toHaveBeenCalled()
   })
 

@@ -20,7 +20,7 @@ import {
   useProgrammerScenery,
 } from '@/store/programmer'
 import { useLiveScenery, useSetLookSceneryMutation } from '@/store/scenery'
-import type { SceneryChange, SceneryState, SceneryWriteItem } from '@/api/sceneryApi'
+import type { LiveScenery, SceneryChange, SceneryState, SceneryWriteItem } from '@/api/sceneryApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import { useProgrammerScope, type ProgrammerScope } from './ProgrammerScope'
@@ -28,17 +28,19 @@ import { useProgrammerScope, type ProgrammerScope } from './ProgrammerScope'
 // — filters ————————————————————————————————————————————————————————————————————
 
 /**
- * The Scenery table's three filters (scenery-programmer plan D4, tables-colours plan D6): *Set* lists the
- * Set layer, *Venue* the Venue layer, *Moving only* drops what can only be shown and hidden. A piece
- * the scope holds is listed whatever they say — its release × must stay in reach.
+ * The Scenery table's filters (scenery-programmer plan D4, tables-colours plan D6): *Set* lists the
+ * Set layer, *Venue* the Venue layer, *Moving only* drops what can only be shown and hidden, and
+ * *Changed* — the Values table's *Lit* for scenery — drops what nothing on stage has moved off its
+ * base. A piece the scope holds is listed whatever they say — its release × must stay in reach.
  */
 export interface SceneryFilters {
   set: boolean
   venue: boolean
   movingOnly: boolean
+  changedOnly: boolean
 }
 
-export const DEFAULT_SCENERY_FILTERS: SceneryFilters = { set: true, venue: true, movingOnly: false }
+export const DEFAULT_SCENERY_FILTERS: SceneryFilters = { set: true, venue: true, movingOnly: false, changedOnly: false }
 
 /** Per window, as the busk sheet's tab is: `sessionStorage`, so a second window keeps its own. */
 export const SCENERY_FILTERS_KEY = 'programmer.scenery.filters'
@@ -51,7 +53,7 @@ const sceneryFiltersStore = createSyncStore<SceneryFilters>({
     if (parsed == null || typeof parsed !== 'object') return DEFAULT_SCENERY_FILTERS
     const stored = parsed as Partial<Record<keyof SceneryFilters, unknown>>
     const flag = (key: keyof SceneryFilters) => (typeof stored[key] === 'boolean' ? stored[key] : DEFAULT_SCENERY_FILTERS[key])
-    return { set: flag('set'), venue: flag('venue'), movingOnly: flag('movingOnly') }
+    return { set: flag('set'), venue: flag('venue'), movingOnly: flag('movingOnly'), changedOnly: flag('changedOnly') }
   },
 })
 
@@ -71,22 +73,33 @@ export function resetSceneryFiltersStore() {
 
 /**
  * The rows the Scenery table draws, **Venue then Set** and by name within each, after the filters — a held
- * piece always. Pure, so the grouping and the filters are pinned without a store.
+ * piece always. [isChanged] is what *Changed* keeps: `SceneryScope.isChanged`. Pure, so the grouping and
+ * the filters are pinned without a store.
  */
 export function sceneryGroups(
   elements: readonly StageElementDto[],
   filters: SceneryFilters,
   held: ReadonlySet<string>,
+  isChanged: (element: StageElementDto) => boolean = () => false,
 ): { layer: 'VENUE' | 'SET'; elements: StageElementDto[] }[] {
   const keep = (e: StageElementDto) => {
     if (held.has(e.uuid)) return true
     if (e.layer === 'SET' ? !filters.set : !filters.venue) return false
+    if (filters.changedOnly && !isChanged(e)) return false
     return !filters.movingOnly || sceneryMoves(e)
   }
   const byName = (a: StageElementDto, b: StageElementDto) => a.name.localeCompare(b.name)
   return (['VENUE', 'SET'] as const)
     .map((layer) => ({ layer, elements: elements.filter((e) => (e.layer === 'SET' ? 'SET' : 'VENUE') === layer && keep(e)).sort(byName) }))
     .filter((g) => g.elements.length > 0)
+}
+
+const NO_ENTRIES: LiveScenery['entries'] = {}
+
+/** Two shown states the same, `open` and `trimM` to within a hair so a float round trip is no change. */
+function sameSceneryState(a: SceneryState, b: SceneryState): boolean {
+  const near = (x: number | undefined, y: number | undefined) => (x == null || y == null ? x === y : Math.abs(x - y) < 1e-6)
+  return a.visible === b.visible && near(a.open, b.open) && near(a.trimM, b.trimM)
 }
 
 // — the scope's arm ————————————————————————————————————————————————————————————————
@@ -219,6 +232,11 @@ export interface SceneryScope {
   arm: SceneryArm
   /** What the scope holds, by element uuid: the programmer's overlay, or a focused Look's own list. */
   held: ReadonlyMap<string, SceneryState>
+  /**
+   * Whether the stage has [element] off its base — a set, a cue, a Look or the programmer moved it.
+   * Judged by state, not by holder: the frame also lists pieces a cue tracks back to their base.
+   */
+  isChanged: (element: StageElementDto) => boolean
   /** One row's face: the state it draws, its read-out, whether it is held and whether Blind stages it. */
   rowOf: (element: StageElementDto) => { state: SceneryState; readout: string | undefined; held: boolean; staged: boolean }
   write: (elementUuid: string, patch: SceneryState) => void
@@ -252,8 +270,12 @@ export function useSceneryScope(projectId: number): SceneryScope {
 
   const staging = blind && arm.kind === 'local'
   const sameProject = live.projectId == null || live.projectId === projectId
-  const entries = sameProject ? live.entries : {}
+  const entries = sameProject ? live.entries : NO_ENTRIES
   const staged = sameProject ? live.staged : undefined
+  const isChanged = (element: StageElementDto) => {
+    const entry = entries[element.uuid]
+    return entry != null && !sameSceneryState(shownSceneryState(element, entry.state), shownSceneryState(element))
+  }
 
   const rowOf = (element: StageElementDto) => {
     const entry = entries[element.uuid]
@@ -276,7 +298,7 @@ export function useSceneryScope(projectId: number): SceneryScope {
   }
 
   const subject = arm.kind === 'readOnly' ? arm.subject : arm.kind === 'look' ? arm.name : `${held.size} held · Local`
-  return { arm, held, rowOf, write, release, subject, ready: arm.kind !== 'look' || look.ready }
+  return { arm, held, isChanged, rowOf, write, release, subject, ready: arm.kind !== 'look' || look.ready }
 }
 
 /** How many pieces the programmer holds in [projectId] — what Clear will drop, and the Scenery tab's count. */

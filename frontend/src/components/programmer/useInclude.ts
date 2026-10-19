@@ -1,8 +1,8 @@
-import { useCallback, useState } from 'react'
+import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import { useIncludeIntoProgrammerMutation } from '@/store/programmerOps'
-import type { IncludeResponse, PropertyMaskGroup } from '@/store/programmerOps'
+import type { PropertyMaskGroup } from '@/store/programmerOps'
 import { publishIncludeSelection } from '@/store/includeSelection'
 
 export interface UseIncludeOptions {
@@ -43,7 +43,6 @@ export type IncludeTargetRequest =
 export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
   const { toastErrors = true } = options
   const [includeIntoProgrammer, { isLoading, error, reset }] = useIncludeIntoProgrammerMutation()
-  const [result, setResult] = useState<IncludeResponse | null>(null)
 
   const include = useCallback(
     async (target: IncludeTargetRequest, mask?: PropertyMaskGroup[]) => {
@@ -55,7 +54,6 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
             : { lookId: target.lookId }),
           mask: mask && mask.length > 0 ? mask : undefined,
         }).unwrap()
-        setResult(response)
         // "Select Heads on Include": the operator's next gesture is almost always to edit
         // exactly these fixtures.
         publishIncludeSelection(response.fixtureKeys, response.groupKeys)
@@ -80,10 +78,5 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
     [include],
   )
 
-  const resetInclude = useCallback(() => {
-    setResult(null)
-    reset()
-  }, [reset])
-
-  return { include, includeCue, isLoading, error, result, resetInclude }
+  return { include, includeCue, isLoading, error, resetInclude: reset }
 }

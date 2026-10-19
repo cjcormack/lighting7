@@ -84,7 +84,7 @@ import {
 function SceneryRows() {
   const scope = useSceneryScope(6)
   const [filters] = useSceneryFilters()
-  const groups = sceneryGroups(ELEMENTS, filters, new Set(scope.held.keys()))
+  const groups = sceneryGroups(ELEMENTS, filters, new Set(scope.held.keys()), scope.isChanged)
   return (
     <>
       <span data-testid="subject">{scope.subject}</span>
@@ -141,14 +141,14 @@ describe('grouping and filters', () => {
   })
 
   it('filters by Set, Venue and Moving only, stored per window', () => {
-    expect(sceneryGroups(ELEMENTS, { set: true, venue: true, movingOnly: true }, new Set()).flatMap((g) => g.elements.map((e) => e.uuid))).toEqual([
+    expect(sceneryGroups(ELEMENTS, { ...DEFAULT_SCENERY_FILTERS, movingOnly: true }, new Set()).flatMap((g) => g.elements.map((e) => e.uuid))).toEqual([
       'border',
       'tabs',
       'moon',
     ])
     const { result } = renderHook(() => useSceneryFilters())
-    act(() => result.current[1]({ set: false, venue: true, movingOnly: true }))
-    expect(JSON.parse(window.sessionStorage.getItem(SCENERY_FILTERS_KEY)!)).toEqual({ set: false, venue: true, movingOnly: true })
+    act(() => result.current[1]({ ...DEFAULT_SCENERY_FILTERS, set: false, movingOnly: true }))
+    expect(JSON.parse(window.sessionStorage.getItem(SCENERY_FILTERS_KEY)!)).toEqual({ set: false, venue: true, movingOnly: true, changedOnly: false })
     // A second mount in this window reads them back.
     cleanup()
     draw()
@@ -156,9 +156,27 @@ describe('grouping and filters', () => {
   })
 
   it('lists a held piece whatever the filters say, so its release stays in reach', () => {
-    expect(sceneryGroups(ELEMENTS, { set: false, venue: false, movingOnly: true }, new Set(['sofa']))).toEqual([
+    expect(sceneryGroups(ELEMENTS, { set: false, venue: false, movingOnly: true, changedOnly: true }, new Set(['sofa']))).toEqual([
       { layer: 'SET', elements: [ELEMENTS[0]] },
     ])
+  })
+
+  it('keeps under Changed only what something on stage holds off its base', () => {
+    store.live = {
+      projectId: 6,
+      entries: {
+        moon: { elementUuid: 'moon', state: { trimM: 3 }, from: { trimM: 7 }, startedAtMs: 0, durationMs: 0, source: { kind: 'cue', cueId: 14, label: '14' } },
+        // Listed while it travels home, but at its base all the same.
+        tabs: { elementUuid: 'tabs', state: { open: 0 }, from: { open: 1 }, startedAtMs: 0, durationMs: 0, source: { kind: 'base' } },
+        // A cue that tracks the wall back to its base holds it, but has not moved it.
+        wall: { elementUuid: 'wall', state: { visible: true }, from: { visible: false }, startedAtMs: 0, durationMs: 0, source: { kind: 'cue', cueId: 2, label: '2' } },
+      },
+    }
+    store.programmer = { projectId: 6, elements: [{ elementUuid: 'sofa', state: { visible: false } }] }
+    window.sessionStorage.setItem(SCENERY_FILTERS_KEY, JSON.stringify({ ...DEFAULT_SCENERY_FILTERS, changedOnly: true }))
+    draw()
+    // The sofa because the programmer holds it, whatever the frame says.
+    expect(names()).toEqual(['moon', 'sofa'])
   })
 
   it('falls back to the defaults when storage refuses', () => {
@@ -174,7 +192,7 @@ describe('grouping and filters', () => {
     act(() => result.current[1]({ ...DEFAULT_SCENERY_FILTERS, venue: false }))
     expect(names()).toEqual(['moon', 'sofa'])
     vi.restoreAllMocks()
-    expect(DEFAULT_SCENERY_FILTERS).toEqual({ set: true, venue: true, movingOnly: false })
+    expect(DEFAULT_SCENERY_FILTERS).toEqual({ set: true, venue: true, movingOnly: false, changedOnly: false })
   })
 })
 

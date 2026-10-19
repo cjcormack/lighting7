@@ -18,12 +18,12 @@ import type {
   ChecklistCue,
   ProgrammerConflict,
   UpdateChecklist,
-  UpdateResponse,
 } from '@/store/programmerOps'
 import { MaskPicker, maskIsEmpty, maskToWire, maskValueKey, type MaskValue } from './maskPicker'
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 import { describeIncludedTarget, includedTargetKey } from '@/lib/includedTarget'
+import { announceWrite, updateNote } from './writeToasts'
 
 export interface UpdateDialogProps {
   open: boolean
@@ -55,8 +55,10 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   const [update, { isLoading, error, reset }] = useUpdateProgrammerMutation()
   const [checklist, setChecklist] = useState<UpdateChecklist | null>(null)
   const [selected, setSelected] = useState<ReadonlySet<number>>(new Set())
-  const [result, setResult] = useState<UpdateResponse | null>(null)
   const [conflict, setConflict] = useState<ProgrammerConflict | null>(null)
+  // Set by a write that landed, until the next open: the dialog animates out still mounted, and its
+  // Update must not take a second press meanwhile.
+  const [done, setDone] = useState(false)
   const [mask, setMask] = useState<MaskValue>(null)
   const maskKey = maskValueKey(mask)
   // The selection's mask, read once on open (apply-model plan D3). A change here is this Update's
@@ -77,8 +79,6 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         const response = await update({ projectId, ...body }).unwrap()
         if (response.mode === 'CHECKLIST') {
           if (seq !== requestSeqRef.current) return response
-          // A fresh checklist supersedes a commit that wrote nothing (`applied: false`).
-          setResult(null)
           setChecklist(response.checklist ?? null)
           // Preselect everything: the operator opened Update meaning to write, and unticking
           // is a smaller gesture than ticking each cue.
@@ -89,8 +89,10 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                 .filter((cueId) => !untickedRef.current.has(cueId)),
             ),
           )
-        } else {
-          setResult(response)
+        } else if (response.applied) {
+          setDone(true)
+          announceWrite(updateNote(response))
+          onOpenChange(false)
         }
         return response
       } catch (err) {
@@ -99,7 +101,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         return null
       }
     },
-    [projectId, update],
+    [projectId, update, onOpenChange],
   )
 
   // Runs on open, and again if the dialog's *mode* flips underneath it — not on every render
@@ -132,6 +134,7 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
     // the seed moves it the fetch is told the closed mask's checklist is already asked — it then
     // waits one render and asks under the seed, rather than asking twice.
     if (appliedRunKeyRef.current === null) {
+      setDone(false)
       const seed = readSelectionMask()
       setMask(seed)
       checklistMaskKeyRef.current = maskValueKey(seed) === maskKey ? null : maskKey
@@ -141,7 +144,6 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
     appliedRunKeyRef.current = runKey
     setChecklist(null)
     setSelected(new Set())
-    setResult(null)
     setConflict(null)
     untickedRef.current = new Set()
     reset()
@@ -152,18 +154,19 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   // With no include target there is nothing to confirm yet — fetch the checklist so the dialog
   // opens onto the actual decision rather than a spinner behind a button press. Fetched again when
   // the mask changes, since the mask decides which cues the programmer is over; keyed on the mask's
-  // one spelling, so re-picking the same families is no request. Never after a write, whose result
-  // is what the dialog shows.
+  // one spelling, so re-picking the same families is no request.
   useEffect(() => {
     // Nothing ticked asks nothing: the checklist on screen stays, and Update is disabled until a
     // family is ticked again.
-    if (runKey === null || !modeB || result?.applied || maskIsEmpty(mask)) return
+    if (runKey === null || !modeB || maskIsEmpty(mask)) return
     if (checklistMaskKeyRef.current === maskKey) return
     checklistMaskKeyRef.current = maskKey
-    void run({ mask: maskToWire(mask) })
+    // `preview`, so the fetch can never write: the desk takes a request with no targets as Mode A's
+    // write whenever it holds an include target, and this tab may not have heard of one yet.
+    void run({ preview: true, mask: maskToWire(mask) })
     // `mask` is read for the request; `maskKey` is its identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [maskKey, runKey, modeB, result, run])
+  }, [maskKey, runKey, modeB, run])
 
   const toggle = (cueId: number) => {
     setSelected((prev) => {
@@ -185,7 +188,10 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
   // staged has been deleted, so there is nowhere to write it back to. The recoverable arm was
   // `CUE_EDIT_SESSION_OPEN`, retired with the sessions in backend sweep item D1.
   const sentMask = maskToWire(mask)
-  const commit = () => void run(modeB ? { targets: [...selected], mask: sentMask } : { mask: sentMask })
+  const commit = () => {
+    if (done) return
+    void run(modeB ? { targets: [...selected], mask: sentMask } : { mask: sentMask })
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
@@ -200,15 +206,13 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
         </DialogHeader>
 
         <div className="max-h-[50vh] space-y-4 overflow-y-auto">
-          {!result?.applied && (
-            <MaskPicker
-              value={mask}
-              onChange={setMask}
-              hint="It narrows the values written back; held scenery goes back whole."
-            />
-          )}
+          <MaskPicker
+            value={mask}
+            onChange={setMask}
+            hint="It narrows the values written back; held scenery goes back whole."
+          />
 
-          {includeTarget && !result && (
+          {includeTarget && (
             <p className="text-sm text-muted-foreground">
               Only the values you changed since including are written — anything you left alone
               keeps whatever the cue already stored, palette references included. Scenery the
@@ -240,55 +244,16 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
               <AlertDescription>{formatError(error)}</AlertDescription>
             </Alert>
           )}
-
-          {result?.applied && (
-            <Alert>
-              <AlertDescription className="space-y-1">
-                {result.results.map((r) => (
-                  <p key={r.cueId}>
-                    Updated “{r.cueName}” — {r.assignmentsWritten} value
-                    {r.assignmentsWritten === 1 ? '' : 's'} written
-                    {sceneryClause(r.sceneryWritten)}
-                    {r.republishedLive ? ' (live cue republished)' : ''}.
-                  </p>
-                ))}
-                {/* A separate field from `results` rather than a cue-shaped entry, matching the
-                    wire: a Look Update writes rows, not assignments, and what it moves is every
-                    cue layering the Look rather than one cue. That second number is the one the
-                    operator most needs — it is the rest of the show changing, and it is the payoff
-                    of a Look being a reference at all. */}
-                {result.lookResult && (
-                  <p>
-                    Updated “{result.lookResult.lookName}” — {result.lookResult.rowsWritten} row
-                    {result.lookResult.rowsWritten === 1 ? '' : 's'} written
-                    {effectsClause(result.lookResult.effectsWritten)}
-                    {sceneryClause(result.lookResult.sceneryWritten)}
-                    {result.lookResult.cuesRepublished.length > 0
-                      ? `, ${result.lookResult.cuesRepublished.length} live cue(s) moved with it`
-                      : ''}
-                    .
-                  </p>
-                )}
-                {result.warnings.map((warning) => (
-                  <p key={warning} className="text-xs text-amber-600 dark:text-amber-500">
-                    {warning}
-                  </p>
-                ))}
-              </AlertDescription>
-            </Alert>
-          )}
         </div>
 
         <DialogFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            {result?.applied ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
-          {!result?.applied && (
-            <Button onClick={() => commit()} disabled={!canCommit || isLoading}>
-              {isLoading && <Loader2 className="size-4 animate-spin" />}
-              {isLoading ? 'Updating…' : modeB ? `Update ${selected.size} cue(s)` : 'Update'}
-            </Button>
-          )}
+          <Button onClick={() => commit()} disabled={!canCommit || isLoading || done}>
+            {isLoading && <Loader2 className="size-4 animate-spin" />}
+            {isLoading ? 'Updating…' : modeB ? `Update ${selected.size} cue(s)` : 'Update'}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -382,14 +347,4 @@ function ChecklistRow({
       </span>
     </label>
   )
-}
-
-/** A Look's effects Update wrote back — Include runs them in the programmer, and an edit lands on them. */
-function effectsClause(written: number | undefined): string {
-  return written ? `, ${written} effect${written === 1 ? '' : 's'}` : ''
-}
-
-/** `, 1 scenery change` beside an Update's written count — nothing when no scenery moved. */
-function sceneryClause(written: number | undefined): string {
-  return written ? `, ${written} scenery change${written === 1 ? '' : 's'}` : ''
 }

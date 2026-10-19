@@ -35,7 +35,7 @@ const NO_SORT: ReadonlySet<string> = new Set()
 
 /**
  * **The Scenery table** (tables-colours plan D6): every scene element, **Venue then Set** and by
- * name under dividers, with three filters — *Set*, *Venue*, *Moving only* — as chips and
+ * name under dividers, with four filters — *Set*, *Venue*, *Moving only*, *Changed* — as chips and
  * *All* their unfiltered state. A piece the scope holds is listed whatever they say, so its release
  * × stays in reach.
  *
@@ -63,7 +63,7 @@ export function SceneryTable({
   const heldKeys = useMemo(() => new Set(scope.held.keys()), [scope.held])
   const rows = useMemo<ElementRow[]>(() => {
     const matching = (elements ?? []).filter((e) => heldKeys.has(e.uuid) || matchesFilter(view.q, [e.name, sceneryKindLabel(e)]))
-    return sceneryGroups(matching, filters, heldKeys).flatMap((group) => [
+    return sceneryGroups(matching, filters, heldKeys, scope.isChanged).flatMap((group) => [
       { id: `divider:${group.layer}`, divider: group.layer === 'VENUE' ? 'Venue' : 'Set' },
       ...group.elements.map((element) => {
         const face = scope.rowOf(element)
@@ -225,14 +225,15 @@ function ElementNameCell({
   )
 }
 
-/** *All · Set · Venue · Moving only*: three independent filters, and *All* their unfiltered state. */
+/** *All · Set · Venue · Moving only · Changed*: four independent filters, and *All* their unfiltered state. */
 function SceneryFilterChips({ filters, onChange }: { filters: SceneryFilters; onChange: (next: SceneryFilters) => void }) {
-  const all = filters.set && filters.venue && !filters.movingOnly
-  const chip = (on: boolean, label: ReactNode, key: string, next: SceneryFilters) => (
+  const all = filters.set && filters.venue && !filters.movingOnly && !filters.changedOnly
+  const chip = (on: boolean, label: ReactNode, key: string, next: SceneryFilters, title?: string) => (
     <button
       key={key}
       type="button"
       aria-pressed={on}
+      title={title}
       onClick={() => onChange(next)}
       className={cn(
         'inline-flex h-7 shrink-0 items-center rounded-md px-2.5 text-xs font-semibold',
@@ -243,7 +244,7 @@ function SceneryFilterChips({ filters, onChange }: { filters: SceneryFilters; on
     </button>
   )
   return (
-    // No `min-w-0`: the four chips push the filter back rather than run off the row.
+    // No `min-w-0`: the chips push the filter back rather than run off the row.
     <div className="flex flex-1">
       <div role="group" aria-label="Scenery filters" className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
         {chip(all, 'All', 'all', DEFAULT_SCENERY_FILTERS)}
@@ -256,6 +257,13 @@ function SceneryFilterChips({ filters, onChange }: { filters: SceneryFilters; on
           </>,
           'moving',
           { ...filters, movingOnly: !filters.movingOnly },
+        )}
+        {chip(
+          filters.changedOnly,
+          'Changed',
+          'changed',
+          { ...filters, changedOnly: !filters.changedOnly },
+          'Show only scenery moved off its base',
         )}
       </div>
     </div>

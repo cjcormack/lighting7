@@ -29,12 +29,12 @@ import { useRecordProgrammerMutation } from '@/store/programmerOps'
 import { selectTargetKeys } from '@/store/selectionSlice'
 import type {
   RecordMode,
-  RecordResponse,
   RecordSource,
 } from '@/store/programmerOps'
-import { MaskPicker, describeSkips, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
+import { MaskPicker, maskIsEmpty, maskToWire, type MaskValue } from './maskPicker'
 import { useWindowMaskReader } from '@/hooks/useWindowMaskReader'
-import { RecordSceneryRow, describeSceneryWrite } from './RecordSceneryRow'
+import { RecordSceneryRow } from './RecordSceneryRow'
+import { announceWrite, recordNote } from './writeToasts'
 import { RecordCuePicker, usePickedCueName } from './RecordCuePicker'
 
 export interface RecordSheetProps {
@@ -98,9 +98,9 @@ const MODES: { value: RecordMode; label: string; hint: string }[] = [
  * Record the programmer into a cue.
  *
  * A Sheet rather than a Dialog per this repo's convention: mask + mode + target is a form,
- * not a confirmation. The result panel is deliberately chatty — a Record that quietly dropped
- * an element-keyed entry or masked half the rig out should say so, because the operator's
- * next move is to fire the cue and trust it.
+ * not a confirmation. What a Record wrote is said as a toast once the sheet closes, and amber
+ * where it skipped anything — a Record that quietly dropped an element-keyed entry or masked half
+ * the rig out should say so, because the operator's next move is to fire the cue and trust it.
  */
 export function RecordSheet({
   open,
@@ -139,7 +139,9 @@ export function RecordSheet({
   const [cueId, setCueId] = useState<number | null>(targetCueId ?? null)
   const [name, setName] = useState('')
   const [cueNumber, setCueNumber] = useState('')
-  const [result, setResult] = useState<RecordResponse | null>(null)
+  // Set by a Record that landed, until the next open: the sheet animates out still mounted, and its
+  // Record must not take a second press meanwhile.
+  const [done, setDone] = useState(false)
 
   const recordableStacks = useMemo(
     () => (stacks ?? []).filter((stack) => stack.type !== 'SEPARATOR'),
@@ -150,8 +152,8 @@ export function RecordSheet({
   const defaultStackChoice = () => String(defaultCueStackId ?? recordableStacks[0]?.id ?? NEW_STACK)
 
   // Once per open. RTK Query's `reset` changes identity whenever the mutation's state does, so
-  // an effect that depends on it *and* calls it re-fires — here that would wipe the result
-  // panel and the operator's form the instant a Record completed.
+  // an effect that depends on it *and* calls it re-fires — here that would wipe the operator's
+  // form the instant a Record failed.
   const openedRef = useRef(false)
   useEffect(() => {
     if (!open) {
@@ -178,7 +180,7 @@ export function RecordSheet({
     // an unloaded list is not an empty one, and the effect below fills it in when it arrives.
     setStackId(defaultCueStackId != null || stacks != null ? defaultStackChoice() : '')
     setNewStackName('')
-    setResult(null)
+    setDone(false)
     reset()
     resetCreateStack()
     // recordableStacks is only read for its first id on open; re-running when the list
@@ -213,6 +215,7 @@ export function RecordSheet({
   // nothing left to catch here — Record's one recoverable refusal was `409 CUE_EDIT_SESSION_OPEN`,
   // and backend sweep item D1 retired the sessions that produced it.
   const submit = async () => {
+    if (done) return
     resetCreateStack()
     let cueStackId = creating && !newStack && stackId !== NO_STACK ? Number(stackId) : undefined
     if (creating && newStack) {
@@ -241,7 +244,11 @@ export function RecordSheet({
       // A number is an entry's, so a cue in no stack has none to take.
       cueNumber: creating && cueStackId != null && cueNumber.trim() !== '' ? cueNumber.trim() : undefined,
     })
-    if ('data' in response && response.data) setResult(response.data)
+    if ('data' in response && response.data) {
+      setDone(true)
+      announceWrite(recordNote(response.data))
+      onOpenChange(false)
+    }
   }
 
   return (
@@ -407,66 +414,18 @@ export function RecordSheet({
               <AlertDescription>{formatError(error)}</AlertDescription>
             </Alert>
           )}
-
-          {result && <RecordResult result={result} />}
         </SheetBody>
 
         <SheetFooter className="flex-row justify-end gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-            {result ? 'Close' : 'Cancel'}
+            Cancel
           </Button>
-          <Button onClick={() => void submit()} disabled={!canSubmit || isLoading}>
+          <Button onClick={() => void submit()} disabled={!canSubmit || isLoading || done}>
             {isLoading && <Loader2 className="size-4 animate-spin" />}
             {isLoading ? 'Recording…' : 'Record'}
           </Button>
         </SheetFooter>
       </SheetContent>
     </Sheet>
-  )
-}
-
-/**
- * What actually landed. Reported rather than assumed: a silent Record reads as "everything
- * went in", which is exactly the impression the old lossy snapshot gave.
- */
-function RecordResult({ result }: { result: RecordResponse }) {
-  const preserved = result.preserved
-  const notes: string[] = []
-  if (result.groupRowsEmitted > 0) {
-    notes.push(`${result.groupRowsEmitted} group row${result.groupRowsEmitted === 1 ? '' : 's'}`)
-  }
-  if (result.fxWritten > 0) notes.push(`${result.fxWritten} effect${result.fxWritten === 1 ? '' : 's'}`)
-  notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved, result.sceneryAlreadyTracked))
-  const triggersKept = preserved.triggers ?? 0
-  // One sentence for both kinds of timed child: what the operator needs to know is that a timed
-  // thing was preserved rather than dropped, not which shape it had.
-  const timedKept = (preserved.timedLayers ?? 0) + (preserved.timedAdHocEffects ?? 0)
-  const outOfMaskKept = preserved.outOfMaskAssignments ?? 0
-  const outOfScopeKept = preserved.outOfScopeAssignments ?? 0
-  if (triggersKept > 0) notes.push(`${triggersKept} trigger(s) kept`)
-  if (timedKept > 0) notes.push(`${timedKept} timed effect(s) kept`)
-  if (outOfMaskKept > 0) notes.push(`${outOfMaskKept} out-of-mask row(s) kept`)
-  if (outOfScopeKept > 0) notes.push(`${outOfScopeKept} out-of-selection row(s) kept`)
-  if (result.republishedLive) notes.push('the live cue was republished')
-
-  const skipNote = describeSkips(result.skipped)
-
-  return (
-    <Alert>
-      <AlertDescription className="space-y-1">
-        <p className="font-medium">
-          {result.created ? 'Created' : 'Updated'} “{result.cue.name}” — {result.assignmentsWritten}{' '}
-          value{result.assignmentsWritten === 1 ? '' : 's'} written
-          {result.assignmentsRemoved > 0 ? `, ${result.assignmentsRemoved} removed` : ''}.
-        </p>
-        {notes.length > 0 && <p className="text-xs text-muted-foreground">{notes.join(' · ')}</p>}
-        {skipNote && <p className="text-xs text-amber-600 dark:text-amber-500">{skipNote}</p>}
-        {result.warnings.map((warning) => (
-          <p key={warning} className="text-xs text-amber-600 dark:text-amber-500">
-            {warning}
-          </p>
-        ))}
-      </AlertDescription>
-    </Alert>
   )
 }

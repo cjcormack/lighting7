@@ -34,6 +34,7 @@ const recordLook = vi.fn((_: unknown) => ({
     }),
 }))
 
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
 vi.mock('react-redux', () => ({ useSelector: () => [] }))
 vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => store.programmer }))
@@ -51,6 +52,7 @@ vi.mock('@/store/programmerOps', () => ({
   useRecordLookMutation: () => [recordLook, { isLoading: false, error: undefined, reset: () => {} }],
 }))
 
+import { toast } from 'sonner'
 import { RecordSheet } from './RecordSheet'
 import { RecordLookSheet } from './RecordLookSheet'
 import { describeSceneryWrite } from './RecordSceneryRow'
@@ -121,7 +123,9 @@ describe('the Record look sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Record' }))
     await waitFor(() => expect(recordLook).toHaveBeenCalled())
     expect(recordLook.mock.calls[0][0]).toMatchObject({ mode: 'CREATE', name: 'Night', scenery: true })
-    expect(await screen.findByText('1 scenery change')).toBeTruthy()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(expect.any(String), { description: '1 scenery change' }),
+    )
   })
 })
 
