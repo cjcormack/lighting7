@@ -1,7 +1,7 @@
 # Programmer tables and fixture colours
 
 > **Document status: DONE — calls decided 2026-10-18; sessions 1 (`4b61df1`), 2 (`2601fff`), 3 (`8712716`), 4 (`c012601`) and 5 (`60814c2`) done.** The visual design is
-> checked in beside this plan at [`tables-colours-design/`](tables-colours-design/INDEX.md), three
+> checked in at [`tables-colours-design/`](../tables-colours-design/INDEX.md), three
 > hand-written artboards. The live copy at <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi> is a
 > convenience, private to Chris; the checked-in files are the authority. Where this plan and the
 > boards disagree, the plan wins on behaviour and the boards on layout and copy.
