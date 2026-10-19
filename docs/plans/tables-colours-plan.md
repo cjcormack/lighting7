@@ -1,6 +1,6 @@
 # Programmer tables and fixture colours
 
-> **Document status: IN PROGRESS — calls decided 2026-10-18; sessions 1 (`4b61df1`) and 2 (`2601fff`) done.** The visual design is
+> **Document status: IN PROGRESS — calls decided 2026-10-18; sessions 1 (`4b61df1`), 2 (`2601fff`) and 3 (`8712716`) done.** The visual design is
 > checked in beside this plan at [`tables-colours-design/`](tables-colours-design/INDEX.md), three
 > hand-written artboards. The live copy at <https://claude.ai/artifact/GmP5uvxEaF2zBKCfYuHmPi> is a
 > convenience, private to Chris; the checked-in files are the authority. Where this plan and the
@@ -123,7 +123,7 @@ One PR per session.
 - `frontend/CLAUDE.md`: §The rail's tabs, §The applied tables and §The programmer's scoped grid are
   rewritten to match.
 
-### Session 3 — colour on the desk
+### Session 3 — colour on the desk — done, `8712716`
 
 - `models/fixturePatches.kt`, `models/fixtureGroups.kt`: a nullable `colour varchar(16)`, additive.
   `models/fixtureColours.kt` holds the ten keys and their validation (400 `COLOUR_UNKNOWN`).

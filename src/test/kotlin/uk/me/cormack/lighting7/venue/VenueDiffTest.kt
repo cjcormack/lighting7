@@ -105,6 +105,21 @@ class VenueDiffTest {
     }
 
     @Test
+    fun `a patch's or a group's colour is drawing only`() {
+        val recoloured = diffTo(records(*universes(universe(u1, 1)), *patches(patch(extra = ""","colour":"red""""))))
+        assertTrue(recoloured.output.isEmpty(), "a colour never changes output")
+        assertEquals(listOf(VenueFacet.OTHER), recoloured.drawing.single().facets)
+
+        val group = { colour: String -> VenueDiff.Key("fixtureGroups", "g") to obj("""{"uuid":"g","name":"Front"$colour}""") }
+        val groupDiff = VenueDiff.compare(
+            records(*universes(universe(u1, 1)), *patches(patch()), group("")),
+            records(*universes(universe(u1, 1)), *patches(patch()), group(""","colour":"lime"""")),
+        )
+        assertTrue(groupDiff.output.isEmpty())
+        assertEquals(VenueChangeKind.GROUP, groupDiff.drawing.single().kind)
+    }
+
+    @Test
     fun `any other table a venue holds is counted, drawing only, and its speed masters never are`() {
         // What a publish freezes and a discard undoes is counted, so a draft never differs uncounted.
         val look = VenueDiff.Key("looks", "l") to obj("""{"uuid":"l","name":"Focus check","rows":[]}""")

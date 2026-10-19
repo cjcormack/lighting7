@@ -30,6 +30,8 @@ export interface BulkPlacementEntry {
   baseYawDeg?: number | null
   basePitchDeg?: number | null
   baseRollDeg?: number | null
+  /** A colour key; null clears it. A venue patch's entry carrying only this is the show's recolour. */
+  colour?: string | null
 }
 
 export interface BulkPlacementResponse {

@@ -9,6 +9,7 @@ import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.CueSpeedMasterDto
 import uk.me.cormack.lighting7.models.DaoBuskBank
@@ -44,6 +45,8 @@ import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoProjects
+import uk.me.cormack.lighting7.models.DaoShowColour
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
@@ -54,6 +57,7 @@ import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.encodeFacet
 import uk.me.cormack.lighting7.models.HideKind
+import uk.me.cormack.lighting7.sync.dto.ShowColourJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
@@ -230,6 +234,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // referenced — a cloth's paint only — and its next push would delete every model texture while its
 // re-export kept the parts naming them. MIN stays at 5: every key defaults.
 //
+// v36 added fixture colours (tables-colours plan D7, D10): `colour` on `FixturePatchJson` and
+// `FixtureGroupJson`, and `showColours/`, a show's recolours of its venue's patches and groups. SUPPORTED
+// moved for v14's reason — a v35 reader would import every patch and group without its colour and write
+// them away on its next push. MIN stays at 5: a missing colour is none. Imported as stored (a key this
+// desk does not know reads as none, and survives the round trip), as a gel code is.
+//
 // v24 made venues sync (venue plan session 4): `project.json`'s `kind`, a show's pin (`venueUuid`,
 // `venueVersion`) and `venueRepo` hint, and `showHides/`. A show's archive holds only its own rows, so
 // its links into the venue — a patch on a venue universe, a group member, a cue event, a scenery change,
@@ -287,7 +297,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 35
+internal const val SUPPORTED_FORMAT_VERSION = 36
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -574,6 +584,7 @@ class ProjectImporter(private val state: State) {
             project.controlSurfaceBindings.forEach { it.delete() }
             DaoShowHides.deleteWhere { DaoShowHides.project eq project.id }
             DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq project.id }
+            DaoShowColours.deleteWhere { DaoShowColours.project eq project.id }
             DaoShowParkReleases.deleteWhere { DaoShowParkReleases.project eq project.id }
 
             project.name = projectJson.name
@@ -690,6 +701,7 @@ class ProjectImporter(private val state: State) {
         val venue = VenueSeed.of(project)
         importShowHides(sourceDir, project)
         importShowOverrides(sourceDir, project)
+        importShowColours(sourceDir, project)
         // Elements first (v20): a Look's, a stack's and a cue's scenery name one, and an element
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
@@ -734,6 +746,46 @@ class ProjectImporter(private val state: State) {
         val strippedCommands = stripCommandRows(project)
         if (strippedCommands > 0) logger.warn("Import: stripped {} row(s) holding a fixture command", strippedCommands)
         return numberClashes
+    }
+
+    /** v36: a stored colour, as the archive has it; one too long for the column is dropped, and said. */
+    private fun importedColour(raw: String?, what: String): String? {
+        val stored = FixtureColours.storable(raw)
+        if (raw != null && raw.isNotBlank() && stored == null) {
+            logger.warn("Import: {}'s colour '{}' is longer than {} characters; dropping it", what, raw, FixtureColours.MAX_LENGTH)
+        }
+        return stored
+    }
+
+    /**
+     * v36: a show's recolours of its venue's patches and groups, stored as the archive has them. One
+     * naming no record of the pinned version is kept, as a hide is; one an archive repeats for a record
+     * (a merge that kept both sides) is kept once.
+     */
+    private fun importShowColours(dir: Path, project: DaoProject) {
+        val seen = HashSet<UUID>()
+        readDir(dir.resolve("showColours")) { json ->
+            val c = canonicalDecode(ShowColourJson.serializer(), json)
+            val uuid = runCatching { UUID.fromString(c.uuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("A show colour's uuid is not a uuid: ${c.uuid}")
+            val recordUuid = runCatching { UUID.fromString(c.recordUuid) }.getOrNull()
+                ?: throw ImportError.invalidArchive("Show colour ${c.uuid} names no record uuid: ${c.recordUuid}")
+            val colour = importedColour(c.colour, "Show colour ${c.uuid}")
+            when {
+                project.kind != ProjectKind.SHOW || project.venueUuid == null ->
+                    logger.warn("Import: show colour {} in a project on no venue; dropping it", c.uuid)
+                colour == null -> Unit
+                !seen.add(recordUuid) ->
+                    logger.warn("Import: show colour {} names {} a second time; dropping it", c.uuid, c.recordUuid)
+                else -> DaoShowColour.new {
+                    this.project = project
+                    this.recordUuid = recordUuid
+                    this.colour = colour
+                    this.uuid = uuid
+                }
+            }
+            uuid to Unit
+        }
     }
 
     /**
@@ -1206,6 +1258,7 @@ class ProjectImporter(private val state: State) {
             lampKelvin = p.lampKelvin
             storedLocate = p.locate
             fittedMedia = p.media
+            colour = importedColour(p.colour, "Fixture patch ${p.uuid}")
             this.uuid = uuid
         }
         p.extraPlacements.forEachIndexed { index, pl ->
@@ -1250,6 +1303,7 @@ class ProjectImporter(private val state: State) {
         val dao = DaoFixtureGroup.new {
             this.project = project
             name = g.name
+            colour = importedColour(g.colour, "Fixture group ${g.uuid}")
             this.uuid = uuid
         }
         g.members.forEach { m ->

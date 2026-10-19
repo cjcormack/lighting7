@@ -2235,6 +2235,63 @@ aim skipped is not pointing there, and is listed as not focused.
   `saveAsPalette` stays position-only; `record_cue` keeps a focus.
 
 
+## Fixture colours
+
+A patch or a group carries **one colour** (tables-colours plan D7): `fixture_patches.colour` and
+`fixture_groups.colour`, a nullable `varchar(16)` holding one of ten keys — `red`, `orange`,
+`yellow`, `lime`, `green`, `cyan`, `pink`, `brown`, `white`, `grey` (`models/fixtureColours.kt`). Five
+hues are **reserved** because the desk already draws something in them — blue (your values), amber (a
+park), violet (an effect), sky (a cue), teal (a Look and the venue) — and are never a colour. The
+stored value is the key; each key's light and dark values are the frontend's. It is **identity
+only**: it marks which fixture a name, a tile or a label is, and nothing builds output from it.
+
+- **Writes.** The patch create and `PUT` (`colour`), the bulk placement route (`colour` is in
+  `METADATA_ONLY_PUT_KEYS`, so a marquee of patches is one request and no rebuild) and the group `PUT`.
+  A key is matched trimmed and in any case, and blank is a clear; anything else is **400
+  `COLOUR_UNKNOWN`**, a reserved hue saying what the desk draws in it, and every bad entry of a bulk
+  request named at once. A colour-only group `PUT` announces `fixturesChanged` rather than reloading
+  the rig.
+- **Reads.** `FixturePatchDto.colour`, `PatchGroupDto.colour` (and the detail's) and the live
+  `GroupSummaryDto.colour` (`GET /groups`, a busk rig tile's embedded group) — the last read from the
+  stored group through `RigScope`, since the loader builds nothing from it. A stored key this desk does
+  not know (an older or newer desk's) reads as none (`FixtureColours.read`) rather than failing, and
+  sync carries it as stored (`docs/sync-engineering.md` §"Version 36 — fixture colours").
+- **No inheritance** (D9). A group's colour marks the group; its members keep their own.
+
+**On a venue** (D10), a venue's patches and groups carry their own colour, versioned with the venue,
+and `VenueDiff` classes a change to one as drawing only (facet `OTHER`), so a show is never held for
+it. A show **recolours** them through `show_colours` (`models/showColours.kt`: project, the record's
+uuid, the colour and a uuid of its own; unique on project and record), and `RigScope.colourOf(patch |
+group)` lays the recolour over the pinned snapshot's row — the scope's `colours` map, read only for a
+show on a venue; `RigScope.own` is untouched. `FixturePatchDto.colourOwner` and
+`PatchGroupDto.colourOwner` say `SHOW` or `VENUE` on a venue record in a show (`colourOwnerOf`).
+Unlike a facet override there is **no base and no drift**: a colour is identity, so the show's stands
+whatever the venue does to its own. The write is the ordinary one — a patch `PUT` naming only
+`colour` (beside the group-membership keys), a bulk entry of only `patchId` and `colour`, a group
+`PUT` of only `colour` — and lands as a `show_colours` row rather than 409 `VENUE_OWNED`; `null`
+deletes it, taking the venue's back, so a show cannot recolour a venue record to none. Any other key
+beside it is still `VENUE_OWNED`. **Hiding the record leaves its recolour dormant**: the record is out
+of the rig, the row stays, and both are back with the record; a hidden record takes no colour write.
+
+- **Extract** moves the rows, so their colours go into the venue with them.
+- **Detach** writes each copy's colour as the show drew it — its recolour, else the venue's, which
+  the copied row already holds — and deletes the recolours (`DetachResultDto.coloursApplied`).
+- **Attach** compares a replaced patch's or group's colour with the target's, and the origin's where
+  there is one: a show colour that differs becomes a `show_colours` row (`AttachWrites.colours`)
+  unless the venue changed it since the origin and the show did not, or the show has none — then the
+  venue's stands, and that change is listed under `drawing`; a colour the show keeps changes nothing
+  drawn and is not listed. A row the show keeps (*Keep mine*) keeps its own colour.
+- **Update** drops a recolour of a record the target version lacks, listed in `dropped` as `COLOUR`.
+- **MCP**: `patch_fixtures` and `place_fixtures` take `colour` (on a venue fixture, `place_fixtures`'
+  colour is the show's recolour and needs no facet), `override_venue_fixtures` takes it per venue
+  fixture, and `edit_groups` per group (a row of only `colour` recolours a venue's group);
+  `get_patch` and `describe_rig` list it. Their problems name `COLOUR_UNKNOWN`, answered as the
+  result's `code`.
+
+`venue/FixtureColoursTest.kt` covers the writes, the venue cases and the sync, clone, Extract, Detach,
+Attach and Update paths; `VenueDiffTest` pins the drawing-only rule; `mcp/McpFixtureColoursTest.kt`
+the tools.
+
 ## The rig scope
 
 `models/RigScope.kt` is the one answer to "which rows make up this project's rig" (venue plan P4).
@@ -2429,8 +2486,8 @@ write, a sort order and an export are still the show's.
 **Hides** (`show_hides`: project, `record_kind` — `PATCH | RIGGING | ELEMENT | REGION | GROUP |
 VIEWPOINT` — and `record_uuid`, unique on the three, with a uuid of its own, exported as
 `showHides/{uuid}.json` from `formatVersion` 24)
-are one of the two changes a show makes to a venue's row (`venue/ShowHides.kt`); the other is a
-patch's facet overrides (§"Facet overrides"). A uuid is a
+are one of the changes a show makes to a venue's row (`venue/ShowHides.kt`); the others are a
+patch's facet overrides (§"Facet overrides") and a patch's or group's recolour (§"Fixture colours"). A uuid is a
 record's identity across versions, so a hide outlives an Update to a version that still holds it.
 Only a venue record hides (409 `NOT_A_VENUE_RECORD` for a standalone show or a show's own row — delete
 that instead), and **nothing the rig still uses hides** (409 `VENUE_HIDE_IN_USE`, naming what holds
@@ -2602,7 +2659,8 @@ recorded — not the side effect of a drag. The fixture sheet (`VenuePatchPanel`
 the Stage editor's) draws a *Venue | This show* switch per facet, the drift note with *Keep mine* and
 *Take venue's*, and the Patch list's *This show* column four chips, lit where overridden and amber
 where drifted. A venue rigging, element, region, group or viewpoint is still only hidden
-(`FU-VENUE-ELEMENT-OVERRIDES`).
+(`FU-VENUE-ELEMENT-OVERRIDES`) — but for a group's colour, which a show recolours (§"Fixture
+colours").
 
 ### Behind, the hold and Update
 
@@ -2760,6 +2818,8 @@ before and after, on `seedShowOnVenue`, whose three overrides must come over app
   row of the same uuid. One that finds none named a record the show hides — only a show group's member
   can, since a hide is refused while anything else uses its record — and goes, as Update drops a link
   to a removed record; the answer lists it. Nothing may be left pointing into a snapshot (checked).
+- **Colours**: each copy takes the colour the show drew it in — its recolour, else the venue's — and
+  the recolours go (§"Fixture colours").
 - **Then** the show's hides and overrides are deleted, and the pin, `venue_repo` and the stage size —
   read from the version until now — are written onto the show.
 - **The pin becomes the show's origin** (venue-attach plan D1): `projects.detached_from_venue_uuid` +
@@ -2831,7 +2891,7 @@ default applied when unanswered.
 - **The pin** is written — `venueUuid`, `venueVersion` and the repo hint from the venue's sync config —
   and the origin cleared. The stage is read from the version from then on.
 - **The replaced rows** are deleted, children first, and the show's parks the venue's now hold.
-- **Then** the overrides with their base, the hides, the releases and every kept row's fresh uuid (its
+- **Then** the overrides with their base, the recolours (§"Fixture colours"), the hides, the releases and every kept row's fresh uuid (its
   placements' too), and the *Take venue's* renames through `RigKeyReferences.rewrite` — cue rows, layer
   targets and ad-hoc effects, Look rows and effects, palette rows, bindings, busk rig cell tiles and
   each item of a selection effect. Scripts are never rewritten.

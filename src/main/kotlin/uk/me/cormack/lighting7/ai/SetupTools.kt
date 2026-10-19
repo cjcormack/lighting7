@@ -564,6 +564,8 @@ class SetupTools(
                             putLocate(p.locate)
                             if (p.stageHidden) put("stageHidden", true)
                             if (p.infrastructure) put("infrastructure", true)
+                            rig.colourOf(p.row)?.let { put("colour", it) }
+                            if (rig.colourOwnerOf(p.project.id, p.uuid) == ColourOwner.SHOW) put("colourOwner", "show")
                             val alsoAt = placementsByPatch[p.id.value].orEmpty()
                             if (alsoAt.isNotEmpty()) {
                                 putJsonArray("alsoAt") {
@@ -696,7 +698,7 @@ class SetupTools(
             groups.filter { it in venueGroups }.forEach {
                 rowProblems += VenueRigGuard.ownedProblem(venueScope, "Group '$it'")
             }
-            val placement = parsePlacement(row, riggingIds, rowProblems)
+            val placement = parsePlacement(row, riggingIds, where, rowProblems)
             if (placement.setsLength && FixtureTypeRegistry.typeInfoForKey(typeKey) != null) {
                 fixedLengthRefusal(typeKey)?.let { rowProblems += it }
             }
@@ -1004,6 +1006,8 @@ class SetupTools(
         val media: Optional<FittedMedia?>?,
         /** The stored locate when the row carried `locate` (empty — `null` or `[]` — clears it). */
         val locate: Optional<List<UnitLocate>>?,
+        /** The fixture's colour when the row carried `colour` (a null value clears it). */
+        val colour: SentColour?,
     ) {
         /**
          * The fixture's lantern, focus and kind once this row lands on [stored] — the REST routes'
@@ -1062,6 +1066,7 @@ class SetupTools(
             lengthM?.let { patch.lengthM = it.value }
             media?.let { patch.fittedMedia = it.value }
             locate?.let { patch.storedLocate = it.value }
+            colour?.let { patch.colour = it.value }
             stageHidden?.let { patch.stageHidden = it }
             alsoAt?.let { list ->
                 // Positional identity: the n-th lantern listed keeps the n-th placement's uuid, so
@@ -1113,7 +1118,7 @@ class SetupTools(
     private fun optionalBoolean(row: JsonObject, name: String, problems: MutableList<String>): Boolean? =
         row[name]?.let { (it as? JsonPrimitive)?.booleanOrNull ?: run { problems += "$name must be a boolean"; null } }
 
-    private fun parsePlacement(row: JsonObject, riggingIds: Map<String, Int>, problems: MutableList<String>): Placement {
+    private fun parsePlacement(row: JsonObject, riggingIds: Map<String, Int>, where: String, problems: MutableList<String>): Placement {
         fun <T> field(name: String, read: (JsonPrimitive) -> T?): Optional<T?>? {
             val element = row[name] ?: return null
             if (element is JsonNull) return Optional(null)
@@ -1169,7 +1174,8 @@ class SetupTools(
         val locate = if ("locate" in row) {
             StoredLocate.parse(row["locate"]).fold({ Optional(it) }, { problems += it.message.orEmpty(); null })
         } else null
-        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, lampWatts, lampKelvin, gel, kind, length, hidden, alsoAt, focusSent, focus, media, locate)
+        val colour = if (FixtureColours.FIELD in row) FixtureColours.parseSent(row[FixtureColours.FIELD], where, problems) else null
+        return Placement(rigging, x, y, z, yaw, pitch, roll, beam, lampWatts, lampKelvin, gel, kind, length, hidden, alsoAt, focusSent, focus, media, locate, colour)
     }
 
     /** `alsoAt`: absent → untouched (null), null or [] → cleared, an array → the new list. */
@@ -1261,14 +1267,14 @@ class SetupTools(
                 }
             }
             if (!seen.add(key)) rowProblems += "key '$key' is listed twice"
-            val placement = parsePlacement(row, riggingIds, rowProblems)
+            val placement = parsePlacement(row, riggingIds, "placements[$index] ('$key')", rowProblems)
             if (placement.setsLength && stored != null) fixedLengthRefusal(stored.typeKey)?.let { rowProblems += it }
             if (placement.setsLamp && stored != null) lamplessRefusal(stored.typeKey)?.let { rowProblems += it }
             val focusWrite = if (rowProblems.isEmpty() && stored != null) {
                 placement.resolveFocus(stored.typeKey, stored.focus, stored.kindOverride, rowProblems)
             } else null
             if (rowProblems.isEmpty()) parsed += Triple(stored!!.id, placement, focusWrite!!)
-            else problems += rowProblems.map { "placements[$index] ('$key'): $it" }
+            else problems += rowProblems.map { if (VenueRigGuard.codeOf(listOf(it)) != null) it else "placements[$index] ('$key'): $it" }
         }
         val venuePlacements = if (venueRows.isEmpty()) emptyList() else transaction(state.database) {
             val show = DaoProject[project.id]
@@ -1282,6 +1288,8 @@ class SetupTools(
             val show = DaoProject[project.id]
             for (v in venuePlacements) {
                 for (value in v.values) ShowOverrides.put(show, ShowOverrides.target(show, v.patchId), value.facet, value)
+                // A venue fixture's colour is the show's recolour of it (tables-colours plan D10).
+                v.colour?.let { ShowColours.put(show.id, DaoFixturePatch[v.patchId].uuid, it.value) }
             }
             parsed.map { (patchId, placement, focusWrite) ->
                 val patch = DaoFixturePatch.findById(patchId)!!

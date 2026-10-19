@@ -35,6 +35,8 @@ import uk.me.cormack.lighting7.models.DaoLookScenery
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
+import uk.me.cormack.lighting7.models.DaoShowColour
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowOverride
@@ -225,6 +227,18 @@ class VenueUpdate(private val state: State) {
             dropped += UpdateItemDto("HIDE", name, "Your hide of ${hide.recordKind.label()} $name: v${pin.to} has no such ${hide.recordKind.label()}", hide.recordUuid.toString())
         }
 
+        // Recolours of records the target lacks: there is nothing left to colour. A record is a patch or a group.
+        val colours = DaoShowColour.find { DaoShowColours.project eq project.id }.toList()
+        val droppedColours = colours.filter { c ->
+            recordIn(pin.toSnapshot, HideKind.PATCH, c.recordUuid) == null && recordIn(pin.toSnapshot, HideKind.GROUP, c.recordUuid) == null
+        }
+        for (c in droppedColours) {
+            val name = recordIn(pin.fromSnapshot, HideKind.PATCH, c.recordUuid)
+                ?: recordIn(pin.fromSnapshot, HideKind.GROUP, c.recordUuid)
+                ?: c.recordUuid.toString()
+            dropped += UpdateItemDto("COLOUR", name, "Your colour ${c.colour} for $name: v${pin.to} has no such fixture or group", c.recordUuid.toString())
+        }
+
         // Overrides judged against the target: drift is kept (or taken back by a decision), a missing subject dropped.
         val drifts = ShowOverrides.drift(project, pin.toSnapshot)
         val fromPatches = DaoFixturePatch.find { DaoFixturePatches.project eq pin.fromSnapshot }.associateBy { it.uuid }
@@ -266,8 +280,9 @@ class VenueUpdate(private val state: State) {
                 dropLink(link, rowId, target, pin, dropped, blockers)
             }
         }
-        // The dropped hides and overrides go once the links are clear of them.
+        // The dropped hides, recolours and overrides go once the links are clear of them.
         droppedHides.forEach { it.delete() }
+        droppedColours.forEach { it.delete() }
         if (missing.isNotEmpty()) {
             DaoShowOverride.find { DaoShowOverrides.project eq project.id }
                 .filter { o -> missing.any { it.recordUuid == o.recordUuid && it.facet == o.facet } }
@@ -555,7 +570,7 @@ data class VenueRunAgainstRequest(val on: Boolean)
 /** One line of the review: a record carried over, dropped, or blocking. */
 @Serializable
 data class UpdateItemDto(
-    /** `OVERRIDE | HIDE | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
+    /** `OVERRIDE | HIDE | COLOUR | ADDITION | PARK | RELEASE | LINK | KEY_CLASH | UNIVERSE_REMOVED`. */
     val kind: String,
     val name: String,
     val detail: String,

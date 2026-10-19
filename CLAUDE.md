@@ -288,8 +288,9 @@ version's, less its **hides** (`show_hides`, six record kinds) and less the vers
 `RigScope` (`models/RigScope.kt`, `VenueLayer`) is the one place that says so, `RigScope.own` is
 still the show's own. Keys and names are one namespace (`KEY_TAKEN_BY_VENUE`; unhiding over a show's
 reuse is `KEY_TAKEN_BY_SHOW`); a write through a show to a venue's row is 409 `VENUE_OWNED`, never a
-404 (`venue/VenueRigGuard.kt`) — a show makes two changes to one: it hides it, and it makes a venue
-patch's **facets** its own (session 5, `show_overrides`): Address, Position, Focus, Media, each whole,
+404 (`venue/VenueRigGuard.kt`) — a show makes three changes to one: it hides it, it recolours a venue
+patch or group (`show_colours`, tables-colours plan D10: no base and no drift, laid over the version by
+`RigScope.colourOf`, dormant under a hide), and it makes a venue patch's **facets** its own (session 5, `show_overrides`): Address, Position, Focus, Media, each whole,
 identity (name, key, type, head) still the venue's, laid over the version's patch by
 `RigScope.effective` — so the loader, the Patch list, the Stage view and `describe_rig` all read the
 overridden rig. Each override records the venue's value as its `base`; the pinned version's value
@@ -301,7 +302,7 @@ override of a venue record resolves against the **venue's** id (P4), so a univer
 same everywhere and is still set through a show. **Extract** moves a show's rig into a new venue,
 publishes v1 and pins the show, in one transaction, its dry run that run rolled back
 (`venue/VenueExtract.kt`). A show's archive (`formatVersion` 24, session 4) is its own rows, its
-hides (`showHides/`) and its pin in `project.json` (`venueUuid`, `venueVersion`, a `venueRepo` hint);
+hides (`showHides/`), its recolours (`showColours/`, `formatVersion` 36) and its pin in `project.json` (`venueUuid`, `venueVersion`, a `venueRepo` hint);
 the importer seeds its uuid maps from the pinned snapshot, and a show whose pinned version the desk
 lacks is 409 **`VENUE_MISSING`** — on import, add-remote-project, clone and pull — naming the venue and
 its repo, so a fresh desk imports the venue's repo first. A clone keeps the pin; a show with a
@@ -309,7 +310,7 @@ missing version cannot be made current and, current at startup, loads no rig
 (`venue/VenuePins.kt`). **Detach** (session 7, `venue/VenueDetach.kt`, D9) flattens a show into a
 standalone one: the effective rig at its **pin** — overrides applied, hides and Preset seating left
 out — written into its own rows with every uuid kept, every `VenueLinks` link re-pointed onto them, the
-venue's machine overrides of them **copied** to the show's id (P4), its hides, overrides and pin gone;
+venue's machine overrides of them **copied** to the show's id (P4), its hides, overrides and pin gone, its recolours written into the copies;
 the venue is untouched, and a detached show syncs as a standalone show with no `formatVersion` change.
 The pin becomes the show's **origin** (`projects.detached_from_venue_uuid` + `.detached_from_version`,
 venue-attach plan D1; `project.json`'s `detachedFromVenueUuid` / `detachedFromVersion`, also no
@@ -589,6 +590,7 @@ Venue plan sessions 3–7; REST only, no WS operation (`venue.hold` is outbound 
 - `GET /api/rest/projects/{id}/venue/update?to=n` + `POST …/venue/update` `{to?, decisions, dryRun?}` - *Update* (session 6, `venue/VenueUpdate.kt`): the review — the hall's changes `{output, drawing}` beside `carryOver`, `drift` (an override the target moved under, kept unless answered `TAKE_VENUES`), `dropped` (hides, overrides and links whose record the target lacks), `decisions` (an address overlap the update introduces: `KEEP_BOTH | READDRESS_MINE | HIDE_VENUES | REMOVE_MINE`, P8), `blockers` (a key or name clash with the show's own, a show patch on a removed universe) and `deadReferences` (every key the update removes that the show still names — cue rows, layers and effects, Looks, palettes, bindings and scripts) — is the update rolled back; the `POST` moves the pin and re-points every `VenueLinks` link in one transaction. 409 `VENUE_UPDATE_UNDECIDED` / `VENUE_UPDATE_BLOCKED` / `VENUE_UP_TO_DATE`, 400 `VENUE_UPDATE_INVALID`. Both roles; a live show reloads, which lifts its hold
 - `POST /api/rest/projects/{id}/venue/run-against` `{on}` - Lift the hold for this session, or put it back (current project only, both roles; 409 `VENUE_NOT_BEHIND`); answers the hold. Runtime only: kept by a reload at the same pin and installed version, dropped by another project, a moved pin, a newer version or a restart
 - Sync, export, import and clone take a show on a venue (session 4): `POST /projects/{id}/export` writes its own rows, hides and pin; `POST /projects/import`, `POST /cloud-sync/import` and `POST /projects/{id}/clone` answer 409 `VENUE_MISSING` (`{error, code}`) for a show whose pinned version is not on the desk, and so does `POST /projects/{id}/set-current` for one already here; `POST /projects/{id}/sync/run` refuses a pull that would pin one (`VENUE_MISSING`, before the working tree moves). A clone keeps the pin
+- `colour` on the patch `PUT`, its bulk path (`PUT .../patches/placements`) and the group `PUT` — one of ten keys, 400 `COLOUR_UNKNOWN` otherwise, every bad entry at once (`models/fixtureColours.kt`). Through a show onto a venue's patch or group, a body naming only `colour` writes the show's recolour (`show_colours`) rather than 409 `VENUE_OWNED`, and `null` takes the venue's back; `FixturePatchDto` and `PatchGroupDto` carry `colour` and, on a venue record, `colourOwner` (`SHOW | VENUE`); `GroupSummaryDto` carries `colour`. See `docs/fixtures-engineering.md` §"Fixture colours"
 - `PUT /api/rest/projects/{id}/patches/{pid}/hidden` `{hidden}` + `GET .../patches/hidden` - Hide a venue patch in a show, or bring it back; the hidden ones as Patch list rows. `GET /projects/{id}/hides` and `PUT .../hides/{KIND}/{uuid}` `{hidden}` do it for all six kinds (`PATCH | RIGGING | ELEMENT | REGION | GROUP | VIEWPOINT`). 409 `NOT_A_VENUE_RECORD`, `VENUE_HIDE_IN_USE` (something in the show still uses it), `KEY_TAKEN_BY_SHOW`. `FixturePatchDto`, `PatchGroupDto` and `UniverseConfigDto` carry `owner` (`SHOW | VENUE`)
 - `PUT /api/rest/projects/{id}/patches/{pid}/facets/{facet}` `{value | null}` - Make one facet of a venue patch this show's own (session 5) — `ADDRESS | POSITION | FOCUS | MEDIA`, the whole facet (placements named by the venue placement's uuid), recording the pinned version's value as `base` when new — or take the venue's back with `null` (also *Take venue's*). Checked like the patch write it stands for, every problem at once: 400 `FACET_INVALID` / `FACET_UNKNOWN`; an address overlap is allowed and answered in `warnings` (P8). 409 `NOT_A_VENUE_RECORD` (a show's own patch, a standalone show, a venue), `FACET_PATCH_HIDDEN`; a version is `VENUE_VERSION_READ_ONLY`. A stored show write an operator may make. `POST .../facets/{facet}/keep-mine` is *Keep mine*: base := the venue's current value (409 `FACET_NOT_OVERRIDDEN`). Both answer `{patch, changed, warnings}`; `FixturePatchDto.facets` lists a venue patch's overridden facets `{facet, value, venue, drifted, base?, dormant}`, its fields already the overridden ones, and `universeConfigUuid` (also on `UniverseConfigDto`, as `uuid`). The patch PUT on a venue patch stays `VENUE_OWNED`, naming this route; the Stage editor's drag of one is not turned into a Position override
 

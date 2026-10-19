@@ -130,6 +130,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
                 return@withProject
             }
+            val colour = FixtureColours.normalise(request.colour).getOrElse {
+                call.respond(HttpStatusCode.BadRequest, colourError(it.message))
+                return@withProject
+            }
             val normalisedGelCode = normaliseGelCode(request.gelCode)
             val normalisedKindOverride = try {
                 normaliseKindOverride(request.kindOverride)
@@ -241,6 +245,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     this.lampKelvin = request.lampKelvin
                     this.stageHidden = request.stageHidden
                     this.infrastructure = request.infrastructure
+                    this.colour = colour
                 }
                 if (!focusWrite.focus.isEmpty) patch.focus = focusWrite.focus
                 if (requestedMedia != null) patch.fittedMedia = requestedMedia
@@ -336,6 +341,13 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     return@withProject
                 }
             } else null
+            val colourSent = FixtureColours.FIELD in body
+            val colour: String? = if (colourSent) {
+                FixtureColours.parse(body[FixtureColours.FIELD]).getOrElse {
+                    call.respond(HttpStatusCode.BadRequest, colourError(it.message))
+                    return@withProject
+                }
+            } else null
 
             var sweptCellTiles = 0
             var infrastructureFlipped = false
@@ -345,12 +357,12 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val rig = RigScope.of(project)
                 val found = DaoFixturePatch.findById(resource.patchId)?.takeIf { rig.ownerOf(it.project.id) != null }
                     ?: return@transaction Pair<FixturePatchDto?, String?>(null, "Patch not found")
-                // A venue patch in a show: its group membership is the show group's to change (D12), so
-                // a body naming only `addToGroup` / `removeFromGroupId` goes ahead; anything else
-                // changes the venue's row and is refused.
-                if (rig.ownerOf(found.project.id) == RigOwner.VENUE &&
-                    (body.keys.any { it !in PATCH_MEMBERSHIP_KEYS } || rig.isHidden(HideKind.PATCH, found.uuid))
-                ) {
+                // A venue patch in a show: its group membership is the show group's to change (D12), and
+                // its colour the show's recolour (tables-colours plan D10), so a body naming only those
+                // goes ahead; anything else changes the venue's row and is refused.
+                val venuePatch = rig.ownerOf(found.project.id) == RigOwner.VENUE
+                val venueMayTake = body.keys.all { it in PATCH_MEMBERSHIP_KEYS } || ShowColours.isRecolour(body.keys, PATCH_MEMBERSHIP_KEYS)
+                if (venuePatch && (!venueMayTake || rig.isHidden(HideKind.PATCH, found.uuid))) {
                     throw VenueRigGuard.venueOwned(rig, "Patch '${found.key}'")
                 }
                 val patch = found
@@ -457,6 +469,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                 }
                 if ("media" in body) patch.fittedMedia = parsedMedia
+                if (colourSent) {
+                    if (venuePatch) ShowColours.put(project.id, patch.uuid, colour) else patch.colour = colour
+                }
                 // Non-nullable column: an explicit JSON null is read as "show it".
                 if ("stageHidden" in body) {
                     patch.stageHidden = body["stageHidden"].nullableBoolean() ?: false
@@ -579,6 +594,9 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
             val headNumbersById = mutableMapOf<Int, Int?>()
             // Likewise: only the entries that carry `media`, a null clearing it.
             val mediaById = mutableMapOf<Int, FittedMedia?>()
+            // And `colour`. Every bad colour is named at once, so a marquee of patches is refused once.
+            val colourById = mutableMapOf<Int, String?>()
+            val colourProblems = mutableListOf<String>()
             for (entry in request.updates) {
                 val patchId = entry["patchId"].nullableInt()
                 if (patchId == null) {
@@ -655,6 +673,16 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     }
                     mediaById[patchId] = parsed.getOrThrow()
                 }
+                if (FixtureColours.FIELD in entry) {
+                    val parsed = FixtureColours.parse(entry[FixtureColours.FIELD])
+                    val colourError = parsed.exceptionOrNull()?.message
+                    if (colourError != null) {
+                        if (request.atomic) colourProblems += "patch $patchId: $colourError"
+                        else failures.add(BulkPlacementFailure(patchId, colourError))
+                        continue
+                    }
+                    colourById[patchId] = parsed.getOrThrow()
+                }
                 if ("extraPlacements" in entry) {
                     val parsed = parseExtraPlacements(entry["extraPlacements"])
                     val placementError = parsed.exceptionOrNull()?.message
@@ -670,6 +698,10 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 }
                 prepared.add(patchId to entry)
             }
+            if (colourProblems.isNotEmpty()) {
+                call.respond(HttpStatusCode.BadRequest, colourError(colourProblems.joinToString("; ")))
+                return@withProject
+            }
 
             val outcome = transaction(state.database) {
                 // One query for every patch, indexed by id — not findById in a loop.
@@ -677,10 +709,16 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 val rig = RigScope.of(project)
                 val byId = rig.own.patches(DaoFixturePatches.id inList ids).associateBy { it.id.value }
                 // A venue patch in the batch is the venue's (`VENUE_OWNED`): the whole request when
-                // atomic, that entry otherwise — as an unknown id is.
-                val venueOwned = rig.patches(DaoFixturePatches.id inList ids)
+                // atomic, that entry otherwise — as an unknown id is. An entry carrying only a colour is
+                // the show's recolour of it (tables-colours plan D10), which goes ahead.
+                val (venueRecolours, venuePatches) = rig.patches(DaoFixturePatches.id inList ids)
                     .filter { rig.ownerOf(it.project.id) == RigOwner.VENUE }
-                    .associate { it.id.value to VenueRigGuard.venueOwned(rig, "Patch '${it.key}'") }
+                    .partition { p ->
+                        prepared.filter { it.first == p.id.value }
+                            .all { (_, e) -> ShowColours.isRecolour(e.keys, setOf("patchId")) }
+                    }
+                val recolourById = venueRecolours.associateBy { it.id.value }
+                val venueOwned = venuePatches.associate { it.id.value to VenueRigGuard.venueOwned(rig, "Patch '${it.key}'") }
                 if (request.atomic) venueOwned.values.firstOrNull()?.let { throw it }
 
                 // Resolve each DISTINCT rigging once; resolveRiggingForProject does a
@@ -713,6 +751,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                 for ((patchId, entry) in prepared) {
                     val target = byId[patchId]
                     if (target == null) {
+                        if (patchId in recolourById) continue
                         fatal.add(BulkPlacementFailure(patchId, venueOwned[patchId]?.message ?: "Patch not found in this project"))
                         continue
                     }
@@ -785,15 +824,20 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     fatal += headNumberClashes(project, headNumbersById, rejected = refused)
                 }
                 if (request.atomic && fatal.isNotEmpty()) {
-                    return@transaction BulkOutcome(null, fatal.first().error, emptyList(), emptyList())
+                    return@transaction BulkOutcome(null, fatal.first().error, emptyList(), emptyList(), emptyList())
                 }
                 failures.addAll(fatal)
                 val rejected = fatal.map { it.patchId }.toSet()
 
                 val written = mutableListOf<DaoFixturePatch>()
+                val recoloured = LinkedHashMap<Int, DaoFixturePatch>()
                 val warnings = mutableListOf<String>()
                 for ((patchId, entry) in prepared) {
                     if (patchId in rejected) continue
+                    recolourById[patchId]?.let { venuePatch ->
+                        ShowColours.put(project.id, venuePatch.uuid, colourById[patchId])
+                        recoloured[patchId] = venuePatch
+                    }
                     val patch = byId[patchId] ?: continue
 
                     if ("riggingUuid" in entry) {
@@ -826,6 +870,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                         patch.stageHidden = entry["stageHidden"].nullableBoolean() ?: false
                     }
                     if (patchId in mediaById) patch.fittedMedia = mediaById[patchId]
+                    if (patchId in colourById) patch.colour = colourById[patchId]
                     placementInputsById[patchId]?.let { inputs ->
                         applyExtraPlacements(patch, inputs, placementRiggingsById.getValue(patchId))
                     }
@@ -857,7 +902,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
                     placements.mapNotNullTo(warnings) { it.offTheEndWarning(patch.key) }
                     patch.toDto(placements, rig)
                 }
-                BulkOutcome(updated, null, failures.toList(), warnings)
+                BulkOutcome(updated, null, failures.toList(), warnings, recoloured.values.map { it.toDto(rig = rig) })
             }
 
             if (outcome.error != null) {
@@ -883,7 +928,7 @@ internal fun Route.routeApiRestProjectPatches(state: State) {
 
             call.respond(
                 BulkPlacementResponse(
-                    updated = updated,
+                    updated = updated + outcome.recoloured,
                     failed = outcome.failures,
                     warnings = outcome.warnings,
                 ),
@@ -996,6 +1041,8 @@ private data class BulkOutcome(
     val error: String?,
     val failures: List<BulkPlacementFailure>,
     val warnings: List<String>,
+    /** Venue patches the show recoloured: in the answer, but no part of the live patch metadata. */
+    val recoloured: List<FixturePatchDto>,
 )
 
 @Serializable
@@ -1094,6 +1141,14 @@ data class FixturePatchDto(
      * venue patch the show takes whole. The fields above are already the overridden ones.
      */
     val facets: List<ShowOverrides.FacetStateDto> = emptyList(),
+    /**
+     * The unit's colour (tables-colours plan D7), one of `FixtureColours.KEYS`, as this rig draws it — a
+     * venue patch's recolour by the show when it has one. Null is none, and so is a key this desk does
+     * not know. Identity only: never output.
+     */
+    val colour: String? = null,
+    /** On a venue patch in a show: whether [colour] is the show's recolour or the venue's own (D10). Null otherwise. */
+    val colourOwner: ColourOwner? = null,
 )
 
 @Serializable
@@ -1143,6 +1198,8 @@ data class CreatePatchRequest(
     /** Only for a type with loadable settings; see [FixturePatchDto.media]. Raw JSON so it is
      *  checked by the same parser as `PUT`'s, every problem at once. */
     val media: JsonElement? = null,
+    /** One of `FixtureColours.KEYS`, or null for none; anything else is 400 `COLOUR_UNKNOWN`. */
+    val colour: String? = null,
 ) {
     fun focus() = LanternFocus(
         lanternType?.trim()?.takeIf { it.isNotEmpty() }, zoomDeg, lampRotationDeg, shutters, gateRotationDeg, iris, focusSoftness,
@@ -1190,6 +1247,9 @@ internal val METADATA_ONLY_PUT_KEYS = setOf(
     // The lamp (its power and colour temperature) — drawn, never built from.
     "lampWatts",
     "lampKelvin",
+    // The unit's colour (tables-colours plan D7) — drawn beside its name, never built from. The one key
+    // here a show may write onto a venue patch, as its own recolour (D10).
+    FixtureColours.FIELD,
 )
 
 /**
@@ -1264,6 +1324,8 @@ internal fun DaoFixturePatch.toDto(
         owner = rig.ownerOf(project.id) ?: RigOwner.SHOW,
         universeConfigUuid = e.universeConfig.uuid.toString(),
         facets = ShowOverrides.statesOf(rig, this, placements),
+        colour = rig.colourOf(this),
+        colourOwner = rig.colourOwnerOf(project.id, uuid),
     )
 }
 
@@ -1364,10 +1426,13 @@ internal fun headNumberTaken(number: Int, holder: DaoFixturePatch): String =
     "Head number $number is already '${holder.displayName}' (${holder.key})"
 
 /**
- * The patch PUT keys that change a show group's membership, not the patch (venue plan D12): the only
- * keys a show's PUT may carry for a venue patch.
+ * The patch PUT keys that change a show group's membership, not the patch (venue plan D12): with a
+ * colour (`ShowColours.isRecolour`), the only keys a show's PUT may carry for a venue patch.
  */
 internal val PATCH_MEMBERSHIP_KEYS = setOf("addToGroup", "removeFromGroupId")
+
+/** A refused colour: 400 `COLOUR_UNKNOWN`. */
+internal fun colourError(message: String?) = ErrorResponse(message ?: "Invalid colour", FixtureColours.CODE_UNKNOWN)
 
 /**
  * The bulk route's head-number check: every entry in [assigned] (patch id → its new number, null

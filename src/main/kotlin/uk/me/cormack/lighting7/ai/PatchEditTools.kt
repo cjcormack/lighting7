@@ -28,8 +28,11 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
+import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
+import uk.me.cormack.lighting7.models.SentColour
+import uk.me.cormack.lighting7.models.ShowColours
 import uk.me.cormack.lighting7.models.reorderGroupMembers
 import uk.me.cormack.lighting7.routes.deleteOwnPatch
 import uk.me.cormack.lighting7.routes.deleteOwnUniverse
@@ -233,11 +236,24 @@ internal class PatchEditTools(private val state: State) {
         val members: List<String>?,
         val add: List<String>,
         val remove: List<String>,
+        /** The colour the row sends, when it sends one (a null value clears it). */
+        val colour: SentColour? = null,
     ) {
         val where get() = "groups[$index] ('$name')"
+
+        /** A row that only colours its group — the one change a show may make to a venue's (D10). */
+        val colourOnly get() = colour != null && newName == null && members == null && add.isEmpty() && remove.isEmpty()
     }
 
-    private class GroupDone(val name: String, val newName: String?, val created: Boolean, val members: List<String>)
+    private class GroupDone(
+        val name: String,
+        val newName: String?,
+        val created: Boolean,
+        val members: List<String>,
+        val colour: String?,
+        /** A venue group's colour is this show's recolour of it, not the venue's. */
+        val recoloured: Boolean = false,
+    )
 
     private class Edited(
         val groups: List<GroupDone>,
@@ -254,7 +270,7 @@ internal class PatchEditTools(private val state: State) {
             val row = element as? JsonObject ?: run { problems += "groups[$i]: not an object"; return@mapIndexedNotNull null }
             val name = string(row, "name")?.trim().orEmpty()
             val where = "groups[$i] ('$name')"
-            val rowProblems = unknownFields(row, listOf("name", "newName", "members", "add", "remove"), where).toMutableList()
+            val rowProblems = unknownFields(row, listOf("name", "newName", "members", "add", "remove", "colour"), where).toMutableList()
             val newName = string(row, "newName")?.trim()
             val members = stringList(row, "members", where, rowProblems)
             val add = stringList(row, "add", where, rowProblems).orEmpty().distinct()
@@ -270,11 +286,13 @@ internal class PatchEditTools(private val state: State) {
             }
             members?.let { duplicates(it).forEach { k -> rowProblems += "$where: '$k' is listed twice in members" } }
             add.filter { it in remove }.forEach { rowProblems += "$where: '$it' is in both add and remove" }
-            if (newName == null && members == null && add.isEmpty() && remove.isEmpty()) {
-                rowProblems += "$where: nothing to change — send newName, members, add or remove"
+            val colourSent = FixtureColours.FIELD in row
+            val colour = if (colourSent) FixtureColours.parseSent(row[FixtureColours.FIELD], where, rowProblems) else null
+            if (newName == null && members == null && add.isEmpty() && remove.isEmpty() && !colourSent) {
+                rowProblems += "$where: nothing to change — send newName, members, add, remove or colour"
             }
             problems += rowProblems
-            if (rowProblems.isEmpty()) GroupRow(i, name, newName?.takeIf { it.isNotEmpty() }, members, add, remove) else null
+            if (rowProblems.isEmpty()) GroupRow(i, name, newName?.takeIf { it.isNotEmpty() }, members, add, remove, colour) else null
         }
         val names = list.orEmpty().mapNotNull { (it as? JsonObject)?.let { row -> string(row, "name")?.trim() }?.takeIf(String::isNotEmpty) }
         duplicates(names).forEach { problems += "group '$it' is listed twice" }
@@ -290,11 +308,14 @@ internal class PatchEditTools(private val state: State) {
 
             val existing = HashMap<Int, List<DaoFixtureGroupMember>>()
             val creates = mutableListOf<GroupRow>()
+            // A venue group's colour is this show's to recolour (tables-colours plan D10), and nothing else of it.
+            val venueRecolours = mutableListOf<Pair<GroupRow, DaoFixtureGroup>>()
             rows.forEach { row ->
                 val group = own[row.name]
                 when {
                     group != null -> existing[row.index] = rig.members(group).sortedBy { it.sortOrder }
                         .filter { it.readValues[DaoFixtureGroupMembers.fixturePatch].value in keyById }
+                    row.name in inRig && row.colourOnly -> venueRecolours += row to inRig.getValue(row.name)
                     row.name in inRig -> problems += VenueRigGuard.ownedProblem(rig, "Group '${row.name}'")
                     row.newName == null && row.remove.isEmpty() && (row.members != null || row.add.isNotEmpty()) -> creates += row
                     else -> problems += "${row.where}: this project has no group by that name " +
@@ -330,20 +351,40 @@ internal class PatchEditTools(private val state: State) {
                 DaoFixtureGroups.update({ DaoFixtureGroups.id eq id }) { it[DaoFixtureGroups.name] = value }
             }
             val groups = rows.map { row ->
+                venueRecolours.firstOrNull { it.first.index == row.index }?.second?.let { venueGroup ->
+                    val sent = row.colour?.value
+                    ShowColours.put(project.id, venueGroup.uuid, sent)
+                    val members = rig.members(venueGroup).sortedBy { it.sortOrder }
+                        .mapNotNull { keyById[it.readValues[DaoFixtureGroupMembers.fixturePatch].value] }
+                    val colour = FixtureColours.read(sent ?: venueGroup.colour)
+                    return@map GroupDone(row.name, null, created = false, members, colour, recoloured = sent != null)
+                }
                 val group = own[row.name] ?: DaoFixtureGroup.new {
                     this.project = project
                     name = row.name
                 }
+                row.colour?.let { group.colour = it.value }
                 val before = existing[row.index].orEmpty()
                 val members = editMembers(group, before, row, patchesByKey, keyById)
-                GroupDone(row.name, row.newName.takeIf { row.index in existing }, created = row.index !in existing, members)
+                GroupDone(row.name, row.newName.takeIf { row.index in existing }, created = row.index !in existing, members, FixtureColours.read(group.colour))
             }
             val touched = RigKeyReferences.rewrite(project, emptyMap(), renames, emptyList(), patchesByKey.keys)
             if (dryRun) TransactionManager.current().rollback()
             Edited(groups, touched, scripts)
         } ?: return rejected(problems)
 
-        if (!dryRun) announceRewrite(target, done.touched)
+        if (!dryRun) {
+            // A colour is never built from, so a call that only colours groups announces the lists
+            // rather than rebuilding the live rig, as the REST group PUT does.
+            if (rows.all { it.colourOnly }) {
+                if (target.isCurrent) state.show.fixtures.announceFixturesChanged()
+                state.show.fixtures.patchListChanged()
+            } else {
+                announceRewrite(target, done.touched)
+            }
+            // A busk rig tile embeds its group's colour.
+            if (rows.any { it.colour != null }) state.show.fixtures.buskRigChanged()
+        }
         return success(
             "${if (dryRun) "Would edit" else "Edited"} ${done.groups.size} group(s)",
             buildJsonObject {
@@ -355,6 +396,8 @@ internal class PatchEditTools(private val state: State) {
                             g.newName?.let { put("renamedFrom", g.name) }
                             if (g.created) put("created", true)
                             putJsonArray("members") { g.members.forEach { add(it) } }
+                            g.colour?.let { put("colour", it) }
+                            if (g.recoloured) put("colourOwner", "show")
                         }
                     }
                 }

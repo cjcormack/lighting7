@@ -57,4 +57,6 @@ val ALL_TABLES: List<Table> = listOf(
     DaoShowOverrides,
     // A show's releases of venue parks (venue parks, PR 2); keyed by universe and channel, no FK into the rig.
     DaoShowParkReleases,
+    // A show's recolours of venue patches and groups (tables-colours plan D10); keyed by record uuid.
+    DaoShowColours,
 )

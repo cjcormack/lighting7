@@ -19,6 +19,8 @@ import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.fx.group.clearFx
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -30,11 +32,12 @@ internal fun Route.routeApiRestGroups(state: State) {
         get<GroupsResource> {
             val currentProject = state.projectManager.currentProject
             val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
+            val colours = groupColoursByName(state, currentProject.id.value)
 
             val groups = state.show.fixtures.groups.map { group ->
                 val capabilities = group.detectCapabilities().toSet()
                 val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                group.toGroupSummaryDto(looks.compatibleIdsFor(capabilities))
+                group.toGroupSummaryDto(looks.compatibleIdsFor(capabilities), colours[group.name])
             }
             call.respond(groups)
         }
@@ -188,6 +191,12 @@ data class GroupSummaryDto(
      * effects and a spread over it run in, which the Groups list draws its member rows in.
      */
     val memberKeys: List<String> = emptyList(),
+    /**
+     * The group's colour (tables-colours plan D7) as the show's rig draws it — a venue group's recolour by
+     * the show when it has one; null is none. Read from the stored group, since the loader builds nothing
+     * from it.
+     */
+    val colour: String? = null,
 )
 
 @Serializable
@@ -310,9 +319,16 @@ data class DistributionStrategiesResponse(
 )
 
 // Helper functions
+/** Every group's colour in [projectId]'s rig, by name, as the live group list carries it. */
+private fun groupColoursByName(state: State, projectId: Int): Map<String, String> = transaction(state.database) {
+    val rig = RigScope.of(projectId)
+    rig.groups().mapNotNull { g -> rig.colourOf(g)?.let { g.name to it } }.toMap()
+}
+
 /** The group's summary — what the group list answers and what a busk rig tile embeds. */
-internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = emptyList()): GroupSummaryDto {
+internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = emptyList(), colour: String? = null): GroupSummaryDto {
     return GroupSummaryDto(
+        colour = colour,
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),

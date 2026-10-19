@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.venue
 
 import org.jetbrains.exposed.v1.core.dao.id.EntityID
+import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.RigOwner
 import uk.me.cormack.lighting7.models.RigScope
 
@@ -10,9 +11,10 @@ import uk.me.cormack.lighting7.models.RigScope
  *
  * - **A venue's row is the venue's.** A write through a show that names one by id — a `PUT`, a
  *   `DELETE`, a placement, a membership — is refused with 409 [CODE_VENUE_OWNED], not a 404: the
- *   row is in the show's rig, it is just not the show's to change. A show makes two changes to a
- *   venue row: it hides one (`PUT …/hidden`), and it overrides a venue patch's facets — address,
- *   position, focus, media — through their own route (`PUT …/facets/{facet}`, `ShowOverrides`).
+ *   row is in the show's rig, it is just not the show's to change. A show makes three changes to a
+ *   venue row: it hides one (`PUT …/hidden`), it overrides a venue patch's facets — address,
+ *   position, focus, media — through their own route (`PUT …/facets/{facet}`, `ShowOverrides`), and it
+ *   recolours a venue patch or group, a write naming only `colour` (`ShowColours`).
  * - **Keys are one namespace.** A show's own record may not take the key — or, for every kind the rig
  *   checks a clash for, the name or head number — of a venue record in its rig: 409
  *   [CODE_KEY_TAKEN_BY_VENUE]. A hidden venue record is not in the rig, so a show may reuse its key
@@ -82,13 +84,16 @@ object VenueRigGuard {
 
     /** [ownedProblem]'s hint for a venue fixture: what a show may change about one, and with which tool. */
     const val VENUE_FIXTURE_HINT =
-        " A show can make a venue fixture's address, position, focus or media its own, or hide it, with " +
-            "override_venue_fixtures (place_fixtures then edits the position, focus and media it owns); its name, " +
-            "key, type, head and kind are the venue's."
+        " A show can make a venue fixture's address, position, focus or media its own, recolour it, or hide it, with " +
+            "override_venue_fixtures (place_fixtures then edits the position, focus and media it owns, and its colour); " +
+            "its name, key, type, head and kind are the venue's."
 
-    /** The code a list of problems carries when any is a venue rule's, for the tool's `code` field. */
+    /**
+     * The code a list of problems carries, for the tool's `code` field: a venue rule's first, then an
+     * unknown colour's.
+     */
     fun codeOf(problems: List<String>): String? =
-        listOf(CODE_VENUE_OWNED, CODE_KEY_TAKEN_BY_VENUE).firstOrNull { code -> problems.any { it.startsWith("$code:") } }
+        listOf(CODE_VENUE_OWNED, CODE_KEY_TAKEN_BY_VENUE, FixtureColours.CODE_UNKNOWN).firstOrNull { code -> problems.any { it.startsWith("$code:") } }
 
     /** Throw [takenByVenue]'s refusal when there is one. */
     fun refuseIfVenue(scope: RigScope, holderProject: EntityID<Int>, what: String) {

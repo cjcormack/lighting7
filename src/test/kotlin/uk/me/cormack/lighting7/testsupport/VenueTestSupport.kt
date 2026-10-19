@@ -7,6 +7,8 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoFixtureGroups
+import uk.me.cormack.lighting7.models.ShowColours
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoRigging
 import uk.me.cormack.lighting7.models.DaoRiggings
@@ -180,6 +182,12 @@ fun seedShowOnVenue(state: State): VenueShowFixture {
             PositionFacet(riggingUuid = boom.uuid.toString(), stageZ = 2.25, baseYawDeg = 15.0, basePitchDeg = 180.0),
         )
         ShowOverrides.put(show, target, PatchFacet.MEDIA, MediaFacet(gelCode = "L202"))
+        // Fixture colours (formatVersion 36): the show recolours the overridden venue patch and the
+        // venue's first group, both to colours the venue does not use.
+        ShowColours.put(show.id, target.patch.uuid, "pink")
+        val venueGroup = DaoFixtureGroup.find { DaoFixtureGroups.project eq target.venue.snapshotId }
+            .orderBy(DaoFixtureGroups.name to org.jetbrains.exposed.v1.core.SortOrder.ASC).first()
+        ShowColours.put(show.id, venueGroup.uuid, "cyan")
         target.patch.uuid to boom.uuid
     }
     // Venue parks (formatVersion 27): the rich project's three parks moved into the venue with the

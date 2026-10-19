@@ -39,6 +39,8 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRiggings
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoParkedChannels
+import uk.me.cormack.lighting7.models.DaoFixtureGroup
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHides
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.ParkAddress
@@ -228,6 +230,8 @@ class VenueDetach(private val state: State) {
             copy.kindOverride = e.kindOverride
             copy.gelCode = e.gelCode
             copy.fittedMedia = e.fittedMedia
+            // The colour as the show draws it: its recolour, else the venue's, which the copy already holds.
+            rig.colours[patch.uuid]?.let { copy.colour = it }
             for (p in placements.getValue(patch)) {
                 val placement = DaoFixturePatchPlacement[
                     copyRow(DaoFixturePatchPlacements, p.row.id, DaoFixturePatchPlacements.fixturePatch, copy.id),
@@ -246,6 +250,7 @@ class VenueDetach(private val state: State) {
         }
         for (group in groups) {
             val copy = copyRow(DaoFixtureGroups, group.id, DaoFixtureGroups.project, show.id)
+            rig.colours[group.uuid]?.let { colour -> DaoFixtureGroup[copy].colour = colour }
             // Its members as the rig sees them; each still names the snapshot's patch until the re-point.
             members.getValue(group).forEach { copyRow(DaoFixtureGroupMembers, it.id, DaoFixtureGroupMembers.group, copy) }
         }
@@ -315,6 +320,9 @@ class VenueDetach(private val state: State) {
         // The show's layer goes, and the show stands on its own: no pin, and the stage it was reading.
         DaoShowOverrides.deleteWhere { DaoShowOverrides.project eq show.id }
         DaoShowHides.deleteWhere { DaoShowHides.project eq show.id }
+        // Counted over the copies: a dormant recolour of a hidden record, or of one the pin lacks, was never written.
+        val coloursApplied = patches.count { it.uuid in rig.colours } + groups.count { it.uuid in rig.colours }
+        DaoShowColours.deleteWhere { DaoShowColours.project eq show.id }
         show.stageWidthM = snapshot.stageWidthM
         show.stageDepthM = snapshot.stageDepthM
         show.stageHeightM = snapshot.stageHeightM
@@ -346,6 +354,7 @@ class VenueDetach(private val state: State) {
             ),
             overridesApplied = overridden,
             hidesDropped = hides,
+            coloursApplied = coloursApplied,
             parkReleasesDropped = releasesDropped,
             relinked = relinked,
             dropped = dropped,
@@ -479,6 +488,8 @@ data class DetachResultDto(
     val overridesApplied: List<String>,
     /** The show's hides, gone with the venue they hid records of. */
     val hidesDropped: Int,
+    /** The show's recolours of venue patches and groups, written into the copies' own colour. */
+    val coloursApplied: Int = 0,
     /** The show's releases of venue parks, gone with the venue parks they released. */
     val parkReleasesDropped: Int = 0,
     /** The show's links re-pointed from the version onto its own rows, by `table.column`. */

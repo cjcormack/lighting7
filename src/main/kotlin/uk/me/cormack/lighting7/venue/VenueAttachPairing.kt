@@ -82,6 +82,8 @@ object VenueAttachPairing {
         val placements: List<PlacementRow>,
         val facets: Map<PatchFacet, FacetValue>,
         val attributes: Map<String, String?> = emptyMap(),
+        /** Its colour as stored (tables-colours plan D7); a pair's becomes a show recolour, never an override. */
+        val colour: String? = null,
     )
 
     /**
@@ -101,8 +103,8 @@ object VenueAttachPairing {
 
     data class GroupMemberRow(val patchUuid: UUID, val panOffset: Double, val tiltOffset: Double)
 
-    /** A group and its members in order. */
-    data class GroupRow(val id: Int, val uuid: UUID, val name: String, val members: List<GroupMemberRow>)
+    /** A group and its members in order, and its colour as stored. */
+    data class GroupRow(val id: Int, val uuid: UUID, val name: String, val members: List<GroupMemberRow>, val colour: String? = null)
 
     data class MachineOverrideRow(val id: Int, val table: String, val recordUuid: UUID, val field: String, val valueJson: String)
 
@@ -207,6 +209,8 @@ object VenueAttachPairing {
         val drawing = mutableListOf<AttachItemDto>()
         val overrides = mutableListOf<AttachOverrideDto>()
         val plannedOverrides = mutableListOf<PlannedOverride>()
+        /** The show's recolours of the venue records its own replace (D10): target uuid → colour. */
+        val plannedColours = LinkedHashMap<UUID, String>()
         val kept = mutableListOf<AttachItemDto>()
         val additions = mutableListOf<AttachItemDto>()
         val incoming = mutableListOf<AttachItemDto>()
@@ -460,6 +464,27 @@ object VenueAttachPairing {
             if (attributes.isNotEmpty()) {
                 drawing += change(AttachKind.PATCH, showRec, venueRec, "${tp.displayName} takes the venue's ${attributes.joinToString()}")
             }
+            colour(AttachKind.PATCH, s.colour, tp.colour, op?.colour, tp.uuid, tp.displayName, showRec, venueRec)
+        }
+
+        /**
+         * A replaced record's colour (tables-colours plan D10): the show's stands as its recolour of the
+         * venue's record — there is no base and no drift to answer — unless the venue changed it since the
+         * origin and the show did not, or the show has none (a show cannot recolour to none). Only a
+         * change to what the show draws is listed.
+         */
+        fun colour(kind: AttachKind, s: String?, t: String?, o: String?, targetUuid: UUID, name: String, showRec: AttachRecordDto, venueRec: AttachRecordDto) {
+            if (s == t) return
+            if (s == null) {
+                drawing += change(kind, showRec, venueRec, "$name takes the venue's colour, $t")
+                return
+            }
+            when (judge(s, t, o)) {
+                Who.SAME -> Unit
+                Who.VENUE -> drawing += change(kind, showRec, venueRec, "The venue changed $name's colour: yours takes ${t ?: "none"}")
+                // The show keeps drawing its own colour, so nothing drawn changes.
+                Who.SHOW, Who.BOTH -> plannedColours[targetUuid] = s
+            }
         }
 
         fun identityChange(s: PatchRow, tp: PatchRow, showRec: AttachRecordDto, venueRec: AttachRecordDto, why: String) {
@@ -561,6 +586,8 @@ object VenueAttachPairing {
                 if (takeVenues) {
                     replace(AttachKind.GROUP, s.id, s.uuid, tg.id, tg.uuid)
                     if (rename != null) renames += rename
+                    val og = originRecord(origin, tg.uuid) { it.uuid }
+                    colour(AttachKind.GROUP, s.colour, tg.colour, og?.colour, tg.uuid, tg.name, showRec, venueRec)
                 } else {
                     keep(AttachKind.GROUP, s.id, s.uuid, tg.uuid, showRec, venueRec, null)
                     keptGroups += s
@@ -946,6 +973,7 @@ object VenueAttachPairing {
                     freshUuids = freshUuids,
                     uuidRewrites = uuidRewrites,
                     overrides = plannedOverrides.toList(),
+                    colours = plannedColours.toMap(),
                     hides = finalHides.map { it.kind.hideKind!! to UUID.fromString(it.record.uuid) },
                     releases = releases.toList(),
                     parksDropped = parksDropped.toList(),
@@ -1134,6 +1162,8 @@ data class AttachWrites(
      */
     val uuidRewrites: Map<UUID, UUID>,
     val overrides: List<PlannedOverride>,
+    /** The show's recolours of the venue's records (D10): target record uuid → the show's colour, as stored. */
+    val colours: Map<UUID, String> = emptyMap(),
     val hides: List<Pair<HideKind, UUID>>,
     val releases: List<ParkAddress>,
     /** The show's parks that go — the venue parks the channel at the same value — by the address their row has. */

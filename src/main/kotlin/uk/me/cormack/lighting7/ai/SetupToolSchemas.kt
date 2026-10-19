@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
 import uk.me.cormack.lighting7.fixture.media.GelLibrary
+import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.PatchFacet
 import uk.me.cormack.lighting7.models.StageElementKind
 import uk.me.cormack.lighting7.models.StageElementLayer
@@ -156,6 +157,12 @@ private fun JsonObjectBuilder.mediaProp(whose: String) {
     )
 }
 
+/** What every tool that takes a `colour` says it is. */
+private val COLOUR_DESCRIPTION =
+    "The fixture's colour on the desk, ChamSys-style: one of ${FixtureColours.KEYS.joinToString()}, or null for none. " +
+        "Identity only — it marks the name in lists, tiles and labels and never changes output. " +
+        "${FixtureColours.RESERVED.keys.joinToString()} are reserved and refused, as is anything else (COLOUR_UNKNOWN)."
+
 /** The fields a fixture's physical placement shares between patch_fixtures and place_fixtures. */
 private fun JsonObjectBuilder.placementProps() {
     prop("rigging", "string", "Name of the rigging (truss, bar, boom…) it hangs from, as set_stage created it. When set, x/y/z are offsets along that rigging's own frame (x along its length) rather than world coordinates.")
@@ -172,6 +179,7 @@ private fun JsonObjectBuilder.placementProps() {
     enumProp("kind", FixtureKind.entries.map { it.name }, "Override the drawn fixture kind. For a generic dimmer name its lanternType instead: the kind is derived from the lantern, and a different kind beside one is refused.")
     prop("lengthM", "number", "Installed length in metres along the unit's long axis (0.01–100), only for fixture types that take one (list_fixture_types marks them acceptsLength — a lightstrip, cut to its run). Refused for every other type; null returns to the type's default. A run laid round several sides (a ring round the stage edge) is one fixture: its own placement is one side, and each other side is an `alsoAt` entry with its own lengthM.")
     prop("stageHidden", "boolean", "Hide from the Stage view (a patch that is DMX but not a stage object: a dimmer on hard power, a hazer's fan).")
+    prop("colour", "string", COLOUR_DESCRIPTION + " Placing a venue fixture in a show, it is this show's recolour of it, and null takes the venue's back.")
     focusProps("the fixture's own lantern")
     mediaProp("the fixture")
     put("locate", buildJsonObject {
@@ -375,6 +383,11 @@ private val groupEditSchema = objectSchema(required = listOf("name")) {
     )
     stringListProp("add", "Fixture keys to append to the group, in order. One already in it is left where it is.")
     stringListProp("remove", "Fixture keys to take out of the group. The fixtures stay patched.")
+    prop(
+        "colour", "string",
+        COLOUR_DESCRIPTION + " A group's colour marks the group only — its fixtures keep their own. " +
+            "On a show on a venue, a row that sends only colour recolours a venue group for this show; null takes the venue's back.",
+    )
 }
 
 internal val editGroupsTool = ToolDef(
@@ -631,7 +644,7 @@ internal val placeFixturesTool = ToolDef(
         "The whole list is validated first and nothing is written if any row fails. Placement is presentational — it changes no DMX output. " +
         "On a show on a venue, a venue fixture (owner=venue in get_patch) is placed through this show's facet overrides: its rigging and x/y/z/yaw/pitch/roll/length are its Position, " +
         "its lantern, focus fields, beamAngleDeg, lampWatts, lampKelvin and locate its Focus, its gelCode and media its Media — each facet the row touches must already be this show's (override_venue_fixtures), " +
-        "and only the fields sent change. Its kind and stageHidden are the venue's; its `alsoAt` is the venue's lanterns, one entry each in get_patch's order, each changing only the fields it sends. " + COORDINATES,
+        "and only the fields sent change; its colour is this show's recolour of it, needing no facet. Its kind and stageHidden are the venue's; its `alsoAt` is the venue's lanterns, one entry each in get_patch's order, each changing only the fields it sends. " + COORDINATES,
     inputSchema = objectSchema(required = listOf("placements")) {
         arrayProp("placements", placementSchema)
         prop("projectId", "integer", PROJECT_ID_DESCRIPTION)
@@ -667,6 +680,7 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
         })
         put("required", buildJsonArray { add("universe"); add("startChannel") })
     })
+    prop("colour", "string", COLOUR_DESCRIPTION + " This show's recolour of the venue fixture; null takes the venue's colour back.")
     prop(
         "hidden", "boolean",
         "true hides the venue fixture in this show (it leaves the show's rig, its channels free for the show's own units; refused while something in the show still uses it); " +

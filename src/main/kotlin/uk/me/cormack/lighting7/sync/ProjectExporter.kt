@@ -13,6 +13,8 @@ import uk.me.cormack.lighting7.models.DaoCueSceneryRow
 import uk.me.cormack.lighting7.models.DaoCueStackSceneryRow
 import uk.me.cormack.lighting7.models.DaoLookSceneryRow
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.models.DaoShowColour
+import uk.me.cormack.lighting7.models.DaoShowColours
 import uk.me.cormack.lighting7.models.DaoShowHide
 import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
@@ -23,6 +25,7 @@ import uk.me.cormack.lighting7.models.decodeFacet
 import uk.me.cormack.lighting7.models.facetElement
 import uk.me.cormack.lighting7.models.detachedFrom
 import uk.me.cormack.lighting7.models.isVenueBound
+import uk.me.cormack.lighting7.sync.dto.ShowColourJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ShowOverrideJson
@@ -102,6 +105,7 @@ import uk.me.cormack.lighting7.routes.heldAutoNumbers
  * /installs.json                  -- empty in Phase 1; Phase 2 populates
  * /showHides/{uuid}.json           -- v24: a show's hides of its venue's records
  * /showOverrides/{uuid}.json       -- v24 (session 5): a show's facet overrides of venue patches
+ * /showColours/{uuid}.json         -- v36: a show's recolours of venue patches and groups
  * /showParkReleases/{uuid}.json    -- v27: a show's releases of its venue's parks
  * /cueStacks/{uuid}.json           -- includes SEPARATOR rows and show order (sortOrder)
  * /cues/{uuid}.json               -- v32: what a cue is; no stack, position, number or follow
@@ -247,6 +251,15 @@ class ProjectExporter(private val state: State) {
                     value = facetElement(decodeFacet(o.facet, o.value)!!),
                     base = facetElement(decodeFacet(o.facet, o.base)!!),
                 )
+            }
+
+            // v36: a show's recolours of venue patches and groups, as stored.
+            count += writeAll(
+                targetDir, "showColours",
+                DaoShowColour.find { DaoShowColours.project eq project.id }.toList(),
+                ShowColourJson.serializer(), { it.uuid }, liveKeys,
+            ) { c ->
+                ShowColourJson(uuid = c.uuid.toString(), recordUuid = c.recordUuid.toString(), colour = c.colour)
             }
 
             count += writeAll(targetDir, "cueStacks", project.cueStacks.toList(), CueStackJson.serializer(), { it.uuid }, liveKeys) { s ->
@@ -455,6 +468,7 @@ class ProjectExporter(private val state: State) {
                     lampKelvin = p.lampKelvin,
                     locate = p.storedLocate,
                     media = p.fittedMedia,
+                    colour = p.colour,
                     extraPlacements = extraPlacementsOf(p).map { pl ->
                         PatchPlacementJson(
                             uuid = pl.uuid.toString(),
@@ -492,7 +506,7 @@ class ProjectExporter(private val state: State) {
                             tiltOffset = m.tiltOffset,
                         )
                     }
-                FixtureGroupJson(g.uuid.toString(), g.name, members)
+                FixtureGroupJson(g.uuid.toString(), g.name, members, g.colour)
             }
 
             count += writeAll(targetDir, "buskRig", project.buskRigRows.toList(), BuskRigRowJson.serializer(), { it.uuid }, liveKeys) { row ->

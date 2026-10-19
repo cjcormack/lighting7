@@ -20,6 +20,7 @@ import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.ai.RigKeyReferences
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
+import uk.me.cormack.lighting7.models.DaoShowColour
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMembers
 import uk.me.cormack.lighting7.models.DaoFixtureGroups
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacements
@@ -225,6 +226,13 @@ class VenueAttach(private val state: State) {
                 facet = o.facet
                 value = encodeFacet(o.value)
                 base = encodeFacet(o.base)
+            }
+        }
+        for ((recordUuid, colour) in w.colours) {
+            DaoShowColour.new {
+                project = show
+                this.recordUuid = recordUuid
+                this.colour = colour
             }
         }
         for ((kind, uuid) in w.hides) {

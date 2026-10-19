@@ -28,6 +28,8 @@ export interface GroupSummary {
    * an older desk.
    */
   memberKeys?: string[]
+  /** The group's colour as the show's rig draws it (tables-colours plan D7); absent is none. */
+  colour?: string | null
 }
 
 export interface GroupMember {
