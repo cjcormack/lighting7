@@ -457,13 +457,16 @@ function TargetBody({
             <SelectContent>
               <SelectItem value="PAN">Pan</SelectItem>
               <SelectItem value="TILT">Tilt</SelectItem>
+              <SelectItem value="ACROSS">Across the stage</SelectItem>
+              <SelectItem value="DEPTH">Up and down stage</SelectItem>
             </SelectContent>
           </Select>
         </div>
         <p className="text-xs text-muted-foreground">
-          Fans every selected head about its own position: turn one way to fan out, back to fan in. A
-          new selection, or anything else moving a selected head, starts the fan again from where the
-          heads are. With nothing selected the turn is dropped.
+          Fans every selected head about its own position: turn one way to fan out, back to fan in. On
+          a stage axis the beams fan across the floor, a tenth of a metre a step. A new selection, or
+          anything else moving a selected head, starts the fan again from where the heads are. With
+          nothing selected the turn is dropped.
         </p>
       </div>
     )

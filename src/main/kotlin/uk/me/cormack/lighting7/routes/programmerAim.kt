@@ -243,19 +243,9 @@ internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRe
         checkStageCoord(field, value)?.let { return AimOutcome.Invalid(it) }
     }
     if (request.fadeMs != null && request.fadeMs < 0) return AimOutcome.Invalid("fadeMs must not be negative")
-    val given = LinkedHashMap<String, JogStart>()
-    for (entry in request.base.orEmpty()) {
-        given[entry.target.key] = jogStartOf(entry) ?: return AimOutcome.Invalid(
-            "base for '${entry.target.key}' (${entry.value}) is not a pan,tilt position with fine bytes 0..255",
-        )
-    }
-    val near = LinkedHashMap<String, AimNearDto>()
-    for (entry in request.near.orEmpty()) {
-        if (!entry.panDeg.isFinite() || !entry.tiltDeg.isFinite()) {
-            return AimOutcome.Invalid("near for '${entry.target.key}' must be finite degrees")
-        }
-        near[entry.target.key] = entry
-    }
+    val given = jogStarts(request.base.orEmpty())
+        .getOrElse { return AimOutcome.Invalid(it.message ?: "Bad base") }
+    val near = jogNear(request.near.orEmpty()).getOrElse { return AimOutcome.Invalid(it.message ?: "Bad near") }
     val planeZ = request.planeZ ?: JOG_DEFAULT_PLANE_Z
 
     val fixtures = state.show.fixtures
@@ -272,36 +262,13 @@ internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRe
     val bases = ArrayList<AimBaseDto>()
     for ((key, head) in heads) {
         val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
-        val aimable = when (val a = aimableHead(head, placements[key])) {
-            is HeadAim.Skip -> {
-                skipped += SpreadSkipDto(target, a.reason)
-                continue
-            }
-            is AimableHead -> a
-        }
-        val start = given[key] ?: readJogStart(state, aimable, readLocal = request.write)
-        if (start == null) {
-            skipped += SpreadSkipDto(target, "no position to jog from")
-            continue
-        }
-        bases += AimBaseDto(target, start.position.serialize(), start.panFine?.toInt(), start.tiltFine?.toInt())
-        val base = SignedAim(
-            dmxToTravel(start.position.pan, start.panFine, aimable.pan, aimable.panSlider) - aimable.panAxis.zeroDeg,
-            dmxToTravel(start.position.tilt, start.tiltFine, aimable.tilt, aimable.tiltSlider) - aimable.tiltAxis.zeroDeg,
-        )
-        val previous = near[key]?.let { SignedAim(it.panDeg - aimable.panAxis.zeroDeg, it.tiltDeg - aimable.tiltAxis.zeroDeg) }
-        val p = aimable.placement
-        val jog = jogAim(
-            aimable.from, p.baseYawDeg, p.basePitchDeg, base, dx, dy, planeZ,
-            aimable.panAxis, aimable.tiltAxis, previous, p.baseRollDeg,
-        )
-        when (val aim = aimable.aimed(jog.solution)) {
-            is HeadAim.Skip -> skipped += SpreadSkipDto(target, aim.reason)
-            is HeadAim.Aimed -> {
-                val sourceGroup = hints[key]
-                writes += ProgrammerWriter.PropertyWrite(head, "position", aim.position, sourceGroup)
-                aim.fines.forEach { (name, value) -> writes += ProgrammerWriter.PropertyWrite(head, name, value, sourceGroup) }
-                written += AimWriteDto(target, aim.position.serialize(), roundTenth(aim.panDeg), roundTenth(aim.tiltDeg))
+        val jog = jogHead(state, head, placements[key], given[key], readLocal = request.write, near[key], dx, dy, planeZ)
+        jog.base?.let { bases += AimBaseDto(target, it.position.serialize(), it.panFine?.toInt(), it.tiltFine?.toInt()) }
+        when (jog) {
+            is HeadJog.Skip -> skipped += SpreadSkipDto(target, jog.reason)
+            is HeadJog.Moved -> {
+                writes += jog.propertyWrites(head, hints[key])
+                written += AimWriteDto(target, jog.position.serialize(), roundTenth(jog.panDeg), roundTenth(jog.tiltDeg))
             }
         }
     }
@@ -311,8 +278,82 @@ internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRe
     return AimOutcome.Done(AimResponse(written, skipped, bases))
 }
 
+/** One head's step of a jog or a stage fan: where it started, once known, and where it went or why not. */
+internal sealed interface HeadJog {
+    val base: JogStart?
+
+    data class Skip(val reason: String, override val base: JogStart? = null) : HeadJog
+
+    data class Moved(
+        override val base: JogStart,
+        val position: CueAssignmentResolver.PropertyValue.Position,
+        /** Fine pan / tilt, by property name, on a head that has them. */
+        val fines: List<Pair<String, CueAssignmentResolver.PropertyValue.Slider>>,
+        val panDeg: Double,
+        val tiltDeg: Double,
+    ) : HeadJog {
+        fun propertyWrites(head: GroupableFixture, sourceGroup: String?): List<ProgrammerWriter.PropertyWrite> =
+            listOf(ProgrammerWriter.PropertyWrite(head, "position", position, sourceGroup)) +
+                fines.map { (name, value) -> ProgrammerWriter.PropertyWrite(head, name, value, sourceGroup) }
+    }
+}
+
+/**
+ * [head]'s landing point on the plane at [planeZ] moved by [dx], [dy] metres, and the head aimed at
+ * it ([jogAim]): from [given] where the request names a start, else — where [readLocal] — from
+ * Local, else from what the desk is sending; nearest [near], the gesture's previous step.
+ */
+internal fun jogHead(
+    state: State,
+    head: GroupableFixture,
+    placement: AimPlacement?,
+    given: JogStart?,
+    readLocal: Boolean,
+    near: AimNearDto?,
+    dx: Double,
+    dy: Double,
+    planeZ: Double,
+): HeadJog {
+    val aimable = when (val a = aimableHead(head, placement)) {
+        is HeadAim.Skip -> return HeadJog.Skip(a.reason)
+        is AimableHead -> a
+    }
+    val start = given ?: readJogStart(state, aimable, readLocal) ?: return HeadJog.Skip("no position to jog from")
+    val base = SignedAim(
+        dmxToTravel(start.position.pan, start.panFine, aimable.pan, aimable.panSlider) - aimable.panAxis.zeroDeg,
+        dmxToTravel(start.position.tilt, start.tiltFine, aimable.tilt, aimable.tiltSlider) - aimable.tiltAxis.zeroDeg,
+    )
+    val previous = near?.let { SignedAim(it.panDeg - aimable.panAxis.zeroDeg, it.tiltDeg - aimable.tiltAxis.zeroDeg) }
+    val p = aimable.placement
+    val jog = jogAim(
+        aimable.from, p.baseYawDeg, p.basePitchDeg, base, dx, dy, planeZ,
+        aimable.panAxis, aimable.tiltAxis, previous, p.baseRollDeg,
+    )
+    return when (val aim = aimable.aimed(jog.solution)) {
+        is HeadAim.Skip -> HeadJog.Skip(aim.reason, start)
+        is HeadAim.Aimed -> HeadJog.Moved(start, aim.position, aim.fines, aim.panDeg, aim.tiltDeg)
+    }
+}
+
+/** A request's starts by head key, or the reason one is not a start. */
+internal fun jogStarts(entries: List<AimBaseDto>): Result<Map<String, JogStart>> = runCatching {
+    entries.associate { entry ->
+        entry.target.key to requireNotNull(jogStartOf(entry)) {
+            "base for '${entry.target.key}' (${entry.value}) is not a pan,tilt position with fine bytes 0..255"
+        }
+    }
+}
+
+/** A request's previous step by head key, or the reason it is not one. */
+internal fun jogNear(entries: List<AimNearDto>): Result<Map<String, AimNearDto>> = runCatching {
+    entries.associateBy { entry ->
+        require(entry.panDeg.isFinite() && entry.tiltDeg.isFinite()) { "near for '${entry.target.key}' must be finite degrees" }
+        entry.target.key
+    }
+}
+
 /** Where a jogged head starts: its coarse position and, where known, its fine bytes. */
-private data class JogStart(
+internal data class JogStart(
     val position: CueAssignmentResolver.PropertyValue.Position,
     val panFine: UByte?,
     val tiltFine: UByte?,
@@ -439,6 +480,10 @@ private class AimableHead(
     val panFine = fineSlider(head, PropertyCategory.PAN_FINE)
     val tiltFine = fineSlider(head, PropertyCategory.TILT_FINE)
 }
+
+/** Why [head] can never be aimed from [placement] — a cell, a fixed head, no degrees, unplaced — or null. */
+internal fun aimSkipReason(head: GroupableFixture, placement: AimPlacement?): String? =
+    (aimableHead(head, placement) as? HeadAim.Skip)?.reason
 
 private fun aimableHead(head: GroupableFixture, placement: AimPlacement?): Aimability {
     if (head is FixtureElement<*>) return HeadAim.Skip("a cell has no placement of its own — aim its fixture")

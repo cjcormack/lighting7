@@ -1006,6 +1006,18 @@ through the same `TemplateResolver`, an axis not fanned resolving to its base ex
 `SelectionFan` encoder is the same resolve over the desk selection, owner `surface`, with the desk
 holding its anchor and the rig order for the gesture (`docs/midi-control-surface-engineering.md`).
 
+**A stage fan** is a fan in metres: `fan: {x?, y?}`, never beside `pan` or `tilt`, moves each head's
+**landing point** on the jog's working plane (head height) by the amount times the same weight — `x`
+towards SL, `y` upstage — and aims the head at the moved point through the jog's own step
+(`routes/programmerAim.kt`'s `jogHead`; `docs/fixtures-engineering.md` §"Jogging heads across the
+stage"). So the beams fan across the floor by the same metres whatever each head's mount, where a
+pan fan of one amount lands a front-of-house head and an overhead one in very different places. It
+is HEADS only (a cell has no placement: CELLS is refused), and a head that can never be aimed —
+unplaced, no degree range — is skipped before the curve is spread, so it takes no place on it. A
+base carries the fine bytes a jog's does (`panFine`, `tiltFine`), the answer's `near` is each moved
+head's travel degrees for the next request to send back (a client keeps each head's latest), and a
+head the fan takes out of its travel is skipped `out of reach` rather than clamped. The surface fan's `ACROSS` and `DEPTH` axes are this arm.
+
 ### Applied state is resolved by the desk
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk

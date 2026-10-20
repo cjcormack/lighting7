@@ -2,11 +2,14 @@ import type {
   BindingTarget,
   ControlDescriptor,
   ControlSurfaceType,
+  FanAxis,
 } from "@/store/surfaces"
 import { STRIP_FADER_PROPERTY } from "@/lib/surfaceResolve"
 import { axisSuffix } from "@/lib/colourAxis"
 import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
 import type { BuskFocus } from "@/lib/buskWindow"
+
+const FAN_AXIS_WORDS: Record<FanAxis, string> = { PAN: "pan", TILT: "tilt", ACROSS: "across", DEPTH: "depth" }
 
 /** Flash targets wrap an inner continuous target; return the meaningful target. */
 export function effectiveTarget(target: BindingTarget): BindingTarget {
@@ -115,7 +118,7 @@ export function describeTarget(target: BindingTarget): string {
     case "selectionProperty":
       return `Sel · ${target.propertyName}${axisSuffix(target.colourAxis)}`
     case "selectionFan":
-      return `Sel · fan ${target.axis === "PAN" ? "pan" : "tilt"}`
+      return `Sel · fan ${FAN_AXIS_WORDS[target.axis]}`
     case "selectTarget":
       return `${target.mode === "replace" ? "Select only" : "Select"} ${target.target.key}`
     case "clearSelection":

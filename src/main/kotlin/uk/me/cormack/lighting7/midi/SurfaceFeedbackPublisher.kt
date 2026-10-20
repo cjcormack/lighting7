@@ -1380,7 +1380,7 @@ class SurfaceFeedbackPublisher(
     private fun resyncFanEntries(entries: List<FanEntry>) {
         val fan = selectionFan ?: return
         for (entry in entries) {
-            val value7Bit = SelectionFan.amountTo7Bit(fan.amountFor(entry.axis)).toUByte()
+            val value7Bit = SelectionFan.amountTo7Bit(entry.axis, fan.amountFor(entry.axis)).toUByte()
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

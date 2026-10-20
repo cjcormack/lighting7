@@ -2195,6 +2195,11 @@ was made from (a group sheet, the busk Position tab), so each head writes with i
 `sourceGroup`, as the pad's own writes do; it names no head of its own. `aim_fixtures` does not offer
 the arm.
 
+One head's step is `routes/programmerAim.kt`'s `jogHead`, which the spread route's **stage fan**
+(`mode: FAN` with `fan: {x?, y?}`, `docs/lighting-composition-model.md` §"A fan is a spread about each
+head's own position") shares: there each head's `(dx, dy)` is the fan's amount times its weight, so
+the heads' landing points spread apart across the plane rather than move together.
+
 ### Focusing a head on a point
 
 `POST /api/rest/projects/{projectId}/programmer/focus` `{targets, point: {x, y, z}, fadeMs?, write?}`

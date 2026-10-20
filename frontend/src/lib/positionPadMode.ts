@@ -24,6 +24,10 @@ export function usePositionPadMode(): PositionPadMode {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
 }
 
+export function getPositionPadMode(): PositionPadMode {
+  return store.getSnapshot()
+}
+
 export function setPositionPadMode(mode: PositionPadMode): void {
   store.set(mode)
 }

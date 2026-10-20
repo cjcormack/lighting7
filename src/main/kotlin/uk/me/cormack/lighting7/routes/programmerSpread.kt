@@ -38,6 +38,7 @@ import uk.me.cormack.lighting7.fx.parseTemplateColourRefUuid
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.JOG_DEFAULT_PLANE_Z
 import uk.me.cormack.lighting7.state.State
 import kotlin.math.roundToInt
 import uk.me.cormack.lighting7.fx.groupHintsForTargets
@@ -98,6 +99,13 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * client can hold the gesture's anchor and Live never fans a fan. The sum is a centre-relative
  * intent through the same [TemplateResolver], an axis not fanned staying exactly where it was, and a
  * head taken past its travel is held at the end and named in `clamped`.
+ *
+ * **A stage fan** is a fan whose amounts are `fan.x` and `fan.y`, metres across (towards SL) and up
+ * the stage, rather than `pan` and `tilt`: each head's landing point on the jog's working plane is
+ * moved by the amount times its weight and the head aimed at it ([jogHead]), so the beams fan across
+ * the floor by the same metres whatever each head's mount. Over HEADS only, since a cell has no
+ * placement; a base carries fine bytes as a jog's does, `near` is the previous step's answer, and a
+ * head the fan takes out of its travel is skipped as a jog skips it.
  */
 internal fun Route.routeApiRestProgrammerSpread(state: State) {
     post<ProgrammerSpreadResource> { resource ->
@@ -151,7 +159,10 @@ internal data class SpreadRequest(
     val write: Boolean = true,
     /** `ENDS` (from → to) or `FAN` (an amount around each head's own position, position only). */
     val mode: String = "ENDS",
-    /** `FAN`: the outer heads' offset per axis in centre steps; an absent axis is not fanned. */
+    /**
+     * `FAN`: the outer heads' offset per axis — `pan` and `tilt` in centre steps, or `x` and `y` in
+     * stage metres (a stage fan), never both; an absent axis is not fanned.
+     */
     val fan: SpreadFanDto? = null,
     /**
      * `FAN`: where each head starts, a `"pan,tilt"` literal per head — the answer's own
@@ -159,13 +170,22 @@ internal data class SpreadRequest(
      * read by the desk.
      */
     val base: List<SpreadBaseDto>? = null,
+    /** A stage fan: the previous step's answer, so each head's solve stays on the side it is on. */
+    val near: List<AimNearDto>? = null,
 )
 
 @Serializable
-internal data class SpreadFanDto(val pan: Int? = null, val tilt: Int? = null)
+internal data class SpreadFanDto(
+    val pan: Int? = null,
+    val tilt: Int? = null,
+    /** Stage metres towards SL. */
+    val x: Double? = null,
+    /** Stage metres upstage. */
+    val y: Double? = null,
+)
 
-@Serializable
-internal data class SpreadBaseDto(val target: CueTargetDto, val value: String)
+/** A head's start: its `"pan,tilt"` literal and, for a stage fan, the fine bytes it has — a jog's start. */
+internal typealias SpreadBaseDto = AimBaseDto
 
 @Serializable
 internal data class SpreadResponse(
@@ -177,6 +197,8 @@ internal data class SpreadResponse(
     val base: List<SpreadBaseDto> = emptyList(),
     /** `FAN`: the heads the fan took past the end of their travel, held at it. */
     val clamped: List<CueTargetDto> = emptyList(),
+    /** A stage fan: each moved head's pan and tilt in travel degrees, the `near` a later request sends back. */
+    val near: List<AimNearDto> = emptyList(),
 )
 
 /**
@@ -207,6 +229,16 @@ private sealed interface SpreadShape {
     data class Fan(val pan: Int?, val tilt: Int?, val given: Map<String, PropertyValue.Position>) : SpreadShape {
         override val probe get() = TemplateIntent.Position(0.0, 0.0)
     }
+
+    /** A fan in stage metres: [x] towards SL, [y] upstage. */
+    data class StageFan(
+        val x: Double,
+        val y: Double,
+        val given: Map<String, JogStart>,
+        val near: Map<String, AimNearDto>,
+    ) : SpreadShape {
+        override val probe get() = TemplateIntent.Position(0.0, 0.0)
+    }
 }
 
 /**
@@ -220,6 +252,7 @@ internal fun spreadIntoProgrammer(
     families: Set<uk.me.cormack.lighting7.fx.PropertyMaskGroup>?,
     owner: ProgrammerOwner = ProgrammerOwner.WEB,
     rigOrder: () -> BuskRigOrder? = state::buskRigOrder,
+    placementsOf: (Collection<String>) -> Map<String, AimPlacement> = { aimPlacements(state, state.show.project, it) },
 ): SpreadOutcome {
     val property = TemplateProperty.ofOrNull(request.property)
         ?: return SpreadOutcome.Invalid("'${request.property}' is not a property a spread can carry")
@@ -244,7 +277,7 @@ internal fun spreadIntoProgrammer(
             }
             SpreadShape.Ends(from, to)
         }
-        "FAN" -> fanShape(request, property).getOrElse { return SpreadOutcome.Invalid(it.message ?: "Bad fan") }
+        "FAN" -> fanShape(request, property, over).getOrElse { return SpreadOutcome.Invalid(it.message ?: "Bad fan") }
         else -> return SpreadOutcome.Invalid("Mode '${request.mode}' is not one of [ENDS, FAN]")
     }
     if (request.targets.isEmpty()) {
@@ -323,17 +356,52 @@ internal fun spreadIntoProgrammer(
             step to landing
         }
     }
-    val fractions = SpreadPlan.fractions(ordered.size, order, curve, request.parts)
-    val weights = SpreadPlan.fanWeights(ordered.size, order, curve, request.parts)
+    // A stage fan's steps are the heads that can be aimed at all, so one that never can — unplaced,
+    // no degrees — takes no place on the curve, as one that cannot take the property takes none.
+    val placements = if (shape is SpreadShape.StageFan) {
+        placementsOf(ordered.flatMap { (_, landing) -> landing.map { it.targetKey } })
+    } else {
+        emptyMap()
+    }
+    val stepped = if (shape !is SpreadShape.StageFan) ordered else ordered.mapNotNull { (step, landing) ->
+        val aimable = landing.filter { head ->
+            val reason = aimSkipReason(head, placements[head.targetKey])
+            if (reason != null) skipped += SpreadSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey), reason)
+            reason == null
+        }
+        if (aimable.isEmpty()) null else step to aimable
+    }
+    val fractions = SpreadPlan.fractions(stepped.size, order, curve, request.parts)
+    val weights = SpreadPlan.fanWeights(stepped.size, order, curve, request.parts)
     val hints = groupHintsForTargets(fixtures, request.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
 
     val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
     val written = ArrayList<SpreadWriteDto>()
     val bases = ArrayList<SpreadBaseDto>()
     val clamped = ArrayList<CueTargetDto>()
-    ordered.forEachIndexed { index, (step, landing) ->
+    val near = ArrayList<AimNearDto>()
+    stepped.forEachIndexed { index, (step, landing) ->
         for (head in landing) {
             val target = CueTargetDto(TargetRef.Fixture.TYPE, head.targetKey)
+            val sourceGroup = hints[head.targetKey] ?: hints[step.targetKey]
+                ?: (head as? FixtureElement<*>)?.parentFixture?.key?.let { hints[it] }
+            if (shape is SpreadShape.StageFan) {
+                val weight = weights[index]
+                val jog = jogHead(
+                    state, head, placements[head.targetKey], shape.given[head.targetKey], readLocal = request.write,
+                    shape.near[head.targetKey], shape.x * weight, shape.y * weight, JOG_DEFAULT_PLANE_Z,
+                )
+                jog.base?.let { bases += SpreadBaseDto(target, it.position.serialize(), it.panFine?.toInt(), it.tiltFine?.toInt()) }
+                when (jog) {
+                    is HeadJog.Skip -> skipped += SpreadSkipDto(target, jog.reason)
+                    is HeadJog.Moved -> {
+                        writes += jog.propertyWrites(head, sourceGroup)
+                        written += SpreadWriteDto(target, "position", jog.position.serialize())
+                        near += AimNearDto(target, jog.panDeg, jog.tiltDeg)
+                    }
+                }
+                continue
+            }
             val intent = when (shape) {
                 is SpreadShape.Ends -> interpolateIntent(shape.from, shape.to, fractions[index])
                 is SpreadShape.Fan -> {
@@ -350,6 +418,7 @@ internal fun spreadIntoProgrammer(
                         null
                     } ?: continue
                 }
+                is SpreadShape.StageFan -> error("a stage fan is solved above")
             }
             val resolution = TemplateResolver.resolve(head, property.propertyName, intent, media(head))
             val value = resolution.value
@@ -362,11 +431,7 @@ internal fun spreadIntoProgrammer(
             // property (`colourWheel`), and its literal is the slot's level: the cook reads a level on
             // a slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`), so both arms land
             // it — the write arm as a typed entry, the answer-only arm as a Look row.
-            val parentKey = (head as? FixtureElement<*>)?.parentFixture?.key
-            writes += ProgrammerWriter.PropertyWrite(
-                head, resolution.propertyName, value,
-                sourceGroup = hints[head.targetKey] ?: hints[step.targetKey] ?: parentKey?.let { hints[it] },
-            )
+            writes += ProgrammerWriter.PropertyWrite(head, resolution.propertyName, value, sourceGroup)
             written += SpreadWriteDto(target, resolution.propertyName, value.serialize())
         }
     }
@@ -374,14 +439,15 @@ internal fun spreadIntoProgrammer(
     if (request.write && writes.isNotEmpty()) {
         state.show.fxEngine.programmer.writeProperties(owner, writes, fadeMs = request.fadeMs ?: 0)
     }
-    return SpreadOutcome.Done(SpreadResponse(written, skipped, base = bases, clamped = clamped))
+    return SpreadOutcome.Done(SpreadResponse(written, skipped, base = bases, clamped = clamped, near = near))
 }
 
 /** A `FAN` request's amounts and given bases, or the reason it is not one. */
-private fun fanShape(request: SpreadRequest, property: TemplateProperty): Result<SpreadShape.Fan> = runCatching {
+private fun fanShape(request: SpreadRequest, property: TemplateProperty, over: SpreadOver): Result<SpreadShape> = runCatching {
     require(property == TemplateProperty.POSITION) { "A fan is a position spread; '${request.property}' has no position of its own to fan from" }
     val fan = request.fan
-    require(fan != null && (fan.pan != null || fan.tilt != null)) { "A fan needs a pan or a tilt amount" }
+    if (fan != null && (fan.x != null || fan.y != null)) return@runCatching stageFanShape(request, fan, over).getOrThrow()
+    require(fan != null && (fan.pan != null || fan.tilt != null)) { "A fan needs a pan or a tilt amount, or an x or a y" }
     for ((axis, amount) in listOf("pan" to fan.pan, "tilt" to fan.tilt)) {
         require(amount == null || amount in POSITION_CENTRE_MIN..POSITION_CENTRE_MAX) {
             "The $axis amount must be $POSITION_CENTRE_MIN..$POSITION_CENTRE_MAX centre steps"
@@ -394,6 +460,17 @@ private fun fanShape(request: SpreadRequest, property: TemplateProperty): Result
         given[entry.target.key] = position
     }
     SpreadShape.Fan(fan.pan, fan.tilt, given)
+}
+
+/** A stage fan's amounts, starts and previous step, or the reason it is not one. */
+private fun stageFanShape(request: SpreadRequest, fan: SpreadFanDto, over: SpreadOver): Result<SpreadShape.StageFan> = runCatching {
+    require(fan.pan == null && fan.tilt == null) { "A fan is in pan and tilt or in stage metres, not both" }
+    require(over == SpreadOver.HEADS) { "A stage fan moves heads; a cell has no placement of its own" }
+    for ((axis, amount) in listOf("x" to fan.x, "y" to fan.y)) {
+        checkStageCoord(axis, amount)?.let { throw IllegalArgumentException(it) }
+    }
+    val given = jogStarts(request.base.orEmpty()).getOrThrow()
+    SpreadShape.StageFan(fan.x ?: 0.0, fan.y ?: 0.0, given, jogNear(request.near.orEmpty()).getOrThrow())
 }
 
 /**
