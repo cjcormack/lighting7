@@ -1,6 +1,6 @@
 # A stack's timeline: cues against the Looks, palettes, effects and scenery they apply
 
-> **Document status: agreed 2026-10-20, not started.** The design is the record in
+> **Document status: agreed 2026-10-20; session 1 of 5 done.** The design is the record in
 > [`stack-timeline-design/`](stack-timeline-design/INDEX.md): four boards, the desk survey, and the
 > eighteen calls Chris answered (D1–D11 in four rounds, C1–C7 in a fifth, every C as recommended).
 > A one-page copy for human readers is
@@ -315,7 +315,7 @@ All writes go through §3.6's route, one request per gesture; nothing is sent to
 Sessions 1 and 2 are backend only and can land before any UI. Session 3 needs neither. Sessions 4
 and 5 need 3, and 5 needs 1 and 2 for effect runs.
 
-### Session 1: the run key, stored and synced (backend)
+### Session 1: the run key, stored and synced (backend) — done, `a54ffa27`
 
 - §3.4: the column, the read-only DTO field, `take()` leaving it, `stageContent` leaving it out
   (P4), the sync field and the v37 bump, `CueCopier`'s per-call key map (C4).
