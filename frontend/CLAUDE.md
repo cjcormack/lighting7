@@ -3426,7 +3426,9 @@ menu would move the menu's highlight and the sheet's row. The partition chips an
 claim nothing — they are plain buttons — so the row keys also stand aside from **any focused
 control outside the rows** (`isForeignControl` in `sheet/cellEntry.ts`), exempting the rename
 button and cell trigger a click inside a row leaves focused, which is where focus sits while ↓
-moves the selection on. Only plain and Shift arrows (⌘, Ctrl and ⌥ arrows are the browser's and
+moves the selection on — and **one outside the rows that a click left focused**, which a capture
+companion of the same listener hears instead (`pointerLeftOnForeignControl`, §The programmer's
+keyboard). Only plain and Shift arrows (⌘, Ctrl and ⌥ arrows are the browser's and
 the OS's), and — on the kit — not under an open editor. The programmer's list takes the
 foreign-control and modifier rules too, and the dialog guard every
 sheet listener and the programmer's ask is `keyTargetIsGuarded` beside it — which matches
@@ -4630,9 +4632,34 @@ reports `cellEntryKey` / `cellClearKey` false where a key is refused, and the gr
 those rather than restating the rule — so no hint can advertise a key that does nothing. The window
 handler only names a cell, and **not from a focused control** (a button, a link, a menu or menu
 item) on any arm: a cell trigger is tabbable and Tab-then-Enter opening its popover is a path the
-grid already promises, and Backspace is the destructive arm. The one exemption is a cell trigger the
-marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall through to that button's
-own activation and open *that* cell's editor with nothing focused.
+grid already promises, and Backspace is the destructive arm. The first exemption is a cell trigger
+the marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall through to that
+button's own activation and open *that* cell's editor with nothing focused. The second is **a control
+outside the rows that a click left focused** (`clickedForeignControl`, over `sheet/pointerFocus.ts`):
+a toolbar button pressed with the mouse keeps the focus, and Radix hands it back to a menu trigger
+when the menu closes, so without it Enter toggled that menu instead of opening the cell's editor. A
+control reached by Tab keeps its own keys, and so does one inside a row — another row's pencil or
+grip keeps its own Enter. The tracker is the focus-visible rule: a `pointerdown` arms it, any
+`keydown` disarms it, each `focusin` records which; a press on the element already focused records
+it, a `focusin` on the one already recorded keeps it (the window's refocus after ⌘Tab), and
+`main.tsx` attaches it at boot so the click that navigated to a grid is seen. It never counts a
+control a modal hides (Radix's `aria-hidden` around an open modal, where a sheet that keeps focus on
+its door button must not let the grid behind take ⌫), nor one marked `data-own-keys` — the
+`ShowBar`'s GO and BACK and the lock, whose Enter and `L` stay theirs after a click (Chris's call).
+The kit's cell listener is capture-phase, so it takes only unshifted keys from a clicked control and
+leaves a shifted one to it — it runs before the full-screen toggle's `document` capture listener,
+and ⇧F must still reach that. The programmer's is bubble, so it takes unshifted keys from a clicked
+control in a capture listener of its own, because a Radix menu trigger toggles on Enter from its own
+keydown before a window bubble listener runs, and leaves shifted ones to the bubble listener, so ⇧F
+reaches the full-screen toggle first and ⇧G still seeds the type-ahead. **The row keys follow the same rule** (`pointerLeftOnForeignControl`, heard in a
+capture listener on both surfaces, since a menu or Select trigger opens on ↓ from its own keydown):
+⌘A from any clicked control outside the rows, and an arrow from one that does not answer that arrow
+itself. A slider or spin button answers all four; a tab list the arrows along its
+`aria-orientation`, horizontal unless it says otherwise, so ↑ / ↓ after a click on the Values tab
+step the grid; a radio group or toolbar (Radix's single and multiple `ToggleGroup`) the arrows along
+its orientation, and all four when it names none, as Radix's roving focus does. The programmer's
+→/← tree check, which also stands aside from a control inside a row, exempts a clicked one in the
+anchor row (its name); another row's clicked chevron or Info button keeps its own keys.
 
 **Backspace / Delete takes the selected cells out of Local** (`CellWriters.clearValue` →
 `programmer.clearEntry`, by the programmer fade — the same store the action bar's Clear fades by)

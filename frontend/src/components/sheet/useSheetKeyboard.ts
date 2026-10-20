@@ -1,8 +1,16 @@
 import { useEffect, type RefObject } from 'react'
 import { isEditableTarget } from '@/lib/domUtils'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { isForeignControl, keyTargetIsGuarded, marqueeOwnsKeyTarget } from './cellEntry'
+import {
+  clickedForeignControl,
+  isControl,
+  isForeignControl,
+  keyTargetIsGuarded,
+  marqueeOwnsKeyTarget,
+  pointerLeftOnForeignControl,
+} from './cellEntry'
 import { activeKeyRegion, useKeyRegionTracking } from './keyRegion'
+import { usePointerFocusTracking } from './pointerFocus'
 import type { CellKeyboardPermission } from './cellEntry'
 import { arrowOfKey, type CellArrow, type RowId } from './cellSelectionModel'
 
@@ -41,7 +49,8 @@ export interface SheetCellKeys {
  * ↑ / ↓ for its rows.
  *
  * The programmer's container keeps its own copy of this dispatch, interleaved with its row
- * shortcuts (⌘A, ↑/↓, →/←) in one bubble-phase listener, and it is deliberately not rewired onto
+ * shortcuts (⌘A, ↑/↓, →/←) in a bubble-phase listener — plus a capture arm for a control a click
+ * left focused, below — and it is deliberately not rewired onto
  * this hook — its behaviour is pinned by `FixturesTable.test.tsx` and the rule here is the same
  * one; ↑/↓ over rows share `arrowStepTarget` outright, and the arrows over cells share
  * `cellArrowStep`. →/← over a row selection stay the programmer's: they open and close a group or
@@ -63,7 +72,9 @@ export interface SheetCellKeys {
  * a Radix menu is `role="menu"`, so a `[role="dialog"]` guard does not cover a menu item — except a
  * cell trigger the marquee itself covers (`marqueeOwnsKeyTarget`), or Enter there would fall
  * through to that button's own activation. Backspace is the destructive arm, so it is the one that
- * most needs to know a chip or a menu item had the focus.
+ * most needs to know a chip or a menu item had the focus. A control outside the rows that a click
+ * left focused is the exception (`clickedForeignControl`): a toolbar button pressed with the mouse
+ * keeps the focus, and the Enter after it is meant for the selection, not for that button again.
  *
  * **⏎ over one row opens it** (library-sheets plan D4), where the surface passes [onOpenRow]: with
  * exactly one row selected and no cells, Enter is the pencil's key. The focused-control guard has
@@ -150,6 +161,7 @@ export function useSheetKeyboard<C extends string>({
   region?: RefObject<Element | null>
 }): void {
   useKeyRegionTracking()
+  usePointerFocusTracking()
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (!ownsKey(e.target, region)) return
@@ -172,17 +184,19 @@ export function useSheetKeyboard<C extends string>({
           !e.altKey &&
           !e.shiftKey &&
           !editorIsOpen() &&
-          (firstColumnOwnsKeyTarget(e.target) || !isOnControl(e.target))
+          (firstColumnOwnsKeyTarget(e.target) || clickedForeignControl(e.target) || !isControl(e.target))
         ) {
           e.preventDefault()
           onOpenRow()
         }
         return
       }
+      // A clicked control's shifted keys are left to it: this listener runs before the
+      // full-screen toggle's `document` capture listener, and ⇧F must still reach that.
       const onControl =
         !marqueeOwnsKeyTarget(e.target, isCellSelected) &&
-        e.target instanceof HTMLElement &&
-        isOnControl(e.target)
+        !(clickedForeignControl(e.target) && !e.shiftKey) &&
+        isControl(e.target)
       if (e.metaKey || e.ctrlKey || e.altKey || onControl) return
       if (e.key === 'Enter') {
         if (!permission.entry) {
@@ -241,15 +255,12 @@ export function useSheetKeyboard<C extends string>({
   // A control that does **not** claim the key is the other half, and the commoner one: the
   // partition chips and the bar's verbs are plain buttons, so `isForeignControl` stands aside from
   // any focused control outside the rows (and exempts the rename button and cell trigger a click
-  // inside a row leaves focused). Only plain arrows and Shift — ⌘, Ctrl and ⌥ arrows are the
-  // browser's and the OS's — and not under an open editor, where a moved selection would leave the
-  // panel writing to a batch it no longer names.
+  // inside a row leaves focused) — unless a click left it focused, below. Only plain arrows and
+  // Shift — ⌘, Ctrl and ⌥ arrows are the browser's and the OS's — and not under an open editor,
+  // where a moved selection would leave the panel writing to a batch it no longer names.
   useEffect(() => {
     if (rowKeys == null && cellKeys == null) return
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.defaultPrevented) return
-      if (!ownsKey(e.target, region) || isForeignControl(e.target)) return
-      if (editorIsOpen()) return
+    const take = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a') {
         const selectAll = rowKeys?.onSelectAll ?? cellKeys?.onSelectAll
         if (selectAll == null) return
@@ -268,8 +279,26 @@ export function useSheetKeyboard<C extends string>({
         if (rowKeys.onStep(direction, e.shiftKey)) e.preventDefault()
       }
     }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return
+      if (!ownsKey(e.target, region) || isForeignControl(e.target)) return
+      if (editorIsOpen()) return
+      take(e)
+    }
+    // The same keys from a control a click left focused (`pointerLeftOnForeignControl`), heard in the
+    // capture phase: a Radix menu or Select trigger opens its list on ↓ from its own keydown
+    // handler, before a bubble listener on the window runs.
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !pointerLeftOnForeignControl(e.target, e.key)) return
+      if (!ownsKey(e.target, region) || editorIsOpen()) return
+      take(e)
+    }
+    window.addEventListener('keydown', onKeyDownCapture, true)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDownCapture, true)
+      window.removeEventListener('keydown', onKeyDown)
+    }
   }, [rowKeys, cellKeys, cellCount, region])
 }
 
@@ -288,11 +317,6 @@ function ownsKey(target: EventTarget | null, region: RefObject<Element | null> |
   if (isEditableTarget(target)) return false
   const blocker = target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]')
   return blocker == null || blocker.contains(mine)
-}
-
-/** A focused button, link or menu item — a control whose own Enter the grid must not take. */
-function isOnControl(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && target.closest('button, a, [role="menuitem"], [role="menu"]') != null
 }
 
 /**

@@ -25,7 +25,14 @@ import {
   marqueeOwnsKeyTarget,
   orderedSelectedCells,
 } from './cellEntry'
-import { isForeignControl, keyTargetIsGuarded } from '../sheet/cellEntry'
+import {
+  clickedForeignControl,
+  isControl,
+  isForeignControl,
+  keyTargetIsGuarded,
+  pointerLeftOnForeignControl,
+} from '../sheet/cellEntry'
+import { focusedByPointer, usePointerFocusTracking } from '../sheet/pointerFocus'
 import { editorIsOpen } from '../editor/EditorSurface'
 import { cellFamilies, resolutionPropertyNames } from './columns'
 import { familiesKey } from '../../lib/selectionMask'
@@ -1164,6 +1171,7 @@ export function FixturesListContainer({
   // interacting inside popovers/dialogs never triggers.
   /** Was a cell editor open when Escape was pressed? See the Escape arm below, and the hook. */
   const escapeFoundEditorRef = useEscapeEditorSnapshot()
+  usePointerFocusTracking()
 
   // **The arrows over a cell marquee move it**, as a spreadsheet's do and as every kit sheet's do —
   // `cellArrowStep`'s `grid` rule over the selectable rows and the visible columns, Shift growing
@@ -1203,14 +1211,113 @@ export function FixturesListContainer({
   )
 
   useEffect(() => {
+    /**
+     * Enter and a typed character open the first selected cell's editor; Backspace / Delete clear
+     * the selection. Answers whether the key was one of those, claimed or refused by the scope.
+     */
+    const takeCellKey = (e: KeyboardEvent): boolean => {
+      if (e.key === 'Enter') {
+        if (!canTypeCells) return true
+        e.preventDefault()
+        openCellEditor('')
+        return true
+      }
+      if (/^[0-9a-z.]$/i.test(e.key)) {
+        // A digit or a dot is the start of a number, and a letter is the start of a gobo
+        // wheel's type-ahead — so the character that opens an editor is anything a field on the
+        // other side could want, and each editor takes the ones it can use (`numericSeed`).
+        // `#` and `,` went with the typed-value grammar: there is no hex to start, and comma is
+        // now the step-to-the-next-field key *inside* an editor.
+        if (!canTypeCells) return true
+        e.preventDefault()
+        openCellEditor(e.key)
+        return true
+      }
+      if (e.key === 'Backspace' || e.key === 'Delete') {
+        if (canClearCells) {
+          e.preventDefault()
+          clearSelectedCells()
+        }
+        return true
+      }
+      return false
+    }
+    const hearsNoKey = (e: KeyboardEvent): boolean =>
+      rootRef.current?.closest('[inert]') != null || keyTargetIsGuarded(e.target)
+    const inAnchorRow = (target: EventTarget | null): boolean =>
+      target instanceof Element &&
+      selection.anchor != null &&
+      target.closest('[data-row-id]')?.getAttribute('data-row-id') === selection.anchor
+    /** ⌘A, the arrows over a cell marquee, →/← over the tree and ↑/↓ over the rows. */
+    const takeRowKey = (e: KeyboardEvent): void => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
+        e.preventDefault()
+        selectAllRows()
+        return
+      }
+      const arrow = arrowOfKey(e.key)
+      if (arrow != null && cellCount > 0) {
+        // Over a cell marquee every arrow is the marquee's; →/← open and close the tree only over
+        // a row selection. Plain and Shift only, and not under an open editor — the kit's guards.
+        if (e.metaKey || e.ctrlKey || e.altKey || editorIsOpen()) return
+        if (stepCells(arrow, e.shiftKey)) e.preventDefault()
+        return
+      }
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // Not from a focused control either *inside* a row — a chip or a cell trigger does not
+        // want its row opened under it — on top of the foreign-control rule, unless a click left
+        // it focused outside the rows or in the anchor row itself (its name, which a click on the
+        // name focuses). Another row's chevron or Info button stays its own.
+        if (
+          isControl(e.target) &&
+          !clickedForeignControl(e.target) &&
+          !(focusedByPointer(e.target) && inAnchorRow(e.target))
+        ) {
+          return
+        }
+        const anchorRow = selection.anchor ? rowById.get(selection.anchor) : undefined
+        const action = anchorRow ? treeKeyAction(anchorRow, e.key) : null
+        if (!action) return
+        e.preventDefault()
+        if (action.kind === 'select-parent') {
+          selectRow(action.rowId, 'replace')
+          setScrollToRowId(action.rowId)
+        } else {
+          handleToggleExpand(action.row)
+        }
+        return
+      }
+      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        // The kit's rule (`arrowStepTarget`), so this list and every sheet step alike — plain and
+        // Shift arrows only, as the kit's: ⌘, Ctrl and ⌥ arrows are the browser's and the OS's.
+        const next = arrowStepTarget(selectableOrder, selection, e.key === 'ArrowDown' ? 'down' : 'up', e.shiftKey)
+        if (next == null) return
+        e.preventDefault()
+        selectRow(next, e.shiftKey ? 'range' : 'replace')
+        setScrollToRowId(next)
+      }
+    }
+
+    // A control outside the rows that a click left focused is not the keyboard's target
+    // (`clickedForeignControl`), so the cell and row keys take it from there too — in the capture
+    // phase, because a Radix menu trigger toggles its menu on Enter, and a menu or Select trigger
+    // opens on ↓, from its own keydown handler, before this window's bubble listener runs. Shifted
+    // cell keys wait for the bubble listener, so ⇧F reaches the full-screen toggle on `document`'s
+    // capture phase first; a control whose arrows are its own keeps them
+    // (`pointerLeftOnForeignControl`).
+    const onKeyDownCapture = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !clickedForeignControl(e.target) || hearsNoKey(e)) return
+      if (cellCount > 0 && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && takeCellKey(e)) return
+      if (pointerLeftOnForeignControl(e.target, e.key)) takeRowKey(e)
+    }
+
     const onKeyDown = (e: KeyboardEvent) => {
       // A key another handler has already claimed — ⇧F on `document`'s capture phase, which is the
       // full-screen toggle — is not this grid's to seed an editor with. Same posture as
       // `useTransportKeys`; a bubble listener on `window` is the last to run, so the answer is here.
       if (e.defaultPrevented) return
       // The programmer keeps this grid mounted under another table, `inert`: it hears no key there.
-      if (rootRef.current?.closest('[inert]') != null) return
-      if (keyTargetIsGuarded(e.target)) return
+      if (hearsNoKey(e)) return
 
       if (e.key === 'Escape') {
         // **An open editor takes Escape first, and keeps the selection.** The clear used to be
@@ -1240,86 +1347,25 @@ export function FixturesListContainer({
         // to know a chip, the bar's own Set or a menu item had the focus.
         //
         // **Except a cell trigger the marquee itself covers** — `marqueeOwnsKeyTarget`, which is
-        // where the whole of that exception is written down and pinned.
+        // where the whole of that exception is written down and pinned — and a control outside the
+        // rows a click left focused, whose unshifted keys `onKeyDownCapture` has already taken.
         const onControl =
-          !marqueeOwnsKeyTarget(e.target, isCellSelected) &&
-          e.target instanceof HTMLElement &&
-          e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
-        if (e.metaKey || e.ctrlKey || e.altKey || onControl) {
-          // fall through to the row shortcuts below
-        } else if (e.key === 'Enter') {
-          if (!canTypeCells) return
-          e.preventDefault()
-          openCellEditor('')
-          return
-        } else if (/^[0-9a-z.]$/i.test(e.key)) {
-          // A digit or a dot is the start of a number, and a letter is the start of a gobo
-          // wheel's type-ahead — so the character that opens an editor is anything a field on the
-          // other side could want, and each editor takes the ones it can use (`numericSeed`).
-          // `#` and `,` went with the typed-value grammar: there is no hex to start, and comma is
-          // now the step-to-the-next-field key *inside* an editor.
-          if (!canTypeCells) return
-          e.preventDefault()
-          openCellEditor(e.key)
-          return
-        } else if (e.key === 'Backspace' || e.key === 'Delete') {
-          if (canClearCells) {
-            e.preventDefault()
-            clearSelectedCells()
-          }
-          return
-        }
+          !marqueeOwnsKeyTarget(e.target, isCellSelected) && !clickedForeignControl(e.target) && isControl(e.target)
+        if (!e.metaKey && !e.ctrlKey && !e.altKey && !onControl && takeCellKey(e)) return
       }
       // The row keys — ⌘A, ↑/↓ and →/← — stand aside from a focused control outside the rows (a
       // template chip, a verb, a menu): the kit's rule, `isForeignControl`, which exempts the name
-      // and cell triggers a click inside a row leaves focused.
+      // and cell triggers a click inside a row leaves focused. One a click left focused outside the
+      // rows `onKeyDownCapture` has already taken.
       if (isForeignControl(e.target)) return
-      if ((e.metaKey || e.ctrlKey) && e.key === 'a') {
-        e.preventDefault()
-        selectAllRows()
-        return
-      }
-      const arrow = arrowOfKey(e.key)
-      if (arrow != null && cellCount > 0) {
-        // Over a cell marquee every arrow is the marquee's; →/← open and close the tree only over
-        // a row selection. Plain and Shift only, and not under an open editor — the kit's guards.
-        if (e.metaKey || e.ctrlKey || e.altKey || editorIsOpen()) return
-        if (stepCells(arrow, e.shiftKey)) e.preventDefault()
-        return
-      }
-      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-        // Not from a focused control either *inside* a row — a chip or a cell trigger does not
-        // want its row opened under it — on top of the foreign-control rule above.
-        if (
-          e.target instanceof HTMLElement &&
-          e.target.closest('button, a, [role="menuitem"], [role="menu"]') != null
-        ) {
-          return
-        }
-        const anchorRow = selection.anchor ? rowById.get(selection.anchor) : undefined
-        const action = anchorRow ? treeKeyAction(anchorRow, e.key) : null
-        if (!action) return
-        e.preventDefault()
-        if (action.kind === 'select-parent') {
-          selectRow(action.rowId, 'replace')
-          setScrollToRowId(action.rowId)
-        } else {
-          handleToggleExpand(action.row)
-        }
-        return
-      }
-      if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        // The kit's rule (`arrowStepTarget`), so this list and every sheet step alike — plain and
-        // Shift arrows only, as the kit's: ⌘, Ctrl and ⌥ arrows are the browser's and the OS's.
-        const next = arrowStepTarget(selectableOrder, selection, e.key === 'ArrowDown' ? 'down' : 'up', e.shiftKey)
-        if (next == null) return
-        e.preventDefault()
-        selectRow(next, e.shiftKey ? 'range' : 'replace')
-        setScrollToRowId(next)
-      }
+      takeRowKey(e)
     }
+    window.addEventListener('keydown', onKeyDownCapture, true)
     window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDownCapture, true)
+      window.removeEventListener('keydown', onKeyDown)
+    }
     // Narrowed to the two fields this reads rather than the whole `cellSelection`: its identity
     // changes with the selection, and re-binding a window listener on every marquee tick is a cost
     // with no payoff. `clearCells` is stable; `cellCount` is the only value that has to be fresh.

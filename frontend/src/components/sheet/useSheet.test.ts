@@ -285,6 +285,182 @@ describe('useSheet row keys', () => {
     }
   })
 
+  it('opens the selected cell on Enter from a control a click left focused, and not from one tabbed to', () => {
+    const { result } = sheet()
+    act(() => result.current.tableProps.cellSelection.select([{ rowId: 'b', col: 'v' }], 'replace'))
+    const button = document.createElement('button')
+    document.body.append(button)
+    try {
+      fireEvent.keyDown(document.body, { key: 'Tab' })
+      act(() => button.focus())
+      press('Enter', {}, button)
+      // No row is drawn here, so an open asks the table to scroll to the cell's row first.
+      expect(result.current.tableProps.scrollToRowId).toBeFalsy()
+      act(() => button.blur())
+      fireEvent.pointerDown(button)
+      act(() => button.focus())
+      press('Enter', {}, button)
+      expect(result.current.tableProps.scrollToRowId).toBe('b')
+    } finally {
+      button.remove()
+    }
+  })
+
+  it('takes ↓ and ⌘A from a control a click left focused, before a menu trigger opens on ↓', () => {
+    const { result } = sheet()
+    // A Radix menu or Select trigger's shape: ↓ opens its list from its own keydown, unless claimed.
+    let opened = 0
+    const trigger = document.createElement('button')
+    trigger.addEventListener('keydown', (e) => {
+      if (e.defaultPrevented || e.key !== 'ArrowDown') return
+      e.preventDefault()
+      opened += 1
+    })
+    document.body.append(trigger)
+    try {
+      fireEvent.keyDown(document.body, { key: 'Tab' })
+      act(() => trigger.focus())
+      press('ArrowDown', {}, trigger)
+      expect(opened).toBe(1)
+      expect(result.current.rowSelection.count).toBe(0)
+      act(() => trigger.blur())
+      fireEvent.pointerDown(trigger)
+      act(() => trigger.focus())
+      press('ArrowDown', {}, trigger)
+      expect(opened).toBe(1)
+      expect(selected(result)).toEqual(['a'])
+      press('a', { metaKey: true }, trigger)
+      expect(selected(result)).toEqual(['a', 'b', 'c', 'd'])
+    } finally {
+      trigger.remove()
+    }
+  })
+
+  it('leaves the arrows to a clicked control that answers them itself', () => {
+    const { result } = sheet()
+    const group = document.createElement('div')
+    group.setAttribute('role', 'radiogroup')
+    const radio = document.createElement('button')
+    radio.setAttribute('role', 'radio')
+    group.appendChild(radio)
+    const slider = document.createElement('span')
+    slider.setAttribute('role', 'slider')
+    slider.tabIndex = 0
+    document.body.append(group, slider)
+    try {
+      for (const control of [radio, slider]) {
+        fireEvent.pointerDown(control)
+        act(() => control.focus())
+        press('ArrowDown', {}, control)
+      }
+      expect(result.current.rowSelection.count).toBe(0)
+    } finally {
+      group.remove()
+      slider.remove()
+    }
+  })
+
+  /** Mount [el] (inside [wrap], if given), give it the focus with a pointer press, and return it. */
+  const mounted: HTMLElement[] = []
+  function clicked<T extends HTMLElement>(el: T, wrap?: HTMLElement): T {
+    if (wrap) wrap.appendChild(el)
+    const root = wrap ?? el
+    document.body.append(root)
+    mounted.push(root)
+    fireEvent.pointerDown(el)
+    act(() => el.focus())
+    return el
+  }
+  afterEach(() => {
+    for (const el of mounted.splice(0)) el.remove()
+  })
+
+  it('takes ⌘A from a clicked control that owns its arrows, and the arrows across a horizontal tab list', () => {
+    const { result } = sheet()
+    const tablist = document.createElement('div')
+    tablist.setAttribute('role', 'tablist')
+    const tab = document.createElement('button')
+    tab.setAttribute('role', 'tab')
+    clicked(tab, tablist)
+    // ← / → are the tab list's; ↑ / ↓ are not, so they step the rows.
+    press('ArrowLeft', {}, tab)
+    expect(result.current.rowSelection.count).toBe(0)
+    press('ArrowDown', {}, tab)
+    expect(selected(result)).toEqual(['a'])
+    press('a', { metaKey: true }, tab)
+    expect(selected(result)).toEqual(['a', 'b', 'c', 'd'])
+  })
+
+  it('leaves ↑ / ↓ to a clicked tab in a vertical tab list', () => {
+    const { result } = sheet()
+    const tablist = document.createElement('div')
+    tablist.setAttribute('role', 'tablist')
+    tablist.setAttribute('aria-orientation', 'vertical')
+    const tab = document.createElement('button')
+    tab.setAttribute('role', 'tab')
+    clicked(tab, tablist)
+    press('ArrowDown', {}, tab)
+    expect(result.current.rowSelection.count).toBe(0)
+  })
+
+  it('takes nothing from a clicked control behind a modal, or one that keeps its own keys', () => {
+    const { result } = sheet()
+    // Radix marks everything outside an open modal `aria-hidden`.
+    const hidden = document.createElement('div')
+    hidden.setAttribute('aria-hidden', 'true')
+    const behind = clicked(document.createElement('button'), hidden)
+    press('ArrowDown', {}, behind)
+    const own = document.createElement('div')
+    own.setAttribute('data-own-keys', '')
+    const go = clicked(document.createElement('button'), own)
+    press('ArrowDown', {}, go)
+    expect(result.current.rowSelection.count).toBe(0)
+  })
+
+  it('counts a press on an already-focused control, and keeps the record when the window refocuses it', () => {
+    const { result } = sheet()
+    const button = document.createElement('button')
+    document.body.append(button)
+    mounted.push(button)
+    // Reached by Tab, then pressed: no focusin fires, but the press is what last touched it.
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => button.focus())
+    fireEvent.pointerDown(button)
+    press('ArrowDown', {}, button)
+    expect(selected(result)).toEqual(['a'])
+    // ⌘Tab away and back: the Meta keydown disarms, and the window's refocus re-fires focusin.
+    fireEvent.keyDown(button, { key: 'Meta', metaKey: true })
+    fireEvent.focusIn(button)
+    press('ArrowDown', {}, button)
+    expect(selected(result)).toEqual(['b'])
+  })
+
+  it('leaves ⇧F from a clicked control to the full-screen toggle, which listens after the sheet', () => {
+    const { result } = sheet()
+    act(() => result.current.tableProps.cellSelection.select([{ rowId: 'b', col: 'v' }], 'replace'))
+    const button = clicked(document.createElement('button'))
+    let notClaimed = false
+    act(() => {
+      notClaimed = fireEvent.keyDown(button, { key: 'F', shiftKey: true })
+    })
+    expect(notClaimed).toBe(true)
+    expect(result.current.tableProps.scrollToRowId).toBeFalsy()
+    // Unshifted, the same character is the selection's.
+    press('f', {}, button)
+    expect(result.current.tableProps.scrollToRowId).toBe('b')
+  })
+
+  it('counts a control Tab brings the focus back to as the keyboard’s, though a click focused it before', () => {
+    const { result } = sheet()
+    const button = clicked(document.createElement('button'))
+    // A click on empty space sends the focus to the body, with no focusin.
+    act(() => button.blur())
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => button.focus())
+    press('ArrowDown', {}, button)
+    expect(result.current.rowSelection.count).toBe(0)
+  })
+
   it('hears no row key on a sheet with no row axis', () => {
     const { result } = sheet(false)
     press('ArrowDown')

@@ -29,6 +29,10 @@ if (typeof document !== 'undefined') {
   await import('@testing-library/jest-dom/vitest')
   const { cleanup } = await import('@testing-library/react')
   afterEach(cleanup)
+  // The pointer-focus tracker's listeners live for the module's life, so its record would carry
+  // a press from one test into the next.
+  const { resetPointerFocus } = await import('../components/sheet/pointerFocus')
+  afterEach(resetPointerFocus)
   afterAll(async () => {
     if (vi.isFakeTimers() || typeof requestAnimationFrame !== 'function') return
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))

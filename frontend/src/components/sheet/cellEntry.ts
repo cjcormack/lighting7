@@ -1,4 +1,5 @@
 import { isEditableTarget } from '@/lib/domUtils'
+import { focusedByPointer } from './pointerFocus'
 import type { CellRef, RowId } from './cellSelectionModel'
 
 /**
@@ -165,9 +166,10 @@ export function keyTargetIsGuarded(target: EventTarget | null): boolean {
  * A focused control **outside the sheet's rows** — a partition chip, a row verb, a menu item, a
  * Select's list — whose arrows and ⌘A are not the row selection's to take.
  *
- * The row keys stand aside from these (CLAUDE.md §Sheet kit). Most controls on a sheet's chrome do
- * not answer an arrow themselves — the partition chips and the bar's verbs are plain buttons — so
- * nothing claims the key before the window hears it, and without this ↓ on *Delete* would move the
+ * The row keys stand aside from these (CLAUDE.md §Sheet kit) — unless a click left one focused
+ * (`pointerLeftOnForeignControl`, below). Most controls on a sheet's chrome do not answer an arrow
+ * themselves — the partition chips and the bar's verbs are plain buttons — so nothing claims the
+ * key before the window hears it, and without this ↓ on *Delete* would move the
  * row it was about to delete. **A control inside a row is exempt**, because that is where focus
  * sits in the ordinary case: a click on a name focuses its rename button, a click on a value its
  * cell trigger, and focus stays there while ↓ moves the selection on.
@@ -176,4 +178,58 @@ export function isForeignControl(target: EventTarget | null): boolean {
   if (!(target instanceof Element)) return false
   const control = target.closest('button, a, [role="menuitem"], [role="menu"], [role="listbox"], [role="slider"]')
   return control != null && control.closest('[data-row-id]') == null
+}
+
+/** A focused button, link or menu item — a control whose own Enter the grid must not take. */
+export function isControl(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && target.closest('button, a, [role="menuitem"], [role="menu"]') != null
+}
+
+/**
+ * A control outside the rows (`isForeignControl`) that a click left focused (`focusedByPointer`):
+ * the grid's keys take Enter, a character and ⌫ from it, as if nothing had the focus. A control
+ * inside a row — another row's pencil, a row grip — keeps its own rules.
+ */
+export function clickedForeignControl(target: EventTarget | null): boolean {
+  return focusedByPointer(target) && isForeignControl(target)
+}
+
+const HORIZONTAL_ARROWS = new Set(['ArrowLeft', 'ArrowRight'])
+const VERTICAL_ARROWS = new Set(['ArrowUp', 'ArrowDown'])
+
+function arrowsOn(orientation: string | null | undefined, fallback: 'horizontal' | 'both'): Set<string> {
+  if (orientation === 'horizontal') return HORIZONTAL_ARROWS
+  if (orientation === 'vertical') return VERTICAL_ARROWS
+  return fallback === 'horizontal' ? HORIZONTAL_ARROWS : new Set([...HORIZONTAL_ARROWS, ...VERTICAL_ARROWS])
+}
+
+/**
+ * Does the control at [target] answer [key] itself? A slider or spin button answers every arrow;
+ * a tab list the arrows along its `aria-orientation` (horizontal unless it says so); a radio group
+ * or toolbar — Radix's single and multiple `ToggleGroup` — the arrows along its orientation, and
+ * all four when it names none, as Radix's roving focus does. A menu or Select trigger answers none:
+ * its arrow only opens the list.
+ */
+function controlOwnsArrow(target: Element, key: string): boolean {
+  if (target.closest('[role="slider"], [role="spinbutton"]') != null) return true
+  const tabs = target.closest('[role="tablist"]')
+  if (tabs != null || target.closest('[role="tab"]') != null) {
+    return arrowsOn(tabs?.getAttribute('aria-orientation'), 'horizontal').has(key)
+  }
+  const group = target.closest('[role="radiogroup"], [role="toolbar"]')
+  if (group != null || target.closest('[role="radio"]') != null) {
+    const orientation = group?.getAttribute('aria-orientation') ?? group?.getAttribute('data-orientation')
+    return arrowsOn(orientation, 'both').has(key)
+  }
+  return false
+}
+
+/**
+ * The row and cell keys' half of `clickedForeignControl`: ⌘A from any such control, and an arrow
+ * from one that does not answer that arrow itself. One reached by Tab is still
+ * `isForeignControl`'s, and stood aside from.
+ */
+export function pointerLeftOnForeignControl(target: EventTarget | null, key: string): boolean {
+  if (!clickedForeignControl(target) || !(target instanceof Element)) return false
+  return !(HORIZONTAL_ARROWS.has(key) || VERTICAL_ARROWS.has(key)) || !controlOwnsArrow(target, key)
 }
