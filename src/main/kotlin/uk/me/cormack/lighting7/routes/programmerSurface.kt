@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.IncludedTarget
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.CueApplyData
@@ -184,6 +185,13 @@ internal fun performProgrammerRecord(
 private fun CueWriteOutcome.withScenery(scenery: SceneryRecordOutcome) =
     copy(scenery = scenery, warnings = warnings + scenery.warnings)
 
+/** [this] with the cleared values' deletions, split rows and warnings folded in. */
+private fun CueWriteOutcome.withRemoved(removal: ClearedOutcome) = copy(
+    assignmentsWritten = assignmentsWritten + removal.written,
+    assignmentsRemoved = assignmentsRemoved + removal.removed,
+    warnings = warnings + removal.warnings,
+)
+
 internal fun defaultRecordedCueName(project: DaoProject, stack: DaoCueStack?): String =
     "Cue ${(stack?.let { entriesOf(it).size } ?: DaoCue.count(DaoCues.project eq project.id).toInt()) + 1}"
 
@@ -276,7 +284,9 @@ internal fun performProgrammerInclude(
     // write the stack back to the cue the operator had just included. A cue that only moves scenery
     // is the same case again.
     if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0) {
-        state.show.programmerStore.lastIncludedTarget = includedTargetFor(cueData, entryId)
+        val target = includedTargetFor(cueData, entryId)
+        state.show.programmerStore.lastIncludedTarget = target
+        state.show.programmerStore.includedKeys = ProgrammerStore.IncludedKeys(target, outcome.staged)
         // The scenery baseline follows the target: an Include that staged nothing leaves both on
         // the source before it, or every held piece would read as changed against an empty one.
         state.programmerScenery.includedBaseline(project.id.value, sceneryRows)
@@ -296,6 +306,7 @@ internal sealed interface UpdateCoreResult {
     data class LookUpdated(
         val result: ProgrammerLookUpdateResult,
         val skipped: List<RecordSkip>,
+        val warnings: List<String> = emptyList(),
     ) : UpdateCoreResult
 
     data class CuesUpdated(
@@ -377,6 +388,10 @@ internal fun performProgrammerUpdate(
         }
     }
 
+    // Mode A also deletes the rows whose values Include staged and the operator has since cleared.
+    // Mode B names no source, so there is nothing a clear can be measured against.
+    val cleared = if (modeLabel == "A") clearedSinceInclude(state, includeTarget!!, mask) else emptyList()
+
     val results = ArrayList<ProgrammerUpdateResult>(cueIds.size)
     val warnings = ArrayList<String>()
 
@@ -394,6 +409,7 @@ internal fun performProgrammerUpdate(
             cue.adHocEffects.filter { it.sortOrder in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
+                .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures))
             if (modeLabel == "A") {
                 writeLayerStackIntoCue(
                     cue,
@@ -432,11 +448,16 @@ internal fun performProgrammerUpdate(
             fxWritten = written.fxWritten,
             republishedLive = republishCueIfLive(state, cueId),
             sceneryWritten = written.scenery.written,
+            assignmentsRemoved = written.assignmentsRemoved,
         )
         warnings += written.warnings
         if (modeLabel == "A" && written.scenery.warnings.isEmpty()) state.programmerScenery.rebaseline(project.id.value, written = true)
     }
 
+    if (results.isNotEmpty() && modeLabel == "A") {
+        state.show.programmerStore.forgetIncludedKeys(cleared)
+        state.show.programmerStore.rebaseIncludeTarget()
+    }
     if (results.isNotEmpty()) state.show.fixtures.cueListChanged()
     // Scenery written back changes the stack list's `CueStackCueEntry.scenery`.
     if (results.any { it.sceneryWritten > 0 }) state.show.fixtures.cueStackListChanged()

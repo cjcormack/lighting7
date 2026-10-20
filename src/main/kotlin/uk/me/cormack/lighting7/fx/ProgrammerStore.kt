@@ -120,6 +120,12 @@ data class IncludedTarget(
     val targetId: Int,
     val entryId: Int? = null,
     val sourceUuid: UUID? = null,
+    /**
+     * Moves each time the programmer and the source are made to agree — an Include, a Record or an
+     * Update into it — so a client re-takes the baseline it counts unwritten changes against.
+     * Stamped by [ProgrammerStore]; forgetting the entry a cue was included from keeps it.
+     */
+    val baseline: Long = 0,
 ) {
     enum class Kind {
         CUE,
@@ -260,11 +266,19 @@ class ProgrammerStore {
 
     val lastIncludedTargetFlow: StateFlow<IncludedTarget?> = _lastIncludedTarget.asStateFlow()
 
+    private val baselineCounter = AtomicLong(0)
+
+    /** Setting it stamps a fresh [IncludedTarget.baseline], so even the same source included again moves it. */
     var lastIncludedTarget: IncludedTarget?
         get() = _lastIncludedTarget.value
         set(value) {
-            _lastIncludedTarget.value = value
+            _lastIncludedTarget.value = value?.copy(baseline = baselineCounter.incrementAndGet())
         }
+
+    /** The programmer and the include target agree again — an Update wrote into it. */
+    fun rebaseIncludeTarget() {
+        _lastIncludedTarget.value = _lastIncludedTarget.value?.copy(baseline = baselineCounter.incrementAndGet())
+    }
 
     /**
      * Drop the include target if it points at [cueId]. Called when a cue is deleted, so a
@@ -322,6 +336,38 @@ class ProgrammerStore {
      */
     @Volatile
     var includedLayerSnapshot: List<ProgrammerLayer> = emptyList()
+
+    /** One property Include staged as an `INCLUDE` slot. */
+    data class IncludedKey(val fixtureKey: String, val propertyName: String)
+
+    /** The keys one Include staged, and the source it staged them from. */
+    data class IncludedKeys(val target: IncludedTarget, val keys: Set<IncludedKey>)
+
+    /**
+     * What the last Include staged — Update's baseline for a value the operator has since cleared.
+     *
+     * The `INCLUDE` slot answers "changed since Include?" by surviving under the operator's write, but
+     * a clear takes it with every other owner, leaving nothing to compare. This remembers the keys so
+     * Update can delete the rows they came from. Read through [includedKeysFor], which ignores it once
+     * the include target names another source; Update drops the keys it has dealt with, and [clearAll]
+     * drops the lot.
+     */
+    @Volatile
+    var includedKeys: IncludedKeys? = null
+
+    /** [includedKeys] when they were staged from [target]'s source (the entry it was placed from aside). */
+    fun includedKeysFor(target: IncludedTarget): Set<IncludedKey> =
+        includedKeys
+            ?.takeIf { it.target.kind == target.kind && it.target.targetId == target.targetId }
+            ?.keys
+            .orEmpty()
+
+    /** Forget [keys]: their rows have been dealt with, so a later Update must not delete them again. */
+    fun forgetIncludedKeys(keys: Collection<IncludedKey>) {
+        val current = includedKeys ?: return
+        if (keys.isEmpty()) return
+        includedKeys = current.copy(keys = current.keys - keys.toSet())
+    }
 
     private val layersLock = Any()
     private val layerIdCounter = AtomicInteger(1)
@@ -746,6 +792,7 @@ class ProgrammerStore {
         // Look edit, anywhere — put the whole look back on stage after the operator cleared it.
         synchronized(layersLock) { layers = emptyList() }
         includedLayerSnapshot = emptyList()
+        includedKeys = null
         bumpEpoch()
         bumpCoverage()
     }

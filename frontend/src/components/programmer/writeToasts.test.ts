@@ -84,4 +84,25 @@ describe('updateNote', () => {
     } as unknown as UpdateResponse)
     expect(note.title).toBe('Updated “Night” — 4 rows written, 1 scenery change, 2 live cue(s) moved with it.')
   })
+
+  it('counts the rows a cleared value took out of the Look or cue', () => {
+    const look = updateNote({
+      applied: true, mode: 'A', results: [], warnings: [],
+      lookResult: { lookName: 'Set — Market', rowsWritten: 0, rowsRemoved: 2, cuesRepublished: [] },
+    } as unknown as UpdateResponse)
+    expect(look.title).toBe('Updated “Set — Market” — 0 rows written, 2 removed.')
+    const cueNote = updateNote({
+      applied: true, mode: 'A', results: [{ ...cue(3, 1), assignmentsRemoved: 1 }], warnings: [],
+    } as unknown as UpdateResponse)
+    expect(cueNote.title).toBe('Updated “Cue 3” — 1 value written, 1 removed.')
+  })
+
+  it('says nothing was written, and claims nothing about why', () => {
+    const note = updateNote({
+      applied: false, mode: 'A', results: [], warnings: [],
+      lookResult: { lookName: 'Night', rowsWritten: 0, rowsRemoved: 0, cuesRepublished: [] },
+    } as unknown as UpdateResponse)
+    expect(note.title).toBe('Nothing written to “Night”.')
+    expect(note.warn).toBe(false)
+  })
 })

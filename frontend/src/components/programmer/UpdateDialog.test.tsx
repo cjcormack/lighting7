@@ -132,6 +132,20 @@ describe('UpdateDialog mask', () => {
     expect(toast.warning).not.toHaveBeenCalled()
   })
 
+  it('closes and says so when an Update into an included Look writes nothing (Mode A)', async () => {
+    const onOpenChange = vi.fn()
+    const lookTarget = { kind: 'LOOK', lookId: 12, lookName: 'Set — Market' } as unknown as IncludedTarget
+    answer.current = () => ({
+      applied: false, mode: 'A', results: [], warnings: [],
+      lookResult: { lookId: 12, lookName: 'Set — Market', rowsWritten: 0, rowsRemoved: 0, cuesRepublished: [] },
+    })
+    render(<UpdateDialog open onOpenChange={onOpenChange} projectId={6} includeTarget={lookTarget} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Update' }))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(toast.success).toHaveBeenCalledWith('Nothing written to “Set — Market”.', { description: undefined })
+    expect(screen.getByRole('button', { name: 'Update' })).toBeDisabled()
+  })
+
   /**
    * It opens on the selection's mask (apply-model plan D3), and in Mode B asks for the checklist
    * once, under that mask — never first under the closed dialog's and then again. A change here is

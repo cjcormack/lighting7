@@ -271,7 +271,7 @@ class LookRecordTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `Update into a Look never deletes a row the programmer no longer holds`() = testApplication {
+    fun `Update into a Look deletes the row of a value cleared since Include`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
@@ -283,20 +283,185 @@ class LookRecordTest : RouteIntegrationTest() {
         )
 
         client.includeLook(lookId)
-        // The operator drops hex-2 out of the programmer and edits hex-1. Update applies MERGE
-        // semantics, so removing content from a Look is `Record REMOVE`'s job, never Update's —
-        // otherwise editing one head would silently strip every head you had released.
-        //
-        // Deliberately a single-entry clear, not `clear-all`: clearing everything also forgets the
-        // include target (pinned by ProgrammerIncludeRouteTest), which would send this through the
-        // Mode B checklist and prove nothing about MERGE.
+        // A single-entry clear, not `clear-all`: clearing everything also forgets the include
+        // target (pinned by ProgrammerIncludeRouteTest), which would send this through Mode B.
         clearProgrammer("hex-2", "dimmer")
+
+        val response: ProgrammerUpdateResponse = client.update().body()
+        assertTrue(response.applied, "a removal alone is a write")
+        val result = assertNotNull(response.lookResult)
+        assertEquals(0, result.rowsWritten)
+        assertEquals(1, result.rowsRemoved)
+        assertEquals(mapOf(("hex-1" to "dimmer") to "200"), client.lookRows(lookId))
+
+        // Including it again brings back only what the Look now holds.
+        client.includeLook(lookId)
+        assertNull(state.show.programmerStore.slotsFor("hex-2", "dimmer").firstOrNull())
+    }
+
+    @Test
+    fun `a mover's cleared position comes out of the Look and stays out`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 240)
+        val lookId = client.createLook(
+            "Set — Market",
+            LookRowDto("fixture", "mac-1", "dimmer", "255"),
+            LookRowDto("fixture", "mac-1", "position", "108,168"),
+        )
+
+        client.includeLook(lookId)
+        clearProgrammer("mac-1", "position")
+        assertEquals(1, assertNotNull(client.update().body<ProgrammerUpdateResponse>().lookResult).rowsRemoved)
+
+        client.includeLook(lookId)
+        assertEquals(mapOf(("mac-1" to "dimmer") to "255"), client.lookRows(lookId))
+        assertTrue(state.show.programmerStore.slotsFor("mac-1", "position").isEmpty())
+    }
+
+    @Test
+    fun `clearing a position takes its fine halves out of the Look too`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "spot-1", 1)
+        val lookId = client.createLook(
+            "Set — Market",
+            LookRowDto("fixture", "spot-1", "position", "108,168"),
+            LookRowDto("fixture", "spot-1", "panFine", "53"),
+            LookRowDto("fixture", "spot-1", "tiltFine", "207"),
+        )
+
+        client.includeLook(lookId)
+        clearProgrammer("spot-1", "position")
+        val response: ProgrammerUpdateResponse = client.update().body()
+
+        assertEquals(3, assertNotNull(response.lookResult).rowsRemoved)
+        assertEquals(emptyMap(), client.lookRows(lookId))
+    }
+
+    @Test
+    fun `an Update moves the include target's baseline`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val lookId = client.createLook("Warm", LookRowDto("fixture", "hex-1", "dimmer", "200"))
+        client.includeLook(lookId)
+        val before = assertNotNull(state.show.programmerStore.lastIncludedTarget).baseline
+
         setProgrammer("hex-1", "dimmer", "30")
         client.update()
+        val after = assertNotNull(state.show.programmerStore.lastIncludedTarget)
+        assertEquals(lookId, after.lookId)
+        assertTrue(after.baseline > before, "a client re-takes its baseline from the next state frame")
+    }
 
-        val rows = client.lookRows(lookId)
-        assertEquals("30", rows.getValue("hex-1" to "dimmer"))
-        assertEquals("120", rows.getValue("hex-2" to "dimmer"), "Update never deletes")
+    @Test
+    fun `an Update with nothing changed or cleared writes nothing and says so`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val lookId = client.createLook("Warm", LookRowDto("fixture", "hex-1", "dimmer", "200"))
+
+        client.includeLook(lookId)
+        val response: ProgrammerUpdateResponse = client.update().body()
+        assertFalse(response.applied)
+        assertEquals("A", response.mode)
+        assertEquals(0, assertNotNull(response.lookResult).rowsRemoved)
+    }
+
+    @Test
+    fun `clearing one member splits the group row, so the rest keep their value`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
+        val lookId = client.createLook("Warm", LookRowDto("group", "front", "dimmer", "200"))
+
+        client.includeLook(lookId)
+        clearProgrammer("hex-1", "dimmer")
+        val result = assertNotNull(client.update().body<ProgrammerUpdateResponse>().lookResult)
+        assertEquals(1, result.rowsRemoved)
+        assertEquals(1, result.rowsWritten)
+        assertEquals(mapOf(("hex-2" to "dimmer") to "200"), client.lookRows(lookId))
+    }
+
+    @Test
+    fun `a member with its own row loses both that row and the group's hold on it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
+        val lookId = client.createLook(
+            "Warm",
+            LookRowDto("group", "front", "dimmer", "200"),
+            LookRowDto("fixture", "hex-1", "dimmer", "255"),
+        )
+
+        client.includeLook(lookId)
+        clearProgrammer("hex-1", "dimmer")
+        client.update()
+        assertEquals(mapOf(("hex-2" to "dimmer") to "200"), client.lookRows(lookId))
+    }
+
+    @Test
+    fun `a row added back after an Update is not deleted by the next one`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val lookId = client.createLook(
+            "Warm",
+            LookRowDto("fixture", "hex-1", "dimmer", "200"),
+            LookRowDto("fixture", "hex-2", "dimmer", "120"),
+        )
+        client.includeLook(lookId)
+        clearProgrammer("hex-2", "dimmer")
+        client.update()
+
+        transaction(state.database) {
+            uk.me.cormack.lighting7.models.DaoLookRow.new {
+                look = DaoLook[lookId]
+                targetType = "fixture"
+                targetKey = "hex-2"
+                propertyName = "dimmer"
+                value = "80"
+                sortOrder = 9
+            }
+        }
+        setProgrammer("hex-1", "dimmer", "30")
+        client.update()
+        assertEquals("80", client.lookRows(lookId).getValue("hex-2" to "dimmer"))
+    }
+
+    @Test
+    fun `a row Include could not stage is never read as cleared`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        // A hex has no pan or tilt, so Include stages nothing for this row.
+        val lookId = client.createLook(
+            "Warm",
+            LookRowDto("fixture", "hex-1", "dimmer", "200"),
+            LookRowDto("fixture", "hex-1", "position", "108,168"),
+        )
+        client.includeLook(lookId)
+        setProgrammer("hex-1", "dimmer", "30")
+        client.update()
+        assertEquals("108,168", client.lookRows(lookId).getValue("hex-1" to "position"))
+    }
+
+    @Test
+    fun `a Clear drops the Include baseline`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val lookId = client.createLook("Warm", LookRowDto("fixture", "hex-1", "dimmer", "200"))
+        client.includeLook(lookId)
+        assertNotNull(state.show.programmerStore.includedKeys)
+        clearProgrammerCompletely(state)
+        assertNull(state.show.programmerStore.includedKeys)
     }
 
     @Test

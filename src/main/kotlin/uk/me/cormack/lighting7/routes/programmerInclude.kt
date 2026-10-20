@@ -12,6 +12,7 @@ import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -47,7 +48,18 @@ data class IncludeOutcome(
     val layersInstalled: Int,
     val skipped: List<RecordSkip>,
     val warnings: List<String>,
+    /** The keys staged as `INCLUDE` slots, for [ProgrammerStore.includedKeys]. */
+    val staged: Set<ProgrammerStore.IncludedKey> = emptySet(),
 )
+
+/**
+ * The keys of [this] batch that landed as `INCLUDE` slots in [store]. The writer skips a write that
+ * resolves to no channel (a `position` row on a fixed head), and a key Include never held must not
+ * read as cleared.
+ */
+internal fun List<ProgrammerWriter.PropertyWrite>.stagedIn(store: ProgrammerStore): Set<ProgrammerStore.IncludedKey> =
+    filter { store.valueFor(ProgrammerOwner.INCLUDE, it.fixture.targetKey, it.propertyName) != null }
+        .mapTo(LinkedHashSet()) { ProgrammerStore.IncludedKey(it.fixture.targetKey, it.propertyName) }
 
 /**
  * Pull a cue's contents into the programmer as `INCLUDE`-owned entries and programmer-band FX,
@@ -159,6 +171,7 @@ internal fun includeCueIntoProgrammer(
         layersInstalled = state.show.programmerStore.layers.size,
         skipped = skipped,
         warnings = warnings,
+        staged = writes.stagedIn(state.show.programmerStore),
     )
 }
 

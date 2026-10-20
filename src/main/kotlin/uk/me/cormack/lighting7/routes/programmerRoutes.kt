@@ -340,6 +340,8 @@ internal data class ProgrammerUpdateResult(
     val republishedLive: Boolean,
     /** Scenery change rows written back (Mode A only — scenery says nothing about Mode B's cues). */
     val sceneryWritten: Int = 0,
+    /** Rows deleted because the operator cleared the value Include staged from them (Mode A only). */
+    val assignmentsRemoved: Int = 0,
 )
 
 /**
@@ -355,6 +357,8 @@ internal data class ProgrammerLookUpdateResult(
     val lookId: Int,
     val lookName: String,
     val rowsWritten: Int,
+    /** Rows deleted because the operator cleared the value Include staged from them. */
+    val rowsRemoved: Int = 0,
     /** The Look's included effects the operator changed, written back onto them. */
     val effectsWritten: Int = 0,
     /** Scenery rows written back into the Look. */
@@ -362,7 +366,10 @@ internal data class ProgrammerLookUpdateResult(
     /** What the re-resolve moved: live consumers of the Look. */
     val programmerKeysRefreshed: Int,
     val cuesRepublished: List<Int>,
-)
+) {
+    /** Whether the Update changed the Look at all. Derived, so not on the wire. */
+    val wroteAnything: Boolean get() = rowsWritten + rowsRemoved + effectsWritten + sceneryWritten > 0
+}
 
 @Serializable
 internal data class ProgrammerUpdateResponse(
@@ -420,10 +427,11 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
 
             is UpdateCoreResult.LookUpdated -> call.respond(
                 ProgrammerUpdateResponse(
-                    applied = result.result.rowsWritten + result.result.effectsWritten + result.result.sceneryWritten > 0,
+                    applied = result.result.wroteAnything,
                     mode = "A",
                     lookResult = result.result,
                     skipped = result.skipped.map { it.toDto() },
+                    warnings = result.warnings,
                 ),
             )
 

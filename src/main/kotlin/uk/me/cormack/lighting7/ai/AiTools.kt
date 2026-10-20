@@ -2119,16 +2119,19 @@ class AiTools(private val state: State) {
             is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
                 success = true,
                 description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s), " +
-                    "${result.result.effectsWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written",
+                    "${result.result.effectsWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written, " +
+                    "${result.result.rowsRemoved} row(s) removed",
                 result = buildJsonObject {
                     put("mode", "A")
-                    put("applied", result.result.rowsWritten + result.result.effectsWritten + result.result.sceneryWritten > 0)
+                    put("applied", result.result.wroteAnything)
                     put("lookId", result.result.lookId)
                     put("lookName", result.result.lookName)
                     put("rowsWritten", result.result.rowsWritten)
+                    put("rowsRemoved", result.result.rowsRemoved)
                     put("effectsWritten", result.result.effectsWritten)
                     put("sceneryWritten", result.result.sceneryWritten)
                     putSkips(result.skipped)
+                    putStrings("warnings", result.warnings)
                 }.toString()
             )
             is UpdateCoreResult.CuesUpdated -> ToolExecutionResult(
@@ -2138,6 +2141,7 @@ class AiTools(private val state: State) {
                 } else {
                     "Updated " + result.results.joinToString {
                         "'${it.cueName}' (${it.assignmentsWritten} value(s)" +
+                            (if (it.assignmentsRemoved > 0) ", ${it.assignmentsRemoved} removed" else "") +
                             (if (it.sceneryWritten > 0) ", ${it.sceneryWritten} scenery change(s)" else "") + ")"
                     }
                 },
@@ -2150,6 +2154,7 @@ class AiTools(private val state: State) {
                                 put("cueId", r.cueId)
                                 put("cueName", r.cueName)
                                 put("assignmentsWritten", r.assignmentsWritten)
+                                put("assignmentsRemoved", r.assignmentsRemoved)
                                 put("fxWritten", r.fxWritten)
                                 put("sceneryWritten", r.sceneryWritten)
                                 put("republishedLive", r.republishedLive)

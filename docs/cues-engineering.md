@@ -619,7 +619,8 @@ The stack tools (`add_cue_to_stack`, `remove_cue_from_stack`, `move_cue_to_stack
 Plus the three programmer gestures, which is how a cue gets *authored* rather than described:
 `record_cue` (the programmer into a cue, in any `RecordMode` — CREATE / MERGE / UPDATE_EXISTING / REMOVE), `include_into_programmer`
 (a cue or Look back out as an edit buffer) and `update_from_programmer` (write back only what
-changed since the Include; `preview=true` returns the checklist without writing). They call the
+changed since the Include, and delete the row of a value cleared since it; `preview=true` returns
+the checklist without writing). They call the
 same `performProgrammerRecord` / `performProgrammerInclude` / `performProgrammerUpdate` cores in
 `routes/programmerSurface.kt` that the REST routes render — the mode/mask/scope rules and the
 include-target bookkeeping decide which rows get overwritten, so there is exactly one copy of them.
