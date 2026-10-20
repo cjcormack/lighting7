@@ -13,6 +13,7 @@ import { windowName } from "./lib/windowIdentity"
 import { applyImmersiveLaunch } from "./lib/immersive"
 import { refreshTelemetry, startSentry } from "./lib/sentry"
 import { lightingApi } from "./api/lightingApi"
+import { installPointerFocusTracking } from "./components/sheet/pointerFocus"
 
 // Asks the desk whether to report, before the bridges start; it never holds up the first paint.
 startSentry()
@@ -41,6 +42,9 @@ startTemplatesBridge()
 // there is no REST action for `errorToastMiddleware` to catch — so an unheard frame means a
 // slider that moved while the rig did not. See startProgrammerErrorBridge.
 startProgrammerErrorBridge()
+
+// Before the first render, so the click that navigates to a grid is seen. See pointerFocus.ts.
+installPointerFocusTracking()
 
 // This tab's name (multi-screen plan D10): `?window=` is read once and stripped here, before the
 // router is created, so the router never sees the parameter and a bookmark of the stripped URL

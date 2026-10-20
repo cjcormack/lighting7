@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import type { CellSelection } from '../sheet/useCellSelection'
@@ -415,6 +415,161 @@ describe('FixturesListContainer cell arrows', () => {
     press('ArrowRight', { metaKey: true })
     press('ArrowRight', { ctrlKey: true })
     expect(cells()).toEqual(['fixture:a·dimmer'])
+  })
+})
+
+/**
+ * A control a click left focused (`focusedByPointer`): a toolbar button pressed with the mouse
+ * keeps the focus, and the Enter after it is meant for the selection. A menu trigger toggles its
+ * menu from its own keydown handler, so the grid has to take the key before it — the capture arm.
+ */
+describe('FixturesListContainer with a toolbar control focused', () => {
+  function Trigger({ onToggle }: { onToggle: () => void }) {
+    // A Radix menu trigger's shape: Enter toggles and ↓ opens from the trigger's keydown, unless
+    // already claimed.
+    return (
+      <button
+        data-testid="trigger"
+        onKeyDown={(e) => {
+          if (e.defaultPrevented || (e.key !== 'Enter' && e.key !== 'ArrowDown')) return
+          e.preventDefault()
+          onToggle()
+        }}
+      />
+    )
+  }
+
+  function setUp() {
+    const onToggle = vi.fn()
+    // The row the request names must be on screen, or the container scrolls rather than opens.
+    table.editorOpen = true
+    render(
+      <>
+        <Trigger onToggle={onToggle} />
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />
+      </>,
+    )
+    fireEvent.click(screen.getByTestId('cell'))
+    return { onToggle, trigger: screen.getByTestId('trigger') }
+  }
+
+  it('opens the cell editor on Enter when a click left the focus on the control', () => {
+    const { onToggle, trigger } = setUp()
+    fireEvent.pointerDown(trigger)
+    act(() => trigger.focus())
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    expect(onToggle).not.toHaveBeenCalled()
+    expect(table.keyboardOpens.map((open) => open.col)).toEqual(['dimmer'])
+  })
+
+  it('leaves Enter to a control the keyboard reached', () => {
+    const { onToggle, trigger } = setUp()
+    fireEvent.pointerDown(trigger)
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => trigger.focus())
+    fireEvent.keyDown(trigger, { key: 'Enter' })
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(table.keyboardOpens).toEqual([])
+  })
+
+  it('steps the cell marquee on ↓ rather than opening the menu', () => {
+    const { onToggle, trigger } = setUp()
+    fireEvent.click(screen.getByTestId('colour-cell'))
+    fireEvent.pointerDown(trigger)
+    act(() => trigger.focus())
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' })
+    expect(onToggle).not.toHaveBeenCalled()
+    // `b` has no properties, so ↓ steps past its blank row to the pixel bar.
+    expect(table.cellSelection!.cells.map((c) => `${c.rowId}·${c.col}`)).toEqual(['fixture:c·colour'])
+  })
+
+  it('opens the tree on → from a clicked toolbar control', () => {
+    rowSelection.ids = new Set(['fixture:c'])
+    const trigger = document.createElement('button')
+    document.body.append(trigger)
+    try {
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+      const closed = table.rows.length
+      fireEvent.pointerDown(trigger)
+      act(() => trigger.focus())
+      fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+      expect(table.rows.length).toBe(closed + 2)
+    } finally {
+      trigger.remove()
+    }
+  })
+
+  it('opens the tree on → from a control inside the anchor row a click left focused', () => {
+    rowSelection.ids = new Set(['fixture:c'])
+    // The anchor row's own rename button, which a click on the name leaves focused.
+    const row = document.createElement('div')
+    row.setAttribute('data-row-id', 'fixture:c')
+    const name = document.createElement('button')
+    row.appendChild(name)
+    document.body.append(row)
+    try {
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+      const closed = table.rows.length
+      fireEvent.keyDown(document.body, { key: 'Tab' })
+      act(() => name.focus())
+      fireEvent.keyDown(name, { key: 'ArrowRight' })
+      expect(table.rows.length).toBe(closed)
+      act(() => name.blur())
+      fireEvent.pointerDown(name)
+      act(() => name.focus())
+      fireEvent.keyDown(name, { key: 'ArrowRight' })
+      expect(table.rows.length).toBe(closed + 2)
+    } finally {
+      row.remove()
+    }
+  })
+
+  it('leaves → to a clicked control in another row — its chevron toggles that row, not the anchor', () => {
+    rowSelection.ids = new Set(['fixture:c'])
+    const row = document.createElement('div')
+    row.setAttribute('data-row-id', 'fixture:a')
+    const chevron = document.createElement('button')
+    row.appendChild(chevron)
+    document.body.append(row)
+    try {
+      render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" showOwnership />)
+      const closed = table.rows.length
+      fireEvent.pointerDown(chevron)
+      act(() => chevron.focus())
+      fireEvent.keyDown(chevron, { key: 'ArrowRight' })
+      expect(table.rows.length).toBe(closed)
+    } finally {
+      row.remove()
+    }
+  })
+
+  it('leaves the arrows to a clicked radio, whose arrows move it within its group', () => {
+    const { trigger } = setUp()
+    trigger.setAttribute('role', 'radio')
+    fireEvent.pointerDown(trigger)
+    act(() => trigger.focus())
+    fireEvent.keyDown(trigger, { key: 'ArrowRight' })
+    expect(table.cellSelection!.cells.map((c) => `${c.rowId}·${c.col}`)).toEqual(['fixture:a·dimmer'])
+  })
+
+  it('lets ⇧F reach the full-screen toggle first, and seeds the editor with any other ⇧ letter', () => {
+    // `useWindowsBridge`'s ⇧F handler: `document`, capture, claiming the key.
+    const fullScreen = vi.fn((e: KeyboardEvent) => {
+      if (e.key === 'F' && e.shiftKey && !e.defaultPrevented) e.preventDefault()
+    })
+    document.addEventListener('keydown', fullScreen, true)
+    try {
+      const { trigger } = setUp()
+      fireEvent.pointerDown(trigger)
+      act(() => trigger.focus())
+      fireEvent.keyDown(trigger, { key: 'F', shiftKey: true })
+      expect(fullScreen).toHaveBeenCalled()
+      expect(table.keyboardOpens).toEqual([])
+      fireEvent.keyDown(trigger, { key: 'G', shiftKey: true })
+      expect(table.keyboardOpens.map((open) => open.seed)).toEqual(['G'])
+    } finally {
+      document.removeEventListener('keydown', fullScreen, true)
+    }
   })
 })
 

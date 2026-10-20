@@ -109,6 +109,30 @@ describe('useSheet — skips in the batch count, the read-out, Clear and Spread'
     expect(result.current.spreadPlans).toEqual([expect.objectContaining({ count: 2 })])
   })
 
+  it('clears the selected cells on ⌫ from a toolbar control a click left focused, and not from one tabbed to', () => {
+    const { column, result } = harness()
+    act(() => result.current.tableProps.cellSelection.select([{ rowId: 'a', col: 'level' }], 'replace'))
+    const verb = document.createElement('button')
+    document.body.append(verb)
+    try {
+      fireEvent.keyDown(document.body, { key: 'Tab' })
+      act(() => verb.focus())
+      act(() => {
+        fireEvent.keyDown(verb, { key: 'Backspace' })
+      })
+      expect(column.clear).not.toHaveBeenCalled()
+      act(() => verb.blur())
+      fireEvent.pointerDown(verb)
+      act(() => verb.focus())
+      act(() => {
+        fireEvent.keyDown(verb, { key: 'Backspace' })
+      })
+      expect(column.clear).toHaveBeenCalledWith([ROWS[0]])
+    } finally {
+      verb.remove()
+    }
+  })
+
   it('the row-selection path skips as the marquee does', () => {
     const { column, result } = harness()
     act(() => result.current.setRows(['a', 'b']))
@@ -219,6 +243,29 @@ describe('⏎ over one row opens it (D4)', () => {
     const other = within(rowEl('d')).getByTitle('Double-click to rename').closest('button')!
     other.focus()
     fireEvent.keyDown(other, { key: 'Enter' })
+    expect(onOpen).not.toHaveBeenCalled()
+  })
+
+  it('opens the selected row on ⏎ from a toolbar control a click left focused, not from another row’s clicked pencil', () => {
+    const onOpen = vi.fn()
+    render(
+      <>
+        <button data-testid="verb">Verb</button>
+        <Harness onOpen={onOpen} />
+      </>,
+    )
+    fireEvent.click(rowEl('b').querySelector('[data-first-column]')!)
+    const verb = screen.getByTestId('verb')
+    fireEvent.pointerDown(verb)
+    verb.focus()
+    fireEvent.keyDown(verb, { key: 'Enter' })
+    expect(onOpen).toHaveBeenCalledWith(ROWS[1])
+    onOpen.mockClear()
+    // A press on row d's pencil opens row d itself and leaves b selected: ⏎ on it is the pencil's.
+    const pencil = screen.getByRole('button', { name: 'Edit M4' })
+    fireEvent.pointerDown(pencil)
+    pencil.focus()
+    fireEvent.keyDown(pencil, { key: 'Enter' })
     expect(onOpen).not.toHaveBeenCalled()
   })
 

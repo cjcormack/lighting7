@@ -265,7 +265,10 @@ export const ShowBar = memo(function ShowBar({
             comes back onto the one row at a fixed 84×44, which is the bottom rung (D8): a phone has
             no line to spare, and GO at 84px is still the widest thing on the bar. `h-auto` above 700
             lets it match the tile heights, overriding Button's default h-10. */}
-        <div className="flex shrink-0 basis-auto items-stretch gap-2 @[440px]:basis-full @[700px]:ml-auto @[700px]:basis-auto">
+        <div
+          data-own-keys
+          className="flex shrink-0 basis-auto items-stretch gap-2 @[440px]:basis-full @[700px]:ml-auto @[700px]:basis-auto"
+        >
           <Button
             variant="outline"
             onClick={onBack}

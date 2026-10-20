@@ -42,6 +42,7 @@ export function ShowLockControl({
         </span>
       )}
       <Button
+        data-own-keys
         size="sm"
         variant={locked ? 'outline' : 'default'}
         aria-pressed={!locked}
