@@ -14,6 +14,7 @@ describe('describeTarget', () => {
   it('describes a fan as the selection’s, on its axis', () => {
     expect(describeTarget({ type: 'selectionFan', axis: 'PAN' })).toBe('Sel · fan pan')
     expect(describeTarget({ type: 'selectionFan', axis: 'TILT' })).toBe('Sel · fan tilt')
+    expect(describeTarget({ type: 'selectionFan', axis: 'ACROSS' })).toBe('Sel · fan across')
   })
 
   it('describes a tempo binding with its configured range', () => {

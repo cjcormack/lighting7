@@ -392,19 +392,26 @@ export interface SpreadRequest {
    * reason.
    */
   mode?: 'FAN'
-  /** `FAN`: the outer heads' offset per axis, in centre steps; an absent axis is not fanned. */
-  fan?: { pan?: number; tilt?: number }
+  /**
+   * `FAN`: the outer heads' offset per axis — `pan` and `tilt` in centre steps, or `x` (towards SL)
+   * and `y` (upstage) in stage metres, a stage fan; never both. An absent axis is not fanned.
+   */
+  fan?: { pan?: number; tilt?: number; x?: number; y?: number }
   /**
    * `FAN`: where each head starts, a `"pan,tilt"` literal — the desk's own `base` answer sent back
    * for the rest of the gesture, or the row being edited. A head absent here is read by the desk.
    */
   base?: SpreadBase[]
+  /** A stage fan: the previous answer's `near`, so each head stays on the side it is on. */
+  near?: AimNear[]
 }
 
-/** One head's starting position for a fan: the head and its `"pan,tilt"` literal. */
+/** One head's starting position for a fan: the head, its `"pan,tilt"` literal and, on a stage fan, its fine bytes. */
 export interface SpreadBase {
   target: CueTarget
   value: string
+  panFine?: number
+  tiltFine?: number
 }
 
 /**
@@ -438,6 +445,8 @@ export interface SpreadResponse {
   base?: SpreadBase[]
   /** `FAN`: the heads the fan took past the end of their travel, held at it. */
   clamped?: CueTarget[]
+  /** A stage fan: each moved head's pan and tilt in travel degrees, sent back as the next request's `near`. */
+  near?: AimNear[]
 }
 
 /**

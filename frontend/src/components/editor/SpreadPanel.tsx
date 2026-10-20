@@ -30,7 +30,7 @@ import {
 import { WHITE_POLICIES, WHITE_POLICY_LABELS, type TemplateProperty, type WhitePolicy } from '@/lib/templateIntent'
 import { cn } from '@/lib/utils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import type { SpreadBase, SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
+import type { AimNear, SpreadBase, SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
 import type { ColourEditorProps } from './ColourEditor'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
@@ -40,6 +40,7 @@ import { rawValues, spreadDurations, spreadFractions, walkAddresses } from './sp
 import { useEditorKeyboard } from './useEditorKeyboard'
 import { useLivePush } from './useLivePush'
 import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positionScale'
+import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type PositionPadMode } from '@/lib/positionPadMode'
 
 /**
  * **Spread** — one panel, four plan kinds, every host (editor-kit plan D2–D7; `Spread.dc.html` is
@@ -236,9 +237,14 @@ export interface SpreadForm {
   /** Position only: *Ends* or *Fan*. */
   mode: SpreadMode
   axes: FanAxes
+  /** Fan only: in pan and tilt, or across the stage — the position pad's mode (`lib/positionPadMode.ts`). */
+  space: PositionPadMode
   /** The fan's amounts, centre steps on each axis; meaningful only against the gesture's anchor. */
   fanPan: number
   fanTilt: number
+  /** A stage fan's amounts, metres towards SL and upstage; likewise. */
+  fanX: number
+  fanY: number
 }
 
 interface SpreadPanelProps {
@@ -342,8 +348,11 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
     seed: base?.seed ?? 0,
     mode: base?.mode ?? prefs.mode,
     axes: base?.axes ?? prefs.axes,
+    space: base?.space ?? getPositionPadMode(),
     fanPan: 0,
     fanTilt: 0,
+    fanX: 0,
+    fanY: 0,
   }
 }
 
@@ -352,8 +361,22 @@ export function isFanForm(form: SpreadForm): boolean {
   return form.mode === 'FAN' && spreadEditorKind(form.property) === 'position'
 }
 
-/** The amounts a fan form sends: an axis it does not move is absent, which the desk leaves where it was. */
-function fanAmountsOf(form: SpreadForm): { pan?: number; tilt?: number } {
+/** Whether a fan form fans across the stage, in metres, rather than in pan and tilt. */
+export function isStageFanForm(form: SpreadForm): boolean {
+  return isFanForm(form) && form.space === 'STAGE'
+}
+
+/**
+ * The amounts a fan form sends: an axis it does not move is absent, which the desk leaves where it
+ * was. On the stage *Pan* is across (x) and *Tilt* is depth (y).
+ */
+function fanAmountsOf(form: SpreadForm): NonNullable<SpreadRequestBody['fan']> {
+  if (form.space === 'STAGE') {
+    return {
+      ...(form.axes !== 'TILT' ? { x: form.fanX } : {}),
+      ...(form.axes !== 'PAN' ? { y: form.fanY } : {}),
+    }
+  }
   return {
     ...(form.axes !== 'TILT' ? { pan: form.fanPan } : {}),
     ...(form.axes !== 'PAN' ? { tilt: form.fanTilt } : {}),
@@ -392,7 +415,8 @@ export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): Sprea
     curve: form.curve,
     order: form.order,
     parts: form.parts,
-    over: effectiveSpreadOver(form.over, plan.cellCount),
+    // A stage fan aims heads, and a cell has no placement of its own.
+    over: isStageFanForm(form) ? 'HEADS' : effectiveSpreadOver(form.over, plan.cellCount),
     seed: form.seed,
   }
   if (plan.write === false) body.write = false
@@ -406,9 +430,24 @@ interface FanGesture {
   anchoring: boolean
   /** The latest send that is waiting for the anchor. */
   waiting: SpreadRequestBody | null
+  /** A stage fan's latest degrees by head, so each head's next solve stays on the side it is on. */
+  near: Map<string, AimNear>
+  /** The request whose answer last updated [near]: an older answer landing later is not newer degrees. */
+  nearSeq: number
 }
 
-const newFanGesture = (): FanGesture => ({ anchor: null, anchoring: false, waiting: null })
+const newFanGesture = (): FanGesture => ({ anchor: null, anchoring: false, waiting: null, near: new Map(), nearSeq: 0 })
+
+/** The heads a stage fan's answer left where they were because the point was outside their travel. */
+function outOfReachCount(answer: SpreadResponse): number {
+  return (answer.skipped ?? []).filter((skip) => skip.reason.startsWith('out of reach')).length
+}
+
+interface FanReadout {
+  fromStage: number
+  clamped: number
+  outOfReach: number
+}
 
 /** One live write: a desk request, or the raw kind's values. */
 type Send = { kind: 'intent'; body: SpreadRequestBody } | { kind: 'raw'; values: number[]; over: SpreadOver }
@@ -510,7 +549,7 @@ export function SpreadPanel({
    * for it — the amount a drag was let go on — even after the popover closed.
    */
   const fanGestureRef = useRef<FanGesture>(newFanGesture())
-  const [fanReadout, setFanReadout] = useState<{ fromStage: number; clamped: number } | null>(null)
+  const [fanReadout, setFanReadout] = useState<FanReadout | null>(null)
 
   const sendIntent = useCallback((plan: IntentSpreadPlan, outgoing: SpreadRequestBody, gesture: FanGesture) => {
     let body = outgoing
@@ -518,7 +557,7 @@ export function SpreadPanel({
     let given: ReadonlySet<string> | null = null
     if (fan) {
       if (gesture.anchor != null) {
-        body = { ...body, base: gesture.anchor }
+        body = { ...body, base: gesture.anchor, ...(gesture.near.size > 0 ? { near: [...gesture.near.values()] } : {}) }
       } else if (gesture.anchoring) {
         gesture.waiting = body
         return
@@ -543,13 +582,21 @@ export function SpreadPanel({
     void plan
       .send(body)
       .then((answer: SpreadResponse) => {
+        if (fan && seq > gesture.nearSeq && (answer.near?.length ?? 0) > 0) {
+          gesture.nearSeq = seq
+          for (const near of answer.near ?? []) gesture.near.set(near.target.key, near)
+        }
         if (given != null) {
           const bases = answer.base ?? []
           // No base — the mask kept Position out, say — is no anchor: the next send reads the heads again.
           if (bases.length > 0) {
             gesture.anchor = bases
             if (gesture === fanGestureRef.current) {
-              setFanReadout({ fromStage: bases.filter((b) => !given.has(b.target.key)).length, clamped: answer.clamped?.length ?? 0 })
+              setFanReadout({
+                fromStage: bases.filter((b) => !given.has(b.target.key)).length,
+                clamped: answer.clamped?.length ?? 0,
+                outOfReach: outOfReachCount(answer),
+              })
             }
           }
           settle()
@@ -558,7 +605,7 @@ export function SpreadPanel({
         const message = skippedRowsMessage(answer.skippedFamilies ?? [], plan.mask)
         if (message != null) toast.warning(message, { id: SKIPPED_FAMILIES_TOAST })
         if (fan && given == null && gesture === fanGestureRef.current) {
-          setFanReadout((prev) => (prev == null ? prev : { ...prev, clamped: answer.clamped?.length ?? 0 }))
+          setFanReadout((prev) => (prev == null ? prev : { ...prev, clamped: answer.clamped?.length ?? 0, outOfReach: outOfReachCount(answer) }))
         }
         plan.onAnswer?.(answer, body)
       })
@@ -593,8 +640,9 @@ export function SpreadPanel({
   const resetFan = useCallback(() => {
     dropAnchor()
     reset()
-    if (formRef.current.fanPan === 0 && formRef.current.fanTilt === 0) return
-    const next = { ...formRef.current, fanPan: 0, fanTilt: 0 }
+    const { fanPan, fanTilt, fanX, fanY } = formRef.current
+    if (fanPan === 0 && fanTilt === 0 && fanX === 0 && fanY === 0) return
+    const next = { ...formRef.current, fanPan: 0, fanTilt: 0, fanX: 0, fanY: 0 }
     formRef.current = next
     setForm(next)
   }, [dropAnchor, reset])
@@ -767,6 +815,15 @@ export function SpreadPanel({
     setForm(next)
     if (current.mode !== storedFan.mode) resetFan()
   }, [storedFan, resetFan])
+  // The fan's space is the position pad's mode, one fact for both; a change is a new gesture.
+  const storedSpace = usePositionPadMode()
+  useEffect(() => {
+    if (formRef.current.space === storedSpace) return
+    resetFan()
+    const next = { ...formRef.current, space: storedSpace }
+    formRef.current = next
+    setForm(next)
+  }, [storedSpace, resetFan])
 
   // The colour editor's hand-over: Colour, From set to its colour, the knob seeded to it, applied
   // once per seed and then dropped by the host. In the popover host it opens the panel.
@@ -951,6 +1008,7 @@ export function SpreadPanel({
   // ── The controls ────────────────────────────────────────────────────────────────────────────
   const editorKind = spreadEditorKind(form.property)
   const fanForm = intentPlan != null && isFanForm(form)
+  const stageFan = fanForm && isStageFanForm(form)
   const properties = intentPlan == null ? [] : propertiesFor(form.family)
   const offeredFamilies = intentPlan?.offered ?? available
   const editingEndpoint = editing === 'from' ? form.from : form.to
@@ -1055,7 +1113,7 @@ export function SpreadPanel({
             type="single"
             size="sm"
             aria-label="Over"
-            value={form.over}
+            value={stageFan ? 'HEADS' : form.over}
             onValueChange={(next) => next && commit({ over: next as SpreadOver })}
             className="mt-1"
           >
@@ -1065,7 +1123,14 @@ export function SpreadPanel({
             <ToggleGroupItem
               value="CELLS"
               className="text-xs"
-              title={cellCount === 0 ? 'Each cell is one step — no selected fixture has cells, so each fixture is one' : `Each cell is one step — ${cellCount} cells`}
+              disabled={stageFan}
+              title={
+                stageFan
+                  ? 'A stage fan aims whole fixtures — a cell has no placement of its own'
+                  : cellCount === 0
+                    ? 'Each cell is one step — no selected fixture has cells, so each fixture is one'
+                    : `Each cell is one step — ${cellCount} cells`
+              }
             >
               Cells{cellCount > 0 && <span className="ml-1 text-muted-foreground tabular-nums">{cellCount}</span>}
             </ToggleGroupItem>
@@ -1175,11 +1240,11 @@ export function SpreadPanel({
                   onValueChange={(next) => next && commit({ axes: next as FanAxes })}
                   className="min-w-0 flex-1"
                 >
-                  <ToggleGroupItem value="PAN" className="flex-1 text-xs">
-                    Pan
+                  <ToggleGroupItem value="PAN" className="flex-1 text-xs" title={stageFan ? 'SR ↔ SL' : undefined}>
+                    {stageFan ? 'Across' : 'Pan'}
                   </ToggleGroupItem>
-                  <ToggleGroupItem value="TILT" className="flex-1 text-xs">
-                    Tilt
+                  <ToggleGroupItem value="TILT" className="flex-1 text-xs" title={stageFan ? 'Downstage ↔ upstage' : undefined}>
+                    {stageFan ? 'Depth' : 'Tilt'}
                   </ToggleGroupItem>
                   <ToggleGroupItem value="BOTH" className="flex-1 text-xs">
                     Both
@@ -1187,6 +1252,25 @@ export function SpreadPanel({
                 </ToggleGroup>
               )}
             </div>
+          )}
+          {fanForm && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-label="Fan in"
+              value={form.space}
+              onValueChange={(value) => {
+                if (value === 'PAN_TILT' || value === 'STAGE') setPositionPadMode(value)
+              }}
+              className="w-full"
+            >
+              <ToggleGroupItem value="PAN_TILT" className="flex-1 text-xs" title="Fan each head's pan and tilt by centre steps">
+                Pan/Tilt
+              </ToggleGroupItem>
+              <ToggleGroupItem value="STAGE" className="flex-1 text-xs" title="Fan the beams across the stage by metres, each head aimed by the desk">
+                Stage
+              </ToggleGroupItem>
+            </ToggleGroup>
           )}
 
           {/* From / To. A colour has one picker for whichever end is being edited; the other three
@@ -1244,9 +1328,12 @@ export function SpreadPanel({
           ) : fanForm ? (
             <FanAmounts
               axes={form.axes}
-              pan={form.fanPan}
-              tilt={form.fanTilt}
-              onChange={(patch) => commit(patch)}
+              stage={stageFan}
+              first={stageFan ? form.fanX : form.fanPan}
+              second={stageFan ? form.fanY : form.fanTilt}
+              onChange={(first, second) =>
+                commit(stageFan ? { ...(first != null ? { fanX: first } : {}), ...(second != null ? { fanY: second } : {}) } : { ...(first != null ? { fanPan: first } : {}), ...(second != null ? { fanTilt: second } : {}) })
+              }
               readout={fanReadoutLine(intentPlan, fanReadout)}
               onReread={resetFan}
             />
@@ -1744,7 +1831,7 @@ function formatDurationMs(ms: number): string {
 // ─── The fan's amounts ──────────────────────────────────────────────────────
 
 /** The read-out under a fan's amounts: where the heads started, and any the fan held at the end of travel. */
-function fanReadoutLine(plan: IntentSpreadPlan | null, readout: { fromStage: number; clamped: number } | null): string {
+function fanReadoutLine(plan: IntentSpreadPlan | null, readout: FanReadout | null): string {
   const rows = plan?.fanBases != null
   const parts = [rows ? `From ${plan?.fanRowsLabel ?? 'the rows'}` : 'From where they are']
   if (rows && readout != null && readout.fromStage > 0) {
@@ -1753,29 +1840,74 @@ function fanReadoutLine(plan: IntentSpreadPlan | null, readout: { fromStage: num
   if (readout != null && readout.clamped > 0) {
     parts.push(`${readout.clamped} ${readout.clamped === 1 ? 'head' : 'heads'} at the end of travel`)
   }
+  if (readout != null && readout.outOfReach > 0) {
+    parts.push(`${readout.outOfReach} ${readout.outOfReach === 1 ? 'head' : 'heads'} out of reach`)
+  }
   return parts.join(' · ')
+}
+
+/** How a fan amount strip and field read and step: centre steps, or stage metres. */
+interface FanScale {
+  min: number
+  max: number
+  /** An arrow key's step, and ⇧'s. */
+  step: number
+  bigStep: number
+  round: (value: number) => number
+  format: (value: number) => string
+}
+
+const CENTRE_SCALE: FanScale = {
+  min: CENTRE_MIN,
+  max: CENTRE_MAX,
+  step: 1,
+  bigStep: 8,
+  round: (value) => clampCentre(Math.round(value)),
+  format: formatCentre,
+}
+
+/** The furthest a stage fan's strip moves the outer heads, metres either way. */
+export const STAGE_FAN_MAX_M = 10
+
+const STAGE_SCALE: FanScale = {
+  min: -STAGE_FAN_MAX_M,
+  max: STAGE_FAN_MAX_M,
+  step: 0.1,
+  bigStep: 1,
+  round: (value) => Math.max(-STAGE_FAN_MAX_M, Math.min(STAGE_FAN_MAX_M, Math.round(value * 10) / 10)),
+  format: (value) => `${value > 0 ? '+' : ''}${value.toFixed(1)} m`,
 }
 
 function FanAmounts({
   axes,
-  pan,
-  tilt,
+  stage,
+  first,
+  second,
   onChange,
   readout,
   onReread,
 }: {
   axes: FanAxes
-  pan: number
-  tilt: number
-  onChange: (patch: { fanPan?: number; fanTilt?: number }) => void
+  /** Metres across and up the stage, rather than pan and tilt in centre steps. */
+  stage: boolean
+  /** Pan, or across. */
+  first: number
+  /** Tilt, or depth. */
+  second: number
+  onChange: (first: number | undefined, second: number | undefined) => void
   readout: string
   onReread: () => void
 }) {
+  const scale = stage ? STAGE_SCALE : CENTRE_SCALE
   return (
     <div className="flex flex-col gap-1.5">
-      <EditorLabel>Amount · the outer heads, centre steps</EditorLabel>
-      {axes !== 'TILT' && <FanAmountRow axis="Pan" value={pan} onChange={(fanPan) => onChange({ fanPan })} />}
-      {axes !== 'PAN' && <FanAmountRow axis="Tilt" value={tilt} onChange={(fanTilt) => onChange({ fanTilt })} />}
+      <EditorLabel>{stage ? 'Amount · the outer heads, metres on stage' : 'Amount · the outer heads, centre steps'}</EditorLabel>
+      {axes !== 'TILT' && (
+        <FanAmountRow axis={stage ? 'Across' : 'Pan'} scale={scale} value={first} onChange={(value) => onChange(value, undefined)} />
+      )}
+      {axes !== 'PAN' && (
+        <FanAmountRow axis={stage ? 'Depth' : 'Tilt'} scale={scale} value={second} onChange={(value) => onChange(undefined, value)} />
+      )}
       <p data-fan-readout className="flex items-center gap-2 text-[10px] text-muted-foreground">
         <span className="min-w-0 flex-1">{readout}</span>
         <button
@@ -1791,34 +1923,35 @@ function FanAmounts({
   )
 }
 
-function FanAmountRow({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value: number; onChange: (value: number) => void }) {
+type FanAxisLabel = 'Pan' | 'Tilt' | 'Across' | 'Depth'
+
+function FanAmountRow({ axis, scale, value, onChange }: { axis: FanAxisLabel; scale: FanScale; value: number; onChange: (value: number) => void }) {
   return (
     <div className="flex items-center gap-1.5">
-      <span className="w-7 shrink-0 text-[9px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{axis}</span>
-      <FanAmountStrip axis={axis} value={value} onChange={onChange} />
+      <span className="w-9 shrink-0 text-[9px] font-bold tracking-[0.08em] text-muted-foreground uppercase">{axis}</span>
+      <FanAmountStrip axis={axis} scale={scale} value={value} onChange={onChange} />
       <EditorField
         label={`${axis} amount`}
         value={value}
-        min={CENTRE_MIN}
-        max={CENTRE_MAX}
-        onCommit={(n) => onChange(clampCentre(Math.round(n)))}
+        min={scale.min}
+        max={scale.max}
+        step={scale.step}
+        onCommit={(n) => onChange(scale.round(n))}
         className="w-14 shrink-0"
       />
     </div>
   )
 }
 
-/** Centre steps a full-width drag moves: the whole scale across the strip. */
-const STRIP_SPAN = CENTRE_MAX - CENTRE_MIN
-
 /**
- * The fan's drag strip: 0 in the middle, −128…+127 across it. A press anywhere starts a drag from
- * the value as it stands — the strip is a relative control, like the fan — with ⇧ for a quarter of
- * the speed; a double click is 0, and the arrow keys step it (⇧ by 8).
+ * The fan's drag strip: 0 in the middle, the scale's whole range across it. A press anywhere starts
+ * a drag from the value as it stands — the strip is a relative control, like the fan — with ⇧ for
+ * a quarter of the speed; a double click is 0, and the arrow keys step it (⇧ by the big step).
  */
-function FanAmountStrip({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value: number; onChange: (value: number) => void }) {
+function FanAmountStrip({ axis, scale, value, onChange }: { axis: FanAxisLabel; scale: FanScale; value: number; onChange: (value: number) => void }) {
   const drag = useRef<{ lastX: number; acc: number; width: number } | null>(null)
-  const at = (v: number) => ((v - CENTRE_MIN) / STRIP_SPAN) * 100
+  const span = scale.max - scale.min
+  const at = (v: number) => ((v - scale.min) / span) * 100
   const mid = at(0)
   const knob = at(value)
   return (
@@ -1826,10 +1959,10 @@ function FanAmountStrip({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value
       role="slider"
       tabIndex={0}
       aria-label={`${axis} fan`}
-      aria-valuemin={CENTRE_MIN}
-      aria-valuemax={CENTRE_MAX}
+      aria-valuemin={scale.min}
+      aria-valuemax={scale.max}
       aria-valuenow={value}
-      aria-valuetext={formatCentre(value)}
+      aria-valuetext={scale.format(value)}
       data-fan-strip={axis.toLowerCase()}
       title="Drag to fan out or in — ⇧ for fine, double-click for no fan"
       className="relative h-7 min-w-0 flex-1 cursor-ew-resize touch-none overflow-hidden rounded-md border bg-input/30 outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
@@ -1840,10 +1973,10 @@ function FanAmountStrip({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value
       onPointerMove={(e) => {
         const held = drag.current
         if (held == null) return
-        held.acc += ((e.clientX - held.lastX) * STRIP_SPAN * (e.shiftKey ? 0.25 : 1)) / held.width
+        held.acc += ((e.clientX - held.lastX) * span * (e.shiftKey ? 0.25 : 1)) / held.width
         held.lastX = e.clientX
-        held.acc = Math.max(CENTRE_MIN, Math.min(CENTRE_MAX, held.acc))
-        const next = clampCentre(Math.round(held.acc))
+        held.acc = Math.max(scale.min, Math.min(scale.max, held.acc))
+        const next = scale.round(held.acc)
         if (next !== value) onChange(next)
       }}
       onPointerUp={() => {
@@ -1854,11 +1987,11 @@ function FanAmountStrip({ axis, value, onChange }: { axis: 'Pan' | 'Tilt'; value
       }}
       onDoubleClick={() => onChange(0)}
       onKeyDown={(e) => {
-        const step = e.shiftKey ? 8 : 1
+        const step = e.shiftKey ? scale.bigStep : scale.step
         const delta = e.key === 'ArrowRight' || e.key === 'ArrowUp' ? step : e.key === 'ArrowLeft' || e.key === 'ArrowDown' ? -step : 0
         if (delta === 0) return
         e.preventDefault()
-        onChange(clampCentre(value + delta))
+        onChange(scale.round(value + delta))
       }}
     >
       <span aria-hidden className="absolute inset-y-1 w-px bg-muted-foreground/60" style={{ left: `${mid}%` }} />

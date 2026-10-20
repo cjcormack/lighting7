@@ -219,7 +219,8 @@ sealed class BindingTarget {
 
     /**
      * **Fan** the selection's positions on [axis] (venue-visit plan S12): a turn moves the fan's
-     * amount on that axis, two centre steps a 7-bit step, and each selected head is written at its
+     * amount on that axis — two centre steps a 7-bit step on pan and tilt, a tenth of a metre on a
+     * stage axis, which fans the beams' landing points — and each selected head is written at its
      * own position plus its share of the amount, through the Spread panel's own resolve. The desk
      * holds the anchor ([SelectionFan]) and the ring shows the amount, 64 its 0. An empty selection
      * drops the turn, as [SelectionProperty] does.

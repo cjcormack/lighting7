@@ -14,6 +14,7 @@ import {
 import type { SpreadResponse } from '@/store/programmerOps'
 import { getSpreadOver, resetSpreadOverStore } from '@/lib/spreadOver'
 import { getSpreadFanPrefs, resetSpreadFanStore } from '@/lib/spreadFan'
+import { getPositionPadMode, resetPositionPadModeStore, setPositionPadMode } from '@/lib/positionPadMode'
 
 /**
  * The Spread panel (editor-kit plan D2–D7): one component in a popover host and a docked host. What
@@ -89,7 +90,9 @@ beforeEach(() => {
 afterEach(() => {
   resetSpreadOverStore()
   resetSpreadFanStore()
+  resetPositionPadModeStore()
   window.sessionStorage.clear()
+  window.localStorage.clear()
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
@@ -598,6 +601,42 @@ describe('Fan (venue-visit plan S12)', () => {
 
     // Re-read: no anchor and no fan — the next send reads the heads again.
     fireEvent.click(screen.getByRole('button', { name: 'Re-read' }))
+    expect(screen.getByRole('slider', { name: 'Pan fan' })).toHaveAttribute('aria-valuenow', '0')
+    fireEvent.change(amount('Pan'), { target: { value: '5' } })
+    apply()
+    expect(lastBody()).toMatchObject({ fan: { pan: 5 } })
+    expect(lastBody()).not.toHaveProperty('base')
+  })
+
+  it('fans across the stage in metres under the pad’s Stage mode, sending back the fine bases and the degrees', async () => {
+    setPositionPadMode('STAGE')
+    render(<SpreadPanel host="docked" plans={[positionPlan()]} />)
+    toFan()
+    expect(radio('Fan in', 'Stage')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Fan axes', 'Across')).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', 'Cells')).toBeDisabled()
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Across amount' }), { target: { value: '1.5' } })
+    apply()
+    expect(lastBody()).toMatchObject({ mode: 'FAN', fan: { x: 1.5 }, over: 'HEADS' })
+    expect(lastBody()).not.toHaveProperty('near')
+    const fine = { ...base('spot-1', '128,128'), panFine: 7, tiltFine: 9 }
+    const near = [{ target: { type: 'fixture' as const, key: 'spot-1' }, panDeg: 250, tiltDeg: 60 }]
+    await answer({ written: [], base: [fine], near })
+
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Across amount' }), { target: { value: '2' } })
+    apply()
+    expect(lastBody()).toMatchObject({ fan: { x: 2 }, base: [fine], near })
+    // spot-1 out of reach this step: its last degrees are kept beside spot-2's new ones, and the read-out says so.
+    const spot2 = { target: { type: 'fixture' as const, key: 'spot-2' }, panDeg: 280, tiltDeg: 70 }
+    await answer({ written: [], near: [spot2], skipped: [{ target: { type: 'fixture', key: 'spot-1' }, reason: 'out of reach — needs pan …' }] })
+    expect(document.querySelector('[data-fan-readout]')).toHaveTextContent('1 head out of reach')
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Across amount' }), { target: { value: '2.5' } })
+    apply()
+    expect(lastBody()).toMatchObject({ fan: { x: 2.5 }, near: [near[0], spot2] })
+
+    // Back to Pan/Tilt — the pad's mode, one fact for both — is a new gesture with no fan.
+    fireEvent.click(radio('Fan in', 'Pan/Tilt'))
+    expect(getPositionPadMode()).toBe('PAN_TILT')
     expect(screen.getByRole('slider', { name: 'Pan fan' })).toHaveAttribute('aria-valuenow', '0')
     fireEvent.change(amount('Pan'), { target: { value: '5' } })
     apply()

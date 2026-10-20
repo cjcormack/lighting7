@@ -689,6 +689,8 @@ export function SurfaceLibrary({
         // The fan (venue-visit plan S12): an encoder each, over the one desk selection.
         actionChip("fan-pan", "Fan pan", { type: "selectionFan", axis: "PAN" }),
         actionChip("fan-tilt", "Fan tilt", { type: "selectionFan", axis: "TILT" }),
+        actionChip("fan-across", "Fan across", { type: "selectionFan", axis: "ACROSS" }),
+        actionChip("fan-depth", "Fan depth", { type: "selectionFan", axis: "DEPTH" }),
       ],
     })
 

@@ -167,11 +167,12 @@ All are buttons. Five things about them on this side:
 
 ## The selection fan
 
-Venue-visit plan S12 added one continuous target, `selectionFan {axis}` (`PAN` | `TILT`): an encoder
+Venue-visit plan S12 added one continuous target, `selectionFan {axis}` (`PAN` | `TILT`, and the stage
+axes `ACROSS` | `DEPTH`, which fan the beams' landing points a tenth of a metre a step): an encoder
 or fader that fans the desk selection's positions about their own, through the Spread panel's own
 desk resolve. `lib/surfaceDrop.ts` answers `continuous`, `describeTarget` names it *Sel · fan pan*,
 the picker's *Selection — fan* carries one *Axis* select (default Pan), and the library's Desk row
-offers *Fan pan* and *Fan tilt* once — it names no target of its own. The inspector's live card
+offers *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth* once — it names no target of its own. The inspector's live card
 reads it as a selection target. Everything else is the desk's: the gesture's anchor, a turn read as a
 move from what the ring was last shown, and the ring's value, 64 at no fan
 (`docs/midi-control-surface-engineering.md` in lighting7, the `SelectionFan` row). No health arm:

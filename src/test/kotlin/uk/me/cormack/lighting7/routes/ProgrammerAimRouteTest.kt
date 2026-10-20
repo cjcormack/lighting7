@@ -409,6 +409,92 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.entries().none { it.fixtureKey == "spot-coarse" && it.slots.first().sourceGroup == "spots" })
     }
 
+    // ─── a stage fan (POST /programmer/spread, FAN in metres) ──────────────
+
+    private suspend fun HttpClient.spread(request: SpreadRequest): HttpResponse =
+        post("/api/rest/projects/$projectId/programmer/spread") {
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }
+
+    private suspend fun HttpClient.runSpread(request: SpreadRequest): SpreadResponse {
+        val resp = spread(request)
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        return resp.body()
+    }
+
+    private fun stageFan(x: Double?, y: Double?, base: List<SpreadBaseDto>? = null, near: List<AimNearDto>? = null) =
+        SpreadRequest(
+            targets = jogFrom.keys.map(::fixture), property = "position", mode = "FAN",
+            fan = SpreadFanDto(x = x, y = y), base = base, near = near,
+        )
+
+    /** Each moved head's landing point on the plane, from the travel degrees the answer gives as `near`. */
+    private fun landings(answer: SpreadResponse, keys: Set<String> = jogFrom.keys): Map<String, StagePoint> =
+        answer.near.associate { n ->
+            val key = n.target.key
+            val (panZero, tiltZero) = jogZero.getValue(key)
+            key to landing(AimWriteDto(n.target, "", n.panDeg, n.tiltDeg), jogFrom.getValue(key), panZero, tiltZero).point
+        }.also { assertEquals(keys, answer.written.map { it.target.key }.toSet(), answer.skipped.toString()) }
+
+    @Test
+    fun `a stage fan moves each head's landing point by its share of the metres, from where the gesture started`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        client.jogRig()
+        // The start, as a jog reads it: where each head lands before any fan.
+        val start = client.run(jog(0.0, 0.0))
+        val startAt = start.written.associate { w ->
+            val (panZero, tiltZero) = jogZero.getValue(w.target.key)
+            w.target.key to landing(w, jogFrom.getValue(w.target.key), panZero, tiltZero).point
+        }
+
+        val first = client.runSpread(stageFan(2.0, null))
+        assertEquals(jogFrom.keys, first.base.map { it.target.key }.toSet())
+        assertNotNull(first.base.single { it.target.key == "shehds" }.panFine, "a stage fan's base carries fine bytes")
+        val moved = landings(first)
+        // Three heads in a line: the ends move the whole amount, in opposite directions, the middle stays.
+        val offsets = moved.mapValues { (key, at) -> at.x - startAt.getValue(key).x }
+        listOf(-2.0, 0.0, 2.0).zip(offsets.values.sorted()).forEach { (want, got) -> assertEquals(want, got, 0.3, offsets.toString()) }
+        for ((key, at) in moved) assertEquals(startAt.getValue(key).y, at.y, 0.3, "$key y")
+        assertNotNull(entry("shehds", "panFine"), "fine channels are written")
+
+        // A later frame of the gesture is measured from its start, not from the last frame.
+        val later = client.runSpread(stageFan(1.0, null, base = first.base, near = first.near))
+        assertEquals(first.base, later.base, "a base sent is the base answered")
+        val again = landings(later).mapValues { (key, at) -> at.x - startAt.getValue(key).x }
+        for ((key, offset) in offsets) assertEquals(offset / 2, again.getValue(key), 0.3, key)
+    }
+
+    @Test
+    fun `a stage fan refuses mixed units, cells and an amount off any stage`() = testApplication {
+        seedJogRig()
+        mountTestApp(state)
+        val client = jsonClient()
+        suspend fun refused(request: SpreadRequest) {
+            val response = client.spread(request)
+            assertEquals(HttpStatusCode.BadRequest, response.status, response.bodyAsText())
+        }
+        refused(stageFan(1.0, null).copy(fan = SpreadFanDto(pan = 10, x = 1.0)))
+        refused(stageFan(1.0, null).copy(over = "CELLS"))
+        refused(stageFan(900.0, null))
+        refused(stageFan(1.0, null, base = listOf(SpreadBaseDto(fixture("spot-fine"), "128,128", panFine = 300))))
+
+        client.jogRig()
+        val startAt = client.run(jog(0.0, 0.0)).written.associate { w ->
+            val (panZero, tiltZero) = jogZero.getValue(w.target.key)
+            w.target.key to landing(w, jogFrom.getValue(w.target.key), panZero, tiltZero).point
+        }
+        val out = client.runSpread(
+            stageFan(1.0, null).copy(targets = listOf(fixture("spot-unplaced"), fixture("spot-fine"), fixture("shehds"))),
+        )
+        assertTrue(out.skipped.single { it.target.key == "spot-unplaced" }.reason.contains("not placed"), out.skipped.toString())
+        // The unplaced head takes no place on the curve: the two that can be aimed are its ends.
+        val offsets = landings(out, setOf("spot-fine", "shehds")).map { (key, at) -> at.x - startAt.getValue(key).x }.sorted()
+        listOf(-1.0, 1.0).zip(offsets).forEach { (want, got) -> assertEquals(want, got, 0.3, offsets.toString()) }
+    }
+
     // ─── aim_fixtures ──────────────────────────────────────────────────────
 
     private fun call(arguments: String): ToolExecutionResult =

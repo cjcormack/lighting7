@@ -161,13 +161,17 @@ export interface SelectionPropertyTarget {
   colourAxis?: ColourAxis | null
 }
 
-/** The axis a {@link SelectionFanTarget} encoder fans. */
-export type FanAxis = "PAN" | "TILT"
+/**
+ * The axis a {@link SelectionFanTarget} encoder fans: pan or tilt, or the beams' landing points
+ * across the stage (`ACROSS`, SR↔SL) or up it (`DEPTH`).
+ */
+export type FanAxis = "PAN" | "TILT" | "ACROSS" | "DEPTH"
 
 /**
  * **Fan** the selection's positions on one axis (venue-visit plan S12): a turn moves the fan's
- * amount, two centre steps a 7-bit step, each selected head written at its own position plus its
- * share. The desk holds where the heads started; the ring shows the amount, 64 its 0.
+ * amount — two centre steps a 7-bit step on pan and tilt, a tenth of a metre on a stage axis — each
+ * selected head written at its own position plus its share. The desk holds where the heads
+ * started; the ring shows the amount, 64 its 0.
  */
 export interface SelectionFanTarget {
   type: "selectionFan"

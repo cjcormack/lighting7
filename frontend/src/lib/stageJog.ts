@@ -11,6 +11,82 @@ export const JOG_METRES_PER_PX = 0.035
 /** An arrow key's nudge, in metres. */
 export const JOG_NUDGE_M = 0.25
 
+/** Metres a second a drag held at the pad's edge carries on travelling. */
+export const JOG_EDGE_SPEED_M_S = 1.5
+
+/** How much faster it travels for each pixel further past the edge. */
+export const JOG_EDGE_SPEED_PER_PX = 0.05
+
+/** The fastest a held edge travels, metres a second. */
+export const JOG_EDGE_SPEED_MAX_M_S = 5
+
+/** The furthest one gesture moves the landing points on either axis — the desk's farthest landing. */
+export const JOG_MAX_OFFSET_M = 40
+
+/** The edge's speed for a pointer [overshootPx] past it. */
+export function edgeSpeed(overshootPx: number): number {
+  return Math.min(JOG_EDGE_SPEED_MAX_M_S, JOG_EDGE_SPEED_M_S + overshootPx * JOG_EDGE_SPEED_PER_PX)
+}
+
+/**
+ * **One drag of the jog pad as an offset in stage metres.** Inside the pad a drag is a
+ * displacement, [JOG_METRES_PER_PX] a pixel; held at or past an edge it is also a rate, the offset
+ * travelling on towards that edge at [edgeSpeed] for as long as it is held, so one gesture can cross
+ * the whole stage. What the edge carried is kept when the pointer comes back inside.
+ */
+export class JogDrag {
+  private x = 0
+  private y = 0
+  private carryX = 0
+  private carryY = 0
+
+  constructor(private readonly half: number) {}
+
+  /** The pointer's offset from where the drag began, in pixels (+y down the screen). */
+  point(x: number, y: number): void {
+    this.x = x
+    this.y = y
+  }
+
+  /** Whether the pointer is at or past an edge, where [advance] moves the offset. */
+  get atEdge(): boolean {
+    return Math.abs(this.x) >= this.half || Math.abs(this.y) >= this.half
+  }
+
+  /** Carry the offset on at the edge for [seconds]; whether it moved. */
+  advance(seconds: number): boolean {
+    const before = this.offset()
+    this.carryX = this.carry(this.carryX, this.x, seconds)
+    this.carryY = this.carry(this.carryY, -this.y, seconds)
+    const after = this.offset()
+    return after.dx !== before.dx || after.dy !== before.dy
+  }
+
+  /** The whole offset in stage metres: +dx towards SL, +dy upstage. */
+  offset(): { dx: number; dy: number } {
+    return {
+      dx: clampOffset(this.inside(this.x) + this.carryX),
+      dy: clampOffset(this.inside(-this.y) + this.carryY),
+    }
+  }
+
+  private inside(px: number): number {
+    return Math.max(-this.half, Math.min(this.half, px)) * JOG_METRES_PER_PX
+  }
+
+  private carry(carry: number, px: number, seconds: number): number {
+    const over = Math.abs(px) - this.half
+    if (over < 0 || seconds <= 0) return carry
+    const next = carry + Math.sign(px) * edgeSpeed(over) * seconds
+    const inside = this.inside(px)
+    return Math.max(-JOG_MAX_OFFSET_M - inside, Math.min(JOG_MAX_OFFSET_M - inside, next))
+  }
+}
+
+function clampOffset(metres: number): number {
+  return Math.max(-JOG_MAX_OFFSET_M, Math.min(JOG_MAX_OFFSET_M, metres))
+}
+
 /** The fewest milliseconds between two jog requests: every one is a programmer write broadcast to every window. */
 export const JOG_FLOOR_MS = 50
 

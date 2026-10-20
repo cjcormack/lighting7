@@ -2919,9 +2919,10 @@ address a desk window by its **registry name**, `selectionNext` / `selectionPrev
 reach `DeskSelection.subselect` — see `docs/midi-surface-engineering.md` §"Windows and the
 sub-selection".
 
-**And the fan** (venue-visit plan S12): `selectionFan {axis: 'PAN' | 'TILT'}`, a continuous target
-the picker offers as *Selection — fan* with an *Axis* select, the library's Desk row as *Fan pan* and
-*Fan tilt*, and `describeTarget` as *Sel · fan pan*. The desk holds the fan's anchor and feeds the
+**And the fan** (venue-visit plan S12): `selectionFan {axis: 'PAN' | 'TILT' | 'ACROSS' | 'DEPTH'}`, a
+continuous target the picker offers as *Selection — fan* with an *Axis* select, the library's Desk
+row as *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth*, and `describeTarget` as *Sel · fan pan*.
+`ACROSS` and `DEPTH` fan across the stage, a tenth of a metre a step. The desk holds the fan's anchor and feeds the
 ring the amount, so nothing on this side computes one — see `docs/midi-surface-engineering.md`
 §"The selection fan".
 
@@ -3398,6 +3399,16 @@ names any the desk held at the end of travel (`clamped`); the desk reads those h
 never from Local, which is another context's. The position cell's ***Spread…*** opens the dock's
 Spread tab in Fan at 0 (`FanSpreadSeed`, the claim's `spreadFan`), or row C's popover where the dock
 does not dock; see `PaletteBands` below.
+
+**A fan can be across the stage** (*Fan in: Pan/Tilt · Stage* under the mode row). The switch is the
+position pad's own mode (`lib/positionPadMode.ts`), one fact for the pads and the fan, and a change is
+a new gesture. In Stage the amounts are metres — *Across* (SR ↔ SL, `fan.x`) and *Depth* (`fan.y`) in
+place of Pan and Tilt, the strip ±10 m, the arrows 0.1 m and ⇧ 1 m — and the desk moves each head's
+landing point by its share and aims it (lighting7 `docs/lighting-composition-model.md` §"A fan is a
+spread about each head's own position"). The answer's `base` then carries fine bytes and its `near`
+each head's degrees, and the gesture sends both back, `near` each head's latest (an older answer
+landing late is not newer), as the jog does. The read-out counts the heads the fan took *out of
+reach*. Over is Heads: *Cells* is disabled and shown unpressed, a cell having no placement of its own.
 
 **The row keys are every sheet's, and they are the one half that listens in the bubble phase.**
 Where a sheet selects rows — every kit sheet but the DMX sheet, whose surface passes `useSheet`
@@ -4323,8 +4334,13 @@ pad (64px folded). The mode is one fact for all three, per viewer in `localStora
 (`lib/positionPadMode.ts`). In *Stage* the pad is a **jog**: edges *Upstage* at the top, *Downstage*
 at the bottom, *SR* left and *SL* right, as the Plan draws them (*US · DS* on the fixture sheet's
 folded 64px pad); a drag sends its whole offset from where it began, 0.035 m a pixel, and the dot
-springs back on release; the arrow keys nudge 0.25 m, a run of presses one gesture. The desk solves
-every head (`POST /programmer/aim`, `mode: JOG`; lighting7 `docs/fixtures-engineering.md` §"Jogging
+springs back on release. **Held at an edge the drag keeps going** (`lib/stageJog.ts`'s `JogDrag`): the
+dot stops at the pad's edge, and while the pointer stays at or past it the offset travels on that way
+at 1.5 m/s, 0.05 m/s faster for each pixel further past, 5 m/s at most, an animation frame at a time,
+so one gesture crosses the stage, a stalled frame carrying no more than a tenth of a second; back
+inside, the pointer is a displacement again from what the edge carried, no gesture goes past ±40 m,
+and a lost pointer capture, a window blur or a hidden tab ends the drag. The arrow keys nudge 0.25 m,
+a run of presses one gesture. The desk solves every head (`POST /programmer/aim`, `mode: JOG`; lighting7 `docs/fixtures-engineering.md` §"Jogging
 heads across the stage"); `lib/stageJog.ts`'s `JogQueue` keeps one request in flight with the latest
 offset winning — across every pad in the window, no faster than every 50 ms, and a new press leaving
 the last gesture's let-go offset to land first — and sends back each head's first answered `base`

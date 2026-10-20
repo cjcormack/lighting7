@@ -1,6 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AimResponse } from '../store/programmerOps'
-import { JogQueue, resetJogQueues, type JogSend } from './stageJog'
+import {
+  JOG_EDGE_SPEED_M_S,
+  JOG_EDGE_SPEED_MAX_M_S,
+  JOG_MAX_OFFSET_M,
+  JOG_METRES_PER_PX,
+  JogDrag,
+  JogQueue,
+  edgeSpeed,
+  resetJogQueues,
+  type JogSend,
+} from './stageJog'
 
 /** A send whose answers the test releases by hand, so what is in flight is in the test's control. */
 function harness(bases: JogSend['base'] = [], floorMs = 0) {
@@ -128,5 +138,45 @@ describe('JogQueue', () => {
     expect(sent).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(50)
     expect(sent).toHaveLength(2)
+  })
+})
+
+describe('JogDrag', () => {
+  it('is a displacement inside the pad, and stops at the edge until it is held there', () => {
+    const drag = new JogDrag(50)
+    drag.point(20, -10)
+    expect(drag.offset()).toEqual({ dx: 20 * JOG_METRES_PER_PX, dy: 10 * JOG_METRES_PER_PX })
+    expect(drag.atEdge).toBe(false)
+    expect(drag.advance(1)).toBe(false)
+    drag.point(120, 0)
+    expect(drag.atEdge).toBe(true)
+    expect(drag.offset().dx).toBeCloseTo(50 * JOG_METRES_PER_PX)
+  })
+
+  it('travels on towards a held edge, faster the further past it, and keeps what it carried', () => {
+    const drag = new JogDrag(50)
+    drag.point(-50, 0)
+    expect(drag.advance(1)).toBe(true)
+    expect(drag.offset().dx).toBeCloseTo(-50 * JOG_METRES_PER_PX - JOG_EDGE_SPEED_M_S)
+    const slow = drag.offset().dx
+    drag.point(-90, 0)
+    drag.advance(1)
+    expect(slow - drag.offset().dx).toBeCloseTo(edgeSpeed(40))
+    expect(edgeSpeed(40)).toBeGreaterThan(JOG_EDGE_SPEED_M_S)
+    expect(edgeSpeed(10_000)).toBe(JOG_EDGE_SPEED_MAX_M_S)
+    // Back inside, the carry stays and the drag is a displacement again from it.
+    const carried = drag.offset().dx - -50 * JOG_METRES_PER_PX
+    drag.point(0, 0)
+    expect(drag.offset().dx).toBeCloseTo(carried)
+  })
+
+  it('reads the top edge as upstage and never carries past the farthest landing', () => {
+    const drag = new JogDrag(50)
+    drag.point(0, -60)
+    drag.advance(1)
+    expect(drag.offset().dy).toBeGreaterThan(50 * JOG_METRES_PER_PX)
+    for (let i = 0; i < 100; i++) drag.advance(1)
+    expect(drag.offset().dy).toBe(JOG_MAX_OFFSET_M)
+    expect(drag.advance(1)).toBe(false)
   })
 })

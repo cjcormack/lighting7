@@ -1,7 +1,14 @@
 package uk.me.cormack.lighting7.midi
 
 import io.ktor.server.testing.testApplication
+import org.jetbrains.exposed.v1.core.eq
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import uk.me.cormack.lighting7.models.DaoFixturePatch
+import uk.me.cormack.lighting7.models.DaoFixturePatches
+import uk.me.cormack.lighting7.routes.AimOutcome
+import uk.me.cormack.lighting7.routes.AimRequest
+import uk.me.cormack.lighting7.routes.aimIntoProgrammer
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.routes.SpreadOutcome
 import uk.me.cormack.lighting7.routes.SpreadRequest
@@ -64,7 +71,7 @@ class SelectionFanTest : RouteIntegrationTest() {
         sweep(FanAxis.PAN, 74)
         assertEquals(listOf("108,128", "128,128", "148,128"), positions())
         assertEquals(20, fan.amountFor(FanAxis.PAN))
-        assertEquals(74, SelectionFan.amountTo7Bit(fan.amountFor(FanAxis.PAN)))
+        assertEquals(74, SelectionFan.amountTo7Bit(FanAxis.PAN, fan.amountFor(FanAxis.PAN)))
 
         sweep(FanAxis.TILT, 59)
         assertEquals(listOf("108,138", "128,128", "148,118"), positions(), "both axes fan from the one anchor")
@@ -144,6 +151,41 @@ class SelectionFanTest : RouteIntegrationTest() {
         assertEquals(0, fan.amountFor(FanAxis.PAN))
         fan.turn(FanAxis.PAN, 66u)
         assertEquals(listOf("124,128", "128,128", "132,128"), positions())
+    }
+
+    @Test
+    fun `a stage axis fans the landing points in tenths of a metre, and a pan turn then starts afresh`() = testApplication {
+        seed()
+        transaction(state.database) {
+            for ((key, x) in listOf("spot-1" to -1.0, "spot-2" to 1.0)) {
+                val patch = DaoFixturePatch.find { DaoFixturePatches.key eq key }.first()
+                patch.stageX = x; patch.stageY = 4.0; patch.stageZ = 6.0; patch.basePitchDeg = 180.0
+            }
+        }
+        LocateTestSupport.reloadFixtures(state, projectId)
+        state.show.fixtures.patchListChanged()
+        mountTestApp(state)
+        val spots = listOf("spot-1", "spot-2")
+        val request = AimRequest(targets = spots.map(::fixture), x = 0.0, y = 3.0, z = 1.7)
+        assertIs<AimOutcome.Done>(aimIntoProgrammer(state, state.show.project, request.targets, 0.0, 3.0, 1.7, null))
+        state.deskSelection.set(spots.map(::fixture))
+        fun spotPositions() = spots.map { state.show.programmerStore.get(it, "position")!!.value.resolved.serialize() }
+        val start = spotPositions()
+        val fan = state.selectionFan
+
+        sweep(FanAxis.ACROSS, 74)
+        assertEquals(10, fan.amountFor(FanAxis.ACROSS), "a step is a tenth of a metre")
+        assertEquals(74, SelectionFan.amountTo7Bit(FanAxis.ACROSS, fan.amountFor(FanAxis.ACROSS)))
+        val fanned = spotPositions()
+        assertTrue(fanned.zip(start).all { (a, b) -> a != b }, "both heads moved: $start -> $fanned")
+
+        sweep(FanAxis.ACROSS, 64)
+        assertEquals(start, spotPositions(), "back to 0 is back where they started")
+
+        sweep(FanAxis.ACROSS, 70)
+        fan.turn(FanAxis.PAN, 66u)
+        assertEquals(0, fan.amountFor(FanAxis.ACROSS), "a pan turn starts a new gesture")
+        assertEquals(4, fan.amountFor(FanAxis.PAN))
     }
 
     @Test

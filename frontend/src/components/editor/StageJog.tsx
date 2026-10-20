@@ -1,8 +1,8 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { setPositionPadMode, type PositionPadMode } from '@/lib/positionPadMode'
-import { JOG_METRES_PER_PX, JOG_NUDGE_M, JogQueue, type JogSend } from '@/lib/stageJog'
+import { JOG_NUDGE_M, JogDrag, JogQueue, type JogSend } from '@/lib/stageJog'
 import { cn } from '@/lib/utils'
 import { useAimMutation, type AimBase, type AimResponse, type SpreadSkip } from '@/store/programmerOps'
 import { useCurrentProjectQuery } from '@/store/projects'
@@ -43,6 +43,9 @@ export function PadModeSwitch({ mode, className }: { mode: PositionPadMode; clas
 export const JOG_EDGES = { top: 'Upstage', bottom: 'Downstage', left: 'SR', right: 'SL' } as const
 const JOG_EDGES_SHORT = { top: 'US', bottom: 'DS', left: 'SR', right: 'SL' } as const
 
+/** The most one frame of a held edge carries: a stalled or hidden page resumes travelling, never jumps. */
+const EDGE_MAX_FRAME_S = 0.1
+
 /** A key run ends this long after its last press: the next press starts from where the heads are. */
 const KEY_RUN_MS = 1200
 
@@ -57,7 +60,8 @@ const ARROWS: Record<string, readonly [number, number]> = {
 
 /**
  * The jog pad: a drag reports its whole offset from where it began, in stage metres (+x towards SL,
- * +y upstage), and the dot springs back to the centre when it is let go. The arrow keys nudge by
+ * +y upstage), and the dot springs back to the centre when it is let go. Held at an edge the offset
+ * keeps travelling that way, faster the further past it ([JogDrag]). The arrow keys nudge by
  * [JOG_NUDGE_M], a run of presses one gesture so each is measured from where the run began.
  */
 export function StageJogPad({
@@ -73,15 +77,67 @@ export function StageJogPad({
   onMove: (dx: number, dy: number) => void
 }) {
   const [offset, setOffset] = useState<{ x: number; y: number } | null>(null)
-  const drag = useRef<{ id: number; x: number; y: number } | null>(null)
+  const drag = useRef<{ id: number; x: number; y: number; jog: JogDrag } | null>(null)
   const keyRun = useRef<{ dx: number; dy: number; at: number } | null>(null)
+  const frame = useRef<{ id: number; at: number } | null>(null)
   const edges = size < 100 ? JOG_EDGES_SHORT : JOG_EDGES
   const disabled = refusal != null
   const half = size / 2
+  const onMoveRef = useRef(onMove)
+  onMoveRef.current = onMove
+  const disabledRef = useRef(disabled)
+  disabledRef.current = disabled
+
+  const stopEdge = useCallback(() => {
+    if (frame.current != null) cancelAnimationFrame(frame.current.id)
+    frame.current = null
+  }, [])
+  useEffect(() => stopEdge, [stopEdge])
+
+  // A release the pad never hears — the window loses focus mid-drag, the tab is hidden — ends the
+  // drag, so a held edge cannot go on carrying the heads with nothing holding it.
+  useEffect(() => {
+    const drop = () => {
+      if (drag.current == null) return
+      drag.current = null
+      stopEdge()
+      setOffset(null)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') drop()
+    }
+    window.addEventListener('blur', drop)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('blur', drop)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [stopEdge])
+
+  /** While the drag is held at an edge, carry it on a frame at a time. */
+  const runEdge = useCallback(() => {
+    const held = drag.current
+    if (held == null || !held.jog.atEdge || frame.current != null) return
+    const step = (now: number) => {
+      const current = drag.current
+      if (current == null || !current.jog.atEdge || frame.current == null || disabledRef.current) {
+        frame.current = null
+        return
+      }
+      const seconds = Math.min(EDGE_MAX_FRAME_S, (now - frame.current.at) / 1000)
+      frame.current = { id: requestAnimationFrame(step), at: now }
+      if (current.jog.advance(seconds)) {
+        const { dx, dy } = current.jog.offset()
+        onMoveRef.current(dx, dy)
+      }
+    }
+    frame.current = { id: requestAnimationFrame(step), at: performance.now() }
+  }, [])
 
   const end = (e: React.PointerEvent) => {
     if (drag.current?.id !== e.pointerId) return
     drag.current = null
+    stopEdge()
     setOffset(null)
   }
 
@@ -98,7 +154,7 @@ export function StageJogPad({
         tabIndex={disabled ? -1 : 0}
         aria-label="Stage jog — drag, or use the arrow keys"
         aria-disabled={disabled || undefined}
-        title={refusal ?? 'Drag to move every head across the stage; the arrow keys nudge a quarter metre'}
+        title={refusal ?? 'Drag to move every head across the stage, and hold at an edge to keep going; the arrow keys nudge a quarter metre'}
         data-testid="stage-jog-pad"
         className={cn(
           'relative col-start-2 row-start-2 touch-none rounded-md border bg-background outline-none select-none',
@@ -113,7 +169,7 @@ export function StageJogPad({
           // Taken by hand, since the default just prevented would have taken it: the arrow keys are the pad's next.
           e.currentTarget.focus({ preventScroll: true })
           e.currentTarget.setPointerCapture?.(e.pointerId)
-          drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY }
+          drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, jog: new JogDrag(half) }
           keyRun.current = null
           setOffset({ x: 0, y: 0 })
           onBegin()
@@ -123,16 +179,21 @@ export function StageJogPad({
           if (start?.id !== e.pointerId) return
           if (disabled) {
             drag.current = null
+            stopEdge()
             setOffset(null)
             return
           }
           const x = e.clientX - start.x
           const y = e.clientY - start.y
           setOffset({ x, y })
-          onMove(x * JOG_METRES_PER_PX, -y * JOG_METRES_PER_PX)
+          start.jog.point(x, y)
+          const { dx, dy } = start.jog.offset()
+          onMove(dx, dy)
+          runEdge()
         }}
         onPointerUp={end}
         onPointerCancel={end}
+        onLostPointerCapture={end}
         onKeyDown={(e) => {
           const step = ARROWS[e.key]
           if (step == null || e.altKey || e.metaKey || e.ctrlKey) return
