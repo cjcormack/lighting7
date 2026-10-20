@@ -1,0 +1,40 @@
+{
+  "v": 3,
+  "title": "Stack timeline",
+  "boards": {
+    "Spec.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 1240,
+      "h": 1880,
+      "title": "Stack timeline · the brief, the survey, the calls"
+    },
+    "Model.dc.html": {
+      "x": 1340,
+      "y": 0,
+      "w": 1240,
+      "h": 1610,
+      "title": "Stack timeline · columns, the run key, reads and writes"
+    },
+    "Timeline.dc.html": {
+      "x": 0,
+      "y": 1980,
+      "w": 1440,
+      "h": 1210,
+      "title": "Timeline · Act 1, running"
+    },
+    "Editing.dc.html": {
+      "x": 1540,
+      "y": 1980,
+      "w": 1440,
+      "h": 1660,
+      "title": "Editing · cells, runs, ranges and the popovers"
+    }
+  },
+  "order": [
+    "Spec.dc.html",
+    "Model.dc.html",
+    "Timeline.dc.html",
+    "Editing.dc.html"
+  ]
+}
