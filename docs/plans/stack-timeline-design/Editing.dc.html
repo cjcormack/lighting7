@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Editing · cells, runs, ranges and the popovers</title>
+  <style>
+    body { margin:0; }
+    .app { --fg:oklch(0.985 0 0); --card:oklch(0.21 0.006 285.885); --muted:oklch(0.274 0.006 286.033);
+      --mfg:oklch(0.705 0.015 286.067); --bd:oklch(0.274 0.006 286.033); --bd2:oklch(0.274 0.006 286.033 / 0.6);
+      --pri:oklch(0.623 0.214 259.815); --bg:oklch(0.141 0.005 285.823); --page:oklch(0.17 0.005 286);
+      --amber:oklch(0.82 0.16 80); --green:#4ade80; --blue:#60a5fa; --stale:#ff8f78;
+      --look:#5cd1c1; --pal:#d4d4d8; --fx:#b98cff; --scen:#e0b878;
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Helvetica Neue", sans-serif;
+      -webkit-font-smoothing:antialiased; background:var(--bg); color:var(--fg); box-sizing:border-box; font-size:13px; line-height:1.35;
+      width:1440px; display:flex; flex-direction:column; position:relative; }
+    .app.narrow { width:1240px; }
+    .app * { box-sizing:border-box; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+    .dim { color:var(--mfg); } .sp { flex:1; }
+    .lbl { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); white-space:nowrap; }
+    .row { display:flex; align-items:center; gap:8px; }
+    .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 10px; border:1px solid var(--bd); border-radius:7px; background:var(--card); font-size:12.5px; white-space:nowrap; color:var(--fg); }
+    .btn.sm { height:24px; padding:0 8px; font-size:11.5px; border-radius:6px; }
+    .btn.pri { background:var(--pri); border-color:var(--pri); color:#fff; }
+    .btn.ghost { background:transparent; border-color:transparent; }
+    .btn.on { background:var(--muted); }
+    .btn.ask { opacity:0.5; } .btn.stale { color:var(--stale); border-color:oklch(0.65 0.14 30 / 0.6); }
+    .sep { width:1px; height:18px; background:var(--bd); flex:0 0 auto; }
+    .chip { display:inline-flex; align-items:center; gap:5px; height:20px; padding:0 7px; border-radius:999px; border:1px solid var(--bd); font-size:10.5px; color:var(--mfg); white-space:nowrap; flex:0 0 auto; }
+    .chip.on { color:var(--fg); border-color:oklch(0.985 0 0 / 0.5); background:oklch(0.985 0 0 / 0.06); }
+    .chip.shared { color:#7aa2ff; border-color:oklch(0.6 0.12 260 / 0.55); }
+    .chip.stale { color:var(--stale); border-color:oklch(0.65 0.14 30 / 0.6); background:oklch(0.3 0.06 30 / 0.3); }
+    .chip.amber { color:var(--amber); border-color:oklch(0.6 0.12 80 / 0.6); background:oklch(0.3 0.06 80 / 0.3); }
+    .chip i { width:7px; height:7px; border-radius:2px; display:inline-block; }
+    kbd { border-radius:4px; border:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.5); padding:0 5px; font-size:9.5px; font-family:ui-monospace,Menlo,monospace; color:var(--fg); }
+    /* chrome */
+    .top { height:48px; background:#2563eb; display:flex; align-items:center; padding:0 16px; gap:10px; font-weight:600; font-size:16px; }
+    .shell { display:flex; flex:1; min-height:0; }
+    .rail { width:64px; flex:0 0 auto; background:var(--bg); border-right:1px solid var(--bd); display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:14px; }
+    .rail i { width:22px; height:22px; border-radius:6px; background:var(--muted); display:block; }
+    .rail i.on { background:oklch(0.35 0.08 260); }
+    .main { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--page); position:relative; }
+    .showhead { height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .showhead.warn { background:oklch(0.3 0.06 80 / 0.35); border-bottom-color:oklch(0.6 0.12 80 / 0.6); }
+    .crumb { font-size:13px; color:var(--mfg); } .crumb b { color:var(--fg); font-weight:600; }
+    .seg { display:inline-flex; border:1px solid var(--bd); border-radius:8px; padding:2px; gap:2px; background:var(--bg); flex:0 0 auto; }
+    .seg span { height:24px; padding:0 9px; display:inline-flex; align-items:center; gap:5px; border-radius:6px; font-size:12px; color:var(--mfg); white-space:nowrap; }
+    .seg span.on { background:var(--muted); color:var(--fg); }
+    .seg.sm span { height:20px; padding:0 7px; font-size:11px; }
+    .showbar { height:56px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .tile { height:44px; border:1px solid var(--bd); border-radius:8px; background:var(--card); padding:4px 10px; display:flex; flex-direction:column; justify-content:center; position:relative; overflow:hidden; }
+    .go { width:120px; height:44px; border-radius:8px; background:var(--pri); display:grid; place-items:center; font-weight:800; letter-spacing:0.1em; }
+    .tabsstrip { height:40px; display:flex; align-items:flex-end; gap:2px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .tabsstrip span { padding:9px 14px; font-size:12.5px; color:var(--mfg); border-bottom:2px solid transparent; }
+    .tabsstrip span.on { color:var(--fg); border-bottom-color:var(--pri); }
+    .stackhead { height:48px; display:flex; align-items:center; gap:10px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .stackhead.warn { background:oklch(0.3 0.06 80 / 0.25); }
+    .rowb { height:40px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); }
+    .selbar { min-height:36px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--bd); font-size:12px; flex-wrap:wrap; }
+    .handle { height:12px; display:grid; place-items:center; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); background:oklch(0.19 0.005 286); }
+    .handle i { width:40px; height:3px; border-radius:2px; background:#5a5a63; }
+    .foot { height:26px; display:flex; align-items:center; gap:14px; padding:0 12px; border-top:1px solid var(--bd); font-size:10.5px; color:var(--mfg); white-space:nowrap; }
+    .foot .k { display:inline-flex; align-items:center; gap:5px; }
+    .foot .k i { width:12px; height:10px; border-radius:3px; display:inline-block; }
+    /* the timeline grid */
+    .tl { position:relative; display:flex; flex-direction:column; overflow:hidden; background:var(--bg); }
+    .tr { display:flex; height:36px; border-bottom:1px solid var(--bd2); position:relative; flex:0 0 auto; }
+    .tr.gh { height:22px; border-bottom:none; }
+    .tr.ch { height:44px; border-bottom:1px solid var(--bd); }
+    .tr.mk { height:30px; }
+    .tr.live { background:rgba(74,222,128,0.07); }
+    .tr.next { background:oklch(0.623 0.214 259.815 / 0.05); }
+    .tr .edge { position:absolute; left:0; top:0; bottom:0; width:3px; z-index:4; }
+    .tr.live .edge { background:var(--green); } .tr.next .edge { background:var(--blue); }
+    .left .prog { position:absolute; left:0; bottom:0; height:2px; background:var(--green); }
+    .left { position:relative; display:grid; gap:8px; align-items:center; padding:0 10px 0 12px; flex:0 0 auto; height:100%; border-right:1px solid var(--bd); overflow:hidden; white-space:nowrap; font-size:12.5px; }
+    .tr.ch .left { align-items:end; padding-bottom:7px; }
+    .hl { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--mfg); }
+    .nm { overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:6px; min-width:0; }
+    .nm > span:first-child { overflow:hidden; text-overflow:ellipsis; min-width:0; }
+    .pip { width:9px; height:9px; border-radius:50%; background:#52525b; justify-self:center; }
+    .pip.live { background:var(--green); box-shadow:0 0 0 3px rgba(74,222,128,0.2); }
+    .pip.next { background:var(--blue); }
+    .pip.done { background:#3f3f46; }
+    .num { font-weight:700; font-family:ui-monospace,Menlo,monospace; }
+    .mklab { grid-column:1 / -1; display:flex; align-items:center; gap:10px; color:var(--mfg); font-size:11px; }
+    .mklab::before, .mklab::after { content:""; flex:1; height:1px; background:var(--bd); }
+    .gcell { flex:0 0 auto; height:100%; display:flex; align-items:center; gap:6px; padding:0 8px; border-left:1px solid var(--bd); }
+    .gcell i { width:8px; height:8px; border-radius:2px; }
+    .hc { flex:0 0 auto; height:100%; display:flex; flex-direction:column; justify-content:flex-end; padding:0 8px 6px; gap:1px; overflow:hidden; white-space:nowrap; }
+    .hc.g0, .mc.g0 { border-left:1px solid var(--bd); }
+    .hc b { font-size:11.5px; font-weight:600; overflow:hidden; text-overflow:ellipsis; display:flex; align-items:center; gap:5px; }
+    .hc b i { width:9px; height:9px; border-radius:2px; flex:0 0 auto; }
+    .hc span { font-size:10px; color:var(--mfg); overflow:hidden; text-overflow:ellipsis; }
+    .hc.sel { background:oklch(0.623 0.214 259.815 / 0.12); box-shadow:inset 0 -2px 0 var(--pri); }
+    .mc { position:relative; flex:0 0 auto; height:100%; }
+    .run { position:absolute; left:8px; right:8px; top:-1px; bottom:-1px; display:flex; align-items:center; gap:4px; padding:0 6px 0 8px; font-size:10px; z-index:1; white-space:nowrap; overflow:hidden; }
+    .run::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--edge, transparent); }
+    .run.s { top:4px; border-top-left-radius:6px; border-top-right-radius:6px; }
+    .run.e { bottom:4px; border-bottom-left-radius:6px; border-bottom-right-radius:6px; }
+    .run.look { background:#17302d; --edge:var(--look); }
+    .run.pal { background:#25252a; --edge:var(--pal); }
+    .run.fx { background:#2a2141; --edge:var(--fx); }
+    .run.scen { background:#352d21; --edge:var(--scen); top:5px; bottom:5px; border-radius:6px; color:var(--fg); font-size:10.5px; }
+    .run.off { background:transparent; border:1px solid rgba(92,209,193,0.6); color:var(--mfg); --edge:transparent; }
+    .run.ghost { background:transparent; --edge:transparent; border:1px dashed oklch(0.985 0 0 / 0.55); color:var(--mfg); }
+    .run.rel { background:transparent; --edge:transparent; border:1px dashed var(--stale); color:var(--stale); top:4px; bottom:4px; border-radius:6px; }
+    .rk { font-family:ui-monospace,Menlo,monospace; font-style:normal; font-size:10px; color:oklch(0.985 0 0 / 0.75); }
+    .gl { font-style:normal; font-size:9.5px; color:var(--mfg); }
+    .gl.r { margin-left:auto; }
+    .gl.st { color:var(--amber); font-weight:700; }
+    .gl.fxc { color:var(--fx); }
+    .sw { width:10px; height:10px; border-radius:3px; display:inline-block; flex:0 0 auto; }
+    .trk { position:absolute; left:50%; margin-left:-1px; width:2px; top:-1px; bottom:-1px; background:rgba(224,184,120,0.4); }
+    .dia { position:absolute; left:50%; top:-5px; width:9px; height:9px; margin-left:-4px; transform:rotate(45deg); background:var(--fx); border:1px solid var(--bg); z-index:3; }
+    .brk { position:absolute; left:14px; right:14px; top:-1px; height:0; border-top:2px dotted var(--fx); z-index:3; }
+    .mc.sel::after { content:""; position:absolute; inset:2px 5px; border-radius:8px; background:oklch(0.623 0.214 259.815 / 0.22); box-shadow:inset 0 0 0 2px oklch(0.985 0 0 / 0.9); z-index:2; pointer-events:none; }
+    .mc.sel.sn::after { bottom:-1px; border-bottom-left-radius:0; border-bottom-right-radius:0; box-shadow:inset 2px 0 0 oklch(0.985 0 0 / 0.9), inset -2px 0 0 oklch(0.985 0 0 / 0.9), inset 0 2px 0 oklch(0.985 0 0 / 0.9); }
+    .mc.sel.sp::after { top:0; border-top-left-radius:0; border-top-right-radius:0; box-shadow:inset 2px 0 0 oklch(0.985 0 0 / 0.9), inset -2px 0 0 oklch(0.985 0 0 / 0.9), inset 0 -2px 0 oklch(0.985 0 0 / 0.9); }
+    .mc.sel.sp.sn::after { border-radius:0; box-shadow:inset 2px 0 0 oklch(0.985 0 0 / 0.9), inset -2px 0 0 oklch(0.985 0 0 / 0.9); }
+    .mc.inert .run { opacity:0.55; }
+    .grab { position:absolute; left:50%; bottom:2px; width:22px; margin-left:-11px; height:7px; border-radius:4px; background:var(--fg); z-index:5; box-shadow:0 0 0 2px var(--bg); }
+    .scope { position:absolute; z-index:6; display:inline-flex; align-items:center; gap:6px; border-radius:999px; background:var(--pri); color:#fff; padding:3px 10px; font-size:11px; white-space:nowrap; box-shadow:0 8px 16px rgba(0,0,0,0.5); }
+    .fadeR { position:absolute; right:0; top:0; bottom:0; width:28px; background:linear-gradient(to right, transparent, var(--bg)); z-index:6; pointer-events:none; }
+    /* popovers, menus */
+    .pop { background:var(--card); border:1px solid var(--bd); border-radius:10px; box-shadow:0 16px 36px rgba(0,0,0,0.55); }
+    .pop .ph { padding:9px 12px; border-bottom:1px solid var(--bd); display:flex; gap:8px; align-items:center; font-size:12px; }
+    .pop .pb { padding:10px 12px; display:flex; flex-direction:column; gap:10px; font-size:12px; }
+    .pop .pf { padding:9px 12px; border-top:1px solid var(--bd); display:flex; gap:8px; justify-content:flex-end; align-items:center; }
+    .field { height:28px; border:1px solid var(--bd); border-radius:6px; background:var(--bg); display:flex; align-items:center; padding:0 8px; gap:6px; font-family:ui-monospace,Menlo,monospace; font-size:12px; }
+    .field.sans { font-family:inherit; }
+    .field.focus { border-color:var(--pri); box-shadow:0 0 0 2px oklch(0.62 0.2 260 / 0.3); }
+    .slider { height:6px; border-radius:3px; background:#2f2f37; position:relative; }
+    .slider i { position:absolute; inset:0 auto 0 0; background:var(--pri); border-radius:3px; }
+    .slider b { position:absolute; top:-5px; width:16px; height:16px; border-radius:50%; background:#fff; }
+    .tog { width:26px; height:14px; border-radius:7px; background:var(--pri); position:relative; flex:0 0 auto; }
+    .tog::after { content:""; position:absolute; right:2px; top:2px; width:10px; height:10px; border-radius:50%; background:#fff; }
+    .tog.off { background:#3f3f46; } .tog.off::after { left:2px; right:auto; }
+    .cb { width:14px; height:14px; border-radius:3px; background:var(--pri); display:inline-grid; place-items:center; font-size:10px; color:#fff; flex:0 0 auto; }
+    .readout { font-size:11px; color:var(--mfg); line-height:1.45; }
+    .menu { background:var(--card); border:1px solid var(--bd); border-radius:9px; padding:4px; box-shadow:0 14px 32px rgba(0,0,0,0.55); display:flex; flex-direction:column; min-width:220px; }
+    .menu .mi { display:flex; align-items:center; gap:8px; min-height:28px; padding:3px 9px; border-radius:6px; font-size:12px; }
+    .menu .mi.on { background:var(--muted); }
+    .menu .mi small { margin-left:auto; color:var(--mfg); font-size:10.5px; padding-left:12px; }
+    .menu .ms { height:1px; background:var(--bd); margin:4px 0; }
+    .menu .mh { padding:6px 9px 2px; }
+    .toast { display:flex; align-items:center; gap:10px; padding:8px 12px; border-radius:8px; border:1px solid var(--bd); background:var(--card); font-size:12px; box-shadow:0 10px 24px rgba(0,0,0,0.45); }
+    .runlist { display:grid; grid-template-columns:34px 1fr auto; gap:4px 10px; align-items:center; font-size:11.5px; }
+    /* notes and panels */
+    .note { display:inline-grid; place-items:center; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:oklch(0.82 0.16 80); color:#111; font-size:10.5px; font-weight:800; box-shadow:0 0 0 2px rgba(0,0,0,0.55); flex:0 0 auto; z-index:9; }
+    .mc .note { position:absolute; right:-6px; top:-6px; }
+    .notes { border-top:1px solid var(--bd); background:var(--bg); padding:14px 20px 18px; display:grid; grid-template-columns:repeat(3, 1fr); gap:10px 28px; font-size:12px; color:var(--mfg); line-height:1.45; }
+    .notes div { display:flex; gap:8px; align-items:flex-start; }
+    .notes .t { grid-column:1 / -1; font-size:14px; color:var(--fg); font-weight:600; display:block; }
+    .panel { border:1px solid var(--bd); border-radius:10px; background:var(--page); overflow:hidden; display:flex; flex-direction:column; }
+    .panel .pt { padding:9px 12px; border-bottom:1px solid var(--bd); display:flex; align-items:center; gap:8px; }
+    .panel .pt b { font-size:13px; }
+    .panel .pc { padding:12px; display:flex; flex-direction:column; gap:12px; flex:1; }
+    .cap { font-size:11.5px; line-height:1.5; color:var(--mfg); margin:0; }
+    .cap b { color:var(--fg); font-weight:600; }
+    code { font-family:ui-monospace,Menlo,monospace; font-size:11px; color:var(--fg); background:oklch(0.274 0.006 286.033 / 0.5); padding:0 4px; border-radius:3px; }
+    /* spec pages */
+    .doc { padding:48px 56px; display:flex; flex-direction:column; gap:28px; }
+    .doc h1 { margin:0; font-size:30px; font-weight:700; letter-spacing:-0.01em; }
+    .doc h2 { margin:0; font-size:18px; font-weight:700; }
+    table.m { border-collapse:collapse; width:100%; font-size:12px; line-height:1.45; }
+    table.m th { text-align:left; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:var(--mfg); padding:7px 10px; border-bottom:1px solid var(--bd); background:oklch(0.274 0.006 286.033 / 0.3); }
+    table.m td { padding:8px 10px; border-bottom:1px solid var(--bd); vertical-align:top; color:var(--mfg); }
+    table.m td b { color:var(--fg); font-weight:600; }
+    .tag { display:inline-flex; align-items:center; height:18px; padding:0 7px; border-radius:999px; font-size:9px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; white-space:nowrap; }
+    .tag.go { background:oklch(0.5 0.15 150 / 0.3); color:#86efac; }
+    .tag.ask { background:oklch(0.5 0.12 80 / 0.3); color:oklch(0.9 0.15 85); }
+    .n { display:inline-flex; align-items:center; justify-content:center; min-width:22px; height:20px; padding:0 5px; border-radius:999px; background:var(--muted); color:var(--fg); font-size:10px; font-weight:700; }
+    .box { border:1px solid var(--bd); border-radius:8px; background:var(--card); padding:12px 14px; }
+    .box p { margin:0; font-size:12px; line-height:1.5; color:var(--mfg); } .box p + p { margin-top:6px; } .box b { color:var(--fg); font-weight:600; }
+    .box.key { border-color:oklch(0.45 0.16 300); background:oklch(0.27 0.09 302 / 0.25); }
+
+  </style>
+</head>
+<body>
+<div class="app" style="min-height:1660px">
+
+<div style="padding:24px; display:flex; flex-direction:column; gap:20px">
+<div class="row" style="gap:24px; align-items:stretch">
+<div class="panel" style="width:448px; "><div class="pt"><b>Turn one cell on: a press</b></div><div class="pc"><div class="tl"><div class="tr gh"><div class="left" style="grid-template-columns:14px 40px 104px; border-right-color:transparent"></div><div class="gcell" style="width:222px"><i style="background:var(--pal)"></i><span class="lbl">Palettes · 3</span></div></div><div class="tr ch"><div class="left" style="grid-template-columns:14px 40px 104px; "><span></span><span class="hl">Cue</span><span class="hl">Name</span></div><div class="hc g0" style="width:74px"><b><i style="background:#8f7bff"></i><span style="overflow:hidden;text-overflow:ellipsis">Lavender</span></b><span>LX1 Orbits</span></div><div class="hc" style="width:74px"><b><i style="background:#ffb070"></i><span style="overflow:hidden;text-overflow:ellipsis">Amber</span></b><span>LX1 Orbits</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Throne DS</span></b><span>ADV1 Robes</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q3</span><span class="nm"><span>Ballroom</span></span></div><div class="mc g0" style="width:74px"><span class="run pal s"><i class="sw" style="background:#8f7bff"></i><i class="rk">2</i></span></div><div class="mc" style="width:74px"></div><div class="mc" style="width:74px"><span class="run pal s"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q4</span><span class="nm"><span>Waltz build</span></span></div><div class="mc g0" style="width:74px"><span class="run pal e"><i class="sw" style="background:#8f7bff"></i><i class="rk">2</i></span></div><div class="mc" style="width:74px"></div><div class="mc" style="width:74px"><span class="run pal"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q5</span><span class="nm"><span>Christening</span></span></div><div class="mc g0" style="width:74px"><span class="run s e rel"><i class="gl" style="color:var(--stale)">released</i></span></div><div class="mc sel" style="width:74px"><span class="run pal s e"><i class="sw" style="background:#ffb070"></i><i class="rk">4</i></span><span class="note">1</span></div><div class="mc" style="width:74px"><span class="run pal e"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q6</span><span class="nm"><span>Carabosse arrives</span></span></div><div class="mc g0" style="width:74px"></div><div class="mc" style="width:74px"></div><div class="mc" style="width:74px"></div></div></div><div class="toast"><span>Amber on LX1 Orbits in Q5. Lavender released there.</span><span class="sp"></span><span class="btn sm">Undo</span></div><p class="cap">A palette cell is a press of that palette on that target in that cue (D5). Amber and Lavender are both Colour, so turning Amber on takes Lavender off LX1 Orbits in Q5, dashed red for a beat and named in the toast. The new layer goes on top, rank 4, with settings copied from the nearest Amber cell, else the defaults (D6).</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>Drag a run's end</b></div><div class="pc"><div style="position:relative"><div class="tl"><div class="tr gh"><div class="left" style="grid-template-columns:14px 40px 104px; border-right-color:transparent"></div><div class="gcell" style="width:148px"><i style="background:var(--look)"></i><span class="lbl">Looks · 2</span></div><div class="gcell" style="width:74px"><i style="background:var(--pal)"></i><span class="lbl">Palettes · 1</span></div></div><div class="tr ch"><div class="left" style="grid-template-columns:14px 40px 104px; "><span></span><span class="hl">Cue</span><span class="hl">Name</span></div><div class="hc g0" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Shehds colour</span></b><span>own fixtures</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Special · Snooze SR</span></b><span>own fixtures</span></div><div class="hc g0" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Throne DS</span></b><span>ADV1 Robes</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q1</span><span class="nm"><span>Tabs out</span></span></div><div class="mc g0" style="width:74px"><span class="run look s"><i class="rk">3</i></span></div><div class="mc" style="width:74px"><span class="run look s e"><i class="rk">5</i></span></div><div class="mc g0" style="width:74px"></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q2</span><span class="nm"><span>Scrim out</span></span></div><div class="mc g0" style="width:74px"><span class="run look"><i class="rk">1</i></span></div><div class="mc" style="width:74px"></div><div class="mc g0" style="width:74px"></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q3</span><span class="nm"><span>Ballroom</span></span></div><div class="mc g0" style="width:74px"><span class="run look"><i class="rk">1</i></span></div><div class="mc" style="width:74px"></div><div class="mc g0" style="width:74px"><span class="run pal s"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q4</span><span class="nm"><span>Waltz build</span></span></div><div class="mc g0" style="width:74px"><span class="run look ghost"><i class="rk">+</i></span></div><div class="mc" style="width:74px"></div><div class="mc g0" style="width:74px"><span class="run pal"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q5</span><span class="nm"><span>Christening</span></span></div><div class="mc g0" style="width:74px"><span class="run look ghost"><i class="rk">+</i></span></div><div class="mc" style="width:74px"></div><div class="mc g0" style="width:74px"><span class="run pal e"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q6</span><span class="nm"><span>Carabosse</span></span></div><div class="mc g0" style="width:74px"><span class="run look e ghost"><i class="rk">+</i></span><i class="grab"></i></div><div class="mc" style="width:74px"><span class="run look s e"><i class="rk">2</i></span></div><div class="mc g0" style="width:74px"></div></div></div><span class="scope" style="left:150px; top:262px">Shehds colour on in Q4 to Q6</span></div><p class="cap">The handle on a run's last cell drags it down or up. Each cell it crosses becomes that cue's own layer, copying the dragged cell's settings; dragging up takes cells off. The cells stay separate layers, so lighting still does not track (D4).</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>Select a range</b></div><div class="pc"><div class="tl"><div class="tr gh"><div class="left" style="grid-template-columns:14px 40px 104px; border-right-color:transparent"></div><div class="gcell" style="width:222px"><i style="background:var(--look)"></i><span class="lbl">Looks · 3</span></div></div><div class="tr ch"><div class="left" style="grid-template-columns:14px 40px 104px; "><span></span><span class="hl">Cue</span><span class="hl">Name</span></div><div class="hc g0" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Scrim · opaque</span></b><span>own fixtures</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Front of scrim</span></b><span>ADV1 Robes</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Special · Snooze SR</span></b><span>own fixtures</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q9</span><span class="nm"><span>Snooze front of scrim</span></span></div><div class="mc g0" style="width:74px"><span class="run look s e"><i class="rk">2</i><i class="gl r">60%</i><i class="gl st">S</i></span></div><div class="mc" style="width:74px"><span class="run look s e"><i class="rk">3</i></span></div><div class="mc" style="width:74px"><span class="run look s"><i class="rk">4</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q10</span><span class="nm"><span>Scrim out · market</span></span></div><div class="mc g0 sel sn" style="width:74px"></div><div class="mc sel sn" style="width:74px"></div><div class="mc" style="width:74px"><span class="run look e"><i class="rk">3</i></span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q11</span><span class="nm"><span>Market dance</span></span></div><div class="mc g0 sel sp sn" style="width:74px"></div><div class="mc sel sp sn" style="width:74px"><span class="run look s e"><i class="rk">2</i></span></div><div class="mc" style="width:74px"></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q12</span><span class="nm"><span>Spinning wheel</span></span></div><div class="mc g0 sel sp" style="width:74px"></div><div class="mc sel sp" style="width:74px"></div><div class="mc" style="width:74px"><span class="run look s e"><i class="rk">3</i></span></div></div></div><div class="selbar" style="border:1px solid var(--bd); border-radius:8px; background:var(--bg)"><b>6 cells</b><span class="dim">2 columns · Q10 to Q12 · 1 on</span><span class="sp"></span><span class="btn sm">On</span><span class="btn sm">Off</span><span class="btn sm">Fill ↓</span><span class="btn sm">Replace…</span></div><p class="cap">A marquee or shift-click selects cells across columns and cues. <i>On</i> fills the empty cells of each column from its nearest filled cell, <i>Off</i> clears them, and <i>Fill ↓</i> copies the top row's state of each column down. A range is one write and one Undo (call C3).</p></div></div>
+</div>
+<div class="row" style="gap:24px; align-items:stretch">
+<div class="panel" style="width:448px; "><div class="pt"><b>Replace across a range</b></div><div class="pc"><div class="pop"><div class="ph"><b>Replace in Q2 to Q5</b><span class="sp"></span><span class="dim">4 cells</span></div><div class="pb">
+    <div class="row"><span class="chip"><i style="background:#8f7bff"></i>Lavender · LX1 Orbits</span><span class="dim">with</span></div>
+    <div class="row"><span class="field sans" style="flex:1"><i class="sw" style="background:#ffb070"></i>Amber<span class="sp"></span><span class="dim">▾</span></span><span class="field sans" style="width:130px">LX1 Orbits<span class="sp"></span><span class="dim">▾</span></span></div>
+    <div class="row"><span class="cb">✓</span><span>Keep each layer's rank and settings</span></div>
+    <div class="readout">Q2, Q3 and Q4 swap their Lavender layer for Amber in place. Q5 already holds Amber on LX1 Orbits, so its Lavender comes off and Amber stays as it is. Nothing is sent to the stage.</div>
+  </div><div class="pf"><span class="btn sm">Cancel</span><span class="btn sm pri">Replace 4</span></div></div><p class="cap">Eos's <i>Replace With</i> for references: one record for another over the selected cells, each layer keeping its rank, amount, mask and timing. A cue already holding the replacement keeps that layer, and the replaced one comes off (D11).</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>One layer's settings</b></div><div class="pc"><div class="pop"><div class="ph"><b>Q1 · Scrim · opaque</b><span class="chip">rank 2 of 5</span><span class="sp"></span><span class="tog"></span></div><div class="pb">
+    <div class="row"><span class="lbl" style="width:62px">Amount</span><div class="slider" style="flex:1"><i style="width:60%"></i><b style="left:calc(60% - 8px)"></b></div><span class="field" style="width:62px">60<span class="dim">%</span></span></div>
+    <div class="row"><span class="lbl" style="width:62px">Blend</span><span class="seg sm"><span class="on">Replace</span><span>Max</span><span>Min</span><span>Multiply</span></span></div>
+    <div class="row"><span class="lbl" style="width:62px">Mask</span><span class="chip on">Intensity</span><span class="chip on">Colour</span><span class="chip on">Position</span><span class="chip on">Beam</span></div>
+    <div class="row"><span class="lbl" style="width:62px">Stomp</span><span class="tog"></span><span class="dim" style="font-size:11px">lower layers' effects stop under it</span></div>
+    <div class="row"><span class="lbl" style="width:62px">Timing</span><span class="dim">Delay</span><span class="field" style="width:52px"><span class="dim">—</span></span><span class="dim">Every</span><span class="field" style="width:52px"><span class="dim">—</span></span><span class="dim">±</span><span class="field" style="width:52px"><span class="dim">—</span></span></div>
+    <div class="row"><span class="lbl" style="width:62px">Masters</span><span class="chip">Speed · M1</span><span class="chip">Rate · none</span></div>
+    <div class="readout">Writes Q1's layer and sends nothing. Its order among Q1's five layers changes in the cue's Looks tab.</div>
+  </div><div class="pf"><span class="btn sm ghost">Open Look</span><span class="sp"></span><span class="btn sm">Copy down to Q9…</span></div></div><p class="cap">Click a filled cell, or <i>Settings…</i> on a range, for the layer's own fields: the cue editor's Looks-tab row, in a popover. On a range, a field the cells disagree on shows <i>mixed</i> until it is set. A palette layer covering several targets says so, since one write changes every cell it covers.</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>An effect run</b></div><div class="pc"><div class="pop"><div class="ph"><span style="color:var(--fx)">∿</span><b>Pulse · Dimmer · LX1 Orbits</b><span class="sp"></span><span class="chip">run Q2 to Q6</span></div><div class="pb">
+    <div class="runlist"><span class="num">Q2</span><span>½ beat · M1 · 20 to 100%</span><span class="dim" style="font-size:10.5px">starts</span><span class="num">Q3</span><span>same</span><span class="dim" style="font-size:10.5px">continues</span><span class="num">Q4</span><span><b style="color:var(--fx)">◆ 1 beat</b> · M1 · 20 to 100%</span><span class="dim" style="font-size:10.5px">edited in place</span><span class="num">Q5</span><span>same as Q4</span><span class="dim" style="font-size:10.5px">continues</span><span class="num">Q6</span><span>same as Q4</span><span class="dim" style="font-size:10.5px">continues</span></div>
+    <div class="readout">One run key across five cues. Each GO inside the run hands the running Pulse to the next cue with its phase kept; Q4's GO also applies its new speed.</div>
+  </div><div class="pf"><span class="btn sm">Break run at Q4</span><span class="btn sm ask">Join run above</span><span class="sp"></span><span class="btn sm">Edit Q4's effect…</span></div></div><p class="cap">The run key makes a bar mean what it shows (D7). A parameter change inside a run is an in-place edit at that GO, ◆ in the grid (D8). <i>Break run</i> gives this cue and those below a fresh key; <i>Join run above</i> takes the key from above when the signature matches.</p></div></div>
+</div>
+<div class="row" style="gap:24px; align-items:stretch">
+<div class="panel" style="width:448px; "><div class="pt"><b>Scenery cells</b></div><div class="pc"><div class="tl"><div class="tr gh"><div class="left" style="grid-template-columns:14px 40px 104px; border-right-color:transparent"></div><div class="gcell" style="width:148px"><i style="background:var(--scen)"></i><span class="lbl">Scenery · 2</span></div></div><div class="tr ch"><div class="left" style="grid-template-columns:14px 40px 104px; "><span></span><span class="hl">Cue</span><span class="hl">Name</span></div><div class="hc g0" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">House tabs</span></b><span>drawn drape</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">SB Scrim</span></b><span>drawn drape</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q1</span><span class="nm"><span>Tabs out</span></span></div><div class="mc g0" style="width:74px"><span class="run scen">Drawn · 4 s</span></div><div class="mc" style="width:74px"></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q2</span><span class="nm"><span>Scrim out</span></span></div><div class="mc g0" style="width:74px"><i class="trk"></i></div><div class="mc" style="width:74px"><span class="run scen">Drawn · 6 s</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q7</span><span class="nm"><span>The curse</span></span></div><div class="mc g0" style="width:74px"><i class="trk"></i></div><div class="mc" style="width:74px"><i class="trk"></i></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q8</span><span class="nm"><span>Blackout · scrim in</span></span></div><div class="mc g0" style="width:74px"><i class="trk"></i></div><div class="mc sel" style="width:74px"><i class="trk"></i><span class="run scen">Closed · 6 s</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 104px; "><span class="pip "></span><span class="num">Q9</span><span class="nm"><span>Snooze front of scrim</span></span></div><div class="mc g0" style="width:74px"><i class="trk"></i></div><div class="mc" style="width:74px"><i class="trk"></i></div></div></div><div class="pop"><div class="ph"><b>SB Scrim in Q8</b><span class="dim">drawn drape</span><span class="sp"></span><span class="dim">change</span></div><div class="pb">
+    <div class="row"><span class="seg sm"><span class="on">Closed</span><span>Half</span><span>Drawn</span></span><span class="dim">over</span><span class="field" style="width:60px">6<span class="dim">s</span></span></div>
+    <div class="readout">Clearing the change makes Q8 track <i>Drawn</i> from Q2, and the scrim stays out through Q9.</div>
+  </div><div class="pf"><span class="btn sm">Clear change</span></div></div><p class="cap">Scenery already tracks, so a cell is a change or nothing (D9). The popover is the Scenery tab's row for that element and cue; clearing it hands the cue back to tracking.</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>Filters and + Column</b></div><div class="pc"><div class="rowb" style="height:auto; flex-wrap:wrap; padding:6px 10px; border:1px solid var(--bd); border-radius:8px; background:var(--bg)"><span class="seg sm"><span>All</span><span>Intensity</span><span class="on">Colour</span><span>Position</span><span>Beam</span></span><span class="chip on">◎ Selection only</span><span class="sp"></span><span class="btn sm on">+ Column</span></div>
+  <div class="menu" style="min-width:0">
+    <div class="mh"><div class="field sans" style="height:26px"><span class="dim">⌕</span>blue</div></div>
+    <div class="mh lbl">Looks</div><div class="mi">Blue hour <small>own fixtures</small></div>
+    <div class="mh lbl">Palettes</div><div class="mi on"><i class="sw" style="background:#4d7dff"></i>Deep blue <small>on LX1 Orbits, the selection</small></div><div class="mi"><i class="sw" style="background:#4d7dff"></i>Deep blue <small>on a target…</small></div>
+    <div class="mh lbl">Effects</div><div class="mi">Colour Fade · Colour <small>on LX1 Orbits</small></div>
+  </div><p class="cap">With Colour and <i>Selection only</i> on, only Colour columns whose targets meet the desk selection stay. <i>+ Column</i> searches every record; a palette or effect column needs a target, which is the desk selection unless one is picked. A new column starts empty.</p></div></div>
+<div class="panel" style="width:448px; "><div class="pt"><b>Live, and locked</b></div><div class="pc"><div class="tl"><div class="tr gh"><div class="left" style="grid-template-columns:14px 40px 112px; border-right-color:transparent"></div><div class="gcell" style="width:222px"><i style="background:var(--look)"></i><span class="lbl">Looks · 3</span></div></div><div class="tr ch"><div class="left" style="grid-template-columns:14px 40px 112px; "><span></span><span class="hl">Cue</span><span class="hl">Name</span></div><div class="hc g0" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Scrim · opaque</span></b><span>own fixtures</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Shehds colour</span></b><span>own fixtures</span></div><div class="hc" style="width:74px"><b><span style="overflow:hidden;text-overflow:ellipsis">Special · Snooze SR</span></b><span>own fixtures</span></div></div><div class="tr "><div class="left" style="grid-template-columns:14px 40px 112px; "><span class="pip done"></span><span class="num">Q8</span><span class="nm"><span>Blackout · scrim in</span></span></div><div class="mc g0" style="width:74px"></div><div class="mc" style="width:74px"></div><div class="mc" style="width:74px"></div></div><div class="tr live"><i class="edge"></i><div class="left" style="grid-template-columns:14px 40px 112px; "><span class="pip live"></span><span class="num">Q9</span><span class="nm"><span>Snooze front of scrim</span><span class="chip stale">Edited</span></span><i class="prog" style="width:70%"></i></div><div class="mc g0" style="width:74px"><span class="run look s e"><i class="rk">2</i><i class="gl r">60%</i></span></div><div class="mc" style="width:74px"></div><div class="mc sel" style="width:74px"><span class="run look s"><i class="rk">4</i></span></div></div><div class="tr next"><i class="edge"></i><div class="left" style="grid-template-columns:14px 40px 112px; "><span class="pip next"></span><span class="num">Q10</span><span class="nm"><span>Scrim out · market</span></span></div><div class="mc g0" style="width:74px"></div><div class="mc" style="width:74px"><span class="run look s e"><i class="rk">1</i></span></div><div class="mc" style="width:74px"><span class="run look e"><i class="rk">3</i></span></div></div></div><div class="selbar" style="border:1px solid var(--bd); border-radius:8px; background:var(--bg)"><b>1 cell</b><span class="dim">Q9 is live</span><span class="sp"></span><span class="btn sm">Off</span><span class="btn sm">Settings…</span><span class="btn sm stale">Update stage…</span></div><div class="selbar" style="border:1px solid var(--bd); border-radius:8px; background:var(--bg)"><span>🔒</span><span class="dim">Locked: cells are read-only, the filters and the selection still work.</span><span class="sp"></span><kbd>L</kbd><span class="dim">to edit</span></div><p class="cap">A write to a live cue sends nothing. It marks the cue edited since GO, and the selection bar offers <i>Update stage…</i> for the live row (show-cue-editing D4). Locked, every cell is read-only and the verbs ask to unlock, as in the Table.</p></div></div>
+</div>
+</div>
+<div class="notes"><div class="t">Every gesture writes stored cues and sends nothing to the stage.</div><div><span class="note">1</span><span>Copied settings come from the nearest cell above in the same column, else below, else the press defaults (D6). A dragged run copies from the cell dragged.</span></div><div><span class="note">⌘Z</span><span>One gesture is one Undo, however many cues it touched: a range, a drag, a replace.</span></div><div><span class="note">⏎</span><span>⏎ toggles the selected cells, ⌫ turns them off and ⌘D fills down: the sheet kit's keys, as a typed column commits them.</span></div></div>
+
+</div>
+</body>
+</html>
