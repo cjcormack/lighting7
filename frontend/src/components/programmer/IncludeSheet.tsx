@@ -102,27 +102,23 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
   }, [stacks, needle])
 
   /**
-   * Only **bound** Looks are offered. A fully-deferred one names no fixture, so there is nothing to
-   * stage — the programmer has no layer to take targets from until it becomes a layer stack.
-   *
-   * Grouped by family, and a Look spanning two appears under both: its families are derived, so
-   * filing it under a single primary one would be a guess.
+   * Grouped by family, then Scenery, and a Look spanning two appears under each: its families are
+   * derived, so filing it under a single primary one would be a guess. A Look of scenery alone has
+   * no family, so the Scenery group is the only place it is listed.
    */
-  const lookGroups = useMemo(
-    () =>
-      ATTRIBUTE_FAMILIES.map((family) => ({
-        family,
-        // No bound/deferred filter any more: every Look names its own fixtures, which is exactly
-        // what Include needs — it loads a Look's rows onto the heads they name. The deferred half of
-        // the old library is a template, and a template is applied rather than included.
-        looks: (looks ?? []).filter(
-          (look) =>
-            look.families.includes(family) &&
-            (needle === '' || look.name.toLowerCase().includes(needle)),
-        ),
-      })).filter((group) => group.looks.length > 0),
-    [looks, needle],
-  )
+  const lookGroups = useMemo(() => {
+    const matching = (looks ?? []).filter(
+      (look) => needle === '' || look.name.toLowerCase().includes(needle),
+    )
+    return [
+      ...ATTRIBUTE_FAMILIES.map((family) => ({
+        key: family as string,
+        label: FAMILY_LABELS[family].plural,
+        looks: matching.filter((look) => look.families.includes(family)),
+      })),
+      { key: 'scenery', label: 'Scenery', looks: matching.filter((look) => (look.scenery?.length ?? 0) > 0) },
+    ].filter((group) => group.looks.length > 0)
+  }, [looks, needle])
 
   return (
     <Sheet open={open} onOpenChange={(next) => !isLoading && onOpenChange(next)}>
@@ -192,11 +188,9 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
               {/* Including a look stages plain literals, not references — you are looking at that
                   look's own contents, and a slot referencing the thing it describes would mean
                   nothing. The mask still applies on top. */}
-              {lookGroups.map(({ family, looks: group }) => (
-                <div key={family} className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">
-                    {FAMILY_LABELS[family].plural}
-                  </p>
+              {lookGroups.map(({ key, label, looks: group }) => (
+                <div key={key} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">{label}</p>
                   {group.map((look) => (
                     <button
                       key={look.id}
@@ -208,16 +202,16 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                       <span className="min-w-0 flex-1 truncate">{look.name}</span>
                       <LookPreviewSwatches preview={look.preview.slice(0, 4)} className="shrink-0" />
                       <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
-                        {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
+                        {look.targetCount === 0 && (look.scenery?.length ?? 0) > 0
+                          ? `${look.scenery!.length} scenery`
+                          : `${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`}
                       </span>
                     </button>
                   ))}
                 </div>
               ))}
               {lookGroups.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No looks match. Only looks that name their own fixtures can be included.
-                </p>
+                <p className="text-sm text-muted-foreground">No looks match.</p>
               )}
             </TabsContent>
           </Tabs>

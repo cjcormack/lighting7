@@ -99,6 +99,7 @@ export function MakeLayerSheet({
         mask: maskToWire(mask),
         name: name.trim(),
         targets,
+        retarget: false,
       }).unwrap()
 
       try {

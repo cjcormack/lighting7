@@ -51,6 +51,16 @@ describe('useIncludeBaseline', () => {
     expect(result.current).toBe(0)
   })
 
+  it('counts the layers the desk says Update would write, so a Look of scenery alone un-greys Update', () => {
+    const CUE = { kind: 'CUE', cueId: 4, baseline: 1 }
+    const { result } = renderHook(() => useIncludeBaseline())
+    act(() => programmerWs.push({ lastIncluded: CUE, entries: included, snapshotSeq: 1 }))
+    expect(result.current).toBe(0)
+
+    act(() => programmerWs.push({ layersChangedSinceInclude: 1 }))
+    expect(result.current).toBe(1)
+  })
+
   it('takes the baseline at once when the target arrives in a state frame', () => {
     const requestState = vi.spyOn(lightingApi.programmer, 'requestState')
     const { result } = renderHook(() => useIncludeBaseline())

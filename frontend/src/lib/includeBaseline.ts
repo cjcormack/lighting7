@@ -3,10 +3,14 @@ import type { ProgrammerEntry } from '@/api/programmerWsApi'
 /** What the programmer held at one moment: `programmerKey` → canonical value string. */
 export type ValueSnapshot = ReadonlyMap<string, string>
 
-/** Flatten the programmer's entry map down to just what a diff cares about. */
+/**
+ * Flatten the programmer's entry map down to just what a diff cares about. A value a layer holds
+ * is left out: Update writes the layer, never its values as rows, so the layer is counted once, by
+ * the desk ([withLayerChanges]).
+ */
 export function snapshotEntries(entries: ReadonlyMap<string, ProgrammerEntry>): ValueSnapshot {
   const out = new Map<string, string>()
-  for (const [key, entry] of entries) out.set(key, entry.value)
+  for (const [key, entry] of entries) if (entry.owner !== 'layers') out.set(key, entry.value)
   return out
 }
 
@@ -56,4 +60,15 @@ export function diffAgainstBaseline(
 export function withSceneryChanges(values: number | null, scenery: number | undefined): number | null {
   if (values == null) return null
   return values + (scenery ?? 0)
+}
+
+/**
+ * [values] with the layers Update would write into the included cue added — the desk's count
+ * (`layersChangedSinceInclude` on the programmer's frames), for the reason [withSceneryChanges] takes
+ * the desk's: a Look of scenery alone adds a layer and no value.
+ * **`null` stays `null`**; an absent count (an older desk) adds nothing.
+ */
+export function withLayerChanges(values: number | null, layers: number | undefined): number | null {
+  if (values == null) return null
+  return values + (layers ?? 0)
 }

@@ -332,6 +332,12 @@ internal data class ProgrammerRecordLookRequest(
      * scenery Look, a busk pad that flies it. Not governed by [mask] or [targets].
      */
     val scenery: Boolean = true,
+    /**
+     * Point the include target at the Look written, as a Record into a cue does. False from Make
+     * layer, which applies the new Look as a layer of whatever is loaded: Update must still write
+     * that layer into the loaded cue.
+     */
+    val retarget: Boolean = true,
 )
 
 @Serializable
@@ -393,6 +399,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
             targets = request.targets,
             effectIds = request.effectIds,
             scenery = request.scenery,
+            retarget = request.retarget,
         )
         when (result) {
             is RecordLookCoreResult.Failure -> call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.message))
@@ -430,6 +437,7 @@ internal fun performProgrammerRecordLook(
     targets: List<CueTargetDto>?,
     effectIds: List<Long>,
     scenery: Boolean,
+    retarget: Boolean = true,
 ): RecordLookCoreResult {
     recordLookShapeProblem(mode, name, lookId)?.let { return RecordLookCoreResult.Failure(it) }
 
@@ -476,6 +484,16 @@ internal fun performProgrammerRecordLook(
     // as an edit does.
     val republish = republishForLookEdit(state, outcome.lookUuid)
     state.show.fixtures.lookListChanged()
+
+    // As a Record into a cue does: what was just written is what Update writes back to.
+    if (retarget) {
+        state.show.programmerStore.lastIncludedTarget = IncludedTarget.look(outcome.lookId, outcome.lookUuid)
+        stampRecordedValues(state)
+        state.programmerScenery.rebaseline(
+            project.id.value,
+            written = scenery && mode != RecordMode.REMOVE && sceneryOutcome.warnings.isEmpty(),
+        )
+    }
 
     val details = transaction(state.database) {
         DaoLook.findById(outcome.lookId)!!.toDetailsDto(state)
@@ -783,6 +801,7 @@ internal fun updateIncludedLook(
             writeIncludedEffectsBack(look, includedEffects),
         )
     }
+    foldUpdateIntoRecorded(state, changed, cleared)
     state.show.programmerStore.forgetIncludedKeys(cleared)
     state.show.programmerStore.rebaseIncludeTarget()
     // What was written is the new baseline: a second Update writes nothing it already wrote.

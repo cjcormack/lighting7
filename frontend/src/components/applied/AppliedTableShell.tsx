@@ -7,6 +7,8 @@ import { SheetTable, type SheetSort, type SheetTableProps } from '@/components/s
 import { LibraryRow } from '@/components/sheet/LibraryRow'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import type { RowId } from '@/components/sheet/cellSelectionModel'
+import type { CellActionCopy, CellKeyboardPermission } from '@/components/sheet/cellEntry'
+import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
 import { useSheet } from '@/components/sheet/useSheet'
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { ProgrammerTableTabs } from '@/components/programmer/ProgrammerTableTabs'
@@ -33,7 +35,7 @@ export type AppliedBand = 0 | 1 | 2 | 3
  */
 export const PROGRAMMER_CHIPS_CLASS = 'min-w-32'
 
-/** The read-only scope every applied table is: no column holds a cell, so no key edits one. */
+/** The scope of a table with no cell columns: no key edits one. */
 const NO_KEYS = { entry: false, clear: false }
 const NO_COPY = () => ({ setTitle: 'Nothing here is set in the table — use a row’s actions', clearTitle: 'Nothing here is cleared in the table — use a row’s actions' })
 
@@ -79,6 +81,16 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
    */
   onSelectionChange?: (rows: readonly Row[]) => void
   initialSelection?: readonly RowId[]
+  /**
+   * The keys' gate and the bar's words, for a table whose columns hold cells — the Scenery table's
+   * Shown · Open · Trim. Absent, no column is edited in the table and Set and Clear are not drawn.
+   */
+  cells?: {
+    permission: CellKeyboardPermission
+    copy: (cellCount: number) => CellActionCopy
+    /** A cell the scope will not write: drawn inert, as on every sheet. */
+    cellDisabled?: (row: Row, col: C) => boolean
+  }
   /** Drawn in place of the sheet while there is nothing applied at all. */
   emptyNote: string
   /** The rows are still being read: the spinner, not [emptyNote]. */
@@ -92,10 +104,11 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
  * the selection bar with the table's verbs, the sheet and the footer — the library sheets' anatomy
  * over the live programmer.
  *
- * **Every column is a read-out.** What a row can change it changes through its actions, which call
- * the desk's mutations (`useEffectControls`, the stack's `LayerHandlers`), so a later change to what
- * a row can do moves the actions and never the table. The sheet still
- * selects rows — a click, a drag down the name column, ⌘A, ↑ / ↓ — for the bar's verbs over several.
+ * **A column is a read-out unless the table says otherwise** ([cells]). What a row can change it
+ * changes through its actions, which call the desk's mutations (`useEffectControls`, the stack's
+ * `LayerHandlers`); the Scenery table alone edits its state in cells, Set over a marquee as on any
+ * sheet. The sheet selects rows — a click, a drag down the name column, ⌘A, ↑ / ↓ — for the bar's
+ * verbs over several.
  *
  * Sort, filter and chip are the page's (`ProgrammerTables`), handed in as [view]; a header press is
  * `nextSort`. Scroll is remembered per window and table here, through the sheet's `scroll`.
@@ -123,6 +136,7 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   verbs,
   onSelectionChange,
   initialSelection,
+  cells,
   emptyNote,
   loading = false,
   footer,
@@ -138,13 +152,14 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   const sheet = useSheet<Row, C>({
     rows,
     columns,
-    permission: NO_KEYS,
-    copy: NO_COPY,
+    permission: cells?.permission ?? NO_KEYS,
+    copy: cells?.copy ?? NO_COPY,
+    cellDisabled: cells?.cellDisabled,
     noun,
     rowName,
     onOpenRow,
   })
-  const { selectedRows, clearByLadder, setRows } = sheet
+  const { selectedRows, clearByLadder, setRows, cellCount } = sheet
 
   // Once, on mount: `setRows` changes identity with the rows, and re-applying the initial
   // selection on a refetch or a filter keystroke would snap the operator's selection back to it.
@@ -192,12 +207,21 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
       <div className="@container">
         <SelectionBar
           rowLabel={count > 0 ? `${count} ${plural}` : null}
-          cellLabel={null}
+          cellLabel={cellCount > 0 ? `${cellCount} cell${cellCount === 1 ? '' : 's'}` : null}
           family={null}
-          hints={{ entry: false, clear: false }}
+          hints={{ entry: cellCount > 0 && sheet.permission.entry, clear: cellCount > 0 && sheet.permission.clear }}
           verbs={
             count > 0 ? (
               <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+                {cellCount > 0 && cells != null && (
+                  <CellSelectionActions
+                    copy={sheet.copy}
+                    permission={sheet.permission}
+                    setRef={sheet.setButtonRef}
+                    onSet={sheet.toggleCellEditor}
+                    onClear={sheet.clearSelectedCells}
+                  />
+                )}
                 {verbs(selectedRows)}
                 <Button variant="ghost" size="sm" onClick={clearByLadder} title="Deselect all">
                   <X className="size-3.5" />

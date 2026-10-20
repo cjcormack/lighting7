@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ProgrammerEntry } from '@/api/programmerWsApi'
-import { diffAgainstBaseline, snapshotEntries, withSceneryChanges } from './includeBaseline'
+import { diffAgainstBaseline, snapshotEntries, withLayerChanges, withSceneryChanges } from './includeBaseline'
 
 const snap = (o: Record<string, string>) => new Map(Object.entries(o))
 
@@ -37,6 +37,25 @@ describe('snapshotEntries', () => {
     })
     const result = snapshotEntries(new Map([['f:1|dimmer', entry('255')]]))
     expect([...result]).toEqual([['f:1|dimmer', '255']])
+  })
+
+  it('leaves out a value a layer holds, since Update writes the layer and not its values', () => {
+    const held: ProgrammerEntry = {
+      targetKey: 'f:1', propertyName: 'dimmer', value: '200', owner: 'layers', touched: false, owners: ['layers'],
+    }
+    expect(snapshotEntries(new Map([['f:1|dimmer', held]])).size).toBe(0)
+  })
+})
+
+describe('withLayerChanges', () => {
+  it('adds the layers Update would write, so a Look of scenery alone un-greys Update', () => {
+    expect(withLayerChanges(0, 1)).toBe(1)
+    expect(withLayerChanges(2, 1)).toBe(3)
+  })
+
+  it('adds nothing for an absent count, and keeps an unknown value count unknown', () => {
+    expect(withLayerChanges(0, undefined)).toBe(0)
+    expect(withLayerChanges(null, 1)).toBeNull()
   })
 })
 

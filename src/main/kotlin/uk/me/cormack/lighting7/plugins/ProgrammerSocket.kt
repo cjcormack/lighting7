@@ -421,6 +421,12 @@ data class ProgrammerLayerStateOutMessage(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val applied: List<ProgrammerAppliedSourceDto> = emptyList(),
+    /**
+     * How many layers Update would write into the included cue — [ProgrammerStore.layerChangesSinceInclude],
+     * the source strip's count of what the values cannot show. Always encoded: 0 is the common answer.
+     */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val changedSinceInclude: Int = 0,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -451,6 +457,9 @@ data class ProgrammerStateOutMessage(
      */
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val applied: List<ProgrammerAppliedSourceDto> = emptyList(),
+    /** As [ProgrammerLayerStateOutMessage.changedSinceInclude]. */
+    @EncodeDefault(EncodeDefault.Mode.ALWAYS)
+    val layersChangedSinceInclude: Int = 0,
 ) : ProgrammerOutMessage()
 
 /**
@@ -753,7 +762,7 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
 fun setupProgrammerSubscriptions(scope: SocketScope) {
     // Connect snapshots. Only `lastIncludedTargetFlow` below is a StateFlow; `layersFlow` and
     // `provenance.flow` are replay-1 `SharedFlow`s, which have nothing to replay on a desk where
-    // no layer has been touched and nothing has moved a value — so neither can be the connect
+    // neither has emitted yet — so neither can be the connect
     // frame for its family. `programmer.state` covers two of the three: it carries `lastIncluded`
     // and `layers` alongside the entries and the channel sideband, which had no connect frame at
     // all and are why the client asked on open. Provenance has no such carrier, so it gets its
@@ -794,6 +803,7 @@ fun setupProgrammerSubscriptions(scope: SocketScope) {
             ProgrammerLayerStateOutMessage(
                 change.layers.map { it.toDto() },
                 show.programmerLayerStack.appliedState(change.layers).map { it.toDto() },
+                show.programmerStore.layerChangesSinceInclude(change.layers),
             )
         }
     }) { scope.send(it) }
@@ -1275,6 +1285,7 @@ object ProgrammerHandler {
         return ProgrammerLayerStateOutMessage(
             layers.map { it.toDto() },
             state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
+            state.show.programmerStore.layerChangesSinceInclude(layers),
         )
     }
 
@@ -1339,6 +1350,7 @@ object ProgrammerHandler {
             store.blind, entries, channels, includedTargetDto(state, store.lastIncludedTarget),
             layers = layers.map { it.toDto() },
             applied = state.show.programmerLayerStack.appliedState(layers).map { it.toDto() },
+            layersChangedSinceInclude = store.layerChangesSinceInclude(layers),
         )
     }
 

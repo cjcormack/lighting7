@@ -197,6 +197,7 @@ export const programmerWs: {
     lastIncluded: unknown
     layers: unknown[]
     applied: unknown[]
+    layersChangedSinceInclude?: number
     snapshotSeq: number
   }
   push: (patch: Partial<typeof programmerWs.state>) => void

@@ -128,7 +128,7 @@ Clients that fan a group-scoped gesture out *themselves* — a group virtual dim
 
 ### The include target
 
-`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record that names a cue (record-then-tweak-then-Update being the obvious next gesture), carries the stack entry a cue was included from (`entryId`, for the indicator's number — a shared cue has one per stack; Update writes the cue, whichever), cleared by Clear and by deleting the cue (removing its entry drops only the `entryId`), and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
+`ProgrammerStore.lastIncludedTarget` records what Include last loaded, and is what a bare Update writes back to. It is set by Include and by any Record — into a cue or a Look; `record-look`'s `retarget: false`, which Make layer sends, leaves it where it was — (record-then-tweak-then-Update being the obvious next gesture), carries the stack entry a cue was included from (`entryId`, for the indicator's number — a shared cue has one per stack; Update writes the cue, whichever), cleared by Clear and by deleting the cue (removing its entry drops only the `entryId`), and left alone by `clearEntry`, `setBlind`, and a successful Update — Update is repeatable.
 
 It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as a `programmer.includeTarget` push. That push is a **broadcast**, unlike every other programmer reply, because the programmer is shared: a second tab's Update button must offer the same target.
 
@@ -237,6 +237,19 @@ seen nor changed.
   Clear forgets them all. An Update, an Include and a Record each move the include target's `baseline`,
   which is what the source strip re-takes its count of unwritten changes against. A key set only some other way (a cell under its fixture's row) is named in a
   warning. Mode B deletes nothing; removing anything else is `record REMOVE`.
+- **After a Record**, Update's value baseline is what the Record saw (`ProgrammerStore.recordedValues`,
+  every touched value at that moment) rather than the `INCLUDE` slots, which still describe whatever was
+  included before: a masked or scoped Record otherwise left Update writing every busked value outside
+  its remit into the target. A Mode A Update folds in what it wrote, so a value put back is written
+  back; an Include and Clear drop it.
+- **The layer half of the count.** `ProgrammerStore.layerChangesSinceInclude` counts the layers Update
+  would add, remove, move or retune in an included cue (`writeLayerStackIntoCue`'s classification), and
+  rides `programmer.layerState` and `programmer.state`, because a Look of scenery alone adds a layer and
+  no value. A Mode A Update and a Record into a cue rebase the stack (`rebaseLayers`): each layer keyed
+  to the cue row now standing for it and the stack made the baseline, so a second Update — or an Update
+  after a Record — retunes those rows rather than adding the layers again. A layer the Record left
+  with no row (`ALL` and a stage snapshot flatten the stack into rows) stays in the baseline keyed to
+  nothing and counts as neither added nor written.
 - **Scenery** goes back in Mode A only, by the record's MERGE rules — into the cue as change rows (an
   included row with its own clock, a held piece the cue already shows skipped, a row already saying
   exactly the held state left untouched), into a Look as its scenery. Mode B writes none, for the

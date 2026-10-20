@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { lightingApi } from '@/api/lightingApi'
-import { diffAgainstBaseline, snapshotEntries, withSceneryChanges, type ValueSnapshot } from '@/lib/includeBaseline'
+import {
+  diffAgainstBaseline,
+  snapshotEntries,
+  withLayerChanges,
+  withSceneryChanges,
+  type ValueSnapshot,
+} from '@/lib/includeBaseline'
 import { includedTargetKey } from '@/lib/includedTarget'
 import { useProgrammerScenery } from '@/store/programmer'
 
@@ -28,7 +34,9 @@ import { useProgrammerScenery } from '@/store/programmer'
  *
  * Held scenery adds to the count (scenery-programmer plan session 3): Update writes it back too, so
  * moving the tabs after Include must un-grey Update. That half the desk counts itself
- * (`changedSinceInclude` on `programmer.sceneryState`) — see `withSceneryChanges`.
+ * (`changedSinceInclude` on `programmer.sceneryState`) — see `withSceneryChanges`. So do the layers
+ * Update would write into an included cue (`layersChangedSinceInclude`, `withLayerChanges`), since a
+ * Look of scenery alone adds a layer and no value; a layer's own values are not counted as values.
  */
 export function useIncludeBaseline(): number | null {
   const baselineRef = useRef<ValueSnapshot | null>(null)
@@ -67,7 +75,11 @@ export function useIncludeBaseline(): number | null {
         awaitingRef.current = false
       }
 
-      setDirty(awaitingRef.current ? 0 : diffAgainstBaseline(baselineRef.current, current))
+      setDirty(
+        awaitingRef.current
+          ? 0
+          : withLayerChanges(diffAgainstBaseline(baselineRef.current, current), state.layersChangedSinceInclude),
+      )
     }
 
     apply(lightingApi.programmer.getState())

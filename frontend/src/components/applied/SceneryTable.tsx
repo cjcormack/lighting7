@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { SlidersHorizontal, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EditorSurface } from '@/components/editor/EditorSurface'
@@ -13,19 +13,24 @@ import {
   type SceneryFilters,
   type SceneryScope,
 } from '@/components/programmer/ProgrammerSceneryList'
-import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { listNames, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
+import { NumberCell } from '@/components/sheet/cells/NumberCell'
+import { OptionCell, type SheetOption } from '@/components/sheet/cells/OptionCell'
+import type { CellActionCopy, CellKeyboardPermission } from '@/components/sheet/cellEntry'
 import { useStageElementListQuery } from '@/store/stageElements'
 import type { StageElementDto } from '@/api/stageElementApi'
-import { describeSceneryState, sceneryKindLabel } from '@/lib/scenery'
+import type { SceneryState } from '@/api/sceneryApi'
+import { sceneryKindLabel, sceneryRangeOf } from '@/lib/scenery'
 import { cn } from '@/lib/utils'
 import { matchesFilter, type TableView } from '@/lib/programmerTables'
 import { AppliedTableShell, type AppliedBand } from './AppliedTableShell'
 
-type SceneryColumnKey = 'kind' | 'state' | 'source'
+type SceneryColumnKey = 'shown' | 'open' | 'trim' | 'source' | 'kind'
 
 interface ElementRow extends SheetRow {
   element?: StageElementDto
-  state?: string
+  /** What the row draws: the stage's state, a focused Look's own over it. */
+  state?: SceneryState
   readout?: string
   held?: boolean
   staged?: boolean
@@ -80,7 +85,7 @@ export function SceneryTable({
         return {
           id: element.uuid,
           element,
-          state: describeSceneryState(element, face.state),
+          state: face.state,
           readout: face.readout,
           held: face.held,
           staged: face.staged,
@@ -89,7 +94,15 @@ export function SceneryTable({
     ])
   }, [elements, filters, heldKeys, scope, view.q])
 
-  const columnsFor = useCallback((band: AppliedBand) => sceneryColumns(band), [])
+  // `useSceneryScope` answers a fresh object every render, so the columns read it through a ref and
+  // stay put; the cells' gate is rebuilt only when what it says moves.
+  const scopeRef = useRef(scope)
+  scopeRef.current = scope
+  const columnsFor = useCallback((band: AppliedBand) => sceneryColumns(band, scopeRef), [])
+  const armKey = scope.arm.kind === 'readOnly' ? `r:${scope.arm.reason}` : scope.arm.kind === 'look' ? `l:${scope.arm.name}` : 'local'
+  // Complete: `sceneryCells` reads only the scope's `arm` and `ready`, which `armKey` and `ready` say.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const cells = useMemo(() => sceneryCells(scopeRef.current), [armKey, scope.ready])
   const firstColumnFor = useCallback(
     (band: AppliedBand) => ({
       label: 'Element',
@@ -132,6 +145,7 @@ export function SceneryTable({
       pencil={false}
       rowClass={(row) => (row.held ? HELD_TINT : undefined)}
       verbs={(selected) => <SceneryVerbs selected={selected} scope={scope} />}
+      cells={cells}
       emptyNote={NO_SCENERY_YET}
       loading={elements == null}
       footer={
@@ -145,20 +159,89 @@ export function SceneryTable({
   )
 }
 
-function sceneryColumns(band: AppliedBand): { columns: SheetColumn<ElementRow, SceneryColumnKey>[]; minWidth: number } {
-  const kind: SheetColumn<ElementRow, SceneryColumnKey> = {
-    key: 'kind',
-    label: 'Kind',
-    width: '120px',
-    value: () => undefined,
-    display: (row) => (row.element == null ? null : cellText(sceneryKindLabel(row.element), true)),
+const SHOWN_OPTIONS: readonly SheetOption[] = [
+  { value: 'shown', label: 'Shown' },
+  { value: 'hidden', label: 'Hidden' },
+]
+
+const RELEASE_INSTEAD = 'A piece is let go whole — Release it from the bar or its ×'
+
+const names = (rows: readonly ElementRow[]) => listNames(rows.map((r) => r.element?.name ?? 'element'), 'element')
+const has = (rows: readonly ElementRow[]) => (rows.length === 1 ? 'has' : 'have')
+
+/**
+ * The state as three columns, one per kind of state: *Shown* on every piece,
+ * *Open* on a drawn drape, *Trim* on a flown piece with somewhere to fly. A marquee down a column
+ * and Set write that state to every selected piece that has it, through the scope as a row's own
+ * control does — one write, since a focused Look's scenery is written whole. A piece without the
+ * state is skipped and named. There is no Clear (a piece is released whole) and no Spread.
+ */
+function sceneryColumns(
+  band: AppliedBand,
+  scope: RefObject<SceneryScope>,
+): { columns: SheetColumn<ElementRow, SceneryColumnKey>[]; minWidth: number } {
+  const writeAll = (rows: readonly ElementRow[], patch: (row: ElementRow) => SceneryState) =>
+    scope.current.writeMany(rows.filter((row) => row.element != null).map((row) => ({ elementUuid: row.element!.uuid, state: patch(row) })))
+
+  const shown: SheetColumn<ElementRow, SceneryColumnKey> = {
+    key: 'shown',
+    label: 'Shown',
+    kind: 'shown',
+    width: '104px',
+    value: (row) => (row.state == null ? undefined : row.state.visible === false ? 'hidden' : 'shown'),
+    cell: (_row, props) => <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={SHOWN_OPTIONS} />,
+    write: (rows, value) => {
+      if (value !== 'shown' && value !== 'hidden') return false
+      writeAll(rows, () => ({ visible: value === 'shown' }))
+      return true
+    },
+    clearRefusal: RELEASE_INSTEAD,
   }
-  const state: SheetColumn<ElementRow, SceneryColumnKey> = {
-    key: 'state',
-    label: 'State',
-    width: 'minmax(140px, 1fr)',
-    value: () => undefined,
-    display: (row) => (row.state == null ? null : cellText(row.state)),
+  const open: SheetColumn<ElementRow, SceneryColumnKey> = {
+    key: 'open',
+    label: 'Open',
+    kind: 'open',
+    width: '96px',
+    align: 'right',
+    value: (row) => (row.state?.open == null ? undefined : Math.round(row.state.open * 100)),
+    cell: (_row, props) => (
+      <NumberCell {...(props as React.ComponentProps<typeof NumberCell>)} unit="%" min={0} max={100} />
+    ),
+    skipNote: (rows) => `${names(rows)} ${has(rows)} nothing to draw · skipped`,
+    write: (rows, value) => {
+      if (typeof value !== 'number' || value < 0 || value > 100) return false
+      writeAll(rows, () => ({ open: value / 100 }))
+      return true
+    },
+    clearRefusal: RELEASE_INSTEAD,
+  }
+  const trim: SheetColumn<ElementRow, SceneryColumnKey> = {
+    key: 'trim',
+    label: 'Trim',
+    kind: 'trim',
+    width: '96px',
+    align: 'right',
+    value: (row) =>
+      row.element == null || row.state?.trimM == null || sceneryRangeOf(row.element)?.key !== 'trimM' ? undefined : row.state.trimM,
+    cell: (_row, props) => (
+      <NumberCell
+        {...(props as React.ComponentProps<typeof NumberCell>)}
+        unit="m"
+        step={0.01}
+        format={metres}
+        note="Each piece stops at its own in and out"
+      />
+    ),
+    skipNote: (rows) => `${names(rows)} ${has(rows)} nowhere to fly · skipped`,
+    write: (rows, value) => {
+      if (typeof value !== 'number' || !Number.isFinite(value)) return false
+      writeAll(rows, (row) => {
+        const range = sceneryRangeOf(row.element!)!
+        return { trimM: Math.min(range.max, Math.max(range.min, value)) }
+      })
+      return true
+    },
+    clearRefusal: RELEASE_INSTEAD,
   }
   const source: SheetColumn<ElementRow, SceneryColumnKey> = {
     key: 'source',
@@ -167,8 +250,36 @@ function sceneryColumns(band: AppliedBand): { columns: SheetColumn<ElementRow, S
     value: () => undefined,
     display: (row) => (row.readout == null ? null : cellText(row.readout, true)),
   }
+  const kind: SheetColumn<ElementRow, SceneryColumnKey> = {
+    key: 'kind',
+    label: 'Kind',
+    width: '120px',
+    value: () => undefined,
+    display: (row) => (row.element == null ? null : cellText(sceneryKindLabel(row.element), true)),
+  }
   const name = band >= 2 ? 200 : 240
-  return { columns: [state, source, kind], minWidth: name + 140 + 160 + 120 }
+  return { columns: [shown, open, trim, source, kind], minWidth: name + 104 + 96 + 96 + 160 + 120 }
+}
+
+const metres = (v: number) => (Math.round(v * 100) / 100).toFixed(2)
+
+/** The scope's gate for the state cells: Output and a palette layer write nothing, a loading Look waits. */
+function sceneryCells(scope: SceneryScope): {
+  permission: CellKeyboardPermission
+  copy: (cellCount: number) => CellActionCopy
+  cellDisabled: () => boolean
+} {
+  const refusal =
+    scope.arm.kind === 'readOnly' ? scope.arm.reason : !scope.ready ? 'The Look’s scenery is still loading' : null
+  const where = scope.arm.kind === 'look' ? `into ${scope.arm.name}` : 'in the programmer'
+  return {
+    permission: { entry: refusal == null, clear: false },
+    copy: (count) => ({
+      setTitle: refusal ?? `Set ${count === 1 ? 'this cell' : `${count} cells`} ${where}`,
+      clearTitle: RELEASE_INSTEAD,
+    }),
+    cellDisabled: () => refusal != null,
+  }
 }
 
 function cellText(text: string, muted = false) {

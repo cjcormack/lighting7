@@ -7,6 +7,7 @@ import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.IncludedTarget
+import uk.me.cormack.lighting7.fx.CueLayerFields
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -100,7 +101,13 @@ internal fun changedSinceInclude(
     // `allowElements`: both destinations can hold a cell — a cue as a cell-target row, a Look as
     // an element row — so a nudged head comes back through Update as the row it was included as.
     val (entries, skips) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask, allowElements = true)
+    val recorded = store.recordedValues
     val changed = entries.filterTo(LinkedHashSet()) { entry ->
+        // Since a Record, what was recorded is the baseline; a key it did not see is new.
+        if (recorded != null) {
+            return@filterTo recorded[ProgrammerStore.IncludedKey(entry.fixtureKey, entry.propertyName)] !=
+                (entry.reconciledFrom ?: entry.value)
+        }
         val included = store.valueFor(ProgrammerOwner.INCLUDE, entry.fixtureKey, entry.propertyName)
             // New since Include — the operator adding a fixture to the cue.
             ?: return@filterTo true
@@ -130,6 +137,29 @@ internal fun changedSinceInclude(
             entry.fixtureKey in colourChanged
     }
     return (changed + overridden).let { set -> entries.filter { it in set } } to skips
+}
+
+/**
+ * After an Update, what it wrote is the baseline for the next — but only while a Record's baseline is
+ * in force, and only what was written: a masked Update leaves the rest as the Record saw it.
+ */
+internal fun foldUpdateIntoRecorded(
+    state: State,
+    written: Collection<RecordEntry>,
+    cleared: Collection<ProgrammerStore.IncludedKey>,
+) {
+    val store = state.show.programmerStore
+    val recorded = store.recordedValues ?: return
+    store.recordedValues = recorded - cleared.toSet() +
+        written.associate { ProgrammerStore.IncludedKey(it.fixtureKey, it.propertyName) to (it.reconciledFrom ?: it.value) }
+}
+
+/** A Record made the include target agree with the programmer: its touched values become Update's baseline. */
+internal fun stampRecordedValues(state: State) {
+    val (entries, _) = collectProgrammerEntries(state, RecordSource.TOUCHED, mask = null, allowElements = true)
+    state.show.programmerStore.recordedValues = entries.associate {
+        ProgrammerStore.IncludedKey(it.fixtureKey, it.propertyName) to (it.reconciledFrom ?: it.value)
+    }
 }
 
 /**
@@ -463,6 +493,9 @@ internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
         .filterValues { instances -> instances.all { it.splitMember != null } }
         .keys
 
+private fun DaoCueLayer.cueFields() =
+    CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+
 /** What a layer-stack diff changed in the cue, for the response and the log line. */
 internal data class LayerDiffOutcome(
     val added: Int,
@@ -470,6 +503,8 @@ internal data class LayerDiffOutcome(
     val reordered: Int,
     val retuned: Int,
     val timedPreserved: Int,
+    /** The cue row each added layer was written as, by [ProgrammerLayer.layerId]. */
+    val addedRows: Map<Int, Int> = emptyMap(),
 )
 
 /**
@@ -511,7 +546,7 @@ internal fun writeLayerStackIntoCue(
     val storedById = cue.layers.filterNot { it.isTimed }.associateBy { it.id.value }
     val timedPreserved = cue.layers.count { it.isTimed }
 
-    var added = 0
+    val addedRows = HashMap<Int, Int>()
     var removed = 0
     var reordered = 0
     var retuned = 0
@@ -523,11 +558,14 @@ internal fun writeLayerStackIntoCue(
         storedById[gone]?.let { it.delete(); removed++ }
     }
 
+    val left = baseline.filter { it.sourceCueLayerId == null }.mapTo(HashSet()) { it.layerId }
     for ((index, layer) in current.withIndex()) {
         val stored = layer.sourceCueLayerId?.let { storedById[it] }
+        // A layer the last Record flattened into rows rather than writing as a layer.
+        if (stored == null && layer.sourceCueLayerId == null && layer.layerId in left) continue
         if (stored == null) {
             val resolved = resolveLayerSourceRecords(layer.source) ?: continue
-            DaoCueLayer.new {
+            addedRows[layer.layerId] = DaoCueLayer.new {
                 this.cue = cue
                 this.look = resolved.look
                 this.template = resolved.template
@@ -540,8 +578,7 @@ internal fun writeLayerStackIntoCue(
                 this.stomp = layer.stomp
                 this.speedMasterUuid = layer.speedMasterUuid
                 this.rateSpeedMasterUuid = layer.rateSpeedMasterUuid
-            }
-            added++
+            }.id.value
             continue
         }
 
@@ -549,21 +586,18 @@ internal fun writeLayerStackIntoCue(
             stored.sortOrder = index
             reordered++
         }
-        var moved = false
-        if (stored.enabled != layer.enabled) { stored.enabled = layer.enabled; moved = true }
-        if (stored.targets != layer.targets) { stored.targets = layer.targets; moved = true }
-        if (stored.propertyMask != layer.propertyMask) { stored.propertyMask = layer.propertyMask; moved = true }
-        if (stored.blendMode != layer.blendMode) { stored.blendMode = layer.blendMode; moved = true }
-        if (stored.amount != layer.amount) { stored.amount = layer.amount; moved = true }
-        if (stored.stomp != layer.stomp) { stored.stomp = layer.stomp; moved = true }
-        if (stored.speedMasterUuid != layer.speedMasterUuid) {
-            stored.speedMasterUuid = layer.speedMasterUuid; moved = true
+        if (stored.cueFields() != layer.cueFields()) {
+            stored.enabled = layer.enabled
+            stored.targets = layer.targets
+            stored.propertyMask = layer.propertyMask
+            stored.blendMode = layer.blendMode
+            stored.amount = layer.amount
+            stored.stomp = layer.stomp
+            stored.speedMasterUuid = layer.speedMasterUuid
+            stored.rateSpeedMasterUuid = layer.rateSpeedMasterUuid
+            retuned++
         }
-        if (stored.rateSpeedMasterUuid != layer.rateSpeedMasterUuid) {
-            stored.rateSpeedMasterUuid = layer.rateSpeedMasterUuid; moved = true
-        }
-        if (moved) retuned++
     }
 
-    return LayerDiffOutcome(added, removed, reordered, retuned, timedPreserved)
+    return LayerDiffOutcome(addedRows.size, removed, reordered, retuned, timedPreserved, addedRows)
 }

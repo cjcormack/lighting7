@@ -13,6 +13,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LookRowDto
+import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -64,6 +65,69 @@ class LookRecordTest : RouteIntegrationTest() {
             "families are derived from the rows rather than declared",
         )
     }
+
+    @Test
+    fun `record-look points the include target at the Look it wrote, so Update writes back there`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            val other = client.createLook("Other", LookRowDto("fixture", "hex-1", "dimmer", "10"))
+            client.includeLook(other)
+            val before = assertNotNull(state.show.programmerStore.lastIncludedTarget).baseline
+            setProgrammer("hex-1", "dimmer", "200")
+
+            val recorded: ProgrammerRecordLookResponse = client.recordLook(
+                ProgrammerRecordLookRequest(projectId = projectId.toString(), mode = "CREATE", name = "Warm"),
+            ).body()
+            val target = assertNotNull(state.show.programmerStore.lastIncludedTarget)
+            assertEquals(recorded.look.id, target.lookId)
+            assertTrue(target.baseline > before, "the client re-takes its change count from here")
+
+            setProgrammer("hex-1", "dimmer", "255")
+            val response: ProgrammerUpdateResponse = client.update().body()
+            assertEquals(recorded.look.id, assertNotNull(response.lookResult).lookId)
+            assertEquals("255", client.lookRows(recorded.look.id).getValue("hex-1" to "dimmer"))
+            assertEquals("10", client.lookRows(other).getValue("hex-1" to "dimmer"), "the earlier Look is left alone")
+        }
+
+    @Test
+    fun `record-look with retarget false leaves the include target where it was, as Make layer needs`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            val other = client.createLook("Other", LookRowDto("fixture", "hex-1", "dimmer", "10"))
+            client.includeLook(other)
+            setProgrammer("hex-1", "dimmer", "200")
+
+            client.recordLook(
+                ProgrammerRecordLookRequest(projectId = projectId.toString(), mode = "CREATE", name = "Warm", retarget = false),
+            )
+            assertEquals(other, state.show.programmerStore.lastIncludedTarget?.lookId)
+        }
+
+    @Test
+    fun `after record-look, Update writes only what changed since, not what the Record left out`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            seedHex("hex-1", 1)
+            seedHex("hex-2", 13)
+            setProgrammer("hex-1", "dimmer", "200")
+            setProgrammer("hex-2", "dimmer", "120")
+
+            val recorded: ProgrammerRecordLookResponse = client.recordLook(
+                ProgrammerRecordLookRequest(
+                    projectId = projectId.toString(), mode = "CREATE", name = "Warm",
+                    targets = listOf(CueTargetDto("fixture", "hex-1")),
+                ),
+            ).body()
+            setProgrammer("hex-1", "dimmer", "255")
+            client.update()
+
+            assertEquals(mapOf(("hex-1" to "dimmer") to "255"), client.lookRows(recorded.look.id), "hex-2 was outside the Record")
+        }
 
     @Test
     fun `record-look CREATE refuses a name already in use`() = testApplication {
