@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
-    "@sentry/vite-plugin": "5.4.0",
+    "@sentry/vite-plugin": "11.8.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/react": "^19.3.0",
