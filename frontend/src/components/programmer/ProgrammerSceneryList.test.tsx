@@ -296,6 +296,27 @@ describe('a focused Look’s whole-list writes', () => {
   const flush = () => act(async () => { await Promise.resolve(); await Promise.resolve() })
   const held = () => [...document.querySelectorAll('[data-scenery-element][data-held="true"]')].map((r) => r.getAttribute('data-scenery-element'))
 
+  it('writes several pieces in one PUT, so neither drops the other', () => {
+    focusLook(3, 9, 'Night')
+    store.lookScenery = [lookChange('sofa', { visible: false })]
+    let scope: ReturnType<typeof useSceneryScope> | null = null
+    function Probe() {
+      scope = useSceneryScope(6)
+      return null
+    }
+    render(<Probe />)
+    act(() => scope!.writeMany([
+      { elementUuid: 'sofa', state: { visible: true } },
+      { elementUuid: 'tabs', state: { visible: true } },
+    ]))
+    expect(setLookScenery).toHaveBeenCalledTimes(1)
+    expect(setLookScenery).toHaveBeenCalledWith({
+      projectId: 6,
+      lookId: 9,
+      scenery: [{ elementUuid: 'sofa', state: { visible: true } }, { elementUuid: 'tabs', state: { visible: true } }],
+    })
+  })
+
   it('writes nothing to a focused Look until its own list has loaded, which a whole-list PUT would replace', () => {
     focusLook(3, 9, 'Night')
     store.lookLoaded = false

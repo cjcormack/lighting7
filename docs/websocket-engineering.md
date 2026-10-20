@@ -1062,12 +1062,12 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 
 | Message | Payload | Cast |
 |---|---|---|
-| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | Connect snapshot, again on every project switch and reload, + reply |
+| `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `layersChangedSinceInclude: Int` | Connect snapshot, again on every project switch and reload, + reply |
 | `programmer.entryChanged` | `targetType`, `targetKey`, `propertyName`, `value` | Unicast reply |
 | `programmer.entryCleared` | `targetType`, `targetKey`, `propertyName` | Unicast reply |
 | `programmer.cleared` | `cleared: Int`, `effectsCleared: Int` | Unicast reply |
 | `programmer.blindState` | `blind: Boolean` | Unicast reply |
-| `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]` | **Broadcast** — every tab, on `layersFlow` |
+| `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `changedSinceInclude: Int` (the layers Update would write into the included cue, `ProgrammerStore.layerChangesSinceInclude`; 0 unless a cue is included) | **Broadcast** — every tab, on `layersFlow`, which also says the stack again when the include target or the layer baseline moves |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
 | `programmer.error` | `message: String` | Unicast reply |
 | `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |

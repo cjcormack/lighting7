@@ -611,6 +611,54 @@ describe('the Scenery table', () => {
     expect(mocks.clearScenery).toHaveBeenCalledWith('e-tabs', 0)
   })
 
+  const cellOf = (rowId: string, col: string) =>
+    within(rowOf(rowId).querySelector<HTMLElement>(`[data-cell="${col}"]`)!).getByRole('button')
+  // The bar's Set, not the *Set* layer chip beside the filter.
+  const setVerb = () => screen.getAllByRole('button', { name: 'Set' }).find((b) => !b.hasAttribute('aria-pressed'))!
+
+  it('sets Shown on every selected piece in one gesture, through the programmer', async () => {
+    drawRoute('?table=scenery')
+    fireEvent.click(cellOf('e-cloth', 'shown'))
+    fireEvent.keyDown(window, { key: 'ArrowDown', shiftKey: true })
+    fireEvent.keyDown(window, { key: 'ArrowDown', shiftKey: true })
+    expect(screen.getByText('3 cells')).toBeInTheDocument()
+    fireEvent.click(setVerb())
+    fireEvent.click(await screen.findByRole('option', { name: 'Hidden' }))
+    expect(mocks.setScenery.mock.calls).toEqual([
+      ['e-cloth', { visible: false }, 0],
+      ['e-tabs', { visible: false }, 0],
+      ['e-sofa', { visible: false }, 0],
+    ])
+  })
+
+  it('draws Open only on a drawn drape and Trim only on a piece with somewhere to fly, and writes each', async () => {
+    mocks.elements = [
+      element('e-tabs', 'Tabs', 'VENUE', 'DRAPE', { role: 'TABS', operation: 'DRAW' }),
+      element('e-cloth', 'Backcloth', 'VENUE', 'DRAPE', { role: 'BACKCLOTH', operation: 'FLY', states: { trimM: 8 } }),
+      element('e-sofa', 'Sofa', 'SET', 'OBJECT', {}),
+    ]
+    drawRoute('?table=scenery')
+    expect(rowOf('e-tabs').querySelector('[data-cell="open"]')).not.toBeNull()
+    expect(rowOf('e-tabs').querySelector('[data-cell="trim"]')).toBeNull()
+    expect(rowOf('e-cloth').querySelector('[data-cell="open"]')).toBeNull()
+    expect(rowOf('e-sofa').querySelector('[data-cell="trim"]')).toBeNull()
+
+    fireEvent.click(cellOf('e-tabs', 'open'))
+    fireEvent.click(setVerb())
+    const open = await screen.findByLabelText('Open')
+    fireEvent.change(open, { target: { value: '40' } })
+    fireEvent.keyDown(open, { key: 'Enter' })
+    expect(mocks.setScenery).toHaveBeenLastCalledWith('e-tabs', { open: 0.4 }, 0)
+
+    // A trim past the piece's out stops at it.
+    fireEvent.click(cellOf('e-cloth', 'trim'))
+    fireEvent.click(setVerb())
+    const trim = await screen.findByLabelText('Trim')
+    fireEvent.change(trim, { target: { value: '20' } })
+    fireEvent.keyDown(trim, { key: 'Enter' })
+    expect(mocks.setScenery).toHaveBeenLastCalledWith('e-cloth', { trimM: 8 }, 0)
+  })
+
   it('marks a held row with a tint and an edge in its name cell, never a ring the sticky cell cuts', () => {
     mocks.programmerScenery = { projectId: 1, elements: [{ elementUuid: 'e-tabs', state: { open: 0.5 } }] }
     drawRoute('?table=scenery')

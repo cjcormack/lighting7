@@ -54,6 +54,9 @@ data class ProgrammerLayer(
      */
     val beatDivisionOverride: Double? = null,
 ) {
+    /** What a cue row holds for this layer beside its source and place: the fields Update retunes. */
+    fun cueFields() = CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+
     internal fun toCookLayer() = CookLayer(
         source = source,
         sortOrder = sortOrder,
@@ -68,6 +71,22 @@ data class ProgrammerLayer(
         layerId = layerId,
     )
 }
+
+/**
+ * A cue layer's fields beside its source and place — one list, so Update's writer
+ * (`writeLayerStackIntoCue`) and the change count ([ProgrammerStore.layerChangesSinceInclude]) cannot
+ * disagree about what a retune is.
+ */
+data class CueLayerFields(
+    val enabled: Boolean,
+    val targets: List<CueTargetDto>,
+    val propertyMask: String?,
+    val blendMode: String,
+    val amount: Double,
+    val stomp: Boolean,
+    val speedMasterUuid: UUID?,
+    val rateSpeedMasterUuid: UUID?,
+)
 
 /** What a recook moved, for the caller to report. */
 data class ProgrammerLayerOutcome(

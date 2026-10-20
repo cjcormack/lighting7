@@ -1259,7 +1259,15 @@ source's rows into the overlay and the band shows them. **Update's dirty count a
 read by `useIncludeBaseline`), because a client snapshot of the overlay at the include transition
 could land on either side of the overlay's Include — the two frames are unordered — and without it a
 moved tab after Include left Update disabled as *in sync*. `null` stays `null`: a tab that did not
-see the Include still claims nothing. `UpdateDialog`'s toast adds *, 1 scenery change* where one
+see the Include still claims nothing. **The layers are counted the same way**: the desk's
+`layersChangedSinceInclude` (`withLayerChanges`), the layers Update would write into an included
+cue, since a Look of scenery alone pressed over a loaded cue adds a layer and no value — and a value
+a layer holds is not counted as a value (`snapshotEntries` leaves `layers`-owned entries out), so a
+Look pressed over a cue is one change, not one per row. **Record look retargets the include target**
+to the Look it wrote, as Record into a cue does, so the source strip names it and Update writes back
+there — except from *Make layer*, which sends `retarget: false`, since the Look it makes is a layer of
+whatever is loaded and Update still writes that layer into the loaded cue. The Include sheet's Looks tab lists a **Scenery** group after the families, so a Look of
+scenery alone (no family) can be included. `UpdateDialog`'s toast adds *, 1 scenery change* where one
 was written, so a scenery-only Update does not read as *0 values written* and nothing else; the
 Include sheet's toast counts `sceneryIncluded` the same way, Record's menu heading names held
 scenery (`recordMenuLabel`), and a busk pad's face counts a Look's scenery (`padFace.ts`'s
@@ -5138,7 +5146,7 @@ lists** since session 2: the right side is the Colour · Spread dock (§The dock
   grid's row B is hidden, so `ProgrammerBody` gives row A its own row there (`useValuesTableShown`,
   asked only while the viewport is short, so a tab switch at an ordinary height never re-renders the
   memo barrier).
-- **Every cell is a read-out**; a row acts through its own actions and the desk's mutations, the bar
+- **Every cell is a read-out** but the Scenery table's state cells (below); a row acts through its own actions and the desk's mutations, the bar
   carrying the same verbs over a selection, a one-row verb disabled over several with the reason.
   **FX** (`applied/AppliedFxTable.tsx`, Applied FX moved, unchanged columns, bands and verbs):
   `fx/active`, one row per instance in the desk's order; timing *Seconds* or the instance's master
@@ -5176,10 +5184,16 @@ lists** since session 2: the right side is the Colour · Spread dock (§The dock
   cue tracks back to their base), one per-window store (`useSceneryFilters`, `sessionStorage` under
   `programmer.scenery.filters`) — and a held piece listed whatever they say. **One scope reading**,
   `useSceneryScope` (`programmer/ProgrammerSceneryList.tsx`, shared with the Stage view's scenery
-  popover): State, *Held by* and Kind are read-outs; a row's sliders (and ⏎) open its
-  `SceneryElementRow` at the row through
+  popover): the state is three **cells**, one per kind of state — *Shown* (Shown · Hidden, every
+  piece), *Open* (a percent, a drawn drape) and *Trim* (metres, a flown piece with an out to fly to,
+  each piece stopping at its own in and out) — so a marquee down a column and Set write that state to
+  every selected piece that has it, a piece without it skipped and named; there is no Clear (a piece
+  is released whole) and no Spread. A Set over several pieces is **one** write (`SceneryScope.writeMany`),
+  since a focused Look's scenery is written whole; Output and a palette layer refuse with the scope's
+  reason (`AppliedTableShell`'s `cells`, which the other tables leave out). *Held by* and Kind are
+  read-outs; a row's sliders (and ⏎) open its `SceneryElementRow` at the row through
   `EditorSurface`, and the × releases. *Release* on the bar releases the selection's held pieces —
-  one at a time from a focused Look, whose scenery is written whole per gesture.
+  one at a time from a focused Look.
 - **Folds are by the sheet's own width** (`useContainerBand`, `APPLIED_BAND_FLOORS` 1100 / 860 / 480,
   memo rows, overscan 8, all unchanged): band 0 draws every column; band 1 merges FX's Timing with
   Speed and Size · Dir · Runs into Dynamics, and a layer's Blend · Mask · Stomp into Settings; bands 2

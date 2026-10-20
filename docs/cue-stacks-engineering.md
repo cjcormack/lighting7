@@ -799,7 +799,7 @@ resolves there (`docs/cues-engineering.md` §"Copying").
 - **Update** writes the held scenery back in Mode A only — into the cue by the MERGE rule above, into
   a Look as its scenery. Mode B writes none.
 - **The baseline.** Include sets one (the source's rows) when it moves the include target — an Include that stages nothing leaves both where they were — a Record that retargets the include target
-  resets it to what the cue now says (all held, or none when the Record left scenery out or removed
+  (into a cue or a Look) resets it to what the source now says (all held, or none when the Record left scenery out or removed
   it), and a Mode A Update to everything held. `programmer.sceneryState` carries
   `changedSinceInclude` — the held pieces that differ from it — which the source strip adds to its
   value dirty count, because the include target and the overlay are two flows and a client cannot

@@ -274,6 +274,7 @@ internal fun includeExpandedIntoProgrammer(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
         )
     }
+    state.show.programmerStore.recordedValues = null
     state.show.programmerStore.lastIncludedTarget = includedTarget
     state.show.programmerStore.includedKeys = uk.me.cormack.lighting7.fx.ProgrammerStore.IncludedKeys(
         includedTarget,

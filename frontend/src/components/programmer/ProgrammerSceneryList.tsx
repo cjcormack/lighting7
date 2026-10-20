@@ -199,17 +199,24 @@ function useLookScenery(projectId: number, lookId: number | null) {
   // then would replace every piece the Look holds with the one just moved.
   const ready = lookId == null || detail != null
 
-  const write = useCallback(
-    (elementUuid: string, patch: SceneryState) => {
-      if (!ready) return
-      const at = items.findIndex((d) => d.elementUuid === elementUuid)
-      save(
-        at < 0
-          ? [...items, { elementUuid, state: patch }]
-          : items.map((d, i) => (i === at ? { ...d, state: { ...d.state, ...patch } } : d)),
-      )
+  const writeMany = useCallback(
+    (patches: readonly SceneryWriteItem[]) => {
+      if (!ready || patches.length === 0) return
+      let next = items
+      for (const { elementUuid, state: patch } of patches) {
+        const at = next.findIndex((d) => d.elementUuid === elementUuid)
+        next =
+          at < 0
+            ? [...next, { elementUuid, state: patch }]
+            : next.map((d, i) => (i === at ? { ...d, state: { ...d.state, ...patch } } : d))
+      }
+      save(next)
     },
     [items, ready, save],
+  )
+  const write = useCallback(
+    (elementUuid: string, patch: SceneryState) => writeMany([{ elementUuid, state: patch }]),
+    [writeMany],
   )
   const release = useCallback(
     (elementUuid: string) => {
@@ -218,7 +225,7 @@ function useLookScenery(projectId: number, lookId: number | null) {
     [items, ready, save],
   )
 
-  return { held: items, write, release, ready }
+  return { held: items, write, writeMany, release, ready }
 }
 
 // — the scope, shared by the Scenery table and the Stage view ——————————————————————————————————————
@@ -240,6 +247,11 @@ export interface SceneryScope {
   /** One row's face: the state it draws, its read-out, whether it is held and whether Blind stages it. */
   rowOf: (element: StageElementDto) => { state: SceneryState; readout: string | undefined; held: boolean; staged: boolean }
   write: (elementUuid: string, patch: SceneryState) => void
+  /**
+   * Several pieces in one gesture — the Scenery table's Set over a marquee. One write, since a
+   * focused Look's scenery is written whole: two in a row would each send a list without the other.
+   */
+  writeMany: (patches: readonly SceneryWriteItem[]) => void
   release: (elementUuid: string) => void
   /** The label line's subject: *2 held · Local*, the focused Look's name, or the read-only arm's word. */
   subject: string
@@ -292,13 +304,17 @@ export function useSceneryScope(projectId: number): SceneryScope {
     if (arm.kind === 'look') look.write(elementUuid, patch)
     else if (arm.kind === 'local') programmerSetScenery(elementUuid, patch, fade)
   }
+  const writeMany = (patches: readonly SceneryWriteItem[]) => {
+    if (arm.kind === 'look') look.writeMany(patches)
+    else if (arm.kind === 'local') for (const p of patches) programmerSetScenery(p.elementUuid, p.state, fade)
+  }
   const release = (elementUuid: string) => {
     if (arm.kind === 'look') look.release(elementUuid)
     else if (arm.kind === 'local') programmerClearScenery(elementUuid, fade)
   }
 
   const subject = arm.kind === 'readOnly' ? arm.subject : arm.kind === 'look' ? arm.name : `${held.size} held · Local`
-  return { arm, held, isChanged, rowOf, write, release, subject, ready: arm.kind !== 'look' || look.ready }
+  return { arm, held, isChanged, rowOf, write, writeMany, release, subject, ready: arm.kind !== 'look' || look.ready }
 }
 
 /** How many pieces the programmer holds in [projectId] — what Clear will drop, and the Scenery tab's count. */

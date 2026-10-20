@@ -910,7 +910,8 @@ private val maskSchema = buildJsonObject {
 
 internal val recordCueTool = ToolDef(
     name = "record_cue",
-    description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue. " +
+    description = "Record the programmer — the manual overlay busked on top of whatever is running — into a cue, " +
+            "which then becomes what a bare update_from_programmer writes back to. " +
             "CREATE makes a new cue, placed in cueStackId when given and loose (in no stack) otherwise; MERGE adds the recorded values to an existing cue; " +
             "UPDATE_EXISTING replaces that cue's in-mask content; REMOVE deletes the rows the recording names. " +
             "Scenery the programmer holds (move_scenery; `programmer.scenery` in get_current_state) is recorded too unless " +
@@ -999,8 +1000,9 @@ internal val includeIntoProgrammerTool = ToolDef(
 internal val updateFromProgrammerTool = ToolDef(
     name = "update_from_programmer",
     description = "Write the programmer back into what it came from — the desk's Update. With no targets it " +
-            "writes only what changed since the last include_into_programmer, into that same cue or look, and " +
-            "deletes the rows of any value that include staged and the programmer has since cleared. " +
+            "writes into the cue or look last loaded by include_into_programmer or written by record_cue / record_look, " +
+            "only what changed since then, and " +
+            "deletes the rows of any value an include staged and the programmer has since cleared. " +
             "With targets it writes each named cue exactly the keys the programmer is currently overriding it " +
             "on. With preview=true it writes nothing and returns the checklist of which cues the programmer is " +
             "sitting on top of, which is the safe thing to call first. With no targets, the scenery the programmer " +
@@ -1374,7 +1376,8 @@ internal val recordLookTool = ToolDef(
             "in-mask rows for the recorded heads; REMOVE deletes the rows the recording names. A group's heads " +
             "that agree are recorded as one group row. Name targets — a Look recorded from the whole programmer " +
             "takes every head it holds. Scenery the programmer holds is recorded too unless scenery is false. " +
-            "Effects are moved into the Look only by effectIds (get_current_state's `activeEffects`). Returns the Look's rows.",
+            "Effects are moved into the Look only by effectIds (get_current_state's `activeEffects`). The Look then " +
+            "becomes what a bare update_from_programmer writes back to, as after record_cue. Returns the Look's rows.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

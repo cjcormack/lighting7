@@ -18,7 +18,8 @@ vi.mock('@/store/cueStacks', () => ({
     data: [{ id: 4, name: 'Act 1', type: 'STANDARD', cues: [{ id: 15, name: 'Storm', cueNumber: '15', cueType: 'STANDARD' }] }],
   }),
 }))
-vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
+const looks = { current: [] as unknown[] }
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks.current }) }))
 vi.mock('./useInclude', () => ({
   useInclude: () => ({ include, isLoading: false, error: undefined, resetInclude: () => {} }),
 }))
@@ -29,6 +30,7 @@ import { IncludeSheet } from './IncludeSheet'
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  looks.current = []
 })
 
 function includeStorm(onOpenChange: (open: boolean) => void) {
@@ -51,6 +53,22 @@ describe('IncludeSheet', () => {
     const onOpenChange = vi.fn()
     includeStorm(onOpenChange)
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Included “Storm” — 1 value.', { description: undefined }))
+  })
+
+  it('lists a Look of scenery alone under Scenery, and includes it', async () => {
+    looks.current = [
+      { id: 7, name: 'Moon in', families: [], targetCount: 0, preview: [], scenery: [{ elementUuid: 'e1', elementName: 'Moon', state: { trimM: 6 } }] },
+      { id: 8, name: 'Warm', families: ['COLOUR'], targetCount: 4, preview: [], scenery: [] },
+    ]
+    response.current = { name: 'Moon in', entriesWritten: 0, fxSpawned: 0, fxAlreadyRunning: 0, sceneryIncluded: 1 }
+    render(<IncludeSheet open onOpenChange={vi.fn()} projectId={6} />)
+    fireEvent.mouseDown(screen.getByRole('tab', { name: 'Looks' }), { button: 0, ctrlKey: false })
+
+    expect(screen.getByText('Scenery')).toBeTruthy()
+    expect(screen.getByText('1 scenery')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Moon in/ }))
+    await waitFor(() => expect(include).toHaveBeenCalled())
+    expect(include.mock.calls[0][0]).toEqual({ kind: 'LOOK', lookId: 7 })
   })
 
   it('stays open when the Include is refused', async () => {

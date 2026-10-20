@@ -273,6 +273,8 @@ class ProgrammerStore {
         get() = _lastIncludedTarget.value
         set(value) {
             _lastIncludedTarget.value = value?.copy(baseline = baselineCounter.incrementAndGet())
+            // The layer count is measured against the target, so the layer frame says it again.
+            announceLayers()
         }
 
     /** The programmer and the include target agree again — an Update wrote into it. */
@@ -336,9 +338,92 @@ class ProgrammerStore {
      */
     @Volatile
     var includedLayerSnapshot: List<ProgrammerLayer> = emptyList()
+        set(value) {
+            field = value
+            announceLayers()
+        }
+
+    /**
+     * How many layers Update would add, remove, move or retune in the included cue: the structural
+     * half of the source strip's change count, which the value half cannot see (a Look of scenery
+     * alone adds a layer and no value). The same classification as `writeLayerStackIntoCue`, keyed
+     * the same way, on [ProgrammerLayer.sourceCueLayerId]. Zero unless a cue is the include target:
+     * a Look holds no layers, so Update into one writes none.
+     */
+    fun layerChangesSinceInclude(current: List<ProgrammerLayer> = layers): Int {
+        if (lastIncludedTarget?.kind != IncludedTarget.Kind.CUE) return 0
+        val baseline = includedLayerSnapshot.filter { it.sourceCueLayerId != null }
+            .associateBy { it.sourceCueLayerId!! }
+        val position = baseline.keys.withIndex().associate { (index, id) -> id to index }
+        // A row two layers claim is one row: the second is new to the cue.
+        val seen = HashSet<Int>()
+        val surviving = current.filter { val id = it.sourceCueLayerId; id != null && id in baseline && seen.add(id) }
+        val left = unwrittenLayerIds()
+        val added = current.size - surviving.size - current.count { it.sourceCueLayerId == null && it.layerId in left }
+        val removed = baseline.size - surviving.size
+        // A move is a layer outside the longest run still in its old order, so one layer moved is one change.
+        val inOrder = longestIncreasing(surviving.map { position.getValue(it.sourceCueLayerId!!) })
+        val changed = surviving.withIndex().count { (index, layer) ->
+            index !in inOrder || baseline.getValue(layer.sourceCueLayerId!!).cueFields() != layer.cueFields()
+        }
+        return added + removed + changed
+    }
+
+    /**
+     * Layers the baseline holds with no cue row: a Record that flattened them into rows (`ALL`, a stage
+     * snapshot) left them out on purpose, so they are neither changes nor something Update adds.
+     */
+    fun unwrittenLayerIds(): Set<Int> =
+        includedLayerSnapshot.filter { it.sourceCueLayerId == null }.mapTo(HashSet()) { it.layerId }
+
+    /** The indices of one longest strictly increasing subsequence of [values]. */
+    private fun longestIncreasing(values: List<Int>): Set<Int> {
+        if (values.isEmpty()) return emptySet()
+        val length = IntArray(values.size) { 1 }
+        val previous = IntArray(values.size) { -1 }
+        for (i in values.indices) for (j in 0 until i) {
+            if (values[j] < values[i] && length[j] + 1 > length[i]) { length[i] = length[j] + 1; previous[i] = j }
+        }
+        val out = HashSet<Int>()
+        var at = length.indices.maxBy { length[it] }
+        while (at >= 0) { out += at; at = previous[at] }
+        return out
+    }
+
+    /**
+     * The included cue now holds the stack as it stands — an Update or a Record wrote it there — so
+     * the stack becomes the baseline, each layer keyed to the cue row [rowOf] names for it. A layer
+     * with no row joins the baseline only if the writer [seen] it (a Record that flattened it into
+     * rows); one pressed since the writer read the stack stays out, so the next Update adds it.
+     */
+    fun rebaseLayers(seen: Set<Int>, rowOf: (ProgrammerLayer) -> Int?) {
+        val rebased = synchronized(layersLock) {
+            layers = layers.map { layer ->
+                val row = rowOf(layer)
+                if (row == layer.sourceCueLayerId) layer else layer.copy(sourceCueLayerId = row)
+            }
+            layers
+        }
+        includedLayerSnapshot = rebased.filter { it.sourceCueLayerId != null || it.layerId in seen }
+    }
+
+    /** Say the stack again, so the layer frame's change count follows a baseline or target that moved. */
+    private fun announceLayers() {
+        synchronized(layersEmitLock) { _layersFlow.tryEmit(LayersChange(layers, layersEmitted.incrementAndGet())) }
+    }
 
     /** One property Include staged as an `INCLUDE` slot. */
     data class IncludedKey(val fixtureKey: String, val propertyName: String)
+
+    /**
+     * Every touched value as it stood when a Record last made the include target say what the
+     * programmer holds — Update's value baseline from then on, in place of the `INCLUDE` slots, which
+     * still describe whatever was included before. An Update after a masked or scoped Record therefore
+     * writes only what changed since it, not every busked value outside its remit. Null after an
+     * Include, and cleared with the target.
+     */
+    @Volatile
+    var recordedValues: Map<IncludedKey, CueAssignmentResolver.PropertyValue>? = null
 
     /** The keys one Include staged, and the source it staged them from. */
     data class IncludedKeys(val target: IncludedTarget, val keys: Set<IncludedKey>)
@@ -793,6 +878,7 @@ class ProgrammerStore {
         synchronized(layersLock) { layers = emptyList() }
         includedLayerSnapshot = emptyList()
         includedKeys = null
+        recordedValues = null
         bumpEpoch()
         bumpCoverage()
     }

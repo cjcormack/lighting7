@@ -163,6 +163,11 @@ export interface RecordLookRequest {
    * since a Look asserts rather than tracks. Defaults on at the desk.
    */
   scenery?: boolean
+  /**
+   * Point the include target at the Look written, as Record into a cue does. Defaults on at the
+   * desk; Make layer sends false, since it applies the Look as a layer of whatever is loaded.
+   */
+  retarget?: boolean
 }
 
 export interface RecordLookResponse {

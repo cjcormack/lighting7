@@ -230,6 +230,12 @@ export interface ProgrammerState {
   /** The same stack resolved to per-target applied state — what a busk pad's ring reads. */
   applied: readonly ProgrammerAppliedSource[]
   /**
+   * How many layers Update would add, remove, move or retune in the included cue — the desk's count,
+   * which the entries cannot show (a Look of scenery alone adds a layer and no value). 0 unless a cue
+   * is included; absent from a desk that predates it.
+   */
+  layersChangedSinceInclude?: number
+  /**
    * How many `programmer.state` frames have landed. Only such a frame carries the entries and the
    * include target from one moment; `programmer.includeTarget` arrives without the entries.
    */
@@ -523,6 +529,8 @@ interface ProgrammerStateIncoming {
   layers?: ProgrammerLayer[]
   /** The same stack resolved, so a fresh connection can light its pads without a round trip. */
   applied?: ProgrammerAppliedSource[]
+  /** As [ProgrammerState.layersChangedSinceInclude]. */
+  layersChangedSinceInclude?: number
 }
 
 interface ProgrammerIncludeTargetIncoming {
@@ -535,6 +543,8 @@ interface ProgrammerLayerStateIncoming {
   layers: ProgrammerLayer[]
   /** Resolved from the very list `layers` carries, so the two halves of a frame always agree. */
   applied?: ProgrammerAppliedSource[]
+  /** As [ProgrammerState.layersChangedSinceInclude], for the stack this frame carries. */
+  changedSinceInclude?: number
 }
 
 interface ProgrammerEntryChangedIncoming {
@@ -901,6 +911,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let lastIncluded: IncludedTarget | null = null
   let layers: readonly ProgrammerLayer[] = []
   let applied: readonly ProgrammerAppliedSource[] = []
+  let layersChangedSinceInclude: number | undefined
   let scenery: ProgrammerScenery = NO_PROGRAMMER_SCENERY
   let sceneryKnown = false
   let snapshotSeq = 0
@@ -913,6 +924,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     lastIncluded,
     layers,
     applied,
+    layersChangedSinceInclude,
     snapshotSeq,
   })
   let snapshot: ProgrammerState = buildSnapshot()
@@ -980,6 +992,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // answer there. Keeping the previous value instead would leave every pad ringed against an
     // empty programmer after a desk restart, with the press meant to clear one adding a layer.
     applied = message.applied ?? []
+    layersChangedSinceInclude = message.layersChangedSinceInclude
     snapshotSeq++
     notifyKeys(touched)
     notifyState()
@@ -1142,6 +1155,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         // the list it resolves are one answer, and a pad reading one against the other's stack
         // would light for a layer that had already gone.
         applied = message.applied ?? []
+        layersChangedSinceInclude = message.changedSinceInclude
         notifyState()
         break
       case 'provenanceState':

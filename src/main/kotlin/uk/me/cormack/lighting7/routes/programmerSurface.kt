@@ -11,6 +11,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
@@ -100,6 +101,8 @@ internal fun performProgrammerRecord(
         return RecordCoreResult.Failure("None of the requested targets resolve to a fixture")
     }
 
+    // The stack as the recording reads it, just after: a layer pressed later is not in this Record.
+    val recordedLayerIds = state.show.programmerStore.layers.mapTo(HashSet()) { it.layerId }
     val recording = collectProgrammerRecording(state, source, mask, includeFx, scope)
     val held = if (scenery) heldSceneryOf(state, project.id.value) else emptyMap()
 
@@ -153,9 +156,24 @@ internal fun performProgrammerRecord(
     val republished = republishCueIfLive(state, written.outcome.cueId)
 
     // Record-then-tweak-then-Update is the obvious next gesture, so point the include target at
-    // what we just wrote.
+    // what we just wrote — its layers first: each keyed to the cue row that now stands for it, one
+    // row to one layer, so an Update after the Record retunes those rows rather than adding the
+    // stack to the cue a second time.
+    val rowOfLayer = transaction(state.database) {
+        val rows = DaoCue.findById(written.outcome.cueId)?.layers?.filterNot { it.isTimed }.orEmpty()
+        val taken = HashSet<Int>()
+        state.show.programmerStore.layers.associate { layer ->
+            val dto = layer.toCueLayerDto()
+            val fits = rows.filter { it.id.value !in taken && it.appliesSameSourceAs(dto) && sameTargets(it.targets, dto.targets) }
+            val row = fits.firstOrNull { it.id.value == layer.sourceCueLayerId } ?: fits.firstOrNull()
+            row?.let { taken += it.id.value }
+            layer.layerId to row?.id?.value
+        }
+    }
+    state.show.programmerStore.rebaseLayers(recordedLayerIds) { rowOfLayer[it.layerId] }
     state.show.programmerStore.lastIncludedTarget =
         IncludedTarget.cue(written.outcome.cueId, written.entry?.id?.value)
+    stampRecordedValues(state)
     // And the scenery half of that pointer: what the cue now says is the baseline Update's dirty
     // count reads — all of the held scenery, unless this Record left it out or took it away.
     state.programmerScenery.rebaseline(
@@ -283,18 +301,20 @@ internal fun performProgrammerInclude(
     // never be set and Update would silently fall through to the Mode B checklist — unable to
     // write the stack back to the cue the operator had just included. A cue that only moves scenery
     // is the same case again.
+    // The diff baseline, taken *after* the install so it records what actually landed — timed
+    // layers were dropped, so diffing against the cue's own list would report every one of them
+    // as deleted on the next Update. Before the target moves, so no layer frame counts the new
+    // target against the old source's stack.
+    state.show.programmerStore.includedLayerSnapshot = state.show.programmerStore.layers
     if (outcome.entriesWritten > 0 || outcome.fxSpawned > 0 || outcome.layersInstalled > 0 || sceneryIncluded > 0) {
         val target = includedTargetFor(cueData, entryId)
+        state.show.programmerStore.recordedValues = null
         state.show.programmerStore.lastIncludedTarget = target
         state.show.programmerStore.includedKeys = ProgrammerStore.IncludedKeys(target, outcome.staged)
         // The scenery baseline follows the target: an Include that staged nothing leaves both on
         // the source before it, or every held piece would read as changed against an empty one.
         state.programmerScenery.includedBaseline(project.id.value, sceneryRows)
     }
-    // The diff baseline, taken *after* the install so it records what actually landed — timed
-    // layers were dropped, so diffing against the cue's own list would report every one of them
-    // as deleted on the next Update.
-    state.show.programmerStore.includedLayerSnapshot = state.show.programmerStore.layers
 
     return IncludeCoreResult.Cue(cueData, outcome, sceneryIncluded)
 }
@@ -395,6 +415,9 @@ internal fun performProgrammerUpdate(
     val results = ArrayList<ProgrammerUpdateResult>(cueIds.size)
     val warnings = ArrayList<String>()
 
+    // The cue rows the layers Update added were written as, so the stack can be keyed to them after.
+    var addedLayerRows = emptyMap<Int, Int>()
+    var writtenLayerIds = emptySet<Int>()
     for (cueId in cueIds) {
         val entries = plans[cueId].orEmpty()
         val recording = recordingForUpdate(state, entries, includeFx)
@@ -411,11 +434,9 @@ internal fun performProgrammerUpdate(
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
                 .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures))
             if (modeLabel == "A") {
-                writeLayerStackIntoCue(
-                    cue,
-                    state.show.programmerStore.layers,
-                    state.show.programmerStore.includedLayerSnapshot,
-                )
+                val stack = state.show.programmerStore.layers
+                writtenLayerIds = stack.mapTo(HashSet()) { it.layerId }
+                addedLayerRows = writeLayerStackIntoCue(cue, stack, state.show.programmerStore.includedLayerSnapshot).addedRows
             }
             Triple(written, cue.name, entry?.stackId)
         }
@@ -455,8 +476,11 @@ internal fun performProgrammerUpdate(
     }
 
     if (results.isNotEmpty() && modeLabel == "A") {
+        foldUpdateIntoRecorded(state, plans.values.flatten(), cleared)
         state.show.programmerStore.forgetIncludedKeys(cleared)
         state.show.programmerStore.rebaseIncludeTarget()
+        // The cue now holds the stack, so a second Update must not add the same layer again.
+        state.show.programmerStore.rebaseLayers(writtenLayerIds) { addedLayerRows[it.layerId] ?: it.sourceCueLayerId }
     }
     if (results.isNotEmpty()) state.show.fixtures.cueListChanged()
     // Scenery written back changes the stack list's `CueStackCueEntry.scenery`.
