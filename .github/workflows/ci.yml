@@ -49,8 +49,6 @@ jobs:
           java-version: 24
 
       - name: Set up Gradle
-        # Held at v5 deliberately: v6 moved the caching into a proprietary component, and taking
-        # it means accepting Gradle's Terms of Use — an owner's decision, not a Dependabot merge.
         uses: gradle/actions/setup-gradle@v6
 
       # `check shadowJar`, not just `test`: `check` runs from the root, so it covers the
