@@ -34,6 +34,16 @@ interface ElementRow extends SheetRow {
 const NO_SORT: ReadonlySet<string> = new Set()
 
 /**
+ * A held piece's row: a primary tint, laid as an inset shadow so it sits over the selection's own
+ * background tint rather than replacing it. The name cell draws the tint again with a 3px edge
+ * ([HELD_EDGE_CLASS]), since the sticky cell's opaque ground hides anything the row paints there; a
+ * selected row leaves the edge to the selection's.
+ */
+const HELD_TINT = 'shadow-[inset_0_0_0_100vmax_color-mix(in_oklab,var(--color-primary)_6%,transparent)]'
+const HELD_EDGE_CLASS = `pointer-events-none absolute inset-0 ${HELD_TINT}`
+const HELD_EDGE_LINE_CLASS = 'pointer-events-none absolute inset-y-0 left-0 w-[3px] bg-primary'
+
+/**
  * **The Scenery table** (tables-colours plan D6): every scene element, **Venue then Set** and by
  * name under dividers, with four filters — *Set*, *Venue*, *Moving only*, *Changed* — as chips and
  * *All* their unfiltered state. A piece the scope holds is listed whatever they say, so its release
@@ -84,11 +94,12 @@ export function SceneryTable({
     (band: AppliedBand) => ({
       label: 'Element',
       width: band >= 2 ? '200px' : '240px',
-      render: (row: ElementRow) =>
+      render: (row: ElementRow, selected: boolean) =>
         row.element == null ? null : (
           <ElementNameCell
             element={row.element}
             row={row}
+            selected={selected}
             scope={scope}
             editing={editing === row.element.uuid}
             onEditingChange={(open) => setEditing(open ? row.element!.uuid : null)}
@@ -119,7 +130,7 @@ export function SceneryTable({
       rowName={(row) => row.element?.name ?? 'element'}
       onOpenRow={(row) => row.element != null && setEditing(row.element.uuid)}
       pencil={false}
-      rowClass={(row) => (row.held ? 'shadow-[inset_0_0_0_1px_var(--color-primary)]' : undefined)}
+      rowClass={(row) => (row.held ? HELD_TINT : undefined)}
       verbs={(selected) => <SceneryVerbs selected={selected} scope={scope} />}
       emptyNote={NO_SCENERY_YET}
       loading={elements == null}
@@ -175,12 +186,14 @@ function cellText(text: string, muted = false) {
 function ElementNameCell({
   element,
   row,
+  selected,
   scope,
   editing,
   onEditingChange,
 }: {
   element: StageElementDto
   row: ElementRow
+  selected: boolean
   scope: SceneryScope
   editing: boolean
   onEditingChange: (open: boolean) => void
@@ -188,6 +201,11 @@ function ElementNameCell({
   const writable = scope.arm.kind !== 'readOnly' && scope.ready
   return (
     <>
+      {row.held && (
+        <span aria-hidden data-held-edge className={HELD_EDGE_CLASS}>
+          {!selected && <span className={HELD_EDGE_LINE_CLASS} />}
+        </span>
+      )}
       <ElementIcon element={element} />
       <span className="relative min-w-0 flex-1 truncate text-sm font-medium" title={element.name}>
         {element.name}

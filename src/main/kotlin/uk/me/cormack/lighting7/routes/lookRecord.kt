@@ -199,6 +199,39 @@ internal fun elementParentsOf(fixtures: Fixtures, collapsed: CollapsedAssignment
 }
 
 /**
+ * Delete [cleared] from [look]'s rows, splitting a group row as [planClearedRemoval] says. A cell
+ * row is named by its cell's key. Must run inside a transaction.
+ */
+internal fun removeClearedFromLook(
+    look: DaoLook,
+    cleared: Collection<uk.me.cormack.lighting7.fx.ProgrammerStore.IncludedKey>,
+    fixtures: Fixtures,
+): ClearedOutcome {
+    if (cleared.isEmpty()) return ClearedOutcome()
+    val rows = look.rowsInOrder()
+    val plan = planClearedRemoval(
+        rows.map { StoredValueRow(it, it.targetType, it.elementKey ?: it.targetKey, it.propertyName) },
+        cleared,
+        groupMembersIn(fixtures),
+    )
+    var nextSort = (rows.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    for ((group, member) in plan.split) {
+        DaoLookRow.new {
+            this.look = look
+            targetType = TargetRef.Fixture.TYPE
+            targetKey = member
+            elementKey = null
+            propertyName = group.propertyName
+            value = group.value
+            fadeDuration = group.fadeDuration
+            sortOrder = nextSort++
+        }
+    }
+    plan.delete.forEach { it.delete() }
+    return ClearedOutcome(plan.delete.size, plan.split.size, plan.unmatched.map(::unmatchedClearWarning))
+}
+
+/**
  * Is a stored Look row inside the remit of a recording made with [mask] and [scope]?
  *
  * Null on either axis means unrestricted. A row whose target or property no longer resolves answers
@@ -621,7 +654,7 @@ private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: Look
  * keeps its target; a deferred one, which Include ran on the selection, stays deferred — what was
  * edited is how it runs, not where. A deferred effect runs once per selected target, so where
  * several of its instances were changed the first is taken. An effect the operator stopped is left
- * in the Look (Update never deletes — that is Record's Replace or REMOVE), and so is one whose row
+ * in the Look (Update deletes no effect — that is Record's Replace or REMOVE), and so is one whose row
  * went since the Include.
  *
  * Must be called inside a transaction.
@@ -683,6 +716,14 @@ private fun includedLookEffectsOf(state: State, lookId: Int, mask: Set<PropertyM
 
 // ─── Mode A Update, where the include target is a Look ──────────────────
 
+/** What [updateIncludedLook] wrote, inside its one transaction. */
+private data class LookUpdateWrites(
+    val values: LookRecordOutcome,
+    val cleared: ClearedOutcome,
+    val scenery: SceneryRecordOutcome,
+    val effectsWritten: Int,
+)
+
 /**
  * Mode A Update where the include target is a Look: write back what changed since Include.
  *
@@ -694,8 +735,8 @@ private fun includedLookEffectsOf(state: State, lookId: Int, mask: Set<PropertyM
  *
  * The "only what changed" rule is what keeps a Look's untouched rows untouched, exactly as it does
  * for a cue: Include stakes an INCLUDE slot per row, and anything still matching it was not edited.
- * MERGE rather than replace, so rows outside the current selection or mask survive — Update never
- * deletes, which is `Record REMOVE`'s job.
+ * MERGE rather than replace, so rows outside the current selection or mask survive. The one row it
+ * deletes is one Include staged that the operator has since cleared ([clearedSinceInclude]).
  */
 internal fun updateIncludedLook(
     state: State,
@@ -724,22 +765,25 @@ internal fun updateIncludedLook(
     val (changed, skips) = changedSinceInclude(state, mask)
     val collapsed = collapseRecordingToAssignments(changed, state.show.fixtures)
     val elementParents = elementParentsOf(state.show.fixtures, collapsed)
+    val cleared = clearedSinceInclude(state, includeTarget, mask)
     // The held scenery goes back too (scenery-programmer plan D8): every held state, as a Look takes
     // it, merged over the Look's own rows so a piece the operator never held keeps its row.
     val held = heldSceneryOf(state, project.id.value)
     // The Look's own effects as Include ran them, under the same mask as the values.
     val includedEffects = if (includeFx) includedLookEffectsOf(state, lookId, mask) else emptyList()
 
-    val (outcome, scenery, effectsWritten) = transaction(state.database) {
+    val (outcome, removal, scenery, effectsWritten) = transaction(state.database) {
         val look = DaoLook.findById(lookId)!!
-        // MERGE never deletes, so the remit predicate is never consulted; passing "nothing is in
-        // remit" states that rather than leaving a live predicate a later edit could start reading.
-        Triple(
+        // MERGE never consults the remit predicate; passing "nothing is in remit" states that
+        // rather than leaving a live predicate a later edit could start reading.
+        LookUpdateWrites(
             writeRecordingIntoLook(look, collapsed, RecordMode.MERGE, { false }, elementParents),
+            removeClearedFromLook(look, cleared, state.show.fixtures),
             writeHeldSceneryIntoLook(look, held, RecordMode.MERGE),
             writeIncludedEffectsBack(look, includedEffects),
         )
     }
+    state.show.programmerStore.forgetIncludedKeys(cleared)
     // What was written is the new baseline: a second Update writes nothing it already wrote.
     for (instance in includedEffects) {
         val origin = instance.includedLookEffect ?: continue
@@ -753,20 +797,23 @@ internal fun updateIncludedLook(
     state.show.fixtures.lookListChanged()
 
     logger.info(
-        "update-look '{}': {} row{} and {} effect(s) written, {} programmer key(s) refreshed, {} cue(s) republished",
-        located, outcome.written, if (outcome.written == 1) "" else "s", effectsWritten,
+        "update-look '{}': {} row{} written, {} removed and {} effect(s) written, {} programmer key(s) refreshed, {} cue(s) republished",
+        located, outcome.written + removal.written, if (outcome.written + removal.written == 1) "" else "s",
+        removal.removed, effectsWritten,
         republish.programmerKeysRefreshed, republish.cuesRepublished.size,
     )
     return UpdateCoreResult.LookUpdated(
         ProgrammerLookUpdateResult(
             lookId = lookId,
             lookName = located,
-            rowsWritten = outcome.written,
+            rowsWritten = outcome.written + removal.written,
+            rowsRemoved = removal.removed,
             effectsWritten = effectsWritten,
             sceneryWritten = scenery.written,
             programmerKeysRefreshed = republish.programmerKeysRefreshed,
             cuesRepublished = republish.cuesRepublished,
         ),
         skipped = skips,
+        warnings = removal.warnings,
     )
 }

@@ -40,7 +40,8 @@ export interface UpdateDialogProps {
  *
  * - **Mode A** — a cue was Included, so this is a confirmation naming it. Only the values the
  *   operator actually changed since Include are written, which is what leaves palette
- *   references the operator didn't touch as references.
+ *   references the operator didn't touch as references; a value cleared since Include has its row
+ *   deleted.
  * - **Mode B** — nothing was Included, so the server answers with the provenance-derived list
  *   of cues the programmer is currently sitting on top of, grouped by stack, and the operator
  *   picks which to write.
@@ -89,7 +90,8 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
                 .filter((cueId) => !untickedRef.current.has(cueId)),
             ),
           )
-        } else if (response.applied) {
+        } else if (response.applied || response.mode === 'A') {
+          // Mode A closes even when nothing changed, and says so: left open, it reads as stuck.
           setDone(true)
           announceWrite(updateNote(response))
           onOpenChange(false)
@@ -215,8 +217,9 @@ export function UpdateDialog({ open, onOpenChange, projectId, includeTarget }: U
           {includeTarget && (
             <p className="text-sm text-muted-foreground">
               Only the values you changed since including are written — anything you left alone
-              keeps whatever the cue already stored, palette references included. Scenery the
-              programmer holds goes back too, a cue’s own clock kept.
+              keeps whatever the cue already stored, palette references included. A value you
+              cleared since including is deleted from it. Scenery the programmer holds goes back
+              too, a cue’s own clock kept.
             </p>
           )}
 

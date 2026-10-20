@@ -275,6 +275,10 @@ internal fun includeExpandedIntoProgrammer(
         )
     }
     state.show.programmerStore.lastIncludedTarget = includedTarget
+    state.show.programmerStore.includedKeys = uk.me.cormack.lighting7.fx.ProgrammerStore.IncludedKeys(
+        includedTarget,
+        writes.stagedIn(state.show.programmerStore),
+    )
 
     return LookIncludeOutcome(writes.size, fixtureKeys.toList(), skips)
 }

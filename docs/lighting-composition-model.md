@@ -226,7 +226,15 @@ seen nor changed.
   overriding, grouped by stack, and the client confirms which to write. Keys with no cue underneath
   are bucketed separately ("record a new cue instead"). A commit writes each cue only the keys it
   was actually underneath.
-- Update applies MERGE semantics and never deletes. Removing content from a cue is `record REMOVE`.
+- Update applies MERGE semantics. In Mode A it also **deletes the row of a value Include staged that the
+  operator has since cleared** (⌫, a Release): the clear takes the INCLUDE slot with it, so the store
+  keeps the keys the last Include landed as slots (`ProgrammerStore.includedKeys`, read only while the
+  include target names that source) and `clearedSinceInclude` names each one nothing but a layer holds
+  any more, under the mask. A cleared key's own row goes; a group row covering it goes too and is split
+  (`planClearedRemoval`), each member still held and without a row of its own getting the group row's
+  value. An Update forgets the keys it dealt with, so a row added back later is not deleted again, and
+  Clear forgets them all. A key set only some other way (a cell under its fixture's row) is named in a
+  warning. Mode B deletes nothing; removing anything else is `record REMOVE`.
 - **Scenery** goes back in Mode A only, by the record's MERGE rules — into the cue as change rows (an
   included row with its own clock, a held piece the cue already shows skipped, a row already saying
   exactly the held state left untouched), into a Look as its scenery. Mode B writes none, for the
@@ -241,7 +249,7 @@ seen nor changed.
   parameter set, defaults filled in. A bound effect keeps its target and a deferred one stays
   deferred: what was edited is how it runs, not where. Where a deferred effect ran on several heads
   and more than one was changed, the first is written. An effect the operator stopped stays in the
-  Look (Update never deletes), and what was written becomes the new baseline. The active-effect DTO
+  Look (Update deletes no effect), and what was written becomes the new baseline. The active-effect DTO
   carries `includedLookId` and `editedSinceInclude`, so the source strip's Update is enabled by an
   effect edit too.
 

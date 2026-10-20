@@ -295,6 +295,32 @@ export function programmerBlindOn(fadeMs?: number, timeoutMs = 3000): Promise<bo
 }
 
 /**
+ * Clear the programmer at [fadeMs] and resolve once the desk says the include target has gone — true,
+ * or false when it has not said so within [timeoutMs]. False at once while the socket is down.
+ *
+ * Revert Includes only after this resolves true, for `programmerBlindOn`'s reason: the clear is a WS
+ * gesture and Include a REST call, and an Include landing first would be wiped by the clear.
+ */
+export function programmerClearAllConfirmed(fadeMs?: number, timeoutMs = 3000): Promise<boolean> {
+  if (lightingApi.status.get() !== Status.OPEN) return Promise.resolve(false)
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (cleared: boolean) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      subscription.unsubscribe()
+      resolve(cleared)
+    }
+    const subscription = lightingApi.programmer.subscribe((state) => {
+      if (state.lastIncluded == null) finish(true)
+    })
+    const timer = setTimeout(() => finish(false), timeoutMs)
+    lightingApi.programmer.clearAll(fadeMs)
+  })
+}
+
+/**
  * Hold [state] on one scene element (scenery-programmer plan D1). A fire-and-forget gesture like the
  * writers above — a scenery slider calls it through `useLivePush` at the sheet's 33 ms floor — and
  * answered by the `programmer.sceneryState` broadcast, or a `programmer.error` the toast shows.

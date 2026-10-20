@@ -963,7 +963,8 @@ internal val includeIntoProgrammerTool = ToolDef(
             "Name exactly one of cueId or lookId; a cue may also name the entry it is included from (entryId, or stackId and number), " +
             "which the desk's programmer indicator then shows. The included thing becomes the update target, so the " +
             "follow-up is: include, change what you want, then update_from_programmer with no targets, which " +
-            "writes back only what changed and leaves everything else alone. The source's own scenery rows are held " +
+            "writes back only what changed and deletes the row of any value you cleared since (clear_programmer on a " +
+            "target), leaving everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
             "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery. " +
             "A look's effects run in the programmer too, where the operator can change them in the desk's effect editor, " +
@@ -998,7 +999,8 @@ internal val includeIntoProgrammerTool = ToolDef(
 internal val updateFromProgrammerTool = ToolDef(
     name = "update_from_programmer",
     description = "Write the programmer back into what it came from — the desk's Update. With no targets it " +
-            "writes only what changed since the last include_into_programmer, into that same cue or look. " +
+            "writes only what changed since the last include_into_programmer, into that same cue or look, and " +
+            "deletes the rows of any value that include staged and the programmer has since cleared. " +
             "With targets it writes each named cue exactly the keys the programmer is currently overriding it " +
             "on. With preview=true it writes nothing and returns the checklist of which cues the programmer is " +
             "sitting on top of, which is the safe thing to call first. With no targets, the scenery the programmer " +

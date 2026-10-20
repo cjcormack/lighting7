@@ -1,4 +1,5 @@
 import { memo, useState } from 'react'
+import { toast } from 'sonner'
 import { Navigate, useParams } from 'react-router'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { ShowHeader } from '@/components/ShowHeader'
@@ -21,14 +22,13 @@ import { ProgrammerSourceStrip } from '@/components/programmer/ProgrammerSourceS
 import { ProgrammerWorkspace } from '@/components/programmer/ProgrammerWorkspace'
 import { ProgrammerTables } from '@/components/programmer/ProgrammerTables'
 import { useValuesTableShown } from '@/lib/programmerTables'
-import { useInclude } from '@/components/programmer/useInclude'
+import { includeRequestFor, useInclude } from '@/components/programmer/useInclude'
 import { cn } from '@/lib/utils'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { usePersistentState } from '@/hooks/usePersistentState'
 import { useShowBarProps } from '@/hooks/useShowBarProps'
 import { lightingApi } from '@/api/lightingApi'
-import { includedCueId } from '@/lib/includedTarget'
-import { programmerClearAll } from '@/store/programmer'
+import { programmerClearAll, programmerClearAllConfirmed } from '@/store/programmer'
 import { useProjectQuery } from '@/store/projects'
 import { CurrentProjectRedirect } from '@/components/CurrentProjectRedirect'
 
@@ -205,7 +205,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
  */
 const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: number }) {
   const sheets = useProgrammerSheets()
-  const { includeCue } = useInclude(projectId)
+  const { include } = useInclude(projectId)
   // Grouping is a toggle rather than a route split: busking a whole wash wants group rows, plotting
   // an individual mover wants the flat list, and both are the same grid.
   const [grouped, setGrouped] = usePersistentState<boolean>(GROUPED_KEY, false)
@@ -232,7 +232,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   const rowAInRowB = useValuesTableShown(shortViewport) && shortViewport
 
   // Revert is drop-everything-then-re-Include. There is no server-side revert, and those two steps
-  // in that order are what the operator means: throw away the busk, load the cue again.
+  // in that order are what the operator means: throw away the busk, load the cue or Look again.
   //
   // The include target is read at click time rather than subscribed via
   // `useProgrammerSummaryQuery`: this component is the memo barrier for the whole grid/rail
@@ -241,10 +241,15 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
   // compares props. Read before `programmerClearAll`, which is about to clear the target.
   const handleRevert = () => {
     const target = lightingApi.programmer.getState().lastIncluded
-    const cueId = includedCueId(target)
-    const entryId = target?.kind === 'CUE' ? target.entryId : undefined
-    programmerClearAll(0)
-    if (cueId != null) void includeCue(cueId, entryId)
+    const request = includeRequestFor(target)
+    if (request == null) {
+      programmerClearAll(0)
+      return
+    }
+    void programmerClearAllConfirmed(0).then((cleared) => {
+      if (cleared) void include(request)
+      else toast.error('The desk did not confirm the clear, so nothing was included again.')
+    })
   }
 
   // The two halves of row A, built once: drawn on their own row at an ordinary height, and handed

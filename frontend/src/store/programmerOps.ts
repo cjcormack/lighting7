@@ -280,6 +280,8 @@ export interface UpdateResult {
   republishedLive: boolean
   /** Scenery change rows written back (Mode A only). */
   sceneryWritten?: number
+  /** Rows deleted because the value Include staged from them was cleared (Mode A only). Absent from an older desk. */
+  assignmentsRemoved?: number
 }
 
 /**
@@ -292,6 +294,8 @@ export interface LookUpdateResult {
   lookId: number
   lookName: string
   rowsWritten: number
+  /** Rows deleted because the value Include staged from them was cleared. Absent from an older desk. */
+  rowsRemoved?: number
   /** The Look's included effects changed since Include, written back onto them. Absent from an older desk. */
   effectsWritten?: number
   /** Scenery rows written back into the Look. */

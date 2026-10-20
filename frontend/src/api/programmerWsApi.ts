@@ -225,6 +225,11 @@ export interface ProgrammerState {
   layers: readonly ProgrammerLayer[]
   /** The same stack resolved to per-target applied state — what a busk pad's ring reads. */
   applied: readonly ProgrammerAppliedSource[]
+  /**
+   * How many `programmer.state` frames have landed. Only such a frame carries the entries and the
+   * include target from one moment; `programmer.includeTarget` arrives without the entries.
+   */
+  snapshotSeq: number
 }
 
 /** Per-cell lookup result: what the programmer and the cascade say about one property. */
@@ -894,6 +899,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   let applied: readonly ProgrammerAppliedSource[] = []
   let scenery: ProgrammerScenery = NO_PROGRAMMER_SCENERY
   let sceneryKnown = false
+  let snapshotSeq = 0
 
   const buildSnapshot = (): ProgrammerState => ({
     blind,
@@ -903,6 +909,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     lastIncluded,
     layers,
     applied,
+    snapshotSeq,
   })
   let snapshot: ProgrammerState = buildSnapshot()
   const rebuildSnapshot = () => {
@@ -969,6 +976,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // answer there. Keeping the previous value instead would leave every pad ringed against an
     // empty programmer after a desk restart, with the press meant to clear one adding a layer.
     applied = message.applied ?? []
+    snapshotSeq++
     notifyKeys(touched)
     notifyState()
   }

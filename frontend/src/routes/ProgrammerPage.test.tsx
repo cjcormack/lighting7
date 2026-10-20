@@ -119,7 +119,8 @@ vi.mock('@/components/programmer/EditorContext', () => ({
   EditorContextProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock('@/components/programmer/useInclude', () => ({
-  useInclude: () => ({ includeCue: vi.fn() }),
+  includeRequestFor: () => null,
+  useInclude: () => ({ include: vi.fn() }),
 }))
 vi.mock('@/hooks/useShowBarProps', () => ({
   useShowBarProps: () => ({
@@ -138,6 +139,7 @@ vi.mock('@/store/programmer', () => ({
   useProgrammerAppliedQuery: () => ({ data: [] }),
   useProgrammerRevision: () => 0,
   programmerClearAll: vi.fn(),
+  programmerClearAllConfirmed: vi.fn(() => Promise.resolve(true)),
 }))
 vi.mock('@/store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1 }, isLoading: false }),

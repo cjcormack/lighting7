@@ -191,11 +191,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
             <TabsContent value="looks" className="space-y-3">
               {/* Including a look stages plain literals, not references — you are looking at that
                   look's own contents, and a slot referencing the thing it describes would mean
-                  nothing. The mask still applies on top.
-
-                  One-way for now: Update writes back through the retired palette tables, so it is
-                  disabled while a look is the include target. Staging it to busk from still works,
-                  which is what this tab is for. */}
+                  nothing. The mask still applies on top. */}
               {lookGroups.map(({ family, looks: group }) => (
                 <div key={family} className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">
@@ -211,8 +207,8 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
                     >
                       <span className="min-w-0 flex-1 truncate">{look.name}</span>
                       <LookPreviewSwatches preview={look.preview.slice(0, 4)} className="shrink-0" />
-                      <span className="w-16 shrink-0 text-right text-xs text-muted-foreground">
-                        {look.targetCount} fx
+                      <span className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+                        {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
                       </span>
                     </button>
                   ))}

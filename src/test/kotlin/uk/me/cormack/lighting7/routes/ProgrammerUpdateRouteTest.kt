@@ -107,7 +107,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `Update never deletes rows the programmer no longer holds`() = testApplication {
+    fun `Mode A deletes the row of a value cleared since Include`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
@@ -121,14 +121,82 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         )
 
         client.include(cueId)
-        // Release hex-2's include slot entirely, then Update. Removing content from a cue is
-        // `Record REMOVE`; if Update deleted too, an Update after a partial Clear would strip
-        // everything the operator hadn't re-set.
         ProgrammerHandler.clearEntry(state, TargetRef.Fixture("hex-2"), "dimmer", 0)
         setProgrammer("hex-1", "dimmer", "255")
+        val response: ProgrammerUpdateResponse = client.update(ProgrammerUpdateRequest(projectId = projectId.toString())).body()
+
+        assertEquals(1, response.results.single().assignmentsRemoved)
+        assertEquals(mapOf("hex-1" to "255"), client.cueRows(cueId))
+        // Written back, it is no longer a removal: a second Update deletes nothing more.
+        val again: ProgrammerUpdateResponse = client.update(ProgrammerUpdateRequest(projectId = projectId.toString())).body()
+        assertEquals(0, again.results.single().assignmentsRemoved)
+    }
+
+    @Test
+    fun `Mode A splits a cue's group row around a cleared member`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
+        val cueId = createCue(client, "look", rows = listOf(assignment("group", "front", "dimmer", "200")))
+
+        client.include(cueId)
+        ProgrammerHandler.clearEntry(state, TargetRef.Fixture("hex-1"), "dimmer", 0)
+        val response: ProgrammerUpdateResponse = client.update(ProgrammerUpdateRequest(projectId = projectId.toString())).body()
+
+        assertEquals(1, response.results.single().assignmentsRemoved)
+        assertEquals(mapOf("hex-2" to "200"), client.cueRows(cueId))
+        assertTrue(response.warnings.isEmpty())
+    }
+
+    @Test
+    fun `Mode A never deletes a row Include did not stage`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val cueId = createCue(
+            client, "look",
+            rows = listOf(
+                assignment("fixture", "hex-1", "dimmer", "200"),
+                assignment("fixture", "hex-1", "rgbColour", "#ff0000"),
+            ),
+        )
+
+        // Included under Colour, so the programmer never held the dimmer: an Update under every
+        // attribute must not read its absence as a clear.
+        client.post("/api/rest/programmer/include") {
+            contentType(ContentType.Application.Json)
+            setBody(ProgrammerIncludeRequest(projectId = projectId.toString(), cueId = cueId, mask = listOf("COLOUR")))
+        }
+        setProgrammer("hex-1", "rgbColour", "#00ff00")
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
-        assertEquals("120", client.cueRows(cueId).getValue("hex-2"))
+        val rows = client.cueRowsByProperty(cueId)
+        assertEquals("200", rows.getValue("dimmer"))
+        assertEquals(2, rows.size)
+    }
+
+    @Test
+    fun `an Update under a mask leaves a cleared value outside it`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val cueId = createCue(
+            client, "look",
+            rows = listOf(
+                assignment("fixture", "hex-1", "dimmer", "200"),
+                assignment("fixture", "hex-1", "rgbColour", "#ff0000"),
+            ),
+        )
+
+        client.include(cueId)
+        ProgrammerHandler.clearEntry(state, TargetRef.Fixture("hex-1"), "dimmer", 0)
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString(), mask = listOf("COLOUR")))
+        assertEquals("200", client.cueRowsByProperty(cueId).getValue("dimmer"))
+
+        client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
+        assertNull(client.cueRowsByProperty(cueId)["dimmer"])
     }
 
     @Test

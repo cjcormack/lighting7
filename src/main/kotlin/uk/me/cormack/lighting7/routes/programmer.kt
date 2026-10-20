@@ -74,5 +74,6 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     // StateFlow would re-send, and the source strip read *No source* with Update out of reach.
     state.show.programmerStore.lastIncludedTarget = null
     state.show.programmerStore.includedLayerSnapshot = emptyList()
+    state.show.programmerStore.includedKeys = null
     return ProgrammerClearOutcome(entryCount, effectsCleared)
 }

@@ -4,6 +4,7 @@ import { formatError } from '@/lib/formatError'
 import { useIncludeIntoProgrammerMutation } from '@/store/programmerOps'
 import type { PropertyMaskGroup } from '@/store/programmerOps'
 import { publishIncludeSelection } from '@/store/includeSelection'
+import type { IncludedTarget } from '@/api/programmerWsApi'
 
 export interface UseIncludeOptions {
   /**
@@ -23,6 +24,13 @@ export type IncludeTargetRequest =
   | { kind: 'CUE'; cueId: number; entryId?: number | null }
   | { kind: 'LOOK'; lookId: number }
 
+/** The Include that loads [target] again — Revert's second step. */
+export function includeRequestFor(target: IncludedTarget | null): IncludeTargetRequest | null {
+  if (target?.kind === 'CUE') return { kind: 'CUE', cueId: target.cueId, entryId: target.entryId }
+  if (target?.kind === 'LOOK') return { kind: 'LOOK', lookId: target.lookId }
+  return null
+}
+
 /**
  * Include a cue *or a Look* into the programmer and hand its fixtures to the sheet's selection.
  *
@@ -36,7 +44,8 @@ export type IncludeTargetRequest =
  * the backend's call — this hook just names the target.
  *
  * A Look include is **not** one-way, though it was: `updateIncludedLook` MERGEs whatever changed
- * since Include into the Look's own rows, so Include → edit → Update is a round trip for a Look
+ * since Include into the Look's own rows, and deletes the rows of values cleared since, so
+ * Include → edit → Update is a round trip for a Look
  * exactly as it is for a cue. It was disabled while the only write-back path led into the retired
  * palette tables.
  */

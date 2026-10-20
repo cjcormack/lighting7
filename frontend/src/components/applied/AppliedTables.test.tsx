@@ -610,6 +610,20 @@ describe('the Scenery table', () => {
     fireEvent.click(within(rowOf('e-tabs')).getByRole('button', { name: 'Release Tabs' }))
     expect(mocks.clearScenery).toHaveBeenCalledWith('e-tabs', 0)
   })
+
+  it('marks a held row with a tint and an edge in its name cell, never a ring the sticky cell cuts', () => {
+    mocks.programmerScenery = { projectId: 1, elements: [{ elementUuid: 'e-tabs', state: { open: 0.5 } }] }
+    drawRoute('?table=scenery')
+    expect(rowOf('e-tabs').className).not.toMatch(/inset_0_0_0_1px/)
+    expect(rowOf('e-tabs').querySelector('[data-name-cell] [data-held-edge]')?.childElementCount).toBe(1)
+    expect(rowOf('e-sofa').querySelector('[data-held-edge]')).toBeNull()
+
+    // Selected, it keeps the selection's tint and leaves the edge to the selection.
+    fireEvent.click(rowOf('e-tabs').querySelector('[data-name-cell]')!)
+    expect(rowOf('e-tabs')).toHaveAttribute('data-state', 'selected')
+    expect(rowOf('e-tabs').className).toContain('bg-foreground/[0.06]')
+    expect(rowOf('e-tabs').querySelector('[data-held-edge]')?.childElementCount).toBe(0)
+  })
 })
 
 describe('the FX table’s create verb and rule', () => {

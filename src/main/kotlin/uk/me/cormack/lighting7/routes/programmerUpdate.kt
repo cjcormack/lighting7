@@ -2,15 +2,24 @@ package uk.me.cormack.lighting7.routes
 
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.fx.ProgrammerStore
+import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.maskAllows
+import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
+import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.entryInStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
@@ -122,6 +131,148 @@ internal fun changedSinceInclude(
     }
     return (changed + overridden).let { set -> entries.filter { it in set } } to skips
 }
+
+/**
+ * The keys Include staged from [target] that the operator has since cleared, under [mask] — the
+ * values whose rows Mode A deletes.
+ *
+ * A key counts as cleared when nothing but a layer holds it any more: ⌫, a Release or a
+ * `clear_programmer` scoped to it takes every owner's slot, the `INCLUDE` one with it.
+ */
+internal fun clearedSinceInclude(
+    state: State,
+    target: IncludedTarget,
+    mask: Set<PropertyMaskGroup>?,
+): List<ProgrammerStore.IncludedKey> {
+    val store = state.show.programmerStore
+    return store.includedKeysFor(target).filter { included ->
+        if (store.slotsFor(included.fixtureKey, included.propertyName).any { it.owner != ProgrammerOwner.LAYERS }) {
+            return@filter false
+        }
+        val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(included.fixtureKey) }.getOrNull()
+            ?: return@filter false
+        maskAllows(mask, maskGroupForProperty(fixture, included.propertyName))
+    }
+}
+
+/** A stored value row as [planClearedRemoval] reads it: a cue's assignment or a Look's row. */
+internal class StoredValueRow<R>(
+    val row: R,
+    val targetType: String,
+    /** The fixture, cell or group the row names. */
+    val targetKey: String,
+    val propertyName: String,
+)
+
+/** What deleting cleared keys does to one cue's or Look's rows. */
+internal class ClearedRemoval<R>(
+    /** Each cleared key's own row, and every group row covering a cleared member. */
+    val delete: List<R>,
+    /**
+     * The member rows a deleted group row leaves behind — the group row to copy and the member it now
+     * names — for every member still held that has no row of its own.
+     */
+    val split: List<Pair<R, String>>,
+    /** Cleared keys no row here names, alone or through a group. */
+    val unmatched: List<ProgrammerStore.IncludedKey>,
+)
+
+/**
+ * Plan the deletion of [cleared] from [rows].
+ *
+ * A key's own row goes. A group row covering a cleared member goes too, and is **split**: each member
+ * not cleared and without a row of its own gets the group row's value, so the members the operator
+ * kept play on and the cleared one plays nothing — even where a direct row overrode it, which would
+ * otherwise leave the group row driving it once the direct row went.
+ */
+internal fun <R> planClearedRemoval(
+    rows: List<StoredValueRow<R>>,
+    cleared: Collection<ProgrammerStore.IncludedKey>,
+    membersOf: (groupKey: String) -> List<String>?,
+): ClearedRemoval<R> {
+    val clearedKeys = cleared.mapTo(HashSet()) { it.fixtureKey to canonicalPropertyName(it.propertyName) }
+    val direct = rows
+        .filter { it.targetType == TargetRef.Fixture.TYPE }
+        .mapTo(HashSet()) { it.targetKey to canonicalPropertyName(it.propertyName) }
+    val delete = ArrayList<R>()
+    val split = ArrayList<Pair<R, String>>()
+    val handled = HashSet<Pair<String, String>>()
+    val splitKeys = HashSet<Pair<String, String>>()
+
+    for (stored in rows) {
+        val property = canonicalPropertyName(stored.propertyName)
+        when (stored.targetType) {
+            TargetRef.Fixture.TYPE -> if ((stored.targetKey to property) in clearedKeys) {
+                delete += stored.row
+                handled += stored.targetKey to property
+            }
+            TargetRef.Group.TYPE -> {
+                val members = membersOf(stored.targetKey) ?: continue
+                val hit = members.filter { (it to property) in clearedKeys }
+                if (hit.isEmpty()) continue
+                delete += stored.row
+                hit.forEach { handled += it to property }
+                for (member in members) {
+                    val key = member to property
+                    if (key in clearedKeys || key in direct || !splitKeys.add(key)) continue
+                    split += stored.row to member
+                }
+            }
+        }
+    }
+    val unmatched = cleared.filter { (it.fixtureKey to canonicalPropertyName(it.propertyName)) !in handled }
+    return ClearedRemoval(delete, split, unmatched)
+}
+
+/** A group's member keys, for [planClearedRemoval]; null for a group the patch no longer has. */
+internal fun groupMembersIn(fixtures: Fixtures): (String) -> List<String>? = { groupKey ->
+    runCatching { fixtures.untypedGroup(groupKey).fixtures.filterIsInstance<Fixture>().map { it.key } }.getOrNull()
+}
+
+/** The warning for a cleared key Update could not delete: something other than a row of its own sets it. */
+internal fun unmatchedClearWarning(key: ProgrammerStore.IncludedKey): String =
+    "'${key.fixtureKey}'.${key.propertyName} was cleared, but no row of its own sets it — use Record → Remove on what does"
+
+/**
+ * Delete [cleared] from [cue]'s own rows, splitting a group row as [planClearedRemoval] says.
+ * Must run inside a transaction.
+ */
+internal fun removeClearedFromCue(
+    cue: DaoCue,
+    cleared: Collection<ProgrammerStore.IncludedKey>,
+    fixtures: Fixtures,
+): ClearedOutcome {
+    if (cleared.isEmpty()) return ClearedOutcome()
+    val assignments = cue.propertyAssignmentsInOrder()
+    val plan = planClearedRemoval(
+        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.propertyName) },
+        cleared,
+        groupMembersIn(fixtures),
+    )
+    var nextSort = (assignments.maxOfOrNull { it.sortOrder } ?: -1) + 1
+    for ((group, member) in plan.split) {
+        DaoCuePropertyAssignment.new {
+            this.cue = cue
+            targetType = TargetRef.Fixture.TYPE
+            targetKey = member
+            propertyName = group.propertyName
+            value = group.value
+            fadeDuration = group.fadeDuration
+            sortOrder = nextSort++
+            moveInDark = group.moveInDark
+        }
+    }
+    plan.delete.forEach { it.delete() }
+    return ClearedOutcome(plan.delete.size, plan.split.size, plan.unmatched.map(::unmatchedClearWarning))
+}
+
+/** What [removeClearedFromCue] or [removeClearedFromLook] changed. */
+internal data class ClearedOutcome(
+    val removed: Int = 0,
+    /** Member rows written in place of a split group row. */
+    val written: Int = 0,
+    val warnings: List<String> = emptyList(),
+)
 
 /**
  * Build the Mode B checklist: which cues (grouped by stack) the programmer's touched entries
@@ -273,9 +424,9 @@ internal fun entriesUnderlyingCue(
  * Package [entries] as a recording for the cue write path, with the band FX the operator has
  * running.
  *
- * Update applies MERGE semantics — it never deletes. Removing content from a cue is
- * `Record REMOVE`; conflating the two would make an Update after a Clear-and-rebuild silently
- * strip everything the operator didn't happen to re-set.
+ * Update applies MERGE semantics. The only rows it deletes are the ones [clearedSinceInclude]
+ * names, never the rows the programmer merely doesn't hold: a Clear drops the Include baseline with
+ * the target, so an Update after a Clear-and-rebuild cannot strip what the operator didn't re-set.
  */
 internal fun recordingForUpdate(
     state: State,

@@ -124,9 +124,19 @@ export function includeNote(result: IncludeResponse): WriteNote {
  * the count is the title and the lines the body.
  */
 export function updateNote(result: UpdateResponse): WriteNote {
+  const skipNote = describeSkips(result.skipped ?? [])
+  if (!result.applied) {
+    const name = result.lookResult?.lookName
+    return {
+      title: `Nothing written${name ? ` to “${name}”` : ''}.`,
+      description: joined([skipNote, ...result.warnings], ' — '),
+      warn: skipNote != null || result.warnings.length > 0,
+    }
+  }
   const lines = result.results.map(
     (r) =>
       `Updated “${r.cueName}” — ${plural(r.assignmentsWritten, 'value')} written` +
+      (r.assignmentsRemoved ? `, ${r.assignmentsRemoved} removed` : '') +
       (r.sceneryWritten ? `, ${plural(r.sceneryWritten, 'scenery change')}` : '') +
       (r.republishedLive ? ' (live cue republished)' : '') +
       '.',
@@ -135,6 +145,7 @@ export function updateNote(result: UpdateResponse): WriteNote {
   if (look) {
     lines.push(
       `Updated “${look.lookName}” — ${plural(look.rowsWritten, 'row')} written` +
+        (look.rowsRemoved ? `, ${look.rowsRemoved} removed` : '') +
         (look.effectsWritten ? `, ${plural(look.effectsWritten, 'effect')}` : '') +
         (look.sceneryWritten ? `, ${plural(look.sceneryWritten, 'scenery change')}` : '') +
         (look.cuesRepublished.length > 0 ? `, ${look.cuesRepublished.length} live cue(s) moved with it` : '') +
@@ -142,7 +153,6 @@ export function updateNote(result: UpdateResponse): WriteNote {
     )
   }
   const single = lines.length <= 1
-  const skipNote = describeSkips(result.skipped ?? [])
   return {
     title: single ? (lines[0] ?? 'Updated.') : `Updated ${plural(lines.length, 'cue')}.`,
     description: joined([single ? undefined : lines.join(' '), skipNote, ...result.warnings], ' — '),

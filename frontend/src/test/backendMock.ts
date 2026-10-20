@@ -197,6 +197,7 @@ export const programmerWs: {
     lastIncluded: unknown
     layers: unknown[]
     applied: unknown[]
+    snapshotSeq: number
   }
   push: (patch: Partial<typeof programmerWs.state>) => void
   reset: () => void
@@ -210,6 +211,7 @@ export const programmerWs: {
     lastIncluded: null,
     layers: [],
     applied: [],
+    snapshotSeq: 0,
   },
   push(patch) {
     programmerWs.state = { ...programmerWs.state, ...patch }
@@ -225,6 +227,7 @@ export const programmerWs: {
       lastIncluded: null,
       layers: [],
       applied: [],
+      snapshotSeq: 0,
     }
   },
 }
