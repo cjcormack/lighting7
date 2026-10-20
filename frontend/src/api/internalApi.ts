@@ -38,7 +38,7 @@ export interface InternalApiConnection {
    * Deliberately no queue. Flushing a minute-old blackout on reconnect moves the rig behind the
    * operator's back; the bridges' idempotent state re-requests are the correct catch-up.
    */
-  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean,
+  send(data: string | Blob | BufferSource): boolean,
   subscribe(fn: InternalEventHandler): Subscription
   /**
    * Re-open the socket. A no-op while it is already OPEN or CONNECTING, unless
@@ -144,7 +144,7 @@ export function createInternalApiConnection(baseUrl: string, wsUrl: string): Int
     readyState(): number {
       return ws.readyState
     },
-    send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean {
+    send(data: string | Blob | BufferSource): boolean {
       if (ws.readyState !== WebSocket.OPEN) return false
       ws.send(data)
       return true
