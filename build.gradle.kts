@@ -126,7 +126,7 @@ dependencies {
     // Errors, logs and traces to Sentry — docs/observability-engineering.md. No Sentry Gradle
     // plugin: it auto-adds integrations and touches the build
     // (docs/plans/completed/sentry-plan.md D2).
-    implementation(platform("io.sentry:sentry-bom:8.60.0"))
+    implementation(platform("io.sentry:sentry-bom:8.61.0"))
     implementation("io.sentry:sentry")
     implementation("io.sentry:sentry-logback")
     implementation("io.sentry:sentry-kotlin-extensions")
@@ -175,7 +175,7 @@ dependencies {
 
     // mDNS (Bonjour) advertisement so iPad / LAN clients reach the backend at
     // `lighting7-<hostname>.local:8413` without entering an IP. See MdnsService.kt.
-    implementation("org.jmdns:jmdns:3.6.3")
+    implementation("org.jmdns:jmdns:3.6.4")
 
     // JGit for the cloud-sync per-project working tree (phase 3 of plans/cloud-sync.md).
     // Previously pinned to 6.10.0 on the grounds that 7.x carried a larger transitive
