@@ -23,6 +23,9 @@ import { useProgrammerScenery } from '@/store/programmer'
  * asks for the state itself — the desk answers after the target was set, so the answer holds the
  * Include — and reads no count until it lands.
  *
+ * The target's `baseline` is part of the key: the desk moves it on every Include, Record or Update
+ * into the source, so the count starts again from zero once Update has written it back.
+ *
  * Held scenery adds to the count (scenery-programmer plan session 3): Update writes it back too, so
  * moving the tabs after Include must un-grey Update. That half the desk counts itself
  * (`changedSinceInclude` on `programmer.sceneryState`) — see `withSceneryChanges`.
@@ -38,7 +41,7 @@ export function useIncludeBaseline(): number | null {
 
   useEffect(() => {
     const apply = (state: ReturnType<typeof lightingApi.programmer.getState>) => {
-      const key = includedTargetKey(state.lastIncluded)
+      const key = `${includedTargetKey(state.lastIncluded)}#${state.lastIncluded?.baseline ?? 0}`
       const current = snapshotEntries(state.entries)
       const fresh = state.snapshotSeq !== snapshotSeqRef.current
       snapshotSeqRef.current = state.snapshotSeq

@@ -454,7 +454,10 @@ internal fun performProgrammerUpdate(
         if (modeLabel == "A" && written.scenery.warnings.isEmpty()) state.programmerScenery.rebaseline(project.id.value, written = true)
     }
 
-    if (results.isNotEmpty()) state.show.programmerStore.forgetIncludedKeys(cleared)
+    if (results.isNotEmpty() && modeLabel == "A") {
+        state.show.programmerStore.forgetIncludedKeys(cleared)
+        state.show.programmerStore.rebaseIncludeTarget()
+    }
     if (results.isNotEmpty()) state.show.fixtures.cueListChanged()
     // Scenery written back changes the stack list's `CueStackCueEntry.scenery`.
     if (results.any { it.sceneryWritten > 0 }) state.show.fixtures.cueStackListChanged()

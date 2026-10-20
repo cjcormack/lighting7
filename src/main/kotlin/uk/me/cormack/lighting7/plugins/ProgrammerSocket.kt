@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
+import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ExtendedColour
@@ -22,6 +23,7 @@ import uk.me.cormack.lighting7.models.LayerSourceDto
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProvenanceEntry
+import uk.me.cormack.lighting7.fx.LocateValueResolver
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.AppliedSource
@@ -286,6 +288,8 @@ data class IncludedTargetDto(
      */
     val lookId: Int? = null,
     val lookName: String? = null,
+    /** Moves whenever the programmer and the source are made to agree; see [IncludedTarget.baseline]. */
+    val baseline: Long = 0,
 )
 
 /**
@@ -738,6 +742,7 @@ internal fun includedTargetDto(state: State, target: uk.me.cormack.lighting7.fx.
         cueNumber = cue?.second,
         lookId = target.lookId,
         lookName = lookName,
+        baseline = target.baseline,
     )
 }
 
@@ -1097,22 +1102,42 @@ object ProgrammerHandler {
         // bookkeeping must be pruned for the LOCATE / preset slots this clear removes,
         // or their state would keep claiming writes that are gone (a "located" fixture
         // that is no longer located).
-        val released = fixtures.flatMap { f ->
-            store.slotsFor(f.targetKey, propertyName).map { f.targetKey to it.owner }
+        val keys = fixtures.flatMap { f -> (listOf(propertyName) + fineHalvesOf(f, propertyName)).map { f to it } }
+        val released = keys.flatMap { (f, property) ->
+            store.slotsFor(f.targetKey, property).map { Triple(f.targetKey, property, it.owner) }
         }
 
-        engine.programmer.clearEntries(fixtures.map { it to propertyName }, fadeMs)
+        engine.programmer.clearEntries(keys, fadeMs)
 
         // Locate is the only owner left with bookkeeping to prune. The `preset:{id}` owners went
         // with the toggle machinery: a Look now reaches the programmer as a layer, and
         // `clearProgrammerEntries` deliberately leaves LAYERS slots alone — its contribution is
         // derived state that the next recook rebuilds, so there is nothing here to keep in step.
-        for ((fixtureKey, owner) in released) {
+        for ((fixtureKey, property, owner) in released) {
             if (owner == ProgrammerOwner.LOCATE) {
-                state.show.locateManager.pruneWrite(fixtureKey, propertyName)
+                state.show.locateManager.pruneWrite(fixtureKey, property)
             }
         }
         return ProgrammerEntryClearedOutMessage(target.discriminator, target.key, propertyName)
+    }
+
+    /**
+     * The fine channels that are part of [propertyName]'s value on [fixture] — both for a position,
+     * an axis's own for a pan or a tilt — so clearing the value takes them too. No surface shows a
+     * fine half on its own, so one left held would keep the position's family in a Look or a cue
+     * after Update.
+     */
+    private fun fineHalvesOf(fixture: GroupableFixture, propertyName: String): List<String> {
+        val axes = LocateValueResolver.axesOf(fixture) ?: return emptyList()
+        val category = if (canonicalPropertyName(propertyName) == "position") {
+            null
+        } else {
+            PropertyChannelWriter.resolveProperty(fixture, propertyName)?.category ?: return emptyList()
+        }
+        return listOfNotNull(
+            axes.panFine?.first?.takeIf { category == null || category == PropertyCategory.PAN },
+            axes.tiltFine?.first?.takeIf { category == null || category == PropertyCategory.TILT },
+        )
     }
 
     /**

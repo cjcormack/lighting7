@@ -320,6 +320,42 @@ class LookRecordTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `clearing a position takes its fine halves out of the Look too`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedFixture(state, projectId, "shehds-led19-rgbw-24ch", "spot-1", 1)
+        val lookId = client.createLook(
+            "Set — Market",
+            LookRowDto("fixture", "spot-1", "position", "108,168"),
+            LookRowDto("fixture", "spot-1", "panFine", "53"),
+            LookRowDto("fixture", "spot-1", "tiltFine", "207"),
+        )
+
+        client.includeLook(lookId)
+        clearProgrammer("spot-1", "position")
+        val response: ProgrammerUpdateResponse = client.update().body()
+
+        assertEquals(3, assertNotNull(response.lookResult).rowsRemoved)
+        assertEquals(emptyMap(), client.lookRows(lookId))
+    }
+
+    @Test
+    fun `an Update moves the include target's baseline`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val lookId = client.createLook("Warm", LookRowDto("fixture", "hex-1", "dimmer", "200"))
+        client.includeLook(lookId)
+        val before = assertNotNull(state.show.programmerStore.lastIncludedTarget).baseline
+
+        setProgrammer("hex-1", "dimmer", "30")
+        client.update()
+        val after = assertNotNull(state.show.programmerStore.lastIncludedTarget)
+        assertEquals(lookId, after.lookId)
+        assertTrue(after.baseline > before, "a client re-takes its baseline from the next state frame")
+    }
+
+    @Test
     fun `an Update with nothing changed or cleared writes nothing and says so`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()

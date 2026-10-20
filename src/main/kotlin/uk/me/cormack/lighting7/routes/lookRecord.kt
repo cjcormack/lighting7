@@ -784,6 +784,7 @@ internal fun updateIncludedLook(
         )
     }
     state.show.programmerStore.forgetIncludedKeys(cleared)
+    state.show.programmerStore.rebaseIncludeTarget()
     // What was written is the new baseline: a second Update writes nothing it already wrote.
     for (instance in includedEffects) {
         val origin = instance.includedLookEffect ?: continue

@@ -38,6 +38,19 @@ describe('useIncludeBaseline', () => {
     expect(result.current).toBe(1)
   })
 
+  it('starts again from zero once an Update has written the changes back', () => {
+    const { result } = renderHook(() => useIncludeBaseline())
+    act(() => programmerWs.push({ lastIncluded: { ...LOOK, baseline: 1 }, entries: included, snapshotSeq: 1 }))
+    const cleared = new Map([['mac-1|dimmer', entry('255')]])
+    act(() => programmerWs.push({ entries: cleared, snapshotSeq: 2 }))
+    expect(result.current).toBe(1)
+
+    // The Update's target frame moves the baseline; the state frame after it is the new baseline.
+    act(() => programmerWs.push({ lastIncluded: { ...LOOK, baseline: 2 } }))
+    act(() => programmerWs.push({ snapshotSeq: 3 }))
+    expect(result.current).toBe(0)
+  })
+
   it('takes the baseline at once when the target arrives in a state frame', () => {
     const requestState = vi.spyOn(lightingApi.programmer, 'requestState')
     const { result } = renderHook(() => useIncludeBaseline())

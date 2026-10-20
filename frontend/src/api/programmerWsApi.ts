@@ -200,6 +200,8 @@ export type IncludedTarget =
       entryId?: number
       cueName?: string
       cueNumber?: string
+      /** Moves each time Include, Record or Update makes the programmer and the cue agree. Absent from an older desk. */
+      baseline?: number
     }
   | {
       /**
@@ -210,6 +212,8 @@ export type IncludedTarget =
       kind: 'LOOK'
       lookId: number
       lookName?: string
+      /** As the cue arm's. */
+      baseline?: number
     }
 
 /** The client-side view of the programmer, rebuilt from each `programmer.state` snapshot. */

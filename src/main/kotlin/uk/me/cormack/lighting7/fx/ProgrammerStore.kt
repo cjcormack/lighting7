@@ -120,6 +120,12 @@ data class IncludedTarget(
     val targetId: Int,
     val entryId: Int? = null,
     val sourceUuid: UUID? = null,
+    /**
+     * Moves each time the programmer and the source are made to agree — an Include, a Record or an
+     * Update into it — so a client re-takes the baseline it counts unwritten changes against.
+     * Stamped by [ProgrammerStore]; forgetting the entry a cue was included from keeps it.
+     */
+    val baseline: Long = 0,
 ) {
     enum class Kind {
         CUE,
@@ -260,11 +266,19 @@ class ProgrammerStore {
 
     val lastIncludedTargetFlow: StateFlow<IncludedTarget?> = _lastIncludedTarget.asStateFlow()
 
+    private val baselineCounter = AtomicLong(0)
+
+    /** Setting it stamps a fresh [IncludedTarget.baseline], so even the same source included again moves it. */
     var lastIncludedTarget: IncludedTarget?
         get() = _lastIncludedTarget.value
         set(value) {
-            _lastIncludedTarget.value = value
+            _lastIncludedTarget.value = value?.copy(baseline = baselineCounter.incrementAndGet())
         }
+
+    /** The programmer and the include target agree again — an Update wrote into it. */
+    fun rebaseIncludeTarget() {
+        _lastIncludedTarget.value = _lastIncludedTarget.value?.copy(baseline = baselineCounter.incrementAndGet())
+    }
 
     /**
      * Drop the include target if it points at [cueId]. Called when a cue is deleted, so a
