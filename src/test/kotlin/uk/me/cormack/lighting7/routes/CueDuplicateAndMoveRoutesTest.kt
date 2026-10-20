@@ -21,6 +21,7 @@ import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import java.time.Duration
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -106,6 +107,42 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val details = client.get("$base/cues/${copy.cueId}").body<CueDetails>()
         assertEquals("dimmer", details.propertyAssignments.single().propertyName)
         assertEquals(listOf(a), details.entries.map { it.stackId }, "one place: the end of A")
+    }
+
+    /** A copy's effect runs are its own (stack-timeline plan C4): it joins no run of its source's. */
+    @Test
+    fun `duplicate gives the copy's effects fresh run keys, used nowhere else`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val a = stack("A", 0)
+        val (one, two) = listOf(cue("One"), cue("Two"))
+        client.addCue(a, one); client.addCue(a, two)
+        val run = UUID.randomUUID()
+        transaction(state.database) {
+            for ((cueId, property) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
+                DaoCueAdHocEffect.new {
+                    cue = DaoCue[cueId]; targetType = "fixture"; targetKey = "hex-1"
+                    effectType = "Pulse"; category = "dimmer"; propertyName = property; beatDivision = 1.0
+                    blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap()
+                    runUuid = if (property == "dimmer") run else null
+                }
+            }
+        }
+
+        val first = client.duplicate(one, a).body<DuplicateCueResponse>()
+        val second = client.duplicate(one, a).body<DuplicateCueResponse>()
+
+        transaction(state.database) {
+            fun keys(cueId: Int) = DaoCue[cueId].adHocEffects.associate { it.propertyName to it.runUuid }
+            val copied = keys(first.cueId)
+            assertNull(copied["uv"], "an effect in no run stays in none")
+            val fresh = assertNotNull(copied["dimmer"])
+            val everyOther = DaoCueAdHocEffect.all().filter { it.cue.id.value != first.cueId }.mapNotNull { it.runUuid }
+            assertTrue(fresh !in everyOther, "the copy's key is used nowhere else, the next copy's included")
+            assertNotNull(keys(second.cueId)["dimmer"])
+            assertEquals(mapOf<String?, UUID?>("dimmer" to run, "uv" to null), keys(one), "the source keeps its own")
+            assertEquals(run, keys(two)["dimmer"])
+        }
     }
 
     @Test

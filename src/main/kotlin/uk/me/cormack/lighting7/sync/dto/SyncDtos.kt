@@ -83,6 +83,12 @@ data class FormatVersionJson(
     // group without its colour and its next wipe-then-export push would write them away for every peer.
     // `minReader` stays at **5** — a missing colour is none. See `docs/sync-engineering.md`
     // §"Version 36 — fixture colours".
+    // v37: effect runs (stack-timeline plan D7, §3.4). `CueAdHocEffectJson` gains `runUuid` (default
+    // null, omitted): the run key ad-hoc effects of neighbouring cues share, for a GO to hand the running
+    // effect on (stack-timeline plan session 2). A show with no runs exports byte-for-byte as at v36. The writer's number moves by the
+    // sharp-edge rule: a v36 reader would import every effect out of its run and its next
+    // wipe-then-export push would write the keys away for every peer. `minReader` stays at **5** — a
+    // missing key is no run. See `docs/sync-engineering.md` §"Version 37 — effect runs".
     //
     // v29: Seconds. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `seconds`
     // (default false, omitted): an effect on its own cycle, with no speed master, its `beatDivision`
@@ -299,7 +305,7 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 36,
+    val formatVersion: Int = 37,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val minReader: Int = 5,
 )
@@ -964,6 +970,11 @@ data class CueAdHocEffectJson(
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
+    /**
+     * The run key (stack-timeline plan D7, formatVersion 37): rows of neighbouring cues sharing one
+     * are one run. Omitted when null. Not an identity, so a clone's remap leaves it as it is.
+     */
+    val runUuid: String? = null,
 )
 
 @Serializable

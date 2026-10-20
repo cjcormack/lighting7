@@ -37,6 +37,7 @@ import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_NAME
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCRIPT_HASH
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_SCENE_IMAGES
 import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_DETACHED_FROM
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_PULSE_RUN
 import uk.me.cormack.lighting7.testsupport.allUuidsIn
 import uk.me.cormack.lighting7.testsupport.assertExportsEqual
 import uk.me.cormack.lighting7.testsupport.seedRichProject
@@ -117,8 +118,9 @@ class ProjectCloneTest {
         ProjectExporter(state).export(sourceId, exportDirA)
         ProjectExporter(state).export(result.projectId, exportDirB)
         // The origin's venue uuid (venue-attach plan D1) names a project outside the archive, so a clone
-        // keeps it: the one uuid in the export that is a reference to nothing the archive holds.
-        val external = setOf(RICH_PROJECT_DETACHED_FROM.first.toString())
+        // keeps it: a reference to nothing the archive holds. A run key (stack-timeline plan D7) is no
+        // identity, so a clone keeps that too.
+        val external = setOf(RICH_PROJECT_DETACHED_FROM.first.toString(), RICH_PROJECT_PULSE_RUN.toString())
         val sourceUuids = allUuidsIn(exportDirA) - external
         val cloneUuids = allUuidsIn(exportDirB)
         assertTrue(cloneUuids.containsAll(external), "the clone keeps the origin")
@@ -134,6 +136,25 @@ class ProjectCloneTest {
         )
         // Every identity in the export is a row the clone copied, plus the project row itself.
         assertEquals((cloneUuids - external).size - 1, result.recordsCloned, "recordsCloned does not match the graph")
+    }
+
+    /**
+     * A clone copies the whole project, its runs with it (stack-timeline plan §3.4), so every run key
+     * comes across as it is — unlike a copy of cues, which gets fresh ones.
+     */
+    @Test
+    fun `clone keeps every effect run key as it is`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-runs", description = null)
+
+        transaction(state.database) {
+            fun runs(projectId: Int) = DaoCue.find { DaoCues.project eq projectId }
+                .flatMap { cue -> cue.adHocEffects.map { cue.name to it.runUuid } }
+                .filter { it.second != null }.sortedBy { it.first }
+            val expected = listOf("build" to RICH_PROJECT_PULSE_RUN, "open" to RICH_PROJECT_PULSE_RUN)
+            assertEquals(expected, runs(sourceId))
+            assertEquals(expected, runs(result.projectId), "the clone's Pulse is one run under the source's key")
+        }
     }
 
     /**

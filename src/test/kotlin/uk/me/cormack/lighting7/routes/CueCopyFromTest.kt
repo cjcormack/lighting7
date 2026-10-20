@@ -15,13 +15,18 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Test
+import uk.me.cormack.lighting7.ai.AiTools
+import uk.me.cormack.lighting7.ai.SetupTools
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.inStack
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import uk.me.cormack.lighting7.testsupport.seedShowOnVenue
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -386,6 +391,69 @@ class CueCopyFromTest : RouteIntegrationTest() {
         val copy = loose.body<CopyCuesFromResponse>().copied.single()
         assertEquals(null, copy.entryId)
         transaction(state.database) { assertTrue(entriesOfCue(DaoCue[copy.cueId]).isEmpty(), "loose") }
+    }
+
+    /**
+     * Cues copied together keep their effect runs (stack-timeline plan C4): joined to each other, under
+     * a key of their own, and to nothing in the source — `copy-from`'s list and a stack copied whole by
+     * MCP's `copy_to_project` alike, each copy operation minting its own.
+     */
+    @Test
+    fun `cues copied together keep their effect runs among the copies, under keys of their own`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val source = standalone("Panto")
+        val run = UUID.randomUUID()
+        val (cues, stackId) = transaction(state.database) {
+            val stack = DaoCueStack.new {
+                project = DaoProject[source]; name = "Act 1"; loop = false; type = CueStackType.STACK.name; sortOrder = 0
+            }
+            val cues = listOf("a", "b", "c").mapIndexed { i, name ->
+                DaoCue.new { project = DaoProject[source]; this.name = name }.inStack(stack, sortOrder = i).also { cue ->
+                    DaoCueAdHocEffect.new {
+                        this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
+                        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"; beatDivision = 1.0
+                        blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap()
+                        runUuid = if (name == "c") null else run
+                    }
+                }.id.value
+            }
+            cues to stack.id.value
+        }
+        /** Each of the project's cues not in [seen]: its name and its one effect's run key. */
+        fun copies(seen: Set<Int>): Map<String, UUID?> = transaction(state.database) {
+            DaoCue.find { DaoCues.project eq projectId }.filter { it.id.value !in seen }
+                .associate { it.name to it.adHocEffects.single().runUuid }
+        }
+
+        val copied = client.copyFrom(CopyCuesFromRequest(fromProjectId = source, cueIds = cues))
+        assertEquals(HttpStatusCode.Created, copied.status, copied.bodyAsText())
+        val first = copies(emptySet())
+        val firstKey = assertNotNull(first["a"])
+        assertEquals(mapOf("a" to firstKey, "b" to firstKey, "c" to null), first, "a and b one run, c in none")
+
+        val firstIds = transaction(state.database) { DaoCue.find { DaoCues.project eq projectId }.map { it.id.value }.toSet() }
+        val tools = SetupTools(state, AiTools(state))
+        val result = runBlocking {
+            tools.executeTool(
+                "copy_to_project",
+                Json.parseToJsonElement("""{"fromProjectId":$source,"toProjectId":$projectId,"cueStacks":[$stackId]}""").jsonObject,
+                caller = "Tester",
+            )
+        }
+        assertTrue(result.success, result.result)
+        val second = copies(firstIds)
+        val secondKey = assertNotNull(second["a"])
+        assertEquals(mapOf("a" to secondKey, "b" to secondKey, "c" to null), second, "the stack's run joined among its copies")
+
+        assertEquals(3, setOf(run, firstKey, secondKey).size, "each copy's run is its own")
+        transaction(state.database) {
+            assertEquals(
+                listOf(run, run, null),
+                cues.map { DaoCue[it].adHocEffects.single().runUuid },
+                "the source keeps its own",
+            )
+        }
     }
 
     @Test

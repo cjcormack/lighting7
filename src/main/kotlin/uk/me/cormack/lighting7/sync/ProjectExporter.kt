@@ -914,6 +914,7 @@ class ProjectExporter(private val state: State) {
                         wings = e.wings,
                         blocks = e.blocks,
                         groups = e.groups,
+                        runUuid = e.runUuid?.toString(),
                     ),
                 )
                 liveKeys.add(RecordKey("cueAdHocEffects", e.uuid))

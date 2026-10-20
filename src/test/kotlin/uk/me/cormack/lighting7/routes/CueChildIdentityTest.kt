@@ -17,6 +17,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import kotlinx.serialization.json.jsonObject
+import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.fx.BeatDivision
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
@@ -396,7 +398,104 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(0.5, updated.body<ProgrammerRecordResponse>().cue.layers.single().amount)
     }
 
+    // ── Run keys (stack-timeline plan P2, P4) ──────────────────────────────
+
+    @Test
+    fun `a PATCH keeps a matched effect's run key, ignores one in the body, and gives a new effect none`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        val cue = client.richCue()
+        val key = keyEffects(cue.id)
+
+        val echoed = UUID.randomUUID().toString()
+        val response = client.patch("${base()}/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                buildJsonObject {
+                    put(
+                        "adHocEffects",
+                        Json.encodeToJsonElement(
+                            listOf(
+                                cue.adHocEffects.single().copy(beatDivision = 2.0, runUuid = echoed),
+                                pulse.copy(targetKey = "hex-2", sortOrder = 1, runUuid = echoed),
+                            ),
+                        ),
+                    )
+                },
+            )
+        }
+        assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+
+        assertEquals(mapOf("hex-1" to key, "hex-2" to null), runKeys(cue.id), "the body's key is no write's to make")
+        val answered = response.body<CueDetails>().adHocEffects.associate { it.targetKey to it.runUuid }
+        assertEquals(mapOf("hex-1" to key.toString(), "hex-2" to null), answered, "read back on the DTO")
+    }
+
+    @Test
+    fun `Record's UPDATE_EXISTING keeps a re-recorded effect's run key and gives a new effect none`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
+        val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
+
+        state.show.fxEngine.addEffect(programmerBandSine("hex-1"))
+        val created = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId),
+        ).body<ProgrammerRecordResponse>()
+        val key = keyEffects(created.cue.id)
+
+        state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+        state.show.fxEngine.addEffect(programmerBandSine("hex-1", BeatDivision.HALF))
+        state.show.fxEngine.addEffect(programmerBandSine("hex-2"))
+        val updated = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
+                targets = listOf(CueTargetDto(type = "fixture", key = "hex-1"), CueTargetDto(type = "fixture", key = "hex-2")),
+            ),
+        )
+        assertEquals(HttpStatusCode.OK, updated.status, updated.bodyAsText())
+
+        assertEquals(mapOf("hex-1" to key, "hex-2" to null), runKeys(created.cue.id))
+        assertEquals(BeatDivision.HALF, updated.body<ProgrammerRecordResponse>().cue.adHocEffects.single { it.targetKey == "hex-1" }.beatDivision)
+    }
+
+    @Test
+    fun `create_cue gives its effects no run key, whatever the tool call says`() = testApplication {
+        mountTestApp(state)
+        val effect = """{"targetType":"fixture","targetKey":"hex-1","effectType":"Pulse","category":"dimmer","propertyName":"dimmer",""" +
+            """"beatDivision":0.5,"blendMode":"OVERRIDE","runUuid":"${UUID.randomUUID()}"}"""
+        val created = AiTools(state).executeTool(
+            "create_cue",
+            Json.parseToJsonElement("""{"name":"Q1","adHocEffects":[$effect]}""").jsonObject,
+        )
+        assertTrue(created.success, created.result)
+        val cueId = Json.parseToJsonElement(created.result).jsonObject["cueId"].toString().toInt()
+        assertEquals(mapOf("hex-1" to null), runKeys(cueId))
+    }
+
+    @Test
+    fun `a run key is not stage content, so a key change alone leaves a live cue unedited`() = testApplication {
+        mountTestApp(state)
+        val cue = jsonClient().richCue()
+        transaction(state.database) {
+            val stored = DaoCue[cue.id]
+            val before = stored.stageContent()
+            stored.adHocEffects.single().runUuid = UUID.randomUUID()
+            assertEquals(before, DaoCue[cue.id].stageContent())
+        }
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
+
+    /** Give the cue's one effect a run key, as the timeline would; answers it. */
+    private fun keyEffects(cueId: Int): UUID = transaction(state.database) {
+        UUID.randomUUID().also { DaoCue[cueId].adHocEffects.single().runUuid = it }
+    }
+
+    private fun runKeys(cueId: Int): Map<String, UUID?> = transaction(state.database) {
+        DaoCue[cueId].adHocEffects.associate { it.targetKey to it.runUuid }
+    }
 
     private data class Row(val targetKey: String, val propertyName: String)
 

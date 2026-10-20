@@ -196,6 +196,12 @@ data class CueAdHocEffectDto(
      * stands behind the DTO (a capture, an AI tool's input).
      */
     val uuid: String? = null,
+    /**
+     * The effect's run key (stack-timeline plan D7), on read only like [uuid]: rows of neighbouring
+     * cues that share one draw as one run. Ignored on write (P2) — only the timeline, the cue copier
+     * and the importer set it, so no other door can break a run. Null for an effect in no run.
+     */
+    val runUuid: String? = null,
 ) {
     /** A fixture, a group, or a selection of them (effects plan D3). */
     val target: EffectTargetRef get() = EffectTargetRef.of(targetType, targetKey)
@@ -309,6 +315,9 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val blocks = integer("spread_blocks").default(1)
     val groups = integer("spread_groups").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
+
+    /** The run key (stack-timeline plan D7), null for an effect in no run; see [CueAdHocEffectDto.runUuid]. */
+    val runUuid = javaUUID("run_uuid").nullable()
 }
 
 class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
@@ -352,6 +361,7 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var blocks by DaoCueAdHocEffects.blocks
     var groups by DaoCueAdHocEffects.groups
     var uuid by DaoCueAdHocEffects.uuid
+    var runUuid by DaoCueAdHocEffects.runUuid
 }
 
 // ─── Cue Property Assignments table ────────────────────────────────────
@@ -652,4 +662,5 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     blocks = blocks,
     groups = groups,
     uuid = uuid.toString(),
+    runUuid = runUuid?.toString(),
 )
