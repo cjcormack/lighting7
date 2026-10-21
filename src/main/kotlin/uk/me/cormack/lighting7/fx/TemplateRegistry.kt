@@ -43,12 +43,10 @@ data class TemplateSnapshot(
     /** Rows in `sortOrder`. Empty for an effect template. */
     val rows: List<TemplateRowEntry>,
     /**
-     * The one effect an effect template holds, null for a value template (D2).
-     *
-     * Its `target` is always null (D3), which is why this is an [EffectEntry] rather than a
-     * template-specific type: the composer's deferred fan-out reads it with no special case.
+     * The one effect an effect template holds, null for a value template (D2). It names no target
+     * (D3): the cook runs it on each target of the layer pressing it.
      */
-    val effect: EffectEntry? = null,
+    val effect: StoredEffect? = null,
 )
 
 /**
@@ -315,10 +313,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
             // thread against a size-1 pool (`FU-TMPL-REWARM-BOUND`), so the cost that matters is
             // round trips, not rows.
             effect = template.effect?.let { fx ->
-                EffectEntry(
-                    // Always null — a template effect is generic by construction (D3), so there is
-                    // no stored discriminator to read and nothing to drop as corrupt.
-                    target = null,
+                StoredEffect(
                     effectType = fx.effectType,
                     category = fx.category,
                     propertyName = fx.propertyName,

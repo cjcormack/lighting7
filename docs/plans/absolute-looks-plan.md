@@ -1,6 +1,6 @@
 # Looks as absolute states
 
-> **Document status: agreed 2026-10-21; no session done.** D1–D3 are Chris's calls, made after the
+> **Document status: agreed 2026-10-21; session 1 of 3 done.** D1–D3 are Chris's calls, made after the
 > Timeline drew one scenery-only Look as three columns. The P rows are the plan's own.
 
 ## 1. Context
@@ -171,7 +171,7 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
 Session 1 is backend only and lands alone. Session 2 is backend only and leaves the current client
 working, because it strips targets where session 3 refuses them (P2). Session 3 needs session 2.
 
-### Session 1: deferred effects go (backend)
+### Session 1: deferred effects go (backend) — done
 
 - §3.1, step 2, the importer's effect half.
 - **Tests:** `validateLookEffects` refuses `deferred`; `create_look` and `update_look` refuse an

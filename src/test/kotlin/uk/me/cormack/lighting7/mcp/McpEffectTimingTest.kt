@@ -41,7 +41,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
     }
 
     private fun effect(type: String, category: String, extra: String = "") =
-        """{"effectType":"$type","category":"$category","blendMode":"OVERRIDE","parameters":{}$extra}"""
+        """{"targetType":"fixture","targetKey":"foh-1","effectType":"$type","category":"$category","blendMode":"OVERRIDE","parameters":{}$extra}"""
 
     @Test
     fun `a new effect is one bar on its family's usage master, else master 1`() {

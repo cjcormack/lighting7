@@ -166,7 +166,7 @@ private class ReconcilePlan(
 /**
  * Pair each fresh instance with a running one realising the same stored effect — its uuid, the cue
  * layer it came through (none for the cue's own), its target and property — taking the first unused
- * match, so an effect a deferred Look fans out over three heads pairs head by head. A target that
+ * match, so an effect a palette layer runs on three heads pairs head by head. A target that
  * moved is another effect: the old one stops and the new one starts. A fresh one with no match starts
  * only when [spawned] lacks it — otherwise the cue started it and it has since gone.
  */

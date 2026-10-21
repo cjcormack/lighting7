@@ -13,7 +13,6 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCueLayer
@@ -54,8 +53,8 @@ import kotlin.test.assertTrue
  * reads the ramp a gesture set and asks it the level at a chosen instant, and sweeps the engine's
  * retirement at a chosen instant ([FxEngine.retireFinishedLeaving]).
  *
- * The rig: hex-1 and hex-2, and two effect-only Looks with a deferred effect each — *Pulse* and
- * *Sine*, both on dimmer — which a cue layers onto a target.
+ * The rig: hex-1 and hex-2, and two effect-only Looks — *Pulse* and *Sine*, each with a dimmer
+ * effect on both heads — which a cue layers onto one head, the layer's target keeping that head's.
  */
 class EffectFadeTest : RouteIntegrationTest() {
 
@@ -65,7 +64,7 @@ class EffectFadeTest : RouteIntegrationTest() {
 
     private data class Looks(val pulse: LookDetails, val sine: LookDetails)
 
-    /** A Look with one deferred dimmer effect, and a dimmer row of its own on [rowOn] when named. */
+    /** A Look with a dimmer effect on each head, and a dimmer row of its own on [rowOn] when named. */
     private suspend fun HttpClient.look(name: String, effectType: String, rowOn: String? = null, nShot: Int? = null): LookDetails =
         post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
@@ -73,14 +72,14 @@ class EffectFadeTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = name,
                     rows = rowOn?.let { listOf(LookRowDto("fixture", it, "dimmer", "120")) }.orEmpty(),
-                    effects = listOf(
+                    effects = listOf("hex-1", "hex-2").mapIndexed { i, head ->
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = head,
                             effectType = effectType, category = "dimmer", propertyName = "dimmer",
                             beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
-                            nShot = nShot,
-                        ),
-                    ),
+                            nShot = nShot, sortOrder = i,
+                        )
+                    },
                 ),
             )
         }.body()

@@ -33,23 +33,20 @@ data class LookRowEntry(
 )
 
 /**
- * One stored effect, as the composer reads it out of a **Look or a template**.
+ * One stored effect — a **Look's or a palette's** — as the composer reads it, without where it runs.
  *
- * Named `LookEffectEntry` until the fx-templates plan gave a template one of its own; nothing about
- * the type was ever Look-specific, so the rename is mechanical. Unlike [LookRowEntry], [target] may
- * be null: a *deferred* Look effect fans over the targets of the layer applying it, and a
- * template's effect is **always** target-less (D3), so it arrives here as the same shape.
+ * A palette's one effect is this alone: it is generic (fx-templates plan D3), so the cook runs it
+ * on each target of the layer pressing it. A Look's always names its own target, so it arrives as
+ * an [EffectEntry]. What the cook hands on is this and a target, whichever it came from.
  *
  * **Carries no source identity, deliberately, and must not grow one.**
- * [uk.me.cormack.lighting7.fx.ProgrammerLayerEffectKey] freezes a hash over the whole entry so that
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerEffectKey] freezes a hash over the whole effect so that
  * editing an effect produces a *different* key and the stale instance retracts. A `sourceUuid`
  * field here would make every key change on the first recook after an upgrade, retracting and
  * respawning every programmer-layer effect on the desk. Where an effect came from lives on
  * [FxInstance.source] instead.
  */
-data class EffectEntry(
-    /** Null for a deferred effect; a selection (effects plan D3) only on a bound Look effect. */
-    val target: EffectTargetRef?,
+data class StoredEffect(
     val effectType: String,
     val category: String,
     val propertyName: String?,
@@ -82,9 +79,17 @@ data class EffectEntry(
      * Not source identity in the sense above: [ProgrammerLayerEffectKey.of] leaves it out.
      */
     val uuid: UUID? = null,
-) {
-    val isDeferred: Boolean get() = target == null
-}
+)
+
+/**
+ * One stored Look effect: [effect] on [target], a fixture, a group or a selection (effects plan D3).
+ * A Look effect always names its own target (absolute-looks plan D2); a stored one that names none,
+ * or names one the desk cannot parse, never becomes an `EffectEntry` — see [loadLookSnapshot].
+ */
+data class EffectEntry(
+    val target: EffectTargetRef,
+    val effect: StoredEffect,
+)
 
 /** A Look's identity and contents, read out of the DB and held immutably. */
 data class LookSnapshot(
@@ -311,22 +316,33 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                 },
             effects = look.effects
                 .orderBy(DaoLookEffects.sortOrder to SortOrder.ASC)
-                .mapNotNull { it.toEffectEntry() },
+                .mapNotNull { effect ->
+                    if (effect.targetType == DEFERRED_TARGET_TYPE) {
+                        snapshotLogger.warn(
+                            "Look '{}': effect {} ({}) names no target of its own; dropping it",
+                            look.name, effect.uuid, effect.effectType,
+                        )
+                    }
+                    effect.toEffectEntry()
+                },
         )
     }
 
+private val snapshotLogger = LoggerFactory.getLogger("loadLookSnapshot")
+
 /**
- * A stored Look effect as the registry holds it, or null for one whose target discriminator is
- * unknown — such a row is skipped rather than run on nothing. Must be called inside a transaction.
+ * A stored Look effect as the registry holds it, or null for one that names no target the desk can
+ * parse — [DEFERRED_TARGET_TYPE], which an older database wrote, among them — so it is skipped
+ * rather than run on nothing. Must be called inside a transaction.
  */
 internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
-    val target = if (targetType == DEFERRED_TARGET_TYPE) {
-        null
-    } else {
-        EffectTargetRef.ofOrNull(targetType, targetKey) ?: return null
-    }
-    return EffectEntry(
-        target = target,
+    val target = EffectTargetRef.ofOrNull(targetType, targetKey) ?: return null
+    return EffectEntry(target, toStoredEffect())
+}
+
+/** This row's settings, without its target. Must be called inside a transaction. */
+private fun DaoLookEffect.toStoredEffect(): StoredEffect =
+    StoredEffect(
         effectType = effectType,
         category = category,
         propertyName = propertyName,
@@ -350,22 +366,18 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
         groups = groups,
         uuid = uuid,
     )
-}
 
 /**
- * A Look effect as the generic effect spec the instance factories consume.
+ * A stored effect as the generic effect spec the instance factories consume.
  *
  * [uk.me.cormack.lighting7.models.LookEffectSpec] already serves as that shared vehicle rather
  * than as anything preset-specific — a cue's ad-hoc effect is converted *into* it before spawning
- * too — so bridging here keeps `createEffectInstance` and `resolveTargetForCue` untouched. The
- * type gets its final, non-preset name when `models/fxPresets.kt` is deleted and it has to move
- * anyway.
+ * too — so bridging here keeps `createEffectInstance` and `resolveTargetForCue` untouched.
  *
- * The target is deliberately dropped: it is the caller's business, because a deferred effect's
- * target comes from the layer rather than from the effect — and a template's effect has none at
- * all (D3), which is what lets a template effect cross this same bridge unchanged.
+ * Carries no target, which is the caller's business: a Look effect's is its own, and a palette's
+ * comes from the layer pressing it.
  */
-internal fun EffectEntry.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
+internal fun StoredEffect.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
     effectType = effectType,
     category = category,
     propertyName = propertyName,

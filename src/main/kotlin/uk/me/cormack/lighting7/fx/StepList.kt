@@ -299,7 +299,7 @@ fun stepsAt(phase: Double, steps: StepList, fadeRatio: Double = 0.0): FxOutput.S
 /**
  * What a Palette Steps list is as one effect (effects plan §3.6, §4.4): the one family of its
  * palettes, the category it is stored and offered under, and the property it drives when the row
- * that holds it names none — an effect palette's, a Look's deferred effect.
+ * that holds it names none — an effect palette's, or any other stored without one.
  */
 data class PaletteStepsShape(val family: PropertyMaskGroup, val category: String, val property: String)
 

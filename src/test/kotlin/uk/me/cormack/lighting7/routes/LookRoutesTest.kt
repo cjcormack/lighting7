@@ -13,6 +13,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -21,6 +22,7 @@ import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
+import uk.me.cormack.lighting7.testsupport.TestJson
 import uk.me.cormack.lighting7.testsupport.jsonClient
 import uk.me.cormack.lighting7.testsupport.mountTestApp
 import kotlin.test.assertEquals
@@ -55,7 +57,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     ),
                     effects = listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -75,7 +77,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         val summary = list.single { it.id == lookId }
         assertEquals(1, summary.rowCount)
         assertEquals(1, summary.effectCount)
-        assertTrue(summary.hasDeferredEffects, "every row was authored deferred")
+        assertFalse(summary.hasDeferredEffects, "a Look effect names its own target")
 
         val fetched = client.get("${base()}/$lookId").body<LookDetails>()
         assertEquals("dimmer", fetched.rows.single().propertyName)
@@ -192,8 +194,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             // The guard the rest of B6 rests on: `LookRowEntry.target` is non-null and
             // `loadLookSnapshot` drops a row whose discriminator names no arm, so this rejection is
             // the only thing keeping a deferred row from reaching the database and then vanishing
-            // silently at cue time. `validateLookEffects` deliberately permits the same
-            // discriminator, which is exactly how a merge of the two could loosen this unnoticed.
+            // silently at cue time. `validateLookEffects` refuses the same discriminator for effects.
             mountTestApp(state)
             val client = jsonClient()
             val resp = client.post(base()) {
@@ -218,6 +219,50 @@ class LookRoutesTest : RouteIntegrationTest() {
         }
 
     @Test
+    fun `a look effect naming no target of its own is rejected, every problem at once`() =
+        testApplication {
+            mountTestApp(state)
+            val client = jsonClient()
+            fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookEffectDto(
+                targetType = targetType, targetKey = targetKey,
+                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                beatDivision = 0.5, blendMode = blendMode, distribution = "LINEAR",
+            )
+            val resp = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreateLookRequest(
+                        name = "Deferred",
+                        effects = listOf(
+                            effect("fixture", "hex-1"),
+                            effect(DEFERRED_TARGET_TYPE, ""),
+                            effect("fixture", "hex-2", blendMode = "ADD"),
+                        ),
+                    )
+                )
+            }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = resp.bodyAsText()
+            assertTrue("effects[1]: A look effect must name its own fixture, group or selection" in body, body)
+            assertTrue("effects[2]: Unknown blendMode 'ADD'" in body, body)
+            assertFalse("effects[0]" in body, body)
+            assertTrue(client.get(base()).body<List<LookDto>>().none { it.name == "Deferred" }, "nothing is written")
+
+            val lookId = client.post(base()) {
+                contentType(ContentType.Application.Json)
+                setBody(CreateLookRequest(name = "Bound", effects = listOf(effect("group", "front-wash"))))
+            }.body<LookDetails>().id
+            val put = client.put("${base()}/$lookId") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("effects", TestJson.encodeToJsonElement(listOf(effect(DEFERRED_TARGET_TYPE, ""))))
+                })
+            }
+            assertEquals(HttpStatusCode.BadRequest, put.status)
+            assertEquals("group", client.get("${base()}/$lookId").body<LookDetails>().effects.single().targetType, "the PUT wrote nothing")
+        }
+
+    @Test
     fun `an unrecognised effect enum is rejected at the write, not survived at spawn`() =
         testApplication {
             // The failure this closes: `blendMode: "ADD"` used to reach `varchar(50)` intact and
@@ -233,7 +278,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         name = "Bad Blend",
                         effects = listOf(
                             LookEffectDto(
-                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                targetType = "fixture", targetKey = "hex-1",
                                 effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                                 beatDivision = 0.5, blendMode = "ADD", distribution = "LINEAR",
                             ),
@@ -252,7 +297,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         name = "Bad Filter",
                         effects = listOf(
                             LookEffectDto(
-                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                targetType = "fixture", targetKey = "hex-1",
                                 effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                                 beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                                 elementFilter = "THIRDS",
@@ -361,9 +406,6 @@ class LookRoutesTest : RouteIntegrationTest() {
         state.show.fixtures.patchListChanged()
         val client = jsonClient()
 
-        // Deferred rows and effects only: the pad supplies the targets, so a bound row would land
-        // on fixtures the operator never selected. `loadLookToggleData` filters them out, which is
-        // why this look is authored deferred.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -377,7 +419,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     ),
                     effects = listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -403,8 +445,10 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `toggling refuses an empty target set on a Look with a deferred effect, and an unknown look`() = testApplication {
+    fun `toggling an empty target set presses an effects-only Look onto its effect's fixture, and an unknown look is 404`() = testApplication {
         mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
         val client = jsonClient()
 
         val lookId = client.post(base()) {
@@ -414,7 +458,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     name = "Pulse",
                     effects = listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -423,16 +467,16 @@ class LookRoutesTest : RouteIntegrationTest() {
             )
         }.body<LookDetails>().id
 
-        // A deferred effect fans over the layer's targets, so with none it asserts nothing — a 400
-        // rather than a silent no-op, because a toggle that applied nothing and reported success
-        // would read as a dead pad. A Look with *no* deferred effect is pressed onto its own
-        // fixtures instead (the tests below).
+        // The effect names its own fixture, so the Look needs no selection: an empty press lands on it.
         val empty = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest(targets = emptyList()))
         }
-        assertEquals(HttpStatusCode.BadRequest, empty.status)
-        assertEquals(CODE_LOOK_NEEDS_SELECTION, empty.body<ErrorResponse>().code)
+        assertEquals(HttpStatusCode.OK, empty.status, empty.bodyAsText())
+        val pressed = empty.body<ToggleLookResponse>()
+        assertEquals("applied", pressed.action)
+        assertEquals(1, pressed.effectCount)
+        assertEquals(listOf(CueTargetDto("fixture", "hex-1")), state.show.programmerStore.layers.single().targets)
 
         val missing = client.post("${base()}/999999/toggle") {
             contentType(ContentType.Application.Json)
@@ -447,8 +491,8 @@ class LookRoutesTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
 
-        // Dimmer rows and a deferred colour effect: the Look spans INTENSITY + COLOUR, and the
-        // COLOUR half is contributed by the effect alone.
+        // Dimmer rows and a colour effect: the Look spans INTENSITY + COLOUR, and the COLOUR half is
+        // contributed by the effect alone.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -457,7 +501,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(LookRowDto("fixture", "hex-1", "dimmer", "200")),
                     effects = listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "ColourPulse", category = "colour", propertyName = "rgbColour",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -651,12 +695,12 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `including an effects-only look onto no selection says to select fixtures, not that the patch is wrong`() = testApplication {
+    fun `including an effects-only look runs its effect on its own fixture, with nothing selected`() = testApplication {
         mountTestApp(state)
+        LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+        state.show.fixtures.patchListChanged()
         val client = jsonClient()
 
-        // The other zero-write reason, and the one that must *not* blame the patch: a Look holding
-        // only a deferred effect runs it on the selection it is included onto, and there is none.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -664,7 +708,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     name = "Pulse Only",
                     effects = listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -678,9 +722,9 @@ class LookRoutesTest : RouteIntegrationTest() {
             setBody(buildJsonObject { put("projectId", "current"); put("lookId", lookId) })
         }.body<ProgrammerIncludeResponse>()
         assertEquals(0, body.entriesWritten)
-        assertEquals(0, body.fxSpawned)
-        assertTrue(body.warnings.single().contains("select the fixtures"), body.warnings.toString())
-        assertTrue(body.warnings.none { it.contains("patch") }, body.warnings.toString())
+        assertEquals(1, body.fxSpawned)
+        assertEquals(listOf("hex-1"), body.fixtureKeys)
+        assertTrue(body.warnings.isEmpty(), body.warnings.toString())
     }
 
     @Test

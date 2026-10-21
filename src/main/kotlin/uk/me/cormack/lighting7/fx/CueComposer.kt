@@ -276,7 +276,7 @@ internal object CueComposer {
     internal data class FullCook(
         val values: CookResult,
         /** As [cookEffects] returns them; empty when the cook was asked for values only. */
-        val effects: List<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
+        val effects: List<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
         /**
          * `layerId → rank` among the contributing layers — the same number [CookWinner.index]
          * carries, so a caller turning a rank into an effect priority cannot disagree with the rows.
@@ -324,7 +324,7 @@ internal object CueComposer {
         resolveLook: (UUID) -> LookSnapshot?,
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int>,
-        collectEffects: MutableList<Triple<CookLayer, EffectEntry, EffectTargetRef>>?,
+        collectEffects: MutableList<Triple<CookLayer, StoredEffect, EffectTargetRef>>?,
     ): FullCook {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -361,11 +361,10 @@ internal object CueComposer {
             val keys = HashMap<String, MutableSet<String>>()
             applyLayer(fixtures, cueId, layer, index, content, acc, keys, layerTargets)
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
-            // Off the content already resolved above, and off [LayerContent.effects] rather than a
-            // cast to the Look arm: a template layer contributes its one effect through exactly
-            // this fan-out (D5), so there is no kind to test here any more.
+            // Off the content already resolved above, so the effects and the rows come from one
+            // version of it.
             if (collectEffects != null) {
-                effectsForLayer(fixtures, cueId, layer, content.effects, layerTargets, collectEffects)
+                effectsForLayer(fixtures, cueId, layer, content, layerTargets, collectEffects)
             }
         }
 
@@ -475,7 +474,7 @@ internal object CueComposer {
      * [FxTarget.applyValue]. So same-priority effects already resolve last-created-wins, and layer
      * order becomes effect order for free.
      *
-     * A deferred effect fans over the layer's targets; a bound effect uses its own target,
+     * A palette's effect runs on each of the layer's targets; a Look's uses its own target,
      * filtered by the layer's target set when that set is non-empty — the same rule rows follow.
      */
     fun cookEffects(
@@ -494,11 +493,11 @@ internal object CueComposer {
          */
         resolveTemplate: (UUID) -> TemplateSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-    ): List<Triple<CookLayer, EffectEntry, EffectTargetRef>> {
-        val out = ArrayList<Triple<CookLayer, EffectEntry, EffectTargetRef>>()
+    ): List<Triple<CookLayer, StoredEffect, EffectTargetRef>> {
+        val out = ArrayList<Triple<CookLayer, StoredEffect, EffectTargetRef>>()
         for (layer in contributingLayers(layers, includeTimed)) {
             val content = resolveContent(layer.source, resolveLook, resolveTemplate) ?: continue
-            effectsForLayer(fixtures, cueId, layer, content.effects, LayerTargets(fixtures, cueId, layer), out)
+            effectsForLayer(fixtures, cueId, layer, content, LayerTargets(fixtures, cueId, layer), out)
         }
         return out
     }
@@ -508,40 +507,36 @@ internal object CueComposer {
      *
      * Shared by [cookEffects] and [cookAll] so the two cannot disagree about which effects a layer
      * spawns — the combined cook exists precisely to stop the programmer asking twice, and a second
-     * copy of this fan-out would be a new way for the two answers to drift. Since the fx-templates
-     * plan it is shared by the two *layer kinds* as well (D5): it takes [effects] rather than a
-     * [LookSnapshot], so a template's one target-less effect goes down the same deferred arm a
-     * Look's does and neither can acquire a fan-out of its own.
+     * copy of this fan-out would be a new way for the two answers to drift.
      */
     private fun effectsForLayer(
         fixtures: Fixtures,
         cueId: Int,
         layer: CookLayer,
-        /** The layer's content's effects: a Look's, in `sortOrder`, or a template's single one. */
-        effects: List<EffectEntry>,
+        content: LayerContent,
         /** The layer's own target set, expanded once — see [LayerTargets]. */
         layerTargets: LayerTargets,
-        out: MutableList<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
+        out: MutableList<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
     ) {
         val refs = layerTargets.refs
-        for (effect in effects) {
-            val effectTarget = effect.target
-            if (effectTarget == null) {
+        when (content) {
+            is LayerContent.OfLook -> for (entry in content.look.effects) {
+                // A Look effect survives the layer's restriction only if the layer covers it — a
+                // selection, if it covers any item, as a group survives on any member.
+                if (refs.isEmpty() || entry.target.items.any { coversTarget(fixtures, layerTargets, it) }) {
+                    out.add(Triple(layer, entry.effect, entry.target))
+                }
+            }
+            is LayerContent.OfTemplate -> {
+                val effect = content.template.effect ?: return
                 if (refs.isEmpty()) {
                     logger.warn(
-                        "cue {}: {} '{}' has a deferred effect but its layer names no targets — skipping",
-                        cueId, layer.source.kind, layer.source.name,
+                        "cue {}: palette '{}' holds an effect but its layer names no targets — skipping",
+                        cueId, layer.source.name,
                     )
-                    continue
+                    return
                 }
                 for (target in refs) out.add(Triple(layer, effect, EffectTargetRef.Single(target)))
-            } else {
-                // A bound effect survives the layer's restriction only if the layer covers it — a
-                // selection, if it covers any item, as a group survives on any member.
-                val covered = effectTarget.items.any { coversTarget(fixtures, layerTargets, it) }
-                if (refs.isEmpty() || covered) {
-                    out.add(Triple(layer, effect, effectTarget))
-                }
             }
         }
     }
@@ -551,24 +546,16 @@ internal object CueComposer {
     /**
      * What a layer actually applies, once resolved.
      *
-     * The two arms differ in one place only — how a row's stored string becomes a value — which is
-     * why they share [applyLayer] rather than getting a composer each. Everything else about a layer
-     * (targets supplying a template's generic rows and filtering bound ones, mask, blend, amount,
-     * stomp, specificity, assertion recording) is identical, and duplicating it is how the two would
-     * drift.
+     * The two arms' rows differ in one place only — how a row's stored string becomes a value — which
+     * is why they share [applyLayer] rather than getting a composer each. Everything else about a
+     * layer's rows (targets supplying a template's generic rows and filtering bound ones, mask, blend,
+     * amount, stomp, specificity, assertion recording) is identical, and duplicating it is how the two
+     * would drift. Their effects differ in kind — a Look's are bound, a palette's is generic — which
+     * [effectsForLayer] reads off the arm.
      */
     private sealed interface LayerContent {
         /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
         val rows: List<SourceRow>
-
-        /**
-         * The effects this content contributes, in the shape [effectsForLayer] consumes.
-         *
-         * On the interface rather than reached by a cast to [OfLook], which is what it was before
-         * a template could hold one: the cast *was* the "templates hold no effects" rule, and with
-         * that rule reversed (D5) both arms answer here and the cook has no kind to test.
-         */
-        val effects: List<EffectEntry>
 
         /** A Look: literal values and its own effects. */
         class OfLook(val look: LookSnapshot) : LayerContent {
@@ -578,9 +565,6 @@ internal object CueComposer {
                 // [LayerContent] doing.
                 SourceRow(it.target, it.propertyName, it.value, it.elementKey, it.fadeDurationMs)
             }
-
-            /** Bound or deferred, in `sortOrder`; [effectsForLayer] tells the two apart. */
-            override val effects: List<EffectEntry> = look.effects
         }
 
         /** A template: [TemplateIntent]s, resolved per head by [TemplateResolver]. */
@@ -593,15 +577,6 @@ internal object CueComposer {
                 // together. Copying it onto each row is what lets `applyLayer` treat both arms alike.
                 SourceRow(it.target, it.propertyName, it.value, elementKey = null, template.fadeDurationMs)
             }
-
-            /**
-             * Zero or one, and always target-less (D3), so [effectsForLayer]'s deferred arm fans it
-             * over the layer's targets — which is the whole of what an effect template means.
-             *
-             * D1 makes this and [rows] mutually exclusive, so a template layer contributes to one
-             * half of the cook or the other, never both.
-             */
-            override val effects: List<EffectEntry> = listOfNotNull(template.effect)
         }
     }
 
@@ -929,10 +904,10 @@ internal object CueComposer {
      * the three used to expand them for itself, so a Look layer with rows and effects walked its
      * groups twice per cook on top of the per-row rebuild (sweep item C8).
      *
-     * Both derived forms are computed **on first ask and only then**. A layer whose effects are all
-     * deferred never expands at all, which is what keeps a bare [cookEffects] from paying
-     * for a Look that holds no bound effect — and, since [expandTargets] warns about a missing
-     * group, keeps it from warning about one it had no reason to look up.
+     * Both derived forms are computed **on first ask and only then**. A palette's effect runs on
+     * [refs] as named and never expands them, which is what keeps a bare [cookEffects] from paying
+     * for an effect palette's layer — and, since [expandTargets] warns about a missing group, keeps
+     * it from warning about one it had no reason to look up.
      *
      * Plain nullable fields rather than `by lazy`: this object is already the once-per-layer
      * allocation, and two `Lazy` delegates would add two more per layer for nothing.

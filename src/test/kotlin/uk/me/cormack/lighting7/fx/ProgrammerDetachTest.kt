@@ -17,7 +17,6 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
@@ -83,7 +82,7 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
                     rows = rows,
                     effects = if (!withEffect) emptyList() else listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = "hex-1",
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),

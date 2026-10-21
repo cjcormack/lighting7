@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.fixturesSupportProperty
-import uk.me.cormack.lighting7.fx.EffectEntry
+import uk.me.cormack.lighting7.fx.StoredEffect
 import uk.me.cormack.lighting7.fx.EffectSpawner
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
@@ -261,7 +261,7 @@ private class Landing(
  *    `FxEngine.programmerLayerEffects()`, so no recook can retract or retime a keyless copy — a
  *    later edit of the template leaves it exactly as it was spawned.
  *  - **Per target as named, groups not expanded**, mirroring `CueComposer.effectsForLayer`, which
- *    fans a deferred effect over the layer's targets as authored. Identical to one-per-head for a
+ *    runs a palette's effect on each of the layer's targets as authored. Identical to one-per-head for a
  *    head selection; on a group selection it keeps the distribution spread, so ⌥clicking and
  *    tapping the same selection put the same thing on stage — one detached, one tracking.
  *  - **The capability check is ours to do.** `FxTargetFactory` never fails by design, and
@@ -281,7 +281,7 @@ private fun applyEffectTemplateToProgrammer(
     /** The template's name, for the log lines — the snapshot itself is not otherwise read here. */
     templateName: String,
     /** The one effect the template holds, taken from the caller's null test rather than re-tested. */
-    effect: EffectEntry,
+    effect: StoredEffect,
     targets: List<CueTargetDto>,
 ): ApplyTemplateResponse {
     val spec = effect.toEffectSpec()

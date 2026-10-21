@@ -123,7 +123,7 @@ object FixtureTriggers {
 
     /**
      * Every reserved name of every type that has a trigger — what a row with **no** target of its
-     * own (a generic template row, a Look's deferred effect) is checked against, since it lands on
+     * own (a generic template row, a palette's effect) is checked against, since it lands on
      * whatever is selected.
      */
     val allReservedNames: Set<String> by lazy { reservedByTypeKey.values.flatten().toSet() }

@@ -1095,7 +1095,7 @@ internal fun validateTemplateContents(
     templates: TemplateRegistry? = null,
 ): String? {
     // Rule 1 (D1): a template holds a value *or* an effect. A colour *and* a chase is a Look,
-    // which already holds rows plus deferred effects and has its own busk pool.
+    // which already holds rows plus effects and has its own busk pool.
     if (rows.isNotEmpty() && effect != null) {
         return "A palette holds a value or an effect, never both — for both together, record a look"
     }

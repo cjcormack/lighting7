@@ -13,7 +13,7 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
  *
  * Judged exactly as the write boundary judges a new row ([TriggerIndex.refusal]): a row naming a
  * trigger on a fixture or group that carries one, and a row with no target of its own (a generic
- * template row, a deferred effect) naming any trigger's name at all. Returns how many rows went.
+ * template row, a palette's effect) naming any trigger's name at all. Returns how many rows went.
  * Must run inside a transaction.
  *
  * Every sync import runs it, so an archive written before v21 cannot bring a raised trigger back.

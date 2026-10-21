@@ -206,10 +206,8 @@ scenery is something to include: it sets the include target.
 **A Look's effects are included too** (`includeFx`, default true; `routes/programmerLookInclude.kt`):
 each runs as a programmer-band effect stamped with the stored effect it realises
 (`FxInstance.includedLookEffect`, the Look effect's row id and the instance's settings as spawned).
-A **bound** effect runs on its own target; a **deferred** one — every effect `create_look` writes —
-runs on the request's `targets`, else the desk selection, one instance per target as a layer runs
-it, and with neither it is not spawned and a warning says to select the fixtures. The cue rule
-holds: an effect the Look is already running where it is live (a programmer or cue layer, or an
+Each runs on its own target, since a Look effect always names one (absolute-looks plan D2). The cue
+rule holds: an effect the Look is already running where it is live (a programmer or cue layer, or an
 earlier Include of it) is not run again, and says so. They are local effects, so Clear and Release
 take them. Before this a Look of effects alone included nothing, and its effects could be neither
 seen nor changed.
@@ -261,9 +259,8 @@ seen nor changed.
 - **A Look's included effects** go back in Mode A only, onto the effect each came from
   (`writeIncludedEffectsBack`) — and only one changed since Include, judged against the settings the
   instance was spawned with rather than the stored row, because a running effect reports its whole
-  parameter set, defaults filled in. A bound effect keeps its target and a deferred one stays
-  deferred: what was edited is how it runs, not where. Where a deferred effect ran on several heads
-  and more than one was changed, the first is written. An effect the operator stopped stays in the
+  parameter set, defaults filled in. The effect keeps its target: what was edited is how it runs, not
+  where. An effect the operator stopped stays in the
   Look (Update deletes no effect), and what was written becomes the new baseline. The active-effect DTO
   carries `includedLookId` and `editedSinceInclude`, so the source strip's Update is enabled by an
   effect edit too.
@@ -287,8 +284,8 @@ one instance spread over them in that order as a group's members are (effects pl
 programmer's `+ Effect` and ⌘K *Apply FX* start one over the selection's rows in grid order; Record
 writes it onto a cue or a Look as one effect with its `selection` target, and Include spawns it back
 as one. Only an effect may name a selection: a value row, a layer's targets and a binding name a
-fixture or a group, and the write boundaries refuse anything else. A deferred Look or palette effect
-still fans one instance per target of its layer. The expansion is `docs/fx-engineering.md` §"Over a
+fixture or a group, and the write boundaries refuse anything else. A palette's effect, which names no
+target, still runs one instance per target of its layer. The expansion is `docs/fx-engineering.md` §"Over a
 selection".
 
 ### Ordering
@@ -507,9 +504,14 @@ served both of its predecessors' jobs. What forced the split is the most useful 
 focus position, where eight heads aimed at one spot hold eight *different* pan/tilts, so its rows are
 bound and `hasDeferredRows` could not tell it from a recorded Look.
 
-**A Look row is now always bound**, and `validateLookRows` refuses `deferred`. A Look **effect** may
-still be deferred, because fanning an effect over the layer's targets is a different thing from
-holding a value for nobody — and it is what makes a Look usable from a busking pad.
+**A Look row is now always bound**, and `validateLookRows` refuses `deferred`. So is a Look
+**effect** (absolute-looks plan D2): it names a fixture, a group or a selection, and
+`validateLookEffects` refuses `deferred`, every problem at once. An effect to point at a selection is
+an effect palette. A deferred Look effect an older desk wrote is dropped by `loadLookSnapshot` (with a
+warning), by the importer, and was deleted from each database once
+(`state/DeferredLookEffectsMigration.kt`, `PRAGMA user_version` 2). In the cook, `EffectEntry` is a
+Look effect, its target non-null; a palette's effect is a bare `StoredEffect`, which
+`CueComposer.effectsForLayer` runs on each of the layer's targets.
 
 Sweep item B6 removed the row-side plumbing that outlived the rule: there is no `isDeferred` on a
 Look row at any layer any more, `LookRowEntry.target` is non-null, and `loadLookSnapshot` drops a
@@ -1071,12 +1073,12 @@ Three rules keep the reversal narrow, and each removes a way for it to complicat
 
 - **A value *or* an effect, never both** (`template_effects` has a unique `template_id`, and the
   write boundary refuses a mix). A colour *and* a chase is a Look, which already holds rows plus
-  deferred effects. Which one a palette holds is its identity, like its family: `validateTemplateContents`
+  effects. Which one a palette holds is its identity, like its family: `validateTemplateContents`
   refuses a PUT that would flip it, so the cook's palette arm never needs both halves.
-- **One effect.** Several together is, again, what a Look with deferred effects already is.
-- **Always generic** — no `target_type` / `target_key`, unlike `look_effects`, whose
-  deferred/bound split survives for a reason that does not apply here. An effect fans over whatever
-  the layer names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
+- **One effect.** Several together is, again, what a Look with effects already is.
+- **Always generic** — no `target_type` / `target_key`, unlike `look_effects`, every one of which
+  names its own target (absolute-looks plan D2). A palette's effect fans over whatever the layer
+  names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
   snapshots on the argument that nothing patch-shaped is in the cache, so a repatch cannot make an
   entry stale — and a bound, group-targeted palette effect would be exactly that.
 
@@ -1100,12 +1102,10 @@ the DTO because without it `beatDivision` cannot be read: the field is beats for
 *seconds* for a `WALL_CLOCK` one — or for a beat effect on *Seconds* (`seconds`, venue-visit plan D7), and a client would otherwise have to fetch the whole FX library to
 tell a two-beat pulse from a two-second one.
 
-**The cook gained no new path.** `CueComposer.effectsForLayer` was already the single fan-out shared
-by `cookEffects` and `cookAll`; it now takes `LayerContent.effects` rather than a `LookSnapshot`, so
-a palette's one target-less effect goes down the same *deferred* arm a Look's does. The
-`isTemplate` skip and the `is OfLook` cast are gone — they *were* the old rule — and layer
-numbering is untouched, which the three deleted comments were all protecting: a palette layer takes
-a rank whether it contributes rows or an effect.
+**The cook gained no new path.** `CueComposer.effectsForLayer` is the single fan-out shared by
+`cookEffects` and `cookAll`, and it reads the effects off the layer's content: a Look's on their own
+targets, a palette's one `StoredEffect` on each of the layer's. Layer numbering is untouched: a
+palette layer takes a rank whether it contributes rows or an effect.
 
 The two **gestures** are the value palette's two, unchanged in meaning. A tap (and the busk pad)
 posts to `toggle`, which adds a programmer layer that *tracks* the palette: the effect is spawned by
@@ -1120,7 +1120,7 @@ four-point version of that reasoning.
 **An edit to a pad's running effect is the instance's alone** (fixture-fx-sheets plan D20, sessions
 1 and 5). The busk view's Effects tab, the fixture sheet's tray and the programmer's FX table's *Edit…* all edit the
 **instance** the layer spawned, through `updateFx` (`FxEngine.updateEffect`: id and phase kept), and
-never the palette. The layer stack keys that instance by the `EffectEntry` it was spawned from
+never the palette. The layer stack keys that instance by the `StoredEffect` it was spawned from
 (`ProgrammerLayerEffectKey`), and `updateEffect` carries the key across its swap, so the edit
 **survives** every recook that leaves the palette alone — a patch, a move, an unrelated add — and
 goes when the pad goes: pressing it off and on spawns the palette's settings again. The client marks

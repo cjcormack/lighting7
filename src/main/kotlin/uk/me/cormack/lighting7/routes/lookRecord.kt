@@ -623,10 +623,10 @@ private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
  * [edited]'s changes from [baseline] onto this row, and nothing else: a field the operator did not
  * move keeps what the row says. That matters beyond tidiness — an included instance reports some
  * fields by where it runs (element mode only on a group effect, an element filter or step timing
- * only where it differs from the default), so a deferred effect stored with an element mode for the
- * groups it is pressed onto, included onto fixtures, reads `elementMode = null` on both sides; copying
- * the whole settings would null the stored mode on a parameter-only edit. Parameters merge the same
- * way, key by key — unless the effect's type changed, when they are the new type's.
+ * only where it differs from the default), so an effect stored on a fixture with an element mode
+ * reads `elementMode = null` on both sides; copying the whole settings would null the stored mode on
+ * a parameter-only edit. Parameters merge the same way, key by key — unless the effect's type
+ * changed, when they are the new type's.
  */
 private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: LookEffectSettings) {
     if (edited.effectType != baseline.effectType) {
@@ -668,12 +668,11 @@ private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: Look
  * settings each instance was spawned with ([uk.me.cormack.lighting7.fx.IncludedLookEffect.baseline]),
  * and field by field ([takeChanges]).
  *
- * The edit lands **on the effect it came from**: a bound effect takes the instance's changes and
- * keeps its target; a deferred one, which Include ran on the selection, stays deferred — what was
- * edited is how it runs, not where. A deferred effect runs once per selected target, so where
- * several of its instances were changed the first is taken. An effect the operator stopped is left
- * in the Look (Update deletes no effect — that is Record's Replace or REMOVE), and so is one whose row
- * went since the Include.
+ * The edit lands **on the effect it came from**, which keeps its target: what was edited is how it
+ * runs, not where. One effect can have several instances — Include again after changing an included
+ * effect's type spawns a second — so where more than one was changed the first is taken. An effect
+ * the operator stopped is left in the Look (Update deletes no effect — that is Record's Replace or
+ * REMOVE), and so is one whose row went since the Include.
  *
  * Must be called inside a transaction.
  */

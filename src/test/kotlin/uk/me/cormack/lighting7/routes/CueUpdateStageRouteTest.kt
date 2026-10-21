@@ -26,7 +26,6 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -258,17 +257,20 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a changed layer brings its Look's deferred effect in line, head by head`() = testApplication {
+    fun `a changed layer brings its Look's effects in line, head by head`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val rig = seed()
-        val pulse = LookEffectDto(
-            targetType = DEFERRED_TARGET_TYPE, targetKey = "", effectType = "Pulse", category = "dimmer",
-            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
-        )
+        // A Pulse on each head; the layer's targets keep the heads they cover.
+        val pulses = listOf("hex-1", "hex-2").mapIndexed { i, head ->
+            LookEffectDto(
+                targetType = "fixture", targetKey = head, effectType = "Pulse", category = "dimmer",
+                propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR", sortOrder = i,
+            )
+        }
         val look = client.post("$base/looks") {
             contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Throb", effects = listOf(pulse)))
+            setBody(CreateLookRequest(name = "Throb", effects = pulses))
         }.body<LookDetails>().id
         suspend fun layerOn(vararg fixtures: String) = assertEquals(
             HttpStatusCode.OK,
@@ -376,7 +378,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookEffectDto(
-            targetType = DEFERRED_TARGET_TYPE, targetKey = "", effectType = "Pulse", category = "dimmer",
+            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "dimmer",
             propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
         )
         val look = client.post("$base/looks") {
@@ -412,7 +414,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookEffectDto(
-            targetType = DEFERRED_TARGET_TYPE, targetKey = "", effectType = "Pulse", category = "dimmer",
+            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "dimmer",
             propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
         )
         val look = client.post("$base/looks") {

@@ -444,8 +444,12 @@ exactly one effect, and never both an effect and rows: which one a palette holds
 refused at the write boundary if a write would flip it. Its family is derived from the effect's
 library `category` via `familyForEffectCategory`, so `controls` and `composite` are refused by name;
 a Beam effect palette holds a beam built-in or Slot Steps (naming the setting it steps), and a
-Palette Steps palette is its palettes' family, not its `palette` category's. `CueComposer` gained no new path — `effectsForLayer` takes `LayerContent.effects` and a
-palette's one effect goes down the same *deferred* arm a Look's does. See
+Palette Steps palette is its palettes' family, not its `palette` category's. A **Look's** effects,
+unlike a palette's, always name their own target — a fixture, a group or a selection (absolute-looks
+plan D2): `validateLookEffects` refuses `deferred`, the importer drops one, and
+`state/DeferredLookEffectsMigration.kt` deleted this database's once. `CueComposer.effectsForLayer`
+runs a Look's `EffectEntry`s on their own targets and a palette's one `StoredEffect` on each of the
+layer's. See
 `docs/lighting-composition-model.md` §"A palette holds a value *or* an effect". A press is per
 target on **both** arms and is the exact inverse of the pad's lit ring: "already on" is the record
 covering every pressed target, and an off press clears them from every layer of that record. An
@@ -641,7 +645,7 @@ field names such as `templateId`, the stored `pressTemplate` binding and every c
 - `POST /api/rest/projects/{id}/programmer/aim` `{targets, x, y, z, fadeMs?, write?}` - Point moving heads at a stage coordinate (metres, FOH-relative Z-up): each head's pan/tilt (and fine pan/tilt) is solved from its world placement, base orientation and annotated travel (`show/FixtureAim.kt`, the inverse of the Stage view's drawing) and written into the programmer as owner `WEB`, like a spread. Answers `{written: [{target, value, panDeg, tiltDeg}], skipped: [{target, reason}]}`; a fixed head, an unplaced fixture, an axis with no degree range, a cell or a point outside the travel is skipped by name. 400 `AIM_NEEDS_SELECTION` / `AIM_INVALID` (a coordinate outside ±500 m). The `aim_fixtures` MCP tool is the same call with a `dryRun`, and a `saveAsPalette` that also records the aims as a per-fixture position palette (centre-relative `pos:`, each head's own coarse bytes) so they outlive the programmer. See `docs/fixtures-engineering.md` §"Aiming a head at a point". `mode: "JOG"` is the relative arm, a position pad's *Stage* mode: `{targets, mode, dx, dy, planeZ?, base?, near?, groups?, write?, fadeMs?}` lands each head's beam on a working plane (head height, else `planeZ`; a beam that misses it, 12 m along the beam; one landing past 40 m, 40 m along it), moves that point by `dx` (towards SL) and `dy` (upstage) metres and aims the head at it nearest `near` (the previous answer's degrees), so every landing point moves the same distance whatever the mount; `base` (`[{target, value: "pan,tilt", panFine?, tiltFine?}]`) is where each head started, answered and sent back so a drag is measured from its start, else read from Local (not under `write: false`) or the output; `groups` are the groups a pick was made from, so each head writes with its group as its source. Answers `base` too. See `docs/fixtures-engineering.md` §"Jogging heads across the stage"
 - `POST /api/rest/projects/{id}/programmer/focus` `{targets, point: {x, y, z}, fadeMs?, write?}` - *Focus here* (fixture-optics plan D11): each head's FOCUS channel solved for its distance to the point, measured from its lens as the Stage view draws it (its placement through aim's maths, then the view's mover proportions to the pivot and lens, `MoverLens`), through the inverse of the Stage view's `resolveDeclaredFocusDistance` (`show/FixtureFocus.kt`; one shared vector, `src/test/resources/stage/focusInverse.fixture.json`, pins both sides), and written into the programmer as owner `WEB`. Answers `{written: [{target, value, distanceM}], skipped: [{target, reason}]}`; `write: false` answers without writing. A head with no focus channel, no declared range, no placement or a point outside its range is skipped by name; 400 `FOCUS_NEEDS_SELECTION` / `FOCUS_INVALID`. `aim_fixtures`' `focus: true` is the same solve on the aim point, for the heads aim aimed. See `docs/fixtures-engineering.md` §"Focusing a head on a point"
 - `POST .../busk/pads/{padId}/press` `{targets, families?, fadeMs?}` - The busk view's press: a palette or Look → `ProgrammerLayerStack.toggle` with the bank's siblings when the bank is solo; a cue → takes or lets go of a **loose hold** (`fx/CueHolds.kt`), live above every stack, lit from `cueHolds.state`. A generic palette pad pressed with no selection is 400 `PALETTE_NEEDS_SELECTION` (a per-fixture one lands on its own heads). Solo means pressing one turns its siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue press taking layer siblings off wholesale (`release`). An off press releases nothing; an on palette press also takes its heads off the other palettes of its family and kind, solo or not, and `released` counts those too. `families` is the selection's attribute mask (absent = every attribute, an unknown name 400), tested on the **on** arm only — an off press comes off under any mask (`routes/pressArm.kt`): a palette outside it is 400 `PALETTE_OUTSIDE_MASK`, a Look lands with `propertyMask = mask ∩ its families` and answers `skippedFamilies`, or 400 `LOOK_OUTSIDE_MASK` when nothing is inside; a cue ignores it. The same `families` rides `/palettes/{id}/apply`, `/palettes/{id}/toggle`, `/looks/{id}/toggle` and `/looks/{id}/apply`, and the MIDI `PressPad` / `PressTemplate` doors pass the desk's. `fadeMs` (here, `/palettes/{id}/toggle` and `/looks/{id}/toggle`) is the programmer fade: the press's effects grow from nothing over it and a release's shrink to nothing, its values move at it too; absent is the press as before (effects plan D13; the client does not send it yet, `FU-FX-PRESS-FADE-CLIENT`). See `docs/lighting-composition-model.md` §"A press is per target" and §"The busk layout"
-- `POST .../looks/{id}/toggle` with empty `targets` presses a Look with no deferred effect onto its own patched fixtures (400 `LOOK_NEEDS_SELECTION` / `LOOK_NO_TARGETS` otherwise, unless the press takes off a layer of the Look already naming no targets); `POST .../cue-slots` takes exactly one of `lookId` / `cueId` and refuses a deferred-effect Look with 409 `CUE_SLOT_LOOK_NEEDS_SELECTION`
+- `POST .../looks/{id}/toggle` with empty `targets` presses a Look onto its own patched fixtures (400 `LOOK_NO_TARGETS` when none is patched, unless the press takes off a layer of the Look already naming no targets); `POST .../cue-slots` takes exactly one of `lookId` / `cueId`
 
 ### Effects Endpoints
 - `POST /api/rest/projects/{id}/effects/arm` `{on, seconds?}` - Arm the desk for `seconds` (default 60, 5–600) or disarm it; answers the arm as `effects.armed` carries it. Current project only. **Both roles** may arm on the desk's own listener; on the public listener it — and fire and reload — is 403 `REMOTE_EFFECTS_DISABLED` unless an admin allows it (`requireEffectsAccess`, the `requireScriptAccess` twin; Install settings → Remote access). REST rather than WS so the socket gains no operation (stage-view plan P2)
@@ -751,13 +755,16 @@ in raw SQL, rebuilding `cues` and `prompt_book_anchors` from the model.
 `CueModelMigrationTest` runs it over `src/test/resources/db/pre-cue-model.sql`, the
 old shape frozen; never regenerate that file from a later commit.
 
-**One one-shot data step follows it:** `state/CueEntryUuidMigration.kt` (cue model plan
-session 3), inside `initDatabase`'s transaction after the schema exists, gives every cue's
-one stack entry its cue's uuid and every entry its 0-based position as its ordinal, so two
-desks write the same record for the same place once entries are sync records
-(`formatVersion` 32). It runs once per database, recorded in **`PRAGMA
-user_version`** (1) — the database header's counter, first used here; a later one-shot
-step takes the next number. It must never run twice: its KDoc says why.
+**Two one-shot data steps follow it**, inside `initDatabase`'s transaction after the schema
+exists, each run once per database and recorded in **`PRAGMA user_version`** — the database
+header's counter; a later one-shot step takes the next number:
+
+- `state/CueEntryUuidMigration.kt` (1, cue model plan session 3) gives every cue's one stack
+  entry its cue's uuid and every entry its 0-based position as its ordinal, so two desks write the
+  same record for the same place once entries are sync records (`formatVersion` 32). It must
+  never run twice: its KDoc says why.
+- `state/DeferredLookEffectsMigration.kt` (2, absolute-looks plan P9) deletes every Look effect
+  that names no target of its own, logging each Look by name.
 
 Otherwise the bet stands on there being exactly one database (the dev desk), and it
 expires the moment a second install exists — the Windows MSI ships an upgrade path.

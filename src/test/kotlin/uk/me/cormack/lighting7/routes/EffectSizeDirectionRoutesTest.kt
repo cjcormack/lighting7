@@ -18,7 +18,6 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetFactory
 import uk.me.cormack.lighting7.fx.lookEffectSettings
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -132,7 +131,7 @@ class EffectSizeDirectionRoutesTest : RouteIntegrationTest() {
         val base = "/api/rest/projects/$projectId/looks"
         fun look(name: String, effect: LookEffectDto) = CreateLookRequest(name = name, effects = listOf(effect))
         val pulse = LookEffectDto(
-            targetType = DEFERRED_TARGET_TYPE, targetKey = "", effectType = "Pulse", category = "dimmer",
+            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
             propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
         )
 

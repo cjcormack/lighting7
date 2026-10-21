@@ -313,7 +313,7 @@ class CueTriggerManager(
      */
     private fun applyLayerEffectToTarget(
         layer: CookLayer,
-        layerEffect: EffectEntry,
+        layerEffect: StoredEffect,
         target: uk.me.cormack.lighting7.models.EffectTargetRef,
         cueId: Int,
         cueStackId: Int?,

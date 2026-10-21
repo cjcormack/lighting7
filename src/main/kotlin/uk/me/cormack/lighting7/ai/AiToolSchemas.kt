@@ -132,9 +132,29 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
     })
 }
 
+/** Where an effect runs, the same on a look's effects and a cue's ad-hoc ones: one target, or a selection. */
+private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectTarget() {
+    put("targetType", buildJsonObject {
+        put("type", "string")
+        put("enum", buildJsonArray { add("group"); add("fixture") })
+    })
+    put("targetKey", buildJsonObject { put("type", "string") })
+    put("targets", buildJsonObject {
+        put("type", "array")
+        put("items", targetSchema)
+        put(
+            "description",
+            "Instead of targetType and targetKey: one effect over these fixtures and groups, spread across them in this " +
+                "order as a group's members are (a group contributes its members in its own order; a fixture named twice " +
+                "counts once).",
+        )
+    })
+}
+
 private val lookEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
+        putEffectTarget()
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
@@ -223,8 +243,8 @@ internal val createLookTool = ToolDef(
             "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
             "(the colour of a fixture whose colour is per zone — list_fixture_types' cellProperties) set on the fixture or a group of them lands on every cell, " +
             "and a cell's own value beats it. " +
-            "'effects' are deferred: they name no target and run on whatever applies the look. " +
-            "A look of values is pressed onto its own fixtures (apply_look with no targets) and layered in a cue with no layer targets. Returns the look ID and the values as stored.",
+            "'effects' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
+            "A look is pressed onto its own fixtures (apply_look with no targets) and layered in a cue with no layer targets. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -280,7 +300,7 @@ internal val updateLookTool = ToolDef(
             put("effects", buildJsonObject {
                 put("type", "array")
                 put("items", lookEffectSchema)
-                put("description", "The look's effects, replacing all of them. Deferred, as create_look's are.")
+                put("description", "The look's effects, replacing all of them — create_look's effects, each naming its target.")
             })
             put("scenery", buildJsonObject {
                 put("type", "array")
@@ -312,7 +332,7 @@ internal val deleteLookTool = ToolDef(
 internal val applyLookTool = ToolDef(
     name = "apply_look",
     description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on every target, it is removed). " +
-            "Omit targets to press it onto its own fixtures — the ones its values name; a look with effects needs targets for them to run on. " +
+            "Omit targets to press it onto its own fixtures — the ones its values and effects name. " +
             "asValues true instead writes its values into the programmer and starts its effects as the programmer's own, with no layer — not a toggle.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -550,21 +570,7 @@ internal val getCurrentStateTool = ToolDef(
 private val adHocEffectSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        put("targetType", buildJsonObject {
-            put("type", "string")
-            put("enum", buildJsonArray { add("group"); add("fixture") })
-        })
-        put("targetKey", buildJsonObject { put("type", "string") })
-        put("targets", buildJsonObject {
-            put("type", "array")
-            put("items", targetSchema)
-            put(
-                "description",
-                "Instead of targetType and targetKey: one effect over these fixtures and groups, spread across them in this " +
-                    "order as a group's members are (a group contributes its members in its own order; a fixture named twice " +
-                    "counts once).",
-            )
-        })
+        putEffectTarget()
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
@@ -639,7 +645,7 @@ internal val cueLayerSchema = buildJsonObject {
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies the look or palette to: its effects run on these, and only its values on these fixtures land. Omit for a look of values, to land every value it holds; a look with effects, or a generic palette, needs them.")
+            put("description", "What the layer applies the look or palette to. A look's values and effects name their own fixtures, and only those on these land; omit to land all of them. A generic palette's effect or values land on these, so it needs them.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
@@ -968,10 +974,9 @@ internal val includeIntoProgrammerTool = ToolDef(
             "target), leaving everything else alone. The source's own scenery rows are held " +
             "in the programmer too (a cue row keeps its own transition time), replacing what the programmer held on " +
             "those pieces — never the scenery the cue only tracks from earlier cues. The mask does not apply to scenery. " +
-            "A look's effects run in the programmer too, where the operator can change them in the desk's effect editor, " +
-            "and update_from_programmer writes those changes back onto the look's effects (to change them yourself, " +
-            "update_look's effects); an effect the look leaves to whatever applies it runs on 'targets', or on the desk's " +
-            "selection when they are omitted, and stays untargeted in the look.",
+            "A look's effects run in the programmer too, each on its own target, where the operator can change them in the desk's " +
+            "effect editor, and update_from_programmer writes those changes back onto the look's effects (to change them yourself, " +
+            "update_look's effects).",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -980,11 +985,6 @@ internal val includeIntoProgrammerTool = ToolDef(
             put("stackId", buildJsonObject { put("type", "integer"); put("description", "With number: the stack of the entry the cue is included from.") })
             putEntryRefProps("Optional: the entry of cueId it is included from")
             put("mask", maskSchema)
-            put("targets", buildJsonObject {
-                put("type", "array")
-                put("items", targetSchema)
-                put("description", "What a look's untargeted effects run on while included. Omit for the desk's selection.")
-            })
             put("includeFx", buildJsonObject {
                 put("type", "boolean")
                 put("description", "Run a look's effects in the programmer too. Default true.")

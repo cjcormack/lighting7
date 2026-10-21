@@ -1370,6 +1370,10 @@ class State(val config: ApplicationConfig) {
             // alike once entries are archive records (sync formatVersion 32). `CueEntryUuidMigration.kt`.
             keyCueEntriesByCue()
 
+            // Once per database: a Look effect names its own target, so one that names none goes
+            // (absolute-looks plan D2). `DeferredLookEffectsMigration.kt`.
+            dropDeferredLookEffects()
+
             ensureInstallRow()
         }
 

@@ -833,7 +833,7 @@ class ProgrammerLayerStack(
      * its beat-division override) applied exactly as [build] applies them.
      *
      * **The spawn key moves to the template's current effect.** [syncEffects] matches an instance
-     * by the [EffectEntry] it was spawned from, so an instance spawned before a template edit
+     * by the [StoredEffect] it was spawned from, so an instance spawned before a template edit
      * carries the old entry and the next recook would retract it and spawn afresh. Reset is the
      * moment the instance becomes the template's current effect, so it takes that entry as its key
      * and the next recook keeps it. Done under [effectsLock], so no recook can classify the instance
@@ -901,7 +901,7 @@ class ProgrammerLayerStack(
             newBlocks = fresh.dynamics.blocks,
             newGroups = fresh.dynamics.groups,
         ) ?: return ResetToTemplateOutcome.NotFound
-        updated.programmerLayerEffectKey = ProgrammerLayerEffectKey.of(key.layerId, entry, key.targetKey)
+        updated.programmerLayerEffectKey = ProgrammerLayerEffectKey.of(key.layerId, entry, key.target)
         ResetToTemplateOutcome.Reset(updated)
     }
 
@@ -1057,7 +1057,7 @@ class ProgrammerLayerStack(
         val spawning = mutableListOf<FxInstance>()
 
         for ((layer, effect, target) in desired) {
-            val key = ProgrammerLayerEffectKey.of(layer.layerId, effect, target.key)
+            val key = ProgrammerLayerEffectKey.of(layer.layerId, effect, target)
             // A Look holding the same effect twice on one target would collide here; the second is
             // dropped rather than spawning a second instance under the same identity — the retract
             // pass matches on the key, so only one of the twins could ever be seen.
@@ -1112,7 +1112,7 @@ class ProgrammerLayerStack(
      */
     private fun build(
         layer: CookLayer,
-        effect: EffectEntry,
+        effect: StoredEffect,
         target: EffectTargetRef,
         key: ProgrammerLayerEffectKey,
         priority: Int,
@@ -1134,7 +1134,7 @@ class ProgrammerLayerStack(
     /** A layer's effect on one target as a bare instance — no source, no band key, no priority. */
     private fun spawn(
         layer: CookLayer,
-        effect: EffectEntry,
+        effect: StoredEffect,
         target: EffectTargetRef,
         beatDivisionOverride: Double?,
     ): FxInstance? {

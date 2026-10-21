@@ -35,7 +35,7 @@ import org.jetbrains.exposed.v1.json.json
  *   resolve it against and nothing to declare.
  * - **No *values and* effects.** A template holds a value **or** an effect, never both
  *   ([DaoTemplateEffects], the fx-templates plan D1) — a colour *and* a chase is a Look, which
- *   already holds rows plus deferred effects and has its own busk pool. `Holds` is the template's
+ *   already holds rows plus effects and has its own busk pool. `Holds` is the template's
  *   identity like its family is: the write boundary refuses a flip either way, so "a template is
  *   one named thing" stays true and the cook's template arm never needs both halves.
  *
@@ -226,8 +226,8 @@ data class TemplateRowDto(
  * Mirrors [DaoLookEffects] column for column, minus three:
  *
  * - **No [targetType] / [targetKey]** (D3). An effect template is always **generic**: an effect
- *   fans over whatever the applying layer names, so there is no per-fixture effect to describe.
- *   The composer treats it exactly as a *deferred* Look effect. This is load-bearing beyond
+ *   fans over whatever the applying layer names, so there is no per-fixture effect to describe:
+ *   the composer runs it on each of the layer's targets. This is load-bearing beyond
  *   tidiness — [uk.me.cormack.lighting7.fx.TemplateRegistry] caches snapshots on the argument that
  *   "nothing patch-shaped is in the cache, so a repatch cannot make an entry stale", and a bound
  *   effect naming a group would be precisely that.
@@ -331,7 +331,7 @@ class DaoTemplateEffect(id: EntityID<Int>) : IntEntity(id) {
  * Deliberately **not** [LookEffectSpec], despite holding the same fields: that is the shared
  * *spawn* shape, with no `uuid` and no place for one, and this is a client-supplied *authoring*
  * shape that a route validates. The bridge between them is
- * [uk.me.cormack.lighting7.fx.EffectEntry.toEffectSpec], the same one a Look effect crosses.
+ * [uk.me.cormack.lighting7.fx.StoredEffect.toEffectSpec], the same one a Look effect crosses.
  */
 @Serializable
 data class TemplateEffectDto(

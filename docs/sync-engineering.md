@@ -282,6 +282,14 @@ show detached before Att.1 is one, and an attach of one falls back to the no-ori
 record the show lacks comes in, each offered a hide in the review) rather than doing anything silently.
 So no record degrades, and the writer is still v35.
 
+**Deferred Look effects going (absolute-looks plan D2) took no bump, by the same question.** Nothing
+new is written: every Look effect this desk exports names a fixture, a group or a selection, which a
+v37 reader imports as what it is. The change is on the reading side. A `deferred` effect, which ran on
+whatever applied its Look, is dropped from any archive by `importLooks` with a warning, as
+`loadLookSnapshot` drops one an older database holds. An older desk that still writes one loses it
+here, and this desk's next push writes the Look without it; that is the decision, not a degraded
+record, and the Look it leaves is a valid v37 state. So the writer is still v37.
+
 **A master's `usage` gaining `beam` (effects plan session 6) took no bump, by the same question.**
 `usage` is a free string on the wire: an older reader imports `beam` verbatim, its bank routes
 nothing on it (no effect in its library is `beam`), its write boundary re-validates a usage only when

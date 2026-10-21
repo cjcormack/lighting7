@@ -23,7 +23,7 @@ class CommandNotStorableException(message: String) : IllegalArgumentException(me
  *
  * - a **fixture** target (or a cell of one): its own commands;
  * - a **group** target: any member's;
- * - a row with **no target of its own** (a generic template row, a deferred effect), which lands on
+ * - a row with **no target of its own** (a generic template row, a palette's effect), which lands on
  *   whatever is selected: every command name any fixture type declares.
  *
  * A command is not a `@FixtureProperty`, so nothing resolves one by name and a row naming one would

@@ -685,7 +685,7 @@ class CueHolds internal constructor(
     internal fun cueEffectInstances(
         state: State,
         cueId: Int,
-        layerEffects: List<Triple<CookLayer, EffectEntry, EffectTargetRef>>,
+        layerEffects: List<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
         adHocEffects: List<CueAdHocEffectDto>,
     ): List<Pair<FxInstance, CookLayer?>> = buildList {
         for ((layer, lookEffect, target) in layerEffects) {
@@ -1020,10 +1020,10 @@ internal data class CueEffectKey(val uuid: java.util.UUID?, val layerId: Int?, v
 internal fun FxInstance.cueEffectKey() = CueEffectKey(layerEffectUuid, cueLayerId, target.targetRef, target.propertyName)
 
 /** One layer effect a cue's cook names: its layer, its stored effect and its target. */
-internal typealias CookedLayerEffect = Triple<CookLayer, EffectEntry, EffectTargetRef>
+internal typealias CookedLayerEffect = Triple<CookLayer, StoredEffect, EffectTargetRef>
 
 /** A [CookedLayerEffect] by its layer's row id, so a change to the cue's own layer is not one to its Look. */
-internal data class LayerEffectKey(val layerId: Int, val effect: EffectEntry, val target: EffectTargetRef)
+internal data class LayerEffectKey(val layerId: Int, val effect: StoredEffect, val target: EffectTargetRef)
 
 /** The untimed ones of these, as keys: timed layers' effects are fired, never spawned on GO. */
 private fun List<CookedLayerEffect>.keys(): Set<LayerEffectKey> =

@@ -460,12 +460,12 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         })
         assertFalse(bad.success)
 
-        // create_look's effects are deferred, so a trigger's name is refused whatever applies it.
+        // create_look refuses an effect on the cannon naming its arm, as the REST write does.
         val looksBefore = transaction(state.database) { DaoLook.all().count() }
         val look = ai.executeTool("create_look", buildJsonObject {
             put("name", "Bang")
             put("effects", Json.parseToJsonElement(
-                """[{"effectType":"Pulse","category":"dimmer","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
+                """[{"targetType":"fixture","targetKey":"cannon","effectType":"Pulse","category":"dimmer","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
             ))
         })
         assertFalse(look.success, look.description)

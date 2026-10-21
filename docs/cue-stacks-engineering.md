@@ -366,7 +366,7 @@ it as `edited: true`.
     over it, at the cue's priority — **but only one the cue newly gained**: the registry keeps what
     the cue's first hold spawned (`spawnedEffects`, updated by each Update stage), and an effect in it
     with no running instance — an N-shot run out, one another cue's stomp removed — stays off. A
-    changed layer brings its Look's deferred effects in line the same way, head by head.
+    changed layer brings its effects in line the same way, a palette layer's head by head.
   - **Settings compare with master 1 spelled once** (`comparableEffectSettings`): a stored null and
     master 1's uuid are one master, and only the master an effect's timing reads is compared — so an
     effect moved onto master 1 by uuid still matches its stored effect, here and in a later GO's P4

@@ -1021,10 +1021,10 @@ value grid, `LookDraftContext`, `LookLivePreview`, `syntheticFixture.ts`, `Edito
 *recorded*, from the programmer or by promoting a selection, which is why `/looks` has no New
 button and one editor (`LookDetailSheet`, read-only about values on purpose; read its doc comment
 before adding a value grid; it lists the Look's effects read-only too, and Include runs them in the
-programmer — a deferred one on the desk selection — for Update to write an edit back onto). A Look
-**effect** may still be deferred, and
-`LookSummary.hasDeferredEffects` is what says so: that is what makes a Look eligible for a busking
-pad, since a pad supplies the targets on the press.
+programmer, each on its own target, for Update to write an edit back onto). A Look **effect**
+names its own target too (absolute-looks plan D2), so `LookSummary.hasDeferredEffects` is always
+false, and what reads it — the busk starter's Looks pool, the needs-a-selection labels — does
+nothing until those readers go.
 
 **A palette stores an intent, not a literal**, resolved per head at cook: a colour plus a
 white/amber policy, a level or beam role as a percentage of each head's own range, a position

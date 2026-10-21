@@ -208,11 +208,6 @@ internal data class ProgrammerIncludeRequest(
     val mask: List<String>? = null,
     val includeFx: Boolean = true,
     val fadeMs: Long? = null,
-    /**
-     * What a Look's deferred effects run on while included — the selection the operator is
-     * including onto. Absent takes the desk's selection. A cue's effects name their own targets.
-     */
-    val targets: List<CueTargetDto>? = null,
 )
 
 @Serializable
@@ -262,7 +257,6 @@ internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
             val result = performProgrammerInclude(
                 state, project, request.cueId, request.lookId, mask, request.fadeMs ?: 0,
                 includeFx = request.includeFx,
-                targets = request.targets,
                 entryId = request.entryId,
             )
         ) {

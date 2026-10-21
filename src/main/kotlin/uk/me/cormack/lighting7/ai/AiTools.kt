@@ -1,7 +1,5 @@
 package uk.me.cormack.lighting7.ai
 
-import uk.me.cormack.lighting7.fixture.TriggerIndex
-import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.fx.stackEntryPriorities
 import uk.me.cormack.lighting7.routes.runFixtureCommand
 import uk.me.cormack.lighting7.routes.FixtureCommandResult
@@ -157,9 +155,6 @@ class AiTools(private val state: State) {
 
         val applyTargets = input["applyToTargets"]?.jsonArray?.let(::parseTargets).orEmpty()
         val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: applyTargets.isNotEmpty()
-        if (apply && applyTargets.isEmpty() && effects.isNotEmpty()) {
-            return errorResult("A look with effects needs applyToTargets to apply it on: its effects run on a selection")
-        }
 
         val values = resolveLookValues(state.show.fixtures, valuesArray)
         if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
@@ -183,8 +178,6 @@ class AiTools(private val state: State) {
                 this.notes = notes
                 this.project = project
             }
-            // Every effect is deferred: the tool describes the effects, and the targets come from
-            // whatever applies the look. Values are bound rows, each naming its own fixture or group.
             writeLookChildren(created, values.rows, effects, created = true)
             replaceLookScenery(created, scenery)
             created
@@ -271,10 +264,6 @@ class AiTools(private val state: State) {
             look.name to look.uuid
         }
         val (lookName, uuid) = written ?: return errorResult(refusal ?: "Look not found: $lookId")
-        // Stored as the REST edit stores it; the layer create_cue would now refuse is named instead.
-        val untargetedCues = if (effects.isNullOrEmpty()) emptyList() else transaction(state.database) {
-            DaoCueLayer.find { DaoCueLayers.look eq lookId }.filter { it.targets.isEmpty() }.map { it.cue.name }.distinct().sorted()
-        }
         val contentsChanged = values != null || effects != null
         // A contents change moves every live cue layering the Look, as the REST edit does. The list
         // signal is what the library, the busk pads and the live scenery read a rename, new notes or
@@ -292,8 +281,7 @@ class AiTools(private val state: State) {
         return ToolExecutionResult(
             success = true,
             description = "Updated look '$lookName' (id=$lookId): ${changed.joinToString(", ")}" +
-                (republished?.cuesRepublished?.takeIf { it.isNotEmpty() }?.let { ", ${it.size} live cue(s) moved" } ?: "") +
-                (if (untargetedCues.isEmpty()) "" else "; its effects run on nothing in ${untargetedCues.joinToString()}, which layer it with no targets"),
+                (republished?.cuesRepublished?.takeIf { it.isNotEmpty() }?.let { ", ${it.size} live cue(s) moved" } ?: ""),
             result = buildJsonObject {
                 put("lookId", lookId)
                 put("name", lookName)
@@ -302,7 +290,6 @@ class AiTools(private val state: State) {
                 effects?.let { put("effectCount", it.size) }
                 scenery?.let { put("sceneryCount", it.size) }
                 republished?.let { r -> put("cuesRepublished", buildJsonArray { r.cuesRepublished.forEach { add(it) } }) }
-                putStrings("warnings", untargetedCues.map { "cue '$it' layers this look with no targets, so its effects run on nothing there — give that layer targets" })
             }.toString(),
         )
     }
@@ -1331,32 +1318,21 @@ class AiTools(private val state: State) {
         } ?: emptyList()
 
     /**
-     * A layer naming no targets lands its Look's values, but a deferred effect has nothing to run
-     * on — refused here, where apply_look refuses the same press, rather than left silent at GO. A
-     * generic template (an effect, or values for whatever it is pointed at) is refused for the same
-     * reason, as the busk pad refuses it with nothing selected.
+     * A generic template (an effect, or values for whatever it is pointed at) on a layer naming no
+     * targets has nothing to land on — refused here rather than left silent at GO, as the busk pad
+     * refuses it with nothing selected. A Look needs no targets: its values and effects name their own.
      */
     internal fun untargetedEffectLayerProblems(layers: List<CueLayerDto>): List<String> {
-        val untargeted = layers.filter { it.targets.isEmpty() }
-        val lookIds = untargeted.mapNotNull { it.lookId }.toSet()
-        val templateIds = untargeted.mapNotNull { it.templateId }.toSet()
-        if (lookIds.isEmpty() && templateIds.isEmpty()) return emptyList()
-        val (lookNeeding, templateNeeding) = transaction(state.database) {
-            val looks = if (lookIds.isEmpty()) emptySet() else
-                DaoLookEffect.find { (DaoLookEffects.look inList lookIds) and (DaoLookEffects.targetType eq DEFERRED_TARGET_TYPE) }
-                    .mapTo(HashSet()) { it.look.id.value }
-            val templates = if (templateIds.isEmpty()) emptySet() else
-                DaoTemplate.forIds(templateIds.toList()).filter { it.isGenericTemplate() }.mapTo(HashSet()) { it.id.value }
-            looks to templates
+        val templateIds = layers.filter { it.targets.isEmpty() }.mapNotNull { it.templateId }.toSet()
+        if (templateIds.isEmpty()) return emptyList()
+        val templateNeeding = transaction(state.database) {
+            DaoTemplate.forIds(templateIds.toList()).filter { it.isGenericTemplate() }.mapTo(HashSet()) { it.id.value }
         }
         return layers.mapIndexedNotNull { index, layer ->
-            when {
-                layer.targets.isNotEmpty() -> null
-                layer.lookId in lookNeeding ->
-                    "layers[$index]: look ${layer.lookId} has effects that run on the layer's targets — give targets"
-                layer.templateId in templateNeeding ->
-                    "layers[$index]: palette ${layer.templateId} is generic — its effect or values land on the layer's targets, so give targets"
-                else -> null
+            if (layer.targets.isEmpty() && layer.templateId in templateNeeding) {
+                "layers[$index]: palette ${layer.templateId} is generic — its effect or values land on the layer's targets, so give targets"
+            } else {
+                null
             }
         }
     }
@@ -2032,7 +2008,6 @@ class AiTools(private val state: State) {
             mask = mask,
             fadeMs = input["fadeMs"]?.jsonPrimitive?.longOrNull ?: 0L,
             includeFx = input["includeFx"]?.jsonPrimitive?.booleanOrNull ?: true,
-            targets = input["targets"]?.jsonArray?.let(::parseTargets),
             entryId = entryId,
         )
 
@@ -2436,18 +2411,19 @@ class AiTools(private val state: State) {
     }
 
     /**
-     * A Look's `effects` out of a tool call, every one deferred: the tool describes the effects, and
-     * the targets come from whatever applies the Look. A deferred effect lands on whatever applies
-     * it, so it may name no one-shot trigger and no fixture command at all — the REST write
-     * boundary's rule, every problem at once.
+     * A Look's `effects` out of a tool call, each on the target it names — as an ad-hoc effect names
+     * one ([parseAdHocEffectTarget]). A one-shot trigger or fixture command one would name is refused
+     * by `writeLookChildren`, against the project's patch.
      */
-    private fun parseLookEffects(items: JsonArray): List<LookEffectDto> {
-        val effects = items.mapIndexed { index, item ->
+    private fun parseLookEffects(items: JsonArray): List<LookEffectDto> =
+        items.mapIndexed { index, item ->
             val at = "effects[$index]"
-            val spec = parseLookEffect(item as? JsonObject ?: throw IllegalArgumentException("$at must be an object"), at)
+            val obj = item as? JsonObject ?: throw IllegalArgumentException("$at must be an object")
+            val spec = parseLookEffect(obj, at)
+            val target = parseAdHocEffectTarget(obj, at)
             LookEffectDto(
-                targetType = DEFERRED_TARGET_TYPE,
-                targetKey = "",
+                targetType = target.discriminator,
+                targetKey = target.key,
                 effectType = spec.effectType,
                 category = spec.category,
                 propertyName = spec.propertyName,
@@ -2472,11 +2448,6 @@ class AiTools(private val state: State) {
                 sortOrder = index,
             )
         }
-        val refs = effects.mapIndexed { i, e -> TriggerIndex.RowRef(DEFERRED_TARGET_TYPE, "", e.propertyName, "effects[$i]") }
-        TriggerIndex.EMPTY.check(refs)
-        CommandIndex.EMPTY.check(refs)
-        return effects
-    }
 
     /** An ad-hoc effect's `targets` list (effects plan D3), else its `targetType` and `targetKey`. */
     private fun parseAdHocEffectTarget(obj: JsonObject, at: String): EffectTargetRef {

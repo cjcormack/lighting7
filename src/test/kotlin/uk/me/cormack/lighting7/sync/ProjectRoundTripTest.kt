@@ -51,6 +51,10 @@ import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
 import uk.me.cormack.lighting7.sync.dto.CueStackJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DaoLooks
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.testsupport.captureLogs
 import uk.me.cormack.lighting7.sync.dto.FixturePatchJson
 import uk.me.cormack.lighting7.sync.dto.RiggingJson
 import uk.me.cormack.lighting7.sync.dto.StageElementJson
@@ -1496,6 +1500,34 @@ class ProjectRoundTripTest {
             Files.readString(exportDirB.resolve("formatVersion.json")),
         )
         assertExportsEqual(exportDirA, exportDirB, installsShapeOnly = true)
+    }
+
+    /**
+     * A Look effect names its own target (absolute-looks plan D2), so a v37 archive's `deferred` one —
+     * which an older desk could still write — is dropped on import and logged, its Look kept.
+     */
+    @Test
+    fun `a deferred Look effect in an archive is dropped on import, and logged`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val lookFile = Files.list(exportDirA.resolve("looks")).use { files ->
+            files.toList().single { canonicalDecode(LookJson.serializer(), Files.readString(it)).name == "warm-pulse" }
+        }
+        val look = canonicalDecode(LookJson.serializer(), Files.readString(lookFile))
+        val deferred = look.effects.single().copy(targetType = DEFERRED_TARGET_TYPE, targetKey = "")
+        Files.writeString(lookFile, canonicalEncode(LookJson.serializer(), look.copy(effects = listOf(deferred))))
+        wipeDatabase()
+
+        val (imported, logs) = captureLogs(ProjectImporter::class.java.name) {
+            ProjectImporter(state).import(exportDirA, nameOverride = null)
+        }
+
+        transaction(state.database) {
+            val looks = DaoLook.find { DaoLooks.project eq imported.projectId }.associateBy { it.name }
+            assertTrue(looks.getValue("warm-pulse").effects.empty(), "the deferred effect is dropped, its Look kept")
+            assertEquals(1L, looks.getValue("Warm Amber").effects.count(), "a bound effect is untouched")
+        }
+        assertTrue(logs.any { "'warm-pulse'" in it && deferred.uuid in it && "names no target of its own" in it }, "$logs")
     }
 
     /**

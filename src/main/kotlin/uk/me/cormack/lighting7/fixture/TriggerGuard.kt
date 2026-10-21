@@ -27,7 +27,7 @@ class TriggerNotStorableException(message: String) : IllegalArgumentException(me
  *
  * - a **fixture** target (or a cell of one): its own triggers and their arm;
  * - a **group** target: any member's;
- * - a row with **no target of its own** (a generic template row, a deferred effect), which lands on
+ * - a row with **no target of its own** (a generic template row, a palette's effect), which lands on
  *   whatever is selected: every trigger name any fixture type declares.
  *
  * Built from the live register ([of] `Fixtures`) for the programmer and the live effect routes, or
