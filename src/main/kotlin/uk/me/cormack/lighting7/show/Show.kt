@@ -15,6 +15,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.midi.GlobalScalerState
 import uk.me.cormack.lighting7.models.*
+import uk.me.cormack.lighting7.routes.alignEffect
 import uk.me.cormack.lighting7.routes.registerUserEffect
 import uk.me.cormack.lighting7.scripts.*
 import uk.me.cormack.lighting7.state.State
@@ -229,6 +230,7 @@ class Show(
         // following it; this show's registry publishes into it from its first (empty) frame.
         holdsSink = state.cueHoldsFrame,
         onHoldsChanged = { fixtures.cueHoldsChanged() },
+        effectAligner = EffectAligner(::alignEffect),
     )
 
     /**

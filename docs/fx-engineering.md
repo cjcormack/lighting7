@@ -768,7 +768,9 @@ effects plan's P2); the editor only writes the three fields.
   moves it:
   - **a cue's GO** (D1): the hold registry ramps an arriving cue's new effects `0 → 1` and a leaving
     cue's `→ 0` over the cue's fade and curve, and an effect the two cues share runs on untouched
-    (P4; never a paused instance or an N-shot, which the incoming cue starts afresh) —
+    (P4; never a paused instance or an N-shot, which the incoming cue starts afresh) — a Look or
+    palette effect by its stored row, an ad-hoc effect by its run key, edited in place at the GO
+    when the incoming row's settings differ (stack-timeline plan D7, D8) —
     `docs/cue-stacks-engineering.md` §"Holds" and §"Crossfade";
   - **the programmer** (D13): a layer added or removed (a press with `fadeMs`, `programmer.removeLayer`,
     a cue Include's layers), `programmer.clearTarget`'s local effects and Clear's band, over the
@@ -2005,9 +2007,15 @@ hold, `fx/CueHolds.kt`), every effect it creates is tagged with the cue's databa
 A layer's effect also carries `layerEffectUuid`, the stored Look or palette effect row it realises:
 what a GO matches a continuing effect on (effects plan P4), so the incoming cue adopts the outgoing
 cue's instance — retagged to the incoming cue, id and phase kept — instead of fading one out and
-another in. The `cueId`, `layerEffectUuid` and envelope are preserved across atomic swaps in
-`FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue association or its
-fade.
+another in. A cue's ad-hoc effect carries its own row's uuid there, which no other cue holds, and
+its row's run key in `runUuid` (stack-timeline plan D7): a GO hands the outgoing cue's instance with
+the same key, target and property to the incoming row, restamped with that row's uuid so *Update
+stage* still reconciles by row. When the two rows' settings differ, the instance is edited in place
+at the GO (`routes.alignEffect`, the same edit *Update stage* makes, injected into `CueHolds` as an
+`EffectAligner` so `fx/` does not import `routes/`): phase kept, except that a move between Seconds
+and a master restarts it. The `cueId`, `layerEffectUuid`, `runUuid` and envelope are preserved across
+atomic swaps in `FxEngine.updateEffect()`, so updating an effect's parameters doesn't lose its cue
+association, its run or its fade.
 
 ### Layers
 

@@ -1281,6 +1281,7 @@ class FxEngine(
                     cueStackId = existing.cueStackId
                     priority = existing.priority
                     layerEffectUuid = existing.layerEffectUuid
+                    runUuid = existing.runUuid
                     startedAtMs = existing.startedAtMs
                     startedAtBeat = existing.startedAtBeat
                     lastPhase = existing.lastPhase

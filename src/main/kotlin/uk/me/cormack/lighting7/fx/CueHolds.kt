@@ -44,7 +44,9 @@ sealed interface CueHold {
  *   for the caller's crossfade to take down. Any other release only restamps.
  * - A GO from a cue coming off to one coming on keeps every effect the two have in common running,
  *   phase intact (effects plan P4): the incoming cue adopts the outgoing cue's instance of the same
- *   stored effect on the same target ([acquire]'s `adoptFrom`).
+ *   stored effect on the same target ([acquire]'s `adoptFrom`), and of an ad-hoc effect with the same
+ *   run key on the same target, edited in place to the incoming row's settings when they differ
+ *   (stack-timeline plan D7, D8).
  * - A cue brought on again while its fade-out is still running keeps its fading instances and takes
  *   them back up from where they stand rather than respawning them.
  * - A cue's priority is its **highest** hold's. A stack hold is `stackBand + entry position`
@@ -74,6 +76,8 @@ class CueHolds internal constructor(
     private val sink: MutableStateFlow<Frame>,
     /** Called after every change, outside [lock]: the surfaces' cue-pad LEDs re-read [looseHeld]. */
     private val onChanged: () -> Unit,
+    /** How a run handed on with new settings is edited in place, and edited back when it is given back. */
+    private val aligner: EffectAligner,
 ) {
     /** The bank a press sets the cue's speed masters on ([takeLooseCue]). */
     internal val speedMasters: SpeedMasterBank get() = fxEngine.speedMasters
@@ -246,8 +250,9 @@ class CueHolds internal constructor(
      * [fadeMs] and [curve] are the GO's fade, which an [Arrival.FADE_IN]'s effects grow over.
      * [adoptFrom] is the cue the same GO is about to take off (its last hold is the one the caller
      * releases next): an effect of this cue that matches one of that cue's live instances — the same
-     * stored Look or palette effect, on the same target, with the same settings — takes that instance
-     * over rather than spawning, so it runs on untouched (effects plan P4).
+     * stored Look or palette effect, on the same target, with the same settings; or an ad-hoc effect
+     * with the same run key on the same target — takes that instance over rather than spawning, so it
+     * runs on with its phase (effects plan P4, stack-timeline plan D7).
      */
     internal fun acquire(
         state: State,
@@ -322,7 +327,7 @@ class CueHolds internal constructor(
                 // Take down whatever part of it came on, and let the hold go: a hold left behind
                 // would make the next acquire a restamp of a cue that is not on stage. What it took
                 // over goes back first, so the outgoing cue the GO now keeps still runs it.
-                runCatching { giveBack(adopted) }
+                runCatching { giveBack(state, adopted) }
                 runCatching { takeOff(state, cueId, Fade.SNAP) }
                 synchronized(lock) {
                     live[cueId]?.let { cue -> cue.holds.remove(hold); if (cue.holds.isEmpty()) forgetLocked(cueId) }
@@ -513,7 +518,8 @@ class CueHolds internal constructor(
      * Layer 4 rows published (at weight 0 on a fade), its stomp, its timed effects and its triggers.
      * One cook for both halves (sweep item C8) — see [CueComposer.cookAll].
      *
-     * Each effect it cooks to arrives one of three ways, by one rule ([continues]):
+     * Each effect it cooks to arrives one of four ways, by [continues] or, for an ad-hoc effect across
+     * a GO, [handsRunTo]:
      * - **taken back** — the cue was still fading out (its last hold went on a GO with a fade, and
      *   the fade has not ended): an instance of its own that is the same effect is kept, phase intact,
      *   and grows back from where it stands over [fade] (at once on a snap). One the cue no longer
@@ -521,6 +527,10 @@ class CueHolds internal constructor(
      * - **adopted** — an effect matching one of [adoptFrom]'s live instances (the same stored effect,
      *   target and settings, effects plan P4) takes that instance over and runs on untouched, unless
      *   that instance is paused or an N-shot: those arrive afresh, as the cue would start them.
+     * - **handed on** — an ad-hoc effect with a run key, taking over [adoptFrom]'s instance with the
+     *   same key, target and property on the same terms ([handsRunTo], stack-timeline plan D7). When
+     *   the settings differ it is edited in place to the incoming row's at once, not over [fade] (D8);
+     *   an edit refused leaves the instance to its cue, and the effect is spawned.
      * - **spawned** — everything else, growing from nothing over [fade] (full at once on a snap).
      *
      * Every adoption is recorded in [adopted] as it is made, so a caller can hand them back if the
@@ -553,9 +563,13 @@ class CueHolds internal constructor(
 
         val nowMs = System.currentTimeMillis()
         val keptPool = takeBack(cueId).toMutableList()
+        // In compose order, so which of two instances sharing a key is handed on never depends on
+        // the engine's map order.
         val adoptable = adoptFrom?.let { from ->
-            fxEngine.cueEffects(from).filterTo(mutableListOf()) { it.layerEffectUuid != null && it.mayContinue() }
+            fxEngine.cueEffects(from).filter { it.layerEffectUuid != null && it.mayContinue() }
+                .sortedWith(compareBy({ it.composeOrder }, { it.id })).toMutableList()
         } ?: mutableListOf()
+        val master1 = fxEngine.speedMasters.master1Uuid()
         val kept = mutableListOf<FxInstance>()
         val spawning = mutableListOf<FxInstance>()
         // Every instance the cue runs, in cook order — layer order, then the ad-hoc ones — which is
@@ -570,17 +584,31 @@ class CueHolds internal constructor(
                     ordered += own
                     return
                 }
-                val continuing = layer?.let { adoptable.firstOrNull { it.continues(fresh) } }
+                val continuing = if (layer != null) {
+                    adoptable.firstOrNull { it.continues(fresh) }
+                } else {
+                    adoptable.firstOrNull { it.handsRunTo(fresh) }
+                }
                 if (continuing != null) {
                     adoptable.remove(continuing)
-                    adopted += Adoption(continuing, fresh.tagged(cueId, stackTag, priority), continuing.cueId, continuing.cueStackId, continuing.priority, continuing.source, continuing.cueLayerId)
-                    fxEngine.retagEffects(listOf(continuing)) {
-                        it.source = layer.source
-                        it.cueLayerId = layer.layerId
-                        it.tagged(cueId, stackTag, priority)
+                    val was = continuing.settingsSnapshot(master1)
+                    val wanted = fresh.settingsSnapshot(master1)
+                    // A run handed on with new settings takes them now; a refusal leaves it to its cue.
+                    val running = if (was.settings == wanted.settings) continuing else aligner.align(state, continuing.id, was, wanted)
+                    if (running != null) {
+                        adopted += Adoption(
+                            running, fresh.tagged(cueId, stackTag, priority), continuing.cueId, continuing.cueStackId,
+                            continuing.priority, continuing.source, continuing.cueLayerId, continuing.layerEffectUuid, was,
+                        )
+                        fxEngine.retagEffects(listOf(running)) {
+                            it.source = layer?.source
+                            it.cueLayerId = layer?.layerId
+                            it.layerEffectUuid = fresh.layerEffectUuid
+                            it.tagged(cueId, stackTag, priority)
+                        }
+                        ordered += running
+                        return
                     }
-                    ordered += continuing
-                    return
                 }
                 spawning += fresh.tagged(cueId, stackTag, priority)
                 ordered += fresh
@@ -691,9 +719,10 @@ class CueHolds internal constructor(
             } ?: continue
             val instance = EffectSpawner.createEffectInstanceOrNull(spec, fxTarget, state, "cue $cueId: ad-hoc effect on '${adHoc.targetKey}'")
                 ?: continue
-            // Its own row's uuid: what a cue taken back matches its own instance on. No other
-            // cue holds that row, so an ad-hoc effect is never adopted across a GO.
+            // Its own row's uuid: what a cue taken back matches its own instance on, and *Update
+            // stage* reconciles by. Across a GO it is the run key that hands it on.
             instance.layerEffectUuid = adHoc.uuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            instance.runUuid = adHoc.runUuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
             add(instance to null)
         }
     }
@@ -727,8 +756,21 @@ class CueHolds internal constructor(
     private fun FxInstance.mayContinue(): Boolean = isRunning && dynamics.nShot == null
 
     /**
-     * One instance a cue took over from [fromCueId] (P4), with what it was before and the [fresh]
-     * instance the taking cue would otherwise have spawned — so [giveBack] can undo it.
+     * Whether this live instance runs the effect run [fresh] continues (stack-timeline plan D7): an
+     * ad-hoc effect with the same run key, on the same target and property. Its settings may differ —
+     * a change inside a run is an edit in place (D8) — but [fresh] is not an N-shot, an accent its
+     * GO fires afresh, as [mayContinue] keeps one from being handed on.
+     */
+    private fun FxInstance.handsRunTo(fresh: FxInstance): Boolean =
+        fresh.dynamics.nShot == null &&
+            cueLayerId == null && runUuid != null && runUuid == fresh.runUuid &&
+            target.targetRef == fresh.target.targetRef &&
+            target.propertyName == fresh.target.propertyName
+
+    /**
+     * One instance a cue took over from [fromCueId] (P4), with what it was before — its stored effect's
+     * uuid and its settings among it — and the [fresh] instance the taking cue would otherwise have
+     * spawned, so [giveBack] can undo it.
      */
     data class Adoption(
         val instance: FxInstance,
@@ -738,22 +780,39 @@ class CueHolds internal constructor(
         val fromPriority: Int,
         val fromSource: uk.me.cormack.lighting7.models.LayerSource?,
         val fromLayerId: Int?,
+        val fromLayerEffectUuid: java.util.UUID?,
+        val fromSettings: EffectSettingsSnapshot,
     )
 
     /**
-     * Undo [adoptions]: each instance goes back to the cue it came from, as it was, at that cue's
-     * priority now. With [respawnFor], the cue that took them gets its own fresh instances instead, at
-     * full — a GO whose outgoing cue turned out to be held elsewhere, so it never came off.
+     * Undo [adoptions]: each instance goes back to the cue it came from, as it was — a run handed on
+     * with new settings edited back to its own — at that cue's priority now. With [respawnFor], the cue
+     * that took them gets its own fresh instances instead, at full — a GO whose outgoing cue turned out
+     * to be held elsewhere, so it never came off.
      */
-    internal fun giveBack(adoptions: List<Adoption>, respawnFor: Int? = null) {
+    internal fun giveBack(state: State, adoptions: List<Adoption>, respawnFor: Int? = null) {
         if (adoptions.isEmpty()) return
-        fxEngine.retagEffects(adoptions.map { it.instance }) { instance ->
-            val a = adoptions.first { it.instance === instance }
+        val master1 = fxEngine.speedMasters.master1Uuid()
+        // An edit can swap the instance, so each is read back by id; one gone meanwhile has nothing to give back.
+        val returning = adoptions.mapNotNull { a ->
+            val current = fxEngine.getEffect(a.instance.id) ?: return@mapNotNull null
+            val now = current.settingsSnapshot(master1)
+            val restored = if (now.settings == a.fromSettings.settings) current else aligner.align(state, current.id, now, a.fromSettings)
+            // Left as the taking cue had it: its own cue is then not what the stage shows.
+            if (restored == null) {
+                logger.warn("effect {} kept its handed-on settings: the edit back was refused", current.id)
+                a.fromCueId?.let { markEdited(it) }
+            }
+            (restored ?: current) to a
+        }
+        fxEngine.retagEffects(returning.map { it.first }) { instance ->
+            val a = returning.first { it.first === instance }.second
             instance.cueId = a.fromCueId
             instance.cueStackId = a.fromStackId
             instance.priority = a.fromCueId?.let { priorityOf(it) } ?: a.fromPriority
             instance.source = a.fromSource
             instance.cueLayerId = a.fromLayerId
+            instance.layerEffectUuid = a.fromLayerEffectUuid
         }
         if (respawnFor != null) {
             val priority = priorityOf(respawnFor) ?: adoptions.first().instance.priority
@@ -909,6 +968,15 @@ internal fun CueAdHocEffectDto.toLookEffectSpec() = LookEffectSpec(
     blocks = blocks,
     groups = groups,
 )
+
+/**
+ * Edits running effect `effectId` in place from `from`'s settings to `to`'s, phase kept, answering the
+ * instance running now (an edit can swap it), or null when the edit was refused or the effect is gone
+ * — `routes.alignEffect`, handed in so `fx/` does not import `routes/`.
+ */
+fun interface EffectAligner {
+    fun align(state: State, effectId: Long, from: EffectSettingsSnapshot, to: EffectSettingsSnapshot): FxInstance?
+}
 
 /** What a loose press did: the cue's name, and whether it brought the cue on. */
 internal data class LoosePress(val cueName: String, val acquired: CueHolds.Acquired)
