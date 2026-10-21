@@ -1,0 +1,702 @@
+<title>Undo and History</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="color-scheme" content="light dark">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column of plan sections; each mock-up is a dark desk "screen" that scrolls in its own box.
+     Colour carries meaning: blue = a show change (the record history), violet = a programmer step,
+     teal = Claude as a source, amber = a conflict or a confirm, green = live, grey = undone. */
+  :root {
+    --bg:#f2f3f1; --panel:#ffffff; --fg:#17191c; --muted:#5d636b; --line:#d6d9d6; --soft:#e8eae6;
+    --show:#2b62d6; --prog:#7a45c2; --claude:#0f7a6e; --warn:#a86a00; --live:#1f8a45; --no:#c2462e;
+    --sans:"Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono:"Martian Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --show:#86a9ff; --prog:#c39cf5; --claude:#5cd1c1; --warn:#f2bd4f; --live:#5fd38a; --no:#ff8f78; color-scheme:dark; } }
+  :root[data-theme="dark"] {
+    --bg:#101214; --panel:#171a1d; --fg:#eceeec; --muted:#9aa09f; --line:#2b3033; --soft:#1e2225;
+    --show:#86a9ff; --prog:#c39cf5; --claude:#5cd1c1; --warn:#f2bd4f; --live:#5fd38a; --no:#ff8f78; color-scheme:dark; }
+
+  body { background:var(--bg); color:var(--fg); font-family:var(--sans); font-size:15px; line-height:1.55; }
+  .wrap { max-width:1080px; margin:0 auto; padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:32px 72px; display:flex; flex-direction:column; gap:46px; }
+  header { display:flex; flex-direction:column; gap:12px; }
+  .eyebrow { font:500 11px var(--mono); letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 16px; }
+  .eyebrow .status { color:var(--warn); }
+  h1 { margin:0; font-size:clamp(30px, 5.2vw, 48px); line-height:1.05; font-weight:800; letter-spacing:-0.025em; text-wrap:balance; max-width:20ch; }
+  h1 em { font-style:normal; color:var(--show); }
+  .lede { margin:0; max-width:68ch; color:var(--muted); font-size:16.5px; }
+  body::before { content:""; position:fixed; inset:0 0 auto; height:env(safe-area-inset-top, 0px); z-index:10; background:var(--bg); }
+  nav.toc { position:sticky; top:env(safe-area-inset-top, 0px); z-index:3; background:var(--bg); border-bottom:1px solid var(--line); padding-block:10px; display:flex; flex-wrap:wrap; gap:6px; margin-top:-22px; }
+  nav.toc a { font-size:13px; font-weight:500; color:var(--fg); text-decoration:none; border:1px solid var(--line); border-radius:6px; padding:3px 10px; background:var(--panel); }
+  nav.toc a:hover, nav.toc a:focus-visible { border-color:var(--show); outline:none; }
+
+  section { display:flex; flex-direction:column; gap:14px; scroll-margin-top:64px; }
+  h2 { margin:0; font-size:24px; line-height:1.2; font-weight:800; letter-spacing:-0.01em; text-wrap:balance; }
+  h2 small { font:500 11px var(--mono); color:var(--muted); margin-left:10px; letter-spacing:0.04em; }
+  h3 { margin:8px 0 0; font-size:16px; font-weight:600; }
+  p { margin:0; max-width:72ch; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); font-size:0.8em; background:var(--soft); border-radius:4px; padding:1px 4px; overflow-wrap:anywhere; }
+  ul.plain { margin:0; padding-left:20px; max-width:74ch; display:flex; flex-direction:column; gap:6px; }
+  kbd { font:500 11px var(--mono); border:1px solid var(--line); border-bottom-width:2px; border-radius:4px; padding:0 5px; background:var(--panel); }
+
+  .k { display:inline-block; font:500 11px var(--mono); border-radius:4px; padding:0 6px; vertical-align:1px; border:1px solid currentColor; }
+  .k.show { color:var(--show); } .k.prog { color:var(--prog); } .k.claude { color:var(--claude); }
+  .k.warn { color:var(--warn); } .k.live { color:var(--live); } .k.no { color:var(--no); }
+
+  .findings { display:grid; grid-template-columns:repeat(auto-fit, minmax(290px, 1fr)); gap:12px; }
+  .finding { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; }
+  .finding b { display:block; margin-bottom:3px; }
+  .finding .where { display:block; margin-top:6px; font:11px var(--mono); color:var(--muted); overflow-wrap:anywhere; }
+
+  .tablebox { overflow-x:auto; border:1px solid var(--line); border-radius:8px; background:var(--panel); }
+  table { border-collapse:collapse; width:100%; font-size:14px; }
+  th, td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  tr:last-child td { border-bottom:none; }
+  th { font:500 11px var(--mono); letter-spacing:0.05em; text-transform:uppercase; color:var(--muted); background:var(--soft); white-space:nowrap; }
+  td.n { font:500 12px var(--mono); color:var(--muted); white-space:nowrap; }
+  td.d { min-width:280px; }
+  td.q { color:var(--warn); font:500 11px var(--mono); white-space:nowrap; } td.q.ok { color:var(--live); }
+
+  figure { margin:0; display:flex; flex-direction:column; gap:8px; }
+  .fig { overflow-x:auto; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .fig svg { display:block; width:100%; min-width:760px; height:auto; color:var(--fg); font-family:var(--sans); }
+  figcaption { font-size:13.5px; color:var(--muted); max-width:74ch; }
+
+  /* ── mock-ups: the desk is dark, so the screens are dark in both page themes ── */
+  .screenbox { overflow-x:auto; border-radius:10px; border:1px solid var(--line); }
+  .screen { --s-bg:#0e0e11; --s-page:#121216; --s-card:#1b1b20; --s-row:#16161a; --s-bd:#2a2a31; --s-fg:#f4f4f5; --s-mfg:#a1a1aa;
+    --s-show:#7aa2ff; --s-prog:#b98cff; --s-claude:#5cd1c1; --s-live:#4ade80; --s-next:#60a5fa; --s-amber:#f5c04a; --s-pri:#3b82f6; --s-red:#ff7b7b; --s-head:#2563eb;
+    background:var(--s-bg); color:var(--s-fg); font-family:ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; font-size:12.5px; line-height:1.35; min-width:940px; display:flex; flex-direction:column; position:relative; }
+  .screen .m { font-family:ui-monospace, Menlo, Consolas, monospace; font-variant-numeric:tabular-nums; }
+  .screen .dim { color:var(--s-mfg); }
+  .screen .row { display:flex; align-items:center; gap:8px; }
+  .screen .sp { flex:1; }
+  .screen svg.i { width:15px; height:15px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  .screen .btn { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 9px; border:1px solid var(--s-bd); border-radius:6px; background:var(--s-card); font-size:12px; white-space:nowrap; color:var(--s-fg); }
+  .screen .btn.sm { height:24px; padding:0 7px; font-size:11.5px; }
+  .screen .btn.pri { background:var(--s-pri); border-color:var(--s-pri); color:#fff; }
+  .screen .btn.amber { background:#3a2c08; border-color:#8a6a1a; color:var(--s-amber); }
+  .screen .btn.ghost { background:transparent; border-color:transparent; }
+  .screen .btn.off { opacity:0.4; }
+  .screen .btn .chev { border-left:1px solid rgba(255,255,255,0.25); padding-left:6px; margin-left:2px; }
+  .screen .sep { width:1px; height:18px; background:var(--s-bd); }
+  .screen .lbl { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .chip { display:inline-flex; align-items:center; gap:4px; height:19px; padding:0 7px; border-radius:999px; border:1px solid var(--s-bd); font-size:10.5px; color:var(--s-mfg); white-space:nowrap; }
+  .screen .chip.show { color:var(--s-show); border-color:rgba(122,162,255,0.45); }
+  .screen .chip.prog { color:var(--s-prog); border-color:rgba(185,140,255,0.45); }
+  .screen .chip.claude { color:var(--s-claude); border-color:rgba(92,209,193,0.45); }
+  .screen .chip.amber { color:var(--s-amber); border-color:rgba(245,192,74,0.5); background:rgba(245,192,74,0.08); }
+  .screen .chip.on { background:#27272a; color:var(--s-fg); }
+
+  /* chrome */
+  .screen .top { height:48px; background:var(--s-head); display:flex; align-items:center; gap:10px; padding:0 12px; color:#fff; }
+  .screen .top .desk { color:rgba(255,255,255,0.7); font-size:13px; }
+  .screen .top .show { font-weight:600; font-size:14px; display:inline-flex; align-items:center; gap:7px; }
+  .screen .top .dot { width:8px; height:8px; border-radius:50%; background:var(--s-live); }
+  .screen .hchip { display:inline-flex; align-items:center; gap:5px; height:28px; padding:0 9px; border-radius:6px; background:rgba(255,255,255,0.12); color:#fff; font-size:12px; white-space:nowrap; }
+  .screen .hicon { width:32px; height:32px; display:grid; place-items:center; border-radius:6px; color:#fff; }
+  .screen .hicon.on { background:rgba(255,255,255,0.22); }
+  .screen .hicon.off { opacity:0.45; }
+  .screen .hundo { display:inline-flex; align-items:center; border-radius:7px; background:rgba(255,255,255,0.12); height:32px; }
+  .screen .hundo .hicon { width:30px; }
+  .screen .hundo .hsep { width:1px; height:18px; background:rgba(255,255,255,0.25); }
+  .screen .avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.22); display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .screen .shell { display:flex; min-height:0; }
+  .screen .rail { width:56px; border-right:1px solid var(--s-bd); display:flex; flex-direction:column; align-items:center; gap:14px; padding-top:14px; background:var(--s-bg); }
+  .screen .rail i { width:20px; height:20px; border-radius:5px; background:#27272a; display:block; }
+  .screen .rail i.on { background:#1e3a74; }
+  .screen .main { flex:1; min-width:0; background:var(--s-page); display:flex; flex-direction:column; }
+  .screen .bar { height:44px; display:flex; align-items:center; gap:8px; padding:0 12px; border-bottom:1px solid var(--s-bd); }
+  .screen .cue { display:grid; grid-template-columns:12px 40px 1fr auto auto; gap:10px; align-items:center; height:34px; padding:0 12px; border-bottom:1px solid #222228; }
+  .screen .pip { width:9px; height:9px; border-radius:50%; background:#3f3f46; }
+  .screen .pip.live { background:var(--s-live); box-shadow:0 0 0 3px rgba(74,222,128,0.2); }
+  .screen .pip.next { background:var(--s-next); }
+  .screen .scrim { position:absolute; inset:48px 0 0 0; background:rgba(0,0,0,0.5); }
+  .screen .tip { position:absolute; background:#fafafa; color:#18181b; border-radius:6px; padding:5px 9px; font-size:11.5px; box-shadow:0 8px 24px rgba(0,0,0,0.4); white-space:nowrap; z-index:2; }
+  .screen .tip kbd { font:500 10px ui-monospace, Menlo, monospace; border:1px solid #d4d4d8; border-radius:3px; padding:0 4px; margin-left:6px; background:#fff; color:#52525b; }
+  .screen .tip::before { content:""; position:absolute; top:-5px; left:14px; border:5px solid transparent; border-top:0; border-bottom-color:#fafafa; }
+
+  /* sheet */
+  .screen .sheet { position:absolute; top:48px; right:0; bottom:0; width:470px; background:var(--s-bg); border-left:1px solid var(--s-bd); display:flex; flex-direction:column; box-shadow:-18px 0 40px rgba(0,0,0,0.45); z-index:1; }
+  .screen .sheet .shead { padding:14px 16px 10px; display:flex; flex-direction:column; gap:8px; border-bottom:1px solid var(--s-bd); }
+  .screen .sheet h4 { margin:0; font-size:15px; font-weight:600; }
+  .screen .hrow { display:grid; grid-template-columns:44px 18px 1fr auto; gap:9px; align-items:start; padding:8px 16px; border-bottom:1px solid #1f1f25; }
+  .screen .hrow .t { font-size:10.5px; color:var(--s-mfg); padding-top:2px; }
+  .screen .hrow .what { min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .screen .hrow .what b { font-weight:500; }
+  .screen .hrow .meta { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+  .screen .hrow .ic { width:18px; height:18px; border-radius:4px; display:grid; place-items:center; margin-top:1px; }
+  .screen .hrow .ic.show { background:rgba(122,162,255,0.14); color:var(--s-show); }
+  .screen .hrow .ic.prog { background:rgba(185,140,255,0.14); color:var(--s-prog); }
+  .screen .hrow .ic svg.i { width:12px; height:12px; }
+  .screen .hrow.undone { opacity:0.5; }
+  .screen .hrow.undone .what b { text-decoration:line-through; }
+  .screen .hrow.hover { background:rgba(59,130,246,0.1); }
+  .screen .hrow.mark { box-shadow:inset 3px 0 0 var(--s-pri); }
+  .screen .cut { display:flex; align-items:center; gap:8px; padding:5px 16px; font-size:10.5px; color:var(--s-mfg); background:var(--s-row); border-bottom:1px solid #1f1f25; }
+  .screen .cut::before, .screen .cut::after { content:""; flex:1; height:1px; background:var(--s-bd); }
+  .screen .sfoot { margin-top:auto; padding:10px 16px; border-top:1px solid var(--s-bd); font-size:11px; color:var(--s-mfg); }
+  .screen .diffc { font-size:10.5px; } .screen .diffc .a { color:var(--s-live); } .screen .diffc .r { color:var(--s-red); } .screen .diffc .c { color:var(--s-amber); }
+
+  /* toasts, dialogs, menus */
+  .screen.pad { padding:14px; gap:12px; }
+  .screen .toasts { display:flex; flex-direction:column; gap:8px; width:356px; }
+  .screen .toast { background:var(--s-card); border:1px solid var(--s-bd); border-radius:8px; padding:11px 12px; display:flex; align-items:center; gap:10px; box-shadow:0 10px 28px rgba(0,0,0,0.45); }
+  .screen .toast .tx { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+  .screen .toast .tx small { color:var(--s-mfg); font-size:11px; }
+  .screen .toast .act { height:24px; padding:0 9px; border-radius:5px; background:#fafafa; color:#18181b; font-size:11.5px; font-weight:600; display:inline-flex; align-items:center; }
+  .screen .dialog { width:430px; background:var(--s-bg); border:1px solid var(--s-bd); border-radius:10px; padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:0 20px 50px rgba(0,0,0,0.6); }
+  .screen .dialog h4 { margin:0; font-size:15px; font-weight:600; }
+  .screen .dialog p { margin:0; color:var(--s-mfg); font-size:12.5px; max-width:none; }
+  .screen .dialog .list { border:1px solid var(--s-bd); border-radius:7px; overflow:hidden; }
+  .screen .dialog .li { display:flex; gap:8px; align-items:center; padding:6px 10px; border-bottom:1px solid #1f1f25; font-size:12px; }
+  .screen .dialog .li:last-child { border-bottom:none; }
+  .screen .dialog .foot { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+  .screen .menu { border:1px solid var(--s-bd); background:var(--s-card); border-radius:8px; padding:4px; box-shadow:0 12px 28px rgba(0,0,0,0.5); display:flex; flex-direction:column; min-width:230px; }
+  .screen .menu .mi { padding:6px 8px; border-radius:5px; display:flex; gap:8px; align-items:center; font-size:12px; }
+  .screen .menu .mi.on { background:#27272a; }
+  .screen .menu .mi small { margin-left:auto; color:var(--s-mfg); font-size:10.5px; }
+  .screen .menu .ms { height:1px; background:var(--s-bd); margin:3px 0; }
+  .screen .pbar { display:flex; align-items:center; gap:6px; height:44px; padding:0 12px; border-bottom:1px solid var(--s-bd); background:var(--s-page); }
+  .screen .grid { display:grid; grid-template-columns:150px repeat(5, 1fr); font-size:11.5px; }
+  .screen .grid div { height:28px; display:flex; align-items:center; padding:0 8px; border-bottom:1px solid #222228; }
+  .screen .grid .h { font-size:9px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; color:var(--s-mfg); }
+  .screen .grid .v { box-shadow:inset 2px 0 0 var(--s-pri); background:rgba(59,130,246,0.08); }
+  .screen .phone { width:300px; border:1px solid var(--s-bd); border-radius:18px; overflow:hidden; background:var(--s-page); display:flex; flex-direction:column; flex:none; }
+  .screen .cols { display:flex; gap:22px; align-items:flex-start; flex-wrap:wrap; }
+  .screen .cap { font-size:11px; color:var(--s-mfg); max-width:360px; }
+  .screen .num { display:inline-grid; place-items:center; width:17px; height:17px; border-radius:50%; background:var(--s-amber); color:#1a1300; font-size:10px; font-weight:800; flex:none; }
+
+  ol.sessions { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; counter-reset:s; }
+  ol.sessions li { counter-increment:s; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px 12px 58px; position:relative; font-size:14px; min-width:0; }
+  ol.sessions li::before { content:counter(s); position:absolute; left:14px; top:11px; width:30px; height:30px; border-radius:6px; background:var(--soft); color:var(--fg); font:500 13px var(--mono); display:grid; place-items:center; }
+  ol.sessions b { font-size:15px; }
+  ol.sessions .scope { font:11px var(--mono); color:var(--muted); margin-left:6px; }
+  ol.sessions .needs { display:block; font:11px var(--mono); color:var(--muted); margin-top:4px; }
+  ol.sessions p { margin-top:4px; }
+
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:720px) { .two { grid-template-columns:1fr; } }
+  .box { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px 14px; min-width:0; font-size:14px; display:flex; flex-direction:column; gap:6px; }
+  .box h3 { margin:0; }
+  .box ul { margin:0; padding-left:18px; }
+  .box.yes h3 { color:var(--live); } .box.no h3 { color:var(--no); }
+
+  footer { font-size:13px; color:var(--muted); border-top:1px solid var(--line); padding-top:14px; }
+  a { color:var(--show); }
+  a:focus-visible { outline:2px solid var(--show); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior:auto !important; } }
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+  <symbol id="redo" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13"/></symbol>
+  <symbol id="hist" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="erase" viewBox="0 0 24 24"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></symbol>
+  <symbol id="eye" viewBox="0 0 24 24"><path d="M10.7 5.1A10.7 10.7 0 0 1 22 12a14 14 0 0 1-1.6 2.4"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3.6 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="m2 2 20 20"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/></symbol>
+  <symbol id="slid" viewBox="0 0 24 24"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M2 14h4"/><path d="M10 8h4"/><path d="M18 16h4"/></symbol>
+  <symbol id="layers" viewBox="0 0 24 24"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></symbol>
+  <symbol id="trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a6 6 0 0 1-12 0V8z"/></symbol>
+  <symbol id="spark" viewBox="0 0 24 24"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></symbol>
+  <symbol id="rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" fill="currentColor"/></symbol>
+  <symbol id="dots" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="warn" viewBox="0 0 24 24"><path d="m21.7 18-8-14a2 2 0 0 0-3.5 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow"><span>lighting7 · design</span><span>undo and history</span><span>read from main at 59ebdb7</span><span class="status">Agreed · 2026-10-20</span></div>
+    <h1>Every change <em>can be taken back</em></h1>
+    <p class="lede">Every other desk has an Undo key. lighting7 has about ten separate one-step Undos, each built for one place, and none of them reaches a deleted cue, a cleared programmer or an edit Claude made. This design gives the desk two histories behind one key. The programmer's history is a run of snapshots. The show's history is a journal of every stored record that changed, which can be put back in place without a reload. One header control, one History sheet and <kbd>⌘Z</kbd> drive both.</p>
+    <p class="muted" style="font-size:13.5px">Chris answered the seven questions in §4 on 2026-10-20, taking the recommended answer each time. The implementation plan is <code>docs/plans/undo-plan.md</code>; where they differ, the plan wins on behaviour and this page on layout and copy. The fixture, cue and Look names in the mock-ups are illustrative.</p>
+  </header>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#desks">Other desks</a><a href="#code">What the code says</a><a href="#model">The model</a><a href="#decisions">Decisions</a><a href="#header">Header</a><a href="#sheet">History sheet</a><a href="#prog">Programmer</a><a href="#toasts">Toasts</a><a href="#confirms">Confirms</a><a href="#elsewhere">Phone, surfaces, Claude</a><a href="#engine">How it works</a><a href="#scope">Scope</a><a href="#sessions">Sessions</a><a href="#risks">Risks</a>
+  </nav>
+
+  <section id="desks">
+    <h2>What other desks do<small>§1</small></h2>
+    <p>Every major desk has an Undo key, and every one of them treats playback as out of reach. They differ on how deep the history goes, on whether the programmer is part of it, and on whose actions a press takes back.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>Desk</th><th>What it undoes</th><th>Depth</th><th>Whose, and when it clears</th></tr></thead>
+      <tbody>
+        <tr><td><b>MagicQ</b></td><td class="d">First the programmer (head selection, intensity, position, colour, beam), then actions: Record, Set, Move, Copy, Remove, Patch. Shift+Undo redoes. Ctrl+Undo opens an Undo History window.</td><td>Programmer: at most 4 steps. Actions: no published limit.</td><td>The console's. Clears on show load or restart. Operator-level users get programmer undo only.</td></tr>
+        <tr><td><b>grandMA3</b> (Oops)</td><td class="d">Completed actions, listed in the Oops menu. Picking an earlier entry takes back everything from the newest one to it.</td><td>No limit in the manual.</td><td>Clears on any patch change and on show load.</td></tr>
+        <tr><td><b>ETC Eos</b></td><td class="d">Commands that change show data or manual levels in Live. You can undo a range from the command history (Tab 30). Playback, encoder moves and Augment3d edits are excluded.</td><td>The session's whole command history.</td><td>Per user: each user sees and undoes only their own commands.</td></tr>
+        <tr><td><b>Hog 4</b></td><td class="d">Show data, in order. Selection, control-panel settings and window layouts are excluded, although an undo can move the selection as a side effect. Pig+Undo redoes.</td><td>Back to logging on.</td><td>Per console: a networked desk undoes only its own actions.</td></tr>
+      </tbody>
+    </table></div>
+    <p class="muted" style="font-size:13.5px">Sources: <a href="https://secure.chamsys.co.uk/docs/magicq/manual/buttons.html">MagicQ Button Functions</a>, <a href="https://help.malighting.com/grandMA3/2.5/HTML/keyword_oops.html">grandMA3 Oops</a>, <a href="https://www.etcconnect.com/WebDocs/Controls/EosFamilyOnlineHelp/en/Content/08_Manual_Control/04_Advanced_Manual_Control/[Undo].htm">Eos [Undo]</a>, <a href="https://etcconnect.com/webdocs/Controls/HOG/HTML/en/sect-undo_and_redo.htm">Hog 4 Undo and Redo</a>. The network policy blocked the ChamSys and MA pages, so those rows come from search excerpts of them.</p>
+  </section>
+
+  <section id="code">
+    <h2>What the code says<small>§2</small></h2>
+    <p>Three surveys of <code>main</code> at <code>59ebdb7</code>, covering the existing undos, the write paths and the programmer's state:</p>
+    <div class="findings">
+      <div class="finding"><b>Ten small undos, each with its own inverse</b>The hand's place toast, the cue editor's one-step <kbd>⌘Z</kbd>, the prompt-book anchors and Make rig safe each undo one action by calling a reverse operation written for that place. None of them reaches a delete, a Record or the programmer.<span class="where">store/hand.ts:132 · CueRowStore.tsx:297 · useBookAnchors.ts:149 · RigSafetyService.kt:241</span></div>
+      <div class="finding"><b>Writes have no single path</b>About 206 mutating routes each open their own transaction (about 230 in <code>routes/</code>, 79 more in <code>ai/</code>). MCP tools skip the HTTP write guard, and parks, tempo and surface learn are WS frames. A hook at the route or client layer would miss part of this.<span class="where">projectWriteGuard.kt:42 · ai/ToolProject.kt · ParkManager.kt:152</span></div>
+      <div class="finding"><b>Restoring a whole project re-mints every id</b><code>replaceFromWorkingTree</code> deletes and re-imports, so every cue, stack and entry gets a new integer id. URLs, open editors, standby and holds all name those ids. That rules out snapshot-and-reload as the undo mechanism.<span class="where">ProjectImporter.kt:497 · models/LayerSource.kt:29 · ShowCarry.kt:28</span></div>
+      <div class="finding"><b>Every portable record already has a canonical form</b>The sync exporter writes each record as canonical JSON keyed by <code>(folder, uuid)</code>, and <code>RecordHasher</code> hashes it. That gives a before and after image of any change. It only writes to disk today, at about 100 ms for a 300-patch rig.<span class="where">sync/ProjectExporter.kt:800 · RecordHasher.kt:19 · VenueDiff.kt:60</span></div>
+      <div class="finding"><b>The importer works per kind, but over a whole folder</b><code>importCues</code>, <code>importLooks</code> and the rest are private. Each reads a folder and threads uuid→DAO maps through in foreign-key order. Restoring a handful of records needs those functions to take records rather than a folder, and to update rows in place.<span class="where">ProjectImporter.kt:695–750, 938, 1368</span></div>
+      <div class="finding"><b>The programmer is several holders, not one object</b>Its state is split between <code>ProgrammerStore</code>'s private slot maps and layers, the engine's Local effects, <code>LocateManager</code> and the State-owned <code>ProgrammerScenery</code>. A reload hands these across by reference, so there is no capture and restore to reuse.<span class="where">ProgrammerStore.kt:194 · FxInstance.kt:662 · LocateManager.kt:25 · ShowCarry.kt:63</span></div>
+      <div class="finding"><b>Live effects are already one call per kind</b>Look and palette edits republish, cue edits mark <em>edited since GO</em>, patch and group edits reload fixtures in place, and speed master edits reload the bank. Each record kind has one list-changed frame. An undo can make the same calls for the kinds it touched.<span class="where">lookRepublish.kt:63 · CueHolds.kt:446 · show/Fixtures.kt:472–592</span></div>
+      <div class="finding"><b>Who and where are known, but only at the edges</b>REST knows the account but not the window. WS knows both, through <code>SocketScope.window</code>. MCP knows the grant and its <code>clientName</code> but doesn't pass them on. A surface has no user. The selection's <code>source</code> already stamps a window or a surface.<span class="where">auth/AuthGate.kt:20 · SocketScope.kt:81 · McpProtocol.kt:165</span></div>
+    </div>
+  </section>
+
+  <section id="model">
+    <h2>The model: two histories, one key<small>§3</small></h2>
+    <p>The programmer and the show are different kinds of state. The programmer is one shared, live thing, and its history is a run of <span class="k prog">snapshots</span>: going back one step restores what it held before the last gesture, whoever made it. The show is stored records, and its history is a <span class="k show">journal</span> of record changes, each with a source. Any entry can be put back on its own, provided nothing has touched those records since.</p>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 960 330" role="img" aria-label="Programmer gestures from any door produce programmer steps, which are snapshots of the shared programmer. Stored writes from REST, WS, MCP and surfaces produce show changes, journal entries with a source. The Undo key takes the newest of the programmer steps and your own show changes. The History sheet lists both and can take back any show change, Claude's included.">
+          <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+          <g font-size="13" fill="currentColor">
+            <text x="20" y="24" font-size="11" opacity="0.7" letter-spacing="1">DOORS</text>
+            <rect x="20" y="40" width="200" height="46" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+            <text x="120" y="60" text-anchor="middle" font-weight="600">Programmer gestures</text>
+            <text x="120" y="77" text-anchor="middle" font-size="11" opacity="0.7">WS · REST · press · MCP · MIDI</text>
+            <rect x="20" y="210" width="200" height="46" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.45"/>
+            <text x="120" y="230" text-anchor="middle" font-weight="600">Stored writes</text>
+            <text x="120" y="247" text-anchor="middle" font-size="11" opacity="0.7">REST · WS · MCP · surface learn</text>
+
+            <text x="300" y="24" font-size="11" opacity="0.7" letter-spacing="1">HISTORIES</text>
+            <rect style="stroke:var(--prog)" x="300" y="34" width="250" height="58" rx="7" fill="none" stroke-width="2"/>
+            <text x="425" y="57" text-anchor="middle" font-weight="600">Programmer steps</text>
+            <text x="425" y="76" text-anchor="middle" font-size="11" opacity="0.75">snapshots · desk-wide · 50 deep · runtime</text>
+            <rect style="stroke:var(--show)" x="300" y="200" width="250" height="66" rx="7" fill="none" stroke-width="2"/>
+            <text x="425" y="223" text-anchor="middle" font-weight="600">Show changes</text>
+            <text x="425" y="241" text-anchor="middle" font-size="11" opacity="0.75">record before/after · per source</text>
+            <text x="425" y="256" text-anchor="middle" font-size="11" opacity="0.75">per project · until pull, reload or restart</text>
+
+            <text x="640" y="24" font-size="11" opacity="0.7" letter-spacing="1">CONTROLS</text>
+            <rect x="640" y="104" width="300" height="58" rx="7" fill="none" stroke="currentColor"/>
+            <text x="790" y="127" text-anchor="middle" font-weight="600">⌘Z · header Undo · surface key</text>
+            <text x="790" y="146" text-anchor="middle" font-size="11" opacity="0.75">newest of: any programmer step, or your show change</text>
+            <rect x="640" y="236" width="300" height="58" rx="7" fill="none" stroke="currentColor"/>
+            <text x="790" y="259" text-anchor="middle" font-weight="600">History sheet</text>
+            <text x="790" y="278" text-anchor="middle" font-size="11" opacity="0.75">every entry · back to here · anyone's, with a check</text>
+
+            <path d="M220 63 L296 63" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+            <path d="M220 233 L296 233" stroke="currentColor" fill="none" marker-end="url(#ar)"/>
+            <path style="stroke:var(--prog)" d="M550 70 C600 70 600 122 636 124" fill="none" marker-end="url(#ar)"/>
+            <path style="stroke:var(--show)" d="M550 222 C600 222 600 146 636 142" fill="none" marker-end="url(#ar)"/>
+            <path style="stroke:var(--prog)" d="M550 84 C620 100 590 248 636 254" fill="none" stroke-dasharray="4 4" marker-end="url(#ar)"/>
+            <path style="stroke:var(--show)" d="M550 250 L636 266" fill="none" marker-end="url(#ar)"/>
+            <text x="20" y="312" font-size="11.5" opacity="0.7">Out of reach on purpose: GO, BACK, standby, holds, arm and fire, fixture commands, grand master, tempo taps, Blind, the selection.</text>
+          </g>
+        </svg>
+      </div>
+      <figcaption>One key, two histories. The key never undoes playback, and it never takes back someone else's show change without asking. Claude's edits are taken back from the History sheet or by Claude itself.</figcaption>
+    </figure>
+  </section>
+
+  <section id="decisions">
+    <h2>Decisions<small>§4</small></h2>
+    <p>P1–P7 were asked and answered, each <span class="k live">agreed</span> as recommended; the declined alternatives are noted in each row. P8–P12 follow from the code.</p>
+    <div class="tablebox"><table>
+      <thead><tr><th>#</th><th>Decision</th><th>Proposed</th><th></th></tr></thead>
+      <tbody>
+        <tr><td class="n">P1</td><td>Whose changes does <kbd>⌘Z</kbd> take back?</td><td class="d"><b>Yours</b>: your account's show changes, plus programmer steps from anyone, since there is one programmer. Two screens signed in as you share one stack. Claude and surfaces each count as a source of their own. <span class="muted">Declined: one desk-wide stack as on MagicQ (Claude's work would get in the way of yours); one stack per window (your two screens would split).</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P2</td><td>Programmer and show: one key or two?</td><td class="d"><b>One key, newest first</b> across both histories, so Record → <kbd>⌘Z</kbd> takes the Record back first and the programmer step after it. <span class="muted">Declined: MagicQ's programmer-first order, and separate keys.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P3</td><td>How deep, and how long it lasts</td><td class="d">Programmer: <b>50 steps</b>, with a fader, encoder or picker drag counted as one. Show: <b>500 entries per project</b> (or 32 MB), kept while the desk runs, including across a switch away and back. It clears on a sync pull or import, a venue Update, Attach, Detach, Extract or Discard, and a restart, matching MA's clear on patch change and show load. <span class="muted">Declined: clearing on a project switch; persisting it across a restart, which no other desk does.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P4</td><td>An older entry that something has changed since</td><td class="d"><b>Never overwrite silently.</b> Offer <em>Undo back to here</em>, which also takes back the later changes it collides with (MA's Oops), or Cancel. An entry that doesn't collide is undone on its own. <span class="muted">Declined: refusing outright; overwriting.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P5</td><td>Parks, tempo, selection, machine-local</td><td class="d"><b>Parks yes</b> (a stored show write). <b>Tempo no</b> (a tap or BPM move stays a gesture, though editing a master's stored fields is undoable). <b>Selection no</b>, as on Hog. <b>Machine-local no</b> (universe addresses, Full detail, tube state). <span class="muted">Only parks were chosen.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P6</td><td>Undo while the show runs or is locked</td><td class="d">Locked: Undo asks to unlock, like the rest of the action set. Running: an undo that would change output (a Look or palette republished, a patch reloaded, a park) confirms first and names what moves. One that only changes stored data (a cue not live, a stack's order) goes straight through with a toast. <span class="muted">Declined: no confirms at all; show undo off while a stack runs.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P7</td><td>Claude</td><td class="d">Each MCP grant is a source, named by its client (<span class="k claude">Claude · Desktop</span>). Claude gets an <code>undo_changes</code> tool that takes back its own entries and is refused on anyone else's. One tool call is one entry, so a <code>build_cue_stack</code> comes back as a whole. <span class="muted">Declined: no undo tool; Claude's changes counting as yours.</span></td><td class="q ok">agreed</td></tr>
+        <tr><td class="n">P8</td><td>Grouping into entries</td><td class="d">One entry per request, WS frame or tool call. Writes from the same source to the same records within 1.5 s merge, so a dragged pad, a cue editor's typed values or a nudged park are one entry each.</td><td></td></tr>
+        <tr><td class="n">P9</td><td>What an undo restores</td><td class="d">The records exactly as they were, <b>ids kept</b>: a deleted cue comes back with its integer id, uuid, entries, places and pads. No reload. The same frames and live hooks run as for the original write.</td><td></td></tr>
+        <tr><td class="n">P10</td><td>Redo</td><td class="d">Linear per source. A new change from the same source drops that source's redo branch, as on every desk. <kbd>⇧⌘Z</kbd> and the header's Redo.</td><td></td></tr>
+        <tr><td class="n">P11</td><td>The existing undos</td><td class="d">Each becomes a pointer into the history. The hand, cue editor and prompt-book toasts keep their wording and their Undo button, which now undoes that entry and stays good after another edit. Make rig safe keeps its own Undo, because it strikes lamps.</td><td></td></tr>
+        <tr><td class="n">P12</td><td>Roles and venues</td><td class="d">Undo is a stored write under <code>/projects/{id}</code>, so the write guard applies unchanged. An operator can't undo onto a venue, a venue version is never journaled, and Record-off stays off.</td><td></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="header">
+    <h2>The header: Undo, Redo and History<small>§5.1</small></h2>
+    <p>A joined Undo and Redo pair sits after the programmer indicator, before the overview toggles, as white icons on the header's blue. The tooltip names what each would take back and whose it is. A History icon beside them opens the sheet. Both buttons dim when there is nothing to undo or redo. Below the 640 px header width the pair folds into the user menu.</p>
+    <div class="screenbox"><div class="screen" style="min-height:260px">
+      <div class="top">
+        <span class="desk">Desk left</span><span style="width:1px;height:18px;background:rgba(255,255,255,0.3)"></span>
+        <span class="show"><span class="dot"></span>Sleeping Beauty</span>
+        <span class="hchip">Programmer · 14</span>
+        <span class="hchip">GM 100%</span>
+        <span class="hundo">
+          <span class="hicon on"><svg class="i"><use href="#undo"/></svg></span><span class="hsep"></span>
+          <span class="hicon"><svg class="i"><use href="#redo"/></svg></span>
+        </span>
+        <span class="hicon"><svg class="i"><use href="#hist"/></svg></span>
+        <span class="sp"></span>
+        <span class="hicon"><svg class="i"><use href="#slid"/></svg></span>
+        <span class="hicon"><svg class="i"><use href="#layers"/></svg></span>
+        <span class="hicon"><svg class="i"><use href="#list"/></svg></span>
+        <span class="avatar">CC</span>
+      </div>
+      <div class="tip" style="top:58px;left:300px">Undo · Delete cue Q12 “Rose garden”<kbd>⌘Z</kbd></div>
+      <div class="tip" style="top:100px;left:300px;background:#e9e3fb">Undo · Programmer: Hex 1–6 colour → Magenta<kbd>⌘Z</kbd></div>
+      <div class="tip" style="top:142px;left:300px">Nothing to undo since the sync pull at 19:02</div>
+      <div class="tip" style="top:184px;left:340px">Redo · Delete cue Q12 “Rose garden”<kbd>⇧⌘Z</kbd></div>
+      <div style="position:absolute;left:24px;top:64px;display:flex;flex-direction:column;gap:30px;font-size:11px;color:#a1a1aa;width:250px">
+        <span class="row"><span class="num">1</span>Your last show change is newest</span>
+        <span class="row"><span class="num">2</span>A programmer step is newest</span>
+        <span class="row"><span class="num">3</span>Empty after a clear point</span>
+        <span class="row"><span class="num">4</span>Redo after an undo</span>
+      </div>
+    </div></div>
+    <p class="muted" style="font-size:13.5px">The ⌘K palette gains <em>Undo</em>, <em>Redo</em> and <em>Show history</em>. <kbd>⌘Z</kbd> is global except inside a text field, which keeps the browser's own undo. The cue editor's <kbd>⌘Z</kbd> becomes this one.</p>
+  </section>
+
+  <section id="sheet">
+    <h2>The History sheet<small>§5.2</small></h2>
+    <p>A right-hand sheet, the width of Screens…, listing the project's history newest first. Each row shows a time, a kind (<span class="k show">show</span> or <span class="k prog">programmer</span>), what changed, its source and the record counts. Hovering a row shows <em>Undo back to here</em>. Undone rows stay listed, struck through and dimmed, with Redo. A pull, a venue Update or a restart shows as a rule across the list, and nothing below it can be undone.</p>
+    <div class="screenbox"><div class="screen" style="height:780px">
+      <div class="top">
+        <span class="desk">Desk left</span><span style="width:1px;height:18px;background:rgba(255,255,255,0.3)"></span>
+        <span class="show"><span class="dot"></span>Sleeping Beauty</span>
+        <span class="hchip">Programmer · 14</span><span class="hchip">GM 100%</span>
+        <span class="hundo"><span class="hicon"><svg class="i"><use href="#undo"/></svg></span><span class="hsep"></span><span class="hicon"><svg class="i"><use href="#redo"/></svg></span></span>
+        <span class="hicon on"><svg class="i"><use href="#hist"/></svg></span>
+        <span class="sp"></span><span class="avatar">CC</span>
+      </div>
+      <div class="shell" style="flex:1">
+        <div class="rail"><i></i><i class="on"></i><i></i><i></i><i></i></div>
+        <div class="main">
+          <div class="bar"><b>Act 1</b><span class="dim">· 24 cues</span><span class="sp"></span><span class="btn">Table</span><span class="btn pri">GO</span></div>
+          <div class="cue"><span class="pip"></span><span class="m">Q10</span><span>Prologue</span><span class="dim m">3.0s</span><span></span></div>
+          <div class="cue"><span class="pip live"></span><span class="m">Q11</span><span>Christening</span><span class="dim m">5.0s</span><span></span></div>
+          <div class="cue"><span class="pip next"></span><span class="m">Q13</span><span>Carabosse</span><span class="dim m">2.0s</span><span></span></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="shead">
+          <div class="row"><h4>History</h4><span class="dim" style="font-size:11.5px">Sleeping Beauty</span><span class="sp"></span><span class="btn sm"><svg class="i"><use href="#undo"/></svg>Undo</span><span class="btn sm off"><svg class="i"><use href="#redo"/></svg>Redo</span></div>
+          <div class="row" style="gap:5px"><span class="chip on">All</span><span class="chip">Mine</span><span class="chip show">Show</span><span class="chip prog">Programmer</span><span class="chip claude">Claude</span></div>
+        </div>
+        <div class="hrow undone"><span class="t m">21:16</span><span class="ic show"><svg class="i"><use href="#trash"/></svg></span><span class="what"><b>Delete cue Q12 “Rose garden”</b><span class="meta"><span class="chip">You · Desk left</span><span class="diffc m"><span class="r">−9</span></span><span class="dim" style="font-size:10.5px">undone 21:17</span></span></span><span class="btn sm">Redo</span></div>
+        <div class="hrow"><span class="t m">21:15</span><span class="ic prog"><svg class="i"><use href="#slid"/></svg></span><span class="what"><b>Hex 1–6 colour → Magenta</b><span class="meta"><span class="chip">You · Desk left</span><span class="dim" style="font-size:10.5px">programmer</span></span></span><span></span></div>
+        <div class="hrow"><span class="t m">21:15</span><span class="ic show"><svg class="i"><use href="#pen"/></svg></span><span class="what"><b>Look “Warm wash”: Hex 4 to 60%</b><span class="meta"><span class="chip">You · Desk left</span><span class="diffc m"><span class="c">~1</span></span></span></span><span></span></div>
+        <div class="hrow hover mark"><span class="t m">21:14</span><span class="ic show"><svg class="i"><use href="#pen"/></svg></span><span class="what"><b>Look “Warm wash”: 4 values</b><span class="meta"><span class="chip claude">Claude · Desktop</span><span class="diffc m"><span class="c">~4</span></span><span class="chip amber">live in Q11</span></span></span><span class="btn sm">Undo Claude's change</span></div>
+        <div class="hrow"><span class="t m">21:12</span><span class="ic show"><svg class="i"><use href="#rec"/></svg></span><span class="what"><b>Record Q13 “Carabosse” into Act 1</b><span class="meta"><span class="chip">You · Phone</span><span class="diffc m"><span class="a">+14</span></span></span></span><span></span></div>
+        <div class="hrow"><span class="t m">21:09</span><span class="ic prog"><svg class="i"><use href="#erase"/></svg></span><span class="what"><b>Clear: 22 values, 2 layers, 1 effect</b><span class="meta"><span class="chip">X-Touch</span><span class="dim" style="font-size:10.5px">programmer · 1.0s fade</span></span></span><span></span></div>
+        <div class="hrow"><span class="t m">21:03</span><span class="ic show"><svg class="i"><use href="#list"/></svg></span><span class="what"><b>Act 1: renumber 8 cues</b><span class="meta"><span class="chip">You · Desk right</span><span class="diffc m"><span class="c">~8</span></span></span></span><span></span></div>
+        <div class="hrow"><span class="t m">20:58</span><span class="ic show"><svg class="i"><use href="#plug"/></svg></span><span class="what"><b>Patch: Spot 3 to 2.41</b><span class="meta"><span class="chip">You · Desk left</span><span class="diffc m"><span class="c">~1</span></span><span class="chip amber">changes output</span></span></span><span></span></div>
+        <div class="cut">Pulled from GitHub · 19:02 · history before this is gone</div>
+        <div class="sfoot">Programmer steps go back 50 and show changes 500. The history lasts until a pull, a venue Update, Attach, Detach or Discard, or a restart. Playback, arm and fire, the grand master and tempo taps are not in it.</div>
+      </div>
+    </div></div>
+    <div class="two">
+      <div class="box"><h3>Rows</h3><ul>
+        <li>The label comes from the route or tool when it gives one (<em>Record Q13 into Act 1</em>), else from what changed (<em>Look “Warm wash”: 4 values</em>).</li>
+        <li>Counts: <span class="k live">+</span> records added, <span class="k no">−</span> removed, <span class="k warn">~</span> changed.</li>
+        <li>Chips: <em>live in Q11</em> where an undo would change output now, and <em>changes output</em> for patch, park and universe changes.</li>
+        <li>Clicking a row expands it to the records it touched, each a link to open (a cue, a Look, a fixture).</li>
+      </ul></div>
+      <div class="box"><h3>Undo back to here</h3><ul>
+        <li>On your own row: undoes it and every later change of yours, newest first, in one transaction.</li>
+        <li>A later entry from another source that touched the same records is listed in the confirm (§5.5) and goes too.</li>
+        <li>On someone else's row the button says whose it is: <em>Undo Claude's change</em>.</li>
+        <li>An operator gets read-only rows on a venue, matching the write guard.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="prog">
+    <h2>The programmer<small>§5.3</small></h2>
+    <p>The programmer's action bar gets its own Undo and Redo, for programmer steps only, ahead of Clear. This answers "I hit Clear" without reaching into the show's history. In Blind the restore lands staged, like any other programmer write.</p>
+    <div class="screenbox"><div class="screen">
+      <div class="pbar">
+        <span class="btn"><svg class="i"><use href="#undo"/></svg>Undo<span class="dim" style="font-size:11px">· Clear</span></span>
+        <span class="btn off"><svg class="i"><use href="#redo"/></svg></span>
+        <span class="sep"></span>
+        <span class="btn"><svg class="i"><use href="#erase"/></svg>Clear<span class="chev dim m">1.0s ▾</span></span>
+        <span class="btn"><svg class="i"><use href="#eye"/></svg>Blind</span>
+        <span class="btn">Include…</span>
+        <span class="btn pri"><svg class="i"><use href="#rec"/></svg>Record<span class="chev">▾</span></span>
+        <span class="sp"></span>
+        <span class="chip prog">22 values · 2 layers · 1 effect come back</span>
+      </div>
+      <div style="display:flex;gap:14px;padding:12px;align-items:flex-start">
+        <div style="flex:1;min-width:0;border:1px solid var(--s-bd);border-radius:8px;overflow:hidden">
+          <div class="grid">
+            <div class="h">Fixture</div><div class="h">Dimmer</div><div class="h">Colour</div><div class="h">Pan</div><div class="h">Tilt</div><div class="h">Zoom</div>
+            <div>Hex 1</div><div class="v m">80%</div><div class="v"><span style="width:11px;height:11px;border-radius:3px;background:#e11d8f;display:inline-block;margin-right:6px"></span>Magenta</div><div></div><div></div><div></div>
+            <div>Hex 2</div><div class="v m">80%</div><div class="v"><span style="width:11px;height:11px;border-radius:3px;background:#e11d8f;display:inline-block;margin-right:6px"></span>Magenta</div><div></div><div></div><div></div>
+            <div>Spot 1</div><div class="v m">100%</div><div></div><div class="v m">−12°</div><div class="v m">38°</div><div class="v m">22°</div>
+            <div>Spot 2</div><div class="v m">100%</div><div></div><div class="v m">+12°</div><div class="v m">38°</div><div class="v m">22°</div>
+          </div>
+        </div>
+        <div class="menu" style="width:290px">
+          <div class="lbl" style="padding:6px 8px 4px">Programmer steps</div>
+          <div class="mi on"><svg class="i" style="width:13px;height:13px"><use href="#erase"/></svg>Clear<small>21:09 · X-Touch</small></div>
+          <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#slid"/></svg>Spot 1–2 zoom → 22°<small>21:08</small></div>
+          <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#layers"/></svg>Press “Warm wash” on Hex 1–6<small>21:07</small></div>
+          <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#slid"/></svg>Spread pan over Spot 1–4<small>21:06</small></div>
+          <div class="ms"></div>
+          <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#hist"/></svg>Open History…</div>
+        </div>
+      </div>
+      <div style="padding:0 12px 12px;font-size:11px" class="dim">A long press or right-click on Undo opens the last steps. Picking one goes back to before it.</div>
+    </div></div>
+    <ul class="plain">
+      <li><b>What a step captures:</b> the slot stacks and sideband, the layers and Include state, the Local effects (as specs with their phase), Locate and the programmer's scenery. The Blind flag and the selection are left out.</li>
+      <li><b>What counts as one step:</b> one gesture from any door, whether a WS frame, a press, a spread, an aim, an MCP <code>set_programmer</code> or a surface move. A continuous move (fader, encoder, colour picker) on the same property merges until 1 s of rest.</li>
+      <li><b>How it lands:</b> at the Clear fade shown beside Clear, so undoing a 1 s Clear brings it back over 1 s. Effects grow back as a press would.</li>
+    </ul>
+  </section>
+
+  <section id="toasts">
+    <h2>Toasts<small>§5.4</small></h2>
+    <p>The existing bottom-right toasts keep their wording. A delete, a Record, an Update, a Clear and a bulk edit now each carry an Undo, and an undo's own toast carries Redo. Each toast's button points at one history entry, so it still undoes the right thing after another edit.</p>
+    <div class="screenbox"><div class="screen pad">
+      <div class="cols">
+        <div class="toasts">
+          <div class="toast"><span class="tx"><b>Cue Q12 “Rose garden” deleted</b><small>From Act 1 and 2 busk pads</small></span><span class="act">Undo</span></div>
+          <div class="toast"><span class="tx"><b>Undid · Delete cue Q12</b><small>Q12 is back in Act 1 between Q11 and Q13</small></span><span class="act">Redo</span></div>
+          <div class="toast"><span class="tx"><b>Programmer cleared</b><small>22 values, 2 layers, 1 effect · 1.0s</small></span><span class="act">Undo</span></div>
+        </div>
+        <div class="toasts">
+          <div class="toast"><span class="tx"><b>Q1 · values saved</b><small>Cue editor, as today</small></span><span class="act">Undo</span></div>
+          <div class="toast"><span class="tx"><b>“Warm wash” placed in Colour</b><small>The hand, as today</small></span><span class="act">Undo</span></div>
+          <div class="toast" style="border-color:rgba(255,123,123,0.5)"><span class="tx"><b style="color:var(--s-red)">Couldn't undo</b><small>A fixture called “spot-3” exists now. Rename it, then undo again.</small></span></div>
+        </div>
+        <p class="cap" style="max-width:220px">An undo that fails rolls back whole and says why in the record's own words. The error is never partial.</p>
+      </div>
+    </div></div>
+  </section>
+
+  <section id="confirms">
+    <h2>Confirms<small>§5.5</small></h2>
+    <p>An undo goes straight through except in three cases: the undo collides with a later change, it would change output while the show runs, or the desk is locked.</p>
+    <div class="screenbox"><div class="screen pad">
+      <div class="cols">
+        <div class="dialog">
+          <h4>Undo Claude's change to “Warm wash”?</h4>
+          <p>A later change of yours touches the same Look. Undoing Claude's change takes yours back too.</p>
+          <div class="list">
+            <div class="li"><span class="chip">You</span>Look “Warm wash”: Hex 4 to 60%<span class="sp"></span><span class="dim m">21:15</span></div>
+            <div class="li"><span class="chip claude">Claude</span>Look “Warm wash”: 4 values<span class="sp"></span><span class="dim m">21:14</span></div>
+          </div>
+          <p class="row" style="color:var(--s-amber)"><svg class="i"><use href="#warn"/></svg>Q11 is live and uses “Warm wash”. Its values will move over its 5.0s fade.</p>
+          <div class="foot"><span class="btn">Cancel</span><span class="btn pri">Undo 2 changes</span></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div class="dialog" style="width:380px">
+            <h4>Undo “Patch: Spot 3 to 2.41”?</h4>
+            <p>Spot 3 goes back to 2.17. Q11 is live, so the rig changes now.</p>
+            <div class="foot"><span class="btn">Cancel</span><span class="btn amber">Undo on stage</span></div>
+          </div>
+          <div class="dialog" style="width:380px">
+            <h4 class="row"><svg class="i"><use href="#lock"/></svg>The desk is locked</h4>
+            <p>Unlock to undo “Act 1: renumber 8 cues”.</p>
+            <div class="foot"><span class="btn">Cancel</span><span class="btn pri">Unlock and undo</span></div>
+          </div>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section id="elsewhere">
+    <h2>The phone, surfaces and Claude<small>§5.6</small></h2>
+    <div class="screenbox"><div class="screen pad">
+      <div class="cols">
+        <div class="phone">
+          <div class="top" style="height:42px;font-size:13px"><span class="show"><span class="dot"></span>Sleeping Beauty</span><span class="sp"></span><svg class="i"><use href="#dots"/></svg></div>
+          <div style="padding:10px;display:flex;flex-direction:column;gap:8px">
+            <div class="menu" style="min-width:0">
+              <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#undo"/></svg>Undo<small>Record Q13</small></div>
+              <div class="mi" style="opacity:0.45"><svg class="i" style="width:13px;height:13px"><use href="#redo"/></svg>Redo</div>
+              <div class="mi"><svg class="i" style="width:13px;height:13px"><use href="#hist"/></svg>History</div>
+              <div class="ms"></div>
+              <div class="mi">Screens…</div><div class="mi">Log out</div>
+            </div>
+            <span class="cap">The phone runner: Undo, Redo and History in the user menu, with the History sheet full-height.</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px;max-width:520px">
+          <div class="lbl">Surfaces · Desk targets</div>
+          <div class="row" style="flex-wrap:wrap;gap:6px"><span class="chip">Blackout</span><span class="chip">GM toggle</span><span class="chip">Pick up</span><span class="chip">Drop</span><span class="chip show">Undo</span><span class="chip show">Redo</span><span class="chip prog">Programmer undo</span></div>
+          <span class="cap" style="max-width:none">Three new binding targets, all buttons. Undo and Redo act as the surface's source would. A surface has no account, so its show changes are its own and Undo there reaches programmer steps and the surface's own show changes. <em>Programmer undo</em> never reaches the show.</span>
+          <div class="lbl" style="margin-top:6px">Claude (MCP)</div>
+          <div style="border:1px solid var(--s-bd);border-radius:8px;padding:10px;font-size:12px" class="m">
+            <span class="dim">→</span> undo_changes {"projectId": 4, "count": 1}<br>
+            <span class="dim">←</span> {"undone": [{"entryId": "h-0193", "label": "Look “Warm wash”: 4 values"}], "conflicts": []}<br>
+            <span class="dim">→</span> undo_changes {"entryId": "h-0188"}<br>
+            <span class="dim">←</span> 409 HISTORY_NOT_YOURS · “Record Q13 into Act 1” is Chris's
+          </div>
+          <span class="cap" style="max-width:none">Claude can list the history and take back its own entries. Anyone else's is refused, and so is one that collides with a later change by someone else.</span>
+        </div>
+      </div>
+    </div></div>
+  </section>
+
+  <section id="engine">
+    <h2>How it works<small>§6</small></h2>
+    <p>The design rests on four pieces, and none of them needs the ~300 write sites to change. They are a write origin set at each door, a cache of every record in canonical form, a statement hook that says which tables a commit touched, and a per-kind codec that can put a record back exactly.</p>
+    <figure>
+      <div class="fig">
+        <svg viewBox="0 0 960 300" role="img" aria-label="A door sets a write origin. The write runs in its own transaction. A statement interceptor collects the tables it touched. After commit, the history service re-exports those kinds from the database and diffs them against the record cache, producing a journal entry of before and after images with row ids. Undo checks the cache still matches each after image, applies the before images through per-kind codecs in one transaction, then runs each kind's frames and live hooks.">
+          <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+          <g font-size="12.5" fill="currentColor">
+            <rect x="10" y="30" width="150" height="62" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="85" y="54" text-anchor="middle" font-weight="600">Door</text>
+            <text x="85" y="72" text-anchor="middle" font-size="11" opacity="0.75">sets WriteOrigin</text>
+            <rect x="200" y="30" width="170" height="62" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="285" y="54" text-anchor="middle" font-weight="600">The write, unchanged</text>
+            <text x="285" y="72" text-anchor="middle" font-size="11" opacity="0.75">its own transaction</text>
+            <rect x="410" y="30" width="170" height="62" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="495" y="54" text-anchor="middle" font-weight="600">JournalInterceptor</text>
+            <text x="495" y="72" text-anchor="middle" font-size="11" opacity="0.75">touched tables · beforeCommit</text>
+            <rect style="stroke:var(--show)" x="620" y="30" width="330" height="62" rx="7" fill="none" stroke-width="2"/>
+            <text x="785" y="54" text-anchor="middle" font-weight="600">HistoryService.committed</text>
+            <text x="785" y="72" text-anchor="middle" font-size="11" opacity="0.75">re-export touched kinds · diff vs cache · entry</text>
+            <path d="M160 61 L196 61" stroke="currentColor" marker-end="url(#ar2)"/>
+            <path d="M370 61 L406 61" stroke="currentColor" marker-end="url(#ar2)"/>
+            <path d="M580 61 L616 61" stroke="currentColor" marker-end="url(#ar2)"/>
+
+            <rect x="620" y="130" width="155" height="56" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="697" y="153" text-anchor="middle" font-weight="600">Record cache</text>
+            <text x="697" y="170" text-anchor="middle" font-size="11" opacity="0.75">(folder, uuid) → id, json</text>
+            <rect x="795" y="130" width="155" height="56" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="872" y="153" text-anchor="middle" font-weight="600">Journal</text>
+            <text x="872" y="170" text-anchor="middle" font-size="11" opacity="0.75">entries · undone flag</text>
+            <path d="M720 92 L705 126" stroke="currentColor" marker-end="url(#ar2)"/>
+            <path d="M850 92 L865 126" stroke="currentColor" marker-end="url(#ar2)"/>
+
+            <rect style="stroke:var(--warn)" x="10" y="220" width="200" height="62" rx="7" fill="none" stroke-width="1.6"/>
+            <text x="110" y="244" text-anchor="middle" font-weight="600">Undo request</text>
+            <text x="110" y="262" text-anchor="middle" font-size="11" opacity="0.75">entry · cache matches after?</text>
+            <rect x="260" y="220" width="220" height="62" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="370" y="244" text-anchor="middle" font-weight="600">RecordCodec per kind</text>
+            <text x="370" y="262" text-anchor="middle" font-size="11" opacity="0.75">upsert in place · insert with id · delete</text>
+            <rect x="530" y="220" width="210" height="62" rx="7" fill="none" stroke="currentColor" stroke-opacity="0.5"/>
+            <text x="635" y="244" text-anchor="middle" font-weight="600">KindEffects</text>
+            <text x="635" y="262" text-anchor="middle" font-size="11" opacity="0.75">frames · republish · reload</text>
+            <path d="M210 251 L256 251" stroke="currentColor" marker-end="url(#ar2)"/>
+            <path d="M480 251 L526 251" stroke="currentColor" marker-end="url(#ar2)"/>
+            <path d="M740 251 C800 251 840 230 862 190" stroke="currentColor" fill="none" stroke-dasharray="4 4" marker-end="url(#ar2)"/>
+            <text x="790" y="275" font-size="11" opacity="0.7">the undo is itself journaled</text>
+            <path d="M872 186 C872 210 300 200 120 216" stroke="currentColor" fill="none" stroke-opacity="0.4" marker-end="url(#ar2)"/>
+          </g>
+        </svg>
+      </div>
+      <figcaption>The write paths stay as they are. The journal learns about a write just before it commits, inside its transaction, from the tables the write touched and the record cache's before-image.</figcaption>
+    </figure>
+    <div class="two">
+      <div class="box"><h3>Write origin</h3>
+        <p>A <code>WriteOrigin(projectId, source, window, requestId, label?)</code> carried as a <code>ThreadContextElement</code>, so the interceptor sees it on the transaction's thread. It is set at four doors:</p>
+        <ul>
+          <li>A route-scoped Ktor plugin under <code>/projects/{id}</code> and the FX routes. It takes the account from the session and the window from an <code>X-Desk-Window</code> header that <code>restApi</code>'s base query adds (the registry row id).</li>
+          <li>The WS dispatcher, per frame, from <code>SocketScope</code>.</li>
+          <li><code>McpProtocol.callTool</code>, from the grant and its <code>clientName</code>.</li>
+          <li><code>SurfaceInputRouter</code>, as the surface.</li>
+        </ul>
+        <p>A route or tool may name its entry with <code>historyLabel("Record Q13 into Act 1")</code>. A write with no origin (the tempo flush, the scheduler) makes no entry.</p>
+      </div>
+      <div class="box"><h3>Record cache and diff</h3>
+        <p>The exporter's <code>writeJson(dir, …)</code> becomes a <code>RecordSink</code>, either a folder or an in-memory map. A project's cache is built on first use, at about 100 ms for a 300-patch rig. Inside each write's transaction, just before it commits, only the touched kinds are re-exported and diffed by hash against the cache. Once it commits the cache takes the new values, and an empty diff produces no entry.</p>
+        <p>Each change stores <code>(folder, uuid, rowId, before?, after?)</code>. Canonical JSON keeps entries small, and a typical edit is a few KB.</p>
+      </div>
+      <div class="box"><h3>RecordCodec: putting records back</h3>
+        <p>The importer's per-kind functions are refactored to read from a <code>RecordSource</code> (a folder or a map) and to take an upsert mode that seeds the uuid→DAO maps from existing rows. In that mode a record whose uuid exists is <b>updated in place</b>, a missing one is <b>inserted with its old row id</b>, and an absent one is deleted in the importer's own foreign-key order.</p>
+        <p>The database's own constraints catch a collision (a key someone has since reused). The undo then rolls back whole with <code>HISTORY_UNDO_BLOCKED</code>, naming the record.</p>
+      </div>
+      <div class="box"><h3>KindEffects: what an undo sets off</h3>
+        <p>One table maps each kind to what its original write would have done:</p>
+        <ul>
+          <li>Looks and palettes: republish.</li>
+          <li>Cues and their children: <code>markEdited</code>, <code>cuesRecomposed</code>.</li>
+          <li>Entries and stacks: <code>cueStackListChanged</code> and the run state.</li>
+          <li>Patches, groups, universes, hides, overrides and colours: <code>loadFixtures</code>.</li>
+          <li>Speed masters: <code>reloadSpeedMasters</code>.</li>
+          <li>Parks: <code>ParkManager</code> reload.</li>
+          <li>Busk pages: <code>buskLayoutChanged(pageIds)</code>.</li>
+          <li>Stage and scene: their frames and the scenery recompute.</li>
+          <li>Scripts and FX definitions: recompile.</li>
+        </ul>
+      </div>
+      <div class="box"><h3>Programmer snapshots</h3>
+        <p><code>ProgrammerStore.snapshot()</code> / <code>restore(snap, fadeMs)</code> are new. They capture slots, sideband, layers and Include state, leaving out the epochs and Blind. Beside them go <code>LocateManager</code>'s active map, <code>ProgrammerScenery.Snapshot</code> and the Local effects as specs. <code>ProgrammerHistory</code> keeps a ring of 50 and checkpoints <b>before</b> each gesture at the same doors, coalescing by (source, property, target) within 1 s.</p>
+      </div>
+      <div class="box"><h3>The wire</h3>
+        <ul>
+          <li><code>GET /projects/{id}/history</code>: the History sheet's list.</li>
+          <li><code>POST …/history/undo</code> <code>{entryId?, backToHere?, programmerOnly?}</code> and <code>…/redo</code>. These answer 409 <code>HISTORY_CONFLICT</code> (with the colliding entries), <code>HISTORY_NOT_YOURS</code>, <code>HISTORY_UNDO_BLOCKED</code> or <code>HISTORY_EMPTY</code>.</li>
+          <li><code>history.state</code>: an outbound, per-socket WS frame, <code>{undo, redo, revision}</code> for this socket's source. The sheet refetches when <code>revision</code> moves.</li>
+          <li>Undo is REST only, so the socket gains no operation. Each REST answer carries <code>X-History-Entry</code>, which a toast's Undo names.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="scope">
+    <h2>What it covers<small>§7</small></h2>
+    <p>The show's history covers exactly the records sync covers. A test ties the journal's kinds to <code>SyncCoverageTest</code>'s portable dispositions, so a new portable table is journaled or the build fails.</p>
+    <div class="two">
+      <div class="box yes"><h3>Can be undone</h3><ul>
+        <li>Cues, entries, stacks, markers, layers, rows, events, scenery, speed-master lists</li>
+        <li>Looks, palettes, busk pages and rig, cue slots</li>
+        <li>Patch, groups, universes, riggings, regions, hides, overrides, recolours</li>
+        <li>Stage elements, viewpoints, prompt books and their markup</li>
+        <li>Scripts, FX definitions, speed masters' stored fields, bindings</li>
+        <li>Parks and releases (P5)</li>
+        <li>The programmer: values, layers, Local effects, Locate, its scenery; Clear, Release, Include, press, spread, aim, focus, Detach</li>
+      </ul></div>
+      <div class="box no"><h3>Not undoable</h3><ul>
+        <li>GO, BACK, GO TO, standby, holds, stack FX size (playback, as on every desk)</li>
+        <li>Arm, fire, fixture commands, bulk lamp runs (Make rig safe keeps its own Undo)</li>
+        <li>Grand master, tempo taps and BPM moves, Blind, the selection, window layout</li>
+        <li>Machine-local settings: universe addresses, Full detail, tube state, remote access</li>
+        <li>Sync, venue publish, Update, Attach, Detach, Extract, Discard (each is a clear point)</li>
+        <li>Creating, deleting or switching projects; accounts and install settings</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section id="sessions">
+    <h2>Sessions<small>§8</small></h2>
+    <p>Six sessions, each shippable on its own. Session 1 is useful straight away. Session 2 splits the exporter into per-kind sections without changing a byte it writes. Session 3's sheet is a useful activity log before anything can be undone, and sessions 4 and 5 put records back.</p>
+    <ol class="sessions">
+      <li><b>Programmer history</b><span class="scope">backend + programmer UI</span><p><code>ProgrammerStore.snapshot/restore</code>, Local-effect specs, Locate and scenery in the snapshot; <code>ProgrammerHistory</code> with checkpoints at every programmer door and coalescing; the action bar's Undo and Redo and its menu; the Clear toast's Undo; <kbd>⌘Z</kbd> inside the programmer.</p><span class="needs">needs P2, P3 · tests: restore equals before, for every door</span></li>
+      <li><b>Records in memory</b><span class="scope">backend, no behaviour change</span><p><code>SyncCoverageTest</code>'s dispositions move to main code; the exporter becomes per-kind sections writing to a <code>RecordSink</code>, a folder or an in-memory map. A golden test proves the export is byte-identical.</p><span class="needs">needs nothing · tests: export unchanged, map equals folder</span></li>
+      <li><b>Write origin and journal</b><span class="scope">backend + read-only sheet</span><p><code>WriteOrigin</code> at the four doors and the <code>X-Desk-Window</code> header; <code>JournalInterceptor</code>; <code>HistoryService</code> with diff, coalescing, labels and clear points; <code>GET /history</code>, <code>history.state</code>; the History sheet listing entries with nothing undoable yet.</p><span class="needs">needs P1, P3, P8 · tests: every mutating route in a sample journals one entry with the right source</span></li>
+      <li><b>Putting records back: the cue side</b><span class="scope">backend</span><p><code>RecordSource</code> and the importer's upsert mode; <code>RecordCodec</code> for stacks, entries, cues and their children, Looks, palettes, busk pages, cue slots; <code>KindEffects</code> for those; undo and redo routes with the conflict check. The key test: on <code>RichProjectFixture</code>, write → undo leaves the export byte-identical and every row id unchanged.</p><span class="needs">needs P4, P9, P10</span></li>
+      <li><b>Putting records back: the rest</b><span class="scope">backend</span><p>Codecs and effects for patch, groups, universes, hides, overrides, colours, riggings, regions, stage elements and viewpoints, prompt books, scripts, FX definitions, speed masters, parks and bindings; the coverage test against <code>SyncCoverageTest</code>; scene-image pruning skips a hash the journal still names.</p><span class="needs">needs P5, P12</span></li>
+      <li><b>The controls</b><span class="scope">frontend + MCP + surfaces</span><p>The header pair and its tooltips, global <kbd>⌘Z</kbd> / <kbd>⇧⌘Z</kbd>, ⌘K entries, the sheet's Undo back to here, toasts with Undo and Redo, the three confirms, the hand, cue editor and prompt-book undos moved onto entries, the phone's menu, the Undo / Redo / Programmer undo binding targets, and MCP's <code>list_history</code> and <code>undo_changes</code>.</p><span class="needs">needs P6, P7, P11</span></li>
+    </ol>
+  </section>
+
+  <section id="risks">
+    <h2>Risks and things to watch<small>§9</small></h2>
+    <ul class="plain">
+      <li><b>The importer refactor is the big piece.</b> Moving it from folders to records must not change a byte of import. The round-trip, clone and venue tests already pin that, and session 4 adds the undo-is-identity test over every kind in <code>RichProjectFixture</code>.</li>
+      <li><b>Raw restore skips route validation.</b> It restores a state the records were in, but other records may have moved since. The conflict check covers the same records and database constraints cover keys. A rule held only in route code (a venue key clash, a group with a member hidden since) needs the checks Update uses (<code>VenueRigChecks</code>) run after the restore and before commit.</li>
+      <li><b>A write that touches a project other than the current one</b> (MCP with a <code>projectId</code>) must carry that project in its origin. The interceptor sees tables, not projects.</li>
+      <li><b>Background writes.</b> The tempo flush writes a speed master's BPM with no person behind it. Writes with no origin make no entry, and the records they change are rebased into the journal, so a tap never reads as a conflict.</li>
+      <li><b>Memory.</b> The record cache is one canonical copy of the project, a few MB at most, and the journal is capped by P3. Both are dropped when the project's history clears.</li>
+      <li><b>Follow-up gates.</b> <code>FU-AUTH-WS-PER-MESSAGE</code> fires when an admin-only operation gains a WS command. Undo is REST only and <code>history.state</code> is outbound, so it does not fire.</li>
+    </ul>
+  </section>
+
+  <section id="out">
+    <h2>Out of scope<small>§10</small></h2>
+    <ul class="plain">
+      <li>Undoing playback, or a "last GO" recovery, which belongs to the Show view's BACK.</li>
+      <li>A history that persists across a restart, or travels with sync.</li>
+      <li>Branching history or merging an undone branch back.</li>
+      <li>Undo inside the Stage editor's drag, which keeps its own handles. Its committed placements are journaled like any patch write.</li>
+    </ul>
+  </section>
+
+  <footer>lighting7 · undo and history design · agreed 2026-10-20 from <code>main</code> at <code>59ebdb7</code>. The checked-in copy is <code>docs/plans/undo-design/undo.html</code>. The implementation plan is <code>docs/plans/undo-plan.md</code>.</footer>
+</div>
