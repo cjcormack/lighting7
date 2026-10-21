@@ -9,6 +9,7 @@ import {
   getStoredCardsListView,
   setStoredCardsListView,
   stickyRedirectsToList,
+  stickyStackSheetView,
 } from './ViewSwitcher'
 
 /**
@@ -95,5 +96,25 @@ describe('stickyRedirectsToList', () => {
     expect(getStoredCardsListView(FIXTURES_VIEW_KEY)).toBe('list')
     localStorage.setItem(GROUPS_VIEW_KEY, 'not json')
     expect(getStoredCardsListView(GROUPS_VIEW_KEY)).toBe('list')
+  })
+})
+
+describe("a stack's third view, the Timeline (stack-timeline plan D2)", () => {
+  it('sends a drilled stack to whichever sheet was chosen last', () => {
+    expect(stickyStackSheetView(null)).toBeNull()
+    setStoredCardsListView(SHOW_VIEW_KEY, 'timeline')
+    expect(getStoredCardsListView(SHOW_VIEW_KEY)).toBe('timeline')
+    expect(stickyStackSheetView(null)).toBe('timeline')
+    setStoredCardsListView(SHOW_VIEW_KEY, 'list')
+    expect(stickyStackSheetView(null)).toBe('list')
+    expect(stickyStackSheetView(CARDS_LINK_STATE)).toBeNull()
+  })
+
+  it('is Show’s alone: another key reads a stored timeline as its default', () => {
+    localStorage.setItem(FIXTURES_VIEW_KEY, JSON.stringify('timeline'))
+    expect(getStoredCardsListView(FIXTURES_VIEW_KEY)).toBe('list')
+    // Show's Table redirect is the pair's rule, which a stored Timeline does not fire.
+    setStoredCardsListView(SHOW_VIEW_KEY, 'timeline')
+    expect(stickyRedirectsToList(null, SHOW_VIEW_KEY)).toBe(false)
   })
 })

@@ -160,6 +160,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-UPDATE-STAGE-TIMED`](#fu-update-stage-timed) | Trigger | Cues | an operator edits a live cue's timed effect or timed layer and expects *Update stage* to send it |
 | [`FU-UPDATE-STAGE-EFFECT-RAMP`](#fu-update-stage-effect-ramp) | Trigger | Cues | an operator sees the base under a running effect jump on *Update stage* rather than fade |
 | [`FU-SCALER-FLUSH-ON-STOP`](#fu-scaler-flush-on-stop) | Trigger | State | a grand-master level or blackout moved just before the desk stopped comes back as it was before |
+| [`FU-TIMELINE-VALUES`](#fu-timeline-values) | Trigger | Cues | the Timeline is used to find where a hand-set value changes |
 
 **Conventions.** Slugs are stable IDs — cite them, don't renumber. When an item lands, replace
 its section with a one-line row in [Completed](#completed); the narrative belongs in the commit
@@ -3088,6 +3089,20 @@ effect moves at once, and under an effect the same press starts the ramp is over
 effect's first tick. A row's own fade has the same limit. **Trigger**: an operator sees the base under
 a running effect jump on *Update stage* where they expected it to fade. **Then**: a per-cue ramp in
 the resolver — the base value interpolated where the tick reads it — rather than a transmit-time fade.
+
+### `FU-TIMELINE-VALUES`
+
+**The Timeline shows a cue's layers, effects and scenery, not its own values** · Trigger ·
+Stack-timeline plan session 3, 2026-10-21
+
+A stack's Timeline (`components/runner/StackTimeline.tsx`, `lib/stackTimeline/`) draws a column per
+Look, palette, effect and scenery element its cues apply; a cue's own rows — the values Record or the
+Values grid set on a fixture — are not columns (plan D10, §8), so a level set by hand in Q4 and
+changed in Q9 cannot be followed down the stack the way a Look can. **Trigger**: the Timeline is used
+to find where a hand-set value changes. **Then**: a column per family of a cue's own rows (Intensity,
+Colour, Position, Beam), filled where the cue holds a row of that family, each cell naming its
+fixtures; the read gains each cue's own rows' families and heads beside `layers`, and the family and
+*Selection only* filters apply to them as to the rest.
 
 ## Completed
 

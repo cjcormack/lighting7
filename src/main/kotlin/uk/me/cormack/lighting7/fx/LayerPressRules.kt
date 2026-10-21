@@ -1,7 +1,18 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
+
+/**
+ * A per-fixture value palette's row targets, distinct, from its rows' targets ([rowTargets], null
+ * for a deferred row); null for an effect palette, an empty one, or one with any deferred row.
+ * Read off the registry's snapshot by the press and off the stored rows by the timeline.
+ */
+internal fun perFixtureRowTargetsOf(hasEffect: Boolean, rowTargets: List<TargetRef?>): List<CueTargetDto>? {
+    if (hasEffect || rowTargets.isEmpty() || rowTargets.any { it == null }) return null
+    return rowTargets.filterNotNull().distinct().map(::CueTargetDto)
+}
 
 /**
  * What a press of a palette needs to know before [LayerPress] runs, over any layer list: the targets
@@ -26,8 +37,7 @@ internal class LayerPressRules(
     /** A per-fixture value palette's row targets, distinct; null for any other record. */
     fun perFixtureRowTargets(uuid: UUID): List<CueTargetDto>? {
         val snapshot = templateRegistry().snapshot(uuid) ?: return null
-        if (snapshot.effect != null || snapshot.rows.isEmpty() || snapshot.rows.any { it.isDeferred }) return null
-        return snapshot.rows.mapNotNull { it.target }.distinct().map(::CueTargetDto)
+        return perFixtureRowTargetsOf(snapshot.effect != null, snapshot.rows.map { it.target })
     }
 
     /**

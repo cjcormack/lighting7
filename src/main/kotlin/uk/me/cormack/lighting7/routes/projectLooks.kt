@@ -590,12 +590,14 @@ internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookTo
  * The targets this Look names itself — every row's and every *bound* effect's, distinct, in row
  * order — keeping only those that resolve in the live patch. A row on a fixture that is no longer
  * patched contributes nothing rather than failing the press, the `TemplateResolver` rule
- * (an unsupported head contributes nothing, never a default). Must be called inside a transaction.
+ * (an unsupported head contributes nothing, never a default). With no live patch ([fixtures] null,
+ * a project that is not running) every named target is kept. Must be called inside a transaction.
  */
-internal fun DaoLook.ownTargets(fixtures: Fixtures): List<CueTargetDto> {
+internal fun DaoLook.ownTargets(fixtures: Fixtures?): List<CueTargetDto> {
     val named = LinkedHashSet<CueTargetDto>()
     rows.forEach { row -> if (row.target != null) named.add(CueTargetDto(row.targetType, row.targetKey)) }
     effects.forEach { effect -> effect.target?.items?.mapTo(named) { CueTargetDto(it) } }
+    if (fixtures == null) return named.toList()
     return named.filter { target ->
         when (TargetRef.ofOrNull(target.type, target.key)) {
             is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.isSuccess

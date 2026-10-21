@@ -26,7 +26,7 @@ import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
 import {
   SHOW_VIEW_KEY,
   setStoredCardsListView,
-  stickyRedirectsToList,
+  stickyStackSheetView,
   type CardsListView,
 } from '../components/ViewSwitcher'
 
@@ -53,10 +53,11 @@ export function ShowRedirect() {
 }
 
 /**
- * `stackView` is which of the drilled stack's two views this route draws: the cue cards, or the
- * cue sheet at `/show/stacks/:stackId/table` (CLAUDE.md §Sheet kit). Wired exactly like
- * `/fixtures/list`: the table route writes the sticky preference on mount, and the cards route
- * redirects to it when the sticky says so — carrying `?cue=`, which is an external contract.
+ * `stackView` is which of the drilled stack's three views this route draws: the cue cards, the
+ * cue sheet at `/show/stacks/:stackId/table` (CLAUDE.md §Sheet kit), or its Timeline at
+ * `…/timeline` (stack-timeline plan D2). Wired like `/fixtures/list`: the sheet routes write the
+ * sticky preference on mount, and the cards route redirects to the one it names — carrying
+ * `?cue=`, which is an external contract.
  */
 export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } = {}) {
   const { projectId, stackId } = useParams()
@@ -68,7 +69,7 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   // Record the sheet as the last-used stack view even when arriving by deep link, so the next
   // drill into a stack lands here.
   useEffect(() => {
-    if (stackView === 'list') setStoredCardsListView(SHOW_VIEW_KEY, 'list')
+    if (stackView !== 'cards') setStoredCardsListView(SHOW_VIEW_KEY, stackView)
   }, [stackView])
 
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
@@ -306,8 +307,8 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
     if (!stacks) return
 
     // **The operator asked for the stack list, so leave them on it.** The ref alone cannot say
-    // that: `/show`, `/show/stacks/:id` and `/show/stacks/:id/table` are three sibling routes with
-    // an `element` each, so going back from a stack *remounts* this component and resets the ref —
+    // that: `/show`, `/show/stacks/:id`, `/show/stacks/:id/table` and `/timeline` are sibling routes
+    // with an `element` each, so going back from a stack *remounts* this component and resets the ref —
     // and the auto-drill below then put them straight back into the live stack, which is what made
     // the Stacks button look broken while a show was running. The signal has to ride the location,
     // which survives that remount; `handleDrillStack(null)` and the breadcrumb both set it.
@@ -402,8 +403,10 @@ export function ShowPage({ stackView = 'cards' }: { stackView?: CardsListView } 
   // this early return keeps from mounting, so a guard on it could never fire on a fresh load.
   // Nothing needs it — the phone branch below draws `RunMobile` whichever of the two URLs it is
   // on, since the sticky is a desk preference and the phone has no cue sheet.
-  if (stackView === 'cards' && drillStackId != null && stickyRedirectsToList(location.state, SHOW_VIEW_KEY)) {
-    return <Navigate to={`/projects/${projectIdNum}/show/stacks/${drillStackId}/table${location.search}`} replace />
+  const stickySheet = stackView === 'cards' && drillStackId != null ? stickyStackSheetView(location.state) : null
+  if (stickySheet != null) {
+    const segment = stickySheet === 'timeline' ? 'timeline' : 'table'
+    return <Navigate to={`/projects/${projectIdNum}/show/stacks/${drillStackId}/${segment}${location.search}`} replace />
   }
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell) for both views — the

@@ -17,13 +17,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { useScrollEdges } from '@/hooks/useScrollEdges'
 import { useStableCallback } from '@/hooks/useStableCallback'
-import { cellSelectionClass } from './cellSelection'
+import { cellSelectionClass, type CellSelectionJoin } from './cellSelection'
 import { describeCellScope, type CellRef, type RowId } from './cellSelectionModel'
 import { useCellMarquee } from './useCellMarquee'
 import type { CellSelection } from './useCellSelection'
 import { useRevealCell } from './revealCell'
 import type { CellOpenRequest } from './useCellEditorRequests'
-import { batchLabelOf, type SheetCellProps, type SheetColumn, type SheetRow } from './sheetModel'
+import { batchLabelOf, takesValue, type SheetCellProps, type SheetColumn, type SheetColumnGroup, type SheetRow } from './sheetModel'
 
 /** Every row of every sheet is 36px, the DMX sheet's 56 — see `rowHeight`. */
 export const SHEET_ROW_HEIGHT = 36
@@ -235,6 +235,9 @@ export function SheetTable<Row extends SheetRow, C extends string>({
     [firstColumn.width, columns],
   )
   const visibleColumns = useMemo(() => columns.map((c) => c.key), [columns])
+  const bands = useMemo(() => headerBands(columns), [columns])
+  const bandStarts = useMemo(() => new Set(bands.filter((band) => band.group != null).map((band) => band.first)), [bands])
+  const dividerCells = useMemo(() => columns.some((c) => c.dividerCell != null), [columns])
   const columnByKey = useMemo(() => new Map(columns.map((c) => [c.key, c])), [columns])
   const labelFor = useCallback((col: C) => columnByKey.get(col)?.label ?? col, [columnByKey])
 
@@ -340,6 +343,25 @@ export function SheetTable<Row extends SheetRow, C extends string>({
             className={SHEET_HEADER_ROW_CLASS}
             style={{ gridTemplateColumns }}
           >
+            {bands.length > 0 && (
+              <>
+                <div aria-hidden="true" className={cn(SHEET_STICKY_CELL_CLASS, 'h-[22px]')} />
+                {bands.map((band) =>
+                  band.group == null ? (
+                    <div key={`gap-${band.first}`} aria-hidden="true" style={{ gridColumn: `span ${band.span}` }} />
+                  ) : (
+                    <div
+                      key={`band-${band.first}`}
+                      data-header-band={band.group.key}
+                      className="flex h-[22px] min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap border-l border-border px-2 text-[11px] text-muted-foreground"
+                      style={{ gridColumn: `span ${band.span}` }}
+                    >
+                      {band.group.label}
+                    </div>
+                  ),
+                )}
+              </>
+            )}
             <div
               // The marquee measures the first column from this — see `useCellMarquee`. A sheet
               // whose first column selects no rows hangs no name header, and every press is a cell
@@ -359,10 +381,15 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                 // read-out column hangs none: a rectangle over Book or Type selects nothing there,
                 // rather than cells with no editor that inflate the count and refuse Clear.
                 {...(column.cell != null ? { 'data-column-header': column.key } : {})}
-                className={cn(SHEET_HEADER_CELL_CLASS, column.align === 'right' && 'text-right')}
+                className={cn(
+                  SHEET_HEADER_CELL_CLASS,
+                  column.align === 'right' && 'text-right',
+                  column.header != null && 'min-w-0 normal-case tracking-normal',
+                  bandStarts.has(column.key) && 'border-l border-border',
+                )}
                 aria-sort={ariaSort(sort, column.key)}
               >
-                <HeaderLabel label={column.label} sortKey={column.key} sort={sort} />
+                {column.header ?? <HeaderLabel label={column.label} sortKey={column.key} sort={sort} />}
               </div>
             ))}
           </div>
@@ -395,6 +422,8 @@ export function SheetTable<Row extends SheetRow, C extends string>({
             )}
             {virtualizer.getVirtualItems().map((virtualRow) => {
               const row = rows[virtualRow.index]
+              const above = rows[virtualRow.index - 1]
+              const below = rows[virtualRow.index + 1]
               const view = (dragHandle?: SheetDragHandle) => (
                 <SheetRowView
                   row={row}
@@ -413,6 +442,10 @@ export function SheetTable<Row extends SheetRow, C extends string>({
                   skippedFor={skippedFor}
                   cellDisabled={cellDisabled}
                   cellSelection={cellSelection}
+                  aboveRow={above ?? null}
+                  belowRow={below ?? null}
+                  bandStarts={bandStarts}
+                  dividerCells={dividerCells}
                   autoOpenCol={autoOpenCell?.rowId === row.id ? autoOpenCell.col : null}
                   autoOpenSeed={autoOpenCell?.rowId === row.id ? autoOpenCell.seed : null}
                   autoOpenAtButton={autoOpenCell?.rowId === row.id && autoOpenCell.atButton}
@@ -488,6 +521,25 @@ export function SheetTable<Row extends SheetRow, C extends string>({
       )}
     </div>
   )
+}
+
+interface HeaderBand<C extends string> {
+  group: SheetColumnGroup | null
+  span: number
+  first: C
+}
+
+/** The header's bands (`SheetColumn.group`): consecutive columns of one group, and the gaps between. */
+function headerBands<Row extends SheetRow, C extends string>(columns: readonly SheetColumn<Row, C>[]): HeaderBand<C>[] {
+  if (!columns.some((c) => c.group != null)) return []
+  const bands: HeaderBand<C>[] = []
+  for (const column of columns) {
+    const last = bands[bands.length - 1]
+    const key = column.group?.key ?? null
+    if (last != null && (last.group?.key ?? null) === key) last.span += 1
+    else bands.push({ group: column.group ?? null, span: 1, first: column.key })
+  }
+  return bands
 }
 
 function ariaSort(sort: SheetSort | undefined, key: string | undefined): 'ascending' | 'descending' | undefined {
@@ -686,6 +738,17 @@ interface SheetRowViewProps<Row extends SheetRow, C extends string> {
   batchNoun: string
   cellDisabled?: (row: Row, col: C) => boolean
   cellSelection: CellSelection<C>
+  /**
+   * The rows directly above and below — what a selected cell joins its outline to, where the
+   * neighbour draws a selected cell there too (`CellSelectionJoin`). A divider, or a blank cell the
+   * marquee swept up, breaks the ring.
+   */
+  aboveRow: Row | null
+  belowRow: Row | null
+  /** The columns that open a header band, which draw the band's rule down the sheet. */
+  bandStarts: ReadonlySet<C>
+  /** Some column draws on divider rows (`SheetColumn.dividerCell`): dividers are rows of cells. */
+  dividerCells: boolean
   autoOpenCol: C | null
   autoOpenSeed: string | null
   autoOpenAtButton: boolean
@@ -713,6 +776,10 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   batchNoun,
   cellDisabled,
   cellSelection,
+  aboveRow,
+  belowRow,
+  bandStarts,
+  dividerCells,
   autoOpenCol,
   autoOpenSeed,
   autoOpenAtButton,
@@ -722,6 +789,31 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
   onEmptyCellClick,
   dragHandle,
 }: SheetRowViewProps<Row, C>) {
+  if (row.divider != null && dividerCells) {
+    return (
+      <div
+        className={cn(SHEET_ROW_CLASS, 'auto-rows-[minmax(0,1fr)] bg-muted/30')}
+        style={{ gridTemplateColumns }}
+        data-row-id={row.id}
+        data-divider
+      >
+        <div className={cn(SHEET_STICKY_CELL_CLASS, 'flex h-full min-w-0 items-center gap-2 bg-muted px-2')}>
+          {dragHandle && <RowGrip handle={dragHandle} />}
+          <span className="truncate text-xs font-medium text-muted-foreground">{row.divider}</span>
+          <span className="h-px min-w-3 flex-1 bg-border" />
+        </div>
+        {columns.map((column) => (
+          <div
+            key={column.key}
+            data-divider-cell={column.key}
+            className={cn('relative h-full min-w-0', bandStarts.has(column.key) && 'border-l border-border')}
+          >
+            {column.dividerCell?.(row)}
+          </div>
+        ))}
+      </div>
+    )
+  }
   if (row.divider != null) {
     return (
       // `data-row-id` here too: a divider is a row of the sheet, not empty space — a tap on it must
@@ -802,6 +894,7 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
               className={cn(
                 'flex h-full min-w-0 items-center overflow-hidden',
                 column.align === 'right' && 'justify-end',
+                bandStarts.has(column.key) && 'border-l border-border',
               )}
               onClick={column.display == null ? onEmptyCellClick : undefined}
             >
@@ -814,6 +907,11 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
         const batchCount = batchCountFor(row, column.key)
         // Only a selected cell has a batch to skip from; the rest are a batch of themselves.
         const skipped = selectedCell || selected ? (skippedFor?.(row, column.key) ?? null) : null
+        const drawsSelected = (neighbour: Row | null) =>
+          neighbour != null && takesValue(column, neighbour) && cellSelection.isSelected(neighbour.id, column.key)
+        const join: CellSelectionJoin | undefined = selectedCell
+          ? { above: drawsSelected(aboveRow), below: drawsSelected(belowRow) }
+          : undefined
         const props: SheetCellProps<unknown> = {
           value,
           label: column.label,
@@ -843,7 +941,8 @@ function SheetRowViewInner<Row extends SheetRow, C extends string>({
               'relative h-full min-w-0',
               column.gutter === false ? 'p-0.5' : 'py-0.5 pr-[18px]',
               column.cellClass?.(row),
-              cellSelectionClass(selectedCell, column.gutter !== false),
+              bandStarts.has(column.key) && 'border-l border-border',
+              cellSelectionClass(selectedCell, column.gutter !== false, false, join),
               // Read-only for the pointer; the cell's trigger takes `disabled` for the keyboard.
               disabled && 'pointer-events-none',
             )}

@@ -8,6 +8,7 @@ import {
 import type { CueStack } from '@/api/cueStacksApi'
 import { StackDetail } from './StackDetail'
 import { ShowOverview } from './ShowOverview'
+import type { CardsListView } from '@/components/ViewSwitcher'
 import { nextAvailableName } from '@/lib/cueUtils'
 
 interface ShowViewProps {
@@ -44,8 +45,8 @@ interface ShowViewProps {
   openedEntryId?: number | null
   /** Record the programmer into a new cue in this stack — what replaced "Add Cue". */
   onRecordIntoStack?: (stackId: number) => void
-  /** Cards or the cue sheet, for the drilled stack. See `StackDetail`. */
-  view?: 'cards' | 'list'
+  /** Cards, the cue sheet or the Timeline, for the drilled stack. See `StackDetail`. */
+  view?: CardsListView
   onOpenBook?: (cueId: number) => void
   onRequestUnlock?: () => void
 }

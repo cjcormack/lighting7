@@ -379,6 +379,12 @@ function getAppRouter() {
           path: "projects/:projectId/show/stacks/:stackId/table",
           element: <RigGate navId="program"><ShowPage stackView="list" /></RigGate>,
         },
+        // The stack's Timeline — cues against the Looks, palettes, effects and scenery they apply
+        // (stack-timeline plan D2), the third segment of the same switcher.
+        {
+          path: "projects/:projectId/show/stacks/:stackId/timeline",
+          element: <RigGate navId="program"><ShowPage stackView="timeline" /></RigGate>,
+        },
         {
           path: "show",
           element: <ShowRedirect />,
