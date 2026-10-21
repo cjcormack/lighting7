@@ -1,6 +1,6 @@
 # A stack's timeline: cues against the Looks, palettes, effects and scenery they apply
 
-> **Document status: agreed 2026-10-20; session 1 of 5 done.** The design is the record in
+> **Document status: agreed 2026-10-20; session 2 of 5 done.** The design is the record in
 > [`stack-timeline-design/`](stack-timeline-design/INDEX.md): four boards, the desk survey, and the
 > eighteen calls Chris answered (D1–D11 in four rounds, C1–C7 in a fifth, every C as recommended).
 > A one-page copy for human readers is
@@ -326,7 +326,7 @@ and 5 need 3, and 5 needs 1 and 2 for effect runs.
 - **Docs:** `cues-engineering.md` (the ad-hoc row), `sync-engineering.md` §"v37".
 - Full suites locally (P1).
 
-### Session 2: a GO hands a run on (backend)
+### Session 2: a GO hands a run on (backend) — done, `274d0204`
 
 - §3.3: `FxInstance.runUuid`, the ad-hoc arm of `bringOn`, settings-differ adoption through a shared
   `alignmentRequest`, `Adoption` and `giveBack` restoring the uuid and settings.
