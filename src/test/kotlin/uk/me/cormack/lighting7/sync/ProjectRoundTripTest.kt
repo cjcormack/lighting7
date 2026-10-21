@@ -35,10 +35,14 @@ import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoProject
+import uk.me.cormack.lighting7.testsupport.RICH_PROJECT_PULSE_RUN
+import uk.me.cormack.lighting7.models.DaoCues
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
@@ -218,7 +222,7 @@ class ProjectRoundTripTest {
         assertTrue(lookEffect.seconds, "a Look's effect keeps Seconds")
         val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
         assertTrue(templateEffect.seconds, "a palette's effect keeps Seconds")
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
+        val adHoc = openPulse(exportDirA)
         assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
 
         val format = canonicalDecode(
@@ -250,7 +254,7 @@ class ProjectRoundTripTest {
         assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.size, lookEffect.direction, lookEffect.nShot))
         val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
         assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.size, templateEffect.direction, templateEffect.nShot))
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
+        val adHoc = openPulse(exportDirA)
         assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.size, adHoc.direction, adHoc.nShot))
 
         val format = canonicalDecode(
@@ -285,7 +289,7 @@ class ProjectRoundTripTest {
             Shape(1.5, 3, 2, 2),
             Shape(templateEffect.spread, templateEffect.wings, templateEffect.blocks, templateEffect.groups),
         )
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" }
+        val adHoc = openPulse(exportDirA)
         assertEquals(Shape(0.25, 2, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
 
         val format = canonicalDecode(
@@ -1242,6 +1246,64 @@ class ProjectRoundTripTest {
         assertEquals(setOf("operation", "role", "travelS"), cloth.params!!.keys)
     }
 
+    // ── v37: effect runs (stack-timeline plan session 1) ─────────────────────────
+
+    /**
+     * An ad-hoc effect's run key travels on its row and imports back; a row in no run writes no key.
+     * Asserted on the export text for the reason the Seconds test gives.
+     */
+    @Test
+    fun `an effect's run key exports on its rows, imports back, and is omitted when null`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val cueNames = exportDocs(exportDirA, "cues", CueJson.serializer()).associate { it.uuid to it.name }
+        val effects = exportDocs(exportDirA, "cueAdHocEffects", CueAdHocEffectJson.serializer())
+        val keyed = effects.filter { it.runUuid != null }
+        assertEquals(setOf("open", "build"), keyed.map { cueNames.getValue(it.cueUuid) }.toSet(), "one row in each neighbour")
+        assertEquals(setOf(RICH_PROJECT_PULSE_RUN.toString()), keyed.map { it.runUuid }.toSet(), "under one key")
+        val unkeyed = effects.single { it.runUuid == null }
+        val unkeyedText = Files.readString(exportDirA.resolve("cueAdHocEffects/${unkeyed.uuid}.json"))
+        assertFalse(unkeyedText.contains("runUuid"), "a row in no run writes no key: $unkeyedText")
+        assertTrue(SUPPORTED_FORMAT_VERSION >= 37, "run keys sync from v37")
+        assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": $SUPPORTED_FORMAT_VERSION"))
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val runs = DaoCue.find { DaoCues.project eq imported.projectId }
+                .flatMap { cue -> cue.adHocEffects.map { cue.name to it.runUuid } }
+                .toSet()
+            assertEquals(
+                setOf("open" to RICH_PROJECT_PULSE_RUN, "build" to RICH_PROJECT_PULSE_RUN, "open" to null),
+                runs,
+            )
+        }
+    }
+
+    /** A v36 archive holds no run keys (C5): it imports with none, and nothing joins its effects. */
+    @Test
+    fun `a v36 archive imports with no run keys`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        wipeDatabase()
+        Files.list(exportDirA.resolve("cueAdHocEffects")).use { s -> s.toList() }.forEach { file ->
+            val doc = Json.parseToJsonElement(Files.readString(file)).jsonObject
+            Files.writeString(file, JsonObject(doc - "runUuid").toString())
+        }
+        Files.writeString(
+            exportDirA.resolve("formatVersion.json"),
+            Files.readString(exportDirA.resolve("formatVersion.json")).replace("\"formatVersion\": $SUPPORTED_FORMAT_VERSION", "\"formatVersion\": 36"),
+        )
+
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
+        transaction(state.database) {
+            val effects = DaoCue.find { DaoCues.project eq imported.projectId }.flatMap { it.adHocEffects }
+            assertEquals(3, effects.size)
+            assertTrue(effects.all { it.runUuid == null }, "an archive before v37 names no run")
+        }
+    }
+
     // ── v24: venues sync (venue plan session 4) ──────────────────────────────────
 
     /**
@@ -1482,6 +1544,18 @@ class ProjectRoundTripTest {
         val engine = RemoteSyncEngine(state, AuthResolver(creds, tokenStore = null, tokenProvider = null))
         val (uuid, install) = transaction(state.database) { DaoProject[venueId].uuid to DaoInstall.all().first() }
         return runBlocking { engine.runSync(venueId, uuid, install.uuid, install.friendlyName) }
+    }
+
+    private fun <T> exportDocs(dir: Path, folder: String, serializer: kotlinx.serialization.KSerializer<T>): List<T> =
+        Files.walk(dir.resolve(folder)).use { stream ->
+            stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                .map { canonicalDecode(serializer, Files.readString(it)) }
+        }
+
+    /** The rich fixture's Pulse in `open`, every field set; `build`'s runs it on at the defaults. */
+    private fun openPulse(dir: Path): CueAdHocEffectJson {
+        val open = exportDocs(dir, "cues", CueJson.serializer()).single { it.name == "open" }.uuid
+        return exportDocs(dir, "cueAdHocEffects", CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" && it.cueUuid == open }
     }
 
     private fun wipeDatabase() {

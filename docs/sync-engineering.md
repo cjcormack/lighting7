@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 36`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 37`, `minReader = 5`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -318,6 +318,21 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 37 — effect runs
+
+Stack-timeline plan session 1 (D7, §3.4; `docs/cues-engineering.md` §"Effect runs"):
+`CueAdHocEffectJson` gains `runUuid`, the run key ad-hoc effects of neighbouring cues share, omitted
+when null, so a show with no runs exports byte-for-byte as at v36 (only `formatVersion.json` says 37).
+`SUPPORTED_FORMAT_VERSION = 37`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing key is no run,
+so a v36 archive imports with none (C5: nothing joins its effects for it). The writer's number moves by
+the sharp-edge rule: a v36 reader would import every effect out of its run, and its next
+wipe-then-export push would write the keys away for every peer.
+
+**Imported as stored**: nothing checks that a key's rows sit in neighbouring cues or that a cue holds
+it once. A key is not an identity — the field is `runUuid`, never `uuid` — so `ExportUuidRemapper`
+collects none and a clone keeps every key as it is, its runs whole; the cue copier is what gives a
+copy fresh ones. `RichProjectFixture` keys the Pulse in `open` and `build`, neighbours in `show-1`.
 
 ### Version 36 — fixture colours
 

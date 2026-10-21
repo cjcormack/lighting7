@@ -579,7 +579,8 @@ internal val DaoCueTrigger.hookKey get() = CueHookKey(triggerType, script.id.val
  * What *Update stage* sends of a cue — its own rows' values, its untimed layers and its untimed
  * effects, in their order — compared across a write to tell whether it leaves a held cue *Edited
  * since GO* (show-cue-editing plan §3.5). A row's own fade and move-in-dark, a timed layer or effect,
- * scenery and events are not in it: Update stage sends none of them.
+ * scenery and events are not in it: Update stage sends none of them. Nor is an effect's run key
+ * (stack-timeline plan P4): breaking or joining a run changes nothing on stage now.
  */
 internal fun DaoCue.stageContent(): List<List<Any?>> = listOf(
     propertyAssignmentsInOrder().map { it.toDto() }.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value) },
@@ -588,7 +589,7 @@ internal fun DaoCue.stageContent(): List<List<Any?>> = listOf(
         .map { it.copy(sortOrder = 0, randomWindowMs = null) },
     adHocEffectsInOrder().map { it.toDto() }
         .filter { it.delayMs == null && it.intervalMs == null }
-        .map { it.copy(sortOrder = 0, randomWindowMs = null) },
+        .map { it.copy(sortOrder = 0, randomWindowMs = null, runUuid = null) },
 )
 
 /** A cue's stored layers, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
@@ -761,7 +762,10 @@ internal fun DaoCueLayer.take(layer: CueLayerDto) {
     randomWindow = layer.randomWindowMs.asDuration()
 }
 
-/** [effect] onto this effect, but for the target [writeCueChildren] matched it on. */
+/**
+ * [effect] onto this effect, but for the target [writeCueChildren] matched it on. Its `uuid` and run
+ * key are the stored row's, never the write's (stack-timeline plan P2).
+ */
 internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     effectType = effect.effectType
     category = effect.category

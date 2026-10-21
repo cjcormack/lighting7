@@ -97,7 +97,8 @@ cue_ad_hoc_effects
 ├── random_window (Duration, nullable — randomisation for recurring)
 ├── sort_order (int, default 0)
 ├── speed_master_uuid, rate_speed_master_uuid (nullable)
-└── uuid
+├── uuid
+└── run_uuid (nullable — the run key, see §"Effect runs")
 
 cue_triggers (script hooks only)
 ├── id (auto-increment PK)
@@ -152,6 +153,16 @@ the list onto entries (`state/CueModelMigration.kt`).
   `MERGE`, and with it Update, already upserted in place, and Update's layer diff keeps a layer by
   its id. `deleteCueChildren` is only for a cue being deleted. A copy into another project, a clone
   and the importer still mint or carry uuids as they always did.
+- **Effect runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_effects.run_uuid` is an ad-hoc
+  effect's **run key**: rows of neighbouring cues that share one are one run, for the stack's Timeline
+  to draw as one bar and a GO to hand the effect on (stack-timeline plan sessions 2 and 3). It is the
+  timeline's to write. `CueAdHocEffectDto.runUuid` is read only, like `uuid`, and `take()` leaves it
+  alone, so every other write — a `PUT` or `PATCH`, Record, Update, `create_cue` — keeps a matched
+  row's key and gives a new row none. A write that changes an effect's target, property or type
+  replaces its row, so the new one is in no run. A key is not stage content (`stageContent` leaves it out), so breaking or joining a
+  run does not mark a live cue edited since GO. It syncs as `CueAdHocEffectJson.runUuid`
+  (`formatVersion` 37), and a clone keeps it as it is; a copy gets fresh keys (§"Copying"). Effects
+  stored before the key have none, and no migration gives them one (C5).
 
 ## REST API
 
@@ -540,6 +551,11 @@ current project, under the show-editing lock in the Cues table (frontend `CLAUDE
 table"). The REST `POST /cues/{id}/copy`, which copied as-is into a stack it called "Unsorted", is
 gone. When a portable column is added to a cue, Look, palette or their children, add it to the
 copier too.
+
+**A copy's effect runs are its own** (stack-timeline plan C4): the copier maps each source run key to
+a fresh one, once per copier, and one copier spans one operation. A *Duplicate* gets keys used nowhere
+else, so it joins no run of its source's; cues copied together — `copy-from`'s list, every stack of one
+`copy_to_project` — keep their runs joined to each other and to nothing in the source.
 
 ## WebSocket Notifications
 

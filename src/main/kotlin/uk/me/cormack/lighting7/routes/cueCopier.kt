@@ -37,6 +37,9 @@ internal class CopyReport {
  *  - A fixture or group target is kept whatever the target's rig holds, and reported when the rig
  *    (`RigScope.of(target)`) does not have it; the cue then reads it as missing.
  *
+ * An effect's run key (stack-timeline plan C4) is fresh: one per source key for the copier's life,
+ * so a copy made of several cues keeps their runs joined to each other and to nothing in the source.
+ *
  * What it could not carry is in [report]. Prompt-book anchors are an entry's and are never copied.
  * Must be used inside one transaction, which a dry run rolls back.
  */
@@ -67,6 +70,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
     private val lookMap = HashMap<Int, DaoLook>()
     private val templateMap = HashMap<Int, DaoTemplate>()
     private val addedElements = HashMap<String, DaoStageElement>()
+    private val runKeys = HashMap<UUID, UUID>()
 
     /** [element], copied into the target by its caller, is what scenery naming it by name finds. */
     fun elementAdded(element: DaoStageElement) {
@@ -149,6 +153,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 wings = effect.wings
                 blocks = effect.blocks
                 groups = effect.groups
+                runUuid = effect.runUuid?.let { runKeys.getOrPut(it) { UUID.randomUUID() } }
             }
         }
         for (trigger in cue.triggers) {

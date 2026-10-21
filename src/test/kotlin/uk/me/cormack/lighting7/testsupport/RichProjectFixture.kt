@@ -113,6 +113,12 @@ const val RICH_PROJECT_NAME = "round-trip-rich"
 val RICH_PROJECT_DETACHED_FROM: Pair<UUID, Int> = UUID.fromString("5b0e6c1a-7f2d-4c3e-9a8b-1d2e3f4a5b6c") to 7
 
 /**
+ * The run key (stack-timeline plan D7) the Pulse in `open` and `build`, show-1's first two cues, share.
+ * Not an identity, so a clone keeps it.
+ */
+val RICH_PROJECT_PULSE_RUN: UUID = UUID.fromString("3c9d2e7a-41f6-4b8e-a0d5-6e2f8c1b9a47")
+
+/**
  * The scene images the fixture paints with (scrim plan session 1), made in code: a PNG with alpha
  * (a cut cloth's front), a JPEG (its back), an opaque PNG (the flat's) and a JPEG only a model's
  * part is textured with, so an image no cloth names still has to travel. Media type and bytes, in
@@ -803,6 +809,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // session 4 and a cue row can only hold a literal, so the case no longer exists to cover —
     // a cue depends on a Look through a `DaoCueLayer` FK now, and the two layers below are what
     // exercise the clone path.
+    // v37: the Pulse runs on into "build", show-1's next cue, so two rows share a run key.
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
         effectType = "Pulse"; category = "dimmer"; beatDivision = 0.5
@@ -832,6 +839,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         wings = 2
         blocks = 4
         groups = 3
+        runUuid = RICH_PROJECT_PULSE_RUN
     }
     // An ad-hoc effect over a selection (formatVersion 34), the shape Record writes for a Local effect
     // started on a marquee.
@@ -888,6 +896,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; name = "build"
     }
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
+    DaoCueAdHocEffect.new {
+        cue = build; targetType = "fixture"; targetKey = "hex-1"
+        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"; beatDivision = 0.5
+        blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = mapOf("depth" to "0.8")
+        runUuid = RICH_PROJECT_PULSE_RUN
+    }
     // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with
     // every entry shape off its default. A marker in a gap (a midpoint ordinal, P6), an auto number
     // (never exported, P5) beside cue 1's explicit one, and two entries sharing one ordinal — two

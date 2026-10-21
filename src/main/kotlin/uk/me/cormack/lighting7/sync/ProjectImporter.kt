@@ -240,6 +240,12 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // them away on its next push. MIN stays at 5: a missing colour is none. Imported as stored (a key this
 // desk does not know reads as none, and survives the round trip), as a gel code is.
 //
+// v37 added `runUuid` to `CueAdHocEffectJson` (stack-timeline plan D7): the run key ad-hoc effects of
+// neighbouring cues share, for a GO to hand the running effect on (session 2). SUPPORTED moved for v14's reason — a v36
+// reader would import every effect out of its run and write the keys away on its next push. MIN stays at
+// 5: a missing key is no run. Imported as stored: nothing checks that a key's rows are neighbours, or
+// that a cue holds it once.
+//
 // v24 made venues sync (venue plan session 4): `project.json`'s `kind`, a show's pin (`venueUuid`,
 // `venueVersion`) and `venueRepo` hint, and `showHides/`. A show's archive holds only its own rows, so
 // its links into the venue — a patch on a venue universe, a group member, a cue event, a scenery change,
@@ -297,7 +303,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 36
+internal const val SUPPORTED_FORMAT_VERSION = 37
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -1735,6 +1741,7 @@ class ProjectImporter(private val state: State) {
                 this.blocks = e.blocks
                 this.groups = e.groups
                 this.uuid = uuid
+                runUuid = e.runUuid?.let { UUID.fromString(it) }
             }
             uuid to Unit
         }
