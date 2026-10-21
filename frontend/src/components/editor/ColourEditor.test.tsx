@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { useEffect, useState } from 'react'
 import { chan, colourProp, sliderProp } from '@/test/fixtureFactories'
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
 import { resetLiveAppearance } from '@/lib/liveAppearance'
@@ -62,7 +63,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures: [], fixtureTypes: [], fixtureByKey: new Map(), typeByKey: new Map() }),
 }))
 
-import { ColourEditor, emitterHeadCounts, type ColourEditorProps } from './ColourEditor'
+import { ColourEditor, ECHO_SETTLE_MS, emitterHeadCounts, type ColourEditorProps } from './ColourEditor'
 import { ColourPickerPopover } from '@/components/fixtures/ColourPickerPopover'
 
 const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
@@ -317,6 +318,151 @@ describe('Pick', () => {
     )
     expect(onPick).toHaveBeenCalledTimes(2)
     expect(onPick).toHaveBeenLastCalledWith({ r: 255, g: 0, b: 0, w: 0, a: 0, uv: 0 }, { hex: '#ff0000', mixed: false, read: 1 })
+  })
+})
+
+/**
+ * A write to a multi-head fixture is answered once per head. Each answer that lands in the same
+ * batch as the picker's own state update is a second move of its `color` prop, which makes
+ * `react-colorful` call `onChange` with the previous colour and no gesture — the storm.
+ */
+describe('the desk’s answers', () => {
+  const echo = (r: number, g: number, b: number): Partial<ColourEditorProps> => ({ r, g, b, combinedCss: `rgb(${r}, ${g}, ${b})` })
+
+  /** A host whose next props land in the batch the last ones caused, the way per-head echoes do. */
+  function drawBurst(start: Partial<ColourEditorProps> = {}) {
+    const onColourChange = vi.fn()
+    const queue: Partial<ColourEditorProps>[] = []
+    let land: (props: Partial<ColourEditorProps>) => void = () => {}
+    function Host() {
+      const [props, setProps] = useState<Partial<ColourEditorProps>>(start)
+      land = (next) => setProps((prev) => ({ ...prev, ...next }))
+      useEffect(() => {
+        const next = queue.shift()
+        if (next) setProps((prev) => ({ ...prev, ...next }))
+      }, [props])
+      return (
+        <ColourEditor
+          r={10}
+          g={20}
+          b={30}
+          combinedCss="rgb(10, 20, 30)"
+          hasWhiteChannel={false}
+          hasAmberChannel={false}
+          hasUvChannel={false}
+          onColourChange={onColourChange}
+          channelFields
+          open
+          {...props}
+        />
+      )
+    }
+    render(<Host />)
+    const burst = (...answers: Partial<ColourEditorProps>[]) => {
+      const [first, ...rest] = answers
+      queue.push(...rest)
+      act(() => land(first))
+    }
+    return { onColourChange, burst }
+  }
+  const settle = () => act(() => vi.advanceTimersByTime(ECHO_SETTLE_MS))
+  const saturation = () => document.querySelector('.react-colorful__saturation [aria-valuetext]')!
+
+  // The editor's gesture clock is `performance`, which fake timers leave alone unless asked.
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date', 'performance'] }))
+  afterEach(() => vi.useRealTimers())
+
+  it('writes nothing while a burst of answers lands, and the knob follows the last once it is still', () => {
+    const { onColourChange, burst } = drawBurst()
+    burst(echo(64, 0, 0), echo(128, 0, 0), echo(255, 0, 0))
+    expect(onColourChange).not.toHaveBeenCalled()
+    expect(knob()).toBe('Saturation 67%, Brightness 12%')
+    settle()
+    expect(knob()).toBe('Saturation 100%, Brightness 100%')
+    expect(onColourChange).not.toHaveBeenCalled()
+  })
+
+  it('writes only from a press or an arrow key on the picker, never from two seeds in one batch', () => {
+    const { onColourChange, burst } = drawBurst()
+    burst({ ...echo(255, 0, 0), seedKey: 1 }, { ...echo(0, 0, 255), seedKey: 2 })
+    expect(onColourChange).not.toHaveBeenCalled()
+    // Full saturation already: right would move nothing, so left.
+    fireEvent.keyDown(saturation(), { key: 'ArrowLeft', keyCode: 37, which: 37 })
+    expect(onColourChange).toHaveBeenCalledTimes(1)
+    fireEvent.mouseDown(saturation())
+    expect(onColourChange).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not move the knob under a held pointer, and follows once it is let go', () => {
+    const { burst } = drawBurst()
+    fireEvent.pointerDown(saturation())
+    burst(echo(255, 0, 0))
+    act(() => vi.advanceTimersByTime(ECHO_SETTLE_MS * 10))
+    expect(knob()).toBe('Saturation 67%, Brightness 12%')
+    fireEvent.pointerUp(window)
+    settle()
+    expect(knob()).toBe('Saturation 100%, Brightness 100%')
+  })
+
+  it('a right-click holds nothing — its release may never come', () => {
+    const { burst } = drawBurst()
+    fireEvent.pointerDown(saturation(), { button: 2 })
+    burst(echo(255, 0, 0))
+    settle()
+    expect(knob()).toBe('Saturation 100%, Brightness 100%')
+  })
+
+  it('a seed while the pointer is down leaves the drag writing', () => {
+    const { onColourChange, burst } = drawBurst()
+    fireEvent.pointerDown(saturation())
+    fireEvent.mouseDown(saturation())
+    const pressed = onColourChange.mock.calls.length
+    expect(pressed).toBe(1)
+    burst({ ...echo(255, 0, 0), seedKey: 1 })
+    fireEvent.mouseMove(window, { buttons: 1 })
+    expect(onColourChange.mock.calls.length).toBeGreaterThan(pressed)
+  })
+
+  it('follows answers that never stop, at the ceiling', () => {
+    const { burst } = drawBurst()
+    for (let i = 1; i <= 30; i++) {
+      burst(echo(8 * i, 0, 0))
+      act(() => vi.advanceTimersByTime(40))
+    }
+    expect(knob()).toMatch(/^Saturation 100%/)
+  })
+
+  it('keeps what was asked for through one head’s answer, and lets it go once the answers are still', () => {
+    const { onColourChange, burst } = drawBurst({ perHeadEchoes: true })
+    fireEvent.change(field('R'), { target: { value: '200' } })
+    // One of four heads has answered: the average is not what the next edit builds on.
+    burst(echo(58, 20, 30))
+    fireEvent.change(field('G'), { target: { value: '150' } })
+    expect(onColourChange).toHaveBeenLastCalledWith(200, 150, 30, undefined, undefined, undefined)
+    // The rest never answer: once the props are still, they are the desk's word.
+    burst(echo(58, 20, 30), echo(58, 20, 31))
+    settle()
+    fireEvent.change(field('G'), { target: { value: '151' } })
+    expect(onColourChange).toHaveBeenLastCalledWith(58, 151, 31, undefined, undefined, undefined)
+  })
+
+  it('lets go of what was asked for under answers that never stop, at the ceiling', () => {
+    const { onColourChange, burst } = drawBurst({ perHeadEchoes: true })
+    fireEvent.change(field('R'), { target: { value: '200' } })
+    for (let i = 1; i <= 30; i++) {
+      burst(echo(i, 20, 30))
+      act(() => vi.advanceTimersByTime(40))
+    }
+    fireEvent.change(field('G'), { target: { value: '150' } })
+    expect(onColourChange).toHaveBeenLastCalledWith(30, 150, 30, undefined, undefined, undefined)
+  })
+
+  it('drops what was asked for when the heads change', () => {
+    const { onColourChange, burst } = drawBurst({ perHeadEchoes: true, targets: [par1] })
+    fireEvent.change(field('R'), { target: { value: '200' } })
+    burst({ ...echo(5, 6, 7), targets: [par2] })
+    fireEvent.change(field('G'), { target: { value: '150' } })
+    expect(onColourChange).toHaveBeenLastCalledWith(5, 150, 7, undefined, undefined, undefined)
   })
 })
 

@@ -98,19 +98,26 @@ export interface ColourEditorProps {
   uv?: number
   /**
    * Combined preview CSS colour (includes W/A/UV effect): what the picker's knob is seeded from on
-   * open, and re-seeded from whenever it changes while open.
+   * open, and follows while open once it has been still for [ECHO_SETTLE_MS] — at least every
+   * [ECHO_CEILING_MS] if it never is — but never under a held pointer.
    *
-   * **A host must not feed its own writes straight back in here.** `react-colorful` keeps its
-   * state as HSV and reconciles the `color` prop in one effect and reports the state in another;
-   * when the prop changes twice before its own state update has landed — two typed bytes in one
-   * task, two desk echoes in one batch — the second effect sees the *previous* HSV against the
-   * *new* cache and fires `onChange` with the old colour. Fed back into the prop, that is a
-   * ping-pong that never settles: the busk view's Colour tab did exactly this at 20 writes a second
-   * until it passed a colour that moves only on *Pick* — which is the editor's own now, so that
-   * host passes a constant. The popover is fed the desk's echo, which follows one write with one
-   * echo.
+   * `react-colorful` keeps its state as HSV and reconciles the `color` prop in one effect and
+   * reports the state in another; when the prop changes twice before its own state update has
+   * landed, the second effect fires `onChange` with the *previous* colour and no gesture at all. A
+   * write to several heads is answered once per head, so a knob following every answer moves several
+   * times per write, and an `onChange` taken as a write then answers itself: a ping-pong that never
+   * settles. So the knob waits for the answers to settle, and the editor writes only after a press or
+   * an arrow key on the picker. A host with its own buffer (the busk tab, the rail's tab) passes a
+   * constant and moves the knob through *Pick*.
    */
   combinedCss: string
+  /**
+   * The channel props average several heads that each answer a write on their own — the
+   * programmer's cell over a multi-head row. The editor then keeps what it asked for until they have
+   * been still for [ECHO_SETTLE_MS], rather than building the next edit on the first head's answer.
+   * Without it the first movement of the props spends what was asked for.
+   */
+  perHeadEchoes?: boolean
   /**
    * Re-seed the knob from [combinedCss] when this changes, even to the same colour — the Spread
    * tab's endpoint picker bumps it on Swap and on switching ends, so two seeds of one colour both
@@ -210,6 +217,50 @@ export interface ColourEditorProps {
   onSave?: () => void
   /** *Spread…*, handed the current channels. Absent, the button is drawn inert — session 3 wires the programmer's. */
   onSpread?: (channels: ColourChannels) => void
+}
+
+/**
+ * How long the props must be still before the editor believes them: the knob follows them, and (with
+ * `perHeadEchoes`) the buffer of what was asked for is let go. A write to N heads is answered N
+ * times, a few milliseconds apart, and only the last of those is the whole answer.
+ */
+export const ECHO_SETTLE_MS = 150
+
+/**
+ * The longest the props may keep moving before the editor believes them anyway — an effect or a fade
+ * driving the head never goes still.
+ */
+export const ECHO_CEILING_MS = 1000
+
+/**
+ * Calls [settled] once its effect has stopped re-running for [ECHO_SETTLE_MS], or [ECHO_CEILING_MS]
+ * after [since] if it never does, and not while [holdOff] answers a wait. The caller clears [since]
+ * to start a fresh ceiling. Returns the cancel, for the effect's cleanup.
+ */
+function settle(since: { current: number | null }, settled: () => void, holdOff: () => number = () => 0): () => void {
+  const now = performance.now()
+  since.current ??= now
+  let timer: ReturnType<typeof setTimeout>
+  const attempt = () => {
+    const wait = holdOff()
+    if (wait > 0) {
+      timer = setTimeout(attempt, wait)
+      return
+    }
+    since.current = null
+    settled()
+  }
+  timer = setTimeout(attempt, Math.max(0, Math.min(ECHO_SETTLE_MS, since.current + ECHO_CEILING_MS - now)))
+  return () => clearTimeout(timer)
+}
+
+/** The keys `react-colorful` moves the knob with — it reads the code, not `key`. */
+function isPickerKey(event: { key: string; keyCode: number }): boolean {
+  return event.key.startsWith('Arrow') || (event.keyCode >= 37 && event.keyCode <= 40)
+}
+
+function sameBuffer(x: ColourBuffer, y: ColourBuffer): boolean {
+  return x.r === y.r && x.g === y.g && x.b === y.b && x.w === y.w && x.a === y.a && x.uv === y.uv
 }
 
 /** The two toasts Pick can raise, said once. */
@@ -318,6 +369,7 @@ export function ColourEditor({
   a,
   uv,
   combinedCss,
+  perHeadEchoes = false,
   seedKey = 0,
   hasWhiteChannel,
   hasAmberChannel,
@@ -348,6 +400,39 @@ export function ColourEditor({
   const [pickerColor, setPickerColor] = useState<RgbColor>(() => parseCssColour(combinedCss))
 
   /**
+   * Whether the picker's next `onChange` is the operator's ([combinedCss] says why it may not be):
+   * a press or an arrow key on the picker grants it, and a seed of the knob takes it away unless the
+   * pointer is still down. `holding` and `at` keep the knob from following the desk under a gesture
+   * or just after one, which is also what lets a drag's last move, reported after the release, land.
+   */
+  const gestureRef = useRef({ live: false, holding: false, at: Number.NEGATIVE_INFINITY })
+  const releaseRef = useRef<(() => void) | null>(null)
+  const seedKnob = useCallback((color: RgbColor) => {
+    if (!gestureRef.current.holding) gestureRef.current.live = false
+    setPickerColor(color)
+  }, [])
+  const touchPicker = () => {
+    gestureRef.current.live = true
+    gestureRef.current.at = performance.now()
+  }
+  const holdPicker = (event: { button: number }) => {
+    touchPicker()
+    // A secondary button's release can be swallowed by a context menu, which would hold for good.
+    if (event.button !== 0 || releaseRef.current != null) return
+    gestureRef.current.holding = true
+    const events = ['pointerup', 'pointercancel', 'mouseup', 'touchend', 'touchcancel', 'blur'] as const
+    const release = () => {
+      gestureRef.current.holding = false
+      gestureRef.current.at = performance.now()
+      for (const name of events) window.removeEventListener(name, release)
+      releaseRef.current = null
+    }
+    for (const name of events) window.addEventListener(name, release)
+    releaseRef.current = release
+  }
+  useEffect(() => () => releaseRef.current?.(), [])
+
+  /**
    * The six channels this editor has most recently *asked* for — or, after a Pick, read — or null
    * once the desk has answered.
    *
@@ -358,30 +443,63 @@ export function ColourEditor({
    * value and silently reverted it. Buffering what we sent closes it, and the effect below is what
    * stops the buffer going stale: any movement in the props — our echo, a clamp, another client, an
    * effect driving the head — means the desk has spoken more recently than we have, so the buffer
-   * is spent. The open effect drops it too, which bounds a write the desk refused outright (props
-   * never move, so the effect never fires) to a single editing session.
+   * is spent. With [perHeadEchoes] it is spent once the props have been still for [ECHO_SETTLE_MS]
+   * instead, since the first movement is one head's answer. A new set of heads, and the open effect,
+   * drop it too, which bounds a write the desk refused outright (props never move, so the effect
+   * never fires) to a single editing session.
    *
    * Pick fills it the same way, without sending: the picked colour is what the fields show and
-   * what the next single-channel edit builds on, until the desk moves the props.
+   * what the next single-channel edit builds on, until the props next move (or settle).
    */
   const pendingRef = useRef<ColourBuffer | null>(null)
-  useEffect(() => {
-    pendingRef.current = null
-  }, [r, g, b, w, a, uv])
+  // When the props first moved since the buffer was filled, for its ceiling.
+  const bufferSinceRef = useRef<number | null>(null)
   // The props as a ref, so a handler memoised on nothing (`applyPick`) still reads this render's.
   const propsRef = useRef<ColourBuffer>({ r, g, b, w, a, uv })
   propsRef.current = { r, g, b, w, a, uv }
-
-  // Reset picker colour to combined preview when the editor opens, and whenever the preview or
-  // the seed moves while it is open. See [combinedCss] for why a host must not route its own
-  // writes through here. Declared before the Pick-on-targets effect below, so on a mount that
-  // does both the seed from the rig is what the knob ends up on.
+  const [, redraw] = useReducer((n: number) => n + 1, 0)
   useEffect(() => {
-    if (open) {
-      setPickerColor(parseCssColour(combinedCss))
+    const spent = pendingRef.current
+    if (spent == null) return
+    if (!perHeadEchoes) {
       pendingRef.current = null
+      return
     }
-  }, [open, combinedCss, seedKey])
+    return settle(bufferSinceRef, () => {
+      if (pendingRef.current !== spent) return
+      pendingRef.current = null
+      if (!sameBuffer(spent, propsRef.current)) redraw()
+    })
+  }, [r, g, b, w, a, uv, perHeadEchoes])
+
+  // The knob is seeded at once when the editor opens or the host bumps [seedKey], and follows
+  // [combinedCss] once it settles and nobody holds the picker. Declared before the Pick-on-targets
+  // effect below, so a seed and a pick in one commit leave the knob on the pick.
+  const seenRef = useRef({ open, combinedCss, seedKey })
+  const knobSinceRef = useRef<number | null>(null)
+  useEffect(() => {
+    const seen = seenRef.current
+    seenRef.current = { open, combinedCss, seedKey }
+    if (!open) {
+      knobSinceRef.current = null
+      return
+    }
+    if (!seen.open || seen.seedKey !== seedKey) {
+      knobSinceRef.current = null
+      seedKnob(parseCssColour(combinedCss))
+      pendingRef.current = null
+      return
+    }
+    if (seen.combinedCss === combinedCss) return
+    return settle(
+      knobSinceRef,
+      () => seedKnob(parseCssColour(combinedCss)),
+      () => {
+        const { holding, at } = gestureRef.current
+        return holding ? ECHO_SETTLE_MS : at + ECHO_SETTLE_MS - performance.now()
+      },
+    )
+  }, [open, combinedCss, seedKey, seedKnob])
 
   /**
    * What the editor believes the six channels are: our own outstanding write (or Pick) if there is
@@ -412,6 +530,7 @@ export function ColourEditor({
   const send = useCallback(
     (next: ColourBuffer) => {
       pendingRef.current = next
+      bufferSinceRef.current = null
       setPicked(null)
       onColourChange(
         next.r,
@@ -432,6 +551,7 @@ export function ColourEditor({
    */
   const handleColourChange = useCallback(
     (color: RgbColor) => {
+      if (!gestureRef.current.live) return
       setPickerColor(color)
       const held = pendingRef.current ?? propsRef.current
       send(
@@ -454,13 +574,9 @@ export function ColourEditor({
   // rebuild on every prop change anyway — and no consumer is memoised, so a stable identity buys
   // nothing. Its callers are inline arrows.
   const setChannel = (channel: keyof ColourChannels, value: number) => {
-    // **The knob is deliberately not moved to follow the number.** `RgbColorPicker` keeps its state
-    // as HSV and converts back on the way out, and that round trip is lossy for most colours — so
-    // pushing a typed RGB in as its `color` makes it fire `onChange` straight back with a value a
-    // point or two off (200,20,30 comes back 199,…). That echo is indistinguishable from a drag, so
-    // it lands in `handleColourChange`, which is the whole-output gesture: it would zero every
-    // emitter the operator had set, on some colours and not others. The knob staying put until the
-    // editor is reopened is the cheaper wrong thing; the cell's own swatch tracks the value.
+    // **The knob is deliberately not moved to follow the number**: it follows the desk's answer
+    // once that settles (see [combinedCss]), and where the host holds `combinedCss` constant it
+    // stays put; the cell's own swatch tracks the value.
     send({ ...currentChannels(), [channel]: channelByte(value) })
   }
 
@@ -484,10 +600,11 @@ export function ColourEditor({
     const held = pendingRef.current ?? propsRef.current
     const next: ColourBuffer = { r: rgb.r, g: rgb.g, b: rgb.b, w: zeroIfHeld(held.w), a: zeroIfHeld(held.a), uv: zeroIfHeld(held.uv) }
     pendingRef.current = next
-    setPickerColor({ r: rgb.r, g: rgb.g, b: rgb.b })
+    bufferSinceRef.current = null
+    seedKnob({ r: rgb.r, g: rgb.g, b: rgb.b })
     setPicked(result)
     onPickRef.current?.(toChannels(next), result)
-  }, [])
+  }, [seedKnob])
 
   const pick = useCallback(() => {
     const result = pickSelectionColour(heads)
@@ -515,6 +632,14 @@ export function ColourEditor({
         .join('|'),
     [heads],
   )
+  // What was asked for was asked of these heads: a new set drops it. Before the seed below, which
+  // may fill it again for the new heads.
+  const bufferHeadsRef = useRef(headsKey)
+  useEffect(() => {
+    if (bufferHeadsRef.current === headsKey) return
+    bufferHeadsRef.current = headsKey
+    pendingRef.current = null
+  }, [headsKey])
   const seededRef = useRef<{ key: string; done: boolean }>({ key: '', done: false })
   useEffect(() => {
     if (!pickOnTargets) return
@@ -577,7 +702,17 @@ export function ColourEditor({
             : undefined
         }
       >
-        <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
+        <div
+          className="contents"
+          onPointerDownCapture={holdPicker}
+          onMouseDownCapture={holdPicker}
+          onTouchStartCapture={() => holdPicker({ button: 0 })}
+          onKeyDownCapture={(event) => {
+            if (isPickerKey(event)) touchPicker()
+          }}
+        >
+          <RgbColorPicker color={pickerColor} onChange={handleColourChange} />
+        </div>
         {channelFields && (
           <div className={cn('w-20 shrink-0', compact ? 'space-y-2.5' : 'space-y-1.5')}>
             <ChannelField label="R" value={channels.r} onChange={(v) => setChannel('r', v)} seed={numericSeed(keyboardOpen)} />

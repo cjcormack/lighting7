@@ -262,6 +262,8 @@ const RgbColourCell = memo(function RgbColourCell({
         a={value.a}
         uv={value.uv}
         combinedCss={value.combinedCss}
+        // A row over several heads reads their average, and each head answers a write on its own.
+        perHeadEchoes={resolutions.length > 1}
         hasWhiteChannel={hasWhite}
         hasAmberChannel={hasAmber}
         hasUvChannel={hasUv}

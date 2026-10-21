@@ -80,11 +80,11 @@ export interface ColourWrite {
 const EMPTY_SELECTION_TOAST = 'colour-sheet-empty-selection'
 const NEUTRAL: ColourChannels = { r: 255, g: 255, b: 255, w: 0, a: 0, uv: 0 }
 /**
- * The knob's seed — a constant, deliberately. The editor re-seeds its knob from `combinedCss`
- * whenever it changes while open, and here it is always open; routing every drag and typed byte
- * back into that prop put `react-colorful` into a ping-pong that never settled (see the editor's
- * `combinedCss` note — found on the dev desk, at 20 writes a second). The knob moves only when the
- * editor means it to: on Pick, which is the editor's own, and the seed from the rig, which is Pick.
+ * The knob's seed — a constant, deliberately. The editor's knob follows `combinedCss` while open,
+ * and here it is always open; routing every drag and typed byte back into that prop would feed the
+ * editor its own writes — the ping-pong its `combinedCss` note describes. The knob moves only when
+ * the editor means it to: on Pick, which is the editor's own, and the seed from the rig, which is
+ * Pick.
  */
 const NEUTRAL_CSS = computeCombinedCss(NEUTRAL.r, NEUTRAL.g, NEUTRAL.b, 0, 0, 0)
 
