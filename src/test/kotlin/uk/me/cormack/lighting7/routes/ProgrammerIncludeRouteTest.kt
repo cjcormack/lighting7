@@ -23,7 +23,6 @@ import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.programmerChannel
@@ -207,7 +206,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 client, projectId, "Pulsing", rows = emptyMap(),
                 effects = listOf(
                     LookEffectDto(
-                        targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                        targetType = "fixture", targetKey = "hex-1",
                         effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                         beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                     ),

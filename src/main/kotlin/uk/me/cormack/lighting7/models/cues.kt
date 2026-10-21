@@ -446,7 +446,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
 
     /**
      * The target set this layer operates over. **One meaning serving two jobs**: when non-empty it
-     * *supplies* targets to a template layer's generic rows and to a Look's deferred *effects*, and
+     * *supplies* targets to a template layer's generic rows and to its *effect*, and
      * *filters* every bound row and effect. That single rule is what lets the migration preserve
      * coverage exactly — a cue that referenced a palette for two fixtures must not start asserting
      * every fixture the palette covers.

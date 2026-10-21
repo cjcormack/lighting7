@@ -27,6 +27,7 @@ import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLookEffect
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
@@ -968,7 +969,14 @@ class ProjectImporter(private val state: State) {
             // snapshot can come from a *newer* build whose blend modes this one does not know
             // yet, and refusing the whole import over one unrecognised string is worse than the
             // warn `EffectSpecCoercion.Lenient` logs when the effect eventually spawns.
+            //
+            // A deferred effect is dropped: a Look effect names its own target (absolute-looks plan
+            // D2), and one an older desk wrote ran on whatever applied the Look.
             l.effects.forEach { e ->
+                if (e.targetType == DEFERRED_TARGET_TYPE) {
+                    logger.warn("Import: Look '{}' ({}): effect {} ({}) names no target of its own; dropping it", l.name, l.uuid, e.uuid, e.effectType)
+                    return@forEach
+                }
                 DaoLookEffect.new {
                     look = dao
                     targetType = e.targetType

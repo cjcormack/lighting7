@@ -62,7 +62,8 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.createLook(
         name: String,
         vararg fixtureKeys: String,
-        deferredEffect: Boolean = false,
+        /** Also a Pulse on the first head. */
+        effect: Boolean = false,
         /** Also a colour row per head, so the Look spans INTENSITY + COLOUR. */
         withColour: Boolean = false,
     ): Int {
@@ -77,10 +78,10 @@ class BuskPressRouteTest : RouteIntegrationTest() {
                             if (withColour) LookRowDto("fixture", key, "rgbColour", "#ff0000") else null,
                         )
                     },
-                    effects = if (deferredEffect) {
+                    effects = if (effect) {
                         listOf(
                             LookEffectDto(
-                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                targetType = "fixture", targetKey = fixtureKeys.first(),
                                 effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                                 beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                             ),
@@ -327,19 +328,16 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look pad with a deferred effect refuses an empty selection`() = testApplication {
+    fun `a Look pad with an effect needs no selection, its effect naming its own fixture`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val pulse = client.createLook("pulse", "hex-1", deferredEffect = true)
+        val pulse = client.createLook("pulse", "hex-1", effect = true)
         val (pad) = client.bank("looks", solo = false, look(pulse))
 
-        val resp = client.pressRaw(pad)
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        assertEquals(CODE_LOOK_NEEDS_SELECTION, resp.body<ErrorResponse>().code)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-
-        assertEquals("applied", client.press(pad, "hex-1").action, "with a selection it presses")
+        assertEquals("applied", client.press(pad).action)
+        assertEquals(setOf("pulse@hex-1"), live())
+        assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
     }
 
     @Test
@@ -701,17 +699,16 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `applyLook on a deferred-effect Look is dropped`() = testApplication {
+    fun `applyLook runs a Look's effect on its own fixture, not the selection`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val pulse = client.createLook("pulse", "hex-1", deferredEffect = true)
-        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")))
+        val pulse = client.createLook("pulse", "hex-1", effect = true)
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
 
-        // Refused at bind time, so this is the state a Look *edited afterwards* falls into — and
-        // the selection must not be quietly substituted for the targets it no longer has.
         actions().applyLook(client.lookUuid(pulse))
-        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertEquals(setOf("pulse@hex-1"), live())
+        assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
     }
 
     @Test

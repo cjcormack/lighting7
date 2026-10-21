@@ -192,15 +192,11 @@ data class ProgrammerFxOrigin(
 /**
  * Which of a Look's stored effects an Include-spawned programmer-band instance realises, so Update
  * can write the operator's edits back onto that effect (`updateIncludedLook`) rather than beside it.
- *
- * [lookEffectId] is the `DaoLookEffect` row. [deferred] says the stored effect names no target of
- * its own: Include ran it on the selection, and Update must leave it deferred — what the operator
- * edited is how the effect runs, not where.
+ * [lookEffectId] is the `DaoLookEffect` row.
  */
 data class IncludedLookEffect(
     val lookId: Int,
     val lookEffectId: Int,
-    val deferred: Boolean,
     /**
      * The instance's [LookEffectSettings] as Include spawned it — Update's "changed since Include"
      * baseline, the INCLUDE slot's job for a value. Compared against the instance rather than the
@@ -317,20 +313,20 @@ fun FxInstance.settingsSnapshot(master1Uuid: java.util.UUID?): EffectSettingsSna
  * Look's stored effects it realises, and on which target.
  *
  * Stamped on [FxInstance.programmerLayerEffectKey] at spawn, and matched structurally on recook —
- * [effect] is the whole [EffectEntry] rather than an index, so a Look edit that changes an
+ * [effect] is the whole [StoredEffect] rather than an index, so a Look edit that changes an
  * effect produces a *different* key and the stale instance retracts instead of surviving with the
- * old parameters. [targetKey] is [uk.me.cormack.lighting7.models.TargetRef.key], the same string
- * `CueComposer.cookEffects` fans deferred effects out over.
+ * old parameters. [target] is as `CueComposer.cookEffects` hands it on — a Look effect's own, or
+ * one of a palette layer's — whole rather than its key, which a fixture and a group can share.
  */
 data class ProgrammerLayerEffectKey(
     val layerId: Int,
-    val effect: EffectEntry,
-    val targetKey: String,
+    val effect: StoredEffect,
+    val target: uk.me.cormack.lighting7.models.EffectTargetRef,
 ) {
     /**
      * Computed once, at construction, rather than on every hash (sweep item C8).
      *
-     * [effect] is a whole [EffectEntry] — which carries the effect's `parameters` **map** — so
+     * [effect] is a whole [StoredEffect] — which carries the effect's `parameters` **map** — so
      * the generated `hashCode` walks that map end to end. A recook hashes each key at least twice
      * (into the wanted set, then against the live band), and the live band's keys are re-hashed
      * building the engine's snapshot; every one of those used to re-walk the map.
@@ -339,18 +335,18 @@ data class ProgrammerLayerEffectKey(
      * a *new* entry and therefore a new key, which is exactly the identity change the retract pass
      * is built on.
      */
-    private val hash: Int = (layerId * 31 + effect.hashCode()) * 31 + targetKey.hashCode()
+    private val hash: Int = (layerId * 31 + effect.hashCode()) * 31 + target.hashCode()
 
     override fun hashCode(): Int = hash
 
     companion object {
         /**
-         * The key for [effect] on [targetKey] — without the entry's row [EffectEntry.uuid], which is
+         * The key for [effect] on [target] — without the effect's row [StoredEffect.uuid], which is
          * no part of the identity: a palette save recreates its effect row under a new uuid, and an
          * unchanged effect must keep its running instance.
          */
-        fun of(layerId: Int, effect: EffectEntry, targetKey: String) =
-            ProgrammerLayerEffectKey(layerId, effect.copy(uuid = null), targetKey)
+        fun of(layerId: Int, effect: StoredEffect, target: uk.me.cormack.lighting7.models.EffectTargetRef) =
+            ProgrammerLayerEffectKey(layerId, effect.copy(uuid = null), target)
     }
 }
 

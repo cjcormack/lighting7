@@ -94,7 +94,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
     private fun cue(arguments: String): Int = ok("create_cue", arguments)["cueId"]!!.jsonPrimitive.int
 
-    private val pulse = """{"effectType":"Pulse","category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+    private val pulse = """{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
 
     @Test
     fun `update_look replacing values moves a live cue without a re-fire`() {
@@ -156,13 +156,9 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         }
 
         ok("update_look", """{"lookId":$lookId,"effects":[]}""")
-        assertNull(ok("update_look", """{"lookId":$lookId,"effects":[$pulse]}""")["warnings"], "no cue layers it")
-        cue("""{"name":"Bare","values":[${foh1("dmx:1")}],"layers":[{"lookId":$lookId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
-        ok("update_look", """{"lookId":$lookId,"effects":[]}""")
+        // Its effects name their own targets, so a cue layering it with none runs them: nothing to warn of.
         cue("""{"name":"Untargeted","layers":[{"lookId":$lookId}]}""")
-        val warned = ok("update_look", """{"lookId":$lookId,"effects":[$pulse]}""")["warnings"]!!.jsonArray
-        assertEquals(1, warned.size, "$warned")
-        assertTrue("cue 'Untargeted'" in warned.single().jsonPrimitive.content, "$warned")
+        assertNull(ok("update_look", """{"lookId":$lookId,"effects":[$pulse]}""")["warnings"])
         ok("update_look", """{"lookId":$lookId,"effects":[]}""")
         transaction(state.database) {
             assertEquals(0, DaoLook[lookId].effects.count().toInt(), "[] empties the effects")

@@ -57,9 +57,7 @@ class CueComposerTemplateLayerTest {
         name = name,
         fadeDurationMs = null,
         rows = emptyList(),
-        effect = EffectEntry(
-            // Always null — that is the whole of D3, and what puts this down the deferred arm.
-            target = null,
+        effect = StoredEffect(
             effectType = effectType,
             category = category,
             propertyName = propertyName,
@@ -327,11 +325,7 @@ class CueComposerTemplateLayerTest {
         assertTrue(effects.all { it.second.effectType == "Pulse" })
     }
 
-    /**
-     * The counterpart of the deferred-Look-effect warning, and the reason `effectsForLayer` is one
-     * implementation: an effect with nowhere to go spawns nothing rather than fanning over the
-     * whole rig.
-     */
+    /** An effect palette's targets are its layer's, so a layer naming none spawns nothing rather than the whole rig. */
     @Test
     fun `an effect template layer naming no targets spawns nothing`() {
         val breathe = effectTemplate("Amber Breathe")

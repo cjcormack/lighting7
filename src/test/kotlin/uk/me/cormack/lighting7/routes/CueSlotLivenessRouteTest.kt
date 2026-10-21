@@ -15,7 +15,6 @@ import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -80,17 +79,18 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
     private suspend fun stack(client: HttpClient, stackId: Int): CueStackDetails =
         client.get("/api/rest/projects/$projectId/cue-stacks/$stackId").body()
 
-    private suspend fun createLook(client: HttpClient, name: String, deferredEffect: Boolean): Int {
+    /** A Look of hex-1's dimmer, and with [effect] a Pulse on hex-1 too. */
+    private suspend fun createLook(client: HttpClient, name: String, effect: Boolean): Int {
         val resp = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
                     name = name,
                     rows = listOf(LookRowDto("fixture", "hex-1", "dimmer", "200")),
-                    effects = if (deferredEffect) {
+                    effects = if (effect) {
                         listOf(
                             LookEffectDto(
-                                targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                                targetType = "fixture", targetKey = "hex-1",
                                 effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                                 beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                             ),
@@ -183,7 +183,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val warm = createLook(client, "warm", deferredEffect = false)
+        val warm = createLook(client, "warm", effect = false)
 
         val resp = assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = warm))
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
@@ -197,18 +197,18 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look with a deferred effect is refused a slot, and a slot names exactly one thing`() = testApplication {
+    fun `a Look with an effect takes a slot, and a slot names exactly one thing`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = createLook(client, "pulse", deferredEffect = true)
-        val warm = createLook(client, "warm", deferredEffect = false)
+        val pulse = createLook(client, "pulse", effect = true)
+        val warm = createLook(client, "warm", effect = false)
         val stackId = createStack(client, "Act 1")
         val cueId = createRowsOnlyCue(client, "a1", stackId, 10)
 
-        val needsSelection = assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = pulse))
-        assertEquals(HttpStatusCode.Conflict, needsSelection.status)
-        assertEquals(CUE_SLOT_LOOK_NEEDS_SELECTION, needsSelection.body<ErrorResponse>().code)
+        // Its effect names its own fixture, so the slot, which has no selection, can press it.
+        val taken = assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = pulse))
+        assertEquals(HttpStatusCode.OK, taken.status, taken.bodyAsText())
 
         val two = assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, cueId = cueId, lookId = warm))
         assertEquals(HttpStatusCode.BadRequest, two.status)
@@ -217,7 +217,11 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         val unknown = assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = 999_999))
         assertEquals(HttpStatusCode.BadRequest, unknown.status)
 
-        assertTrue(client.get("/api/rest/projects/$projectId/cue-slots").body<List<CueSlotDetails>>().isEmpty(), "nothing landed")
+        assertEquals(
+            listOf(pulse),
+            client.get("/api/rest/projects/$projectId/cue-slots").body<List<CueSlotDetails>>().map { it.itemId },
+            "the refused assignments left the slot as it was",
+        )
     }
 
     @Test
@@ -226,7 +230,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         state.show.fixtures.patchListChanged()
-        val warm = createLook(client, "warm", deferredEffect = false)
+        val warm = createLook(client, "warm", effect = false)
         assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = warm))
 
         // The tile's press: the overlay has no selection, so it sends none and the route derives.

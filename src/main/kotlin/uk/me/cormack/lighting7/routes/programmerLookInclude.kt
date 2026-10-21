@@ -72,11 +72,9 @@ internal fun expandTargetsToFixtureKeys(state: State, targets: List<CueTargetDto
  * as programmer-band effects, so a Look's effects can be seen and changed on stage and written back
  * by Update (`updateIncludedLook`) as its values are.
  *
- * Every row arrives with a target of its own: a Look row is always bound (sweep item B6), and a
- * row an older database left deferred never survives `loadLookSnapshot`. An effect may be deferred
- * — it runs on whatever applies the Look — so a deferred one runs on [deferredTargets], the
- * selection the operator is including onto, one instance per target as a layer would run it; with
- * no selection it is not spawned and the warning says why.
+ * Every row and every effect arrives with a target of its own: a Look row is always bound (sweep
+ * item B6), and so is a Look effect (absolute-looks plan D2). One an older database left deferred
+ * never survives `loadLookSnapshot` or [toEffectEntry].
  */
 internal fun includeLookIntoProgrammer(
     state: State,
@@ -85,26 +83,23 @@ internal fun includeLookIntoProgrammer(
     mask: Set<PropertyMaskGroup>?,
     fadeMs: Long,
     includeFx: Boolean = true,
-    deferredTargets: List<CueTargetDto> = emptyList(),
 ): LookIncludeOutcome {
     val values = includeExpandedIntoProgrammer(
         state, lookUuid, mask, fadeMs,
         uk.me.cormack.lighting7.fx.IncludedTarget.look(lookId, lookUuid),
     )
     if (!includeFx) return values
-    val fx = spawnIncludedLookEffects(state, lookId, mask, deferredTargets)
+    val fx = spawnIncludedLookEffects(state, lookId, mask)
     return values.copy(
         fixtureKeys = (values.fixtureKeys + fx.coveredFixtureKeys).distinct(),
         fxSpawned = fx.spawned,
         fxAlreadyRunning = fx.alreadyRunning,
-        fxNeedTargets = fx.needTargets,
     )
 }
 
 private data class IncludedLookFx(
     val spawned: Int,
     val alreadyRunning: Int,
-    val needTargets: Int,
     val coveredFixtureKeys: Set<String>,
 )
 
@@ -123,65 +118,55 @@ private fun spawnIncludedLookEffects(
     state: State,
     lookId: Int,
     mask: Set<PropertyMaskGroup>?,
-    deferredTargets: List<CueTargetDto>,
 ): IncludedLookFx {
     val stored = transaction(state.database) {
         DaoLook.findById(lookId)?.effects
             ?.sortedBy { it.sortOrder }
             ?.mapNotNull { effect -> effect.toEffectEntry()?.let { effect.id.value to it } }
     }.orEmpty()
-    if (stored.isEmpty()) return IncludedLookFx(0, 0, 0, emptySet())
+    if (stored.isEmpty()) return IncludedLookFx(0, 0, emptySet())
 
     val engine = state.show.fxEngine
     val running = engine.getActiveEffects().filterNot { it.leaving }
     val spawning = ArrayList<FxInstance>()
     val covered = LinkedHashSet<String>()
     var alreadyRunning = 0
-    var needTargets = 0
 
     for ((lookEffectId, entry) in stored) {
-        val targets = entry.target?.let { listOf(CueTargetDto(it)) } ?: deferredTargets
-        if (targets.isEmpty()) {
-            needTargets++
+        val target = CueTargetDto(entry.target)
+        val spec = entry.effect.toEffectSpec()
+        val registrationId = state.show.fxRegistry.getRegistration(spec.effectType)?.id
+        val fxTarget = try {
+            EffectSpawner.resolveTargetForCue(state, target, spec)
+        } catch (e: Exception) {
+            logger.warn("look {}: included fx on '{}' — target unresolvable — skipping: {}", lookId, target.key, e.message)
+            null
+        } ?: continue
+
+        if (mask != null) {
+            val reference = state.show.fixtures.referenceFixtureFor(target.effectTarget)
+            val group = reference?.let { maskGroupForProperty(it, fxTarget.propertyName) }
+            if (!maskAllows(mask, group)) continue
+        }
+
+        val duplicate = running.any {
+            it.registrationId == registrationId &&
+                it.target.targetKey == fxTarget.targetKey &&
+                it.target.propertyName == fxTarget.propertyName &&
+                (it.source?.let { s -> s.kind == LayerSourceKind.LOOK && s.id == lookId } == true ||
+                    it.includedLookEffect?.lookEffectId == lookEffectId)
+        }
+        if (duplicate) {
+            alreadyRunning++
             continue
         }
-        val spec = entry.toEffectSpec()
-        val registrationId = state.show.fxRegistry.getRegistration(spec.effectType)?.id
-        for (target in targets) {
-            val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, target, spec)
-            } catch (e: Exception) {
-                logger.warn("look {}: included fx on '{}' — target unresolvable — skipping: {}", lookId, target.key, e.message)
-                null
-            } ?: continue
 
-            if (mask != null) {
-                val reference = state.show.fixtures.referenceFixtureFor(target.effectTarget)
-                val group = reference?.let { maskGroupForProperty(it, fxTarget.propertyName) }
-                if (!maskAllows(mask, group)) continue
-            }
-
-            val duplicate = running.any {
-                it.registrationId == registrationId &&
-                    it.target.targetKey == fxTarget.targetKey &&
-                    it.target.propertyName == fxTarget.propertyName &&
-                    (it.source?.let { s -> s.kind == LayerSourceKind.LOOK && s.id == lookId } == true ||
-                        it.includedLookEffect?.lookEffectId == lookEffectId)
-            }
-            if (duplicate) {
-                alreadyRunning++
-                continue
-            }
-
-            val instance = EffectSpawner.createEffectInstanceOrNull(
-                spec, fxTarget, state, "look $lookId: included fx on '${target.key}'",
-            ) ?: continue
-            markProgrammerOwned(instance, true)
-            instance.includedLookEffect = IncludedLookEffect(
-                lookId, lookEffectId, entry.isDeferred, baseline = instance.lookEffectSettings(),
-            )
-            spawning += instance
-        }
+        val instance = EffectSpawner.createEffectInstanceOrNull(
+            spec, fxTarget, state, "look $lookId: included fx on '${target.key}'",
+        ) ?: continue
+        markProgrammerOwned(instance, true)
+        instance.includedLookEffect = IncludedLookEffect(lookId, lookEffectId, baseline = instance.lookEffectSettings())
+        spawning += instance
     }
 
     engine.addEffects(spawning)
@@ -189,7 +174,7 @@ private fun spawnIncludedLookEffects(
     if (spawning.isNotEmpty()) {
         logger.debug("include: spawned {} programmer-band effect(s) from look {}", spawning.size, lookId)
     }
-    return IncludedLookFx(spawning.size, alreadyRunning, needTargets, covered)
+    return IncludedLookFx(spawning.size, alreadyRunning, covered)
 }
 
 /**
@@ -292,28 +277,22 @@ internal data class LookIncludeOutcome(
     val fxSpawned: Int = 0,
     /** Effects not spawned because the Look is already running them where it is live. */
     val fxAlreadyRunning: Int = 0,
-    /** Deferred effects not spawned because the Include named no targets to run them on. */
-    val fxNeedTargets: Int = 0,
 )
 
 /**
  * Why a zero-write Look include always says something: silently writing nothing reads as a broken
- * button. The reasons point at different places — the Look editor, the patch, the selection, where
- * the Look is live — so each is its own message rather than one hedged one. An effect left out of
- * an Include that staged something else is said too: Update writes back only what was included.
+ * button. The reasons point at different places — the Look editor, the patch, where the Look is
+ * live — so each is its own message rather than one hedged one. An effect left out of an Include
+ * that staged something else is said too: Update writes back only what was included.
  */
 internal fun lookIncludeWarnings(lookName: String, outcome: LookIncludeOutcome, sceneryIncluded: Int = 0): List<String> {
-    val needTargets = outcome.fxNeedTargets.takeIf { it > 0 }?.let { n ->
-        "${effectsPhrase(n)} of '$lookName' run on whatever applies it — select the fixtures to run " +
-            "${if (n == 1) "it" else "them"} on and include again to edit ${if (n == 1) "it" else "them"}."
-    }
     val alreadyRunning = outcome.fxAlreadyRunning.takeIf { it > 0 }?.let { n ->
         "${effectsPhrase(n)} of '$lookName' already running where it is live — release it there to edit " +
             "${if (n == 1) "that one" else "those"} here."
     }
     val staged = outcome.entriesWritten > 0 || sceneryIncluded > 0 || outcome.fxSpawned > 0
     return when {
-        staged || needTargets != null || alreadyRunning != null -> listOfNotNull(needTargets, alreadyRunning)
+        staged || alreadyRunning != null -> listOfNotNull(alreadyRunning)
         outcome.skipped.isNotEmpty() -> listOf(
             "None of '$lookName''s rows could be staged: the fixtures or properties they " +
                 "name are not in the current patch, or the mask excluded them.",

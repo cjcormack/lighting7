@@ -313,7 +313,7 @@ park released for this show, the venue keeping it) or `VENUE_RESTORED` (the show
 venue's at `venueValue` standing again). In a venue both are admin-only, as every stored write there is
 (`VENUE_STORED_WRITE_TOOLS`).
 
-`create_look` authors a Look's **values** as well as its deferred effects and scenery (`ai/LookValues.kt`):
+`create_look` authors a Look's **values** as well as its effects and scenery (`ai/LookValues.kt`):
 `values: [{target, propertyName, value}]`, each bound to its own fixture or group, as a Look row
 always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `pos:` — a
 centre-relative position, `-128..127` with 0 the centre of travel — or a stored `deg:`, `dmx:`,
@@ -334,11 +334,15 @@ gap a model hit: the Shehds' fixture-level colour was refused and nothing said a
 `describe_rig` now lists each multi-head fixture's cells (`cells=3 (…zone-1 … …zone-3)`) and the
 target and `create_look` descriptions say how to name one. The rows then go through the
 REST write path (`validateLookRows`, `writeLookChildren`), so a trigger or command name is refused as
-it is there. `apply_look` with no targets presses a Look onto its own fixtures, the REST toggle's rule,
-and a cue layer's targets are optional for the same reason; its `asValues: true` is
-`POST /looks/{id}/apply` instead, the Look's values and effects as the programmer's own. `list_fixture_types` with `properties: true`
-is where the model learns the names. A layer with no targets on a Look with effects is refused by
-`create_cue` and `build_cue_stack`, as `apply_look` refuses the same press. There is no static
+it is there. **A Look's effects name their own targets** (absolute-looks plan D2), taken as
+`create_cue`'s ad-hoc effects take one (`parseAdHocEffectTarget`): `targetType` and `targetKey`, or
+`targets` for one effect over a selection; `update_look` takes them the same way, and one naming no
+target is refused before anything is written. `apply_look` with no targets presses a Look onto its own
+fixtures, the REST toggle's rule, and a cue layer's targets are optional for the same reason; its
+`asValues: true` is `POST /looks/{id}/apply` instead, the Look's values and effects as the programmer's
+own. `list_fixture_types` with `properties: true` is where the model learns the names. A layer with no
+targets on a generic palette is refused by `create_cue` and `build_cue_stack`, as the busk pad refuses
+the same press. There is no static
 effect: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
 `StaticPosition` once `set_programmer` could set any property, so a fixed state is always a value on the
 fixture's own property. A stored effect naming a type the registry no longer has is skipped with a warn
@@ -356,9 +360,7 @@ Look holds it) and notes, and each of `values`, `effects` and `scenery` given re
 whole while one left out is kept — the same resolve and checks as `create_look`, every part checked
 before anything is written. A values or effects change goes through `republishForLookEdit`, so every
 live cue layering the Look moves without a re-fire; a rename, notes or scenery fire
-`lookListChanged`, which the library and the live scenery read. Effects given to a Look that a cue
-layers with no targets are stored, as REST stores them, and each such cue is named under `warnings`:
-`create_cue` would refuse that layer now. `delete_look` is the REST delete
+`lookListChanged`, which the library and the live scenery read. `delete_look` is the REST delete
 itself (`performLookDelete`): refused with `LOOK_IN_USE` and the cues that layer it unless `force`,
 which deletes those layers — rebuilding a live cue that held one, so the Look's values leave the
 stage without a re-fire (effects the cue spawned from it run until the cue stops) — and the Look's busk pads, cue slots, scenery, programmer layers and include
@@ -516,8 +518,7 @@ piece the cue would not show anyway, a row the cue already has replaced — answ
 `sceneryRemoved` and `sceneryAlreadyTracked`; `include_into_programmer` holds a cue's or Look's own
 scenery rows in the programmer (`sceneryIncluded`), a cue row's transition kept, and
 `update_from_programmer` with no targets writes them back (`sceneryWritten`). It runs a Look's
-**effects** in the programmer as well (`fxSpawned`; a deferred one on its `targets`, else the desk
-selection), and `update_from_programmer` writes an operator's edit back onto the effect it came from
+**effects** in the programmer as well (`fxSpawned`, each on its own target), and `update_from_programmer` writes an operator's edit back onto the effect it came from
 (`effectsWritten`) — `docs/lighting-composition-model.md` §"Record / Include / Update". Their descriptions say
 so, and that neither the mask nor `targets` narrows scenery. **It needs no remote-access gate**, unlike arming, firing and fixture
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no

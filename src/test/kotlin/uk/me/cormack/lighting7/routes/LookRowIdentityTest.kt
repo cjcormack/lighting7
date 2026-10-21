@@ -21,7 +21,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
@@ -45,7 +44,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
     private fun base() = "/api/rest/projects/$projectId/looks"
 
     private val pulse = LookEffectDto(
-        targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+        targetType = "fixture", targetKey = "hex-1",
         effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
         beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
     )

@@ -291,7 +291,7 @@ Zoom Breathe on it writes the byte and lands on whichever step that is. To step 
 Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
 which snaps to the step nearest that share of its angles, as a palette does (below).
 
-A stored beam effect that names no property — an effect palette's, a Look's deferred effect — lands
+A stored beam effect that names no property — an effect palette's, or any other stored without one — lands
 on the one property its registration declares (`EffectSpawner`'s `beam` arm), on a group only where
 every member has it, as the dimmer arm asks of a group's dimmers; so a Beam palette's effect must
 name one property, its own `propertyName` or else the one its registration declares, never a
@@ -358,7 +358,7 @@ family on purpose: a stored one carries the family of its palettes (`dimmer`, `c
 `beam`), and `paletteStepsShape` is the one statement of that shape — every palette in one family,
 and the property it drives, the colour for colour, else the first in the palette vocabulary every
 palette names (zoom, where every Beam palette names zoom and only some frost). A stored Palette Steps
-that names no property (an effect palette's, a Look's deferred effect) lands on that property
+that names no property (an effect palette's, or any other stored without one) lands on that property
 (`EffectSpawner.drivenPropertyOf`); Slot Steps names its setting as the row's `propertyName`. An effect
 palette's write boundary (`validateTemplateEffect`) holds both: Palette Steps needs two generic value
 palettes or more, all readable, and its category must be their family's; Slot Steps needs a
@@ -740,7 +740,7 @@ How effect output combines with fixture's base value:
 Three fields of every running effect, edited in place (they are `FxDynamics` fields, so an edit
 keeps the phase), stored on the four effect homes — a live instance, `look_effects`,
 `cue_ad_hoc_effects` and an effect palette (`template_effects`) — and carried by `LookEffectSpec`,
-`EffectEntry` and `LookEffectSettings` between them, so Record and Include keep them. They sync
+`StoredEffect` and `LookEffectSettings` between them, so Record and Include keep them. They sync
 from `formatVersion` 30 (`docs/sync-engineering.md` §"Version 30"). The desk owns every rule (the
 effects plan's P2); the editor only writes the three fields.
 
@@ -989,7 +989,7 @@ programmer palette layer started (a Look's, a manual one, a cue's palette layer,
 respawns); 409 `FX_PALETTE_GONE` when the palette holds no effect any more.
 
 **What a recook does to an edited instance.** `ProgrammerLayerStack.syncEffects` matches a live
-instance by the `EffectEntry` it was **spawned** from (`ProgrammerLayerEffectKey`), never by its
+instance by the `StoredEffect` it was **spawned** from (`ProgrammerLayerEffectKey`), never by its
 current parameters, and `updateEffect` carries that key across its swap — so an instance edited
 through `updateFx` survives a patch, a move or an unrelated add. A palette-effect `PUT` recooks
 values only and leaves the instance alone, but the next recook of the stack *for any reason* reads
@@ -1256,7 +1256,7 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   `targetType` and `targetKey`, and `clear_effects` naming targets clears a selection effect only when
   every item it names is among them. A rename rewrites the keys inside a stored selection (`ai/RigKeyReferences.kt`), and a
   venue Update's dead-reference report names each item (`venue/VenueUpdate.kt`).
-- **Not here**: a layer's deferred effects still fan one instance per target. The programmer's bare
+- **Not here**: a palette layer's effect still fans one instance per target. The programmer's bare
   effect press and the split are built on this — §"Local effects follow the selection" below.
 
 ### Local effects follow the selection (apply-model plan session 2)
@@ -1530,7 +1530,7 @@ first. Four more fields shape what the Order gives — **Spread**, **Wings**, **
 in place as the Order is (an edit keeps the phase), stored on the four effect homes beside it
 (`look_effects`, `cue_ad_hoc_effects`, `template_effects` as `spread` and `spread_wings` /
 `spread_blocks` / `spread_groups` — `GROUPS` is an SQLite keyword — and a live instance), carried by
-`LookEffectSpec`, `EffectEntry` and `LookEffectSettings` so Record, Include and Update keep them, and
+`LookEffectSpec`, `StoredEffect` and `LookEffectSettings` so Record, Include and Update keep them, and
 synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 
 `DistributionPlan.of` runs §3.3 over each member, after the Order (step 1):
@@ -2029,8 +2029,8 @@ order.** `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` wi
 the monotonic creation counter (a split copy keeps its parent's, §"Local effects follow the
 selection"), and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
 same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
-uniform per-cue priority stays. A deferred Look effect fans over the layer's targets; a bound one
-uses its own, filtered by the layer's target set when that set is non-empty.
+uniform per-cue priority stays. A palette's effect fans over the layer's targets; a Look's uses its
+own, filtered by the layer's target set when that set is non-empty.
 
 The one limit worth stating: effects are Layer 3 and static values are Layer 4, so an effect sits
 above a static value regardless of layer order. See `lighting-composition-model.md`
@@ -2230,7 +2230,7 @@ its own cycle, with no master, for a slow breathe or drift that must not move wh
 It is one question for every effect, asked by one chip (`Seconds | M1 | M2…`), and stored as one
 flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`template_effects`), a
 Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`), with
-`LookEffectSpec`, `EffectEntry` and `LookEffectSettings` carrying it between them. It syncs from
+`LookEffectSpec`, `StoredEffect` and `LookEffectSettings` carrying it between them. It syncs from
 `formatVersion` 29. The rules are `fx/EffectTiming.kt`'s:
 
 - **A beat effect on Seconds** reads its `beatDivision` as seconds and runs on the **wall-clock

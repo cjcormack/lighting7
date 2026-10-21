@@ -87,7 +87,7 @@ internal object EffectSpawner {
 
     /**
      * The one property an effect drives where its stored category cannot say, for a spec stored
-     * without a `propertyName` — an effect palette's, a Look's deferred effect: a beam built-in's
+     * without a `propertyName` — an effect palette's, or any other that names none: a beam built-in's
      * declared one (effects plan D6), and Palette Steps' from its palettes (§3.6), which may step
      * a strobe in an Intensity palette or a frost in a Beam one. Never a sentinel (`setting`,
      * `slider`), which names no property: Slot Steps is stored with its setting's name.
@@ -103,7 +103,7 @@ internal object EffectSpawner {
 
     /**
      * A beam effect (effects plan D6) and Palette Steps (§3.6) drive one property, so a spec stored
-     * without a `propertyName` — an effect palette's, a Look's deferred effect — lands on
+     * without a `propertyName` — an effect palette's, or any other that names none — lands on
      * [drivenProperty], on a group only where every member has it.
      */
     private fun resolveEffectPropertyForCue(

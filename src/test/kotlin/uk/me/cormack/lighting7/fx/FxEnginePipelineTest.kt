@@ -1105,14 +1105,14 @@ class FxEnginePipelineTest {
             // are irrelevant to suppression, so any stamped values do.
             it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
                 layerId = 3,
-                effect = EffectEntry(
-                    target = null, effectType = "Pulse", category = "dimmer",
+                effect = StoredEffect(
+                    effectType = "Pulse", category = "dimmer",
                     propertyName = "dimmer", beatDivision = 1.0, blendMode = "ADDITIVE",
                     distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, stepTiming = null, parameters = emptyMap(),
                     speedMasterUuid = null, rateSpeedMasterUuid = null,
                 ),
-                targetKey = "hex-a",
+                target = uk.me.cormack.lighting7.models.EffectTargetRef.Single(uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-a")),
             )
         }
         rig.engine.addEffect(effect)

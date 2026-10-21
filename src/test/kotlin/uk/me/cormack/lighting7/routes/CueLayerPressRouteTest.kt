@@ -53,16 +53,17 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         return resp.body<TemplateDto>().id
     }
 
-    private suspend fun HttpClient.look(name: String, vararg keys: String, deferredEffect: Boolean = false): Int {
+    /** A Look of [keys]' dimmer and colour, and with [effect] a Pulse on the first of them. */
+    private suspend fun HttpClient.look(name: String, vararg keys: String, effect: Boolean = false): Int {
         val resp = post("$base/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
                     name = name,
                     rows = keys.flatMap { listOf(LookRowDto("fixture", it, "dimmer", "200"), LookRowDto("fixture", it, "rgbColour", "#00ff00")) },
-                    effects = if (!deferredEffect) emptyList() else listOf(
+                    effects = if (!effect) emptyList() else listOf(
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = keys.first(),
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
@@ -184,7 +185,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val warm = client.look("Warm", "hex-1", "hex-2")
-        val chase = client.look("Chase", "hex-1", deferredEffect = true)
+        val chase = client.look("Chase", "hex-1", effect = true)
         val q = client.cue("Q")
 
         val masked = client.press(q, lookId = warm, keys = arrayOf("hex-1"), families = listOf("COLOUR"))
@@ -197,9 +198,9 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         assertEquals("removed", client.press(q, lookId = warm).action, "the same gesture again takes it off")
         assertEquals(listOf("Warm: hex-1"), client.layers(q))
 
-        val needs = client.pressRaw(q, CueLayerPressRequest(lookId = chase))
-        assertEquals(HttpStatusCode.BadRequest, needs.status)
-        assertTrue(needs.bodyAsText().contains(CODE_LOOK_NEEDS_SELECTION))
+        // Its effect names its own fixture too, so it needs no selection either.
+        assertEquals("applied", client.press(q, lookId = chase).action)
+        assertEquals(listOf("Warm: hex-1", "Chase: "), client.layers(q))
     }
 
     @Test
@@ -238,19 +239,10 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val q = client.cue("Q")
         client.press(q, lookId = warm)
 
+        // Its rows now name only a fixture the rig does not have, so it has nothing of its own to land on.
         val edit = client.put("$base/looks/$warm") {
             contentType(ContentType.Application.Json)
-            setBody(
-                mapOf(
-                    "effects" to listOf(
-                        LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
-                        ),
-                    ),
-                ),
-            )
+            setBody(mapOf("rows" to listOf(LookRowDto("fixture", "hex-9", "dimmer", "200"))))
         }
         assertEquals(HttpStatusCode.OK, edit.status, edit.bodyAsText())
 
@@ -258,7 +250,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         assertTrue(client.layers(q).isEmpty())
         val again = client.pressRaw(q, CueLayerPressRequest(lookId = warm))
         assertEquals(HttpStatusCode.BadRequest, again.status)
-        assertTrue(again.bodyAsText().contains(CODE_LOOK_NEEDS_SELECTION))
+        assertTrue(again.bodyAsText().contains(CODE_LOOK_NO_TARGETS))
     }
 
     @Test

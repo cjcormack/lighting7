@@ -12,7 +12,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -37,8 +36,8 @@ import kotlin.test.assertTrue
  * the stack being the one whose hold is on top of the cue (§11, question 21), 100 % under a loose
  * hold; kept by a reload, dropped by a project switch.
  *
- * The rig is hex-1 and hex-2, and an effect-only Look with one deferred Pulse on dimmer, which a cue
- * layers onto a fixture.
+ * The rig is hex-1 and hex-2, and an effect-only Look with a Pulse on each head's dimmer, which a cue
+ * layers onto a fixture, the layer's target keeping that head's.
  */
 class StackEffectSizeTest : RouteIntegrationTest() {
 
@@ -53,13 +52,14 @@ class StackEffectSizeTest : RouteIntegrationTest() {
             setBody(
                 CreateLookRequest(
                     name = "Pulse",
-                    effects = listOf(
+                    effects = listOf("hex-1", "hex-2").mapIndexed { i, head ->
                         LookEffectDto(
-                            targetType = DEFERRED_TARGET_TYPE, targetKey = "",
+                            targetType = "fixture", targetKey = head,
                             effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
                             beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
-                        ),
-                    ),
+                            sortOrder = i,
+                        )
+                    },
                 ),
             )
         }.body()

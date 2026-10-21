@@ -80,8 +80,8 @@ class ProgrammerLayerPressTest {
         templates[uuid] = TemplateSnapshot(
             templateId = name.hashCode(), templateUuid = uuid, name = name, fadeDurationMs = null,
             rows = emptyList(),
-            effect = EffectEntry(
-                target = null, effectType = "ColourCycle", category = "colour", propertyName = "rgbColour",
+            effect = StoredEffect(
+                effectType = "ColourCycle", category = "colour", propertyName = "rgbColour",
                 beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR", phaseOffset = 0.0,
                 elementMode = null, elementFilter = null, stepTiming = null, parameters = emptyMap(),
                 speedMasterUuid = null, rateSpeedMasterUuid = null,

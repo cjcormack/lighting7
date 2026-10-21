@@ -269,7 +269,8 @@ class CueModelMigrationTest {
     fun `cue entries are named after their cues once, and never again`() {
         startDesk()
         stopDesk()
-        assertEquals(CUE_ENTRIES_KEYED_USER_VERSION, (rows("PRAGMA user_version").single().values.single() as Number).toInt())
+        val version = (rows("PRAGMA user_version").single().values.single() as Number).toInt()
+        assertTrue(version >= CUE_ENTRIES_KEYED_USER_VERSION, "the step is recorded: user_version $version")
 
         // An entry renamed afterwards — as a later session's entry of a shared cue would be — stays as
         // it is on every start from now on.

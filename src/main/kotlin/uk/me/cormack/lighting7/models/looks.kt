@@ -12,14 +12,15 @@ import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
- * The `targetType` discriminator marking a [DaoLookEffects] or [DaoTemplateRows] row as *deferred*:
- * it names no target of its own and takes its targets from whatever applies it — the [DaoCueLayers]
- * line referencing the Look, or the selection a template is applied to.
+ * The `targetType` discriminator marking a [DaoTemplateRows] row as *deferred*: it names no target
+ * of its own and takes its targets from whatever applies it — the selection a template is applied
+ * to, or the [DaoCueLayers] line referencing it.
  *
- * **Not [DaoLookRows].** A Look *row* is always bound; the deferred half of that entity became
- * [DaoTemplates] in session 3, and sweep item B6 removed the plumbing that still read the
- * discriminator on the row side. A stored row carrying it is data from an older database and is
- * dropped on read.
+ * **Not a Look's.** A Look row and a Look effect always name their own target. The deferred half of
+ * the row became [DaoTemplates] in session 3; a deferred Look *effect* is refused at the write
+ * boundary, dropped on import and was deleted from this database once (absolute-looks plan D2,
+ * `state/DeferredLookEffectsMigration.kt`). A stored row or effect carrying it is data from an
+ * older database and is dropped on read.
  *
  * Deliberately not a [TargetRef] arm. `TargetRef.of` must keep rejecting it, because a deferred
  * row reaching a code path that expects a resolvable target is a bug we want loud rather than
@@ -34,8 +35,7 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
  * **Always bound.** A Look row names a fixture or a group; [DEFERRED_TARGET_TYPE] is rejected at the
  * write boundary. Until session 3 a deferred row was how a Look served as a template — that job
  * moved to [DaoTemplates], which is a better home for it (one family, an intent per row, resolved
- * per head) and which is why the discriminator survives here only for *effects*, where a deferred
- * target still means "fan over the layer's targets".
+ * per head).
  *
  * [value] is always a **literal** in the canonical
  * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] grammar. **Looks do
@@ -72,10 +72,8 @@ data class LookRowDto(
 }
 
 /**
- * One stored Look effect. Unifies the two near-identical shapes it replaces:
- * [LookEffectSpec] (target-less, and a JSON blob column purely to avoid DDL) and
- * [CueAdHocEffectDto] (targeted, real columns). This gets real columns *and* the deferred-target
- * convention, so one shape serves both.
+ * One stored Look effect, on its own fixture, group or selection — the shape [CueAdHocEffectDto]
+ * has, with real columns, which is why the two record into one another field for field.
  *
  * The `delayMs` / `intervalMs` / `randomWindowMs` triple is **not** here: timing is a property of
  * the layer applying the Look, not of the Look itself, and it lives on [DaoCueLayers].
@@ -126,16 +124,9 @@ data class LookEffectDto(
     val groups: Int = 0,
     val sortOrder: Int = 0,
 ) {
-    /** True when this effect takes its targets from the referencing layer rather than naming one. */
-    val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
-
-    /** The effect's own target — a fixture, a group or a selection (effects plan D3) — or null when [isDeferred]. */
-    val target: EffectTargetRef? get() = if (isDeferred) null else EffectTargetRef.of(targetType, targetKey)
-
     /** This effect with its target spelled as the desk stores it ([EffectTargetRef.canonical]). */
     fun canonicalTarget(): LookEffectDto =
-        if (isDeferred) this
-        else EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
+        EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
 }
 
 /**
@@ -236,12 +227,15 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
 object DaoLookEffects : IntIdTable("look_effects") {
     val look = reference("look_id", DaoLooks)
 
-    /** A [TargetRef] discriminator, or [DEFERRED_TARGET_TYPE]. */
+    /**
+     * An [EffectTargetRef] discriminator. An older database may hold [DEFERRED_TARGET_TYPE], which
+     * nothing reads as a target; `DeferredLookEffectsMigration.kt` deleted those rows once.
+     */
     val targetType = varchar("target_type", 50)
 
     /**
-     * Empty string when [targetType] is [DEFERRED_TARGET_TYPE]. `text`, not a `varchar(255)`: a
-     * selection's canonical key outgrows any fixed width.
+     * `text`, not a `varchar(255)`: a selection's canonical key outgrows any fixed width. Empty
+     * beside [DEFERRED_TARGET_TYPE].
      */
     val targetKey = text("target_key")
     val effectType = varchar("effect_type", 255)
@@ -391,9 +385,10 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 
+    /** A row an older database wrote, which ran on whatever applied the Look; nothing writes one now. */
     val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
 
-    /** The effect's own target, or null when deferred or the discriminator is unknown. */
+    /** The effect's own target, or null when the discriminator is unknown — [DEFERRED_TARGET_TYPE] among them. */
     val target: EffectTargetRef?
-        get() = if (isDeferred) null else EffectTargetRef.ofOrNull(targetType, targetKey)
+        get() = EffectTargetRef.ofOrNull(targetType, targetKey)
 }

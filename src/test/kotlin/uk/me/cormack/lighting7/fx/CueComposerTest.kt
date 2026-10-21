@@ -6,6 +6,8 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import java.util.UUID
@@ -614,20 +616,22 @@ class CueComposerTest {
             rows = emptyList(),
             effects = listOf(
                 EffectEntry(
-                    target = null,
-                    effectType = "SineWave",
-                    category = "dimmer",
-                    propertyName = "dimmer",
-                    beatDivision = 1.0,
-                    blendMode = "OVERRIDE",
-                    distribution = "LINEAR",
-                    phaseOffset = 0.0,
-                    elementMode = null,
-                    elementFilter = null,
-                    stepTiming = null,
-                    parameters = emptyMap(),
-                    speedMasterUuid = null,
-                    rateSpeedMasterUuid = null,
+                    target = EffectTargetRef.Single(TargetRef.Fixture("hex-1")),
+                    effect = StoredEffect(
+                        effectType = "SineWave",
+                        category = "dimmer",
+                        propertyName = "dimmer",
+                        beatDivision = 1.0,
+                        blendMode = "OVERRIDE",
+                        distribution = "LINEAR",
+                        phaseOffset = 0.0,
+                        elementMode = null,
+                        elementFilter = null,
+                        stepTiming = null,
+                        parameters = emptyMap(),
+                        speedMasterUuid = null,
+                        rateSpeedMasterUuid = null,
+                    ),
                 ),
             ),
         )

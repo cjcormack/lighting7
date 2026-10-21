@@ -313,11 +313,11 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
             assertEquals(CommandNotStorableException.CODE, refused.code)
         }
 
-        // And the AI's create_look, whose deferred effects land on whatever is selected.
+        // And the AI's create_look, an effect on the fixture whose command it names.
         val ai = AiTools(state).executeTool(
             "create_look",
             Json.parseToJsonElement(
-                """{"name":"X","effects":[{"effectType":"Pulse","category":"dimmer","propertyName":"reset","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""",
+                """{"name":"X","effects":[{"targetType":"fixture","targetKey":"vary","effectType":"Pulse","category":"dimmer","propertyName":"reset","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""",
             ).jsonObject,
         )
         assertFalse(ai.success, ai.description)

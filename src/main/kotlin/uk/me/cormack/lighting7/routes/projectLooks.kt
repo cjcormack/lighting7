@@ -726,14 +726,8 @@ internal data class LookDto(
     val effectCount: Int,
     val targetCount: Int,
     /**
-     * True when any **effect** takes its targets from the layer applying this Look rather than
-     * naming one.
-     *
-     * Rows can no longer be deferred at all — session 3 moved that half of the entity out to
-     * templates, and sweep item B6 removed the plumbing that still read the discriminator on the row
-     * side — so this is only ever about effects, where a deferred target still means "fan over
-     * whatever the layer points at". It stays because a Look whose effects are all deferred asserts
-     * nothing without a layer's targets, which is worth being able to see in the library.
+     * Always false: a Look effect names its own target (absolute-looks plan D2). Kept on the wire
+     * until the client stops reading it.
      */
     val hasDeferredEffects: Boolean,
     val preview: List<String>,
@@ -1000,9 +994,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
         // session 3, and a deferred row here would now be a second, weaker way to express one: no
         // family constraint, no intent resolution, and invisible to `/palettes`. Refusing it at the
         // write boundary is what makes "a Look names its own fixtures" true rather than customary.
-        //
-        // A Look *effect* may still be deferred — see `validateLookEffects` — because fanning an
-        // effect over the layer's targets is a different thing from holding a value for nobody.
+        // `validateLookEffects` holds a Look's effects to the same rule.
         if (row.targetType == DEFERRED_TARGET_TYPE) {
             return "A look row must name its own fixture or group. A value you point at a selection " +
                 "is a palette — create one in the palette library instead."
@@ -1020,9 +1012,11 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
 }
 
 /**
- * The same target check for effects. Rows had it and effects did not, which let a write through with
- * an unresolvable `targetType`: [DaoLookEffect.target] and `loadLookSnapshot` both then drop the
- * effect silently on every read, so the operator sees a 201 and an effect that never exists again.
+ * The same target check for effects, every problem at once. **A Look effect names its own target**
+ * (absolute-looks plan D2): a fixture, a group or a selection. A `deferred` one, which ran on
+ * whatever applied the Look, is refused by name, and so is a target that does not parse —
+ * [DaoLookEffect.target] and `loadLookSnapshot` would drop it on every read, so the operator would
+ * see a 201 and an effect that never exists again.
  *
  * The enum-valued fields are checked here for the same reason, and it is the worse failure of the
  * two: an unrecognised `blendMode` reaches `varchar(50)` intact, reads back as itself, and renders
@@ -1031,29 +1025,34 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
  * [EffectSpecCoercion.Lenient] exists to *survive*, not what it should have to cover.
  */
 internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
-    for (effect in effects) {
-        if (effect.targetType != DEFERRED_TARGET_TYPE &&
-            EffectTargetRef.ofOrNull(effect.targetType, effect.targetKey) == null
-        ) {
-            return "Unknown effect target '${effect.targetType}' — expected 'fixture', 'group', " +
-                "'${EffectTargetRef.Selection.TYPE}' (a list of fixtures and groups) or '$DEFERRED_TARGET_TYPE'"
-        }
-        if (effect.effectType.isBlank()) return "Effect type must not be blank"
-        EffectSpecCoercion.Strict.problem(
-            blendMode = effect.blendMode,
-            distribution = effect.distribution,
-            elementMode = effect.elementMode,
-            elementFilter = effect.elementFilter,
-            direction = effect.direction,
-            size = effect.size,
-            nShot = effect.nShot,
-            spread = effect.spread,
-            wings = effect.wings,
-            blocks = effect.blocks,
-            groups = effect.groups,
-        )?.let { return it }
+    val problems = effects.flatMapIndexed { index, effect ->
+        listOfNotNull(
+            when {
+                effect.targetType == DEFERRED_TARGET_TYPE ->
+                    "A look effect must name its own fixture, group or selection. An effect you point at a " +
+                        "selection is an effect palette — create one in the palette library instead."
+                EffectTargetRef.ofOrNull(effect.targetType, effect.targetKey) == null ->
+                    "Unknown effect target '${effect.targetType}' — expected 'fixture', 'group' or " +
+                        "'${EffectTargetRef.Selection.TYPE}' (a list of fixtures and groups)"
+                else -> null
+            },
+            "Effect type must not be blank".takeIf { effect.effectType.isBlank() },
+            EffectSpecCoercion.Strict.problem(
+                blendMode = effect.blendMode,
+                distribution = effect.distribution,
+                elementMode = effect.elementMode,
+                elementFilter = effect.elementFilter,
+                direction = effect.direction,
+                size = effect.size,
+                nShot = effect.nShot,
+                spread = effect.spread,
+                wings = effect.wings,
+                blocks = effect.blocks,
+                groups = effect.groups,
+            ),
+        ).map { "effects[$index]: $it" }
     }
-    return null
+    return problems.takeIf { it.isNotEmpty() }?.joinToString("; ")
 }
 
 /** [pairs] is each incoming item with the existing one it updates, or null; [unmatched] the existing items left over. */
@@ -1286,7 +1285,7 @@ internal fun DaoLook.toSummaryDto(
         rowCount = rowList.size,
         effectCount = effectList.size,
         targetCount = rowList.map { it.targetKey }.distinct().size,
-        hasDeferredEffects = effectList.any { it.isDeferred },
+        hasDeferredEffects = false,
         preview = rowList.groupingBy { it.value }
             .eachCount()
             .entries

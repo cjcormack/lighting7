@@ -249,11 +249,6 @@ internal fun performProgrammerInclude(
     fadeMs: Long,
     /** Run a Look's effects in the programmer band too, so Update can write them back. */
     includeFx: Boolean = true,
-    /**
-     * What a Look's deferred effects run on — the selection being included onto. Null takes the
-     * desk's selection, the one a busk press would land on.
-     */
-    targets: List<CueTargetDto>? = null,
     /** The stack entry a cue is included from, for the indicator's number; must place [cueId]. */
     entryId: Int? = null,
 ): IncludeCoreResult {
@@ -266,11 +261,7 @@ internal fun performProgrammerInclude(
                 ?.let { it.name to it.uuid }
         } ?: return IncludeCoreResult.Failure("Look not found in current project", notFound = true)
         val (lookName, lookUuid) = look
-        val outcome = includeLookIntoProgrammer(
-            state, lookId, lookUuid, mask, fadeMs,
-            includeFx = includeFx,
-            deferredTargets = targets ?: state.deskSelection.state.value.targets,
-        )
+        val outcome = includeLookIntoProgrammer(state, lookId, lookUuid, mask, fadeMs, includeFx = includeFx)
         val rows = transaction(state.database) { DaoLook.findById(lookId)?.let(::lookSceneryForInclude).orEmpty() }
         val sceneryIncluded = state.programmerScenery.include(project.id.value, rows, fadeMs)
         // A Look Include always moves the include target, so the baseline moves with it.

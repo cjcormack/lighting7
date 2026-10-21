@@ -455,7 +455,10 @@ data class LookRowJson(
 @Serializable
 data class LookEffectJson(
     val uuid: String,
-    /** `fixture`, `group`, `deferred`, or since v34 `selection` (its key the ordered list's canonical JSON). */
+    /**
+     * `fixture`, `group`, or since v34 `selection` (its key the ordered list's canonical JSON). An older
+     * archive's `deferred` is dropped on import (absolute-looks plan D2).
+     */
     val targetType: String,
     val targetKey: String,
     val effectType: String,

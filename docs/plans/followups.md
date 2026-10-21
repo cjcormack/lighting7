@@ -69,7 +69,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
 | [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
-| [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | Looks made of exactly two deferred effects of one family, no rows |
+| [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | The same pair of same-family effect palettes pressed together, again and again |
 | [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
 | [`FU-TMPL-FX-EDIT-NO-RETIME`](#fu-tmpl-fx-edit-no-retime) | Trigger | Tmpl | an operator retunes an effect template and the live effect keeps its old timing |
 | [`FU-TMPL-CLICK-GROUP-PARTIAL`](#fu-tmpl-click-group-partial) | Trigger | Tmpl | an effect template on a mixed group (hexes plus a hazer, or plus a 24-channel Shehds) runs on none of its heads |
@@ -1369,17 +1369,17 @@ mask means, not an implementation detail.
 
 ### `FU-TMPL-MULTI-EFFECT`
 
-**More than one effect per template** · Trigger: an operator keeps making Looks that are exactly two
-deferred effects of one family with no rows · fx-templates session 1, 2026-09-02
+**More than one effect per template** · Trigger: an operator keeps pressing the same pair of
+same-family effect palettes together · fx-templates session 1, 2026-09-02
 
-D2 caps an effect template at one effect, on the grounds that several together is what a Look with
-deferred effects already is — and a Look has its own busk pool, so nothing is unreachable. The cap
-is enforced twice: `uniqueIndex(template)` on `template_effects`, and by name at the write boundary
-so it surfaces as a 400 rather than a constraint violation.
+D2 caps an effect template at one effect. It was made when several effects together on a selection
+were a Look with deferred effects; absolute-looks plan D2 removed those (a Look effect names its own
+target), so two effects on one selection are now two effect palettes pressed together. The cap is
+enforced twice: `uniqueIndex(template)` on `template_effects`, and by name at the write boundary so
+it surfaces as a 400 rather than a constraint violation.
 
-The trigger to watch for is a Look that is *only* a pair of same-family deferred effects with no
-rows: that is an operator working around the cap, and it is the shape the cap gets in the way of. If
-it fires, the storage change is small (drop the unique index, add `sort_order`) but three things
+The trigger to watch for is an operator who keeps pressing the same pair of same-family effect
+palettes onto one selection: that is the shape the cap gets in the way of. If it fires, the storage change is small (drop the unique index, add `sort_order`) but three things
 follow it: `TemplateSnapshot.effect` becomes a list, `TemplateDto.kind` needs to stay a string
 because a third arm becomes plausible, and the *Runs on* preview has to say which effect it is
 previewing.
@@ -1431,7 +1431,7 @@ instance is edited as that instance only, and reads ***edited*** while it differ
 the old settings — and *Reset to template* tours them one by hand. It stays a Trigger: the automatic
 tour is still not built.
 
-This is **inherited from Looks unchanged**, not new: a deferred Look effect behaves identically, and
+This is **inherited from Looks unchanged**, not new: a Look's effect behaves identically, and
 has since the layer stack was written. It is recorded here because an effect template makes it much
 more visible — the whole *point* of an effect template is the one thing the operator retunes, so
 "nothing happened" is a likelier reaction than it was for a Look. `TemplateRoutesTest`'s

@@ -623,17 +623,15 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 0
     }
 
-    // An **effects-only** look, the shape an FX preset migrated into. Its rows would once have been
-    // deferred too; session 3 moved that half of the entity out to `templates` (see the template
-    // below), so what survives here is the effect — where a deferred target still means "fan over
-    // whatever the layer points at".
+    // An **effects-only** look, the shape an FX preset migrated into. Its effect names its own
+    // group, as every Look effect does (absolute-looks plan D2).
     val effectsLook = DaoLook.new {
         this.project = project
         name = "warm-pulse"
         notes = "warm pulse"
     }
     DaoLookEffect.new {
-        look = effectsLook; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        look = effectsLook; targetType = "group"; targetKey = "front-wash"
         effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
         beatDivision = 0.5; blendMode = "OVERRIDE"; distribution = "LINEAR"
         phaseOffset = 0.25
@@ -853,7 +851,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         elementMode = "FLAT"
         sortOrder = 4
     }
-    // A timed layer over the deferred look — the shape a timed preset application migrated into,
+    // A timed layer over the effects-only look — the shape a timed preset application migrated into,
     // carrying all three timing fields plus both speed-master overrides.
     DaoCueLayer.new {
         cue = cue1; look = effectsLook

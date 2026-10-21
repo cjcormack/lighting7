@@ -319,13 +319,13 @@ class EffectSizeDirectionNShotTest {
         val effect = bandEffect(Level(200u), SliderTarget("hex-a", "dimmer")) { it.copy(nShot = 1) }
         effect.programmerLayerEffectKey = ProgrammerLayerEffectKey(
             layerId = 7,
-            effect = EffectEntry(
-                target = null, effectType = "Level", category = "dimmer", propertyName = "dimmer",
+            effect = StoredEffect(
+                effectType = "Level", category = "dimmer", propertyName = "dimmer",
                 beatDivision = BeatDivision.QUARTER, blendMode = "OVERRIDE", distribution = "LINEAR",
                 phaseOffset = 0.0, elementMode = null, elementFilter = null, stepTiming = null,
                 parameters = emptyMap(), speedMasterUuid = null, rateSpeedMasterUuid = null, nShot = 1,
             ),
-            targetKey = "hex-a",
+            target = uk.me.cormack.lighting7.models.EffectTargetRef.Single(uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-a")),
         )
         rig.engine.addEffect(effect)
 
