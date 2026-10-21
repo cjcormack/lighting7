@@ -4,7 +4,8 @@ import { toast } from 'sonner'
 import { ArrowDownToLine, CircleOff, Plus, Replace, Settings2, Sparkles, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { EditorSurface } from '@/components/editor/EditorSurface'
 import { cn } from '@/lib/utils'
 import type { CueTarget } from '@/api/cuesApi'
 import type { SceneryState } from '@/api/sceneryApi'
@@ -22,7 +23,8 @@ import { useEditCueStackTimelineMutation } from '@/store/cueStacks'
 import { useLookListQuery } from '@/store/looks'
 import { useTemplateListQuery } from '@/store/templates'
 import { useSpeedMasterListQuery } from '@/store/speedMasters'
-import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
+import { parsePropertyMask, serializePropertyMask } from '@/lib/attributeFamily'
+import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
 import { replacePlan, sharedValue, type TimelineColumn } from '@/lib/stackTimeline'
 import type { StoredExtraColumn } from '@/lib/stackTimeline/columnOrder'
@@ -44,14 +46,35 @@ export function resetTimelineUndo(): void {
 /**
  * The Timeline's one write door: each gesture as **one** request to `timeline/edit`, its answer's
  * `before` pushed as one Undo step, and a toast naming what it did with *Undo* on it. ⌘Z and the
- * toast's *Undo* send the last step back as `restore` ops. A refusal is the desk's, toasted by the
- * error middleware, and changes nothing here.
+ * toast's *Undo* send the last step back as `restore` ops; while [lock] says locked, both ask to
+ * unlock instead. A refusal is the desk's, toasted by the error middleware, and changes nothing here
+ * — but an Undo the desk refuses as invalid is dropped, since it would be refused every time.
  */
-export function useTimelineEdits(projectId: number, stackId: number) {
+export function useTimelineEdits(projectId: number, stackId: number, lock: { locked: boolean; onLocked?: () => void }) {
   const [edit, { isLoading }] = useEditCueStackTimelineMutation()
   const toastId = `timeline-edit-${stackId}`
   const [depth, setDepth] = useState(() => undoSteps.get(stackId)?.length ?? 0)
-  const undoRef = useRef<() => void>(() => {})
+  const lockRef = useRef(lock)
+  lockRef.current = lock
+
+  const undo = useCallback(async () => {
+    if (lockRef.current.locked) {
+      lockRef.current.onLocked?.()
+      return
+    }
+    const steps = undoSteps.get(stackId)
+    const step = steps?.pop()
+    if (steps == null || step == null) return
+    setDepth(steps.length)
+    try {
+      await edit({ projectId, stackId, ops: step.map((cue) => ({ op: 'restore' as const, ...cue })) }).unwrap()
+      toast('Put back', { id: toastId, action: undefined })
+    } catch (error) {
+      if ((error as { status?: unknown } | null)?.status === 400) return
+      steps.push(step)
+      setDepth(steps.length)
+    }
+  }, [edit, projectId, stackId, toastId])
 
   const send = useCallback(
     async (ops: TimelineEditOp[], words: (answer: TimelineEditResponse) => string): Promise<TimelineEditResponse | null> => {
@@ -70,27 +93,12 @@ export function useTimelineEdits(projectId: number, stackId: number) {
       }
       toast(words(answer), {
         id: toastId,
-        action: answer.before.length > 0 ? { label: 'Undo', onClick: () => undoRef.current() } : undefined,
+        action: answer.before.length > 0 ? { label: 'Undo', onClick: () => void undo() } : undefined,
       })
       return answer
     },
-    [edit, projectId, stackId, toastId],
+    [edit, projectId, stackId, toastId, undo],
   )
-
-  const undo = useCallback(async () => {
-    const steps = undoSteps.get(stackId)
-    const step = steps?.pop()
-    if (steps == null || step == null) return
-    setDepth(steps.length)
-    try {
-      await edit({ projectId, stackId, ops: step.map((cue) => ({ op: 'restore' as const, ...cue })) }).unwrap()
-      toast('Put back', { id: toastId })
-    } catch {
-      steps.push(step)
-      setDepth(steps.length)
-    }
-  }, [edit, projectId, stackId, toastId])
-  undoRef.current = () => void undo()
 
   return { send, undo, canUndo: depth > 0, busy: isLoading }
 }
@@ -101,6 +109,7 @@ export function describeEdit(
   answer: TimelineEditResponse,
   columnOf: (op: TimelineEditOp) => TimelineColumn | undefined,
   cues: (cueIds: readonly number[]) => string,
+  label?: string,
 ): string {
   const groups = new Map<string, { column: TimelineColumn | undefined; verb: string; cueIds: number[] }>()
   for (const op of ops) {
@@ -119,7 +128,10 @@ export function describeEdit(
   })
   const released = [...new Set(answer.released.map((r) => r.source.name))]
   if (released.length > 0) sentences.push(`${released.join(', ')} released there.`)
-  if (sentences.length === 0) return answer.changed.length === 0 ? 'Nothing changed' : `${cues(answer.changed)} changed.`
+  if (sentences.length === 0) {
+    if (answer.changed.length === 0) return 'Nothing changed'
+    return label ? `${label} in ${cues(answer.changed)}.` : `${cues(answer.changed)} changed.`
+  }
   if (answer.changed.length === 0) return 'Nothing changed'
   return sentences.join(' ')
 }
@@ -211,7 +223,7 @@ export function TimelineVerbs({
 
 // ── Replace with… ─────────────────────────────────────────────────────────────────────────────────
 
-type RecordChoice = { kind: 'LOOK' | 'TEMPLATE'; id: number; name: string }
+type RecordChoice = { kind: 'LOOK' | 'TEMPLATE'; id: number; name: string; generic: boolean }
 
 /** *Replace with…* (D11): the selected column's record swapped for another over the selected cues. */
 export function TimelineReplacePopover({
@@ -233,15 +245,15 @@ export function TimelineReplacePopover({
   deskTargets: readonly CueTarget[]
   targetName: (target: CueTarget) => string
   cues: (cueIds: readonly number[]) => string
-  onReplace: (op: TimelineEditOp) => void
+  onReplace: (op: TimelineEditOp, label: string) => void
 }) {
   const [open, setOpen] = useState(false)
   const { data: looks } = useLookListQuery({ projectId }, { skip: !open })
   const { data: palettes } = useTemplateListQuery({ projectId }, { skip: !open })
   const records = useMemo<RecordChoice[]>(
     () => [
-      ...(palettes ?? []).map((p) => ({ kind: 'TEMPLATE' as const, id: p.id, name: p.name })),
-      ...(looks ?? []).map((l) => ({ kind: 'LOOK' as const, id: l.id, name: l.name })),
+      ...(palettes ?? []).map((p) => ({ kind: 'TEMPLATE' as const, id: p.id, name: p.name, generic: p.isGeneric })),
+      ...(looks ?? []).map((l) => ({ kind: 'LOOK' as const, id: l.id, name: l.name, generic: false })),
     ],
     [looks, palettes],
   )
@@ -254,9 +266,12 @@ export function TimelineReplacePopover({
     for (const t of deskTargets) out.set(`${t.type}:${t.key}`, t)
     return out
   }, [column.target, deskTargets])
-  const defaultTarget = deskTargets[0] ?? column.target
-  const chosenTargetKey = targetKey ?? (defaultTarget ? `${defaultTarget.type}:${defaultTarget.key}` : '*')
   const chosen = records.find((r) => `${r.kind}:${r.id}` === record)
+  /** A generic palette has no heads of its own, so it needs a target — the desk refuses it on none. */
+  const needsTarget = chosen?.generic === true
+  const defaultTarget = deskTargets[0] ?? column.target
+  const keyed = targetKey ?? (defaultTarget ? `${defaultTarget.type}:${defaultTarget.key}` : '*')
+  const chosenTargetKey = needsTarget && keyed === '*' ? ([...targets.keys()].find((k) => k !== '*') ?? '*') : keyed
   const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'TEMPLATE', id: column.sourceId! }, target: column.target }
   const to: TimelineCellRef | null = chosen ? { source: { kind: chosen.kind, id: chosen.id }, target: targets.get(chosenTargetKey) ?? null } : null
   const plan = to ? replacePlan(timeline.entries, cueIds, from, to) : null
@@ -298,7 +313,7 @@ export function TimelineReplacePopover({
             value={chosenTargetKey}
             onChange={(e) => setTargetKey(e.target.value)}
           >
-            {[...targets].map(([key, t]) => (
+            {[...targets].filter(([key]) => !(needsTarget && key === '*')).map(([key, t]) => (
               <option key={key} value={key}>{t == null ? 'Own heads' : targetName(t)}</option>
             ))}
           </select>
@@ -318,10 +333,11 @@ export function TimelineReplacePopover({
           <Button variant="outline" size="sm" onClick={() => setOpen(false)}>Cancel</Button>
           <Button
             size="sm"
-            disabled={to == null || same || count === 0}
+            disabled={to == null || same || count === 0 || (needsTarget && to.target == null)}
+            title={needsTarget && to?.target == null ? `${chosen?.name} needs a target — select one on the desk` : undefined}
             onClick={() => {
               if (to == null) return
-              onReplace({ op: 'replace', cueIds: [...new Set(cueIds)], from, to, keepSettings })
+              onReplace({ op: 'replace', cueIds: [...new Set(cueIds)], from, to, keepSettings }, `${chosen?.name} for ${column.name}`)
               setOpen(false)
             }}
           >
@@ -342,11 +358,6 @@ const BLENDS: { value: string; label: string }[] = [
   { value: 'MIN', label: 'Min' },
   { value: 'MULTIPLY', label: 'Multiply' },
 ]
-const MASK_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
-
-function maskSet(mask: string | null): Set<string> {
-  return new Set((mask ?? '').split(',').map((f) => f.trim().toUpperCase()).filter((f) => f.length > 0))
-}
 
 /**
  * *Settings…* (D11): the selected layers' own fields, as the cue editor's Looks tab draws them —
@@ -373,7 +384,7 @@ export function TimelineSettingsPopover({
   const value = <T,>(read: (l: TimelineLayer) => T) => sharedValue(layers.map(({ layer }) => read(layer)))
   const amount = value((l) => l.amount)
   const blend = value((l) => l.blendMode.toUpperCase())
-  const mask = value((l) => l.propertyMask)
+  const mask = value((l) => l.propertyMask ?? null)
   const stomp = value((l) => l.stomp)
   const enabled = value((l) => l.enabled)
   const delay = value((l) => l.delayMs ?? null)
@@ -420,29 +431,7 @@ export function TimelineSettingsPopover({
           />
         </SettingRow>
         <SettingRow label="Mask">
-          <div className="flex flex-wrap gap-1">
-            {MASK_FAMILIES.map((family) => {
-              const on = mask !== 'mixed' && (mask == null ? true : maskSet(mask).has(family))
-              return (
-                <button
-                  key={family}
-                  type="button"
-                  aria-pressed={on}
-                  className={cn('rounded border px-1.5 py-0.5 text-[11px]', on ? 'bg-muted font-semibold' : 'text-muted-foreground', mask === 'mixed' && 'border-dashed')}
-                  onClick={() => {
-                    const current = mask === 'mixed' || mask == null ? new Set<string>(MASK_FAMILIES) : maskSet(mask)
-                    if (current.has(family)) current.delete(family)
-                    else current.add(family)
-                    if (current.size === 0) return
-                    const next = MASK_FAMILIES.filter((f) => current.has(f))
-                    write({ propertyMask: next.length === MASK_FAMILIES.length ? null : next.join(',') }, 'Mask')
-                  }}
-                >
-                  {FAMILY_LABELS[family].singular}
-                </button>
-              )
-            })}
-          </div>
+          <TimelineMaskField key={mask === 'mixed' ? 'mixed' : 'shared'} mask={mask ?? null} onWrite={(propertyMask) => write({ propertyMask }, 'Mask')} />
         </SettingRow>
         <SettingRow label="Stomp">
           <SegmentButtons
@@ -491,6 +480,39 @@ export function TimelineSettingsPopover({
         {sources.size === 1 && first && <OpenSourceButton projectId={projectId} source={first.source} />}
       </PopoverContent>
     </Popover>
+  )
+}
+
+/**
+ * The layers' mask in the shared picker. Where they agree it is the layer popover's
+ * `LayerMaskPicker`, through `useMaskDraft`. Where they differ it says so and starts on *All
+ * attributes*: the first choice that is a mask — every attribute, or a narrowing — is written to
+ * every layer, and the picker then reads as one mask.
+ */
+function TimelineMaskField({ mask, onWrite }: { mask: string | null | 'mixed'; onWrite: (propertyMask: string | null) => void }) {
+  return mask === 'mixed' ? <MixedMask onWrite={onWrite} /> : <SharedMask mask={mask} onWrite={onWrite} />
+}
+
+function SharedMask({ mask, onWrite }: { mask: string | null; onWrite: (propertyMask: string | null) => void }) {
+  const stored = parsePropertyMask(mask)
+  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) => onWrite(serializePropertyMask(families ?? [])))
+  return <MaskToggles value={draft} onChange={setDraft} />
+}
+
+function MixedMask({ onWrite }: { onWrite: (propertyMask: string | null) => void }) {
+  const [draft, setDraft] = useState<MaskValue>(null)
+  return (
+    <div className="space-y-1">
+      <p className="text-[11px] text-muted-foreground">The layers&apos; masks differ — a choice here sets every one.</p>
+      <MaskToggles
+        value={draft}
+        onChange={(next) => {
+          setDraft(next)
+          if (maskIsEmpty(next) || (next != null && maskToWire(next) == null)) return
+          onWrite(serializePropertyMask(next ?? []))
+        }}
+      />
+    </div>
   )
 }
 
@@ -629,15 +651,19 @@ export function TimelineSceneryPopover({
   onSet: (state: SceneryState, transitionMs: number | null) => void
   onClear: () => void
 }) {
-  const virtualRef = useRef({ getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() })
-  useEffect(() => {
-    virtualRef.current = { getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() }
-  }, [anchor])
+  const anchorRef = useRef<{ getBoundingClientRect(): DOMRect } | null>(null)
+  anchorRef.current = { getBoundingClientRect: () => anchor()?.getBoundingClientRect() ?? new DOMRect() }
   const shown = shownSceneryState(element, tracked ?? undefined, state ?? undefined)
   return (
-    <Popover open onOpenChange={(open) => !open && onClose()}>
-      <PopoverAnchor virtualRef={virtualRef} />
-      <PopoverContent className="w-72 space-y-3 p-3" data-timeline-scenery>
+    <EditorSurface
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`${element.name} in ${cueLabel}`}
+      align="center"
+      anchorRef={anchorRef}
+      contentClassName="w-72 space-y-3 p-3"
+    >
+      <div className="space-y-3" data-timeline-scenery>
         <div className="text-sm font-semibold">
           {element.name} in {cueLabel} <span className="font-normal text-muted-foreground">{state ? 'change' : 'tracked'}</span>
         </div>
@@ -666,8 +692,8 @@ export function TimelineSceneryPopover({
             Clear change
           </Button>
         </div>
-      </PopoverContent>
-    </Popover>
+      </div>
+    </EditorSurface>
   )
 }
 
@@ -741,7 +767,8 @@ export function TimelineAddColumn({
               <ListItem
                 key={`palette-${p.id}`}
                 label={p.name}
-                sub={paletteTarget == null ? 'own heads' : targetName(paletteTarget)}
+                sub={paletteTarget == null ? (p.isGeneric ? 'needs a selection' : 'own heads') : targetName(paletteTarget)}
+                disabled={paletteTarget == null && p.isGeneric}
                 onPick={() => add({ kind: 'palette', sourceId: p.id, name: p.name, target: paletteTarget, families: p.family ? [p.family] : [] })}
               />
             ))}
@@ -761,9 +788,15 @@ function ListGroup({ label, children }: { label: string; children: ReactNode }) 
   )
 }
 
-function ListItem({ label, sub, onPick }: { label: string; sub: string; onPick: () => void }) {
+function ListItem({ label, sub, disabled, onPick }: { label: string; sub: string; disabled?: boolean; onPick: () => void }) {
   return (
-    <button type="button" className="flex items-baseline justify-between gap-2 rounded px-1.5 py-1 text-left text-sm hover:bg-muted" onClick={onPick}>
+    <button
+      type="button"
+      disabled={disabled}
+      title={disabled ? `${label} has no heads of its own — select a target on the desk` : undefined}
+      className="flex items-baseline justify-between gap-2 rounded px-1.5 py-1 text-left text-sm hover:bg-muted disabled:opacity-50 disabled:hover:bg-transparent"
+      onClick={onPick}
+    >
       <span className="truncate">{label}</span>
       <span className="shrink-0 text-[10px] text-muted-foreground">{sub}</span>
     </button>

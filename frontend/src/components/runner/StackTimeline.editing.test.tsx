@@ -205,6 +205,46 @@ describe('one cell', () => {
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
     expect(requests[1].ops.map((op) => op.op)).toEqual(['restore'])
   })
+
+  it('⌘Z’s toast drops the Undo it replaced, and an Undo the desk refuses is dropped', async () => {
+    mount()
+    fireEvent.click(cell(102, PALETTE))
+    fireEvent.click(cell(102, PALETTE))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    edit.mockImplementationOnce((arg: { ops: TimelineEditOp[] }) => {
+      requests.push(arg)
+      return { unwrap: () => Promise.reject({ status: 400 }) }
+    })
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    await act(async () => {})
+    expect(edit).toHaveBeenCalledTimes(2)
+  })
+
+  it('a put-back toast carries no Undo', async () => {
+    mount()
+    fireEvent.click(cell(102, PALETTE))
+    fireEvent.click(cell(102, PALETTE))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    fireEvent.keyDown(window, { key: 'z', metaKey: true })
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Put back', expect.objectContaining({ action: undefined })))
+    const [, options] = toast.mock.calls.at(-1) as [string, object]
+    expect('action' in options).toBe(true)
+  })
+
+  it('locked, the toast’s Undo asks to unlock and sends nothing', async () => {
+    const onRequestUnlock = vi.fn()
+    const { rerender } = mount({ onRequestUnlock })
+    fireEvent.click(cell(102, PALETTE))
+    fireEvent.click(cell(102, PALETTE))
+    await waitFor(() => expect(toast).toHaveBeenCalled())
+    const [, options] = toast.mock.calls[0] as [string, { action: { onClick: () => void } }]
+    rerender(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} locked onRequestUnlock={onRequestUnlock} />)
+    act(() => options.action.onClick())
+    expect(screen.getByRole('alertdialog')).toBeTruthy()
+    expect(edit).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('a range', () => {
@@ -274,6 +314,22 @@ describe('a range', () => {
       { op: 'layerSettings', cueId: 3, layerId: 13, fields: { amount: 0.4 } },
     ])
   })
+
+  it('Settings… over differing masks says so, and the first mask chosen is written to every layer', async () => {
+    TIMELINE!.entries[3] = entry(103, { layers: [lavender(13, { propertyMask: 'COLOUR' })] })
+    mount()
+    selectColumn()
+    fireEvent.click(document.querySelector('[data-timeline-verb="Settings"]')!)
+    expect(screen.getByText(/masks differ/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('switch', { name: 'All attributes' }))
+    expect(edit).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Beam' }))
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops).toEqual([
+      { op: 'layerSettings', cueId: 1, layerId: 11, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
+      { op: 'layerSettings', cueId: 3, layerId: 13, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
+    ])
+  })
 })
 
 it('dragging a run’s end down fills the cells it crosses in one request', async () => {
@@ -315,6 +371,12 @@ it('+ Column adds an empty column for this window', () => {
   fireEvent.click(screen.getByText('Warm'))
   expect(document.querySelector('[data-row-id="entry:101"] [data-cell="look:4:*"]')).toBeTruthy()
   expect(edit).not.toHaveBeenCalled()
+})
+
+it('+ Column will not add a generic palette on no target', () => {
+  mount()
+  fireEvent.click(document.querySelector('[data-timeline-add-column]')!)
+  expect(screen.getByText('Amber').closest('button')!.disabled).toBe(true)
 })
 
 describe('locked', () => {

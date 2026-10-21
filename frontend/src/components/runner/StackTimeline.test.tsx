@@ -8,7 +8,7 @@ import type { StackTimeline as StackTimelineData, TimelineEntry, TimelineLayer }
 /**
  * The Timeline's grid (stack-timeline plan §4.2): a column per record and target under its kind's
  * band, runs that pass a marker, the live row's fade bar, and one selected cell opening the pane on
- * its cue at the column's tab — while nothing a cell does writes.
+ * its cue at the column's tab.
  */
 let TIMELINE: StackTimelineData | undefined
 const edit = vi.fn()

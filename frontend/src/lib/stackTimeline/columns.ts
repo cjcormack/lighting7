@@ -183,10 +183,17 @@ export function recordColumnId(kind: 'look' | 'palette', sourceId: number, targe
 }
 
 /**
- * [columns] with this window's added [extras] (§4.4) after each kind's own — an extra the stack
- * now fills is derived already, so it is left out.
+ * [columns] with this window's added [extras] (§4.4), each kind in this window's [order] with its
+ * extras after its own until the order names them — an extra the stack now fills is derived
+ * already, so it is left out. An extra's heads are its target's: a fixture or cell itself, a
+ * group's members; on its own fixtures it reaches nothing until a cell is filled.
  */
-export function withExtraColumns(columns: readonly TimelineColumn[], extras: readonly StoredExtraColumn[], names: TimelineNames): TimelineColumn[] {
+export function withExtraColumns(
+  columns: readonly TimelineColumn[],
+  extras: readonly StoredExtraColumn[],
+  names: TimelineNames,
+  order: readonly string[] | null = null,
+): TimelineColumn[] {
   const ids = new Set(columns.map((c) => c.id))
   const added = extras
     .map((extra): TimelineColumn => ({
@@ -195,10 +202,12 @@ export function withExtraColumns(columns: readonly TimelineColumn[], extras: rea
       name: extra.name,
       sub: extra.target == null ? (extra.kind === 'look' ? 'own fixtures' : 'own heads') : names.target(extra.target),
       families: extra.families,
-      heads: [],
+      heads: extra.target == null ? [] : extra.target.type === 'group' ? [...(names.members?.(extra.target.key) ?? [])] : [extra.target.key],
       sourceId: extra.sourceId,
       target: extra.target,
     }))
     .filter((c) => !ids.has(c.id))
-  return TIMELINE_KINDS.flatMap((kind) => [...columns.filter((c) => c.kind === kind), ...added.filter((c) => c.kind === kind)])
+  return TIMELINE_KINDS.flatMap((kind) =>
+    applyColumnOrder([...columns.filter((c) => c.kind === kind), ...added.filter((c) => c.kind === kind)], order),
+  )
 }

@@ -6595,13 +6595,14 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   …/timeline/edit` (`useEditCueStackTimelineMutation`), sent through `useTimelineEdits`: nothing
   reaches the stage, and the answer's `before` is pushed as one Undo step — per stack, kept while the
   window lives (module-level, so a view switch keeps it), last first — which ⌘Z and the toast's
-  *Undo* send back as `restore` ops (P5). Every gesture toasts what it did, in one id per stack, the
+  *Undo* send back as `restore` ops (P5) — an Undo the desk refuses as invalid is dropped rather than
+  left on top, and `StackDetail` keys the Timeline by stack, so one stack's toast cannot undo another's. Every gesture toasts what it did, in one id per stack, the
   press's knock-on named from the answer's `released` (*Amber on LX1 Orbits in Q5. Lavender released
   there.*). The gestures:
   - **One cell.** A click selects; a second click on the one selected cell toggles it — a Look or
     palette cell on is `layerOn` with `settingsFrom` the nearest filled cell above in its column, else
     below (D6, `nearestFilled`), off is `layerOff` — and a scenery cell's second click opens
-    `TimelineSceneryPopover` instead: `SceneryControl` (`commit="release"`, so one write per gesture),
+    `TimelineSceneryPopover` instead, through `EditorSurface`: `SceneryControl` (`commit="release"`, so one write per gesture),
     the transition, and *Clear change*. ⏎ toggles the selection (all filled → off, else the empty ones
     on) and ⌫ turns it off, through the kit's new `useSheet` options `onActivate` and `onClearCells`
     (a surface-owned ⏎ and ⌫ — one request over every column rather than each column's `clear`; a
@@ -6620,14 +6621,18 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
     record and its target (the desk selection's first by default), *Keep each layer's rank and
     settings*, and a readout of which cues swap and which already hold it (`replacePlan`). *Settings…*
     (`TimelineSettingsPopover`) is the Looks tab's fields over every selected layer, each change one
-    request, a field the layers disagree on reading *mixed*; a number commits on Enter or blur, never
+    request, a field the layers disagree on reading *mixed* — the mask through the shared
+    `MaskToggles` and `useMaskDraft`, and over differing masks the first mask chosen written to every
+    layer; a number commits on Enter or blur, never
     per keystroke; it names a layer covering several targets and offers *Open Look* / *Open palette*.
   - **+ Column** (`TimelineAddColumn`) searches the Looks and palettes; a palette takes the desk
-    selection's first target unless another is picked, a Look its own fixtures. The column lives in
-    this window (`sessionStorage timeline.extra.<stackId>`, `withExtraColumns`) until a cell is filled,
-    when the derived one replaces it and the window lets go.
+    selection's first target unless another is picked, a Look its own fixtures — a generic palette is
+    offered no *own heads*, here or in *Replace with…*, since the desk refuses it on none. The column
+    lives in this window (`sessionStorage timeline.extra.<stackId>`, `withExtraColumns`, which gives it
+    its target's heads and the window's column order) until a cell is filled, when the derived one
+    replaces it and the window lets go.
   - **Locked**, every write asks to unlock (`UnlockShowDialog`, the cue sheet's `refuseVerb` /
-    `onRefused` pattern, ⏎ alone claimed from the keyboard) or is disabled with the reason where the
+    `onRefused` pattern, ⏎ alone claimed from the keyboard; ⌘Z and the toast's *Undo* too) or is disabled with the reason where the
     lock is not the operator's; the selection and filters still work and no handle is drawn.
   `StackTimeline.editing.test.tsx` asserts one request per gesture and the locked refusals,
   `edits.test.ts` the op lists, `useSheet.test.ts` the two kit options.

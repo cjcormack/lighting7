@@ -233,14 +233,14 @@ export function StackTimeline({
   const selectionOn = filters.selectionOnly && selectionHeads.size > 0
 
   const derivedColumns = useMemo(() => (timeline == null ? [] : deriveColumns(timeline, names, order)), [names, order, timeline])
-  const allColumns = useMemo(() => withExtraColumns(derivedColumns, extras, names), [derivedColumns, extras, names])
+  const allColumns = useMemo(() => withExtraColumns(derivedColumns, extras, names, order), [derivedColumns, extras, names, order])
   // An added column the stack now fills is derived like any other: the window lets go of it.
   useEffect(() => {
-    if (extras.length === 0 || timeline == null) return
+    if (extras.length === 0 || timeline == null || timeline.stackId !== stack.id) return
     const derived = new Set(derivedColumns.map((c) => c.id))
     const kept = extras.filter((e) => !derived.has(recordColumnId(e.kind, e.sourceId, e.target)))
     if (kept.length !== extras.length) extraStore.set(kept)
-  }, [derivedColumns, extraStore, extras, timeline])
+  }, [derivedColumns, extraStore, extras, stack.id, timeline])
   const facet = useMemo(
     () => ({ family: filters.family, selectionHeads: selectionOn ? selectionHeads : null }),
     [filters.family, selectionHeads, selectionOn],
@@ -280,7 +280,11 @@ export function StackTimeline({
     [stack.cues],
   )
   const cuesWords = useCallback((ids: readonly number[]) => cueRangeWords(cueOrder, ids, cueLabel), [cueLabel, cueOrder])
-  const edits = useTimelineEdits(projectId, stack.id)
+  const [unlockAsked, setUnlockAsked] = useState(false)
+  const askToUnlock = useCallback(() => setUnlockAsked(true), [])
+  /** Locked, a write asks to unlock — where the lock is the operator's to lift. */
+  const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
+  const edits = useTimelineEdits(projectId, stack.id, { locked, onLocked: refuseVerb })
   const columnOfOp = useCallback(
     (op: TimelineEditOp) => {
       if (op.op === 'layerOn' || op.op === 'layerOff') {
@@ -293,21 +297,19 @@ export function StackTimeline({
   )
   const { send } = edits
   const gesture = useCallback(
-    (ops: TimelineEditOp[]) => void send(ops, (answer) => describeEdit(ops, answer, columnOfOp, cuesWords)),
+    (ops: TimelineEditOp[], label?: string) => void send(ops, (answer) => describeEdit(ops, answer, columnOfOp, cuesWords, label)),
     [columnOfOp, cuesWords, send],
   )
-
-  const [unlockAsked, setUnlockAsked] = useState(false)
-  const askToUnlock = useCallback(() => setUnlockAsked(true), [])
-  /** Locked, a write asks to unlock — where the lock is the operator's to lift. */
-  const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
 
   const [sceneryEdit, setSceneryEdit] = useState<{ entryId: number; columnId: string } | null>(null)
   const [drag, setDrag] = useState<{ columnId: string; fromEntryId: number; toEntryId: number; x: number; y: number } | null>(null)
   const dragColumn = drag == null ? null : (byId.get(drag.columnId) ?? null)
+  // Keyed on the rows the drag spans, not the pointer, so a move within one row rebuilds no cells.
+  const dragFrom = drag?.fromEntryId ?? null
+  const dragTo = drag?.toEntryId ?? null
   const dragGhosts = useMemo(
-    () => (drag == null || dragColumn == null ? null : dragPlan(cueOrder, grid, dragColumn, drag.fromEntryId, drag.toEntryId)),
-    [cueOrder, drag, dragColumn, grid],
+    () => (dragFrom == null || dragTo == null || dragColumn == null ? null : dragPlan(cueOrder, grid, dragColumn, dragFrom, dragTo)),
+    [cueOrder, dragColumn, dragFrom, dragTo, grid],
   )
 
   /** A cell's click: select it, or — when it is already the one selected cell — toggle it. */
@@ -547,8 +549,7 @@ export function StackTimeline({
     },
     onUndo: () => {
       if (!edits.canUndo) return false
-      if (locked) refuseVerb?.()
-      else void edits.undo()
+      void edits.undo()
       return true
     },
   })
@@ -706,7 +707,7 @@ export function StackTimeline({
                     locked={locked}
                     lockedReason={LOCKED_REASON}
                     onRefused={refuseVerb}
-                    onSend={(ops) => gesture(ops)}
+                    onSend={gesture}
                     replacePopover={(trigger) =>
                       verbState.replace == null || timeline == null ? (
                         trigger
@@ -720,7 +721,7 @@ export function StackTimeline({
                           deskTargets={deskSelection}
                           targetName={names.target}
                           cues={cuesWords}
-                          onReplace={(op) => gesture([op])}
+                          onReplace={(op, label) => gesture([op], label)}
                         />
                       )
                     }
@@ -733,7 +734,7 @@ export function StackTimeline({
                           projectId={projectId}
                           layers={verbState.layers}
                           cues={cuesWords}
-                          onWrite={(ops) => gesture(ops)}
+                          onWrite={gesture}
                         />
                       )
                     }

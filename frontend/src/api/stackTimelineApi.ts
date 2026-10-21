@@ -18,7 +18,7 @@ export interface TimelineEntry {
   /** A marker's label. */
   label?: string | null
   cueId?: number | null
-  /** In layer order, bottom first: a layer's rank is its place here, from 1. */
+  /** In layer order, bottom first; each layer carries its rank, which counts a layer whose source is gone. */
   layers: TimelineLayer[]
   effects: TimelineEffect[]
   scenery: TimelineScenery[]
