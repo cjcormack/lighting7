@@ -178,6 +178,26 @@ export interface SheetColumn<Row extends SheetRow, C extends string = string, V 
   cellTitle?: (row: Row) => string | undefined
   /** Right-align the content — numbers. */
   align?: 'left' | 'right'
+  /**
+   * The header band this column sits under: consecutive columns sharing a [SheetColumnGroup.key]
+   * draw one band above the header row, labelled once, with a rule on the left of the first. A
+   * sheet with no grouped column draws no band.
+   */
+  group?: SheetColumnGroup
+  /** The header's content in place of the uppercase [label] — a two-line name and target. */
+  header?: ReactNode
+  /**
+   * What this column draws across a **divider** row. Given on any column, the sheet draws its
+   * dividers as rows of cells — the label in the first column, each column's own mark beside it —
+   * so a bar can pass through a marker. A sheet that gives none keeps the full-width rule.
+   */
+  dividerCell?: (row: Row) => ReactNode
+}
+
+/** A header band over consecutive columns (`SheetColumn.group`). */
+export interface SheetColumnGroup {
+  key: string
+  label: ReactNode
 }
 
 /** A cell of a sheet, over the sheet's own column vocabulary. */

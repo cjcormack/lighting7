@@ -169,6 +169,19 @@ object SceneryResolver {
         cueId: Int,
     ): List<Pair<Resolved, Map<String, Source>>> {
         val upTo = cues.indexOfFirst { it.cueId == cueId }.takeIf { it >= 0 } ?: return emptyList()
+        return trackedAtPosition(elements, set, cues, upTo)
+    }
+
+    /**
+     * [trackedAt] at the [upTo]th of [cues] — one place of a cue, where a cue placed twice in one
+     * stack has two.
+     */
+    fun trackedAtPosition(
+        elements: Collection<Element>,
+        set: List<Change>,
+        cues: List<Cue>,
+        upTo: Int,
+    ): List<Pair<Resolved, Map<String, Source>>> {
         val own = cues[upTo].changes.associateBy { it.elementId }
         val named = (set.map { it.elementId } + cues.take(upTo + 1).flatMap { c -> c.changes.map { it.elementId } }).toSet()
         val resolved = resolve(

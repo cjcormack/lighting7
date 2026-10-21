@@ -51,6 +51,9 @@ vi.mock('./ShowMarkerRow', () => ({
   ),
 }))
 
+vi.mock('./StackTimeline', () => ({ StackTimeline: () => <div data-testid="timeline" /> }))
+vi.mock('./CueSheet', () => ({ CueSheet: () => <div data-testid="table" /> }))
+
 import { StackDetail } from './StackDetail'
 
 /** A cue row of the stack, or — with `cueType: 'MARKER'` — a marker entry, its entry id `id + 100`. */
@@ -91,6 +94,7 @@ interface Props {
   onSetStandby?: (cueId: number, entryId: number) => void
   locked?: boolean
   unlockedWarning?: boolean
+  view?: 'cards' | 'list' | 'timeline'
 }
 
 function view(p: Props = {}) {
@@ -112,6 +116,7 @@ function view(p: Props = {}) {
       onAddMarker={vi.fn()}
       onMarkerRename={vi.fn()}
       onMarkerDelete={vi.fn()}
+      view={p.view}
     />
     </MemoryRouter>
   )
@@ -248,5 +253,39 @@ describe('StackDetail', () => {
     // Arming the first place names its entry, though the cue is live at the other.
     rowProps.get(105)?.onSetStandby?.()
     expect(onSetStandby).toHaveBeenCalledWith(5, 105)
+  })
+})
+
+describe('the Timeline from 1100 px (C6)', () => {
+  /** The stack's content box, as the width hook measures it on mount. */
+  function atWidth(width: number) {
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width, height: 600 } as DOMRect)
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('offers three views, and draws the Timeline, where the stack is 1100 px wide', () => {
+    atWidth(1100)
+    render(view({ view: 'timeline' }))
+    expect(screen.getByRole('link', { name: 'Cards' })).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Table' })).toBeTruthy()
+    expect(screen.getByLabelText('Timeline').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByTestId('timeline')).toBeTruthy()
+  })
+
+  it('hides the Timeline below 1100 px, and a linked or remembered one draws as the Table', () => {
+    atWidth(1099)
+    render(view({ view: 'timeline' }))
+    expect(screen.queryByLabelText('Timeline')).toBeNull()
+    expect(screen.getByLabelText('Table').getAttribute('aria-current')).toBe('page')
+    expect(screen.getByTestId('table')).toBeTruthy()
+    expect(screen.queryByTestId('timeline')).toBeNull()
+  })
+
+  it('keeps the Table and the cards as they were at any width', () => {
+    atWidth(800)
+    render(view({ view: 'list' }))
+    expect(screen.getByTestId('table')).toBeTruthy()
+    expect(screen.queryByLabelText('Timeline')).toBeNull()
   })
 })

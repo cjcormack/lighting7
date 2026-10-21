@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import {
   AudioWaveform,
   BookOpenText,
+  GanttChart,
   LayoutGrid,
   SlidersVertical,
   TableProperties,
@@ -102,7 +103,11 @@ export function ViewSwitcher({ current, projectId }: { current: ShowView; projec
   )
 }
 
-export type CardsListView = 'cards' | 'list'
+/**
+ * Which view of a pair a route draws. `timeline` is the third view of a stack alone (stack-timeline
+ * plan D2): *Cards · Table · Timeline*, the Timeline a mode of the Table with the same rows.
+ */
+export type CardsListView = 'cards' | 'list' | 'timeline'
 
 /**
  * localStorage keys remembering which view (cards or list) each page last used, so its single
@@ -156,6 +161,8 @@ export function getStoredCardsListView(key: string): CardsListView {
     if (raw != null) {
       const stored: unknown = JSON.parse(raw)
       if (stored === 'list' || stored === 'cards') return stored
+      // Only Show writes it; a stack's third view.
+      if (stored === 'timeline' && key === SHOW_VIEW_KEY) return stored
     }
   } catch {
     // Unparseable, or storage unavailable — the default below.
@@ -172,6 +179,29 @@ export function getStoredCardsListView(key: string): CardsListView {
  */
 export function stickyRedirectsToList(locationState: unknown, storageKey: string): boolean {
   return !isCardsLinkState(locationState) && getStoredCardsListView(storageKey) === 'list'
+}
+
+/**
+ * Show's sticky decision, over its three views: the sheet view a drilled stack's cards route hands
+ * off to — the Table or the Timeline, whichever was chosen last — or null to stay on the cards. The
+ * Timeline below its width is the route's own fallback to the Table (C6), not this one's.
+ */
+export function stickyStackSheetView(locationState: unknown): 'list' | 'timeline' | null {
+  if (isCardsLinkState(locationState)) return null
+  const stored = getStoredCardsListView(SHOW_VIEW_KEY)
+  return stored === 'cards' ? null : stored
+}
+
+/** The content width a stack's Timeline needs (C6): below it the switcher hides it. */
+export const TIMELINE_MIN_WIDTH = 1100
+
+/**
+ * The view a stack draws: the Timeline falls back to the Table where it is not [timelineOffered] —
+ * the stack narrower than [TIMELINE_MIN_WIDTH] — whether it was linked or remembered, and comes
+ * back when there is room (C6).
+ */
+export function effectiveStackView(view: CardsListView, timelineOffered: boolean): CardsListView {
+  return view === 'timeline' && !timelineOffered ? 'list' : view
 }
 
 /** Location state the Cards segment attaches to its navigation. The cards
@@ -200,6 +230,7 @@ function CardsListSwitcher({
   listTo,
   storageKey,
   listLabel = 'List',
+  timelineTo,
 }: {
   current: CardsListView
   cardsTo: string
@@ -207,6 +238,8 @@ function CardsListSwitcher({
   storageKey: string
   /** What the second segment is called — `List` on Fixtures and Groups, `Table` on Channels and Show. */
   listLabel?: string
+  /** A third segment, the Timeline, where given — a stack's alone. */
+  timelineTo?: string
 }) {
   return (
     <nav className="inline-flex items-center gap-0.5 rounded-lg border bg-card p-0.5">
@@ -225,6 +258,15 @@ function CardsListSwitcher({
         label={listLabel}
         onClick={() => setStoredCardsListView(storageKey, 'list')}
       />
+      {timelineTo != null && (
+        <Segment
+          active={current === 'timeline'}
+          to={timelineTo}
+          icon={<GanttChart className="size-3.5" />}
+          label="Timeline"
+          onClick={() => setStoredCardsListView(storageKey, 'timeline')}
+        />
+      )}
     </nav>
   )
 }
@@ -286,23 +328,32 @@ export function ChannelsViewSwitcher({
   )
 }
 
-/** A stack's cue cards (`/show/stacks/:id`) vs its cue sheet (`/show/stacks/:id/table`). */
+/**
+ * A stack's three views: its cue cards (`/show/stacks/:id`), its cue sheet (`…/table`) and its
+ * Timeline (`…/timeline`, stack-timeline plan D2). Each segment records the choice before it
+ * navigates, as the pair does. [timelineOffered] false — the stack's content narrower than
+ * [TIMELINE_MIN_WIDTH] — draws two segments, the Timeline hidden rather than disabled (C6).
+ */
 export function ShowStackViewSwitcher({
   current,
   projectId,
   stackId,
+  timelineOffered = true,
 }: {
   current: CardsListView
   projectId: number
   stackId: number
+  timelineOffered?: boolean
 }) {
+  const base = `/projects/${projectId}/show/stacks/${stackId}`
   return (
     <CardsListSwitcher
       current={current}
-      cardsTo={`/projects/${projectId}/show/stacks/${stackId}`}
-      listTo={`/projects/${projectId}/show/stacks/${stackId}/table`}
+      cardsTo={base}
+      listTo={`${base}/table`}
       storageKey={SHOW_VIEW_KEY}
       listLabel="Table"
+      timelineTo={timelineOffered ? `${base}/timeline` : undefined}
     />
   )
 }

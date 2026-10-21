@@ -233,7 +233,7 @@ function seconds(ms: number): string {
 }
 
 /** A cue change's own clock in words — `snap`, `4 s` — or null on the cue's fade; one wording for every reader. */
-function clockWords(transitionMs: number | null | undefined): string | null {
+export function clockWords(transitionMs: number | null | undefined): string | null {
   return transitionMs == null ? null : transitionMs === 0 ? 'snap' : seconds(transitionMs)
 }
 

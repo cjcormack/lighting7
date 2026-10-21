@@ -3710,8 +3710,10 @@ Three surface rules, each pinned by its test:
 **Cards · List and Cards · Table are one switcher and one storage vocabulary.** Fixtures and
 Groups keep the word *List*; Channels and Show say *Table* (their second view is a table and their
 first genuinely is cards). The stored value is `'list'` for all four keys, so `getStoredCardsListView`
-answers every pair and a rename can never reset a desk's remembered view; `stickyRedirectsToList`
-is the one redirect decision, called by all four cards routes (`ViewSwitcher.test.ts`). **A first
+answers every pair and a rename can never reset a desk's remembered view — Show alone may also store
+`'timeline'`, its stack's third view (§The Timeline). `stickyRedirectsToList` is the redirect
+decision of the Fixtures, Groups and Channels cards routes, and Show's is `stickyStackSheetView`,
+which names the Table or the Timeline (`ViewSwitcher.test.ts`). **A first
 visit lands Fixtures and Groups on their lists**, Channels and Show on their cards (venue-visit plan
 S2, `CARDS_LIST_DEFAULTS`): only an absent or unreadable value reads the default, so a stored
 `'cards'` or `'list'` means what it always did, and a read never writes the default back. The Cards
@@ -6372,8 +6374,8 @@ in `OffPlayheadBanner`. The confirmation is not ceremony: `POST /show/go-to` dea
 being left and then calls `activateAtFirstCue` on the target, so the target's first cue genuinely
 fires and the desk darkens it again — a visible blip on top of losing the current cue.
 
-**And the Stacks button has to be able to leave one.** `/show`, `/show/stacks/:id` and
-`/show/stacks/:id/table` are three sibling routes with an `element` each, so going back from a stack
+**And the Stacks button has to be able to leave one.** `/show`, `/show/stacks/:id`,
+`/show/stacks/:id/table` and `/show/stacks/:id/timeline` are four sibling routes with an `element` each, so going back from a stack
 **remounts** `ShowPage` — which reset the `initialDrillDoneRef` that makes the "drill into the live
 stack on arrival" auto-navigate fire once, and the auto-drill put the operator straight back where
 they had just left. A ref cannot say "they asked for the list" across a remount, so the signal rides
@@ -6541,6 +6543,53 @@ is found — Record's *No stack* makes one.
   is the desk's alone. Locked it asks to unlock first (the action set's `UnlockShowDialog`, through
   `useCueActionDialogs`), and a GO that re-locks closes it. A copied cue whose fixture the rig lacks
   reads as missing in its editor (`AssignmentHealth`).
+
+#### The Timeline
+
+**A stack's third view** (lighting7 `docs/plans/stack-timeline-plan.md`, D1–D11, C1–C7):
+`/projects/:id/show/stacks/:stackId/timeline`, `ShowPage stackView="timeline"`, the third segment
+of `ShowStackViewSwitcher` — *Cards · Table · Timeline*. `CardsListView` gained `'timeline'`; it is
+stored under `show.view` alone (`getStoredCardsListView` reads it for no other key), and the cards
+route's sticky hand-off asks `stickyStackSheetView`, which names the Table or the Timeline.
+**From 1100 px of content width** (C6, `TIMELINE_MIN_WIDTH`): `StackDetail` measures itself
+(`useContainerBand`), and below it the switcher draws two segments and a linked or remembered
+Timeline draws as the Table (`effectiveStackView`), the stored choice kept for when there is room.
+
+- **The read is `GET …/cue-stacks/{sid}/timeline`** (`useCueStackTimelineQuery`, tag
+  `CueStackTimeline`), which rides the stack list's, the cue list's, each cue's, the Looks', the
+  palettes' and the scene's tags rather than a frame of its own. **The grid is derived on the client**
+  (P6) by `lib/stackTimeline/`, pure and tested on its own: `columns` (a column per Look or palette
+  and target — none is the record's own fixtures — per effect by type, property and target, per
+  scenery element; grouped Looks · Palettes · Effects · Scenery, each in first use down the stack),
+  `cells` (rank, glyphs), `runs` (start, end, ↺ where two run keys meet, ◆ where a run's settings
+  change, the scenery tracked line, and what passes a marker) and `filter`. Layer cells join
+  whenever both are filled; effect cells only on one shared `runUuid`, and never where either is an
+  N-shot, which a GO fires afresh; scenery never.
+- **`StackTimeline`** (`components/runner/`) is the grid on `useSheet` / `SheetTable`, with the
+  Table's rows, row drag, lock, arming click and `CueEditorPane`: the sticky cue column (pip, number,
+  name, shared and *Edited* chips, the live row's fade bar), Fade and Follow, then 84 px columns (92
+  for effects and scenery) under the kit's header bands; a palette's cells and header carry its
+  colour where it has one (`templateRowsSwatch` over a generic palette's rows, the busk pad's rule). Markers are divider rows whose cells a run
+  and a tracked line pass through. **Read-only in session 3**: a cell selects through its
+  `onBeginEdit` and never toggles; `permission` is closed, so ⏎ and ⌫ do nothing. One selected cell
+  opens the pane on its cue at the column's tab (Looks for Look and palette columns, FX, Scenery); a
+  range over several cues folds it (C2).
+- **Row B** is the filters, per window (`sessionStorage timeline.filters`): the kind chips with
+  their counts under the other two filters (`kindCounts`), the family segment (scenery always
+  kept), and *Selection only*, the columns whose `heads` meet the desk selection expanded through the
+  cached group list and met by the desk's parent↔cell rule both ways, a selected fixture reaching its
+  cells and a selected cell a layer on its parent (scenery kept too). **Column order** is per window and never stored on the desk
+  (C7): `sessionStorage timeline.columns.<stackId>`, moved within its kind by the header's ‹ ›,
+  which trades places with the neighbour on screen, so a column the filters hide stays put.
+  A Timeline is drawn only once the stack is measured, so a narrow desk never mounts it.
+- **The kit's three changes**, generic: `SheetColumn.dividerCell` draws a divider as a row of cells
+  where any column gives one (other sheets keep the full-width rule); a selected cell whose
+  neighbour directly above or below in its column is selected, and draws a cell there, drops that
+  edge (`cellSelectionClass`'s `CellSelectionJoin`, on every `SheetTable`), so a range is one ring and
+  a blank cell the marquee swept up still closes it; `SheetColumn.group` draws a band over
+  consecutive columns, its rule down the first. The programmer's `FixturesTable` keeps whole rings:
+  whether its neighbour is blank depends on the neighbour's live values.
+  `SheetColumn.header` replaces the uppercase label where a column needs two lines.
 
 #### The Show position
 
@@ -6886,7 +6935,7 @@ path may quietly change where it lands.
   them move *another* window; the sidebar never lists them.
 - **Exception — cards/list sibling routes**: list views that pair with a cards
   view (`/fixtures/list`, `/groups/list`, `/channels/:universe/table`,
-  `/show/stacks/:stackId/table`) deliberately have **no** `navItems`
+  `/show/stacks/:stackId/table`, `/show/stacks/:stackId/timeline`) deliberately have **no** `navItems`
   entry. They're reached via the in-page Cards/List switcher
   (`src/components/ViewSwitcher.tsx`) and Cmd+K item deep links, and the
   sidebar keeps one entry per resource; the cards route redirects to the list

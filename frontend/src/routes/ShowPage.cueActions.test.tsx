@@ -60,7 +60,7 @@ vi.mock('../store/projects', () => ({
   useCurrentProjectQuery: () => ({ data: { id: 1 }, isLoading: false }),
   useProjectQuery: () => ({ data: { id: 1, name: 'Hamlet' }, isLoading: false }),
 }))
-vi.mock('../hooks/useContainerBand', () => ({ useNarrowContainer: () => [vi.fn(), false] }))
+vi.mock('../hooks/useContainerBand', () => ({ useNarrowContainer: () => [vi.fn(), false], useContainerBand: () => [vi.fn(), 0] }))
 vi.mock('../hooks/useShowBarProps', () => ({
   useShowBarProps: () => ({
     showBarProps: { goDisabled: true, stackName: null, fade: null },

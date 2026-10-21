@@ -162,58 +162,69 @@ internal data class CueStackSceneryResource(val parent: ProjectCueStacksResource
 internal data class LookSceneryResource(val parent: ProjectLooksResource, val lookId: Int)
 
 /**
- * What [cue]'s card shows hatched under its own changes: every state the cue does not set itself
- * but shows anyway at the cue — tracked from the last earlier cue of its stack that set it, or held
+ * What [entry]'s card shows hatched under its own changes: every state the cue does not set itself
+ * but shows anyway at that place — tracked from the last earlier cue of its stack that set it, or held
  * by the stack's set ([SceneryResolver.trackedAt]). One entry per element, named by where its newest
  * tracked state came from. Must run inside a transaction.
  */
-internal fun trackedSceneryAt(entry: DaoCueStackEntry): List<TrackedSceneryDto> {
-    val cue = entry.cue ?: return emptyList()
-    val stack = entry.stack
-    // Read for every cue of a cue list, so a stack with no scenery at all costs two small queries
-    // and nothing more: its set, and its entries' cues' changes through one join. Tracking walks
-    // the stack the caller named, down its entries to this one (cue model plan §3.4).
+internal fun trackedSceneryAt(entry: DaoCueStackEntry): List<TrackedSceneryDto> =
+    if (entry.cue == null) emptyList() else trackedSceneryOfStack(entry.stack, only = entry.id.value)[entry.id.value].orEmpty()
+
+/**
+ * [trackedSceneryAt] for every cue entry of [stack] at once, by entry id, from one read of its
+ * scenery — the timeline's tracking lines — or for the one entry [only] names. An entry that tracks
+ * nothing is absent. Must run inside a transaction.
+ */
+internal fun trackedSceneryOfStack(stack: DaoCueStack, only: Int? = null): Map<Int, List<TrackedSceneryDto>> {
+    // A stack with no scenery at all costs two small queries and nothing more: its set, and its
+    // entries' cues' changes through one join. Tracking walks the stack down its entries (cue model
+    // plan §3.4), so a cue placed twice tracks at each of its places.
     val set = stackSceneryOf(stack.id)
     val stackRows = DaoCueSceneryRow.wrapRows(
         DaoCueScenery.join(DaoCueStackEntries, JoinType.INNER, DaoCueScenery.cue, DaoCueStackEntries.cue)
             .select(DaoCueScenery.columns)
             .where { DaoCueStackEntries.stack eq stack.id },
     ).toList().distinctBy { it.id.value }
-    if (set.isEmpty() && stackRows.isEmpty()) return emptyList()
-    val cueEntries = entriesOf(stack).filter { !it.isMarker }
-    val cues = cueEntries.mapNotNull { it.cue }
+    if (set.isEmpty() && stackRows.isEmpty()) return emptyMap()
+    val cueEntries = entriesOf(stack).filter { !it.isMarker && it.cue != null }
     val rows = stackRows
         .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
         .groupBy { it.cue.id.value }
     val elements = (set.map { it.element } + rows.values.flatten().map { it.element })
         .distinctBy { it.id.value }
         .map { it.toSceneryElement() }
-    val labels = cueEntries.associate { e -> e.cueId!! to (e.cueNumber?.takeIf { n -> n.isNotBlank() } ?: e.cue!!.name) }
-    val tracked = SceneryResolver.trackedAt(
-        elements,
-        set.map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) },
-        cues.map { c ->
-            SceneryResolver.Cue(
-                c.id.value,
-                labels.getValue(c.id.value),
-                rows[c.id.value].orEmpty().map { SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), 0) },
-            )
-        },
-        cue.id.value,
-    )
-    val order = cues.withIndex().associate { (i, c) -> c.id.value to i }
-    return tracked.map { (r, sources) ->
-        // The newest source among the tracked states names the entry: the latest cue, else the set.
-        val newest = sources.values.filterIsInstance<SceneryResolver.Source.CueRow>().maxByOrNull { order[it.cueId] ?: -1 }
-        TrackedSceneryDto(
-            elementUuid = r.element.uuid.toString(),
-            elementName = r.element.name,
-            state = sceneryStateObject(SceneryResolver.only(r.state, sources.keys)),
-            fromCueId = newest?.cueId,
-            fromCueLabel = newest?.cueLabel,
-            fromSet = newest == null,
+    val setChanges = set.map { SceneryResolver.Change(it.element.id.value, decodeSceneryState(it.stateJson)) }
+    val cues = cueEntries.map { e ->
+        val cueId = e.cueId!!
+        SceneryResolver.Cue(
+            cueId,
+            e.cueNumber?.takeIf { n -> n.isNotBlank() } ?: e.cue!!.name,
+            rows[cueId].orEmpty().map { SceneryResolver.CueChange(it.element.id.value, decodeSceneryState(it.stateJson), 0) },
         )
     }
+    // Each cue's latest place up to the position being read: what names a tracked state's source.
+    val order = HashMap<Int, Int>()
+    val out = HashMap<Int, List<TrackedSceneryDto>>()
+    for ((position, e) in cueEntries.withIndex()) {
+        order[cues[position].cueId] = position
+        if (only != null && e.id.value != only) continue
+        val tracked = SceneryResolver.trackedAtPosition(elements, setChanges, cues, position)
+        if (tracked.isEmpty()) continue
+        out[e.id.value] = tracked.map { (r, sources) ->
+            // The newest source among the tracked states names the entry: the latest cue, else the set.
+            val newest = sources.values.filterIsInstance<SceneryResolver.Source.CueRow>().maxByOrNull { order[it.cueId] ?: -1 }
+            TrackedSceneryDto(
+                elementUuid = r.element.uuid.toString(),
+                elementName = r.element.name,
+                state = sceneryStateObject(SceneryResolver.only(r.state, sources.keys)),
+                fromCueId = newest?.cueId,
+                fromCueLabel = newest?.cueLabel,
+                fromSet = newest == null,
+            )
+        }
+        if (only != null) break
+    }
+    return out
 }
 
 /**

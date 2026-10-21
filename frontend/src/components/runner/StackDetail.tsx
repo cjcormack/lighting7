@@ -28,9 +28,15 @@ import { ShowMarkerRow } from './ShowMarkerRow'
 import { OutOfOrderBanner } from '@/components/runner/OutOfOrderBanner'
 import { cueNumberColumnChars, detectOutOfOrder } from '@/lib/cueNumber'
 import { UNLOCKED_WARNING_CLASS } from '@/lib/lockChrome'
-import { ShowStackViewSwitcher, type CardsListView } from '@/components/ViewSwitcher'
+import { ShowStackViewSwitcher, TIMELINE_MIN_WIDTH, effectiveStackView, type CardsListView } from '@/components/ViewSwitcher'
+import { useContainerBand } from '@/hooks/useContainerBand'
 import { CueSheet } from './CueSheet'
+import { StackTimeline } from './StackTimeline'
 import { OwnerEditor } from '@/components/stage/OwnerEditor'
+
+const TIMELINE_WIDTH_FLOORS = [TIMELINE_MIN_WIDTH, 0] as const
+/** `useContainerBand`'s band before the first measurement: no band of the floors. */
+const UNMEASURED = -1
 
 interface StackDetailProps {
   stack: CueStack
@@ -82,9 +88,10 @@ interface StackDetailProps {
   onMarkerRename: (entryId: number, name: string) => void
   onMarkerDelete: (entryId: number) => void
   /**
-   * Cards (the inline-expanding cue cards, draggable while unlocked) or the cue sheet
-   * (`CueSheet`, CLAUDE.md §Sheet kit). A sibling route plus a sticky preference, exactly the
-   * Fixtures / Groups wiring — see `ShowPage`.
+   * Cards (the inline-expanding cue cards, draggable while unlocked), the cue sheet (`CueSheet`,
+   * CLAUDE.md §Sheet kit) or the Timeline (`StackTimeline`). Sibling routes plus a sticky
+   * preference, the Fixtures / Groups wiring — see `ShowPage`. The Timeline draws as the Table
+   * where the stack is narrower than `TIMELINE_MIN_WIDTH` (C6).
    */
   view?: CardsListView
   /** Open the Prompt Book at a cue's anchor — the cue sheet's Book column. */
@@ -118,6 +125,12 @@ export function StackDetail({
   onRequestUnlock,
 }: StackDetailProps) {
   const [reorderCues] = useReorderCueStackCuesMutation()
+  // Band 0 is room for the Timeline. Until the stack is measured neither view of a remembered
+  // Timeline is drawn, so a narrow desk never mounts the grid (and its read) it is about to drop.
+  const [widthRef, widthBand] = useContainerBand(TIMELINE_WIDTH_FLOORS, UNMEASURED)
+  const timelineOffered = widthBand === 0
+  const shownView = effectiveStackView(view, timelineOffered)
+  const awaitingWidth = view === 'timeline' && widthBand === UNMEASURED
   /** *Stack settings…* open — the stack form, the set's door from inside the stack (D13). */
   const [settingsOpen, setSettingsOpen] = useState(false)
   // A GO that re-locks the show closes the form rather than holding it for the unlock.
@@ -212,7 +225,7 @@ export function StackDetail({
   )
 
   return (
-    <div className="@container flex-1 flex flex-col overflow-hidden">
+    <div ref={widthRef} className="@container flex-1 flex flex-col overflow-hidden">
       {/* Header — controls drop their text labels progressively as the content area narrows
           (container-query, sidebar-aware); everything stays reachable as an icon button down
           to phone widths. */}
@@ -238,7 +251,7 @@ export function StackDetail({
           {standardCount} cues
         </span>
         <div className="flex-1" />
-        <ShowStackViewSwitcher current={view} projectId={projectId} stackId={stack.id} />
+        <ShowStackViewSwitcher current={shownView} projectId={projectId} stackId={stack.id} timelineOffered={timelineOffered} />
 
         {/* **Recording is the only way in.** "Add Cue" made an empty cue and opened an editor
             on it, which is backwards: a cue is a captured state, so the thing that makes one is the
@@ -288,7 +301,21 @@ export function StackDetail({
         />
       )}
 
-      {view === 'list' ? (
+      {awaitingWidth ? null : shownView === 'timeline' ? (
+        <StackTimeline
+          stack={stack}
+          projectId={projectId}
+          activeEntryId={activeEntryId}
+          standbyEntryId={standbyEntryId}
+          fadeStackId={fadeStackId}
+          onSetStandby={onSetStandby}
+          locked={locked}
+          openedEntryId={openedEntryId}
+          placesByCue={placesByCue}
+          onRequestUnlock={onRequestUnlock}
+          onReorder={handleSheetReorder}
+        />
+      ) : shownView === 'list' ? (
         <CueSheet
           stack={stack}
           projectId={projectId}

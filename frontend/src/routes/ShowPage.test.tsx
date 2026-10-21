@@ -53,6 +53,7 @@ vi.mock('../store/programmer', () => ({
 const narrow = { value: false }
 vi.mock('../hooks/useContainerBand', () => ({
   useNarrowContainer: () => [vi.fn(), narrow.value],
+  useContainerBand: () => [vi.fn(), 0],
 }))
 const stripProbe: { onSelectStack?: (s: CueStack) => void } = {}
 vi.mock('../components/runner/StackTabStrip', () => ({

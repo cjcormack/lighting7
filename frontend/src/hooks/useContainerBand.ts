@@ -47,6 +47,8 @@ export function useContainerBand(
     }
     if (!el) return
     applyRef.current(el.getBoundingClientRect().width)
+    // Absent outside a browser (jsdom): the first measurement stands.
+    if (typeof ResizeObserver === 'undefined') return
     const observer = new ResizeObserver((entries) => {
       applyRef.current(entries[0]?.contentRect.width ?? 0)
     })

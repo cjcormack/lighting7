@@ -12,7 +12,8 @@
  * Applied as an `::after` overlay so it layers over whatever `ownershipCellClass` produced without
  * either one having to know about the other.
  */
-export function cellSelectionClass(selected: boolean, gutter = true, dimmed = false): string {
+export function cellSelectionClass(selected: boolean, gutter = true, dimmed = false, join: CellSelectionJoin = NO_JOIN): string {
+  if (selected && (join.above || join.below)) return joinedSelectionClass(gutter, dimmed, join)
   // A fill plus a 2px **foreground** outline. The outline is not a seventh colour in the ownership
   // vocabulary — it is the theme's text colour, white on the dark desk and near-black on light —
   // which is exactly why it can sit beside all six rings without being read as one of them. It
@@ -37,4 +38,41 @@ export function cellSelectionClass(selected: boolean, gutter = true, dimmed = fa
     ? 'after:pointer-events-none after:absolute after:rounded-sm after:bg-primary/10 after:ring-1 after:ring-inset after:ring-foreground/40'
     : base
   return gutter ? `after:inset-0 ${look}` : `after:inset-0.5 ${look}`
+}
+
+/** Whether the cell's neighbours in its column, directly above and below, are selected too. */
+export interface CellSelectionJoin {
+  above: boolean
+  below: boolean
+}
+
+const NO_JOIN: CellSelectionJoin = { above: false, below: false }
+
+/**
+ * A selected cell whose neighbour above or below in the same column is selected **drops that edge**
+ * of its outline, so a range down one column is one ring rather than a stack of boxes (stack-timeline
+ * plan §4.2). The overlay reaches over the row's bottom line where it joins the cell below, and the
+ * outline is drawn as the sides it keeps — a ring cannot leave an edge out. Whole class strings, one
+ * per arm, for Tailwind's scanner.
+ */
+function joinedSelectionClass(gutter: boolean, dimmed: boolean, join: CellSelectionJoin): string {
+  const { above, below } = join
+  const position = gutter
+    ? below
+      ? 'after:inset-x-0 after:top-0 after:-bottom-px'
+      : 'after:inset-x-0 after:top-0 after:bottom-0'
+    : `after:inset-x-0.5 ${above ? 'after:top-0' : 'after:top-0.5'} ${below ? 'after:-bottom-px' : 'after:bottom-0.5'}`
+  const radius = above && below ? 'after:rounded-none' : above ? 'after:rounded-b-sm' : 'after:rounded-t-sm'
+  const edges = dimmed
+    ? above && below
+      ? 'after:bg-primary/10 after:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent),inset_-1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent)]'
+      : above
+        ? 'after:bg-primary/10 after:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent),inset_-1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent),inset_0_-1px_0_color-mix(in_oklab,var(--foreground)_40%,transparent)]'
+        : 'after:bg-primary/10 after:shadow-[inset_1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent),inset_-1px_0_0_color-mix(in_oklab,var(--foreground)_40%,transparent),inset_0_1px_0_color-mix(in_oklab,var(--foreground)_40%,transparent)]'
+    : above && below
+      ? 'after:bg-primary/25 after:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent),inset_-2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent)]'
+      : above
+        ? 'after:bg-primary/25 after:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent),inset_-2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent),inset_0_-2px_0_color-mix(in_oklab,var(--foreground)_90%,transparent)]'
+        : 'after:bg-primary/25 after:shadow-[inset_2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent),inset_-2px_0_0_color-mix(in_oklab,var(--foreground)_90%,transparent),inset_0_2px_0_color-mix(in_oklab,var(--foreground)_90%,transparent)]'
+  return `after:pointer-events-none after:absolute ${position} ${radius} ${edges}`
 }

@@ -25,6 +25,7 @@ import type {
   CueEntryPatch,
   DeleteCueStackResponse,
 } from '../api/cueStacksApi'
+import type { StackTimeline } from '../api/stackTimelineApi'
 export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 export type { CueType, StackType } from '../api/cueStacksApi'
 
@@ -40,6 +41,33 @@ export const cueStacksApi = restApi.injectEndpoints({
       providesTags: (_result, _error, projectId) => [
         { type: 'CueStackList', id: projectId },
         'CueStackList',
+      ],
+    }),
+
+    /**
+     * A stack's timeline (stack-timeline plan §3.5). No frame of its own: it rides every list a
+     * stored change to its rows announces — the stack list, the cue list, a cue, the Looks and
+     * palettes (`cuesRecomposed` among them) and the scene — and the rig's, which its heads and
+     * families are read off, so any of them refetches it.
+     */
+    cueStackTimeline: build.query<StackTimeline, { projectId: number; stackId: number }>({
+      query: ({ projectId, stackId }) => `projects/${projectId}/cue-stacks/${stackId}/timeline`,
+      providesTags: (result, _error, { projectId, stackId }) => [
+        { type: 'CueStackTimeline', id: stackId },
+        'CueStackTimeline',
+        { type: 'CueStackList', id: projectId },
+        'CueStackList',
+        { type: 'CueList', id: projectId },
+        'CueList',
+        ...(result?.entries ?? []).flatMap((e) => (e.cueId != null ? [{ type: 'Cue' as const, id: e.cueId }] : [])),
+        { type: 'LookList', id: projectId },
+        'LookList',
+        { type: 'TemplateList', id: projectId },
+        'TemplateList',
+        'StageElement',
+        'Fixture',
+        'GroupList',
+        'Patch',
       ],
     }),
 
@@ -685,6 +713,7 @@ export const {
   usePatchCueStackEntryMutation,
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
+  useCueStackTimelineQuery,
   usePreviewLooseCueQuery,
   useSortCueStackByCueNumberMutation,
   useActivateProgramMutation,

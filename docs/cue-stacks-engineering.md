@@ -599,7 +599,44 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | POST | `/{stackId}/markers` | Add a marker entry: body `{ label, sortOrder? }` (a position; appended if omitted). 201 with its row |
 | PUT / DELETE | `/{stackId}/markers/{entryId}` | Rename (`{ label }`) or remove a marker; 404 for a cue's entry |
 | GET | `/{stackId}/preview?entryId=` | Compose an entry's cue without firing it (absent → the effective next). See below |
+| GET | `/{stackId}/timeline` | The stack's Timeline read: every entry with its cue's stored layers, ad-hoc effects, scenery and tracked scenery. See below |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
+
+### `timeline`
+
+`GET /{stackId}/timeline` (stack-timeline plan §3.5, `routes/cueStackTimeline.kt`) is what the
+Show view's Timeline derives its grid from (P6): `{stackId, entries: [{entryId, kind: CUE | MARKER,
+label?, cueId?, layers, effects, scenery, trackedScenery}]}`, one entry per row in `ENTRY_ORDER`. Under
+`withProject` like the stack GET, so it reads any project's stack. Names, fade, follow, numbers and
+live state are not repeated: the client has them from the stack list, `cueRunStateChanged` and
+`cueHolds.state`, and the read rides those lists' invalidations rather than a frame of its own.
+
+- **`layers`**, in layer order (`sortOrder`, then id), so a layer's rank is its place, from 1:
+  `{id, source: {kind, id, uuid, name, families}, targets, heads, sortOrder, enabled, amount,
+  blendMode, propertyMask, stomp, timed, speedMasterUuid, rateSpeedMasterUuid}`. `families` is a
+  Look's `derivedFamilyGroups` (its rows' properties and its effects' categories) or a palette's
+  `familyOf`. `heads` are the fixture keys the layer lands on, groups expanded
+  (`TargetCoverage.expand`): a Look's own heads (`ownTargets`) narrowed to the targets it names as
+  the cook narrows its rows (`covers`), and the targets themselves where it has a deferred effect; a
+  per-fixture palette's row heads, narrowed as `LayerPressRules.paletteHeads` narrows a press; a
+  generic palette's targets. `timed` is a delay, interval or random window.
+- **`effects`**: `{id, uuid, runUuid, effectType, propertyName, targetType, targetKey, family, heads,
+  settings}`, the target canonical (`canonicalTarget`). `family` is the group of the property it
+  drives as Record reads it — the first head's property, else the library category's. `settings` is
+  what `comparableEffectSettings` compares, built from the **row** rather than a live instance: the
+  canonical type, the parameters over the library's defaults, an element mode only over members, a
+  filter or step timing only where not the default, and only the master the timing reads, master 1
+  by its uuid. Two rows of one run with equal settings are one effect to a GO; unequal, an edit in
+  place (◆, D8) — unless either is an N-shot, which a GO never hands on.
+- **`scenery`** `{elementUuid, state, transitionMs}` and **`trackedScenery`** `{elementUuid, state,
+  fromCueId}` (null from the stack's set) — the latter from `trackedSceneryOfStack`, one read of the
+  stack's scenery for every entry, at each **place** of a cue placed twice (`trackedSceneryAt` reads
+  the same function for its one entry, resolving that place alone).
+
+A cue placed twice carries the same children at both entries; each child is read once per cue. The
+rig-derived fields — `heads`, a Look's row families, an effect's family by head — read the live
+patch, so for a project that is not current the heads are the targets unexpanded and a Look's
+families its effects' alone.
 
 ### `add-cue` with `insertByNumber`
 
