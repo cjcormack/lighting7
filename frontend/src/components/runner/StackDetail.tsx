@@ -303,6 +303,7 @@ export function StackDetail({
 
       {awaitingWidth ? null : shownView === 'timeline' ? (
         <StackTimeline
+          key={stack.id}
           stack={stack}
           projectId={projectId}
           activeEntryId={activeEntryId}

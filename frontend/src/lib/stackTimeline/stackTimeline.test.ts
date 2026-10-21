@@ -10,8 +10,10 @@ import {
   layerGlyphs,
   markerMarkAt,
   moveColumn,
+  recordColumnId,
   runMarkAt,
   runs,
+  withExtraColumns,
   type TimelineNames,
 } from './index'
 
@@ -259,6 +261,20 @@ describe('moving a column under a filter', () => {
     const visible = palettes.filter((c) => c.id !== 'palette:7:fixture:hex-2')
     const order = moveColumn(cols, 'palette:8:fixture:hex-2', -1, visible)
     expect(order.filter((id) => id.startsWith('palette'))).toEqual(['palette:8:fixture:hex-2', 'palette:7:fixture:hex-2', 'palette:7:fixture:hex-1'])
+  })
+})
+
+describe('an added column', () => {
+  const amber = { kind: 'palette' as const, sourceId: 9, name: 'Amber', target: { type: 'group' as const, key: 'wash' }, families: ['COLOUR'] }
+  it('reaches its target’s heads, so Selection only keeps it', () => {
+    const added = withExtraColumns(columns(act(), names), [amber], { ...names, members: () => ['hex-1', 'hex-2'] })
+    expect(added.find((c) => c.id === recordColumnId('palette', 9, amber.target))?.heads).toEqual(['hex-1', 'hex-2'])
+  })
+
+  it('takes its place in the window’s order among its kind', () => {
+    const id = recordColumnId('palette', 9, amber.target)
+    const added = withExtraColumns(columns(act(), names), [amber], names, [id])
+    expect(added.filter((c) => c.kind === 'palette')[0].id).toBe(id)
   })
 })
 

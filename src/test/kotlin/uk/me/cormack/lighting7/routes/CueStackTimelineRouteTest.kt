@@ -25,6 +25,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TemplateRowDto
@@ -242,6 +243,11 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
     fun `another project's stack, or none, is not found`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
+        val elsewhere = transaction(state.database) {
+            val other = DaoProject.new { name = "other"; isCurrent = false }
+            DaoCueStack.new { name = "Theirs"; project = other }.id.value
+        }
+        assertEquals(HttpStatusCode.NotFound, client.get("$base/cue-stacks/$elsewhere/timeline").status)
         assertEquals(HttpStatusCode.NotFound, client.get("$base/cue-stacks/9999/timeline").status)
     }
 

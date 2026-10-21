@@ -87,9 +87,11 @@ internal fun cueStackTimeline(
                 kind = KIND_CUE,
                 cueId = cueId,
                 layers = layerDtos.getOrPut(cueId) {
+                    // Ranked over every stored layer, so one whose source is gone keeps its place
+                    // and the layers above it their ranks.
                     layersByCue[cueId].orEmpty()
                         .sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
-                        .mapNotNull { reads.layer(it) }
+                        .mapIndexedNotNull { index, layer -> reads.layer(layer, rank = index + 1) }
                 },
                 effects = effectDtos.getOrPut(cueId) {
                     effectsByCue[cueId].orEmpty()
@@ -119,7 +121,7 @@ private class TimelineReads(
     private val paletteFamilies = HashMap<Int, List<String>>()
     private val paletteRows = HashMap<Int, Set<CueTargetDto>?>()
 
-    fun layer(layer: DaoCueLayer): TimelineLayerDto? {
+    fun layer(layer: DaoCueLayer, rank: Int): TimelineLayerDto? {
         val source = layer.source ?: return null
         val look = layer.look
         val template = layer.template
@@ -139,12 +141,16 @@ private class TimelineReads(
             targets = layer.targets,
             heads = heads,
             sortOrder = layer.sortOrder,
+            rank = rank,
             enabled = layer.enabled,
             amount = layer.amount,
             blendMode = layer.blendMode,
             propertyMask = layer.propertyMask,
             stomp = layer.stomp,
             timed = layer.delay != null || layer.interval != null || layer.randomWindow != null,
+            delayMs = layer.delay?.toMillis(),
+            intervalMs = layer.interval?.toMillis(),
+            randomWindowMs = layer.randomWindow?.toMillis(),
             speedMasterUuid = layer.speedMasterUuid?.toString(),
             rateSpeedMasterUuid = layer.rateSpeedMasterUuid?.toString(),
         )
@@ -244,7 +250,7 @@ private class TimelineReads(
             blendMode = effect.blendMode.uppercase(),
             distribution = effect.distribution.uppercase(),
             phaseOffset = effect.phaseOffset,
-            elementMode = effect.elementMode.takeIf { overMembers },
+            elementMode = effect.elementMode?.uppercase()?.takeIf { overMembers },
             elementFilter = effect.elementFilter?.takeUnless { it.equals("ALL", ignoreCase = true) },
             stepTiming = effect.stepTiming?.takeUnless { it == (registration?.defaultStepTiming ?: false) },
             parameters = (defaults + effect.parameters).toSortedMap(),
@@ -278,7 +284,7 @@ internal data class TimelineEntryDto(
     val kind: String,
     val label: String? = null,
     val cueId: Int? = null,
-    /** In layer order, bottom first: a layer's rank is its place here, from 1. */
+    /** In layer order, bottom first; each layer carries its rank, which counts a layer whose source is gone. */
     val layers: List<TimelineLayerDto> = emptyList(),
     val effects: List<TimelineEffectDto> = emptyList(),
     val scenery: List<TimelineSceneryDto> = emptyList(),
@@ -304,6 +310,8 @@ internal data class TimelineLayerDto(
     /** The fixture keys the layer reaches: its targets with groups expanded, else its source's own. */
     val heads: List<String>,
     val sortOrder: Int,
+    /** Its place in the cue's stored layer order, from 1 at the bottom — a layer whose source is gone still counted. */
+    val rank: Int,
     val enabled: Boolean,
     val amount: Double,
     val blendMode: String,
@@ -311,6 +319,9 @@ internal data class TimelineLayerDto(
     val stomp: Boolean,
     /** A delay, interval or random window: the layer fires on a timer rather than at the GO. */
     val timed: Boolean,
+    val delayMs: Long?,
+    val intervalMs: Long?,
+    val randomWindowMs: Long?,
     val speedMasterUuid: String?,
     val rateSpeedMasterUuid: String?,
 )

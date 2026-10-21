@@ -118,8 +118,11 @@ export function useSheetKeyboard<C extends string>({
    * next Escape, with nothing left to clear, closes it.
    */
   onEscape: () => void | boolean
-  /** Enter (`''`) or a character: open the first selected cell's editor, seeded. */
-  onOpen: (seed: string) => void
+  /**
+   * Enter (`''`) or a character: open the first selected cell's editor, seeded. Answering false
+   * leaves the key unclaimed — a surface with no editor to open lets a character through.
+   */
+  onOpen: (seed: string) => boolean | void
   /** Backspace / Delete: clear the selected cells. */
   onClear: () => void
   /**
@@ -203,8 +206,7 @@ export function useSheetKeyboard<C extends string>({
           if (onRefused?.({ gesture: 'entry', key: e.key }) === true) e.preventDefault()
           return
         }
-        e.preventDefault()
-        onOpen('')
+        if (onOpen('') !== false) e.preventDefault()
         return
       }
       if (/^[0-9a-z.]$/i.test(e.key)) {
@@ -215,8 +217,7 @@ export function useSheetKeyboard<C extends string>({
           if (onRefused?.({ gesture: 'entry', key: e.key }) === true) e.preventDefault()
           return
         }
-        e.preventDefault()
-        onOpen(e.key)
+        if (onOpen(e.key) !== false) e.preventDefault()
         return
       }
       if (e.key === 'Backspace' || e.key === 'Delete') {

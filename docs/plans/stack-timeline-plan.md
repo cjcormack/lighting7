@@ -1,6 +1,6 @@
 # A stack's timeline: cues against the Looks, palettes, effects and scenery they apply
 
-> **Document status: agreed 2026-10-20; session 3 of 5 done.** The design is the record in
+> **Document status: agreed 2026-10-20; session 4 of 5 done.** The design is the record in
 > [`stack-timeline-design/`](stack-timeline-design/INDEX.md): four boards, the desk survey, and the
 > eighteen calls Chris answered (D1–D11 in four rounds, C1–C7 in a fifth, every C as recommended).
 > A one-page copy for human readers is
@@ -351,7 +351,7 @@ and 5 need 3, and 5 needs 1 and 2 for effect runs.
 - **Docs:** `cue-stacks-engineering.md` §"REST API", CLAUDE.md's Cue Stack Run Endpoints,
   `frontend/CLAUDE.md` for the mode.
 
-### Session 4: editing layers (backend + frontend)
+### Session 4: editing layers (backend + frontend) — done, `644906c1`
 
 - §3.6's route with `layerOn`, `layerOff`, `layerSettings`, `replace`, `scenerySet`, `sceneryClear`
   and `restore`; `pressCueLayer`'s decide step extracted and shared.

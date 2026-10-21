@@ -24,6 +24,7 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.UUID
 import uk.me.cormack.lighting7.models.asDuration
 
 
@@ -311,6 +312,7 @@ internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
     randomWindowMs = randomWindow?.toMillis(),
     source = (source ?: return null).toDto(),
     id = id.value,
+    uuid = uuid.toString(),
 )
 
 
@@ -641,6 +643,10 @@ private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
  * Record has no catch, so if that ever stops being true it surfaces as a 500, not a stored bad
  * blend. Every refusal is raised before anything is written.
  *
+ * [restore] is the Timeline's Undo (stack-timeline plan P5): layers and effects are paired by their
+ * `uuid` instead of their key, a new one takes the uuid it names, and an effect takes its run key —
+ * so a cue is put back exactly as an edit found it.
+ *
  * Must be called inside a transaction.
  */
 internal fun writeCueChildren(
@@ -650,6 +656,7 @@ internal fun writeCueChildren(
     triggers: List<CueTriggerDto>? = null,
     layers: List<CueLayerDto>? = null,
     created: Boolean = false,
+    restore: Boolean = false,
 ) {
     val newEffects = adHocEffects.orEmpty()
     val newRows = propertyAssignments.orEmpty()
@@ -676,7 +683,12 @@ internal fun writeCueChildren(
 
     if (layers != null) {
         val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
-        val pairing = pairByKey(if (created) emptyList() else cue.layersInOrder(), resolved, { it.layerKey }, { it.second.layerKey })
+        val existing = if (created) emptyList() else cue.layersInOrder()
+        val pairing = if (restore) {
+            pairByKey(existing, resolved, { it.uuid to it.layerKey }, { (layer, source) -> restoredUuid(layer.uuid) to source.layerKey })
+        } else {
+            pairByKey(existing, resolved, { it.layerKey }, { it.second.layerKey })
+        }
         pairing.unmatched.forEach { it.delete() }
         for ((item, stored) in pairing.pairs) {
             val (layer, source) = item
@@ -688,24 +700,29 @@ internal fun writeCueChildren(
                     this.look = source.look
                     this.template = source.template
                     take(layer)
+                    if (restore) layer.uuid?.let { uuid = UUID.fromString(it) }
                 }
             }
         }
     }
     if (adHocEffects != null) {
-        val pairing = pairByKey(if (created) emptyList() else cue.adHocEffectsInOrder(), adHocEffects.map { it.canonicalTarget() }, { it.effectKey }, { it.effectKey })
+        val existing = if (created) emptyList() else cue.adHocEffectsInOrder()
+        val incoming = adHocEffects.map { it.canonicalTarget() }
+        val pairing = if (restore) {
+            pairByKey(existing, incoming, { it.uuid to it.effectKey }, { restoredUuid(it.uuid) to it.effectKey })
+        } else {
+            pairByKey(existing, incoming, { it.effectKey }, { it.effectKey })
+        }
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
-            if (stored != null) {
-                stored.take(effect)
-            } else {
-                DaoCueAdHocEffect.new {
-                    this.cue = cue
-                    targetType = effect.targetType
-                    targetKey = effect.targetKey
-                    take(effect)
-                }
+            val row = stored?.apply { take(effect) } ?: DaoCueAdHocEffect.new {
+                this.cue = cue
+                targetType = effect.targetType
+                targetKey = effect.targetKey
+                take(effect)
+                if (restore) effect.uuid?.let { uuid = UUID.fromString(it) }
             }
+            if (restore) row.runUuid = effect.runUuid?.let(UUID::fromString)
         }
     }
     if (propertyAssignments != null) {
@@ -745,6 +762,9 @@ internal fun writeCueChildren(
         }
     }
 }
+
+/** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */
+private fun restoredUuid(uuid: String?): UUID = uuid?.let(UUID::fromString) ?: UUID.randomUUID()
 
 /** [layer] onto this layer, but for the record [writeCueChildren] matched it on. */
 internal fun DaoCueLayer.take(layer: CueLayerDto) {

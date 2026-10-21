@@ -25,7 +25,7 @@ import type {
   CueEntryPatch,
   DeleteCueStackResponse,
 } from '../api/cueStacksApi'
-import type { StackTimeline } from '../api/stackTimelineApi'
+import type { StackTimeline, TimelineEditOp, TimelineEditResponse } from '../api/stackTimelineApi'
 export type { CueStack, CueStackCueEntry } from '../api/cueStacksApi'
 export type { CueType, StackType } from '../api/cueStacksApi'
 
@@ -69,6 +69,26 @@ export const cueStacksApi = restApi.injectEndpoints({
         'GroupList',
         'Patch',
       ],
+    }),
+
+    /**
+     * One Timeline gesture (stack-timeline plan §3.6, C3): a batch of ops, one transaction, nothing
+     * sent to the stage. Its answer's `before` is the gesture's Undo.
+     */
+    editCueStackTimeline: build.mutation<TimelineEditResponse, { projectId: number; stackId: number; ops: TimelineEditOp[]; dryRun?: boolean }>({
+      query: ({ projectId, stackId, ops, dryRun }) => ({
+        url: `projects/${projectId}/cue-stacks/${stackId}/timeline/edit`,
+        method: 'POST',
+        body: dryRun ? { ops, dryRun } : { ops },
+      }),
+      invalidatesTags: (result, _error, { projectId, stackId, dryRun }) =>
+        dryRun || result == null || result.changed.length === 0
+          ? []
+          : [
+              { type: 'CueStackTimeline', id: stackId },
+              { type: 'CueStackList', id: projectId },
+              ...result.changed.map((id) => ({ type: 'Cue' as const, id })),
+            ],
     }),
 
     // A single-stack read stood here. Every surface drills into `projectCueStackList` instead
@@ -714,6 +734,7 @@ export const {
   useDeleteMarkerEntryMutation,
   usePreviewCueLookQuery,
   useCueStackTimelineQuery,
+  useEditCueStackTimelineMutation,
   usePreviewLooseCueQuery,
   useSortCueStackByCueNumberMutation,
   useActivateProgramMutation,

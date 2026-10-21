@@ -8,10 +8,16 @@ import type { StackTimeline as StackTimelineData, TimelineEntry, TimelineLayer }
 /**
  * The Timeline's grid (stack-timeline plan §4.2): a column per record and target under its kind's
  * band, runs that pass a marker, the live row's fade bar, and one selected cell opening the pane on
- * its cue at the column's tab — while nothing a cell does writes.
+ * its cue at the column's tab.
  */
 let TIMELINE: StackTimelineData | undefined
-vi.mock('@/store/cueStacks', () => ({ useCueStackTimelineQuery: () => ({ data: TIMELINE }) }))
+const edit = vi.fn()
+vi.mock('@/store/cueStacks', () => ({
+  useCueStackTimelineQuery: () => ({ data: TIMELINE }),
+  useEditCueStackTimelineMutation: () => [edit, { isLoading: false }],
+}))
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/speedMasters', () => ({ useSpeedMasterListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({
   useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }, { key: 'bar', name: 'Bar', elements: [{ key: 'bar.1' }, { key: 'bar.2' }] }] }),
 }))
@@ -83,6 +89,7 @@ function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntr
 }
 
 beforeEach(() => {
+  edit.mockReset()
   timelineFiltersStore.reset()
   sessionStorage.clear()
   DESK_SELECTION = []
@@ -176,13 +183,13 @@ describe('StackTimeline', () => {
     expect(editor()).toBeNull()
   })
 
-  it('never writes: ⏎ and ⌫ over a cell do nothing a cell could send', () => {
+  it('writes nothing for ⏎ and ⌫ over a row selection', () => {
     render(<StackTimeline stack={STACK} projectId={1} activeEntryId={null} />)
     fireEvent.keyDown(window, { key: 'ArrowDown' })
     fireEvent.keyDown(window, { key: 'Enter' })
     fireEvent.keyDown(window, { key: 'Backspace' })
     expect(document.querySelector('[role="dialog"]')).toBeNull()
-    expect(cell(101, PALETTE).querySelector('[data-rank]')?.textContent).toBe('1')
+    expect(edit).not.toHaveBeenCalled()
   })
 
   it('meets a selected cell with a layer on its parent, and a selected parent with a layer on its cell', () => {
