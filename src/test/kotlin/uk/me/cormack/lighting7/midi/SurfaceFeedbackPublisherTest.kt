@@ -12,13 +12,26 @@ import kotlinx.coroutines.yield
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.FxEngine
+import uk.me.cormack.lighting7.fx.LayerResolver
+import uk.me.cormack.lighting7.fx.LookRegistry
+import uk.me.cormack.lighting7.fx.LookRowEntry
+import uk.me.cormack.lighting7.fx.LookSnapshot
+import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
+import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.SpeedMasterSnapshot
+import uk.me.cormack.lighting7.fx.TemplateRegistry
+import uk.me.cormack.lighting7.fx.TemplateRowEntry
+import uk.me.cormack.lighting7.fx.TemplateSnapshot
+import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.DeskSelection
+import java.util.UUID
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
@@ -70,6 +83,8 @@ class SurfaceFeedbackPublisherTest {
         // test whose subject is the composition of the two — delta suppression lives in
         // KtMidiController, so a fake that only records messages cannot show it being bypassed.
         midiControllerOverride: MidiController? = null,
+        /** What each busk pad presses, for a `PressPad` LED. */
+        buskRefs: BuskRefs = BuskRefs.EMPTY,
     ) {
         val fixtures = Fixtures()
         val controller = MockDmxController(Universe(0, 0))
@@ -92,6 +107,9 @@ class SurfaceFeedbackPublisherTest {
             ),
         )
         val publisher: SurfaceFeedbackPublisher
+        val looks = HashMap<UUID, LookSnapshot>()
+        val palettes = HashMap<UUID, TemplateSnapshot>()
+        val layers: ProgrammerLayerStack
 
         init {
             fixtures.register {
@@ -107,6 +125,24 @@ class SurfaceFeedbackPublisherTest {
 
             val registry = MidiDeviceRegistry(FakeMidiAccess(), pollIntervalMs = 60_000L, autoOpen = false)
             matcher = DeviceMatcher(registry)
+
+            val store = ProgrammerStore()
+            val lookRegistry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
+            val templateRegistry = TemplateRegistry(loader = { palettes[it] })
+            val engine = FxEngine(
+                fixtures = fixtures,
+                speedMasters = speedMasters,
+                programmerStore = store,
+                layerResolver = LayerResolver(CueAssignmentResolver(), store),
+            )
+            layers = ProgrammerLayerStack(
+                fixtures = { fixtures },
+                lookRegistry = { lookRegistry },
+                templateRegistry = { templateRegistry },
+                engine = { engine },
+                store = store,
+                state = { null },
+            )
 
             publisher = SurfaceFeedbackPublisher(
                 deviceMatcher = matcher,
@@ -125,6 +161,8 @@ class SurfaceFeedbackPublisherTest {
                 stackEffectSizesProvider = { stackSizes },
                 stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
                 selectionFan = fan,
+                programmerLayerStackProvider = { layers },
+                buskRefsProvider = { buskRefs },
             )
         }
 
@@ -1101,6 +1139,60 @@ class SurfaceFeedbackPublisherTest {
             h.selection.set(listOf(hex1))
             yield()
             assertTrue(lastLed() is MidiFeedbackMessage.NoteOffFeedback, "one member is not the group")
+        } finally {
+            h.publisher.stop()
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun `a Look's LED is lit while a layer of it is on, whatever is selected, and a palette's follows the selection`() = runBlocking {
+        val lookUuid = UUID.nameUUIDFromBytes("look:Warm".toByteArray())
+        val paletteUuid = UUID.nameUUIDFromBytes("palette:Red".toByteArray())
+        val lookPadUuid = UUID.nameUUIDFromBytes("pad:Warm".toByteArray())
+        val h = Harness(
+            listOf(
+                binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid.toString())),
+                binding(2, "btn-2", BindingTarget.PressPad(lookPadUuid.toString())),
+                binding(3, "btn-3", BindingTarget.PressTemplate(paletteUuid.toString())),
+            ),
+            buskRefs = BuskRefs(pads = mapOf(lookPadUuid to PadRef.Layer(lookUuid, isLook = true)), pageIds = emptyMap()),
+        )
+        // The Look's rows reach hex-1 only: its LED still reads the whole rig.
+        h.looks[lookUuid] = LookSnapshot(
+            lookId = 1, lookUuid = lookUuid, name = "Warm",
+            rows = listOf(LookRowEntry(TargetRef.Fixture("hex-1"), "dimmer", "200")),
+            effects = emptyList(),
+        )
+        h.palettes[paletteUuid] = TemplateSnapshot(
+            templateId = 2, templateUuid = paletteUuid, name = "Red", fadeDurationMs = null,
+            rows = listOf(TemplateRowEntry(target = null, propertyName = "uv", value = "dmx:200")),
+        )
+        val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
+        try {
+            h.publisher.start(scope)
+            h.attachXTouch()
+            yield()
+            fun led(control: String) = h.publisher.controlStates.snapshot("x-touch-compact")!!.controls.getValue(control).led
+
+            assertEquals(listOf(LedState.OFF, LedState.OFF, LedState.OFF), listOf(led("btn-1"), led("btn-2"), led("btn-3")))
+
+            h.layers.add(source = LayerSource.look(1, lookUuid, "Warm"), targets = emptyList())
+            h.layers.add(source = LayerSource.template(2, paletteUuid, "Red"), targets = listOf(hex1))
+            yield()
+            assertEquals(LedState.ON, led("btn-1"), "a Look's button: lit with nothing selected")
+            assertEquals(LedState.ON, led("btn-2"), "and a Look pad's")
+            assertEquals(LedState.OFF, led("btn-3"), "a palette's is dark with nothing selected")
+
+            h.selection.set(listOf(hex2))
+            yield()
+            assertEquals(LedState.ON, led("btn-1"), "lit on a head the Look's rows never reach")
+            assertEquals(LedState.ON, led("btn-2"))
+            assertEquals(LedState.OFF, led("btn-3"), "the palette does not cover hex-2")
+
+            h.selection.set(listOf(hex1))
+            yield()
+            assertEquals(LedState.ON, led("btn-3"), "and covers hex-1")
         } finally {
             h.publisher.stop()
             scope.cancel()

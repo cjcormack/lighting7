@@ -10,8 +10,11 @@ import java.util.UUID
  * list and recooks it. [ProgrammerLayerStack.toggle] is the programmer's caller; a stored cue's
  * layer list is the other stack it is written for (apply-model plan §3.6), so the two cannot drift.
  *
- * The rules, all per **head** ([TargetCoverage]), and each documented where it bites on
- * [ProgrammerLayerStack.toggle]:
+ * A **Look** is pressed whole (absolute-looks plan P1, [Ops.whole]): on puts one layer of it on
+ * top, off takes every layer of it off, and nothing is ever narrowed off it or widened onto it.
+ *
+ * A **palette**'s rules are all per **head** ([TargetCoverage]), and each documented where it bites
+ * on [ProgrammerLayerStack.toggle]:
  *
  * - **Off.** The record already covers every pressed head (or, for a press naming no targets, has
  *   a layer naming none): the pressed heads come off every layer of the record.
@@ -23,10 +26,12 @@ import java.util.UUID
  *   ([Ops.sameSettings]), the press widens it — keeping its identity — rather than adding one. Only
  *   the top, so a widening never changes what a higher layer shows.
  *
- * A layer naming **no** targets is the source's own bound rows. Where the caller knows their heads
- * ([Ops.boundHeads] — a per-fixture palette's rows, or in a cue the pressed Look's own fixtures) it
- * is read as naming them, and a subtraction rewrites it to the rest. Where it does not (a Look's in
- * the programmer), nothing here subtracts from it — except a
+ * A solo bank's siblings follow P3: a Look sibling cannot be narrowed, so any press takes it off
+ * whole, and a Look press takes every sibling off whole, as a cue press does.
+ *
+ * A palette layer naming **no** targets is the palette's own bound rows. Where the caller knows
+ * their heads ([Ops.boundHeads] — a per-fixture palette's rows) it is read as naming them, and a
+ * subtraction rewrites it to the rest. Where it does not, nothing here subtracts from it — except a
  * solo sibling or the record itself under a press that also names none, which is the same gesture
  * and replaces it.
  */
@@ -39,6 +44,9 @@ internal object LayerPress {
 
         /** Whether [layer] carries every setting a fresh press would give [arriving], targets aside. */
         fun sameSettings(layer: L, arriving: L): Boolean
+
+        /** Whether [layer] is a Look's: pressed, released and taken off whole, never by head. */
+        fun whole(layer: L): Boolean
 
         /** The heads a layer naming no targets lands on, when its rows name them; null when unknown. */
         fun boundHeads(layer: L): List<CueTargetDto>? = null
@@ -68,6 +76,7 @@ internal object LayerPress {
         replacesOn: Set<CueTargetDto>? = null,
     ): Result<L> {
         val uuid = ops.sourceUuid(arriving)
+        if (ops.whole(arriving)) return pressWhole(layers, arriving, uuid, ops, siblings)
         val targets = ops.targets(arriving)
         val pressed = coverage.expand(targets).toSet()
 
@@ -84,6 +93,8 @@ internal object LayerPress {
             val layerUuid = ops.sourceUuid(layer)
             val mine = layerUuid == uuid
             val next = when {
+                // A Look sibling cannot be narrowed, so it comes off whole (P3).
+                layerUuid in siblings && ops.whole(layer) -> null
                 mine || layerUuid in siblings ->
                     if (held(layer, ops).isEmpty()) layer.takeUnless { targets.isEmpty() }
                     else without(layer, pressed, ops, coverage)
@@ -112,13 +123,24 @@ internal object LayerPress {
     }
 
     /**
+     * A Look's press (P1, P3): off when any layer of it is on, taking every one; else on top, with
+     * every [siblings] layer taken off whole.
+     */
+    private fun <L> pressWhole(layers: List<L>, arriving: L, uuid: UUID, ops: Ops<L>, siblings: Set<UUID>): Result<L> {
+        if (layers.any { ops.sourceUuid(it) == uuid }) return Result.Removed(layers.filterNot { ops.sourceUuid(it) == uuid })
+        val kept = layers.filterNot { ops.sourceUuid(it) in siblings }
+        return Result.Applied(kept + arriving, layers.size - kept.size)
+    }
+
+    /**
      * Whether a press of [sourceUuid] on [targets] would take the record **off** [layers] — asked
      * by a door before the press, to test the selection's mask on the on arm only
      * (`routes/pressArm.kt`). The same decision [press] makes, so the arm a door tests is the arm
-     * the press takes.
+     * the press takes. A Look's press is off whenever a layer of it is on.
      */
     fun <L> wouldRelease(layers: List<L>, sourceUuid: UUID, targets: List<CueTargetDto>, ops: Ops<L>, coverage: TargetCoverage): Boolean =
-        arm(layers, sourceUuid, targets, coverage.expand(targets).toSet(), ops, coverage) != Arm.On
+        layers.any { ops.sourceUuid(it) == sourceUuid && ops.whole(it) } ||
+            arm(layers, sourceUuid, targets, coverage.expand(targets).toSet(), ops, coverage) != Arm.On
 
     private sealed interface Arm {
         data object On : Arm
@@ -150,9 +172,12 @@ internal object LayerPress {
         return if (pressed.all { coverage.covers(covered, it) }) Arm.Covered else Arm.On
     }
 
-    /** What [layer] names: its targets, else the heads its bound rows land on, else nothing. */
+    /**
+     * What [layer] names: its targets, else the heads its bound rows land on, else nothing. A Look's
+     * names nothing, whatever an older write left on it, so no head is ever taken off it.
+     */
     private fun <L> held(layer: L, ops: Ops<L>): List<CueTargetDto> =
-        ops.targets(layer).ifEmpty { ops.boundHeads(layer).orEmpty() }
+        if (ops.whole(layer)) emptyList() else ops.targets(layer).ifEmpty { ops.boundHeads(layer).orEmpty() }
 
     /**
      * [layer] with [pressed] taken off: itself (by identity) when the press names none of its heads

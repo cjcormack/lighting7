@@ -618,11 +618,11 @@ live state are not repeated: the client has them from the stack list, `cueRunSta
   place among **every** stored layer of the cue, from 1 at the bottom, so a layer whose source is gone
   — left out of the list — still holds its place and the ranks above it do not shift. `families` is a
   Look's `derivedFamilyGroups` (its rows' properties and its effects' categories) or a palette's
-  `familyOf`. `heads` are the fixture keys the layer lands on, groups expanded
-  (`TargetCoverage.expand`): a Look's own heads (`ownTargets`) narrowed to the targets it names as
-  the cook narrows its rows (`covers`), and the targets themselves where it has a deferred effect; a
-  per-fixture palette's row heads, narrowed as `LayerPressRules.paletteHeads` narrows a press; a
-  generic palette's targets. `timed` is a delay, interval or random window.
+  `familyOf`. `targets` are a palette layer's; a Look layer's are none, since a Look lands whole
+  (absolute-looks plan D1). `heads` are the fixture keys the layer lands on, groups expanded
+  (`TargetCoverage.expand`): a Look's own heads (`ownTargets`); a per-fixture palette's row heads,
+  narrowed as `LayerPressRules.paletteHeads` narrows a press; a generic palette's targets. `timed` is
+  a delay, interval or random window.
 - **`effects`**: `{id, uuid, runUuid, effectType, propertyName, targetType, targetKey, family, heads,
   settings}`, the target canonical (`canonicalTarget`). `family` is the group of the property it
   drives as Record reads it — the first head's property, else the library category's. `settings` is
@@ -684,10 +684,10 @@ and every cue an op names must have an entry in this stack. **Nothing is sent to
 
 | Op | Does |
 |---|---|
-| `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a Look or palette on one target — or none, its own heads — taking `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
-| `layerOff {cueId, source, target?}` | The off press. A cell already off is left alone |
+| `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a palette on one target — or none, its own heads — or of a Look, whole: a Look's `target` is ignored. It takes `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
+| `layerOff {cueId, source, target?}` | The off press; a Look's takes every layer of it off. A cell already off is left alone |
 | `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `propertyMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
-| `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a layer of its record naming its target, or none for its own heads): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
+| `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a palette's layer naming its target, or none for its own heads; any layer of a Look, whose target is ignored): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
 | `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | One element's change, checked by `parseSceneryList` with the rest of the cue's list and written by `replaceCueScenery`; a clear hands the cue back to tracking |
 | `restore {cueId, layers, adHocEffects, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and effects by uuid rather than key, so a row an edit deleted comes back with its uuid, and an effect with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
 

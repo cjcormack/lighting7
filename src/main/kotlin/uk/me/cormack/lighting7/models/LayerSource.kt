@@ -62,3 +62,14 @@ data class LayerSourceDto(
     val uuid: String,
     val name: String,
 )
+
+/**
+ * The targets a layer of [source] holds: a Look's none, whatever a write carried (absolute-looks plan
+ * D1, P2 — a Look lands whole), a palette's as given.
+ */
+internal fun layerTargets(source: LayerSource, targets: List<CueTargetDto>): List<CueTargetDto> =
+    if (source.kind == LayerSourceKind.LOOK) emptyList() else targets
+
+/** This cue layer as it is stored: a Look layer's targets dropped ([layerTargets]). */
+internal fun CueLayerDto.withStoredTargets(): CueLayerDto =
+    if (lookId != null && targets.isNotEmpty()) copy(targets = emptyList()) else this

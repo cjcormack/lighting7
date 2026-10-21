@@ -31,14 +31,9 @@ internal fun Route.routeApiRestGroups(state: State) {
         // List all groups
         get<GroupsResource> {
             val currentProject = state.projectManager.currentProject
-            val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
             val colours = groupColoursByName(state, currentProject.id.value)
 
-            val groups = state.show.fixtures.groups.map { group ->
-                val capabilities = group.detectCapabilities().toSet()
-                val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-                group.toGroupSummaryDto(looks.compatibleIdsFor(capabilities), colours[group.name])
-            }
+            val groups = state.show.fixtures.groups.map { group -> group.toGroupSummaryDto(colours[group.name]) }
             call.respond(groups)
         }
 
@@ -46,14 +41,7 @@ internal fun Route.routeApiRestGroups(state: State) {
         get<GroupResource> { resource ->
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
-
-                val currentProject = state.projectManager.currentProject
-                val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
-
-                val capabilities = group.detectCapabilities().toSet()
-                val memberTypeKeys = group.fixtures.filterIsInstance<Fixture>().map { it.typeKey }.toSet()
-
-                call.respond(group.toDetailedDto(looks.compatibleIdsFor(capabilities)))
+                call.respond(group.toDetailedDto())
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
@@ -185,6 +173,7 @@ data class GroupSummaryDto(
     val capabilities: List<String>,
     val symmetricMode: String,
     val defaultDistribution: String,
+    /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
     val compatibleLookIds: List<Int> = emptyList(),
     /**
      * Every member's key in the group's order (`sort_order`, venue-visit plan S7) — the order its
@@ -219,6 +208,7 @@ data class GroupDetailDto(
     val symmetricMode: String,
     val defaultDistribution: String,
     val members: List<GroupMemberDto>,
+    /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
     val compatibleLookIds: List<Int> = emptyList(),
     /**
      * Each strategy's step per member, by `index` (`DistributionStrategy.stepsBySize`): the order
@@ -326,7 +316,7 @@ private fun groupColoursByName(state: State, projectId: Int): Map<String, String
 }
 
 /** The group's summary — what the group list answers and what a busk rig tile embeds. */
-internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = emptyList(), colour: String? = null): GroupSummaryDto {
+internal fun FixtureGroup<*>.toGroupSummaryDto(colour: String? = null): GroupSummaryDto {
     return GroupSummaryDto(
         colour = colour,
         name = name,
@@ -334,12 +324,11 @@ internal fun FixtureGroup<*>.toGroupSummaryDto(compatibleLookIds: List<Int> = em
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
         defaultDistribution = metadata.defaultDistributionName,
-        compatibleLookIds = compatibleLookIds,
         memberKeys = allMembers.map { it.key },
     )
 }
 
-private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyList()): GroupDetailDto {
+private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
     return GroupDetailDto(
         name = name,
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
@@ -358,7 +347,6 @@ private fun FixtureGroup<*>.toDetailedDto(compatibleLookIds: List<Int> = emptyLi
                 tags = member.metadata.tags.toList()
             )
         },
-        compatibleLookIds = compatibleLookIds,
         distributionSteps = DistributionStrategy.stepsBySize(memberCount),
     )
 }

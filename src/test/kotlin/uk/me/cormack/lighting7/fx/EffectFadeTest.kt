@@ -53,8 +53,9 @@ import kotlin.test.assertTrue
  * reads the ramp a gesture set and asks it the level at a chosen instant, and sweeps the engine's
  * retirement at a chosen instant ([FxEngine.retireFinishedLeaving]).
  *
- * The rig: hex-1 and hex-2, and two effect-only Looks — *Pulse* and *Sine*, each with a dimmer
- * effect on both heads — which a cue layers onto one head, the layer's target keeping that head's.
+ * The rig: hex-1 and hex-2, and effect-only Looks — *Pulse* and *Sine* — one per head, each a
+ * dimmer effect on its head; a Look lands whole, so a cue puts one head's effect on through that
+ * head's Look.
  */
 class EffectFadeTest : RouteIntegrationTest() {
 
@@ -62,17 +63,28 @@ class EffectFadeTest : RouteIntegrationTest() {
     private val holds get() = manager.holds
     private val engine get() = state.show.fxEngine
 
-    private data class Looks(val pulse: LookDetails, val sine: LookDetails)
+    /** One Look per head, each its effect on that head alone. */
+    private class PerHead(private val byHead: Map<String, LookDetails>) {
+        operator fun get(head: String): LookDetails = byHead.getValue(head)
+    }
 
-    /** A Look with a dimmer effect on each head, and a dimmer row of its own on [rowOn] when named. */
-    private suspend fun HttpClient.look(name: String, effectType: String, rowOn: String? = null, nShot: Int? = null): LookDetails =
+    private data class Looks(val pulse: PerHead, val sine: PerHead)
+
+    /** A Look with a dimmer effect on each of [heads], and a dimmer row of its own on [rowOn] when named. */
+    private suspend fun HttpClient.look(
+        name: String,
+        effectType: String,
+        heads: List<String>,
+        rowOn: String? = null,
+        nShot: Int? = null,
+    ): LookDetails =
         post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
             setBody(
                 CreateLookRequest(
                     name = name,
                     rows = rowOn?.let { listOf(LookRowDto("fixture", it, "dimmer", "120")) }.orEmpty(),
-                    effects = listOf("hex-1", "hex-2").mapIndexed { i, head ->
+                    effects = heads.mapIndexed { i, head ->
                         LookEffectDto(
                             targetType = "fixture", targetKey = head,
                             effectType = effectType, category = "dimmer", propertyName = "dimmer",
@@ -92,21 +104,24 @@ class EffectFadeTest : RouteIntegrationTest() {
         state.show.fxEngine.sweepsLeaving = false
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 21)
-        return Looks(look("Pulse", "Pulse"), look("Sine", "SineWave"))
+        return Looks(perHead("Pulse", "Pulse"), perHead("Sine", "SineWave"))
     }
 
-    /** A cue layering each of [layers] (a Look and the fixture it lands on), with [fadeMs]. */
-    private fun cue(name: String, fadeMs: Long?, vararg layers: Pair<LookDetails, String>): Int = transaction(state.database) {
+    private suspend fun HttpClient.perHead(name: String, effectType: String): PerHead =
+        PerHead(listOf("hex-1", "hex-2").associateWith { look("$name $it", effectType, listOf(it)) })
+
+    /** A cue layering each of [layers], with [fadeMs]. */
+    private fun cue(name: String, fadeMs: Long?, vararg layers: LookDetails): Int = transaction(state.database) {
         val cue = DaoCue.new {
             project = DaoProject.findById(projectId)!!
             this.name = name
             fadeDuration = fadeMs?.let { Duration.ofMillis(it) }
         }
-        layers.forEachIndexed { i, (look, fixture) ->
+        layers.forEachIndexed { i, look ->
             DaoCueLayer.new {
                 this.cue = cue
                 this.look = DaoLook[look.id]
-                targets = listOf(CueTargetDto("fixture", fixture))
+                targets = emptyList()
                 sortOrder = i
             }
         }
@@ -151,8 +166,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a GO over 3 s shrinks the outgoing effect and grows the incoming one, both running throughout`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
 
         manager.activateEntry(state, s, entries[0])
@@ -184,8 +199,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a continuing Look effect keeps its instance, id and phase`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.pulse to "hex-1", looks.sine to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.pulse["hex-1"], looks.sine["hex-2"])
         val (s, entries) = stack("S", 0, q1, q2)
 
         manager.activateEntry(state, s, entries[0])
@@ -212,9 +227,9 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a cue composes in its own layer order however it was reached`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
         // The Sine is Q2's first layer, the Pulse it continues from Q1 its second, both on hex-1.
-        val q2 = cue("Q2", 3000, looks.sine to "hex-1", looks.pulse to "hex-1")
+        val q2 = cue("Q2", 3000, looks.sine["hex-1"], looks.pulse["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val pulse = one(q1)
@@ -231,9 +246,9 @@ class EffectFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val looks = client.seedLooks()
-        val shot = client.look("Shot", "Pulse", nShot = 3)
-        val q1 = cue("Q1", null, looks.pulse to "hex-1", shot to "hex-2")
-        val q2 = cue("Q2", 2000, looks.pulse to "hex-1", shot to "hex-2")
+        val shot = client.look("Shot", "Pulse", listOf("hex-2"), nShot = 3)
+        val q1 = cue("Q1", null, looks.pulse["hex-1"], shot)
+        val q2 = cue("Q2", 2000, looks.pulse["hex-1"], shot)
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val (paused, oneShot) = effectsOf(q1).partition { it.target.targetKey == "hex-1" }.let { it.first.single() to it.second.single() }
@@ -252,8 +267,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a 0 s cue snaps its effects`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", null, looks.sine to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", null, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
 
         manager.activateEntry(state, s, entries[0])
@@ -267,8 +282,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `GO BACK fades as GO does`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", 1000, looks.pulse to "hex-1")
-        val q2 = cue("Q2", null, looks.sine to "hex-1")
+        val q1 = cue("Q1", 1000, looks.pulse["hex-1"])
+        val q2 = cue("Q2", null, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[1])
 
@@ -286,8 +301,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `an effect-only cue fades, and the run state says so`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 2000, looks.sine to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 2000, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
 
@@ -303,8 +318,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a GO onto a cue another stack holds moves no envelope`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 2000, looks.sine to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 2000, looks.sine["hex-2"])
         val (s, sEntries) = stack("S", 0, q1, q2)
         val (t, tEntries) = stack("T", 1, q2)
         manager.activateEntry(state, t, tEntries[0])
@@ -322,8 +337,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a stack leaving a cue a press holds leaves its effects at full`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 2000, looks.sine to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 2000, looks.sine["hex-2"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         holds.takeLooseCue(state, q1)
@@ -340,7 +355,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a loose press snaps on and off`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q = cue("Q", 2000, looks.pulse to "hex-1")
+        val q = cue("Q", 2000, looks.pulse["hex-1"])
 
         holds.takeLooseCue(state, q)
         assertFull(one(q), "a loose hold has no fade")
@@ -353,8 +368,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a cue brought back on mid-fade keeps its instances and returns to full`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-2"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val pulse = one(q1)
@@ -374,9 +389,9 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a cue taken back by another stack's fade grows from where it stood`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q0 = cue("Q0", null, looks.sine to "hex-2")
-        val q1 = cue("Q1", 2000, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-2")
+        val q0 = cue("Q0", null, looks.sine["hex-2"])
+        val q1 = cue("Q1", 2000, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-2"])
         val (s, sEntries) = stack("S", 0, q1, q2)
         val (t, tEntries) = stack("T", 1, q0, q1)
         manager.activateEntry(state, s, sEntries[0])
@@ -399,8 +414,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a GO BACK on the same stack mid-fade keeps the returning cue's instances`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", 1000, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-1")
+        val q1 = cue("Q1", 1000, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val pulse = one(q1)
@@ -419,8 +434,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a cue taken back gets back the effects the next cue took over, as fresh instances`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1", looks.sine to "hex-2")
-        val q2 = cue("Q2", 3000, looks.pulse to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"], looks.sine["hex-2"])
+        val q2 = cue("Q2", 3000, looks.pulse["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val (pulse, sine) = effectsOf(q1).partition { it.target.targetKey == "hex-1" }.let { it.first.single() to it.second.single() }
@@ -440,8 +455,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `adoptions go back when the outgoing cue turns out to be held`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", null, looks.pulse to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", null, looks.pulse["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val pulse = one(q1)
@@ -768,9 +783,9 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a GO cut short removes the abandoned outgoing effects and pins the incoming at full`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-1")
-        val q3 = cue("Q3", 3000, looks.pulse to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-1"])
+        val q3 = cue("Q3", 3000, looks.pulse["hex-2"])
         val (s, entries) = stack("S", 0, q1, q2, q3)
         manager.activateEntry(state, s, entries[0])
         manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
@@ -788,8 +803,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a stack stop snaps its effects`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 3000, looks.sine to "hex-1")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 3000, looks.sine["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
@@ -813,7 +828,7 @@ class EffectFadeTest : RouteIntegrationTest() {
                 parameters = emptyMap()
             }
         }
-        val q2 = cue("Q2", 1000, looks.pulse to "hex-1")
+        val q2 = cue("Q2", 1000, looks.pulse["hex-1"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val adHoc = one(q1)
@@ -832,7 +847,7 @@ class EffectFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val looks = client.seedLooks()
-        suspend fun press() = client.post("/api/rest/projects/$projectId/looks/${looks.pulse.id}/toggle") {
+        suspend fun press() = client.post("/api/rest/projects/$projectId/looks/${looks.pulse["hex-1"].id}/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1")), fadeMs = 2000))
         }
@@ -856,7 +871,7 @@ class EffectFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         client.seedLooks()
-        val washPulse = client.look("Wash pulse", "Pulse", rowOn = "hex-1")
+        val washPulse = client.look("Wash pulse", "Pulse", listOf("hex-1"), rowOn = "hex-1")
         val source = LayerSource.look(washPulse.id, UUID.fromString(washPulse.uuid), washPulse.name)
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
@@ -872,7 +887,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `a press with no fade snaps, as before`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val source = LayerSource.look(looks.pulse.id, UUID.fromString(looks.pulse.uuid), looks.pulse.name)
+        val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
         val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
         state.show.programmerLayerStack.toggle(source, targets)
@@ -886,7 +901,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `Clear at a fade shrinks the band, and a Release shrinks its local effects`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val source = LayerSource.look(looks.pulse.id, UUID.fromString(looks.pulse.uuid), looks.pulse.name)
+        val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
         val layerEffect = bandEffects().single()
 
@@ -913,7 +928,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `Clear at a fade stops a band effect over a programmer value`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val source = LayerSource.look(looks.pulse.id, UUID.fromString(looks.pulse.uuid), looks.pulse.name)
+        val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
         ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), fadeMs = 0)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
 
@@ -926,7 +941,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `leaving Blind grows the programmer's effects over the Blind fade`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val source = LayerSource.look(looks.pulse.id, UUID.fromString(looks.pulse.uuid), looks.pulse.name)
+        val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
         engine.programmer.setBlind(true)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
         val effect = bandEffects().single()
@@ -943,7 +958,7 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `leaving Blind lands an effect over a programmer value at full`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val source = LayerSource.look(looks.pulse.id, UUID.fromString(looks.pulse.uuid), looks.pulse.name)
+        val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
         ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), fadeMs = 0)
         engine.programmer.setBlind(true)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
@@ -960,8 +975,8 @@ class EffectFadeTest : RouteIntegrationTest() {
     fun `an instance the engine retired cannot be taken back`() = testApplication {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
-        val q1 = cue("Q1", null, looks.pulse to "hex-1")
-        val q2 = cue("Q2", 1000, looks.sine to "hex-2")
+        val q1 = cue("Q1", null, looks.pulse["hex-1"])
+        val q2 = cue("Q2", 1000, looks.sine["hex-2"])
         val (s, entries) = stack("S", 0, q1, q2)
         manager.activateEntry(state, s, entries[0])
         val pulse = one(q1)

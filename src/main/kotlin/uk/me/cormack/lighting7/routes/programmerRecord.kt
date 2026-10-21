@@ -18,7 +18,8 @@ import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
-import uk.me.cormack.lighting7.models.sameTargets
+import uk.me.cormack.lighting7.models.DaoCueLayers
+import uk.me.cormack.lighting7.models.withStoredTargets
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
@@ -175,6 +176,7 @@ internal fun writeRecordingIntoCue(
     var removed = 0
     var outOfMask = 0
     var outOfScope = 0
+    var fxReplaced = 0
 
     when (mode) {
         RecordMode.CREATE -> error("unreachable")
@@ -206,7 +208,7 @@ internal fun writeRecordingIntoCue(
         RecordMode.REMOVE -> {
             for (layer in recording.layers) {
                 cue.layers.toList()
-                    .filter { !it.isTimed && it.appliesSameSourceAs(layer) && sameTargets(it.targets, layer.targets) }
+                    .filter { !it.isTimed && it.isSameLayerAs(layer) }
                     .forEach { it.delete() }
             }
             val doomed = recording.rows.map { it.matchKey() }.toSet()
@@ -281,14 +283,13 @@ internal fun writeRecordingIntoCue(
                 }
                 written++
             }
-            replaceImmediateFxChildren(cue, recording, mask, state, scope, warnings)
+            fxReplaced = replaceImmediateFxChildren(cue, recording, mask, state, scope, warnings)
         }
     }
 
     val fxWritten = when (mode) {
         RecordMode.MERGE -> appendFxChildren(cue, recording)
-        RecordMode.UPDATE_EXISTING ->
-            recording.layers.size + recording.adHocEffects.size
+        RecordMode.UPDATE_EXISTING -> fxReplaced
         else -> 0
     }
 
@@ -320,15 +321,14 @@ internal fun writeRecordingIntoCue(
 private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     var count = 0
 
-    // Layers first, upserted on `(source, targets)`. Upsert rather than append for the same reason
-    // the ad-hoc branch below does: `(source, targets)` says *which* layer this is, while amount,
-    // blend and mask are what the operator may just have changed in the programmer. Appending would
-    // give a cue a second copy of the same layer on every Update, and each Record would double it.
+    // Layers first, upserted on `(source, targets)` — a Look's on its source, since it lands whole
+    // (absolute-looks plan P5). Upsert rather than append for the same reason the ad-hoc branch below
+    // does: the key says *which* layer this is, while amount, blend and mask are what the operator may
+    // just have changed in the programmer. Appending would give a cue a second copy of the same layer
+    // on every Update, and each Record would double it.
     val existingLayers = cue.layers.toList()
     for (layer in recording.layers) {
-        val match = existingLayers.firstOrNull {
-            !it.isTimed && it.appliesSameSourceAs(layer) && sameTargets(it.targets, layer.targets)
-        }
+        val match = existingLayers.firstOrNull { !it.isTimed && it.isSameLayerAs(layer) }
         if (match != null) {
             if (match.applyFrom(layer)) count++
             continue
@@ -340,7 +340,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
             this.template = resolved.template
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
-            this.targets = layer.targets
+            this.targets = layer.withStoredTargets().targets
             this.propertyMask = layer.propertyMask
             this.blendMode = layer.blendMode
             this.amount = layer.amount
@@ -463,6 +463,8 @@ private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording
 /**
  * Replace the cue's in-mask *immediate* FX children with the recording's. Timed children are
  * left in place regardless of mask — they are not the programmer's to replace.
+ *
+ * Returns how many layers and effects it wrote.
  */
 private fun replaceImmediateFxChildren(
     cue: DaoCue,
@@ -471,7 +473,8 @@ private fun replaceImmediateFxChildren(
     state: State,
     scope: Set<String>? = null,
     warnings: MutableList<String> = ArrayList(),
-) {
+): Int {
+    var written = 0
     // What the recording replaces. A replaced child the recording names again is written over,
     // keeping its uuid (show-cue-editing plan P3); the rest are deleted once the recording is in.
     val replacedEffects = cue.adHocEffectsInOrder().filter { effect ->
@@ -481,20 +484,35 @@ private fun replaceImmediateFxChildren(
     }
     // Layers, same rule as preset applications had and for the same reason: a Look can span
     // several attribute families, so there is no single property to mask by. A masked re-record
-    // therefore leaves the layer stack alone rather than deleting more than was asked for, and a
-    // scoped one strips only the selected targets.
+    // therefore leaves the layer stack alone rather than deleting more than was asked for. A scoped
+    // one strips only the selected targets from a palette layer, and takes a Look — the cue's and
+    // the recording's alike — only when it lands on fixtures and every one is in scope
+    // (absolute-looks plan P5): a Look cannot be narrowed, so one reaching outside the selection,
+    // or landing on none, is left as it is.
     if (mask == null) {
+        val inScope = HashMap<Int, Boolean>()
+        fun lookInScope(lookId: Int?): Boolean = lookId == null || scope == null || inScope.getOrPut(lookId) {
+            val own = DaoLook.findById(lookId)?.ownTargets(state.show.fixtures).orEmpty()
+            own.isNotEmpty() && own.all { targetInScope(state.show.fixtures, it.target, scope) }
+        }
         val replacedLayers = ArrayList<DaoCueLayer>()
         for (layer in cue.layersInOrder()) {
             if (layer.isTimed) continue
-            if (scope == null) {
+            val lookId = layer.readValues[DaoCueLayers.look]?.value
+            if (scope == null || (lookId != null && lookInScope(lookId))) {
                 replacedLayers += layer
                 continue
             }
+            if (lookId != null) continue
             val kept = layer.targets.filterNot { targetInScope(state.show.fixtures, it.target, scope) }
             if (kept.isEmpty()) replacedLayers += layer else layer.targets = kept
         }
-        val resolved = recording.layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
+        val (recorded, leftOut) = recording.layers.partition { lookInScope(it.lookId) }
+        for (layer in leftOut) {
+            val name = layer.lookId?.let { DaoLook.findById(it)?.name } ?: "#${layer.lookId}"
+            warnings += "Look '$name' was not recorded — it lands outside the selection, and a Look is recorded whole"
+        }
+        val resolved = recorded.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
         val pairing = pairByKey(replacedLayers, resolved, { it.layerKey }, { it.second.layerKey })
         pairing.unmatched.forEach { it.delete() }
         for ((item, stored) in pairing.pairs) {
@@ -509,6 +527,7 @@ private fun replaceImmediateFxChildren(
                     take(layer)
                 }
             }
+            written++
         }
     }
 
@@ -544,8 +563,10 @@ private fun replaceImmediateFxChildren(
         } else {
             newAdHocChild(cue, effect)
         }
+        written++
     }
     replacedEffects.filter { it.id.value in pending }.forEach { it.delete() }
+    return written
 }
 
 /**

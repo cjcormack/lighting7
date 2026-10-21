@@ -256,10 +256,10 @@ class SurfaceFeedbackPublisher(
     /**
      * How a record button's LED is read.
      *
-     * [LOOK_APPLIED] is **selection-independent**: `ApplyLook` presses onto the Look's own fixtures,
-     * so "is it on the rig" is the whole question, and folding it over a selection would leave the
-     * button dark whenever nothing was selected. [COVERS_SELECTION] is the selection-scoped fold, and
-     * dark on an empty selection is right there — that is also when the press is dropped.
+     * [LOOK_APPLIED] is **selection-independent**: a Look is on or off (absolute-looks plan P4), lit
+     * while a layer of it is on the programmer's stack, whatever is selected — an `ApplyLook` button
+     * and a Look pad alike. [COVERS_SELECTION] is a palette's selection-scoped fold, and dark on an
+     * empty selection is right there — that is also when the press is dropped.
      */
     private enum class RecordLedKind { LOOK_APPLIED, COVERS_SELECTION, CUE_LIVE }
 
@@ -836,11 +836,9 @@ class SurfaceFeedbackPublisher(
             when (val ref = uuidOrNull(raw)?.let { refs.pads[it] }) {
                 is PadRef.Layer -> RecordLedEntry(
                     entry,
-                    // A Look pad's ring is the busk view's, and the busk view's is selection-scoped:
-                    // it is `lookLayerPresence`, not `lookIsApplied`, because a pad presses onto the
-                    // selection. Only an `ApplyLook` *button* is selection-independent, and that is
-                    // because it presses onto the Look's own fixtures instead.
-                    RecordLedKind.COVERS_SELECTION,
+                    // A palette pad's ring is the busk view's selection-scoped fold; a Look pad's is
+                    // on or off, as an `ApplyLook` button's is (P4).
+                    if (ref.isLook) RecordLedKind.LOOK_APPLIED else RecordLedKind.COVERS_SELECTION,
                     ref.sourceUuid,
                 )
                 is PadRef.Cue -> RecordLedEntry(entry, RecordLedKind.CUE_LIVE, null, ref.cueId)
@@ -1181,11 +1179,10 @@ class SurfaceFeedbackPublisher(
     /**
      * A record button's LED, read from the state the busk view's ring reads.
      *
-     * `ApplyLook` is deliberately **not** folded over the selection: it presses onto the Look's own
-     * fixtures, so "is this Look on the rig" is the whole question — the same split
-     * `lookIsApplied` answers for an FX cue slot, which likewise has no selection. Everything else
-     * is the selection-scoped fold, and dark on an empty selection is right: that is also when the
-     * press is dropped.
+     * A Look — an `ApplyLook` button or a Look pad — is deliberately **not** folded over the
+     * selection: it lands whole, so "is a layer of this Look on" is the whole question (P4). A
+     * palette is the selection-scoped fold, and dark on an empty selection is right: that is also
+     * when the press is dropped.
      */
     private fun recordLedOn(record: RecordLedEntry, applied: List<AppliedSource>): Boolean = when (record.kind) {
         RecordLedKind.CUE_LIVE -> record.cue?.let { cueId ->
@@ -1193,7 +1190,7 @@ class SurfaceFeedbackPublisher(
         } ?: false
         RecordLedKind.LOOK_APPLIED -> {
             val uuid = record.layerUuid
-            uuid != null && applied.any { it.source.uuid == uuid && it.targets.isNotEmpty() }
+            uuid != null && applied.any { it.source.uuid == uuid }
         }
         RecordLedKind.COVERS_SELECTION -> {
             val uuid = record.layerUuid

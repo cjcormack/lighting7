@@ -23,6 +23,7 @@ import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.layerTargets
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.show.referenceFixtureFor
@@ -144,7 +145,7 @@ internal fun includeCueIntoProgrammer(
     val (timedLayersSkipped, layerOutcome) = state.show.programmerLayerStack
         .installFromCue(cueData.layers, fadeMs)
     val layerGroupKeys = cueData.layers
-        .flatMap { it.targets }
+        .flatMap { layerTargets(it.source, it.targets) }
         .mapNotNull { (it.target as? TargetRef.Group)?.key }
         .toSet()
 
@@ -162,8 +163,8 @@ internal fun includeCueIntoProgrammer(
     return IncludeOutcome(
         entriesWritten = writes.size,
         fixtureKeys = fixtureKeys.toList().sorted(),
-        // A layer's group targets are *real* information rather than inferred, unlike the member
-        // rows' recovered hints — the layer names the group directly.
+        // A palette layer's group targets are *real* information rather than inferred, unlike the
+        // member rows' recovered hints — the layer names the group directly.
         groupKeys = (groupHints.values.toSet() + fx.groupKeys + layerGroupKeys).toList().sorted(),
         fxSpawned = fx.spawned + layerOutcome.effectsSpawned,
         fxAlreadyRunning = fx.alreadyRunning,

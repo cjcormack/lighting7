@@ -15,8 +15,8 @@ import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 /**
- * A Look's **element row** composes onto its cell (`FU-LOOK-ELEMENT-ROWS`), and a layer whose
- * targets are cells lands a template's generic rows on exactly those cells. The accumulator is
+ * A Look's **element row** composes onto its cell (`FU-LOOK-ELEMENT-ROWS`), whole, and a palette
+ * layer whose targets are cells lands a palette's generic rows on exactly those cells. The accumulator is
  * keyed by target key, so a cell's row lives under its element key, beside its parent's.
  */
 class CueComposerElementRowsTest {
@@ -113,16 +113,31 @@ class CueComposerElementRowsTest {
     }
 
     @Test
-    fun `a layer on one cell filters the rows to that cell`() {
+    fun `a Look's element rows land whole, whatever its layer names`() {
         val look = look(elementRow(2, "#ff0000"), elementRow(5, "#00ff00"))
-        val result = cook(rig(), lookLayer(look, targets = listOf(cell(2))), look = look)
+        val onCell = cook(rig(), lookLayer(look, targets = listOf(cell(2))), look = look)
+        assertEquals(setOf("bar-1.pixel-2", "bar-1.pixel-5"), onCell.rows.map { it.targetKey }.toSet())
+        val elsewhere = cook(rig(), lookLayer(look, targets = listOf(CueTargetDto("fixture", "hex-1"))), look = look)
+        assertEquals(setOf("bar-1.pixel-2", "bar-1.pixel-5"), elsewhere.rows.map { it.targetKey }.toSet())
+    }
+
+    /** A per-fixture palette with a colour row on each of [cells]. */
+    private fun cellPalette(vararg cells: Int) = template(
+        *cells.map { TemplateRowEntry(target = TargetRef.Fixture("bar-1.pixel-$it"), propertyName = "rgbColour", value = "#FF0000;policy=extract") }
+            .toTypedArray(),
+    )
+
+    @Test
+    fun `a palette layer on one cell filters its bound rows to that cell`() {
+        val red = cellPalette(2, 5)
+        val result = cook(rig(), templateLayer(red, targets = listOf(cell(2))), template = red)
         assertEquals(listOf("bar-1.pixel-2"), result.rows.map { it.targetKey })
     }
 
     @Test
-    fun `a layer on another fixture drops the cells' rows`() {
-        val look = look(elementRow(2, "#ff0000"))
-        val result = cook(rig(), lookLayer(look, targets = listOf(CueTargetDto("fixture", "hex-1"))), look = look)
+    fun `a palette layer on another fixture drops the cells' rows`() {
+        val red = cellPalette(2)
+        val result = cook(rig(), templateLayer(red, targets = listOf(CueTargetDto("fixture", "hex-1"))), template = red)
         assertTrue(result.rows.isEmpty())
     }
 
@@ -136,12 +151,11 @@ class CueComposerElementRowsTest {
     }
 
     @Test
-    fun `a bound row spelled as a cell target lands under a layer on its parent`() {
-        // The write boundary accepts `{fixture, <elementKey>}` with no elementKey — the shape a
-        // cell target has everywhere else — and the parent covers it like an element row.
-        val look = look(LookRowEntry(target = TargetRef.Fixture("bar-1.pixel-2"), propertyName = "rgbColour", value = "#ff0000"))
-        val result = cook(rig(), lookLayer(look, targets = listOf(bar)), look = look)
+    fun `a bound palette row on a cell lands under a layer on its parent`() {
+        // A cell target is `{fixture, <elementKey>}`, and the parent covers it as it covers an
+        // element row.
+        val red = cellPalette(2)
+        val result = cook(rig(), templateLayer(red, targets = listOf(bar)), template = red)
         assertEquals(listOf("bar-1.pixel-2"), result.rows.map { it.targetKey })
-        assertTrue(cook(rig(), lookLayer(look, targets = listOf(CueTargetDto("fixture", "hex-1"))), look = look).rows.isEmpty())
     }
 }

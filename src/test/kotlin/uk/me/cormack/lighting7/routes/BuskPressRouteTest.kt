@@ -161,10 +161,18 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     /** Whether a press holds [cueId] loose — what a cue pad toggles (cue model plan D6, D11). */
     private fun looseHeld(cueId: Int): Boolean = state.show.cueStackManager.holds.looseHeld(cueId)
 
-    /** `name@key+key` per live programmer layer — the idiom the template-group tests left behind. */
+    /**
+     * `name@key+key` per live programmer layer — the idiom the template-group tests left behind. A
+     * Look's layer names no targets (absolute-looks plan D1), so it reads `name@`.
+     */
     private fun live(): Set<String> = state.show.programmerStore.layers
         .map { layer -> "${layer.source.name}@${layer.targets.map { it.key }.sorted().joinToString("+")}" }
         .toSet()
+
+    /** The heads whose dimmer the programmer's layers hold. */
+    private fun dimmedByLayers(): Set<String> = listOf("hex-1", "hex-2").filter { key ->
+        state.show.programmerStore.get(key, "dimmer")?.owner == uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS
+    }.toSet()
 
     private fun seedRig() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -288,7 +296,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val warm = client.createLook("warm", "hex-1")
         val (pad) = client.bank("looks", solo = false, look(warm))
         client.press(pad, "hex-1")
-        assertEquals(setOf("warm@hex-1"), live())
+        assertEquals(setOf("warm@"), live())
 
         // No cue layer names it, so the delete needs no `force` — and must not leave the layer.
         assertEquals(HttpStatusCode.NoContent, client.delete("/api/rest/projects/$projectId/looks/$warm").status)
@@ -296,7 +304,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look pad applies on the selection and a second press removes it`() = testApplication {
+    fun `a Look pad lands whole whatever is selected, and a press with any selection takes it off`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -306,37 +314,29 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val on = client.press(pad, "hex-2")
         assertEquals("LOOK", on.kind)
         assertEquals("applied", on.action)
-        assertEquals(setOf("warm@hex-2"), live())
+        assertEquals(setOf("warm@"), live(), "one layer, naming no targets")
         assertNull(state.show.programmerStore.layers.single().propertyMask, "a Look layer is unmasked")
+        assertEquals(setOf("hex-1", "hex-2"), dimmedByLayers(), "both its rows land, not only the selected head")
 
-        assertEquals("removed", client.press(pad, "hex-2").action)
+        val off = client.press(pad)
+        assertEquals("removed", off.action, "nothing selected still takes it off")
+        assertTrue(state.show.programmerStore.layers.isEmpty())
+
+        assertEquals("applied", client.press(pad).action, "and nothing selected puts it on")
+        assertEquals("removed", client.press(pad, "hex-1").action, "a selection that is part of it takes it off")
         assertTrue(state.show.programmerStore.layers.isEmpty())
     }
 
     @Test
-    fun `a Look pad pressed with no selection uses the Look's own fixtures`() = testApplication {
-        mountTestApp(state)
-        seedRig()
-        val client = jsonClient()
-        val warm = client.createLook("warm", "hex-1", "hex-2")
-        val (pad) = client.bank("looks", solo = false, look(warm))
-
-        assertEquals("applied", client.press(pad).action)
-        assertEquals(setOf("warm@hex-1+hex-2"), live())
-        assertEquals("removed", client.press(pad).action)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-    }
-
-    @Test
-    fun `a Look pad with an effect needs no selection, its effect naming its own fixture`() = testApplication {
+    fun `a Look pad's effect runs on its own target, whatever is selected`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
         val pulse = client.createLook("pulse", "hex-1", effect = true)
         val (pad) = client.bank("looks", solo = false, look(pulse))
 
-        assertEquals("applied", client.press(pad).action)
-        assertEquals(setOf("pulse@hex-1"), live())
+        assertEquals("applied", client.press(pad, "hex-2").action)
+        assertEquals(setOf("pulse@"), live())
         assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
     }
 
@@ -406,15 +406,14 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val amber = client.createTemplate("amber")
-        val warm = client.createLook("warm", "hex-1", "hex-2")
+        val blue = client.createTemplate("blue", "#0000ff")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
-        val (amberPad, warmPad, cuePad) = client.bank("keys", solo = true, tpl(amber), look(warm), cue(opening))
+        val (amberPad, bluePad, cuePad) = client.bank("keys", solo = true, tpl(amber), tpl(blue), cue(opening))
 
         client.press(amberPad, "hex-1", "hex-2")
-        // The Look press narrows amber to hex-2 rather than dropping it — the layer rule.
-        assertEquals(1, client.press(warmPad, "hex-1").released)
-        assertEquals(setOf("amber@hex-2", "warm@hex-1"), live())
+        assertEquals(1, client.press(bluePad, "hex-1").released)
+        assertEquals(setOf("amber@hex-2", "blue@hex-1"), live())
 
         val on = client.press(cuePad)
         assertEquals("applied", on.action)
@@ -424,6 +423,64 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
         // Off: nothing else moves.
         assertEquals(0, client.press(cuePad).released)
+    }
+
+    @Test
+    fun `a Look press in a solo bank takes every sibling off whole, as a cue press does`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val warm = client.createLook("warm", "hex-1")
+        val stackId = client.createStack("Main")
+        val opening = client.createCue("opening", stackId)
+        val (_, warmPad, cuePad) = client.bank("keys", solo = true, tpl(amber), look(warm), cue(opening))
+
+        client.press(cuePad)
+        // Both on at once, as a door with no siblings leaves them: amber's own pad would stop the cue.
+        state.show.programmerLayerStack.toggle(
+            uk.me.cormack.lighting7.models.LayerSource.template(amber, java.util.UUID.fromString(client.templateUuid(amber)), "amber"),
+            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+        )
+        assertTrue(looseHeld(opening))
+        assertEquals(setOf("amber@hex-1+hex-2"), live())
+
+        // Amber holds hex-2 as well, which the Look never touches: it still comes off whole (P3).
+        val on = client.press(warmPad, "hex-1")
+        assertEquals("applied", on.action)
+        assertEquals(2, on.released, "the palette sibling and the cue sibling")
+        assertEquals(setOf("warm@"), live())
+        assertFalse(looseHeld(opening))
+    }
+
+    @Test
+    fun `a palette press in a solo bank takes a Look sibling off whole and narrows a palette`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val amber = client.createTemplate("amber")
+        val blue = client.createTemplate("blue", "#0000ff")
+        val warm = client.createLook("warm", "hex-1", "hex-2")
+        val (amberPad, bluePad, warmPad) = client.bank("keys", solo = true, tpl(amber), tpl(blue), look(warm))
+
+        client.press(warmPad)
+        client.press(amberPad, "hex-1", "hex-2")
+        assertEquals(setOf("amber@hex-1+hex-2"), live(), "amber took the Look off whole on its way on")
+        client.press(warmPad)
+        assertEquals(setOf("warm@"), live(), "and the Look took amber off whole")
+
+        // Both on at once, as a door with no siblings leaves them, for the narrowing half.
+        state.show.programmerLayerStack.toggle(
+            uk.me.cormack.lighting7.models.LayerSource.template(amber, java.util.UUID.fromString(client.templateUuid(amber)), "amber"),
+            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
+            propertyMask = "COLOUR",
+        )
+        assertEquals(setOf("warm@", "amber@hex-1+hex-2"), live())
+
+        val on = client.press(bluePad, "hex-1")
+        assertEquals("applied", on.action)
+        assertEquals(2, on.released, "the Look off whole, amber narrowed")
+        assertEquals(setOf("amber@hex-2", "blue@hex-1"), live())
     }
 
     @Test
@@ -521,36 +578,30 @@ class BuskPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look pad under a mask lands masked to what they share and reports what it skipped`() = testApplication {
+    fun `a Look pad ignores the selection's mask, and a mask set on its layer afterwards is kept`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
         val warm = client.createLook("warm", "hex-1", withColour = true)
-        val (pad) = client.bank("looks", solo = false, look(warm))
+        val half = client.createTemplate("half", "pct:50", propertyName = "dimmer")
+        val (pad, halfPad) = client.bank("looks", solo = false, look(warm), tpl(half))
 
         val on = client.press(pad, "hex-1", families = listOf("COLOUR", "POSITION"))
         assertEquals("applied", on.action)
-        assertEquals(listOf("INTENSITY"), on.skippedFamilies, "the dimmer rows are outside the mask")
-        assertEquals(setOf("warm@hex-1"), live())
-        assertEquals(
-            "COLOUR", state.show.programmerStore.layers.single().propertyMask,
-            "mask ∩ look.families — POSITION is in the mask but not in the Look, so it is not on the layer",
-        )
-
-        // Pressed again with no mask: coverage says on, so it comes off — the second press is
-        // still off, and an off press skips nothing.
-        val off = client.press(pad, "hex-1")
-        assertEquals("removed", off.action)
-        assertTrue(off.skippedFamilies.isEmpty())
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-
-        // Unmasked, the layer is unmasked — today's press.
-        assertEquals("applied", client.press(pad, "hex-1").action)
+        assertTrue(on.skippedFamilies.isEmpty(), "nothing is skipped: the Look lands whole")
         assertNull(state.show.programmerStore.layers.single().propertyMask)
+        assertEquals(setOf("hex-1"), dimmedByLayers(), "its Intensity row lands under a Colour mask")
+
+        // The mask is the layer's own setting (D3), set after the press and kept by the next one.
+        val layer = state.show.programmerStore.layers.single()
+        state.show.programmerLayerStack.patch(layer.layerId, propertyMask = "COLOUR")
+        assertEquals("applied", client.press(halfPad, "hex-2").action)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single { it.source.name == "warm" }.propertyMask)
+        assertEquals(setOf("hex-2"), dimmedByLayers(), "the cook masks the Look's rows; hex-2's is the palette's")
     }
 
     @Test
-    fun `a Look pad with nothing inside the mask is refused, and a cue pad ignores it`() = testApplication {
+    fun `a Look pad with nothing inside the mask still lands, as a cue pad does`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -559,15 +610,16 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val cueId = client.createCue("Q1", stackId)
         val (lookPad, cuePad) = client.bank("mixed", solo = false, look(warm), cue(cueId))
 
-        val refused = client.pressRaw(lookPad, "hex-1", families = listOf("COLOUR"))
-        assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
-        assertEquals(CODE_LOOK_OUTSIDE_MASK, refused.body<ErrorResponse>().code)
-        assertTrue(state.show.programmerStore.layers.isEmpty(), "a layer asserting nothing would light the pad for nothing")
+        val look = client.press(lookPad, "hex-1", families = listOf("COLOUR"))
+        assertEquals("applied", look.action, "a Look press takes no mask")
+        assertEquals(setOf("warm@"), live())
 
         val cue = client.press(cuePad, "hex-1", families = listOf("COLOUR"))
         assertEquals("CUE", cue.kind)
         assertEquals("applied", cue.action, "a cue has no targets to be masked on")
         assertTrue(looseHeld(cueId))
+
+        assertEquals("removed", client.press(lookPad, families = listOf("Gobo")).action, "nor is an unknown family a Look's to refuse")
     }
 
     @Test
@@ -583,7 +635,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         // presses each lit pad to turn it off, and neither may read dead.
         client.press(amberPad, "hex-1")
         client.press(warmPad, "hex-1")
-        assertEquals(setOf("amber@hex-1", "warm@hex-1"), live())
+        assertEquals(setOf("amber@hex-1", "warm@"), live())
 
         val amberOff = client.press(amberPad, "hex-1", families = listOf("POSITION"))
         assertEquals("removed", amberOff.action, "a lit Colour pad releases under a Position mask")
@@ -592,9 +644,10 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertTrue(warmOff.skippedFamilies.isEmpty(), "an off press skips nothing")
         assertTrue(state.show.programmerStore.layers.isEmpty())
 
-        // And now that nothing is lit, the same presses are on presses and the mask refuses them.
+        // And now that nothing is lit, the same presses are on presses: the mask refuses the palette,
+        // and the Look, which takes no mask, goes on.
         assertEquals(CODE_TEMPLATE_OUTSIDE_MASK, client.pressRaw(amberPad, "hex-1", families = listOf("POSITION")).body<ErrorResponse>().code)
-        assertEquals(CODE_LOOK_OUTSIDE_MASK, client.pressRaw(warmPad, "hex-1", families = listOf("POSITION")).body<ErrorResponse>().code)
+        assertEquals("applied", client.press(warmPad, "hex-1", families = listOf("POSITION")).action)
     }
 
     @Test
@@ -682,7 +735,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
             .single { it.id == padId }.uuid
 
     @Test
-    fun `applyLook presses onto the Look's own fixtures, not the selection`() = testApplication {
+    fun `applyLook presses the Look whole, not onto the selection`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -692,7 +745,8 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
 
         actions().applyLook(client.lookUuid(warm))
-        assertEquals(setOf("warm@hex-1"), live())
+        assertEquals(setOf("warm@"), live())
+        assertEquals(setOf("hex-1"), dimmedByLayers())
 
         actions().applyLook(client.lookUuid(warm))
         assertTrue(state.show.programmerStore.layers.isEmpty(), "a second press takes it off")
@@ -707,7 +761,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
 
         actions().applyLook(client.lookUuid(pulse))
-        assertEquals(setOf("pulse@hex-1"), live())
+        assertEquals(setOf("pulse@"), live())
         assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
     }
 
@@ -763,7 +817,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
         actions().pressTemplate(uuid)
         actions().pressPad(client.padUuid(warmPad))
-        assertEquals(setOf("amber@hex-1", "warm@hex-1"), live())
+        assertEquals(setOf("amber@hex-1", "warm@"), live())
 
         // A marquee on a screen masks the desk to Position; the buttons must still turn them off.
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(PropertyMaskGroup.POSITION))
@@ -771,14 +825,14 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         actions().pressPad(client.padUuid(warmPad))
         assertTrue(state.show.programmerStore.layers.isEmpty(), "both released under a mask that excludes them")
 
-        // Off, the same presses are on presses and are dropped by name.
+        // Off, the palette's press is an on press and is dropped by name; the Look's lands whole.
         actions().pressTemplate(uuid)
         actions().pressPad(client.padUuid(warmPad))
-        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertEquals(setOf("warm@"), live())
     }
 
     @Test
-    fun `pressPad passes the desk's mask through the same press`() = testApplication {
+    fun `pressPad passes the desk's mask through the same press, which a Look ignores`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -791,8 +845,8 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.layers.isEmpty(), "refused by name, logged — a button has no 400")
 
         actions().pressPad(client.padUuid(lookPad))
-        assertEquals(setOf("warm@hex-1"), live())
-        assertEquals("INTENSITY", state.show.programmerStore.layers.single().propertyMask, "mask ∩ look.families")
+        assertEquals(setOf("warm@"), live())
+        assertNull(state.show.programmerStore.layers.single().propertyMask, "a Look lands whole, under no mask")
     }
 
     @Test
@@ -863,40 +917,25 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-1", 1)
     }
 
-    /** A Look holding one colour row per named cell of `bar-1`. */
-    private suspend fun HttpClient.createCellLook(name: String, vararg cells: Int): Int {
-        val resp = post("/api/rest/projects/$projectId/looks") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                CreateLookRequest(
-                    name = name,
-                    rows = cells.map { LookRowDto("fixture", "bar-1", "rgbColour", "#ff0000", elementKey = cell(it)) },
-                ),
-            )
-        }
-        assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
-        return resp.body<LookDetails>().id
-    }
-
     @Test
-    fun `a cell press under a whole-bar Look layer reads lit and releases nothing`() = testApplication {
+    fun `a cell press under a whole-bar palette layer reads lit and releases nothing`() = testApplication {
         mountTestApp(state)
         seedRig()
         seedBar()
         val client = jsonClient()
-        val cells = client.createCellLook("cells", 0, 1, 2, 3, 6)
-        val other = client.createLook("other", "hex-1")
-        val (pad, otherPad) = client.bank("solo", solo = true, look(cells), look(other))
+        val red = client.createTemplate("red", "#ff0000")
+        val half = client.createTemplate("half", "pct:50", propertyName = "dimmer")
+        val (pad, otherPad) = client.bank("solo", solo = true, tpl(red), tpl(half))
         assertEquals("applied", client.press(otherPad, "hex-1").action)
 
         assertEquals("applied", client.press(pad, "bar-1").action)
-        assertEquals(setOf("cells@bar-1", "other@hex-1"), live())
+        assertEquals(setOf("red@bar-1", "half@hex-1"), live())
 
         val off = client.press(pad, cell(0), cell(1), cell(2), cell(3))
         assertEquals("removed", off.action, "the whole bar covers four of its cells")
         assertEquals(0, off.released, "an off press releases nothing")
         assertEquals(
-            setOf("cells@" + (4 until 12).map { cell(it) }.sorted().joinToString("+"), "other@hex-1"),
+            setOf("red@" + (4 until 12).map { cell(it) }.sorted().joinToString("+"), "half@hex-1"),
             live(),
             "the layer is narrowed to the cells the press did not name; the sibling is untouched",
         )
@@ -908,15 +947,15 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         seedBar()
         val client = jsonClient()
-        val cells = client.createCellLook("cells", 0, 1, 2, 3, 6)
-        val (pad) = client.bank("keys", solo = false, look(cells))
+        val red = client.createTemplate("red", "#ff0000")
+        val (pad) = client.bank("keys", solo = false, tpl(red))
 
         assertEquals("applied", client.press(pad, cell(0), cell(1), cell(2), cell(3)).action)
-        assertEquals(setOf("cells@" + (0 until 4).map { cell(it) }.joinToString("+")), live())
+        assertEquals(setOf("red@" + (0 until 4).map { cell(it) }.joinToString("+")), live())
 
         val on = client.press(pad, "bar-1")
         assertEquals("applied", on.action, "four cells do not cover the whole bar")
         assertEquals(0, on.released)
-        assertEquals(setOf("cells@bar-1"), live(), "the bar subsumes its cells: one layer per head")
+        assertEquals(setOf("red@bar-1"), live(), "the bar subsumes its cells: one layer per head")
     }
 }

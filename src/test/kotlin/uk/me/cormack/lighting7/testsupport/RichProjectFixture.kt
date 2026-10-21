@@ -852,10 +852,11 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 4
     }
     // A timed layer over the effects-only look — the shape a timed preset application migrated into,
-    // carrying all three timing fields plus both speed-master overrides.
+    // carrying all three timing fields plus both speed-master overrides. A Look layer names no
+    // targets (absolute-looks plan D1); the palette layer below carries the field.
     DaoCueLayer.new {
         cue = cue1; look = effectsLook
-        targets = listOf(CueTargetDto("group", "front-wash"))
+        targets = emptyList()
         sortOrder = 2
         delay = Duration.ofMillis(250L)
         interval = Duration.ofMillis(500L)
@@ -875,7 +876,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // non-OVERRIDE blend, partial amount, stomp.
     DaoCueLayer.new {
         cue = cue1; look = boundLook
-        targets = listOf(CueTargetDto("fixture", "hex-1"))
+        targets = emptyList()
         sortOrder = 3
         enabled = false
         propertyMask = "COLOUR"

@@ -11,7 +11,6 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.sameTargets
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
@@ -164,7 +163,7 @@ internal fun performProgrammerRecord(
         val taken = HashSet<Int>()
         state.show.programmerStore.layers.associate { layer ->
             val dto = layer.toCueLayerDto()
-            val fits = rows.filter { it.id.value !in taken && it.appliesSameSourceAs(dto) && sameTargets(it.targets, dto.targets) }
+            val fits = rows.filter { it.id.value !in taken && it.isSameLayerAs(dto) }
             val row = fits.firstOrNull { it.id.value == layer.sourceCueLayerId } ?: fits.firstOrNull()
             row?.let { taken += it.id.value }
             layer.layerId to row?.id?.value

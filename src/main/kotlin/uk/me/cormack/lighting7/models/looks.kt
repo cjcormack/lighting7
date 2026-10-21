@@ -385,9 +385,6 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 
-    /** A row an older database wrote, which ran on whatever applied the Look; nothing writes one now. */
-    val isDeferred: Boolean get() = targetType == DEFERRED_TARGET_TYPE
-
     /** The effect's own target, or null when the discriminator is unknown — [DEFERRED_TARGET_TYPE] among them. */
     val target: EffectTargetRef?
         get() = EffectTargetRef.ofOrNull(targetType, targetKey)

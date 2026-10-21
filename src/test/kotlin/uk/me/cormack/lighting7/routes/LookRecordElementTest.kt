@@ -144,7 +144,7 @@ class LookRecordElementTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a cell press under a Look on the whole bar comes off, narrowed to the other cells`() = testApplication {
+    fun `a press on one cell takes a Look recorded from cells off whole`() = testApplication {
         mountTestApp(state)
         seedBar()
         val client = jsonClient()
@@ -163,14 +163,14 @@ class LookRecordElementTest : RouteIntegrationTest() {
         assertEquals(Color.RED, layerColour(cell(2)))
         assertEquals(Color.GREEN, layerColour(cell(5)))
 
-        // Pressing cell 2 under the whole-bar layer reads as lit: off arm, and the layer keeps the rest.
+        // A Look lands whole (absolute-looks plan P1): a press naming one of its cells takes all of it off.
         assertEquals("removed", client.toggle(lookId, cellTarget(2)).action)
         assertNull(state.show.programmerStore.get(cell(2), "rgbColour"))
-        assertEquals(Color.GREEN, layerColour(cell(5)), "cell 5 is still under the narrowed layer")
+        assertNull(state.show.programmerStore.get(cell(5), "rgbColour"))
     }
 
     @Test
-    fun `a recorded cell Look derives its family from the cell and takes a masked press`() = testApplication {
+    fun `a recorded cell Look derives its family from the cell, and a press lands it under any mask`() = testApplication {
         mountTestApp(state)
         seedBar()
         val client = jsonClient()
@@ -187,7 +187,7 @@ class LookRecordElementTest : RouteIntegrationTest() {
 
         val resp = client.post("/api/rest/projects/$projectId/looks/${look.id}/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = listOf(cellTarget(2)), families = listOf("COLOUR")))
+            setBody(ToggleLookRequest(targets = listOf(cellTarget(2)), families = listOf("POSITION")))
         }
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         assertEquals("applied", resp.body<ToggleLookResponse>().action)

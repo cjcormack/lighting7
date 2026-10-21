@@ -18,11 +18,13 @@ let effects: { programmerOwned: boolean }[] = []
 
 let heldScenery = 0
 vi.mock('./ProgrammerSceneryList', () => ({ useHeldSceneryCount: () => heldScenery }))
+let layers: unknown[] = []
 
 const programmerClearAll = vi.fn()
 const programmerSetBlind = vi.fn()
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: summary }),
+  useProgrammerLayersQuery: () => ({ data: layers }),
   programmerClearAll: (...a: unknown[]) => programmerClearAll(...a),
   programmerSetBlind: (...a: unknown[]) => programmerSetBlind(...a),
 }))
@@ -66,6 +68,7 @@ afterEach(() => {
   effects = []
   desk.connected = true
   heldScenery = 0
+  layers = []
   venue.isVenue = false
   resetProgrammerFadeStore()
 })
@@ -278,9 +281,25 @@ describe('ProgrammerActionBar', () => {
     })
 
     it('lists what a Clear releases as a sentence', () => {
-      expect(clearSentence(3, 0, 0, 0)).toBe('Release 3 programmer values')
-      expect(clearSentence(1, 2, 0, 500)).toBe('Release 1 programmer value and 2 programmer FX over 0.5s')
-      expect(clearSentence(3, 1, 1, 0)).toBe('Release 3 programmer values, 1 programmer FX and 1 piece of held scenery')
+      expect(clearSentence(3, 0, 0, 0, 0)).toBe('Release 3 programmer values')
+      expect(clearSentence(1, 2, 0, 0, 500)).toBe('Release 1 programmer value and 2 programmer FX over 0.5s')
+      expect(clearSentence(3, 1, 1, 0, 0)).toBe('Release 3 programmer values, 1 programmer FX and 1 piece of held scenery')
+      expect(clearSentence(0, 0, 0, 1, 0)).toBe('Release 1 layer')
+    })
+  })
+
+  describe('Clear and Record count layers', () => {
+    it('enables both for a programmer holding only a layer — a Look of only scenery puts no value on it', () => {
+      layers = [{ layerId: 1 }]
+      render(<ProgrammerActionBar projectId={1} />)
+      expect(screen.getByRole('button', { name: 'Clear' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Record' })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Record destination' })).not.toBeDisabled()
+    })
+
+    it("heads Record's menu with the layers it would write", () => {
+      expect(recordMenuLabel(0, 0, 1)).toBe('Write 1 layer into')
+      expect(recordMenuLabel(2, 1, 2)).toBe('Write 2 values, 2 layers and 1 piece of scenery into')
     })
   })
 })

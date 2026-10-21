@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -15,6 +16,7 @@ import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -180,7 +182,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look goes on masked, and on its own fixtures as a layer naming none`() = testApplication {
+    fun `a Look goes on whole, whatever the press names, and any press takes it off`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -188,50 +190,62 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val chase = client.look("Chase", "hex-1", effect = true)
         val q = client.cue("Q")
 
-        val masked = client.press(q, lookId = warm, keys = arrayOf("hex-1"), families = listOf("COLOUR"))
-        assertEquals("COLOUR", masked.propertyMask)
-        assertEquals(listOf("INTENSITY"), masked.skippedFamilies)
+        val on = client.press(q, lookId = warm, keys = arrayOf("hex-1"), families = listOf("COLOUR"))
+        assertEquals("applied", on.action)
+        assertEquals(null, on.propertyMask, "the selection's mask is the palette's, never a Look's")
+        assertTrue(on.skippedFamilies.isEmpty())
+        assertEquals(listOf("Warm: "), client.layers(q), "one layer, naming no targets")
 
-        val own = client.press(q, lookId = warm)
-        assertEquals("applied", own.action)
-        assertEquals(listOf("Warm: hex-1", "Warm: "), client.layers(q))
-        assertEquals("removed", client.press(q, lookId = warm).action, "the same gesture again takes it off")
-        assertEquals(listOf("Warm: hex-1"), client.layers(q))
-
-        // Its effect names its own fixture too, so it needs no selection either.
-        assertEquals("applied", client.press(q, lookId = chase).action)
-        assertEquals(listOf("Warm: hex-1", "Chase: "), client.layers(q))
-    }
-
-    @Test
-    fun `a Look on its own fixtures reads as covering them, so a press on one of them narrows it`() = testApplication {
-        mountTestApp(state)
-        seedRig()
-        val client = jsonClient()
-        val warm = client.look("Warm", "hex-1", "hex-2")
-        val q = client.cue("Q")
-
-        client.press(q, lookId = warm)
-        val off = client.press(q, lookId = warm, keys = arrayOf("hex-1"))
-        assertEquals("removed", off.action)
-        assertEquals(listOf("Warm: hex-2"), client.layers(q))
-    }
-
-    @Test
-    fun `a Look pressed with no targets comes off layers already on all its own fixtures`() = testApplication {
-        mountTestApp(state)
-        seedRig()
-        val client = jsonClient()
-        val warm = client.look("Warm", "hex-1", "hex-2")
-        val q = client.cue("Q")
-        client.press(q, lookId = warm, keys = arrayOf("hex-1", "hex-2"))
-
-        assertEquals("removed", client.press(q, lookId = warm).action)
+        assertEquals("removed", client.press(q, lookId = warm, keys = arrayOf("hex-2"), families = listOf("Gobo")).action, "a press on any head, under any mask, takes it off")
         assertTrue(client.layers(q).isEmpty())
+
+        assertEquals("applied", client.press(q, lookId = warm).action)
+        assertEquals("applied", client.press(q, lookId = chase, keys = arrayOf("hex-2")).action)
+        assertEquals(listOf("Warm: ", "Chase: "), client.layers(q))
     }
 
     @Test
-    fun `a Look that can no longer be pressed with no targets still comes off that way`() = testApplication {
+    fun `a press never adds a second layer of a Look, and off takes every layer of it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.look("Warm", "hex-1", "hex-2")
+        val q = client.cue("Q")
+        // Two layers of one Look, as a cue may legitimately hold at two delays.
+        val written = client.patch("$base/cues/$q") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("layers" to listOf(CueLayerDto(lookId = warm, sortOrder = 0), CueLayerDto(lookId = warm, sortOrder = 1, delayMs = 500))))
+        }
+        assertEquals(HttpStatusCode.OK, written.status, written.bodyAsText())
+
+        assertEquals("removed", client.press(q, lookId = warm, keys = arrayOf("hex-1")).action)
+        assertTrue(client.layers(q).isEmpty(), "every layer of it came off")
+        assertEquals("applied", client.press(q, lookId = warm).action)
+        assertEquals(listOf("Warm: "), client.layers(q))
+    }
+
+    @Test
+    fun `a Look layer's mask is its own setting, kept by the next press`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.look("Warm", "hex-1")
+        val red = client.palette("Red")
+        val q = client.cue("Q")
+        client.press(q, lookId = warm)
+        val stored = client.get("$base/cues/$q").body<CueDetails>().layers.single()
+        val masked = client.patch("$base/cues/$q") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("layers" to listOf(stored.copy(propertyMask = "COLOUR"))))
+        }
+        assertEquals(HttpStatusCode.OK, masked.status, masked.bodyAsText())
+
+        client.press(q, templateId = red, keys = arrayOf("hex-2"))
+        assertEquals("COLOUR", client.get("$base/cues/$q").body<CueDetails>().layers.single { it.lookId == warm }.propertyMask)
+    }
+
+    @Test
+    fun `a Look none of whose fixtures is patched still goes on, as a cue does`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
@@ -239,7 +253,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val q = client.cue("Q")
         client.press(q, lookId = warm)
 
-        // Its rows now name only a fixture the rig does not have, so it has nothing of its own to land on.
+        // Its rows now name only a fixture the rig does not have, so it lands nothing.
         val edit = client.put("$base/looks/$warm") {
             contentType(ContentType.Application.Json)
             setBody(mapOf("rows" to listOf(LookRowDto("fixture", "hex-9", "dimmer", "200"))))
@@ -248,9 +262,33 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
 
         assertEquals("removed", client.press(q, lookId = warm).action)
         assertTrue(client.layers(q).isEmpty())
-        val again = client.pressRaw(q, CueLayerPressRequest(lookId = warm))
-        assertEquals(HttpStatusCode.BadRequest, again.status)
-        assertTrue(again.bodyAsText().contains(CODE_LOOK_NO_TARGETS))
+        assertEquals("applied", client.press(q, lookId = warm).action)
+        assertEquals(listOf("Warm: "), client.layers(q))
+    }
+
+    @Test
+    fun `a cue write giving a Look layer targets stores it with none`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.look("Warm", "hex-1", "hex-2")
+        val red = client.palette("Red")
+        val q = client.cue("Q")
+
+        val written = client.put("$base/cues/$q") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                NewCue(
+                    name = "Q",
+                    layers = listOf(
+                        CueLayerDto(lookId = warm, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("selection", "[]")), sortOrder = 0),
+                        CueLayerDto(templateId = red, targets = listOf(CueTargetDto("fixture", "hex-2")), sortOrder = 1),
+                    ),
+                ),
+            )
+        }
+        assertEquals(HttpStatusCode.OK, written.status, written.bodyAsText())
+        assertEquals(listOf("Warm: ", "Red: hex-2"), client.layers(q), "a Look's dropped, unjudged; a palette's kept")
     }
 
     @Test

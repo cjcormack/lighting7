@@ -289,17 +289,10 @@ sealed class BindingTarget {
     ) : BindingTarget()
 
     /**
-     * Press a **Look** onto its own fixtures on button press.
-     *
-     * One behaviour, every press (D6): the targets are always the Look's own — the empty-targets
-     * arm of `resolveLookToggleTargets` — never the desk selection. A button that meant something
-     * different depending on what was selected is the thing a fixed binding exists not to be, and
-     * a Look already names its fixtures.
-     *
-     * A Look with a **deferred effect** has no own targets to fall back on, so it is refused at
-     * bind time (`BINDING_LOOK_NEEDS_SELECTION`); one that gains a deferred effect afterwards reads
-     * as health [uk.me.cormack.lighting7.models.AssignmentHealth.LookNeedsSelection] and its press
-     * is dropped by the dead-binding gate.
+     * Press a **Look** on button press: the Look whole, on its own fixtures, never the desk
+     * selection (D6; absolute-looks plan D1). A button that meant something different depending on
+     * what was selected is the thing a fixed binding exists not to be, and a Look already names its
+     * fixtures.
      */
     @Serializable
     @SerialName("applyLook")

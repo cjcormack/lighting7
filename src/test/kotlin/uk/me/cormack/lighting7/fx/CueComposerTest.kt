@@ -443,9 +443,9 @@ class CueComposerTest {
     }
 
     @Test
-    fun `a layer with explicit targets asserts only those, even when the Look covers more`() {
-        // This is what makes the migration coverage-preserving: a cue that referenced a palette for
-        // one fixture must not start asserting every fixture the palette covered.
+    fun `a Look layer lands its rows whole, whatever targets an older write left on it`() {
+        // A Look is an absolute state (absolute-looks plan D1): its layer names no targets, and the
+        // cook reads none that a layer still carries.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val wide = look(
             "Wide",
@@ -457,8 +457,9 @@ class CueComposerTest {
             registryOf(fixtures, wide),
             listOf(layer(wide, 0, targets = listOf(CueTargetDto("fixture", "hex-1")))),
         )
-        assertEquals(1, rows.size)
+        assertEquals(2, rows.size)
         assertEquals(111u.toUByte(), sliderAt(rows, "hex-1"))
+        assertEquals(222u.toUByte(), sliderAt(rows, "hex-2"))
     }
 
     @Test
@@ -475,7 +476,7 @@ class CueComposerTest {
     }
 
     @Test
-    fun `a group layer target filters a Look's bound group row to the intersection`() {
+    fun `a Look's group row lands on every member, and the layer's mask still filters it`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val grouped = look(
             "Grouped",
@@ -486,8 +487,12 @@ class CueComposerTest {
             registryOf(fixtures, grouped),
             listOf(layer(grouped, 0, targets = listOf(CueTargetDto("fixture", "hex-2")))),
         )
-        assertEquals(1, rows.size)
+        assertEquals(2, rows.size)
+        assertEquals(140u.toUByte(), sliderAt(rows, "hex-1"))
         assertEquals(140u.toUByte(), sliderAt(rows, "hex-2"))
+
+        val masked = cook(fixtures, registryOf(fixtures, grouped), listOf(layer(grouped, 0, propertyMask = "COLOUR")))
+        assertTrue(masked.isEmpty(), "a layer's mask is its own setting, and the cook applies it to the rows")
     }
 
     // ─── What the local pass must carry through ─────────────────────────

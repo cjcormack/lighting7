@@ -27,7 +27,6 @@ import uk.me.cormack.lighting7.plugins.ProgrammerLayerStateOutMessage
 import uk.me.cormack.lighting7.routes.ApplyLookRequest
 import uk.me.cormack.lighting7.routes.ApplyLookResponse
 import uk.me.cormack.lighting7.routes.CreateLookRequest
-import uk.me.cormack.lighting7.routes.ErrorResponse
 import uk.me.cormack.lighting7.routes.LookDetails
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -295,7 +294,7 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look apply with a bad target is a 400, not a 500`() = testApplication {
+    fun `a Look apply reads no targets, so one that names no target is not refused`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
@@ -306,7 +305,8 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
             setBody(ApplyLookRequest(targets = listOf(CueTargetDto("bogus", "x"))))
         }
 
-        assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        assertEquals(2, resp.body<ApplyLookResponse>().written, "the Look's own rows")
     }
 
     @Test
@@ -337,25 +337,20 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a Look applied as values honours the selection's mask`() = testApplication {
+    fun `a Look applied as values ignores the selection's mask, as its press does`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         val look = client.createLook("Amber", withEffect = false)
 
-        val masked = client.post("/api/rest/projects/$projectId/looks/${look.id}/apply") {
-            contentType(ContentType.Application.Json)
-            setBody(ApplyLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1")), families = listOf("COLOUR")))
-        }.body<ApplyLookResponse>()
-        assertEquals(1, masked.written)
-        assertEquals(listOf("INTENSITY"), masked.skippedFamilies)
-        assertNull(store.get("hex-1", "dimmer"))
-
-        val outside = client.post("/api/rest/projects/$projectId/looks/${look.id}/apply") {
+        val applied = client.post("/api/rest/projects/$projectId/looks/${look.id}/apply") {
             contentType(ContentType.Application.Json)
             setBody(ApplyLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1")), families = listOf("POSITION")))
         }
-        assertEquals(HttpStatusCode.BadRequest, outside.status)
-        assertEquals("LOOK_OUTSIDE_MASK", outside.body<ErrorResponse>().code)
+        assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
+        val body = applied.body<ApplyLookResponse>()
+        assertEquals(2, body.written)
+        assertEquals(emptyList(), body.skippedFamilies)
+        assertNotNull(store.get("hex-1", "dimmer"))
     }
 }

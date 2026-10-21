@@ -244,7 +244,8 @@ internal val createLookTool = ToolDef(
             "(the colour of a fixture whose colour is per zone — list_fixture_types' cellProperties) set on the fixture or a group of them lands on every cell, " +
             "and a cell's own value beats it. " +
             "'effects' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
-            "A look is pressed onto its own fixtures (apply_look with no targets) and layered in a cue with no layer targets. Returns the look ID and the values as stored.",
+            "A look always lands whole — its own values, effects and scenery, never narrower and never wider — whether pressed (apply_look) or layered in a cue; " +
+            "to point something at a selection, use a palette. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
@@ -264,14 +265,9 @@ internal val createLookTool = ToolDef(
                 put("items", sceneryItemSchema(forCue = false))
                 put("description", "Scene elements this Look shows while it is live — layered in a live cue, or pressed on a busk pad — above every cue (the Night look flies the moon in).")
             })
-            put("applyToTargets", buildJsonObject {
-                put("type", "array")
-                put("description", "Optional: immediately apply to these targets")
-                put("items", targetSchema)
-            })
             put("apply", buildJsonObject {
                 put("type", "boolean")
-                put("description", "Apply it now, as apply_look would: onto applyToTargets when given, else onto the look's own fixtures. Defaults to true when applyToTargets is given.")
+                put("description", "Apply it now, as apply_look would. Default false.")
             })
         })
         put("required", buildJsonArray { add("name") })
@@ -331,18 +327,13 @@ internal val deleteLookTool = ToolDef(
 
 internal val applyLookTool = ToolDef(
     name = "apply_look",
-    description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on every target, it is removed). " +
-            "Omit targets to press it onto its own fixtures — the ones its values and effects name. " +
+    description = "Apply an existing look in the programmer as a layer, or take it off again (a toggle: already on, every layer of it is removed). " +
+            "A look lands whole, on the fixtures its own values and effects name, whatever is selected. " +
             "asValues true instead writes its values into the programmer and starts its effects as the programmer's own, with no layer — not a toggle.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {
             put("lookId", buildJsonObject { put("type", "integer") })
-            put("targets", buildJsonObject {
-                put("type", "array")
-                put("items", targetSchema)
-                put("description", "Where to apply it. Omit for the look's own fixtures.")
-            })
             put("beatDivision", buildJsonObject {
                 put("type", "number")
                 put("description", "Optional beat division override for the Look's effects that follow a speed master; an effect on Seconds keeps its own cycle")
@@ -645,7 +636,7 @@ internal val cueLayerSchema = buildJsonObject {
         put("targets", buildJsonObject {
             put("type", "array")
             put("items", targetSchema)
-            put("description", "What the layer applies the look or palette to. A look's values and effects name their own fixtures, and only those on these land; omit to land all of them. A generic palette's effect or values land on these, so it needs them.")
+            put("description", "What the layer applies a palette to: a generic palette's effect or values land on these, so it needs them. A look's layer names none — a look always lands whole — so targets given for one are dropped.")
         })
         put("sortOrder", buildJsonObject {
             put("type", "integer")
@@ -730,7 +721,7 @@ internal val createCueTool = ToolDef(
             put("layers", buildJsonObject {
                 put("type", "array")
                 put("items", cueLayerSchema)
-                put("description", "Looks or palettes to layer, with their targets, in sortOrder. They are read fresh at apply time, so editing one moves every cue that layers it.")
+                put("description", "Looks or palettes to layer, with a palette's targets, in sortOrder. They are read fresh at apply time, so editing one moves every cue that layers it.")
             })
             put("values", buildJsonObject {
                 put("type", "array")

@@ -1689,6 +1689,14 @@ class ProjectImporter(private val state: State) {
                         "Cue layer ${l.uuid} references unknown template $templateUuid",
                     )
             }
+            // A Look lands whole (absolute-looks plan D1): a Look layer an older desk wrote with
+            // targets comes in naming none.
+            if (look != null && l.targets.isNotEmpty()) {
+                logger.warn(
+                    "Import: cue '{}' ({}): layer {} of Look '{}' named targets; dropping them",
+                    cue.name, cue.uuid, l.uuid, look.name,
+                )
+            }
             val uuid = UUID.fromString(l.uuid)
             DaoCueLayer.new {
                 this.cue = cue
@@ -1696,7 +1704,7 @@ class ProjectImporter(private val state: State) {
                 this.template = template
                 sortOrder = l.sortOrder
                 enabled = l.enabled
-                targets = l.targets
+                targets = if (look != null) emptyList() else l.targets
                 propertyMask = l.propertyMask
                 blendMode = l.blendMode
                 amount = l.amount

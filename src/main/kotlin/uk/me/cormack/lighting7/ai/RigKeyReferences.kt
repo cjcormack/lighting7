@@ -4,6 +4,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.core.isNotNull
+import org.jetbrains.exposed.v1.core.isNull
 import org.jetbrains.exposed.v1.jdbc.select
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
@@ -42,7 +43,7 @@ import uk.me.cormack.lighting7.models.placeLabel
 
 /**
  * Where a project's own stored records name a fixture by key or a group by name — cue rows, ad-hoc
- * effects and layer targets, Look rows and effects, template rows and surface bindings — for MCP's
+ * effects and palette-layer targets, Look rows and effects, template rows and surface bindings — for MCP's
  * patch edits: who still names a key `unpatch_fixtures` removes, and the rewrite `rename_fixtures`
  * and `edit_groups` make. A cell is named `<fixture key>.<cell>`, so a fixture key also matches its
  * cells. Scripts are Kotlin source, so they are only ever reported. Inside a transaction.
@@ -191,7 +192,8 @@ internal object RigKeyReferences {
                 val cueId = row.readValues[DaoCueAdHocEffects.cue].value
                 visitEffect(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
             }
-            DaoCueLayer.find { DaoCueLayers.cue inList ids }.forEach { layer ->
+            // A palette layer's targets; a Look's layer names none (absolute-looks plan D1).
+            DaoCueLayer.find { (DaoCueLayers.cue inList ids) and DaoCueLayers.look.isNull() }.forEach { layer ->
                 val cueId = layer.readValues[DaoCueLayers.cue].value
                 var changed = false
                 val targets = layer.targets.map { t ->

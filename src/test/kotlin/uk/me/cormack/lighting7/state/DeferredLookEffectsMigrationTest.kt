@@ -96,7 +96,7 @@ class DeferredLookEffectsMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, "user_version ${userVersion()}")
     }
 
     @Test
@@ -110,7 +110,7 @@ class DeferredLookEffectsMigrationTest {
         }
 
         assertEquals(listOf("fixture" to "Pulse"), storedEffects())
-        assertEquals(DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(1, logs.size, "one line per Look: $logs")
         assertTrue("'S5 Deferred FX' in 'Experiment'" in logs.single() && "ColourCycle" in logs.single(), logs.single())
     }
@@ -157,7 +157,7 @@ class DeferredLookEffectsMigrationTest {
         }
 
         assertEquals(listOf("fixture" to "Pulse", DEFERRED_TARGET_TYPE to "Breathe"), storedEffects())
-        assertEquals(DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(emptyList(), logs)
     }
 }

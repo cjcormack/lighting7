@@ -1101,7 +1101,7 @@ data class ShowEntryJson(
 /**
  * One tile of the FX cue slots overlay. **Exactly one of [cueUuid] / [lookUuid]** is set, enforced
  * by the importer (a slot naming none or two is malformed input, not a state). [lookUuid] is v10: a
- * Look with no deferred effect, pressed onto its own fixtures.
+ * Look, pressed whole.
  *
  * A cue *stack* used to be a third arm. It went with the overlay's own assign flow, under the same
  * v10 (see [FormatVersionJson]); a pre-session-3 v10 archive may still carry `cueStackUuid`, and

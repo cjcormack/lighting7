@@ -20,6 +20,7 @@ import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
+import uk.me.cormack.lighting7.models.layerTargets
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.models.entryInStack
@@ -571,7 +572,7 @@ internal fun writeLayerStackIntoCue(
                 this.template = resolved.template
                 this.sortOrder = index
                 this.enabled = layer.enabled
-                this.targets = layer.targets
+                this.targets = layerTargets(layer.source, layer.targets)
                 this.propertyMask = layer.propertyMask
                 this.blendMode = layer.blendMode
                 this.amount = layer.amount
@@ -588,7 +589,7 @@ internal fun writeLayerStackIntoCue(
         }
         if (stored.cueFields() != layer.cueFields()) {
             stored.enabled = layer.enabled
-            stored.targets = layer.targets
+            stored.targets = layerTargets(layer.source, layer.targets)
             stored.propertyMask = layer.propertyMask
             stored.blendMode = layer.blendMode
             stored.amount = layer.amount

@@ -71,8 +71,8 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * in element order), because rig order places a fixture at its first appearance on the rig and can
  * so disagree with the order the group sheet shows (venue-visit plan S7). `over = CELLS` spreads across every cell of every multi-head fixture in the selection;
  * `HEADS` treats each fixture as one step. A `tmpl:{uuid}` endpoint resolves the template's generic
- * colour, as an FX colour reference does. The selection's attribute mask is honoured the way a
- * Look's press honours it: a property outside it writes nothing and answers `skippedFamilies`.
+ * colour, as an FX colour reference does. The selection's attribute mask is honoured: a property
+ * outside it writes nothing and answers `skippedFamilies`.
  *
  * **Two things changed for the programmer's own Spread (editor-kit plan §3.2, D6).** `write` on
  * the request, default true: `false` runs everything above — the mask, the target expansion, the

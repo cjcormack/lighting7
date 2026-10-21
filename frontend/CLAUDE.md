@@ -1226,8 +1226,9 @@ not leave this one showing a stale order. It arrives two ways, and both are need
 **broadcast** to every socket from `ProgrammerStore.layersFlow`. The broadcast was missing until
 session 4, on the reasoning that "every layer mutation also emits `provenanceState`, which
 already schedules the value re-read" — which is false for a mutation that moves no value. A
-layer whose `targets` don't match its bound Look's rows asserts nothing, so adding, reordering
-or disabling it emitted no provenance and left every other tab on a stale layer list. Found on
+layer that asserts nothing (a palette layer on heads its rows never reach, a Look of only
+scenery) emitted no provenance when added, reordered or disabled, and left every other tab on a
+stale layer list. Found on
 a desk, not by a test. The flow is emitted from `mutateLayers` rather than from `recook`,
 because `reset()` bypasses the recook path and a full programmer clear must reach other tabs
 too. Its handler still calls `notifyState()` only and deliberately *not*
@@ -1368,8 +1369,9 @@ layer's — a local busk sits above the layer slot, and naming the Look there wo
 for the operator's own hand.
 
 **The pads still go through `POST /looks/{id}/toggle`**, which is `programmerLayerStack.toggle`
-server-side — it adds or removes a layer, matching on the **whole `LayerSource`** + exact `targets`
-(matching on an id alone would let a Look and a palette that share an int PK cancel each other).
+server-side — it adds or removes a layer, matching a Look on its source alone, since it lands
+whole, and a palette per head by coverage — the source by uuid and kind, never an id alone, which
+would let a Look and a palette that share an int PK cancel each other.
 Keeping one owner for that match rule is why they weren't moved to the explicit ops. What did change
 is the ring: `lookLayerPresence` reads the desk's **resolved applied state** (`programmer.applied`,
 from `useProgrammerAppliedQuery`), not the effect list. The old match was
@@ -1470,9 +1472,9 @@ second door since the MIDI surface's session 4: a `PressPad` binding runs the
 same `BuskPressService` with the desk selection as the targets, which is why that service exists at
 all — the solo rules and the refusals are the pad's behaviour, not the endpoint's. The server reads the pad, its record and, when the bank is **solo**, the records on its
 sibling pads in one transaction. Solo has one meaning for every kind: pressing one *on* turns its
-siblings off — a layer sibling narrowed on the pressed heads, a live cue sibling stopped, and a cue
-press taking its layer siblings off wholesale, because a cue has no targets to narrow by. An **off**
-press releases nothing, and a stacking bank has no siblings at all. The request carries the
+siblings off — a palette sibling narrowed on the pressed heads, a Look sibling off whole, a live cue
+sibling stopped, and a cue or a Look press taking its layer siblings off whole, because neither has
+targets to narrow by. An **off** press releases nothing, and a stacking bank has no siblings at all. The request carries the
 selection's **`families`** beside its targets — the desk's pair while this tab follows the desk,
 the tab's own when unlinked — and the response answers `skippedFamilies`; see §The desk selection
 has a mask for what lands under it and why a press is never pre-refused here. The band's one row
@@ -1543,10 +1545,9 @@ load-bearing:
   reads a live speed-master label through a hook, and the overlay must be hookless.
 
 **The FX cue-slot overlay is filled from the busk view's library, and edited only while the busk
-view is.** A slot holds a cue or a **Look with no deferred effect** — `itemType` is `'cue' | 'look'`,
-and the cue-*stack* arm is gone. It has no selection, so it can hold only what needs none: a Look
-tile presses `POST /looks/{id}/toggle` with an **empty target list**, and the desk derives the
-targets from the Look's own patched fixtures. A **cue** tile is a busk cue pad's twin (§"The cue
+view is.** A slot holds a cue or a **Look** — `itemType` is `'cue' | 'look'`, and the
+cue-*stack* arm is gone. It has no selection, so it can hold only what needs none: a Look tile
+presses `POST /looks/{id}/toggle` with an **empty target list**, and the desk lands the Look whole. A **cue** tile is a busk cue pad's twin (§"The cue
 column is gone"): a tap takes a loose hold (`/cues/{id}/apply`) or, while a press holds it, lets go
 (`/cues/{id}/stop`), and it draws the pad's two looks — the overlay's fill for a loose hold, an
 outline (`slotLitClass`'s `outlined`) for a cue live only in a stack. Three rules follow, and each
@@ -2934,14 +2935,15 @@ row as *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth*, and `describeTarget`
 ring the amount, so nothing on this side computes one — see `docs/midi-surface-engineering.md`
 §"The selection fan".
 
-A button can also press a **record**: `applyLook` onto the Look's *own* fixtures, `pressTemplate`
+A button can also press a **record**: `applyLook` puts the Look on whole, `pressTemplate`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
 component exists to mount `useTargetProperties` per target — so they are built in `SurfaceLibrary`'s
 `rows` memo from `actionChip`. The **kind row stays at six**: a palette files under *Looks*, a busk
 page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
-per page reads as page-specific. A **Look with a deferred effect is offered with no chip**, since it
-has no own fixtures and the write boundary refuses it by name. And `describeTarget` **will not
+per page reads as page-specific. A Look whose `hasDeferredEffects` is set is still offered with no
+chip, but the desk now answers it false for every Look and refuses no Look binding, so every Look
+gets one. And `describeTarget` **will not
 resolve a uuid to a name** — `components/surfaces/recordOptions.ts` is the one owner of that, shared
 by the picker and the inspector, the same split `useSpeedMasterDisplay` makes for a speed master.
 
@@ -3203,10 +3205,9 @@ while a mask is set. The sheets that take a mask
 open on this one (§Looks, palettes and layers, *Every mask a sheet takes*).
 
 What the desk does under a mask, per kind: a **palette** is one family, so it lands whole or is
-400 `PALETTE_OUTSIDE_MASK` on every door, apply and layer alike; a **Look** spans families, so its
-layer lands with `propertyMask = mask ∩ its families`, the cook skips the rows outside, and the
-response names them in `skippedFamilies` — nothing inside is 400 `LOOK_OUTSIDE_MASK`; a **cue**
-ignores it. The two refusals carry a message naming both families and reach the screen through
+400 `PALETTE_OUTSIDE_MASK` on every door, apply and layer alike; a **Look** and a **cue** ignore it
+— a Look lands whole, its layer's mask a setting of the layer, and `skippedFamilies` answers empty.
+The refusal carries a message naming both families and reaches the screen through
 `errorToastMiddleware`, which toasts every rejected mutation — which is why `usePress` toasts no
 failure of its own: it would say the same sentence twice.
 
@@ -3215,13 +3216,11 @@ A press that turns a lit record off answers `removed` under any mask (`routes/pr
 the arm before the press), and only the desk knows which arm a press is on — a lit Intensity pad
 must still release while a Colour marquee stands. Send it, and render the desk's answer.
 
-**The skip is toasted on the pressing window** (D6): `<Family> rows skipped — the selection is
-<Family>` from `skippedRowsMessage` (`lib/selectionMask.ts`), read off `skippedFamilies` on the busk
-press and Look toggle responses (the palette toggle response is unchanged). It says **rows** and
-must keep saying rows: the layer's mask filters its rows, not its effects, so a Look's effect in a
-skipped family still runs while being named — promising the whole family was held back would be
-promising more than the desk does. The window that made the marquee learns the way it learns every
-layer: `programmer.layerState` carries the mask and `LookStack` draws the badge.
+**The skip toast is dormant** (D6): `<Family> rows skipped — the selection is <Family>` from
+`skippedRowsMessage` (`lib/selectionMask.ts`) reads `skippedFamilies` off the busk press and Look
+toggle responses, and the desk now answers it empty, since a Look press ignores the selection's
+mask (absolute-looks plan D3). A Look layer's mask is set on the layer itself, and it filters the
+layer's rows, not its effects.
 
 ### Sheet kit
 
@@ -7049,10 +7048,9 @@ path may quietly change where it lands.
     `Projects > Project > <View>`.
   - **There is no empty-selection dim, and re-adding one would be a regression.** The pools used to
     grey themselves out with nothing selected. Three of the things a pad can now hold do not need a
-    selection at all — a **per-fixture** palette names its own heads, a Look with **no deferred
-    effect** names its own fixtures, and a **cue** has no targets — and the two cases that genuinely
-    need one are refused *by name* server-side (`PALETTE_NEEDS_SELECTION`, `LOOK_NEEDS_SELECTION`),
-    which is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim
+    selection at all — a **per-fixture** palette names its own heads, a **Look** lands whole, and a
+    **cue** has no targets — and the one case that genuinely needs one is refused *by name*
+    server-side (`PALETTE_NEEDS_SELECTION`), which is a better answer than a grey page. A bank mixes kinds anyway, so the old per-section dim
     has nothing left to be per. **The band does not dim in edit mode either**, any more — it did,
     on the reasoning that pads do not press then and the selection they would press onto is doing
     nothing; but in edit mode the band is being *edited*, its tiles are drag handles and take

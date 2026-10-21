@@ -153,8 +153,7 @@ class AiTools(private val state: State) {
 
         val effects = parseLookEffects(effectsArray)
 
-        val applyTargets = input["applyToTargets"]?.jsonArray?.let(::parseTargets).orEmpty()
-        val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: applyTargets.isNotEmpty()
+        val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: false
 
         val values = resolveLookValues(state.show.fixtures, valuesArray)
         if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
@@ -186,14 +185,12 @@ class AiTools(private val state: State) {
 
         val lookId = look.id.value
 
-        val press = if (apply) pressLook(lookId, applyTargets, beatDivision = null) else null
-        val pressed = press as? LookPress.Pressed
+        val pressed = if (apply) pressLook(lookId, beatDivision = null) else null
 
         return ToolExecutionResult(
             success = true,
             description = "Created look '$name' (id=$lookId, ${values.rows.size} values, ${effects.size} effects)" +
-                (pressed?.let { ", ${it.action} it" } ?: "") +
-                ((press as? LookPress.Refused)?.let { ", not applied: ${it.message}" } ?: ""),
+                (pressed?.let { ", ${it.action} it" } ?: ""),
             result = buildJsonObject {
                 put("lookId", lookId)
                 put("name", name)
@@ -204,7 +201,6 @@ class AiTools(private val state: State) {
                     put("action", it.action)
                     put("appliedEffectCount", it.effectCount)
                 }
-                (press as? LookPress.Refused)?.let { put("notApplied", it.message) }
             }.toString()
         )
     }
@@ -343,68 +339,50 @@ class AiTools(private val state: State) {
 
     private fun executeApplyLook(input: JsonObject): ToolExecutionResult {
         val lookId = input["lookId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'lookId'")
-        val targets = input["targets"]?.jsonArray?.let(::parseTargets).orEmpty()
         val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
-        if (input["asValues"]?.jsonPrimitive?.booleanOrNull == true) return applyLookValues(lookId, targets, beatDivision)
+        if (input["asValues"]?.jsonPrimitive?.booleanOrNull == true) return applyLookValues(lookId, beatDivision)
 
-        return when (val outcome = pressLook(lookId, targets, beatDivision)) {
-            is LookPress.Refused -> errorResult(outcome.message)
-            is LookPress.Pressed -> ToolExecutionResult(
-                success = true,
-                description = "${outcome.action} look $lookId (${outcome.effectCount} effects)",
-                result = buildJsonObject {
-                    put("action", outcome.action)
-                    put("effectCount", outcome.effectCount)
-                }.toString()
-            )
-        }
+        val outcome = pressLook(lookId, beatDivision) ?: return errorResult("Look not found: $lookId")
+        return ToolExecutionResult(
+            success = true,
+            description = "${outcome.action} look $lookId (${outcome.effectCount} effects)",
+            result = buildJsonObject {
+                put("action", outcome.action)
+                put("effectCount", outcome.effectCount)
+            }.toString()
+        )
     }
 
     /** `asValues`: the Look's values and effects into the programmer's own, as `POST /looks/{id}/apply`. */
-    private fun applyLookValues(lookId: Int, requested: List<CueTargetDto>, beatDivision: Double?): ToolExecutionResult {
-        val project = state.projectManager.currentProject
-        val look = transaction(state.database) {
-            DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.toggleSource(state.show.fixtures)
-        } ?: return errorResult("Look not found: $lookId")
-        return when (val outcome = applyLookAsValues(state, look, requested, families = null, fadeMs = null, beatDivision)) {
-            is LookApplyOutcome.Refused -> errorResult(outcome.message)
-            is LookApplyOutcome.Applied -> ToolExecutionResult(
-                success = true,
-                description = "Applied look $lookId as values: ${outcome.response.written} value(s), " +
-                    "${outcome.response.effectIds.size} effect(s)",
-                result = buildJsonObject {
-                    put("written", outcome.response.written)
-                    put("effectIds", buildJsonArray { outcome.response.effectIds.forEach { add(JsonPrimitive(it)) } })
-                }.toString(),
-            )
-        }
+    private fun applyLookValues(lookId: Int, beatDivision: Double?): ToolExecutionResult {
+        val look = lookSource(lookId) ?: return errorResult("Look not found: $lookId")
+        val response = applyLookAsValues(state, look, fadeMs = null, beatDivision)
+        return ToolExecutionResult(
+            success = true,
+            description = "Applied look $lookId as values: ${response.written} value(s), ${response.effectIds.size} effect(s)",
+            result = buildJsonObject {
+                put("written", response.written)
+                put("effectIds", buildJsonArray { response.effectIds.forEach { add(JsonPrimitive(it)) } })
+            }.toString(),
+        )
     }
 
-    private sealed interface LookPress {
-        data class Pressed(val action: String, val effectCount: Int) : LookPress
-        data class Refused(val message: String) : LookPress
+    private fun lookSource(lookId: Int): LayerSource? {
+        val project = state.projectManager.currentProject
+        return transaction(state.database) {
+            DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.layerSource()
+        }
     }
 
     /**
      * Toggle a Look as a programmer layer — the layer the busking pads add, so the AI and the pads
-     * toggle the *same* thing rather than two mechanisms that each think they own the Look. No
-     * targets means the Look's own fixtures, by the REST toggle's rule ([resolveLookToggleTargets]).
+     * toggle the *same* thing rather than two mechanisms that each think they own the Look. A Look
+     * is pressed whole (absolute-looks plan P1): no targets, so a call's `targets` are not read.
+     * Null for a Look the current project lacks.
      */
-    private fun pressLook(lookId: Int, requested: List<CueTargetDto>, beatDivision: Double?): LookPress {
-        val project = state.projectManager.currentProject
-        val look = transaction(state.database) {
-            DaoLook.findById(lookId)?.takeIf { it.project.id == project.id }?.toggleSource(state.show.fixtures)
-        } ?: return LookPress.Refused("Look not found: $lookId")
-        val targets = when (val resolved = resolveLookToggleTargets(requested, look)) {
-            is LookTargetResolution.Refused -> return LookPress.Refused(resolved.message)
-            is LookTargetResolution.Targets -> resolved.targets
-        }
-        val outcome = state.show.programmerLayerStack.toggle(
-            source = look.source,
-            targets = targets,
-            beatDivisionOverride = beatDivision,
-        )
-        return LookPress.Pressed(outcome.action, outcome.effectCount)
+    private fun pressLook(lookId: Int, beatDivision: Double?): ToggleOutcome? {
+        val look = lookSource(lookId) ?: return null
+        return state.show.programmerLayerStack.toggle(source = look, targets = emptyList(), beatDivisionOverride = beatDivision)
     }
 
     private fun parseTargets(array: JsonArray): List<CueTargetDto> = array.map { t ->
@@ -783,7 +761,7 @@ class AiTools(private val state: State) {
 
             if ("programmer" in include) {
                 // The AI mutates the programmer itself — and `apply_look` and `apply_palette` (unless
-                // `asValues`) and `create_look`'s `applyToTargets` go through `programmerLayerStack.toggle`,
+                // `asValues`) and `create_look`'s `apply` go through `programmerLayerStack.toggle`,
                 // which *toggles*: without being able to read the stack back, a model asked to "add
                 // the wash" a second time takes it off stage instead.
                 val store = state.show.programmerStore

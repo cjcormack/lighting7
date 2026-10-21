@@ -25,7 +25,6 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
@@ -257,26 +256,26 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a changed layer brings its Look's effects in line, head by head`() = testApplication {
+    fun `changed layers bring their Looks' effects in line, head by head`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val rig = seed()
-        // A Pulse on each head; the layer's targets keep the heads they cover.
-        val pulses = listOf("hex-1", "hex-2").mapIndexed { i, head ->
-            LookEffectDto(
+        // A Look per head, each a Pulse on its head: a Look lands whole.
+        val looks = listOf("hex-1", "hex-2").associateWith { head ->
+            val pulse = LookEffectDto(
                 targetType = "fixture", targetKey = head, effectType = "Pulse", category = "dimmer",
-                propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR", sortOrder = i,
+                propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
             )
+            client.post("$base/looks") {
+                contentType(ContentType.Application.Json)
+                setBody(CreateLookRequest(name = "Throb $head", effects = listOf(pulse)))
+            }.body<LookDetails>().id
         }
-        val look = client.post("$base/looks") {
-            contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Throb", effects = pulses))
-        }.body<LookDetails>().id
         suspend fun layerOn(vararg fixtures: String) = assertEquals(
             HttpStatusCode.OK,
             client.patch("$base/cues/${rig.q}") {
                 contentType(ContentType.Application.Json)
-                setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look, targets = fixtures.map { CueTargetDto("fixture", it) }))))
+                setBody(mapOf("layers" to fixtures.mapIndexed { i, it -> CueLayerDto(lookId = looks.getValue(it), sortOrder = i) }))
             }.status,
         )
         layerOn("hex-1")
@@ -387,7 +386,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         }.body<LookDetails>().id
         client.patch("$base/cues/${rig.q}") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look, targets = listOf(CueTargetDto("fixture", "hex-2"))))))
+            setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look))))
         }
         manager.activateEntry(state, rig.a, rig.aQ)
         suspend fun putLook(body: Any) {
@@ -424,7 +423,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, client.patchCue(rig.q, """{"propertyAssignments":[]}""").status)
         client.patch("$base/cues/${rig.q}") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look, targets = listOf(CueTargetDto("fixture", "hex-2"))))))
+            setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look))))
         }
         manager.activateEntry(state, rig.a, rig.aQ)
         assertFalse(state.show.fxEngine.cueLayer.hasAssignments(rig.q), "it publishes no rows")
