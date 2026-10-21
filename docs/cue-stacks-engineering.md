@@ -263,7 +263,8 @@ already holds moves none, and a stack moving off a cue a press still holds leave
 full. A loose hold has no fade: its effects snap on and off with its rows. Each effect a cue coming
 on cooks to is matched by one rule (`continues`: the same stored effect row —
 `FxInstance.layerEffectUuid`, a Look's, a palette's or the cue's own ad-hoc row's uuid — on the same
-target and property, with the same `lookEffectSettings()`), and arrives one of three ways:
+target and property, with the same `lookEffectSettings()`), an ad-hoc one across a GO by its run key
+(`handsRunTo`, below), and arrives one of four ways:
 
 - **Taken back.** A cue brought on again while its fade-out is still running (Chris's answer,
   session 4) keeps its own instances: they grow from where they stand over the new hold's fade, or
@@ -278,6 +279,19 @@ target and property, with the same `lookEffectSettings()`), and arrives one of t
   Look layered at two speed masters is two effects, so one leaves and one arrives. Should a press
   take the outgoing cue between the two holds, or the acquire fail, the adoptions go back
   (`giveBack`) and the incoming cue runs its own.
+- **Handed on** (stack-timeline plan D7, D8). An ad-hoc effect's row is its cue's alone, so it is
+  never adopted by `continues`; its **run key** (`cue_ad_hoc_effects.run_uuid`) is what carries it
+  across a GO. Under the same `adoptFrom` and the same paused and N-shot rule — an incoming N-shot
+  row starts afresh too, an accent its GO fires — an incoming ad-hoc effect with a key takes over
+  the outgoing cue's instance with that key, target and property,
+  restamped with the incoming row's uuid. Same settings, it runs on untouched; different ones, it is
+  edited in place at the GO, not over the fade (`EffectAligner`, `routes.alignEffect`: phase kept, but
+  a move between Seconds and a master restarts it), and an edit refused leaves the instance to its
+  cue, which fades it out while the incoming row spawns. `giveBack` restores a handed-on instance's
+  cue, row uuid and settings; should the edit back be refused, the cue it returns to is marked edited
+  since GO, so *Update stage* puts it right. The candidates are tried in compose order and each is taken once, so a
+  key two rows of one cue share (an import, which keeps keys as they arrive) hands one instance to at
+  most one row, the same one every time; a loose press hands on nothing.
 - **Spawned**, growing from nothing over the fade.
 
 Instances carried over get fresh compose orders in the cue's layer order (`restampComposeOrder`),

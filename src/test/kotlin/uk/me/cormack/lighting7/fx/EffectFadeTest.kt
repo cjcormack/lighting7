@@ -10,6 +10,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
+import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -456,11 +457,312 @@ class EffectFadeTest : RouteIntegrationTest() {
         holds.takeLooseCue(state, q1)
         assertFalse(holds.release(state, q1, CueHold.Stack(s, entries[0]), CueHolds.Departure.SNAP).last)
 
-        holds.giveBack(acquired.adopted, respawnFor = q2)
+        holds.giveBack(state, acquired.adopted, respawnFor = q2)
 
         assertSame(pulse, one(q1), "Q1, still on, has its Pulse back")
         assertEquals(holds.priorityOf(q1), pulse.priority)
         assertTrue(one(q2) !== pulse, "and Q2 runs one of its own")
+    }
+
+    // ─── Effect runs (stack-timeline plan D7, D8) ────────────────────────────────────────────
+
+    /** An immediate ad-hoc dimmer effect on [fixture] in [cueId], in run [run]; answers its row's uuid. */
+    private fun adHoc(
+        cueId: Int,
+        fixture: String,
+        run: UUID?,
+        division: Double = 1.0,
+        seconds: Boolean = false,
+        nShot: Int? = null,
+        sort: Int = 0,
+        order: String = "LINEAR",
+        wings: Int = 1,
+    ): UUID = transaction(state.database) {
+        DaoCueAdHocEffect.new {
+            cue = DaoCue[cueId]
+            targetType = "fixture"; targetKey = fixture
+            effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
+            beatDivision = division; blendMode = "OVERRIDE"; distribution = order
+            parameters = emptyMap()
+            this.wings = wings
+            this.seconds = seconds
+            this.nShot = nShot
+            sortOrder = sort
+            runUuid = run
+        }.uuid
+    }
+
+    /** A stack of [cues] with its first entry live. */
+    private fun runStack(vararg cues: Int): Pair<Int, List<Int>> {
+        val (s, entries) = stack("S", 0, *cues)
+        manager.activateEntry(state, s, entries[0])
+        return s to entries
+    }
+
+    @Test
+    fun `an effect run is handed on with its id and phase`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
+        val q2 = cue("Q2", 3000)
+        val row2 = adHoc(q2, "hex-1", run)
+        val (s, _) = runStack(q1, q2)
+        val pulse = one(q1)
+        val (id, started) = pulse.id to pulse.startedAtMs
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(effectsOf(q1).isEmpty(), "Q1 has nothing left to fade")
+        assertSame(pulse, one(q2), "the same instance runs on")
+        assertEquals(id, pulse.id)
+        assertEquals(started, pulse.startedAtMs)
+        assertFull(pulse, "and is not faded")
+        assertEquals(row2, pulse.layerEffectUuid, "stamped with Q2's row")
+        assertEquals(run, pulse.runUuid)
+        assertEquals(cueDerivedPriority(s, 1), pulse.priority)
+    }
+
+    @Test
+    fun `a new speed inside a run is an edit in place at the GO`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
+        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", run, division = 0.5) }
+        val (s, _) = runStack(q1, q2)
+        val pulse = one(q1)
+        val (id, started) = pulse.id to pulse.startedAtMs
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(effectsOf(q1).isEmpty())
+        val running = one(q2)
+        assertEquals(id, running.id, "the same effect runs on")
+        assertEquals(started, running.startedAtMs, "phase kept")
+        assertEquals(0.5, running.timing.beatDivision, "at Q2's speed from the GO")
+        assertFull(running, "with no fade of its own")
+    }
+
+    @Test
+    fun `a run moving onto Seconds restarts its phase`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
+        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", run, division = 2.0, seconds = true) }
+        val (s, _) = runStack(q1, q2)
+        val id = one(q1).id
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        val running = one(q2)
+        assertEquals(id, running.id, "edited in place")
+        assertTrue(running.onSeconds)
+        assertEquals(TimingSource.WALL_CLOCK, running.timingSource, "on the wall-clock loop")
+        assertTrue(running.accumulatedScaledMs < 1000.0, "near the top of its 2 s cycle: ${running.accumulatedScaledMs}")
+    }
+
+    @Test
+    fun `different run keys fade one effect out and the other in`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", UUID.randomUUID()) }
+        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", UUID.randomUUID()) }
+        val (s, _) = runStack(q1, q2)
+        val outgoing = one(q1)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(outgoing.leaving, "Q1's shrinks over the fade")
+        val incoming = one(q2)
+        assertTrue(incoming !== outgoing)
+        assertNear(0.0, levelAfter(incoming, 0), "Q2's grows from nothing")
+    }
+
+    @Test
+    fun `an effect with no run key restarts at every GO, as before`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", null) }
+        val q2 = cue("Q2", 3000).also { adHoc(it, "hex-1", null) }
+        val (s, _) = runStack(q1, q2)
+        val outgoing = one(q1)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(outgoing.leaving)
+        val incoming = one(q2)
+        assertTrue(incoming !== outgoing && incoming.id != outgoing.id)
+        assertNear(0.0, levelAfter(incoming, 0), "grows from nothing")
+    }
+
+    @Test
+    fun `a paused effect or an N-shot is not handed on`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val (run, shotRun) = UUID.randomUUID() to UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run); adHoc(it, "hex-2", shotRun, nShot = 3, sort = 1) }
+        val q2 = cue("Q2", 2000).also { adHoc(it, "hex-1", run); adHoc(it, "hex-2", shotRun, nShot = 3, sort = 1) }
+        val (s, _) = runStack(q1, q2)
+        val (paused, oneShot) = effectsOf(q1).partition { it.target.targetKey == "hex-1" }.let { it.first.single() to it.second.single() }
+        engine.pauseEffect(paused.id)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(paused.leaving && oneShot.leaving, "both leave with Q1")
+        val arrived = effectsOf(q2)
+        assertEquals(2, arrived.size)
+        assertTrue(arrived.none { it.id == paused.id || it.id == oneShot.id }, "Q2 starts its own")
+    }
+
+    @Test
+    fun `an N-shot row in a run starts afresh rather than taking the run over`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
+        val q2 = cue("Q2", 2000).also { adHoc(it, "hex-1", run, nShot = 3) }
+        val (s, _) = runStack(q1, q2)
+        val forever = one(q1)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(forever.leaving, "Q1's leaves over the fade")
+        assertEquals(null, forever.dynamics.nShot, "untouched")
+        val accent = one(q2)
+        assertTrue(accent.id != forever.id)
+        assertEquals(3, accent.dynamics.nShot)
+        assertNear(0.0, levelAfter(accent, 0), "the accent grows from nothing")
+    }
+
+    @Test
+    fun `GO BACK hands a run back with its own settings`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", 1000)
+        val row1 = adHoc(q1, "hex-1", run)
+        val q2 = cue("Q2", 1000).also { adHoc(it, "hex-1", run, division = 0.5) }
+        val (s, _) = runStack(q1, q2)
+        val (id, started) = one(q1).let { it.id to it.startedAtMs }
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+        assertEquals(id, one(q2).id)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.BACKWARD)
+
+        assertTrue(effectsOf(q2).isEmpty())
+        val back = one(q1)
+        assertEquals(id, back.id, "the same effect runs on")
+        assertEquals(started, back.startedAtMs)
+        assertEquals(1.0, back.timing.beatDivision, "at Q1's speed again")
+        assertEquals(row1, back.layerEffectUuid)
+    }
+
+    @Test
+    fun `a press between the GO's two holds gives a handed-on run back as it was`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null)
+        val row1 = adHoc(q1, "hex-1", run)
+        val q2 = cue("Q2", null)
+        val row2 = adHoc(q2, "hex-1", run, division = 0.5)
+        val (s, entries) = runStack(q1, q2)
+        val id = one(q1).id
+        val data = transaction(state.database) { buildCueGoData(DaoCue[q2], DaoCueStackEntry[entries[1]]) }
+
+        val acquired = holds.acquire(
+            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data), CueHolds.Arrival.SNAP,
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default), fireEvents = false, stackTag = s, adoptFrom = q1,
+        )
+        assertEquals(id, one(q2).id, "handed on")
+        assertEquals(0.5, one(q2).timing.beatDivision)
+        assertEquals(row2, one(q2).layerEffectUuid)
+        holds.takeLooseCue(state, q1)
+        assertFalse(holds.release(state, q1, CueHold.Stack(s, entries[0]), CueHolds.Departure.SNAP).last)
+
+        holds.giveBack(state, acquired.adopted, respawnFor = q2)
+
+        val back = one(q1)
+        assertEquals(id, back.id, "Q1, still on, has its effect back")
+        assertEquals(1.0, back.timing.beatDivision, "at its own speed")
+        assertEquals(row1, back.layerEffectUuid, "stamped with its own row")
+        assertEquals(holds.priorityOf(q1), back.priority)
+        val own = one(q2)
+        assertTrue(own.id != id, "and Q2 runs one of its own")
+        assertEquals(0.5, own.timing.beatDivision)
+        assertEquals(row2, own.layerEffectUuid)
+    }
+
+    @Test
+    fun `a run that cannot be edited back marks the cue it returns to`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        // Wings under Centre out spawn (the stored row is read leniently) but are refused by an edit
+        // that moves the Order back onto it.
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run, order = "CENTER_OUT", wings = 2) }
+        val q2 = cue("Q2", null).also { adHoc(it, "hex-1", run, wings = 2) }
+        val (s, entries) = runStack(q1, q2)
+        val id = one(q1).id
+        val data = transaction(state.database) { buildCueGoData(DaoCue[q2], DaoCueStackEntry[entries[1]]) }
+        val acquired = holds.acquire(
+            state, data, CueHold.Stack(s, entries[1]), cueDerivedPriority(data), CueHolds.Arrival.SNAP,
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Default), fireEvents = false, stackTag = s, adoptFrom = q1,
+        )
+        assertEquals(id, one(q2).id, "handed on")
+        holds.takeLooseCue(state, q1)
+        holds.release(state, q1, CueHold.Stack(s, entries[0]), CueHolds.Departure.SNAP)
+
+        holds.giveBack(state, acquired.adopted, respawnFor = q2)
+
+        assertEquals(id, one(q1).id, "Q1 has its effect back")
+        assertEquals(DistributionStrategy.LINEAR, one(q1).distributionStrategy, "still as Q2 had it")
+        assertTrue(holds.isEdited(q1), "so Q1 reads edited since GO")
+    }
+
+    @Test
+    fun `a run key on two rows hands one instance to one row`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run); adHoc(it, "hex-1", run, sort = 1) }
+        val q2 = cue("Q2", 2000).also { adHoc(it, "hex-1", run); adHoc(it, "hex-1", run, sort = 1); adHoc(it, "hex-1", run, sort = 2) }
+        val (s, _) = runStack(q1, q2)
+        val outgoing = effectsOf(q1).map { it.id }.toSet()
+        assertEquals(2, outgoing.size)
+
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+
+        assertTrue(effectsOf(q1).isEmpty(), "both of Q1's are taken")
+        val arrived = effectsOf(q2)
+        assertEquals(3, arrived.size)
+        assertEquals(3, arrived.map { it.id }.toSet().size, "no instance runs twice")
+        assertEquals(outgoing, arrived.filter { it.id in outgoing }.map { it.id }.toSet())
+        assertEquals(3, arrived.map { it.layerEffectUuid }.toSet().size, "each row has its own")
+        assertNear(0.0, levelAfter(arrived.single { it.id !in outgoing }, 0), "the third grows from nothing")
+    }
+
+    @Test
+    fun `Update stage on a cue a run was handed to reconciles by its row`() = testApplication {
+        mountTestApp(state)
+        jsonClient().seedLooks()
+        val run = UUID.randomUUID()
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run) }
+        val q2 = cue("Q2", null)
+        val row2 = adHoc(q2, "hex-1", run)
+        val (s, _) = runStack(q1, q2)
+        manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
+        val running = one(q2)
+        transaction(state.database) { DaoCue[q2].adHocEffects.single { it.uuid == row2 }.beatDivision = 0.25 }
+
+        val answer = assertNotNull(uk.me.cormack.lighting7.routes.updateStage(state, q2, dryRun = false))
+
+        assertEquals(uk.me.cormack.lighting7.routes.UpdateStageEffects(edited = 1, stopped = 0, started = 0), answer.effects)
+        val after = one(q2)
+        assertEquals(running.id, after.id, "the handed-on instance is Q2's own row's")
+        assertEquals(0.25, after.timing.beatDivision)
     }
 
     @Test

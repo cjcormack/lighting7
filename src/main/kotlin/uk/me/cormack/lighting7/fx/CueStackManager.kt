@@ -51,6 +51,8 @@ class CueStackManager(
     holdsSink: MutableStateFlow<CueHolds.Frame> = MutableStateFlow(CueHolds.Frame.EMPTY),
     /** After every hold change: the surfaces' cue-pad LEDs. */
     onHoldsChanged: () -> Unit = {},
+    /** How [CueHolds] edits an effect run it hands on in place — `routes.alignEffect`. */
+    effectAligner: EffectAligner,
 ) {
     private data class ActiveStackState(
         val stackId: Int,
@@ -101,7 +103,7 @@ class CueStackManager(
     private val crossfades = CueCrossfadeDriver(fxEngine)
 
     /** What holds each cue live — stacks and loose presses alike. See [CueHolds]. */
-    val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged)
+    val holds: CueHolds = CueHolds(fxEngine, crossfades, projectId, holdsSink, onHoldsChanged, effectAligner)
 
     /**
      * Each stack's effect size (effects plan D10): a runtime weight on the effects its cues run,
@@ -267,7 +269,7 @@ class CueStackManager(
         }
         // A press took the outgoing cue between the two holds, so it stays on: what the incoming cue
         // took over goes back to it, and the incoming cue runs its own.
-        if (outgoing?.last != true) holds.giveBack(incoming.adopted, respawnFor = cueData.cueId)
+        if (outgoing?.last != true) holds.giveBack(state, incoming.adopted, respawnFor = cueData.cueId)
         // Only the side that really moved fades: an incoming cue already held elsewhere is at full,
         // an outgoing cue still held elsewhere stays at full. Either side's rows or effects make it a
         // fade, so an effect-only cue fades too (and a cancel can find what it was fading).

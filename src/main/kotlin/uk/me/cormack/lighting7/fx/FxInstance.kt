@@ -297,6 +297,22 @@ fun FxInstance.comparableEffectSettings(master1Uuid: java.util.UUID?): LookEffec
 }
 
 /**
+ * What an in-place edit between two instances reads of each: [settings] as
+ * [comparableEffectSettings] answers them, the [dynamics] they were read from, the
+ * [timingSource] its type runs on and whether it is [onSeconds]. Taken of an instance before an edit,
+ * so the edit can be undone.
+ */
+data class EffectSettingsSnapshot(
+    val settings: LookEffectSettings,
+    val dynamics: FxDynamics,
+    val timingSource: TimingSource,
+    val onSeconds: Boolean,
+)
+
+fun FxInstance.settingsSnapshot(master1Uuid: java.util.UUID?): EffectSettingsSnapshot =
+    EffectSettingsSnapshot(comparableEffectSettings(master1Uuid), dynamics, registrationTimingSource, onSeconds)
+
+/**
  * The identity of one programmer-layer effect instance: which layer spawned it, which of the
  * Look's stored effects it realises, and on which target.
  *
@@ -614,12 +630,20 @@ class FxInstance internal constructor(
     var cueId: Int? = null
 
     /**
-     * The stored effect row a cue's layer spawned this from — a Look effect's or a palette effect's
-     * uuid — or null for anything else. What a GO matches a continuing effect on (effects plan P4):
-     * the incoming cue keeps an outgoing cue's instance running the same row on the same target,
-     * phase intact, rather than fading one out and another in.
+     * The stored effect row a cue spawned this from — a Look effect's, a palette effect's or the
+     * cue's own ad-hoc row's uuid — or null for anything else. What a GO matches a continuing layer
+     * effect on (effects plan P4): the incoming cue keeps an outgoing cue's instance running the same
+     * row on the same target, phase intact, rather than fading one out and another in. An ad-hoc
+     * effect handed on by its [runUuid] is restamped with the incoming row's.
      */
     var layerEffectUuid: java.util.UUID? = null
+
+    /**
+     * The run key of the cue ad-hoc effect row this was spawned from (stack-timeline plan D7), null
+     * for anything else. A GO hands the outgoing cue's instance with the same key, target and
+     * property to the incoming cue rather than starting the incoming row afresh ([CueHolds]).
+     */
+    var runUuid: java.util.UUID? = null
 
     /**
      * The stack of the hold that brought this effect's cue on, null for a loose one or no cue. Not

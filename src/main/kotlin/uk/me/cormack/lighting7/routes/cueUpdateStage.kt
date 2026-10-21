@@ -9,6 +9,7 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.CueEffectKey
 import uk.me.cormack.lighting7.fx.CueHold
 import uk.me.cormack.lighting7.fx.EffectEnvelope
+import uk.me.cormack.lighting7.fx.EffectSettingsSnapshot
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.TimingSource
@@ -17,6 +18,7 @@ import uk.me.cormack.lighting7.fx.buildCombinedCueLayerCook
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.comparableEffectSettings
 import uk.me.cormack.lighting7.fx.cueEffectKey
+import uk.me.cormack.lighting7.fx.settingsSnapshot
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
@@ -106,15 +108,14 @@ private fun updateStageLocked(state: State, cueId: Int, dryRun: Boolean): Update
     val replaced = mutableListOf<FxInstance>()
     var edited = 0
     for ((instance, freshInstance) in plan.edited) {
-        when (val outcome = applyEffectUpdate(state, instance.id, alignmentRequest(instance, freshInstance, master1))) {
-            is EffectUpdateOutcome.Updated -> edited++
-            else -> {
-                // An edit the in-place path refuses (or an instance gone meanwhile) is the stored
-                // effect started afresh, so the stage still ends up as the cue says.
-                logger.info("cue {}: effect {} not edited in place ({}); restarting it", cueId, instance.id, outcome)
-                engine.fadeOutEffects(listOf(instance), 0)
-                replaced += freshInstance
-            }
+        if (alignEffect(state, instance.id, instance.settingsSnapshot(master1), freshInstance.settingsSnapshot(master1)) != null) {
+            edited++
+        } else {
+            // An edit the in-place path refuses (or an instance gone meanwhile) is the stored
+            // effect started afresh, so the stage still ends up as the cue says.
+            logger.info("cue {}: effect {} not edited in place; restarting it", cueId, instance.id)
+            engine.fadeOutEffects(listOf(instance), 0)
+            replaced += freshInstance
         }
     }
     engine.fadeOutEffects(plan.stopped, fadeMs, curve)
@@ -197,18 +198,34 @@ private fun reconcile(
 }
 
 /**
+ * Edit running effect [effectId] in place from [from]'s settings to [to]'s, through
+ * [applyEffectUpdate] on [alignmentRequest] — a GO handing an effect run on with new settings, and
+ * undoing that when the GO gives it back ([uk.me.cormack.lighting7.fx.CueHolds]). Answers the
+ * instance running now, which a swapping edit replaces, or null when the edit was refused or the
+ * effect is gone.
+ */
+internal fun alignEffect(state: State, effectId: Long, from: EffectSettingsSnapshot, to: EffectSettingsSnapshot): FxInstance? =
+    when (val outcome = applyEffectUpdate(state, effectId, alignmentRequest(from, to))) {
+        is EffectUpdateOutcome.Updated -> outcome.instance
+        else -> {
+            logger.info("effect {} not edited in place ({})", effectId, outcome)
+            null
+        }
+    }
+
+/**
  * The in-place edit that takes [live] to [fresh]'s settings: every field that differs, each in the
  * form [UpdateEffectRequest] reads as a change — master 1 by its uuid, forever as [UpdateEffectRequest.runForever],
  * Seconds as [UpdateEffectRequest.seconds] — and nothing else, so no field is re-sent that a refusal
  * could catch on. No `targets`: a cue's effect never splits (`FX_SPLIT_NOT_LOCAL`).
  */
-private fun alignmentRequest(live: FxInstance, fresh: FxInstance, master1: UUID?): UpdateEffectRequest {
-    val was = live.comparableEffectSettings(master1)
-    val now = fresh.comparableEffectSettings(master1)
+internal fun alignmentRequest(live: EffectSettingsSnapshot, fresh: EffectSettingsSnapshot): UpdateEffectRequest {
+    val was = live.settings
+    val now = fresh.settings
     val wasDyn = live.dynamics
     val nowDyn = fresh.dynamics
     val typeMoved = now.effectType != was.effectType
-    val beat = fresh.registrationTimingSource == TimingSource.BEAT
+    val beat = fresh.timingSource == TimingSource.BEAT
     val toSeconds = fresh.onSeconds && !live.onSeconds
     val fromSeconds = !fresh.onSeconds && live.onSeconds
     val speedMaster = when {
