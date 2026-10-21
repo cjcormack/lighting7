@@ -600,6 +600,7 @@ All endpoints under `/api/rest/projects/{projectId}/cue-stacks`.
 | PUT / DELETE | `/{stackId}/markers/{entryId}` | Rename (`{ label }`) or remove a marker; 404 for a cue's entry |
 | GET | `/{stackId}/preview?entryId=` | Compose an entry's cue without firing it (absent → the effective next). See below |
 | GET | `/{stackId}/timeline` | The stack's Timeline read: every entry with its cue's stored layers, ad-hoc effects, scenery and tracked scenery. See below |
+| POST | `/{stackId}/timeline/edit` | One Timeline gesture: `{ ops, dryRun? }`, a batch over the stack's stored cues in one transaction, nothing sent to the stage. See §"Timeline" |
 | POST | `/{stackId}/sort-by-cue-number` | Group-aware sort of cue_number |
 
 ### `timeline`
@@ -611,9 +612,11 @@ label?, cueId?, layers, effects, scenery, trackedScenery}]}`, one entry per row 
 live state are not repeated: the client has them from the stack list, `cueRunStateChanged` and
 `cueHolds.state`, and the read rides those lists' invalidations rather than a frame of its own.
 
-- **`layers`**, in layer order (`sortOrder`, then id), so a layer's rank is its place, from 1:
-  `{id, source: {kind, id, uuid, name, families}, targets, heads, sortOrder, enabled, amount,
-  blendMode, propertyMask, stomp, timed, speedMasterUuid, rateSpeedMasterUuid}`. `families` is a
+- **`layers`**, in layer order (`sortOrder`, then id): `{id, source: {kind, id, uuid, name,
+  families}, targets, heads, sortOrder, rank, enabled, amount, blendMode, propertyMask, stomp, timed,
+  delayMs, intervalMs, randomWindowMs, speedMasterUuid, rateSpeedMasterUuid}`. `rank` is the layer's
+  place among **every** stored layer of the cue, from 1 at the bottom, so a layer whose source is gone
+  — left out of the list — still holds its place and the ranks above it do not shift. `families` is a
   Look's `derivedFamilyGroups` (its rows' properties and its effects' categories) or a palette's
   `familyOf`. `heads` are the fixture keys the layer lands on, groups expanded
   (`TargetCoverage.expand`): a Look's own heads (`ownTargets`) narrowed to the targets it names as
@@ -670,6 +673,39 @@ from the entry's position — see [cues-engineering.md](cues-engineering.md) §P
 - `CueStackActivateResponse` — stackId, entryId, cueId, cueName, effectCount
 - `CueStackDeactivateResponse` — stackId, removedCount
 - `SortByNumberResponse` — updatedCues, pinnedCount, nullNumberCount
+
+## Timeline
+
+`POST /{stackId}/timeline/edit` `{ops, dryRun?}` (stack-timeline plan §3.6, C3, P5;
+`routes/cueStackTimelineEdit.kt`) is every write the Show view's Timeline makes: one gesture, one
+request. Under `withCurrentProject` (409 off it), and 404 for another project's stack. The batch is
+**one transaction, all or nothing**: its ops run in order, each over the state the one before it left,
+and every cue an op names must have an entry in this stack. **Nothing is sent to the stage.**
+
+| Op | Does |
+|---|---|
+| `layerOn {cueId, source: {kind, id}, target?, settingsFrom?}` | The cue editor's press (`decideCueLayerPress`, shared with `POST /cues/{id}/layers/press`, not copied) of a Look or palette on one target — or none, its own heads — taking `settingsFrom`'s settings (D6): a layer of the same record in this stack as the batch found it, so one an earlier op took off still lends them. Else a fresh press's. A new layer goes on top; the top layer of the record is widened where it carries the same settings, keeping its own identity. A cell already on is left alone |
+| `layerOff {cueId, source, target?}` | The off press. A cell already off is left alone |
+| `layerSettings {cueId, layerId, fields}` | The Looks tab's fields: `enabled`, `amount` (0–1), `blendMode`, `propertyMask` (a comma list, or null), `stomp`, `delayMs`, `intervalMs`, `randomWindowMs`, `speedMasterUuid`, `rateSpeedMasterUuid` (a project's master, or null). An unknown field is a problem |
+| `replace {cueIds, from, to, keepSettings}` | In each cue holding `from` (a layer of its record naming its target, or none for its own heads): where the cue lacks `to`, `from` comes off and `to` goes on with `from`'s settings **where `from` was** (`keepSettings`; a palette's mask is its family), else on top with a press's defaults; where the cue already has `to`, `from` comes off. Still the press, so a palette arriving takes its family's others off its heads |
+| `scenerySet {cueId, elementUuid, state, transitionMs?}` / `sceneryClear {cueId, elementUuid}` | One element's change, checked by `parseSceneryList` with the rest of the cue's list and written by `replaceCueScenery`; a clear hands the cue back to tracking |
+| `restore {cueId, layers, adHocEffects, scenery}` | Undo (P5): the cue put back exactly as an answer's `before` holds it — `writeCueChildren(restore = true)` pairs layers and effects by uuid rather than key, so a row an edit deleted comes back with its uuid, and an effect with its run key; scenery by `replaceCueScenery`'s uuids. Stored orders are kept where they order the rows on their own, else renumbered by place |
+
+The answer is `{changed, released: [{cueId, source, targets}], before: [{cueId, layers, adHocEffects,
+scenery}], edited}`: the cues whose layers, effects or scenery changed (compared whole, uuids
+included), each press's knock-on — another record's layers it narrowed or dropped, named on the
+pressed targets — each changed cue as the batch found it (what Undo sends back as `restore` ops), and
+the held cues whose `stageContent` changed, which are marked edited since GO (`CueHolds.markEdited`).
+`cueListChanged` and `cueStackListChanged` fire once per batch. `dryRun` runs the batch and rolls it
+back, marking and announcing nothing. Every problem is named at once: 400 `TIMELINE_EDIT_INVALID`
+`{error, code, problems: [{op, message}]}`, `op` the op's index — an unknown record or op, a cue
+with no entry in the stack, a refused press (a generic palette with no target), a bad field, a
+scenery state its element refuses — and the batch rolls back.
+
+The press's palette snapshots are read inside the batch's transaction, so `loadTemplateSnapshot`
+queries a palette's rows rather than ordering `template.rows`, which throws on a referrer collection
+the transaction has already loaded. Effect ops (`effectOn`, `effectOff`, `breakRun`, `joinRun`) are
+the plan's session 5.
 
 ## Preview compose
 

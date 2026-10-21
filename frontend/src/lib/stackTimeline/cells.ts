@@ -58,7 +58,7 @@ export function cells(timeline: StackTimeline, columns: readonly TimelineColumn[
       for (const target of layerTargets(layer)) {
         const id = layerColumnId(layer, target)
         if (!wanted.has(id)) continue
-        row.set(id, { filled: { kind: 'layer', layer, rank: index + 1, glyphs: layerGlyphs(layer) }, tracked: null })
+        row.set(id, { filled: { kind: 'layer', layer, rank: layer.rank ?? index + 1, glyphs: layerGlyphs(layer) }, tracked: null })
       }
     })
     for (const effect of entry.effects) {

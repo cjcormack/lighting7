@@ -7,6 +7,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoTemplateRow
 import uk.me.cormack.lighting7.models.DaoTemplateRows
 import uk.me.cormack.lighting7.models.DaoTemplates
 import uk.me.cormack.lighting7.models.TargetRef
@@ -290,7 +291,10 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
             templateUuid = template.uuid,
             name = template.name,
             fadeDurationMs = template.fadeDuration?.toMillis(),
-            rows = template.rows
+            // A query of its own rather than `template.rows`: ordering a referrer collection the
+            // caller's transaction has already loaded throws, and the Timeline's batch decides its
+            // presses inside one transaction that may have read this palette's rows already.
+            rows = DaoTemplateRow.find { DaoTemplateRows.template eq template.id }
                 .orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)
                 .mapNotNull { row ->
                     // A deferred row legitimately has no target; a row whose discriminator names no

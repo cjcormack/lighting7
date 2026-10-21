@@ -48,6 +48,8 @@ export interface SelectionBarProps {
   familyControl?: ReactNode
   /** The two keyboard hints, each drawn only where the surface's permission allows the key. */
   hints: { entry: boolean; clear: boolean }
+  /** What the two keys do here, where it is not *edit* and *clear* — the Timeline's *toggle* and *off*. */
+  hintWords?: { entry: string; clear: string }
   /**
    * A chip after the family pill and the hints, before the strip — the programmer's desk chip
    * (`components/desk/DeskChip.tsx`), which says whose selection this is. Drawn in the reserved
@@ -122,6 +124,7 @@ export function SelectionBar({
   family,
   familyControl,
   hints,
+  hintWords = { entry: 'edit', clear: 'clear' },
   chip,
   strip,
   verbs,
@@ -218,12 +221,12 @@ export function SelectionBar({
             <span className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-[10px] text-muted-foreground group-data-[strip]/bar:@max-[1100px]:hidden">
               {hints.entry && (
                 <>
-                  <kbd className={KBD_CLASS}>⏎</kbd> edit
+                  <kbd className={KBD_CLASS}>⏎</kbd> {hintWords.entry}
                 </>
               )}
               {hints.clear && (
                 <>
-                  <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> clear
+                  <kbd className={`${KBD_CLASS} ml-1`}>⌫</kbd> {hintWords.clear}
                 </>
               )}
             </span>

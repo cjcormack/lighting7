@@ -7,6 +7,8 @@ import { isCueRow } from '@/api/cueStacksApi'
 import type { CueTarget } from '@/api/cuesApi'
 import type { SceneryState } from '@/api/sceneryApi'
 import { useCueStackTimelineQuery } from '@/store/cueStacks'
+import { useCueEdited } from '@/store/cueHolds'
+import type { TimelineEditOp } from '@/api/stackTimelineApi'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
 import { useTemplateListQuery } from '@/store/templates'
@@ -24,13 +26,27 @@ import {
   cellAt,
   cells as deriveCells,
   columns as deriveColumns,
+  cueRangeWords,
+  dragOps,
+  dragPlan,
+  editsColumn,
+  fillDownOps,
   filter as filterColumns,
   kindCounts,
   markerMarkAt,
   moveColumn,
+  offOps,
+  onOps,
+  recordColumnId,
   runMarkAt,
   runs as deriveRuns,
+  sceneryColumnId,
+  selectedLayers,
   TIMELINE_KINDS,
+  toggleOps,
+  withExtraColumns,
+  type TimelineCellAddress,
+  type TimelineCueRef,
   type TimelineCell,
   type TimelineCells,
   type TimelineColumn,
@@ -39,7 +55,7 @@ import {
   type TimelineRunMark,
   type TimelineRuns,
 } from '@/lib/stackTimeline'
-import { timelineColumnOrderStore, timelineFiltersStore } from '@/lib/stackTimeline/columnOrder'
+import { timelineColumnOrderStore, timelineExtraColumnsStore, timelineFiltersStore } from '@/lib/stackTimeline/columnOrder'
 import type { CueEditorTab } from '@/components/cues/editor/cueEditorTab'
 import { CueStatePip } from '@/components/cues/CueRowParts'
 import { EditedSinceGoChip } from '@/components/cues/EditedSinceGo'
@@ -49,7 +65,24 @@ import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { LegendSwatch, SheetPage } from '@/components/sheet/SheetPage'
 import { CHROME_ROW_CLASS } from '@/components/sheet/sheetFrame'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { activeKeyRegion } from '@/components/sheet/keyRegion'
+import { keyTargetIsGuarded } from '@/components/sheet/cellEntry'
+import { editorIsOpen } from '@/components/editor/EditorSurface'
+import type { SheetKeyRefusal } from '@/components/sheet/useSheetKeyboard'
 import { CueEditorPane } from './CueEditorPane'
+import { UnlockShowDialog } from './UnlockShowDialog'
+import { useSharedCueActionDialogs } from './cueActionDialogsContext'
+import {
+  describeEdit,
+  TimelineAddColumn,
+  TimelineReplacePopover,
+  TimelineSceneryPopover,
+  TimelineSettingsPopover,
+  TimelineVerbs,
+  useTimelineCommandKeys,
+  useTimelineEdits,
+  type TimelineVerbState,
+} from './TimelineEditing'
 import { SharedCueChip } from './SharedCueChip'
 import { entryRowId } from './CueSheet'
 
@@ -104,14 +137,21 @@ export interface StackTimelineProps {
 }
 
 /**
- * A stack's **Timeline** (stack-timeline plan D1–D11, §4.2): the Table's rows — cues, markers as
- * divider rows, row drag, the lock and the bottom pane — against a column per Look, palette,
+ * A stack's **Timeline** (stack-timeline plan D1–D11, §4.2, §4.4): the Table's rows — cues, markers
+ * as divider rows, row drag, the lock and the bottom pane — against a column per Look, palette,
  * effect and scenery element the stack applies, derived from the desk's read
  * (`GET …/cue-stacks/{id}/timeline`) by `lib/stackTimeline/`. A filled cell is that cue's own
  * layer, row or change; neighbouring cells draw as one bar, an effect's only on a shared run key.
  *
- * **Read-only**: a cell selects and never toggles. One selected cell opens
- * `CueEditorPane` on its cue at its column's tab; a range over several cues folds it (C2).
+ * **Editing Looks, palettes and scenery** (§4.4): a click selects a cell and a second click — or ⏎ —
+ * toggles it (a scenery cell's second click opens its popover), ⌫ turns the selection off, a run's
+ * end drags to fill or empty the cells it crosses, and the bar's *On · Off · Fill ↓ · Replace with…
+ * · Settings…* act on a range. **Every gesture is one request** to `timeline/edit`
+ * (`useTimelineEdits`), nothing is sent to the stage, and its answer is one Undo (⌘Z, or the toast).
+ * Locked, the cells read and every write asks to unlock. Effect cells select and read only.
+ *
+ * One selected cell opens `CueEditorPane` on its cue at its column's tab; a range over several cues
+ * folds it (C2).
  */
 export function StackTimeline({
   stack,
@@ -141,6 +181,8 @@ export function StackTimeline({
   const orderStore = timelineColumnOrderStore(stack.id)
   const order = useSyncExternalStore(orderStore.subscribe, orderStore.getSnapshot, orderStore.getServerSnapshot)
   const filters = useSyncExternalStore(timelineFiltersStore.subscribe, timelineFiltersStore.getSnapshot, timelineFiltersStore.getServerSnapshot)
+  const extraStore = timelineExtraColumnsStore(stack.id)
+  const extras = useSyncExternalStore(extraStore.subscribe, extraStore.getSnapshot, extraStore.getServerSnapshot)
 
   /** The rig as the timeline reads it: each cell's parent, each fixture's cells, each group's members. */
   const rig = useMemo(() => {
@@ -190,7 +232,15 @@ export function StackTimeline({
   }, [deskSelection, rig])
   const selectionOn = filters.selectionOnly && selectionHeads.size > 0
 
-  const allColumns = useMemo(() => (timeline == null ? [] : deriveColumns(timeline, names, order)), [names, order, timeline])
+  const derivedColumns = useMemo(() => (timeline == null ? [] : deriveColumns(timeline, names, order)), [names, order, timeline])
+  const allColumns = useMemo(() => withExtraColumns(derivedColumns, extras, names), [derivedColumns, extras, names])
+  // An added column the stack now fills is derived like any other: the window lets go of it.
+  useEffect(() => {
+    if (extras.length === 0 || timeline == null) return
+    const derived = new Set(derivedColumns.map((c) => c.id))
+    const kept = extras.filter((e) => !derived.has(recordColumnId(e.kind, e.sourceId, e.target)))
+    if (kept.length !== extras.length) extraStore.set(kept)
+  }, [derivedColumns, extraStore, extras, timeline])
   const facet = useMemo(
     () => ({ family: filters.family, selectionHeads: selectionOn ? selectionHeads : null }),
     [filters.family, selectionHeads, selectionOn],
@@ -218,6 +268,51 @@ export function StackTimeline({
       ),
     [stack.cues],
   )
+
+  // ── Editing (§4.4) ────────────────────────────────────────────────────────────────────────────
+  const cueOrder = useMemo<TimelineCueRef[]>(() => stack.cues.filter(isCueRow).map((c) => ({ entryId: c.entryId, cueId: c.id })), [stack.cues])
+  const byId = useMemo(() => new Map(allColumns.map((c) => [c.id, c])), [allColumns])
+  const cueLabel = useCallback(
+    (cueId: number) => {
+      const cue = stack.cues.find((c): c is CueStackCueRow => isCueRow(c) && c.id === cueId)
+      return cue == null ? `cue ${cueId}` : cue.cueNumber ? `Q${cue.cueNumber}` : cue.name
+    },
+    [stack.cues],
+  )
+  const cuesWords = useCallback((ids: readonly number[]) => cueRangeWords(cueOrder, ids, cueLabel), [cueLabel, cueOrder])
+  const edits = useTimelineEdits(projectId, stack.id)
+  const columnOfOp = useCallback(
+    (op: TimelineEditOp) => {
+      if (op.op === 'layerOn' || op.op === 'layerOff') {
+        return byId.get(recordColumnId(op.source.kind === 'LOOK' ? 'look' : 'palette', op.source.id, op.target ?? null))
+      }
+      if (op.op === 'scenerySet' || op.op === 'sceneryClear') return byId.get(sceneryColumnId(op.elementUuid))
+      return undefined
+    },
+    [byId],
+  )
+  const { send } = edits
+  const gesture = useCallback(
+    (ops: TimelineEditOp[]) => void send(ops, (answer) => describeEdit(ops, answer, columnOfOp, cuesWords)),
+    [columnOfOp, cuesWords, send],
+  )
+
+  const [unlockAsked, setUnlockAsked] = useState(false)
+  const askToUnlock = useCallback(() => setUnlockAsked(true), [])
+  /** Locked, a write asks to unlock — where the lock is the operator's to lift. */
+  const refuseVerb = locked && onRequestUnlock ? askToUnlock : undefined
+
+  const [sceneryEdit, setSceneryEdit] = useState<{ entryId: number; columnId: string } | null>(null)
+  const [drag, setDrag] = useState<{ columnId: string; fromEntryId: number; toEntryId: number; x: number; y: number } | null>(null)
+  const dragColumn = drag == null ? null : (byId.get(drag.columnId) ?? null)
+  const dragGhosts = useMemo(
+    () => (drag == null || dragColumn == null ? null : dragPlan(cueOrder, grid, dragColumn, drag.fromEntryId, drag.toEntryId)),
+    [cueOrder, drag, dragColumn, grid],
+  )
+
+  /** A cell's click: select it, or — when it is already the one selected cell — toggle it. */
+  const clickCellRef = useRef<(row: TimelineRow, column: TimelineColumn, select: () => void) => void>(() => {})
+  const startDragRef = useRef<(column: TimelineColumn, entryId: number, e: React.PointerEvent) => void>(() => {})
 
   const move = useCallback(
     (id: string, direction: -1 | 1) => orderStore.set(moveColumn(allColumns, id, direction, shown)),
@@ -257,6 +352,7 @@ export function StackTimeline({
       ...fixed,
       ...shown.map((column, index): SheetColumn<TimelineRow, string> => {
         const swatch = column.kind === 'palette' && column.sourceId != null ? (swatches.get(column.sourceId) ?? null) : null
+        const dragging = drag?.columnId === column.id
         return {
         key: column.id,
         label: `${column.name} · ${column.sub}`,
@@ -284,12 +380,18 @@ export function StackTimeline({
         value: (row) => (isCueRow(row.entry) ? row.entry.entryId : undefined),
         cell: (row, props) => (
           <TimelineCellView
-            onSelect={props.onBeginEdit}
+            onClick={() => clickCellRef.current(row, column, props.onBeginEdit)}
             swatch={swatch}
             column={column}
             cell={cellAt(grid, row.entry.entryId, column.id)}
             mark={runMarkAt(marks, row.entry.entryId, column.id)}
             previous={previousEntry.has(row.entry.entryId) ? cellAt(grid, previousEntry.get(row.entry.entryId)!, column.id) : null}
+            ghost={dragging ? (dragGhosts?.get(row.entry.entryId) ?? null) : null}
+            onHandle={
+              !locked && (column.kind === 'look' || column.kind === 'palette')
+                ? (e) => startDragRef.current(column, row.entry.entryId, e)
+                : undefined
+            }
           />
         ),
         dividerCell: (row) => <TimelineMarkerCell column={column} entryId={row.entry.entryId} marks={marks} />,
@@ -297,22 +399,159 @@ export function StackTimeline({
         }
       }),
     ]
-  }, [grid, marks, move, previousEntry, shown, swatches])
+  }, [drag?.columnId, dragGhosts, grid, locked, marks, move, previousEntry, shown, swatches])
 
-  const permission = useMemo(() => ({ entry: false, clear: false }), [])
+  const permission = useMemo(() => ({ entry: !locked, clear: !locked }), [locked])
   const copy = useCallback(
-    () => ({ setTitle: 'The Timeline is read-only — edit the cue below', clearTitle: 'The Timeline is read-only — edit the cue below' }),
-    [],
+    () =>
+      locked
+        ? { setTitle: LOCKED_REASON, clearTitle: LOCKED_REASON }
+        : { setTitle: 'Toggle the selected cells (Enter)', clearTitle: 'Take the selected cells off (Backspace)' },
+    [locked],
   )
+  /**
+   * Locked, ⏎ asks to unlock — Enter alone, as on the Table: while a show is locked
+   * `useTransportKeys` owns Backspace (BACK) and a typed `l` (the lock toggle).
+   */
+  const refuseKey = useMemo(() => {
+    if (!locked || !onRequestUnlock) return undefined
+    return ({ key }: SheetKeyRefusal) => {
+      if (key !== 'Enter') return false
+      setUnlockAsked(true)
+      return true
+    }
+  }, [locked, onRequestUnlock])
+
+  const activateRef = useRef<() => void>(() => {})
+  const clearRef = useRef<() => void>(() => {})
+  const onActivate = useCallback(() => activateRef.current(), [])
+  const onClearCells = useCallback(() => clearRef.current(), [])
   const sheet = useSheet<TimelineRow, string>({
     rows,
     columns,
     permission,
     copy,
+    onRefused: refuseKey,
+    onActivate,
+    onClearCells,
     noun: 'cue',
     rowName: (row) => (cueOf(row).cueNumber ? `Q${cueOf(row).cueNumber}` : cueOf(row).name),
   })
   const { selectedRows, cellCount, setRows, scrollTo, cellSelection } = sheet
+
+  /** The selected cells this session edits — Look, palette and scenery cells of cue rows. */
+  const addresses = useMemo<TimelineCellAddress[]>(
+    () =>
+      cellSelection.cells.flatMap((cell) => {
+        const entryId = Number(String(cell.rowId).slice('entry:'.length))
+        const column = byId.get(cell.col)
+        return Number.isFinite(entryId) && column != null && editsColumn(column) ? [{ entryId, columnId: cell.col }] : []
+      }),
+    [byId, cellSelection.cells],
+  )
+  const verbState = useMemo<TimelineVerbState>(() => {
+    const layerColumns = new Set(addresses.map((a) => a.columnId).filter((id) => {
+      const kind = byId.get(id)?.kind
+      return kind === 'look' || kind === 'palette'
+    }))
+    let replace: TimelineVerbState['replace'] = null
+    if (layerColumns.size === 1 && addresses.every((a) => layerColumns.has(a.columnId))) {
+      const column = byId.get([...layerColumns][0])!
+      const cueIds = addresses.flatMap((a) =>
+        cellAt(grid, a.entryId, a.columnId).filled != null ? cueOrder.filter((c) => c.entryId === a.entryId).map((c) => c.cueId) : [],
+      )
+      if (cueIds.length > 0 && column.sourceId != null) replace = { column, cueIds }
+    }
+    return {
+      on: onOps(cueOrder, grid, byId, addresses),
+      off: offOps(cueOrder, grid, byId, addresses),
+      fillDown: fillDownOps(cueOrder, grid, byId, addresses),
+      replace,
+      layers: selectedLayers(cueOrder, grid, byId, addresses),
+    }
+  }, [addresses, byId, cueOrder, grid])
+
+  activateRef.current = () => {
+    if (addresses.length === 0) return
+    const allFilled = addresses.every((a) => cellAt(grid, a.entryId, a.columnId).filled != null)
+    gesture(allFilled ? verbState.off : verbState.on)
+  }
+  clearRef.current = () => gesture(verbState.off)
+
+  const soleCell = cellCount === 1 ? `${cellSelection.cells[0].rowId}|${cellSelection.cells[0].col}` : null
+  clickCellRef.current = (row, column, select) => {
+    if (soleCell !== `${row.id}|${column.id}`) {
+      select()
+      return
+    }
+    if (!editsColumn(column)) return
+    if (locked) {
+      refuseVerb?.()
+      return
+    }
+    if (column.kind === 'scenery') {
+      setSceneryEdit({ entryId: row.entry.entryId, columnId: column.id })
+      return
+    }
+    gesture(toggleOps(cueOrder, grid, column, row.entry.entryId))
+  }
+
+  startDragRef.current = (column, entryId, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDrag({ columnId: column.id, fromEntryId: entryId, toEntryId: entryId, x: e.clientX, y: e.clientY })
+  }
+  // The drag follows the pointer over the rows; its release is one request.
+  const dragRef = useRef(drag)
+  dragRef.current = drag
+  const finishDragRef = useRef<() => void>(() => {})
+  finishDragRef.current = () => {
+    const current = dragRef.current
+    setDrag(null)
+    if (current == null) return
+    const column = byId.get(current.columnId)
+    if (column != null) gesture(dragOps(cueOrder, grid, column, current.fromEntryId, current.toEntryId))
+  }
+  const dragging = drag != null
+  useEffect(() => {
+    if (!dragging) return
+    const onMove = (e: PointerEvent) => {
+      const row = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-row-id]')?.getAttribute('data-row-id') ?? null
+      const entryId = row?.startsWith('entry:') ? Number(row.slice('entry:'.length)) : null
+      setDrag((d) =>
+        d == null ? d : { ...d, x: e.clientX, y: e.clientY, toEntryId: entryId != null && cueOrder.some((c) => c.entryId === entryId) ? entryId : d.toEntryId },
+      )
+    }
+    const onUp = () => finishDragRef.current()
+    const onCancel = () => setDrag(null)
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setDrag(null)
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('keydown', onKey)
+    }
+  }, [cueOrder, dragging])
+
+  useTimelineCommandKeys({
+    guarded: (e) => activeKeyRegion() != null || keyTargetIsGuarded(e.target) || editorIsOpen(),
+    onFillDown: () => {
+      if (cellCount === 0) return false
+      if (locked) refuseVerb?.()
+      else gesture(verbState.fillDown)
+      return true
+    },
+    onUndo: () => {
+      if (!edits.canUndo) return false
+      if (locked) refuseVerb?.()
+      else void edits.undo()
+      return true
+    },
+  })
 
   // ── The pane (C2): one selected cue opens it, at the selected cell's column's tab. ──
   const columnRef = useRef<HTMLDivElement>(null)
@@ -362,6 +601,12 @@ export function StackTimeline({
     [activeEntryId, locked, onSetStandby, rows, sheet.tableProps],
   )
 
+  // The live row selected and edited since GO: the bar offers *Update stage…* (show-cue-editing D4).
+  const dialogs = useSharedCueActionDialogs()
+  const liveRow = activeEntryId == null ? null : (selectedRows.find((r) => isCueRow(r.entry) && r.entry.entryId === activeEntryId) ?? null)
+  const liveCue = liveRow == null ? null : cueOf(liveRow)
+  const liveEdited = useCueEdited(projectId, liveCue?.id ?? -1)
+
   const setFilters = (patch: Partial<typeof filters>) => timelineFiltersStore.set({ ...filters, ...patch })
   const toggleKind = (kind: TimelineKind) =>
     setFilters({ kinds: filters.kinds.includes(kind) ? filters.kinds.filter((k) => k !== kind) : [...filters.kinds, kind] })
@@ -370,9 +615,23 @@ export function StackTimeline({
   const markerCount = rows.length - standardCount
   const rowNoun = selectedRows.length === 1 ? 'cue' : 'cues'
 
+  const elementsByUuid = useMemo(() => new Map((elements ?? []).map((e) => [e.uuid, e])), [elements])
+  const sceneryColumn = sceneryEdit == null ? null : (byId.get(sceneryEdit.columnId) ?? null)
+  const sceneryElement = sceneryColumn?.elementUuid ? elementsByUuid.get(sceneryColumn.elementUuid) : undefined
+  const sceneryCue = sceneryEdit == null ? undefined : cueOrder.find((c) => c.entryId === sceneryEdit.entryId)
+  const sceneryCell = sceneryEdit == null ? null : cellAt(grid, sceneryEdit.entryId, sceneryEdit.columnId)
+  const sceneryChange = sceneryCell?.filled?.kind === 'scenery' ? sceneryCell.filled : null
+
+  const dragScope =
+    drag == null || dragColumn == null || dragGhosts == null || dragGhosts.size === 0
+      ? null
+      : `${dragColumn.name} · ${dragColumn.sub} ${[...dragGhosts.values()][0] === 'fill' ? 'on' : 'off'} in ${cuesWords(
+          [...dragGhosts.keys()].flatMap((entryId) => cueOrder.filter((c) => c.entryId === entryId).map((c) => c.cueId)),
+        )}`
+
   return (
     <div ref={columnRef} className="flex min-h-0 flex-1 flex-col" data-stack-timeline>
-      {/* Row B: the filters (§4.3), per window. */}
+      {/* Row B: the filters (§4.3), per window, and + Column. */}
       <div className={cn(CHROME_ROW_CLASS, 'overflow-x-auto')} data-timeline-filters>
         <span className="shrink-0 text-[11px] uppercase tracking-wider text-muted-foreground">Show</span>
         {TIMELINE_KINDS.map((kind) => (
@@ -422,6 +681,13 @@ export function StackTimeline({
         <span className="shrink-0 truncate text-[11px] text-muted-foreground">
           {selectionHeads.size === 0 ? 'no desk selection' : `desk selection: ${selectionHeads.size} head${selectionHeads.size === 1 ? '' : 's'}`}
         </span>
+        <span aria-hidden className="mx-1 h-5 w-px shrink-0 bg-border" />
+        <TimelineAddColumn
+          projectId={projectId}
+          deskTargets={deskSelection}
+          targetName={names.target}
+          onAdd={(column) => extraStore.set([...extras.filter((e) => recordColumnId(e.kind, e.sourceId, e.target) !== recordColumnId(column.kind, column.sourceId, column.target)), column])}
+        />
       </div>
       <div className="@container">
         <SelectionBar
@@ -429,13 +695,69 @@ export function StackTimeline({
           cellLabel={cellCount > 0 ? `${cellCount} cell${cellCount === 1 ? '' : 's'}` : null}
           cellTitle={`${cellCount} cell${cellCount === 1 ? '' : 's'}`}
           family={null}
-          hints={{ entry: false, clear: false }}
+          hints={{ entry: addresses.length > 0 && !locked, clear: addresses.length > 0 && !locked }}
+          hintWords={{ entry: 'toggle', clear: 'off' }}
           verbs={
             selectedRows.length > 0 ? (
-              <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
-                <X className="size-3.5" />
-                <span className="hidden sm:inline">Deselect</span>
-              </Button>
+              <>
+                {addresses.length > 0 && (
+                  <TimelineVerbs
+                    state={verbState}
+                    locked={locked}
+                    lockedReason={LOCKED_REASON}
+                    onRefused={refuseVerb}
+                    onSend={(ops) => gesture(ops)}
+                    replacePopover={(trigger) =>
+                      verbState.replace == null || timeline == null ? (
+                        trigger
+                      ) : (
+                        <TimelineReplacePopover
+                          trigger={trigger}
+                          projectId={projectId}
+                          column={verbState.replace.column}
+                          cueIds={verbState.replace.cueIds}
+                          timeline={timeline}
+                          deskTargets={deskSelection}
+                          targetName={names.target}
+                          cues={cuesWords}
+                          onReplace={(op) => gesture([op])}
+                        />
+                      )
+                    }
+                    settingsPopover={(trigger) =>
+                      verbState.layers.length === 0 ? (
+                        trigger
+                      ) : (
+                        <TimelineSettingsPopover
+                          trigger={trigger}
+                          projectId={projectId}
+                          layers={verbState.layers}
+                          cues={cuesWords}
+                          onWrite={(ops) => gesture(ops)}
+                        />
+                      )
+                    }
+                  />
+                )}
+                {liveCue != null && liveEdited && dialogs != null && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="border-amber-500/60 text-amber-300"
+                    disabled={locked && onRequestUnlock == null}
+                    title={`${cueLabel(liveCue.id)} is live and edited since GO`}
+                    onClick={() =>
+                      locked ? refuseVerb?.() : dialogs.openUpdateStage({ projectId, cueId: liveCue.id, name: liveCue.name })
+                    }
+                  >
+                    Update stage…
+                  </Button>
+                )}
+                <Button variant="ghost" size="sm" onClick={sheet.clearByLadder} title="Deselect all">
+                  <X className="size-3.5" />
+                  <span className="hidden sm:inline">Deselect</span>
+                </Button>
+              </>
             ) : null
           }
           marqueeDragging={sheet.marqueeDragging}
@@ -493,9 +815,43 @@ export function StackTimeline({
         />
       )}
       <TimelineLegend cues={standardCount} markers={markerCount} columns={shown.length} />
+      {sceneryEdit != null && sceneryElement != null && sceneryCue != null && sceneryColumn?.elementUuid != null && (
+        <TimelineSceneryPopover
+          key={`${sceneryEdit.entryId}|${sceneryEdit.columnId}`}
+          anchor={() =>
+            sheetRef.current?.querySelector(`[data-row-id="${entryRowId(sceneryEdit.entryId)}"] [data-cell="${CSS.escape(sceneryEdit.columnId)}"]`) ?? null
+          }
+          element={sceneryElement}
+          cueLabel={cueLabel(sceneryCue.cueId)}
+          state={sceneryChange?.state ?? null}
+          tracked={sceneryCell?.tracked ?? null}
+          transitionMs={sceneryChange?.transitionMs ?? null}
+          onClose={() => setSceneryEdit(null)}
+          onSet={(state, transitionMs) =>
+            gesture([{ op: 'scenerySet', cueId: sceneryCue.cueId, elementUuid: sceneryColumn.elementUuid!, state, transitionMs }])
+          }
+          onClear={() => {
+            gesture([{ op: 'sceneryClear', cueId: sceneryCue.cueId, elementUuid: sceneryColumn.elementUuid! }])
+            setSceneryEdit(null)
+          }}
+        />
+      )}
+      {dragScope != null && drag != null && (
+        <div
+          className="pointer-events-none fixed z-50 rounded-md border bg-popover px-2 py-1 text-xs shadow-md"
+          style={{ left: drag.x + 14, top: drag.y + 14 }}
+          data-timeline-drag-scope
+        >
+          {dragScope}
+        </div>
+      )}
+      <UnlockShowDialog open={unlockAsked} onOpenChange={setUnlockAsked} onUnlock={() => onRequestUnlock?.()} />
     </div>
   )
 }
+
+/** Why a cell is read-only while the show is locked. */
+const LOCKED_REASON = 'The show is locked — unlock to edit'
 
 function TimelineCueLead({
   cue,
@@ -606,7 +962,8 @@ function runSegmentClass(kind: TimelineKind, mark: Pick<TimelineRunMark, 'start'
 
 /**
  * One cell, drawn from its run mark. A click selects it — the kit's cells select through
- * `onBeginEdit` — and nothing else: the Timeline is read-only, so no cell opens an editor.
+ * `onBeginEdit` — or, on the one selected cell, toggles it ([onClick] decides). A run's last cell
+ * carries the drag handle ([onHandle]), and a cell a drag would change draws its ghost.
  */
 function TimelineCellView({
   column,
@@ -614,19 +971,40 @@ function TimelineCellView({
   mark,
   previous,
   swatch,
-  onSelect,
+  ghost,
+  onClick,
+  onHandle,
 }: {
   column: TimelineColumn
   cell: TimelineCell
   mark: TimelineRunMark
   previous: TimelineCell | null
   swatch: string | null
-  onSelect: () => void
+  ghost: 'fill' | 'empty' | null
+  onClick: () => void
+  onHandle?: (e: React.PointerEvent) => void
 }) {
+  const handle = onHandle != null && mark.end && cell.filled?.kind === 'layer'
   return (
     // The whole cell, over the kit's 2px padding, so a run's segments meet across the row line.
-    <div className="absolute inset-0" onClick={onSelect}>
+    <div className="group/cell absolute inset-0" onClick={onClick}>
       <TimelineCellFace column={column} cell={cell} mark={mark} previous={previous} swatch={swatch} />
+      {ghost === 'fill' && (
+        <span aria-hidden data-timeline-ghost="fill" className={cn('absolute inset-x-2 inset-y-1 z-[2] rounded-md border border-dashed', RUN_CLASS[column.kind], 'opacity-60')} />
+      )}
+      {ghost === 'empty' && (
+        <span aria-hidden data-timeline-ghost="empty" className="absolute inset-x-2 inset-y-1 z-[2] rounded-md border border-dashed border-destructive/70 bg-background/60" />
+      )}
+      {handle && (
+        <button
+          type="button"
+          aria-label={`Drag ${column.name}'s run`}
+          data-timeline-handle
+          className="absolute bottom-0 left-1/2 z-[4] h-2 w-6 -translate-x-1/2 cursor-ns-resize rounded-full border border-background bg-foreground/60 opacity-0 transition-opacity group-hover/cell:opacity-100 focus-visible:opacity-100"
+          onPointerDown={onHandle}
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   )
 }

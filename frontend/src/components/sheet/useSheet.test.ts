@@ -681,3 +681,48 @@ describe('useSheet cell keys', () => {
     }
   })
 })
+
+describe('useSheet surface-owned keys', () => {
+  function surface() {
+    const clear = vi.fn()
+    const onActivate = vi.fn()
+    const onClearCells = vi.fn()
+    const columns: SheetColumn<Row, 'level'>[] = [
+      { key: 'level', label: 'Level', width: '64px', value: (row) => row.level, cell: () => null, clear },
+    ]
+    const hook = renderHook(() =>
+      useSheet<Row, 'level'>({
+        rows,
+        columns,
+        permission: { entry: true, clear: true },
+        copy: () => ({ setTitle: 'Set', clearTitle: 'Clear' }),
+        onActivate,
+        onClearCells,
+      }),
+    )
+    act(() => hook.result.current.tableProps.cellSelection.select([{ rowId: 'a', col: 'level' }, { rowId: 'b', col: 'level' }], 'replace'))
+    return { clear, onActivate, onClearCells }
+  }
+
+  it('hands ⏎ over a cell selection to the surface, and leaves a typed character unclaimed', () => {
+    const { onActivate } = surface()
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true })
+    act(() => {
+      window.dispatchEvent(enter)
+    })
+    expect(onActivate).toHaveBeenCalledTimes(1)
+    expect(enter.defaultPrevented).toBe(true)
+    const typed = new KeyboardEvent('keydown', { key: 'l', cancelable: true })
+    act(() => {
+      window.dispatchEvent(typed)
+    })
+    expect(typed.defaultPrevented).toBe(false)
+  })
+
+  it('clears the whole selection with one call to the surface, not the columns', () => {
+    const { clear, onClearCells } = surface()
+    fireEvent.keyDown(window, { key: 'Backspace' })
+    expect(onClearCells).toHaveBeenCalledTimes(1)
+    expect(clear).not.toHaveBeenCalled()
+  })
+})

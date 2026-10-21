@@ -1,6 +1,7 @@
 import type { CueTarget } from '@/api/cuesApi'
 import type { StackTimeline, TimelineEffect, TimelineLayer } from '@/api/stackTimelineApi'
 import { TIMELINE_KINDS, type TimelineColumn, type TimelineKind } from './model'
+import type { StoredExtraColumn } from './columnOrder'
 
 /** What the columns are called — the rig's and the scene's names, which the timeline does not carry. */
 export interface TimelineNames {
@@ -174,4 +175,30 @@ export function moveColumn(
   if (at < 0 || to < 0) return ids
   ;[ids[at], ids[to]] = [ids[to], ids[at]]
   return ids
+}
+
+/** The id a Look or palette column on [target] has — what a derived column of the same cell gets. */
+export function recordColumnId(kind: 'look' | 'palette', sourceId: number, target: CueTarget | null): string {
+  return `${kind}:${sourceId}:${targetId(target)}`
+}
+
+/**
+ * [columns] with this window's added [extras] (§4.4) after each kind's own — an extra the stack
+ * now fills is derived already, so it is left out.
+ */
+export function withExtraColumns(columns: readonly TimelineColumn[], extras: readonly StoredExtraColumn[], names: TimelineNames): TimelineColumn[] {
+  const ids = new Set(columns.map((c) => c.id))
+  const added = extras
+    .map((extra): TimelineColumn => ({
+      id: recordColumnId(extra.kind, extra.sourceId, extra.target),
+      kind: extra.kind,
+      name: extra.name,
+      sub: extra.target == null ? (extra.kind === 'look' ? 'own fixtures' : 'own heads') : names.target(extra.target),
+      families: extra.families,
+      heads: [],
+      sourceId: extra.sourceId,
+      target: extra.target,
+    }))
+    .filter((c) => !ids.has(c.id))
+  return TIMELINE_KINDS.flatMap((kind) => [...columns.filter((c) => c.kind === kind), ...added.filter((c) => c.kind === kind)])
 }

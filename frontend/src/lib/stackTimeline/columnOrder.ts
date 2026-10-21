@@ -1,3 +1,4 @@
+import type { CueTarget } from '@/api/cuesApi'
 import { createSyncStore, sessionStorageArea, type SyncStore } from '@/lib/syncStore'
 import { TIMELINE_KINDS, type TimelineKind } from './model'
 
@@ -50,3 +51,43 @@ export const timelineFiltersStore = createSyncStore<StoredTimelineFilters>({
   },
   storage: sessionStorageArea,
 })
+
+/** A Look or palette column a window added with *+ Column*: empty until a cell is filled (§4.4). */
+export interface StoredExtraColumn {
+  kind: 'look' | 'palette'
+  sourceId: number
+  name: string
+  target: CueTarget | null
+  families: string[]
+}
+
+function parseExtras(parsed: unknown): StoredExtraColumn[] {
+  if (!Array.isArray(parsed)) return []
+  return parsed.filter(
+    (c): c is StoredExtraColumn =>
+      typeof c === 'object' &&
+      c != null &&
+      (c.kind === 'look' || c.kind === 'palette') &&
+      typeof c.sourceId === 'number' &&
+      typeof c.name === 'string' &&
+      Array.isArray(c.families) &&
+      (c.target === null || (typeof c.target === 'object' && typeof c.target.key === 'string' && typeof c.target.type === 'string')),
+  )
+}
+
+const extraStores = new Map<number, SyncStore<StoredExtraColumn[]>>()
+
+/** This window's added columns for one stack: `sessionStorage timeline.extra.<stackId>`. */
+export function timelineExtraColumnsStore(stackId: number): SyncStore<StoredExtraColumn[]> {
+  let store = extraStores.get(stackId)
+  if (store == null) {
+    store = createSyncStore<StoredExtraColumn[]>({
+      key: `timeline.extra.${stackId}`,
+      fallback: [],
+      parse: parseExtras,
+      storage: sessionStorageArea,
+    })
+    extraStores.set(stackId, store)
+  }
+  return store
+}

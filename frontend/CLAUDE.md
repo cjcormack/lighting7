@@ -6570,10 +6570,10 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   name, shared and *Edited* chips, the live row's fade bar), Fade and Follow, then 84 px columns (92
   for effects and scenery) under the kit's header bands; a palette's cells and header carry its
   colour where it has one (`templateRowsSwatch` over a generic palette's rows, the busk pad's rule). Markers are divider rows whose cells a run
-  and a tracked line pass through. **Read-only in session 3**: a cell selects through its
-  `onBeginEdit` and never toggles; `permission` is closed, so ⏎ and ⌫ do nothing. One selected cell
-  opens the pane on its cue at the column's tab (Looks for Look and palette columns, FX, Scenery); a
-  range over several cues folds it (C2).
+  and a tracked line pass through. A cell selects through its `onBeginEdit`; editing is the next
+  bullet. One selected cell opens the pane on its cue at the column's tab (Looks for Look and palette
+  columns, FX, Scenery); a range over several cues folds it (C2). A layer cell's rank is the desk's
+  `rank`, which counts a layer whose source is gone, so the ranks above it do not shift.
 - **Row B** is the filters, per window (`sessionStorage timeline.filters`): the kind chips with
   their counts under the other two filters (`kindCounts`), the family segment (scenery always
   kept), and *Selection only*, the columns whose `heads` meet the desk selection expanded through the
@@ -6590,6 +6590,47 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   consecutive columns, its rule down the first. The programmer's `FixturesTable` keeps whole rings:
   whether its neighbour is blank depends on the neighbour's live values.
   `SheetColumn.header` replaces the uppercase label where a column needs two lines.
+- **Editing Looks, palettes and scenery** (§4.4, session 4; `TimelineEditing.tsx`, the pure op
+  builders in `lib/stackTimeline/edits.ts`). **Every gesture is one request** to `POST
+  …/timeline/edit` (`useEditCueStackTimelineMutation`), sent through `useTimelineEdits`: nothing
+  reaches the stage, and the answer's `before` is pushed as one Undo step — per stack, kept while the
+  window lives (module-level, so a view switch keeps it), last first — which ⌘Z and the toast's
+  *Undo* send back as `restore` ops (P5). Every gesture toasts what it did, in one id per stack, the
+  press's knock-on named from the answer's `released` (*Amber on LX1 Orbits in Q5. Lavender released
+  there.*). The gestures:
+  - **One cell.** A click selects; a second click on the one selected cell toggles it — a Look or
+    palette cell on is `layerOn` with `settingsFrom` the nearest filled cell above in its column, else
+    below (D6, `nearestFilled`), off is `layerOff` — and a scenery cell's second click opens
+    `TimelineSceneryPopover` instead: `SceneryControl` (`commit="release"`, so one write per gesture),
+    the transition, and *Clear change*. ⏎ toggles the selection (all filled → off, else the empty ones
+    on) and ⌫ turns it off, through the kit's new `useSheet` options `onActivate` and `onClearCells`
+    (a surface-owned ⏎ and ⌫ — one request over every column rather than each column's `clear`; a
+    typed character is then left unclaimed, so the transport's `L` still works). ⌘D and ⌘Z are
+    `useTimelineCommandKeys`, standing aside for a key region (the pane), a guarded target or an open
+    editor. Effect cells select and read only — their edits are session 5's.
+  - **A run's end** carries a handle (on hover, never while locked). Dragging it down fills the cells
+    it crosses with the dragged cell's settings, up empties them, the one under the pointer kept
+    (`dragPlan`); ghost cells and a scope chip by the pointer show the result before the release,
+    which is one request. The pointer's row is read with `elementFromPoint`, markers skipped.
+  - **The bar's verbs** (`TimelineVerbs`): *On* (empty cells filled, each from its nearest filled
+    cell), *Off*, *Fill ↓* (each column's top row copied down, ⌘D), *Replace with…* and *Settings…*,
+    then *Update stage…* when the live row is selected and edited since GO, then *Deselect*. **A verb
+    that would change nothing is disabled** — its op list is empty. *Replace with…*
+    (`TimelineReplacePopover`) takes a selection in one Look or palette column: the replacement
+    record and its target (the desk selection's first by default), *Keep each layer's rank and
+    settings*, and a readout of which cues swap and which already hold it (`replacePlan`). *Settings…*
+    (`TimelineSettingsPopover`) is the Looks tab's fields over every selected layer, each change one
+    request, a field the layers disagree on reading *mixed*; a number commits on Enter or blur, never
+    per keystroke; it names a layer covering several targets and offers *Open Look* / *Open palette*.
+  - **+ Column** (`TimelineAddColumn`) searches the Looks and palettes; a palette takes the desk
+    selection's first target unless another is picked, a Look its own fixtures. The column lives in
+    this window (`sessionStorage timeline.extra.<stackId>`, `withExtraColumns`) until a cell is filled,
+    when the derived one replaces it and the window lets go.
+  - **Locked**, every write asks to unlock (`UnlockShowDialog`, the cue sheet's `refuseVerb` /
+    `onRefused` pattern, ⏎ alone claimed from the keyboard) or is disabled with the reason where the
+    lock is not the operator's; the selection and filters still work and no handle is drawn.
+  `StackTimeline.editing.test.tsx` asserts one request per gesture and the locked refusals,
+  `edits.test.ts` the op lists, `useSheet.test.ts` the two kit options.
 
 #### The Show position
 

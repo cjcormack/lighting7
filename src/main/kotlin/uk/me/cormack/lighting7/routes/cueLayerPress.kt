@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoTemplate
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -110,20 +111,7 @@ internal fun pressCueLayer(
         if (DaoCue.findById(cueId)?.takeIf { it.project.id == project.id } == null) {
             return@transaction PressedRecord.Missing("Cue not found")
         }
-        val templateId = request.templateId
-        if (templateId != null) {
-            val template = DaoTemplate.findById(templateId)?.takeIf { it.project.id == project.id }
-                ?: return@transaction PressedRecord.Missing("Palette not found")
-            PressedRecord.Palette(
-                LayerSource.template(template.id.value, template.uuid, template.name),
-                template.familyOf(),
-                template.isGenericTemplate(),
-            )
-        } else {
-            val look = DaoLook.findById(request.lookId!!)?.takeIf { it.project.id == project.id }
-                ?: return@transaction PressedRecord.Missing("Look not found")
-            PressedRecord.Look(look.id.value, look.toggleSource(state.show.fixtures))
-        }
+        readPressedRecord(project, request.templateId, request.lookId, state.show.fixtures)
     }
     val record = when (read) {
         is PressedRecord.Missing -> return CueLayerPressOutcome.NotFound(read.message)
@@ -133,9 +121,9 @@ internal fun pressCueLayer(
     repeat(PRESS_ATTEMPTS) {
         val layers = transaction(state.database) { DaoCue.findById(cueId)?.layersInOrder()?.mapNotNull { it.toDto() } }
             ?: return CueLayerPressOutcome.NotFound("Cue not found")
-        val decided = when (val decision = decide(record, requested, families, layers, rules, coverage)) {
-            is Decision.Refused -> return decision.outcome
-            is Decision.Decided -> decision
+        val decided = when (val decision = decideCueLayerPress(record, requested, families, layers, rules, coverage)) {
+            is CueLayerPressDecision.Refused -> return CueLayerPressOutcome.Refused(decision.message, decision.code)
+            is CueLayerPressDecision.Decided -> decision
         }
         val written: CueLayerPressOutcome? = transaction(state.database) {
             val cue = DaoCue.findById(cueId) ?: return@transaction CueLayerPressOutcome.NotFound("Cue not found")
@@ -167,7 +155,7 @@ private const val PRESS_ATTEMPTS = 3
 internal const val CODE_CUE_LAYERS_MOVED = "CUE_LAYERS_MOVED"
 
 /** What was pressed, read once — or what was not there. */
-private sealed interface PressedRecord {
+internal sealed interface PressedRecord {
     data class Missing(val message: String) : PressedRecord
 
     sealed interface Found : PressedRecord {
@@ -181,21 +169,51 @@ private sealed interface PressedRecord {
     }
 }
 
-private sealed interface Decision {
-    class Refused(val outcome: CueLayerPressOutcome.Refused) : Decision
-
-    class Decided(val arriving: CueLayerDto, val result: LayerPress.Result<CueLayerDto>, val skippedFamilies: List<String>) : Decision
+/**
+ * The record a press names — a palette by [templateId] or a Look by [lookId], exactly one — read as
+ * the press needs it, or [PressedRecord.Missing] for one [project] lacks. Must run inside a
+ * transaction.
+ */
+internal fun readPressedRecord(project: DaoProject, templateId: Int?, lookId: Int?, fixtures: Fixtures): PressedRecord {
+    if (templateId != null) {
+        val template = DaoTemplate.findById(templateId)?.takeIf { it.project.id == project.id }
+            ?: return PressedRecord.Missing("Palette not found")
+        return PressedRecord.Palette(
+            LayerSource.template(template.id.value, template.uuid, template.name),
+            template.familyOf(),
+            template.isGenericTemplate(),
+        )
+    }
+    val look = lookId?.let { DaoLook.findById(it) }?.takeIf { it.project.id == project.id }
+        ?: return PressedRecord.Missing("Look not found")
+    return PressedRecord.Look(look.id.value, look.toggleSource(fixtures))
 }
 
-/** The press over [layers]: a refusal, or what the list becomes. */
-private fun decide(
+internal sealed interface CueLayerPressDecision {
+    class Refused(val message: String, val code: String) : CueLayerPressDecision
+
+    class Decided(val arriving: CueLayerDto, val result: LayerPress.Result<CueLayerDto>, val skippedFamilies: List<String>) : CueLayerPressDecision
+}
+
+/**
+ * The press of [record] on [requested] over a cue's [layers]: a refusal, or what the list becomes —
+ * the decide step the cue editor's press and the Timeline's batch (`timeline/edit`) share, so the
+ * two cannot drift. Pure but for the palette snapshots [rules] reads, which open a transaction of
+ * their own or join the caller's.
+ *
+ * [settings] is a layer whose settings the arriving one takes (stack-timeline plan D6) — its
+ * enabled, mask, blend, amount, stomp, masters and timing; absent, a fresh press's defaults. The
+ * widening test reads them, so a layer that already carries them is widened and keeps its own.
+ */
+internal fun decideCueLayerPress(
     record: PressedRecord.Found,
     requested: List<CueTargetDto>,
     families: Set<PropertyMaskGroup>?,
     layers: List<CueLayerDto>,
     rules: LayerPressRules,
     coverage: TargetCoverage,
-): Decision {
+    settings: CueLayerDto? = null,
+): CueLayerPressDecision {
     val source = record.source
     val ops = CueLayerOps(rules, layers, (record as? PressedRecord.Look)?.let { it.source.uuid to it.toggle.ownTargets })
     val arriving: CueLayerDto
@@ -205,14 +223,12 @@ private fun decide(
             // A generic palette's rows take their targets from the press, so with none the layer
             // would assert nothing — the busk pad's refusal. A per-fixture one names its own heads.
             if (requested.isEmpty() && record.generic) {
-                return Decision.Refused(CueLayerPressOutcome.Refused("This palette needs a selection to press onto", CODE_TEMPLATE_NEEDS_SELECTION))
+                return CueLayerPressDecision.Refused("This palette needs a selection to press onto", CODE_TEMPLATE_NEEDS_SELECTION)
             }
             val targets = rules.pressTargets(source.uuid, requested)
             val releasing = LayerPress.wouldRelease(layers, source.uuid, targets, ops, coverage)
             if (!releasing && families != null && !maskAllows(families, record.family)) {
-                return Decision.Refused(
-                    CueLayerPressOutcome.Refused(templateOutsideMaskMessage(source.name, record.family, families), CODE_TEMPLATE_OUTSIDE_MASK),
-                )
+                return CueLayerPressDecision.Refused(templateOutsideMaskMessage(source.name, record.family, families), CODE_TEMPLATE_OUTSIDE_MASK)
             }
             arriving = CueLayerDto(templateId = source.id, targets = targets, propertyMask = record.family?.name, source = source.toDto())
         }
@@ -225,7 +241,7 @@ private fun decide(
                 LayerPress.wouldRelease(layers, source.uuid, own, ops, coverage)
             ) {
                 val arriving = CueLayerDto(lookId = record.lookId, targets = own, source = source.toDto())
-                return Decision.Decided(arriving, LayerPress.press(layers, arriving, ops, coverage), emptyList())
+                return CueLayerPressDecision.Decided(arriving, LayerPress.press(layers, arriving, ops, coverage), emptyList())
             }
             // A cue keeps a press naming no targets naming none — the Look's own fixtures, which
             // follow the Look as it is edited.
@@ -233,7 +249,7 @@ private fun decide(
                 LayerPress.wouldRelease(layers, source.uuid, it, ops, coverage)
             }
             val ready = when (resolved) {
-                is LookPressResolution.Refused -> return Decision.Refused(CueLayerPressOutcome.Refused(resolved.message, resolved.code))
+                is LookPressResolution.Refused -> return CueLayerPressDecision.Refused(resolved.message, resolved.code)
                 is LookPressResolution.Ready -> resolved
             }
             skippedFamilies = ready.skippedFamilies
@@ -246,8 +262,23 @@ private fun decide(
         layers.mapNotNullTo(HashSet()) { layer -> layer.source?.takeIf { it.kind == "TEMPLATE" }?.let { UUID.fromString(it.uuid) } },
     )
     val replacesOn = if (replaces.isEmpty()) null else rules.paletteHeads(source.uuid, arriving.targets)
-    return Decision.Decided(arriving, LayerPress.press(layers, arriving, ops, coverage, replaces = replaces, replacesOn = replacesOn), skippedFamilies)
+    val pressed = settings?.let { arriving.withSettingsOf(it) } ?: arriving
+    return CueLayerPressDecision.Decided(pressed, LayerPress.press(layers, pressed, ops, coverage, replaces = replaces, replacesOn = replacesOn), skippedFamilies)
 }
+
+/** This layer carrying [from]'s settings — every field a cue layer has but its record and targets. */
+internal fun CueLayerDto.withSettingsOf(from: CueLayerDto): CueLayerDto = copy(
+    enabled = from.enabled,
+    propertyMask = from.propertyMask,
+    blendMode = from.blendMode,
+    amount = from.amount,
+    stomp = from.stomp,
+    speedMasterUuid = from.speedMasterUuid,
+    rateSpeedMasterUuid = from.rateSpeedMasterUuid,
+    delayMs = from.delayMs,
+    intervalMs = from.intervalMs,
+    randomWindowMs = from.randomWindowMs,
+)
 
 /**
  * How [LayerPress] reads a stored cue layer. A fresh press is untimed, unmastered, unstomped and at

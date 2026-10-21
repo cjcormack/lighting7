@@ -107,6 +107,17 @@ export interface UseSheetOptions<Row extends SheetRow, C extends string> {
    * rows and the columns that hold cells, so this is all a surface says.
    */
   cellFlow?: CellFlow
+  /**
+   * ⏎ over the cell selection, instead of opening an editor: the surface acts on the selection as
+   * one gesture — the Timeline's toggle. A typed character is then left unclaimed.
+   */
+  onActivate?: () => void
+  /**
+   * ⌫ over the cell selection as one gesture, instead of each column's own `clear` — for a surface
+   * whose clear is one request over every column (the Timeline's *Off*). The columns' `clear` and
+   * `clearRefusal` are not consulted.
+   */
+  onClearCells?: () => void
 }
 
 /**
@@ -132,6 +143,8 @@ export function useSheet<Row extends SheetRow, C extends string>({
   onOpenRow,
   selectsRows = true,
   cellFlow = 'grid',
+  onActivate,
+  onClearCells,
 }: UseSheetOptions<Row, C>) {
   const selectableOrder = useMemo(
     () => rows.filter((row) => row.divider == null).map((row) => row.id),
@@ -204,14 +217,16 @@ export function useSheet<Row extends SheetRow, C extends string>({
   const effective: CellKeyboardPermission = useMemo(
     () => ({
       entry: permission.entry,
-      clear: permission.clear && selectedColumns.length > 0 && selectedColumns.every((c) => c.clear != null),
+      clear:
+        permission.clear &&
+        (onClearCells != null || (selectedColumns.length > 0 && selectedColumns.every((c) => c.clear != null))),
     }),
-    [permission.entry, permission.clear, selectedColumns],
+    [onClearCells, permission.entry, permission.clear, selectedColumns],
   )
   const actionCopy: CellActionCopy = useMemo(() => {
     const base = copy(cellCount)
-    return permission.clear && clearRefusal ? { ...base, clearTitle: clearRefusal } : base
-  }, [cellCount, clearRefusal, copy, permission.clear])
+    return permission.clear && clearRefusal && onClearCells == null ? { ...base, clearTitle: clearRefusal } : base
+  }, [cellCount, clearRefusal, copy, onClearCells, permission.clear])
 
   // ── Commits ──
   const commitToCells = useCallback(
@@ -338,16 +353,32 @@ export function useSheet<Row extends SheetRow, C extends string>({
     },
     [columnByKey, commitToCells, firstEditable, openCellEditor],
   )
+  const activateOrOpen = useCallback(
+    (seed: string): boolean => {
+      if (onActivate == null) {
+        openOrType(seed)
+        return true
+      }
+      if (seed !== '') return false
+      onActivate()
+      return true
+    },
+    [onActivate, openOrType],
+  )
   const setButtonRef = useRef<HTMLButtonElement | null>(null)
 
   const clearSelectedCells = useCallback(() => {
     if (!effective.clear) return
+    if (onClearCells != null) {
+      onClearCells()
+      return
+    }
     for (const { col, rows: group } of columnGroups) {
       const column = columnByKey.get(col)
       const taken = column ? group.filter((row) => takesValue(column, row)) : []
       if (taken.length > 0) column?.clear?.(taken)
     }
-  }, [columnByKey, columnGroups, effective.clear])
+  }, [columnByKey, columnGroups, effective.clear, onClearCells])
 
   // ⏎ over one row opens its record. Read through the selected rows, so it names the row the
   // operator is looking at whichever way it was selected (a click, a name-column drag, ⌘A of one).
@@ -432,7 +463,7 @@ export function useSheet<Row extends SheetRow, C extends string>({
     permission: effective,
     isCellSelected,
     onEscape: clearByLadder,
-    onOpen: openOrType,
+    onOpen: activateOrOpen,
     onClear: clearSelectedCells,
     onRefused,
     // The visible rows, not the selection's raw count: a selected id whose row has since gone (a

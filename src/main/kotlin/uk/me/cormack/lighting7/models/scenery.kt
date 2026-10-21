@@ -452,7 +452,11 @@ fun lookSceneryOf(lookId: EntityID<Int>): List<DaoLookSceneryRow> =
 // list names again: re-saving an unchanged list must export byte-for-byte as before, or every save
 // would be a sync change. Must run inside a transaction.
 
-fun replaceCueScenery(cue: DaoCue, writes: List<SceneryWrite>) {
+/**
+ * [uuids], index for index with [writes], are the uuids a new row takes — the Timeline's `restore`,
+ * putting back a change an edit cleared exactly as it was. A kept row keeps its own.
+ */
+fun replaceCueScenery(cue: DaoCue, writes: List<SceneryWrite>, uuids: List<UUID?> = emptyList()) {
     val existing = DaoCueSceneryRow.find { DaoCueScenery.cue eq cue.id }.associateBy { it.element.id.value }
     val kept = writes.map { it.element.id }.toSet()
     existing.filterKeys { it !in kept }.values.forEach { it.delete() }
@@ -461,6 +465,7 @@ fun replaceCueScenery(cue: DaoCue, writes: List<SceneryWrite>) {
             this.cue = cue
             this.element = DaoStageElement[w.element.id]
             this.stateJson = ""
+            uuids.getOrNull(i)?.let { uuid = it }
         }
         row.stateJson = encodeSceneryState(w.state)
         row.transition = w.transition

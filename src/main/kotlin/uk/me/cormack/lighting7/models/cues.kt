@@ -105,6 +105,11 @@ data class CueLayerDto(
      * [source] is: a PATCH that echoed an id back would invite the server to trust it as identity.
      */
     val id: Int? = null,
+    /**
+     * The stored layer's uuid, on read only, as `CueAdHocEffectDto.uuid` is: ignored on write but
+     * by the Timeline's `restore`, which puts a cue back exactly as an edit found it.
+     */
+    val uuid: String? = null,
 )
 
 /**
