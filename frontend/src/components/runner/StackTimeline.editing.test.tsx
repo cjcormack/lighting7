@@ -274,6 +274,16 @@ describe('a range', () => {
     expect(requests[1].ops.map((op) => ('cueId' in op ? `${op.op}:${op.cueId}` : op.op))).toEqual(['layerOn:2', 'layerOn:4'])
   })
 
+  it('a shift-click extends the selection to a range, writing nothing', async () => {
+    mount()
+    fireEvent.click(cell(101, PALETTE))
+    fireEvent.click(cell(104, PALETTE), { shiftKey: true })
+    expect(edit).not.toHaveBeenCalled()
+    fireEvent.click(document.querySelector('[data-timeline-verb="On"]')!)
+    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    expect(requests[0].ops.map((op) => ('cueId' in op ? `${op.op}:${op.cueId}` : op.op))).toEqual(['layerOn:2', 'layerOn:4'])
+  })
+
   it('disables a verb that would change nothing', () => {
     mount()
     fireEvent.click(cell(101, PALETTE))

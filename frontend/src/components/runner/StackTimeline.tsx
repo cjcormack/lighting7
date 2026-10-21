@@ -313,7 +313,7 @@ export function StackTimeline({
   )
 
   /** A cell's click: select it, or — when it is already the one selected cell — toggle it. */
-  const clickCellRef = useRef<(row: TimelineRow, column: TimelineColumn, select: () => void) => void>(() => {})
+  const clickCellRef = useRef<(row: TimelineRow, column: TimelineColumn, select: () => void, extend: boolean) => void>(() => {})
   const startDragRef = useRef<(column: TimelineColumn, entryId: number, e: React.PointerEvent) => void>(() => {})
 
   const move = useCallback(
@@ -382,7 +382,7 @@ export function StackTimeline({
         value: (row) => (isCueRow(row.entry) ? row.entry.entryId : undefined),
         cell: (row, props) => (
           <TimelineCellView
-            onClick={() => clickCellRef.current(row, column, props.onBeginEdit)}
+            onClick={(e) => clickCellRef.current(row, column, props.onBeginEdit, e.shiftKey)}
             swatch={swatch}
             column={column}
             cell={cellAt(grid, row.entry.entryId, column.id)}
@@ -481,7 +481,23 @@ export function StackTimeline({
   clearRef.current = () => gesture(verbState.off)
 
   const soleCell = cellCount === 1 ? `${cellSelection.cells[0].rowId}|${cellSelection.cells[0].col}` : null
-  clickCellRef.current = (row, column, select) => {
+  clickCellRef.current = (row, column, select, extend) => {
+    const anchor = cellSelection.cursor?.anchor ?? cellSelection.cells[0]
+    if (extend && anchor != null) {
+      // Shift-click: the rectangle from the anchor to this cell, as a marquee would draw it.
+      const rowIds = rows.filter((r) => r.divider == null).map((r) => r.id)
+      const colIds = shown.map((c) => c.id)
+      const span = <T,>(list: T[], a: T, b: T) => {
+        const [i, j] = [list.indexOf(a), list.indexOf(b)]
+        return i < 0 || j < 0 ? [] : list.slice(Math.min(i, j), Math.max(i, j) + 1)
+      }
+      const head = { rowId: row.id, col: column.id }
+      cellSelection.place(
+        span(rowIds, anchor.rowId, row.id).flatMap((rowId) => span(colIds, anchor.col, column.id).map((col) => ({ rowId, col }))),
+        { anchor, head },
+      )
+      return
+    }
     if (soleCell !== `${row.id}|${column.id}`) {
       select()
       return
@@ -982,7 +998,7 @@ function TimelineCellView({
   previous: TimelineCell | null
   swatch: string | null
   ghost: 'fill' | 'empty' | null
-  onClick: () => void
+  onClick: (e: React.MouseEvent) => void
   onHandle?: (e: React.PointerEvent) => void
 }) {
   const handle = onHandle != null && mark.end && cell.filled?.kind === 'layer'

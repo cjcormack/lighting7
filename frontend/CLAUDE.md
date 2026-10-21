@@ -6599,7 +6599,8 @@ Timeline draws as the Table (`effectiveStackView`), the stored choice kept for w
   left on top, and `StackDetail` keys the Timeline by stack, so one stack's toast cannot undo another's. Every gesture toasts what it did, in one id per stack, the
   press's knock-on named from the answer's `released` (*Amber on LX1 Orbits in Q5. Lavender released
   there.*). The gestures:
-  - **One cell.** A click selects; a second click on the one selected cell toggles it — a Look or
+  - **One cell.** A click selects, a shift-click extends the selection to the rectangle from its
+    anchor; a second click on the one selected cell toggles it — a Look or
     palette cell on is `layerOn` with `settingsFrom` the nearest filled cell above in its column, else
     below (D6, `nearestFilled`), off is `layerOff` — and a scenery cell's second click opens
     `TimelineSceneryPopover` instead, through `EditorSurface`: `SceneryControl` (`commit="release"`, so one write per gesture),
