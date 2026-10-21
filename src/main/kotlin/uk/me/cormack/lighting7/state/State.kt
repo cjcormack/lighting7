@@ -14,7 +14,6 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import org.slf4j.LoggerFactory
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.GlobalScope
@@ -620,17 +619,7 @@ class State(val config: ApplicationConfig) {
                 .map { it.id.value to it.uuid }
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
                 .map { it.uuid }.toSet()
-            val looks = DaoLook.find { DaoLooks.project eq projectId }.map { it.id.value to it.uuid }
-            val lookUuidById = looks.toMap()
-            // The Looks a button cannot press: one deferred effect is enough. One batched read
-            // over this project's Looks rather than `look.effects.any { … }` per Look, which
-            // would be a query per library row on every fixture change.
-            val deferred = if (looks.isEmpty()) emptySet() else DaoLookEffect
-                .find {
-                    (DaoLookEffects.targetType eq DEFERRED_TARGET_TYPE) and
-                        (DaoLookEffects.look inList looks.map { it.first })
-                }
-                .mapNotNullTo(HashSet()) { lookUuidById[it.readValues[DaoLookEffects.look].value] }
+            val looks = DaoLook.find { DaoLooks.project eq projectId }.mapTo(HashSet()) { it.uuid }
             val templates = DaoTemplate.find { DaoTemplates.project eq projectId }.mapTo(HashSet()) { it.uuid }
             val pages = DaoBuskPage.find { DaoBuskPages.project eq projectId }.map { it.id.value to it.uuid }
             // A pad has no project column of its own — it is reached through its bank's column's
@@ -652,8 +641,7 @@ class State(val config: ApplicationConfig) {
                 stacks = stacks,
                 cues = cues,
                 speedMasterUuids = masters,
-                lookUuids = looks.mapTo(HashSet()) { it.second },
-                looksNeedingSelection = deferred,
+                lookUuids = looks,
                 templateUuids = templates,
                 padUuids = pads,
                 bankUuids = banks,
@@ -671,7 +659,6 @@ class State(val config: ApplicationConfig) {
             selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
             colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
             validLookUuids = snapshot.lookUuids,
-            looksNeedingSelection = snapshot.looksNeedingSelection,
             validTemplateUuids = snapshot.templateUuids,
             validPadUuids = snapshot.padUuids,
             validBankUuids = snapshot.bankUuids,
@@ -688,7 +675,6 @@ class State(val config: ApplicationConfig) {
         val cues: List<Pair<Int, java.util.UUID>>,
         val speedMasterUuids: Set<java.util.UUID>,
         val lookUuids: Set<java.util.UUID>,
-        val looksNeedingSelection: Set<java.util.UUID>,
         val templateUuids: Set<java.util.UUID>,
         val padUuids: Set<java.util.UUID>,
         val bankUuids: Set<java.util.UUID>,
@@ -1373,6 +1359,10 @@ class State(val config: ApplicationConfig) {
             // Once per database: a Look effect names its own target, so one that names none goes
             // (absolute-looks plan D2). `DeferredLookEffectsMigration.kt`.
             dropDeferredLookEffects()
+
+            // Once per database: a Look lands whole, so its cue layers name no targets
+            // (absolute-looks plan D1). `LookLayerTargetsMigration.kt`.
+            clearLookLayerTargets()
 
             ensureInstallRow()
         }

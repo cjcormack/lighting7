@@ -36,6 +36,9 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
+import uk.me.cormack.lighting7.sync.dto.CueLayerJson
+import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DaoCueLayer
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -1528,6 +1531,35 @@ class ProjectRoundTripTest {
             assertEquals(1L, looks.getValue("Warm Amber").effects.count(), "a bound effect is untouched")
         }
         assertTrue(logs.any { "'warm-pulse'" in it && deferred.uuid in it && "names no target of its own" in it }, "$logs")
+    }
+
+    /**
+     * A Look lands whole (absolute-looks plan D1), so a v37 archive's Look layer naming targets — which
+     * an older desk could still write — imports naming none and is logged; a palette layer keeps its.
+     */
+    @Test
+    fun `a Look layer's targets in an archive are dropped on import, and logged`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val layerFiles = Files.list(exportDirA.resolve("cueLayers")).use { it.toList() }
+        val lookLayer = layerFiles.first { canonicalDecode(CueLayerJson.serializer(), Files.readString(it)).lookUuid != null }
+        val layer = canonicalDecode(CueLayerJson.serializer(), Files.readString(lookLayer))
+        Files.writeString(
+            lookLayer,
+            canonicalEncode(CueLayerJson.serializer(), layer.copy(targets = listOf(CueTargetDto("fixture", "hex-1")))),
+        )
+        wipeDatabase()
+
+        val (imported, logs) = captureLogs(ProjectImporter::class.java.name) {
+            ProjectImporter(state).import(exportDirA, nameOverride = null)
+        }
+
+        transaction(state.database) {
+            val layers = DaoCueLayer.all().filter { it.cue.project.id.value == imported.projectId }
+            assertTrue(layers.filter { it.look != null }.all { it.targets.isEmpty() }, "every Look layer names none")
+            assertTrue(layers.any { it.template != null && it.targets.isNotEmpty() }, "a palette layer keeps its targets")
+        }
+        assertTrue(logs.any { layer.uuid in it && "named targets" in it }, "$logs")
     }
 
     /**

@@ -728,7 +728,7 @@ private val showCueSchema = objectSchema {
     prop("fadeCurve", "string", "LINEAR (default), SINE_IN_OUT, CUBIC_IN_OUT, … — an EasingCurve name.")
     prop("followSeconds", "number", "Auto-follow: the stack fires the next cue this many seconds after this one fires.")
     prop("marker", "boolean", "A section divider ('Act 1', 'Interval') rather than a cue: name is its label; GO skips it.")
-    arrayProp("layers", cueLayerSchema, "Looks or palettes this cue applies, with their targets — the same shape as create_cue's layers.")
+    arrayProp("layers", cueLayerSchema, "Looks or palettes this cue applies, with a palette's targets — the same shape as create_cue's layers.")
     arrayProp("values", lookValueSchema, "The cue's own values, in create_look's values shape — $CUE_VALUES_NOTE Current project only: they are resolved against the live rig.")
     arrayProp("scenery", sceneryItemSchema(forCue = true), "Scene elements this cue moves on GO — the same shape as create_cue's scenery. $SCENERY_TRACKS_NOTE")
     arrayProp("events", cueEventItemSchema, "One-shot triggers this cue fires after GO — the same shape as create_cue's events. $CUE_EVENTS_NOTE")

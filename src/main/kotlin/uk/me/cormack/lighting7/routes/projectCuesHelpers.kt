@@ -54,9 +54,9 @@ internal fun captureCurrentState(state: State): CapturedState {
     val activeEffects = state.show.fxEngine.getActiveEffects()
 
     // Keyed by the **source record**, Look or template: an effect names where it came from and
-    // nothing else, so one record applied twice to different targets collapses into one layer
+    // nothing else, so one palette applied twice to different targets collapses into one layer
     // covering both — the honest reading of a *snapshot*, since the stage cannot tell you it was
-    // two gestures.
+    // two gestures. A Look's layer names no targets: it lands whole.
     //
     // Keyed by (kind, id) rather than by a bare int, and this is load-bearing rather than tidy.
     // A template layer spawns effects since fx-templates D5, so the old `effect.lookId != null`
@@ -125,7 +125,7 @@ internal fun captureCurrentState(state: State): CapturedState {
         CueLayerDto(
             lookId = sourceId.takeIf { kind == LayerSourceKind.LOOK },
             templateId = sourceId.takeIf { kind == LayerSourceKind.TEMPLATE },
-            targets = targets,
+            targets = targets.takeUnless { kind == LayerSourceKind.LOOK }.orEmpty(),
             sortOrder = index,
         )
     }
@@ -477,6 +477,15 @@ internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
     look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
 
 /**
+ * Is this stored layer the one [dto] describes — Record's whole `(source, targets)` key? A Look's
+ * layer is matched on its source alone, since it names no targets (absolute-looks plan P5).
+ *
+ * Must run inside a transaction.
+ */
+internal fun DaoCueLayer.isSameLayerAs(dto: CueLayerDto): Boolean =
+    appliesSameSourceAs(dto) && (dto.lookId != null || sameTargets(targets, dto.targets))
+
+/**
  * A cue write's speed-master list, checked against [project]'s masters and the ones cue [cueId]
  * already names (null for a new cue) — every problem in one failure, its message the 400's.
  */
@@ -515,7 +524,8 @@ internal fun validateCueChildren(
     propertyAssignments.withIndex().firstOrNull { (_, row) -> TargetRef.ofOrNull(row.targetType, row.targetKey) == null }
         ?.let { (i, row) -> return "propertyAssignments[$i]: unknown target type '${row.targetType}' — expected 'fixture' or 'group'" }
     for (layer in layers) {
-        layer.targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
+        // A Look layer's targets are dropped, not judged (absolute-looks plan P2).
+        layer.withStoredTargets().targets.firstOrNull { TargetRef.ofOrNull(it.type, it.key) == null }
             ?.let { return "A layer's target must be a fixture or a group, not '${it.type}'" }
         EffectSpecCoercion.Strict.problem(blendMode = layer.blendMode)?.let { return it }
     }
@@ -682,7 +692,8 @@ internal fun writeCueChildren(
     }
 
     if (layers != null) {
-        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer to it } }
+        // A Look layer names no targets (absolute-looks plan P2): a write naming some stores none.
+        val resolved = layers.mapNotNull { layer -> resolveCueLayerSource(layer)?.let { layer.withStoredTargets() to it } }
         val existing = if (created) emptyList() else cue.layersInOrder()
         val pairing = if (restore) {
             pairByKey(existing, resolved, { it.uuid to it.layerKey }, { (layer, source) -> restoredUuid(layer.uuid) to source.layerKey })
@@ -766,11 +777,11 @@ internal fun writeCueChildren(
 /** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */
 private fun restoredUuid(uuid: String?): UUID = uuid?.let(UUID::fromString) ?: UUID.randomUUID()
 
-/** [layer] onto this layer, but for the record [writeCueChildren] matched it on. */
+/** [layer] onto this layer, but for the record [writeCueChildren] matched it on; a Look layer's targets are none. */
 internal fun DaoCueLayer.take(layer: CueLayerDto) {
     sortOrder = layer.sortOrder
     enabled = layer.enabled
-    targets = layer.targets
+    targets = layer.withStoredTargets().targets
     propertyMask = layer.propertyMask
     blendMode = layer.blendMode
     amount = layer.amount

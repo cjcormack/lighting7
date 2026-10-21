@@ -30,9 +30,7 @@ import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.familyForEffectCategory
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.fx.toMaskNames
-import uk.me.cormack.lighting7.fx.toPropertyMask
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
@@ -345,9 +343,10 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
     }
 
     // POST /projects/{id}/looks/{lookId}/apply — *Apply as values* (apply-model plan §3.5): the
-    // Look's rows over the selection as `WEB` literals and its effects as Local effects, as a press
-    // followed by Detach would leave them, with no layer ever on the stack. Not a toggle: a second
-    // apply writes the same values again. Targets and mask follow the toggle's rules exactly.
+    // Look's rows as `WEB` literals and its effects as Local effects, as a press followed by Detach
+    // would leave them, with no layer ever on the stack. Not a toggle: a second apply writes the same
+    // values again. Whole, as a press is (absolute-looks plan P6): the request's targets and mask are
+    // read and ignored.
     post<ApplyLookResource> { resource ->
         withCurrentProject(
             state,
@@ -355,27 +354,15 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             { p -> "Cannot apply looks in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<ApplyLookRequest>()
-            val families = try {
-                parseMaskGroups(request.families)
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
-                return@withCurrentProject
-            }
             val look = transaction(state.database) {
-                DaoLook.findById(resource.lookId)
-                    ?.takeIf { it.project.id == project.id }
-                    ?.toggleSource(state.show.fixtures)
+                DaoLook.findById(resource.lookId)?.takeIf { it.project.id == project.id }?.layerSource()
             }
             if (look == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
                 return@withCurrentProject
             }
             try {
-                when (val outcome = applyLookAsValues(state, look, request.targets, families, request.fadeMs)) {
-                    is LookApplyOutcome.Refused ->
-                        call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
-                    is LookApplyOutcome.Applied -> call.respond(outcome.response)
-                }
+                call.respond(applyLookAsValues(state, look, request.fadeMs))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {
@@ -386,20 +373,13 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 
     // POST /projects/{id}/looks/{lookId}/toggle
     //
-    // The tap / cue-slot path: put this Look on these targets, or take it off again, as a
-    // **programmer layer** — the pad adds one, or removes the one it added. No solo siblings, and a
-    // Look replaces nothing (apply-model D6): the busk page's press goes through
-    // `POST /busk/pads/{id}/press`, which resolves the bank's siblings and calls the same `toggle`
-    // with them (busk-layout plan D4).
-    //
-    // A layer carries the whole Look, so a **bound** row lands on the fixture it names and a
-    // *deferred* effect fans over the targets the press supplies. That is what decides the
-    // empty-targets rule: a Look with a deferred effect and no targets asserts nothing, so it is
-    // refused (`LOOK_NEEDS_SELECTION`); a Look with none — rows are always bound — is pressed onto
-    // **its own fixtures**, derived here, which is how a cue-slot tile presses a Look with no
-    // selection to give it (D7). The derivation drops a fixture no longer in the patch rather than
-    // failing the press, and refuses when nothing is left (`LOOK_NO_TARGETS`) — a toggle that
-    // applied nothing and reported success would read as a dead pad.
+    // The tap / cue-slot path: put this Look on as a **programmer layer**, or take it off again. A
+    // Look is pressed whole (absolute-looks plan D1, P1): on puts one layer of it on top, naming no
+    // targets and no mask, and off takes every layer of it off, whatever is selected. The request's
+    // targets and mask are read and ignored (P2, D3). A Look none of whose fixtures is patched lands
+    // nothing, as a cue does, and its ring still lights (P4). No solo siblings, and a Look replaces
+    // nothing (apply-model D6): the busk page's press goes through `POST /busk/pads/{id}/press`,
+    // which resolves the bank's siblings and calls the same `toggle` with them (busk-layout plan D4).
     post<ToggleLookResource> { resource ->
         withCurrentProject(
             state,
@@ -407,50 +387,22 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
             { p -> "Cannot toggle looks in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<ToggleLookRequest>()
-            val families = try {
-                parseMaskGroups(request.families)
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
-                return@withCurrentProject
-            }
-
             val look = transaction(state.database) {
-                DaoLook.findById(resource.lookId)
-                    ?.takeIf { it.project.id == project.id }
-                    ?.toggleSource(state.show.fixtures)
+                DaoLook.findById(resource.lookId)?.takeIf { it.project.id == project.id }?.layerSource()
             }
             if (look == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(LOOK_NOT_FOUND))
                 return@withCurrentProject
             }
-            // The selection's mask, if it has one, narrows the layer to the families the Look and
-            // the mask share (multi-screen plan D5); the ones left out are reported, not silent.
-            // On the *on* arm only — an off press comes off under any mask (`pressWouldRelease`).
-            val press = when (val resolved = resolveLookPress(request.targets, look, families) { pressWouldRelease(state, look.source.uuid, it) }) {
-                is LookPressResolution.Refused -> {
-                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(resolved.message, code = resolved.code))
-                    return@withCurrentProject
-                }
-                is LookPressResolution.Ready -> resolved
-            }
 
             try {
                 val outcome = state.show.programmerLayerStack.toggle(
-                    source = look.source,
-                    targets = press.targets,
-                    propertyMask = press.propertyMask,
+                    source = look,
+                    targets = emptyList(),
                     beatDivisionOverride = request.beatDivision,
                     fadeMs = request.fadeMs ?: 0,
                 )
-                // Skips belong to the arm that put the layer on — the busk door's rule, kept here so
-                // the two doors onto one gesture cannot toast differently.
-                call.respond(
-                    ToggleLookResponse(
-                        outcome.action,
-                        outcome.effectCount,
-                        if (outcome.action == "applied") press.skippedFamilies else emptyList(),
-                    ),
-                )
+                call.respond(ToggleLookResponse(outcome.action, outcome.effectCount))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Target not found"))
             } catch (e: Exception) {
@@ -474,11 +426,9 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
 // than being renamed. One target DTO, not two.
 
 /**
- * Body of `POST /looks/{id}/toggle` — apply the Look as a programmer layer, or remove it. An empty
- * [targets] means the Look's own fixtures, and is refused for a Look with a deferred effect.
- * [families] is the selection's attribute mask (`PropertyMaskGroup` names); absent is every
- * attribute, and an unknown name is 400. The layer lands masked to the families the Look and the
- * mask share — see [resolveLookMask].
+ * Body of `POST /looks/{id}/toggle` — put the Look on as a programmer layer, or take it off. A Look
+ * is pressed whole (absolute-looks plan P1), so [targets] and [families] are read and ignored: the
+ * fields stay because the client sends them, and the server's Json refuses an unknown key.
  */
 @Serializable
 internal data class ToggleLookRequest(
@@ -493,7 +443,7 @@ internal data class ToggleLookRequest(
     val fadeMs: Long? = null,
 )
 
-/** Body of `POST /looks/{id}/apply`: [ToggleLookRequest]'s targets and mask, and a fade for the values. */
+/** Body of `POST /looks/{id}/apply`: [ToggleLookRequest]'s ignored targets and mask, and a fade for the values. */
 @Serializable
 internal data class ApplyLookRequest(
     val targets: List<CueTargetDto> = emptyList(),
@@ -506,92 +456,41 @@ internal data class ApplyLookRequest(
 internal data class ApplyLookResponse(
     /** Programmer values written into Local. */
     val written: Int,
-    /** The Local effects started, one per effect and target. */
+    /** The Local effects started, one per effect. */
     val effectIds: List<Long> = emptyList(),
-    /** The Look's families the selection's mask left out, as on [ToggleLookResponse]. */
+    /** Always empty: a Look lands whole, under no mask (D3). Kept on the wire until the client stops reading it. */
     val skippedFamilies: List<String> = emptyList(),
 )
 
-internal sealed interface LookApplyOutcome {
-    data class Applied(val response: ApplyLookResponse) : LookApplyOutcome
-    data class Refused(val message: String, val code: String?) : LookApplyOutcome
-}
-
 /**
- * *Apply as values* for a Look — the REST route's and MCP `apply_look`'s `asValues`: targets by
- * [resolveLookToggleTargets], mask by [resolveLookMask], then
- * [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.applyAsValues].
+ * *Apply as values* for a Look — the REST route's and MCP `apply_look`'s `asValues`: the whole Look,
+ * no targets and no mask ([uk.me.cormack.lighting7.fx.ProgrammerLayerStack.applyAsValues]).
  */
 internal fun applyLookAsValues(
     state: State,
-    look: LookToggleSource,
-    requested: List<CueTargetDto>,
-    families: Set<PropertyMaskGroup>?,
+    look: LayerSource,
     fadeMs: Long?,
     beatDivision: Double? = null,
-): LookApplyOutcome {
-    val targets = when (val resolved = resolveLookToggleTargets(requested, look)) {
-        is LookTargetResolution.Refused -> return LookApplyOutcome.Refused(resolved.message, resolved.code)
-        is LookTargetResolution.Targets -> resolved.targets
-    }
-    val mask = when (val resolved = resolveLookMask(families, look)) {
-        is LookMaskResolution.Refused -> return LookApplyOutcome.Refused(resolved.message, resolved.code)
-        is LookMaskResolution.Masked -> resolved
-    }
+): ApplyLookResponse {
     val outcome = state.show.programmerLayerStack.applyAsValues(
-        source = look.source,
-        targets = targets,
-        propertyMask = mask.propertyMask,
+        source = look,
+        targets = emptyList(),
         beatDivisionOverride = beatDivision,
         fadeMs = fadeMs,
     )
-    return LookApplyOutcome.Applied(ApplyLookResponse(outcome.written, outcome.effectIds, mask.skippedFamilies))
+    return ApplyLookResponse(outcome.written, outcome.effectIds)
 }
 
-/** 400 code: the Look has a deferred effect, so a press with no targets would assert nothing. */
-internal const val CODE_LOOK_NEEDS_SELECTION = "LOOK_NEEDS_SELECTION"
-
-/** 400 code: a press with no targets, on a Look none of whose own fixtures are patched. */
-internal const val CODE_LOOK_NO_TARGETS = "LOOK_NO_TARGETS"
-
-/** 400 code: the selection is masked to families this Look has no row or effect in. */
-internal const val CODE_LOOK_OUTSIDE_MASK = "LOOK_OUTSIDE_MASK"
+/** The layer source a press of this Look puts on. */
+internal fun DaoLook.layerSource(): LayerSource = LayerSource.look(id.value, uuid, name)
 
 /**
- * What a toggle has to know about a Look, read in one transaction beside the source so the press
- * and the busk press route see one consistent record.
- */
-internal data class LookToggleSource(
-    val source: LayerSource,
-    /** Any effect that fans over the layer's targets — the Look that cannot be pressed target-less. */
-    val hasDeferredEffect: Boolean,
-    /** The Look's own fixtures and groups, patched ones only — see [ownTargets]. */
-    val ownTargets: List<CueTargetDto>,
-    /** The attribute families its rows and effects span, in declaration order — see [derivedFamilyGroups]. */
-    val families: Set<PropertyMaskGroup>,
-    /**
-     * It carries scenery (stage-view plan session 8), which shows while the Look is live whatever it
-     * lights — so a Look with scenery and nothing patched to land on is pressed as a layer that names
-     * no targets, and a mask it has no rows in does not refuse it.
-     */
-    val hasScenery: Boolean = false,
-)
-
-/** Must be called inside a transaction. */
-internal fun DaoLook.toggleSource(fixtures: Fixtures): LookToggleSource = LookToggleSource(
-    source = LayerSource.look(id.value, uuid, name),
-    hasDeferredEffect = effects.any { it.isDeferred },
-    ownTargets = ownTargets(fixtures),
-    families = derivedFamilyGroups(fixtures),
-    hasScenery = !DaoLookSceneryRow.find { DaoLookScenery.look eq id }.empty(),
-)
-
-/**
- * The targets this Look names itself — every row's and every *bound* effect's, distinct, in row
- * order — keeping only those that resolve in the live patch. A row on a fixture that is no longer
- * patched contributes nothing rather than failing the press, the `TemplateResolver` rule
- * (an unsupported head contributes nothing, never a default). With no live patch ([fixtures] null,
- * a project that is not running) every named target is kept. Must be called inside a transaction.
+ * The targets this Look names itself — every row's and every effect's, distinct, in row order —
+ * keeping only those that resolve in the live patch: the fixtures and groups a press of it lands
+ * on. A row on a fixture that is no longer patched contributes nothing rather than failing, the
+ * `TemplateResolver` rule (an unsupported head contributes nothing, never a default). With no live
+ * patch ([fixtures] null, a project that is not running) every named target is kept. Must be called
+ * inside a transaction.
  */
 internal fun DaoLook.ownTargets(fixtures: Fixtures?): List<CueTargetDto> {
     val named = LinkedHashSet<CueTargetDto>()
@@ -600,76 +499,11 @@ internal fun DaoLook.ownTargets(fixtures: Fixtures?): List<CueTargetDto> {
     if (fixtures == null) return named.toList()
     return named.filter { target ->
         when (TargetRef.ofOrNull(target.type, target.key)) {
-            is TargetRef.Fixture -> runCatching { fixtures.untypedFixture(target.key) }.isSuccess
+            is TargetRef.Fixture -> runCatching { fixtures.untypedGroupableFixture(target.key) }.isSuccess
             is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.isSuccess
             else -> false
         }
     }
-}
-
-internal sealed interface LookTargetResolution {
-    data class Targets(val targets: List<CueTargetDto>) : LookTargetResolution
-    data class Refused(val message: String, val code: String) : LookTargetResolution
-}
-
-/**
- * The empty-targets rule, decided in one place for `/looks/{id}/toggle` and the busk press route:
- * named targets are taken as given; none means the Look's own fixtures, unless it has a deferred
- * effect or has no patched fixture left.
- */
-internal fun resolveLookToggleTargets(requested: List<CueTargetDto>, look: LookToggleSource): LookTargetResolution = when {
-    requested.isNotEmpty() -> LookTargetResolution.Targets(requested.map { CueTargetDto(it.type, it.key) })
-    look.hasDeferredEffect -> LookTargetResolution.Refused(
-        "This Look has a deferred effect, so it needs a selection to press onto", CODE_LOOK_NEEDS_SELECTION,
-    )
-    // Nothing of its own to light, but scenery to show: a layer with no targets, which asserts no
-    // value and toggles off as the same gesture (`ProgrammerLayerStack.toggle`'s twin).
-    look.ownTargets.isEmpty() && look.hasScenery -> LookTargetResolution.Targets(emptyList())
-    look.ownTargets.isEmpty() -> LookTargetResolution.Refused(
-        "None of this Look's own fixtures are patched, so there is nothing to press it onto", CODE_LOOK_NO_TARGETS,
-    )
-    else -> LookTargetResolution.Targets(look.ownTargets)
-}
-
-/**
- * How the selection's mask lands on a Look: the layer's `propertyMask`, and which of the Look's
- * families it left out.
- */
-internal sealed interface LookMaskResolution {
-    /**
-     * [propertyMask] is `mask ∩ look.families` in layer spelling, or null for an unmasked press.
-     * [skippedFamilies] names the Look's families outside the mask — what the pressing window
-     * toasts (D6) — and is empty for an unmasked press.
-     */
-    data class Masked(val propertyMask: String?, val skippedFamilies: List<String>) : LookMaskResolution
-    data class Refused(val message: String, val code: String) : LookMaskResolution
-}
-
-/**
- * The mask rule for a Look, decided in one place for `/looks/{id}/toggle` and the busk press
- * (multi-screen plan D5). A Look spans families, so it is not refused by name the way a template
- * is: the layer goes on masked to the families the Look and the selection share, the cook skips
- * the rows outside it, and the response names what was skipped. Nothing shared is a refusal
- * (`LOOK_OUTSIDE_MASK`): a layer that asserts nothing would light the pad for nothing.
- *
- * The mask lands through the layer's own `propertyMask`, which `CueComposer` applies to the
- * layer's **rows**. A Look's *effects* are not filtered by a layer mask today (a pre-existing
- * property of the cook, not of the press), so an effect in a skipped family still runs; it is
- * still named in [LookMaskResolution.Masked.skippedFamilies], which is the honest report.
- */
-internal fun resolveLookMask(mask: Set<PropertyMaskGroup>?, look: LookToggleSource): LookMaskResolution {
-    if (mask == null) return LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
-    // A Look that lights nothing has nothing to mask; its scenery is not an attribute family.
-    if (look.families.isEmpty() && look.hasScenery) return LookMaskResolution.Masked(propertyMask = null, skippedFamilies = emptyList())
-    val inside = look.families.filterTo(LinkedHashSet()) { it in mask }
-    if (inside.isEmpty()) {
-        return LookMaskResolution.Refused(
-            "'${look.source.name}' has nothing in ${describeFamilies(mask)} — the selection is masked to it",
-            CODE_LOOK_OUTSIDE_MASK,
-        )
-    }
-    val skipped = look.families.filterTo(LinkedHashSet()) { it !in mask }
-    return LookMaskResolution.Masked(inside.toPropertyMask(), skipped.toMaskNames())
 }
 
 /** `Colour`, `Colour + Position` — the family names as an operator reads them, in declaration order. */
@@ -681,10 +515,7 @@ internal data class ToggleLookResponse(
     /** `"applied"` or `"removed"`. */
     val action: String,
     val effectCount: Int,
-    /**
-     * The Look's families the selection's mask left out (`PropertyMaskGroup` names, declaration
-     * order) — the toast on the pressing window. Empty for an unmasked press, and on the off arm.
-     */
+    /** Always empty: a Look press takes no mask (D3). Kept on the wire until the client stops reading it. */
     val skippedFamilies: List<String> = emptyList(),
 )
 
@@ -1213,9 +1044,8 @@ private fun DaoLook.derivedFamilies(state: State): List<String> =
 /**
  * Which attribute families this Look touches, in declaration order: its rows' properties resolved
  * against the live patch ([maskGroupForProperty]) and its effects' declared categories. Read by
- * `toSummaryDto` for the library's family banking and by [toggleSource] for the press's mask
- * rule, so the family a Look is banked under is the family a masked press honours. Must be
- * called inside a transaction.
+ * `toSummaryDto` for the library's family banking and by the Timeline. Must be called inside a
+ * transaction.
  */
 internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGroup> {
     val families = LinkedHashSet<PropertyMaskGroup>()

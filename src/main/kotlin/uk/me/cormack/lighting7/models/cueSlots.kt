@@ -13,8 +13,7 @@ import org.jetbrains.exposed.v1.core.java.javaUUID
  * One tile of the FX cue slots overlay — the paged grid of eight above the Show view.
  *
  * A slot holds **exactly one** of [cue] / [look]. The overlay has no selection, so it can hold only
- * what needs none: a cue, or a Look with no deferred effect — its rows are always bound, so a Look
- * slot presses the Look onto its own fixtures (`docs/plans/completed/busk-layout-plan.md` D7). A cue *stack*
+ * what needs none: a cue, or a Look, which lands whole (absolute-looks plan D1). A cue *stack*
  * used to be a third arm; it went with the overlay's own assign flow, and nothing else ever wanted
  * a stack on a tile.
  *

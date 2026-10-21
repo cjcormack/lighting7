@@ -33,17 +33,18 @@ internal const val CODE_TEMPLATE_NEEDS_SELECTION = "PALETTE_NEEDS_SELECTION"
  * - a **template** → `ProgrammerLayerStack.toggle` with its derived family mask and the siblings,
  *   refused by name when the selection's mask leaves that family out (`PALETTE_OUTSIDE_MASK`) —
  *   on the on arm only, an off press coming off under any mask (`pressWouldRelease`);
- * - a **Look** → the same `toggle`, masked to what the Look and the selection's mask share
- *   (`resolveLookMask`, unmasked when the press carries no mask), with the siblings — and the
- *   empty-targets rule the Look toggle route has (`resolveLookToggleTargets`);
+ * - a **Look** → the same `toggle`, whole (absolute-looks plan P1): no targets and no mask, whatever
+ *   the press carries, on taking every sibling off whole and off taking every layer of it off;
  * - a **cue** → apply / stop through `CueStackManager`, exactly as a cue slot presses: a toggle,
  *   lit from the stack's `activeCueId`, live without being the playhead. Never the playhead's GO.
  *
- * **Solo has one meaning for every kind** (D6): pressing one *on* turns its siblings off. A layer
- * sibling under a layer press is narrowed on the pressed heads by `toggle`'s own `releaseSiblings`
- * rule; a cue sibling that is live is stopped; and a cue press takes its layer siblings off
- * *wholesale* through [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.release], because a cue has
- * no targets to narrow by. An **off** press releases nothing, whatever the kind. A stacking bank
+ * **Solo has one meaning for every kind** (D6): pressing one *on* turns its siblings off. A palette
+ * sibling under a palette press is narrowed on the pressed heads by `toggle`'s own
+ * `releaseSiblings` rule; a Look sibling, which cannot be narrowed, comes off whole, and a Look
+ * press takes every layer sibling off whole (absolute-looks plan P3); a cue sibling that is live is
+ * stopped; and a cue press takes its layer siblings off *wholesale* through
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerStack.release], because a cue has no targets to narrow
+ * by. An **off** press releases nothing, whatever the kind. A stacking bank
  * (solo off) has no siblings at all.
  *
  * The engine's rules do not move here: `/palettes/{id}/toggle` and `/looks/{id}/toggle` remain
@@ -58,15 +59,15 @@ internal fun Route.routeApiRestBuskPress(state: State) {
             { p -> "Cannot press busk pads in project '${p.name}' - only the current project is live" },
         ) { project ->
             val request = call.receive<BuskPressRequest>()
-            val families = try {
-                parseMaskGroups(request.families)
-            } catch (e: IllegalArgumentException) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
-                return@withCurrentProject
-            }
             val plan = BuskPressService.plan(state, project.id.value, resource.padId)
             if (plan == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(PAD_NOT_FOUND))
+                return@withCurrentProject
+            }
+            val families = try {
+                if (plan.record is PressRecord.Template) parseMaskGroups(request.families) else null
+            } catch (e: IllegalArgumentException) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
             }
             val outcome = BuskPressService.apply(
@@ -75,9 +76,7 @@ internal fun Route.routeApiRestBuskPress(state: State) {
             )
             when (outcome) {
                 is BuskPressService.Outcome.Pressed -> call.respond(
-                    BuskPressResponse(
-                        outcome.kind, outcome.action, outcome.effectCount, outcome.released, outcome.skippedFamilies,
-                    ),
+                    BuskPressResponse(outcome.kind, outcome.action, outcome.effectCount, outcome.released),
                 )
                 is BuskPressService.Outcome.Refused ->
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(outcome.message, code = outcome.code))
@@ -96,10 +95,9 @@ internal fun Route.routeApiRestBuskPress(state: State) {
 internal data class BuskPadPressResource(val projectId: String, val padId: Int)
 
 /**
- * The selection and its attribute mask. Both ignored for a cue pad; [targets] may be empty for a
- * Look with no deferred effect. [families] (`PropertyMaskGroup` names) absent is every attribute
- * and an unknown name is 400; a template outside it is `PALETTE_OUTSIDE_MASK`, a Look with
- * nothing inside it `LOOK_OUTSIDE_MASK` — multi-screen plan D5.
+ * The selection and its attribute mask, a palette pad's: both ignored, unread, for a cue or a Look
+ * pad. [families] (`PropertyMaskGroup` names) absent is every attribute and an unknown name is 400;
+ * a palette outside it is `PALETTE_OUTSIDE_MASK` — multi-screen plan D5.
  */
 @Serializable
 internal data class BuskPressRequest(
@@ -127,10 +125,6 @@ internal data class BuskPressResponse(
      * D2). Always 0 for an off press.
      */
     val released: Int = 0,
-    /**
-     * A Look's families the selection's mask left out (`PropertyMaskGroup` names, declaration
-     * order) — what the pressing window toasts (D6). Empty for a template or cue, an unmasked
-     * press, and an off press.
-     */
+    /** Always empty: no press is masked by family any more (a Look's lands whole). Kept on the wire until the client stops reading it. */
     val skippedFamilies: List<String> = emptyList(),
 )

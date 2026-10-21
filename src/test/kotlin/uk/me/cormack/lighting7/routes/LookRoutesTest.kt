@@ -436,6 +436,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.OK, applied.status, applied.bodyAsText())
         assertEquals("applied", applied.body<ToggleLookResponse>().action)
+        assertTrue(state.show.programmerStore.layers.single().targets.isEmpty(), "a Look layer names no targets, whatever the press named")
 
         val removed = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
@@ -476,7 +477,8 @@ class LookRoutesTest : RouteIntegrationTest() {
         val pressed = empty.body<ToggleLookResponse>()
         assertEquals("applied", pressed.action)
         assertEquals(1, pressed.effectCount)
-        assertEquals(listOf(CueTargetDto("fixture", "hex-1")), state.show.programmerStore.layers.single().targets)
+        assertTrue(state.show.programmerStore.layers.single().targets.isEmpty())
+        assertEquals(listOf("hex-1"), state.show.fxEngine.programmerLayerEffects().values.map { it.target.targetKey })
 
         val missing = client.post("${base()}/999999/toggle") {
             contentType(ContentType.Application.Json)
@@ -486,13 +488,12 @@ class LookRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `toggling under the selection's mask lands the shared families and reports the rest`() = testApplication {
+    fun `toggling ignores the selection's mask, on and off`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
 
-        // Dimmer rows and a colour effect: the Look spans INTENSITY + COLOUR, and the COLOUR half is
-        // contributed by the effect alone.
+        // Dimmer rows and a colour effect: the Look spans INTENSITY + COLOUR.
         val lookId = client.post(base()) {
             contentType(ContentType.Application.Json)
             setBody(
@@ -513,53 +514,23 @@ class LookRoutesTest : RouteIntegrationTest() {
 
         val on = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = targets, families = listOf("INTENSITY")))
+            setBody(ToggleLookRequest(targets = targets, families = listOf("POSITION")))
         }
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
         val applied = on.body<ToggleLookResponse>()
-        assertEquals("applied", applied.action)
-        assertEquals(listOf("COLOUR"), applied.skippedFamilies, "the effect's family is outside the mask")
-        assertEquals("INTENSITY", state.show.programmerStore.layers.single().propertyMask, "mask ∩ look.families")
-        // The documented limit (`resolveLookMask`): a layer mask filters rows, not effects, so the
-        // colour effect still spawns. Pinned so a cook that starts masking effects has to update it.
+        assertEquals("applied", applied.action, "nothing of it is Position, and it goes on all the same")
+        assertTrue(applied.skippedFamilies.isEmpty())
+        assertNull(state.show.programmerStore.layers.single().propertyMask, "the press gives the layer no mask (D3)")
         assertEquals(1, applied.effectCount)
 
-        // The off arm skips nothing — the busk door's rule, kept on this door too.
+        // A mask name outside the vocabulary is ignored with the rest of the mask.
         val off = client.post("${base()}/$lookId/toggle") {
-            contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = targets, families = listOf("INTENSITY")))
-        }.body<ToggleLookResponse>()
-        assertEquals("removed", off.action)
-        assertTrue(off.skippedFamilies.isEmpty())
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-
-        // Nothing shared is a refusal by name; a name outside the vocabulary is 400 as on Record.
-        val outside = client.post("${base()}/$lookId/toggle") {
-            contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = targets, families = listOf("POSITION")))
-        }
-        assertEquals(HttpStatusCode.BadRequest, outside.status, outside.bodyAsText())
-        assertEquals(CODE_LOOK_OUTSIDE_MASK, outside.body<ErrorResponse>().code)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-
-        // But once it is on, the same excluding mask does not stop the off press.
-        client.post("${base()}/$lookId/toggle") {
-            contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = targets))
-        }
-        assertEquals(1, state.show.programmerStore.layers.size)
-        val offUnderMask = client.post("${base()}/$lookId/toggle") {
-            contentType(ContentType.Application.Json)
-            setBody(ToggleLookRequest(targets = targets, families = listOf("POSITION")))
-        }
-        assertEquals(HttpStatusCode.OK, offUnderMask.status, offUnderMask.bodyAsText())
-        assertEquals("removed", offUnderMask.body<ToggleLookResponse>().action)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
-        val bad = client.post("${base()}/$lookId/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest(targets = targets, families = listOf("GOBO")))
         }
-        assertEquals(HttpStatusCode.BadRequest, bad.status)
+        assertEquals(HttpStatusCode.OK, off.status, off.bodyAsText())
+        assertEquals("removed", off.body<ToggleLookResponse>().action)
+        assertTrue(state.show.programmerStore.layers.isEmpty())
     }
 
     private suspend fun io.ktor.client.HttpClient.createBoundLook(name: String, vararg fixtureKeys: String): Int =
@@ -575,27 +546,24 @@ class LookRoutesTest : RouteIntegrationTest() {
         }
 
     @Test
-    fun `toggling with no targets applies a bound Look on its own fixtures`() = testApplication {
+    fun `toggling lands a bound Look whole, on its own fixtures, naming no targets`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
         state.show.fixtures.patchListChanged()
         val client = jsonClient()
-        val warm = client.createBoundLook("warm", "hex-1", "hex-2", "hex-1")
+        val warm = client.createBoundLook("warm", "hex-1", "hex-2")
 
         val on = client.toggleBare(warm)
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
         assertEquals("applied", on.body<ToggleLookResponse>().action)
-        assertEquals(
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-            state.show.programmerStore.layers.single().targets,
-            "the layer names each of the Look's fixtures once, in row order",
-        )
+        assertTrue(state.show.programmerStore.layers.single().targets.isEmpty())
+        assertEquals(setOf("hex-1", "hex-2"), dimmedByLayers("hex-1", "hex-2"))
         assertEquals("removed", client.toggleBare(warm).body<ToggleLookResponse>().action)
     }
 
     @Test
-    fun `toggling with no targets skips rows on fixtures no longer in the patch`() = testApplication {
+    fun `toggling lands the rows still patched and skips the rest`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         state.show.fixtures.patchListChanged()
@@ -604,20 +572,26 @@ class LookRoutesTest : RouteIntegrationTest() {
 
         val on = client.toggleBare(warm)
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
-        assertEquals(listOf(CueTargetDto("fixture", "hex-1")), state.show.programmerStore.layers.single().targets)
+        assertEquals(setOf("hex-1"), dimmedByLayers("hex-1", "hex-9"))
     }
 
     @Test
-    fun `toggling with no targets refuses a Look none of whose fixtures are patched`() = testApplication {
+    fun `a Look none of whose fixtures are patched goes on and lands nothing, as a cue does`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val gone = client.createBoundLook("gone", "hex-9")
 
         val resp = client.toggleBare(gone)
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        assertEquals(CODE_LOOK_NO_TARGETS, resp.body<ErrorResponse>().code)
-        assertTrue(state.show.programmerStore.layers.isEmpty())
+        assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
+        assertEquals("applied", resp.body<ToggleLookResponse>().action)
+        assertEquals(1, state.show.programmerStore.layers.size, "its ring lights: a layer of it is on")
+        assertEquals("removed", client.toggleBare(gone).body<ToggleLookResponse>().action)
     }
+
+    /** Which of [keys] the programmer's layers hold a dimmer on. */
+    private fun dimmedByLayers(vararg keys: String): Set<String> = keys.filter { key ->
+        state.show.programmerStore.get(key, "dimmer")?.owner == uk.me.cormack.lighting7.fx.ProgrammerOwner.LAYERS
+    }.toSet()
 
     // ── Include ─────────────────────────────────────────────────────────────
 

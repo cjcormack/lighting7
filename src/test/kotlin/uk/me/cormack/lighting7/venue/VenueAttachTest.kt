@@ -36,6 +36,7 @@ import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.models.ALL_TABLES
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
@@ -289,8 +290,9 @@ class VenueAttachTest : RouteIntegrationTest() {
             DaoFixturePatch.new { project = show; universeConfig = u; fixtureTypeKey = "generic-dimmer"; key = "panto-spot"; displayName = "Panto spot"; startChannel = 1 }
             val vu = DaoUniverseConfig.new { project = DaoProject[h.venueId]; subnet = 0; universe = 9; controllerType = "MOCK" }
             DaoFixturePatch.new { project = DaoProject[h.venueId]; universeConfig = vu; fixtureTypeKey = "generic-dimmer"; key = "house-spot"; displayName = "House spot"; startChannel = 1 }
-            val look = DaoLook.new { project = show; name = "Spot look" }
-            DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); this.look = look; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
+            val palette = DaoTemplate.new { project = show; name = "Spot level" }
+            DaoTemplateRow.new { template = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; propertyName = "dimmer"; value = "pct:50"; sortOrder = 0 }
+            DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); template = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
             DaoControlSurfaceBinding.new {
                 project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureProperty"
                 targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("panto-spot", "dimmer"))

@@ -14,6 +14,7 @@ import java.util.UUID
 import uk.me.cormack.lighting7.models.ElementStates
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.LayerSourceKind
+import uk.me.cormack.lighting7.models.layerTargets
 import uk.me.cormack.lighting7.state.lookSceneryOf
 
 private val logger = LoggerFactory.getLogger("ProgrammerLayerStack")
@@ -244,7 +245,7 @@ class ProgrammerLayerStack(
 
     // ── Mutations ───────────────────────────────────────────────────────────
 
-    /** Append a layer to the top of the stack. */
+    /** Append a layer to the top of the stack. A Look's names no targets ([layerTargets]). */
     fun add(
         source: LayerSource,
         targets: List<CueTargetDto> = emptyList(),
@@ -261,7 +262,7 @@ class ProgrammerLayerStack(
             layerId = store.mintLayerId(),
             source = source,
             sortOrder = 0, // renumbered below
-            targets = targets,
+            targets = layerTargets(source, targets),
             propertyMask = propertyMask,
             blendMode = blendMode,
             amount = amount,
@@ -275,9 +276,14 @@ class ProgrammerLayerStack(
     }
 
     /**
-     * The busking pad's gesture: put this Look or template on these targets, or take it off again.
-     * The rule itself is [LayerPress], pure over the layer list; this is its programmer caller, which
-     * installs the list in one store mutation and recooks it once.
+     * The busking pad's gesture: put this Look or template on, or take it off again. The rule itself
+     * is [LayerPress], pure over the layer list; this is its programmer caller, which installs the
+     * list in one store mutation and recooks it once.
+     *
+     * **A Look is pressed whole** (absolute-looks plan D1, D3, P1): its layer names no targets and
+     * no mask, whatever the door passes in [targets] and [propertyMask]; on puts one layer of it on
+     * top, off takes every layer of it off. Everything below about targets and coverage is a
+     * palette's.
      *
      * "Already on" is matched on `source.uuid`, which is neither of the two obvious things and
      * deliberately so. Not the int `id`, because a Look and a template can share an int PK and would
@@ -299,10 +305,9 @@ class ProgrammerLayerStack(
      * way, and so does a **value** template; an *effect* template reports one per target, which is
      * why the pads' ring cannot be driven from the effect list alone.
      *
-     * [propertyMask] applies to the *arriving* layer only. It is deliberately **not** part of the
-     * "already on" comparison: a pad that re-pressed with a different mask should still take its
-     * layer off rather than stack a second one. A Look passes the selection's mask narrowed to its own
-     * families, or null.
+     * [propertyMask] applies to the *arriving* palette layer only. It is deliberately **not** part of
+     * the "already on" comparison: a pad that re-pressed with a different mask should still take its
+     * layer off rather than stack a second one.
      *
      * **Both arms are per target**, and this is the whole of what a press means: *these targets are
      * now this record's, or they are now nobody's.* On the off arm the pressed targets come off
@@ -314,7 +319,8 @@ class ProgrammerLayerStack(
      * [ToggleOutcome.released], and none on the off arm — turning a pad off never lights anything:
      *
      * - [releaseSiblings], a **solo bank's** exclusivity: the records on the pressed pad's sibling
-     *   pads, of any kind, resolved by `routes/buskPress.kt`. Empty for every other door.
+     *   pads, of any kind, resolved by `routes/buskPress.kt`. Empty for every other door. A Look
+     *   sibling comes off whole, and a Look press takes every sibling off whole (P3).
      * - **The family replacement** (apply-model plan D2, D6), resolved here so every palette door gets
      *   it: a palette press takes its heads off every other palette on the stack of the **same family
      *   and kind** — a value palette off value palettes, an effect palette off effect palettes, so
@@ -327,7 +333,8 @@ class ProgrammerLayerStack(
      * and then on Hex 2 is one layer — and its effects on Hex 1 keep their phase. With anything
      * pressed on top in between it is two, so a widening never changes what a higher layer shows.
      *
-     * A layer with **empty** targets is the one thing no subtraction reaches — see [LayerPress].
+     * A Look's layer, and a palette's naming **no** targets, are what no subtraction reaches — see
+     * [LayerPress].
      *
      * [fadeMs] is the programmer fade (effects plan D13): above 0 the press's effects grow from
      * nothing over it and a release's shrink to nothing, and every value it moves goes at it too, as
@@ -342,14 +349,15 @@ class ProgrammerLayerStack(
         releaseSiblings: Set<UUID> = emptySet(),
         fadeMs: Long = 0,
     ): ToggleOutcome {
-        val pressTargets = pressRules.pressTargets(source.uuid, targets)
+        val isLook = source.kind == LayerSourceKind.LOOK
+        val pressTargets = if (isLook) emptyList() else pressRules.pressTargets(source.uuid, targets)
         val fade = fadeMs.coerceAtLeast(0)
         val arriving = ProgrammerLayer(
             layerId = store.mintLayerId(),
             source = source,
             sortOrder = 0, // renumbered below
             targets = pressTargets,
-            propertyMask = propertyMask,
+            propertyMask = propertyMask.takeUnless { isLook },
             beatDivisionOverride = beatDivisionOverride,
         )
         // Resolved before the mutation: a palette snapshot can open a transaction, which must never
@@ -391,6 +399,7 @@ class ProgrammerLayerStack(
      */
     private class LayerOps(private val boundHeads: Map<UUID, List<CueTargetDto>?>) : LayerPress.Ops<ProgrammerLayer> {
         override fun boundHeads(layer: ProgrammerLayer) = boundHeads[layer.source.uuid]
+        override fun whole(layer: ProgrammerLayer) = layer.source.kind == LayerSourceKind.LOOK
         override fun sourceUuid(layer: ProgrammerLayer) = layer.source.uuid
         override fun targets(layer: ProgrammerLayer) = layer.targets
         override fun withTargets(layer: ProgrammerLayer, targets: List<CueTargetDto>) = layer.copy(targets = targets)
@@ -437,23 +446,34 @@ class ProgrammerLayerStack(
      * cells reports those cells and the bar as SOME. Layers are folded by source, so two layers of
      * one template on two selections answer as one record applied to both.
      *
-     * A layer with **empty** targets contributes the heads its per-fixture palette's rows name, as
-     * [toggle] reads it; a Look's contributes nothing, since its rows' landing is the cook's answer.
-     * Enabled-ness is ignored on purpose — a disabled layer is still *on the stack*, and a pad's
-     * next press still takes it off, so its ring stays lit.
+     * A palette layer with **empty** targets contributes the heads its per-fixture palette's rows
+     * name, as [toggle] reads it. Enabled-ness is ignored on purpose — a disabled layer is still *on
+     * the stack*, and a pad's next press still takes it off, so its ring stays lit.
+     *
+     * **A Look is on or off** (absolute-looks plan P4): coverage is a palette's question. A Look with
+     * a layer on the stack answers every target of the rig as [AppliedExtent.ALL] ([wholeRig]), so a
+     * ring folded over any selection reads it lit — "a layer of it is on", in the vocabulary a
+     * palette's ring already reads.
      *
      * Takes the layer list so the `layerState` broadcast can describe the frame it is sending
      * rather than whatever the store holds by the time it renders.
      */
     fun appliedState(layers: List<ProgrammerLayer> = store.layers): List<AppliedSource> {
-        val heads = LinkedHashMap<UUID, Pair<LayerSource, MutableSet<CueTargetDto>>>()
+        // Each source once, in the order its first layer stands; only a palette's heads are folded.
+        val sources = LinkedHashMap<UUID, LayerSource>()
+        val heads = HashMap<UUID, MutableSet<CueTargetDto>>()
         for (layer in layers) {
-            val named = layer.targets.ifEmpty { if (layer.source.isTemplate) pressRules.perFixtureRowTargets(layer.source.uuid).orEmpty() else emptyList() }
+            if (layer.source.kind == LayerSourceKind.LOOK) {
+                sources.putIfAbsent(layer.source.uuid, layer.source)
+                continue
+            }
+            val named = layer.targets.ifEmpty { pressRules.perFixtureRowTargets(layer.source.uuid).orEmpty() }
             if (named.isEmpty()) continue
-            heads.getOrPut(layer.source.uuid) { layer.source to LinkedHashSet() }
-                .second += coverage(named)
+            sources.putIfAbsent(layer.source.uuid, layer.source)
+            heads.getOrPut(layer.source.uuid) { LinkedHashSet() } += coverage(named)
         }
-        if (heads.isEmpty()) return emptyList()
+        if (sources.isEmpty()) return emptyList()
+        val rig = if (sources.size == heads.size) emptyList() else wholeRig()
 
         // Group membership in the same terms `coverage` produces, so the two can be compared
         // directly. Empty groups are dropped: "every one of no heads" is a claim nothing means.
@@ -461,7 +481,8 @@ class ProgrammerLayerStack(
             group.name to group.fixtures.filterIsInstance<Fixture>().map { CueTargetDto("fixture", it.key) }
         }.filter { (_, members) -> members.isNotEmpty() }
 
-        return heads.values.map { (source, covered) ->
+        return sources.values.map { source ->
+            val covered = heads[source.uuid] ?: return@map AppliedSource(source, rig)
             val groupTargets = groups.mapNotNull { (name, members) ->
                 val hits = members.count { it in covered }
                 // A member held only through some of its cells is partly covered: the group reads
@@ -495,6 +516,23 @@ class ProgrammerLayerStack(
                 covered.map { AppliedTarget(it, AppliedExtent.ALL) } + cellTargets + parentTargets + groupTargets,
             )
         }
+    }
+
+    /**
+     * Every target of the rig as [AppliedExtent.ALL] — each fixture, each of its cells and each group
+     * with members — which is what a Look's [appliedState] entry answers: lit whatever is selected.
+     */
+    private fun wholeRig(): List<AppliedTarget> {
+        val rig = fixtures()
+        val out = ArrayList<AppliedTarget>()
+        for (fixture in rig.fixtures) {
+            val head = CueTargetDto(TargetRef.Fixture.TYPE, fixture.key)
+            out += AppliedTarget(head, AppliedExtent.ALL)
+            targetCoverage.cells(head).mapTo(out) { AppliedTarget(it, AppliedExtent.ALL) }
+        }
+        rig.groups.filter { it.fixtures.isNotEmpty() }
+            .mapTo(out) { AppliedTarget(CueTargetDto(TargetRef.Group.TYPE, it.name), AppliedExtent.ALL) }
+        return out
     }
 
     /**
@@ -544,7 +582,8 @@ class ProgrammerLayerStack(
      *
      * The stack is cooked with the layer and without it, and every key the two disagree on — the
      * keys it wins, and those a higher layer blends over it — is written as a touched `WEB` value at
-     * the with-layer value. A key some other local owner shows (a Locate, a flash) takes it beneath
+     * the with-layer value, under the group its row names (else the group the layer names it through).
+     * A key some other local owner shows (a Locate, a flash) takes it beneath
      * that owner, for when it lets go; a key the operator's own `WEB` value already holds, or a raw
      * channel slot overrides, is left as it is. A Look's scenery passes to the programmer's own
      * scenery ([ProgrammerScenery.holdUnder]) where no higher Look layer holds it. Its effects lose
@@ -572,7 +611,7 @@ class ProgrammerLayerStack(
             if (PropertyChannelWriter.channelsFor(head, row.propertyName).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
             val write = ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = hints[row.targetKey] ?: parentKey?.let { hints[it] },
+                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
             if (slots.firstOrNull()?.owner == ProgrammerOwner.LAYERS) onTop += write else beneath += write
         }
@@ -624,8 +663,9 @@ class ProgrammerLayerStack(
      * *Apply as values* for a Look (apply-model plan §3.5): the end of a press followed by [detach],
      * with no layer ever on the stack. The Look is cooked on top of the stack as the layer a press
      * would add; the keys it wins are written as `WEB` values (at [fadeMs] when given, else each
-     * row's own fade, as a press's arrival is), its effects start as Local effects at the rank that
-     * layer would have had, and its scenery passes to the programmer's own.
+     * row's own fade, as a press's arrival is) under the group each row names, its effects start as
+     * Local effects at the rank that layer would have had, and its scenery passes to the
+     * programmer's own. A Look's [targets] are none (D1).
      */
     fun applyAsValues(
         source: LayerSource,
@@ -638,7 +678,7 @@ class ProgrammerLayerStack(
             layerId = store.mintLayerId(),
             source = source,
             sortOrder = Int.MAX_VALUE,
-            targets = targets,
+            targets = layerTargets(source, targets),
             propertyMask = propertyMask,
             beatDivisionOverride = beatDivisionOverride,
         )
@@ -651,7 +691,7 @@ class ProgrammerLayerStack(
             val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
             byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = hints[row.targetKey] ?: parentKey?.let { hints[it] },
+                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
         }
         val eng = engine()
@@ -685,7 +725,10 @@ class ProgrammerLayerStack(
         return recook(next)
     }
 
-    /** Change one layer's presentation fields. Null means "leave alone". */
+    /**
+     * Change one layer's presentation fields. Null means "leave alone". A Look's layer keeps naming
+     * no targets ([layerTargets]); its mask is the operator's to set here (D3).
+     */
     fun patch(
         layerId: Int,
         enabled: Boolean? = null,
@@ -704,7 +747,7 @@ class ProgrammerLayerStack(
                     amount = amount?.coerceIn(0.0, 1.0) ?: it.amount,
                     propertyMask = propertyMask ?: it.propertyMask,
                     blendMode = blendMode ?: it.blendMode,
-                    targets = targets ?: it.targets,
+                    targets = layerTargets(it.source, targets ?: it.targets),
                     stomp = stomp ?: it.stomp,
                 )
             } to Unit
@@ -739,7 +782,7 @@ class ProgrammerLayerStack(
                     source = layer.source,
                     sortOrder = 0, // renumbered below
                     enabled = layer.enabled,
-                    targets = layer.targets,
+                    targets = layerTargets(layer.source, layer.targets),
                     propertyMask = layer.propertyMask,
                     // The one point a *stored* blend becomes programmer state, and so the one
                     // place the lenient policy belongs on this path: a row written by another
@@ -1172,3 +1215,6 @@ class ProgrammerLayerStack(
             if (layer.sortOrder == index) layer else layer.copy(sortOrder = index)
         }
 }
+
+/** The group a cooked row came through — a group row's own, or a palette layer's group target. */
+private fun CueAssignmentResolver.Assignment.sourceGroup(): String? = (sourceTarget as? TargetRef.Group)?.key

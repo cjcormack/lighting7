@@ -90,14 +90,16 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
         }
         // Both referent columns are written: a layer names exactly one of a Look and a palette.
         for (layer in cue.layers.sortedBy { it.sortOrder }) {
-            layer.targets.forEach { checkTarget(it.type, it.key, by) }
+            // A Look layer names no targets (absolute-looks plan D1); a palette's are checked here.
+            val targets = if (layer.look != null) emptyList() else layer.targets
+            targets.forEach { checkTarget(it.type, it.key, by) }
             DaoCueLayer.new {
                 this.cue = copy
                 look = layer.look?.let(::look)
                 template = layer.template?.let(::template)
                 sortOrder = layer.sortOrder
                 enabled = layer.enabled
-                targets = layer.targets
+                this.targets = targets
                 propertyMask = layer.propertyMask
                 blendMode = layer.blendMode
                 amount = layer.amount

@@ -231,7 +231,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         )
 
         val layers = client.get("$base/cue-stacks/$act/timeline").body<CueStackTimelineDto>().entries.single().layers
-        // Warm binds hex-1 only: the wash narrows its rows, it does not reach hex-2.
+        // Warm binds hex-1 only and lands whole: the wash its write named is not its to reach.
         assertEquals(listOf("hex-1"), layers[0].heads)
         assertEquals(listOf("hex-2"), layers[1].heads)
         assertEquals(listOf("hex-2"), layers[2].heads)

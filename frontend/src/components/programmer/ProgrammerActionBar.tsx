@@ -24,6 +24,7 @@ import { setProgrammerFade, useProgrammerFade } from '@/lib/programmerFade'
 import {
   programmerClearAll,
   programmerSetBlind,
+  useProgrammerLayersQuery,
   useProgrammerSummaryQuery,
 } from '@/store/programmer'
 import { useIsDeskConnected } from '@/store/status'
@@ -138,12 +139,15 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
   // holding only a flown moon must still be clearable. Counted from `programmer.sceneryState`, since
   // the desk's `programmer.cleared` reply counts values and effects only.
   const sceneryCount = useHeldSceneryCount(projectId)
-  const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
+  // And layers: a Look of only scenery puts no value on the programmer, yet Clear takes it off and
+  // Record writes it.
+  const layerCount = useProgrammerLayersQuery().data?.length ?? 0
+  const hasSomethingToClear = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0 || layerCount > 0
 
   // Record reads the programmer, so it is meaningless when the programmer is empty. Include is
   // not: it is how you *fill* the programmer. Held scenery is content: Record writes it into a cue
   // or a Look (scenery-programmer plan D7), and a Look of only the moon is a busk pad that flies it.
-  const hasContent = entryCount > 0 || programmerFxCount > 0 || sceneryCount > 0
+  const hasContent = hasSomethingToClear
   // A venue's programmer is for testing and focus: Record is off there (venue plan D11), and the
   // desk refuses one with `VENUE_RECORD_OFF` whatever this shows.
   const { isVenue } = useVenueMode(projectId)
@@ -209,7 +213,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           {'Stage — '}
           {!hasSomethingToClear
             ? 'the programmer is empty'
-            : clearSentence(entryCount, programmerFxCount, sceneryCount, fade)}
+            : clearSentence(entryCount, programmerFxCount, sceneryCount, layerCount, fade)}
         </TooltipContent>
       </Tooltip>
 
@@ -280,7 +284,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[238px]">
             <DropdownMenuLabel className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
-              {recordMenuLabel(entryCount, sceneryCount)}
+              {recordMenuLabel(entryCount, sceneryCount, layerCount)}
             </DropdownMenuLabel>
             {cueId != null && (
               <MenuItem
@@ -325,17 +329,21 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
 
 /**
  * What a Clear releases, as its tooltip says it — the one place the programmer states what a Clear
- * will drop (it has no confirmation): *Release 3 programmer values, 1 programmer FX and 2 pieces of
- * held scenery over 2s*. Each part only where it is held; the parts joined as a list is read.
+ * will drop (it has no confirmation): *Release 3 programmer values, 1 programmer FX, 1 layer and 2
+ * pieces of held scenery over 2s*. Each part only where it is held; the parts joined as a list is read.
  */
-export function clearSentence(values: number, fx: number, scenery: number, fadeMs: number): string {
+export function clearSentence(values: number, fx: number, scenery: number, layers: number, fadeMs: number): string {
   const parts = [
     values > 0 ? `${values} programmer value${values === 1 ? '' : 's'}` : null,
     fx > 0 ? `${fx} programmer FX` : null,
+    layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
     scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of held scenery` : null,
   ].filter((p): p is string => p != null)
-  const list = parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
-  return ['Release', list, fadeMs > 0 ? `over ${fadeMs / 1000}s` : null].filter(Boolean).join(' ')
+  return ['Release', listOf(parts), fadeMs > 0 ? `over ${fadeMs / 1000}s` : null].filter(Boolean).join(' ')
+}
+
+function listOf(parts: string[]): string {
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}`
 }
 
 function MenuItem({
@@ -361,14 +369,16 @@ function MenuItem({
 }
 
 /**
- * The Record menu's heading: what a Record would write — `Write 3 values into`, `Write 2 pieces of
- * scenery into`, or both. Record is enabled for a programmer holding only scenery (scenery-programmer
- * plan D7), and *Write 0 values into* would say it holds nothing.
+ * The Record menu's heading: what a Record would write — `Write 3 values into`, `Write 1 layer
+ * into`, `Write 2 pieces of scenery into`, or a list of them. Record is enabled for a programmer
+ * holding only scenery (scenery-programmer plan D7) or only a layer, and *Write 0 values into* would
+ * say it holds nothing.
  */
-export function recordMenuLabel(values: number, scenery: number): string {
+export function recordMenuLabel(values: number, scenery: number, layers = 0): string {
   const parts = [
-    values > 0 || scenery === 0 ? `${values} value${values === 1 ? '' : 's'}` : null,
+    values > 0 || (scenery === 0 && layers === 0) ? `${values} value${values === 1 ? '' : 's'}` : null,
+    layers > 0 ? `${layers} layer${layers === 1 ? '' : 's'}` : null,
     scenery > 0 ? `${scenery} piece${scenery === 1 ? '' : 's'} of scenery` : null,
-  ].filter(Boolean)
-  return `Write ${parts.join(' and ')} into`
+  ].filter((p): p is string => p != null)
+  return `Write ${listOf(parts)} into`
 }

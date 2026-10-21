@@ -1,6 +1,6 @@
 # Looks as absolute states
 
-> **Document status: agreed 2026-10-21; session 1 of 3 done.** D1–D3 are Chris's calls, made after the
+> **Document status: agreed 2026-10-21; session 2 of 3 done.** D1–D3 are Chris's calls, made after the
 > Timeline drew one scenery-only Look as three columns. The P rows are the plan's own.
 
 ## 1. Context
@@ -144,7 +144,10 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
   which loses *Own fixtures* and its Looks' "outside the mask" section (`:131-156, 218, 324-333`);
   `CueRowStore.pressLayer`; `MakeLayerSheet`, which keeps its promotion mask (`:106-114`, D3); and the
   hand (`F/lib/handTargets.ts`, `HandLayerTargets.tsx`, `slotDrop.ts`).
-- Rings follow P4: `lookPresence.ts`, `BuskingView.tsx:383-417`, `CueSlotOverviewPanel.tsx`.
+- Rings follow P4: `lookPresence.ts`, `BuskingView.tsx:383-417`, `CueSlotOverviewPanel.tsx`. Until
+  they do, `appliedState` answers a Look's entry as every fixture, cell and group of the rig at `ALL`
+  (session 2), so today's coverage fold lights it whatever is selected; once the client reads
+  presence alone the entry can name no targets.
 - `hasDeferredEffects` goes, with its readers: `LibraryPalette.tsx:268-275`, `buskLayout.ts:642`'s pool,
   `SurfaceLibrary.tsx:576-583`, `recordOptions.ts:76`, `LookSheet.tsx:398`, `LookDetailSheet.tsx:288`
   and `CueEffectsTab.tsx:466`.
@@ -171,7 +174,7 @@ A Look layer's rows and bound effects land whole. `LayerTargets` keeps filtering
 Session 1 is backend only and lands alone. Session 2 is backend only and leaves the current client
 working, because it strips targets where session 3 refuses them (P2). Session 3 needs session 2.
 
-### Session 1: deferred effects go (backend) — done
+### Session 1: deferred effects go (backend) — done, `a717cbdc`
 
 - §3.1, step 2, the importer's effect half.
 - **Tests:** `validateLookEffects` refuses `deferred`; `create_look` and `update_look` refuse an
@@ -183,7 +186,7 @@ working, because it strips targets where session 3 refuses them (P2). Session 3 
 - **Docs:** the composition model's §"Record / Include / Update" and §"Looks, palettes and layers";
   `mcp-engineering.md` §"Tools"; CLAUDE.md where it names deferred effects.
 
-### Session 2: a Look is whole on the desk (backend)
+### Session 2: a Look is whole on the desk (backend) — done
 
 - §3.2–3.5, step 3, the importer's layer half, P2's strip.
 - **Tests:**

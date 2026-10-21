@@ -26,7 +26,6 @@ import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.parseMaskGroups
 import uk.me.cormack.lighting7.fx.toPropertyMask
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
 
@@ -116,7 +115,7 @@ internal fun editTimeline(state: State, project: DaoProject, stackId: Int, reque
     return transaction(state.database) {
         val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
             ?: return@transaction TimelineEditOutcome.NotFound
-        val batch = TimelineBatch(project, stack, fixtures, rules, coverage, isHeld = holds::isHeld)
+        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld)
         request.ops.forEachIndexed { index, raw -> batch.run(index, raw) }
         val outcome = if (batch.problems.isNotEmpty()) TimelineEditOutcome.Invalid(batch.problems) else TimelineEditOutcome.Edited(batch.answer())
         if (outcome !is TimelineEditOutcome.Edited || request.dryRun) TransactionManager.current().rollback()
@@ -128,7 +127,6 @@ internal fun editTimeline(state: State, project: DaoProject, stackId: Int, reque
 private class TimelineBatch(
     private val project: DaoProject,
     stack: DaoCueStack,
-    private val fixtures: Fixtures,
     private val rules: LayerPressRules,
     private val coverage: TargetCoverage,
     private val isHeld: (Int) -> Boolean,
@@ -191,7 +189,7 @@ private class TimelineBatch(
     private fun layerOn(op: LayerOnOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = targetOf(op.target, problem) ?: if (op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
         val settings = op.settingsFrom?.let { id ->
             val from = startLayers[id] ?: return problem("settingsFrom names no layer of this stack")
             if (!from.isOf(record)) return problem("settingsFrom is a layer of another record")
@@ -203,7 +201,7 @@ private class TimelineBatch(
     private fun layerOff(op: LayerOffOp, problem: (String) -> Unit) {
         val cue = cueOf(op.cueId, problem) ?: return
         val record = recordOf(op.source, problem) ?: return
-        val target = targetOf(op.target, problem) ?: if (op.target != null) return else null
+        val target = cellTargetOf(record, op.target, problem) ?: if (record is PressedRecord.Palette && op.target != null) return else null
         press(cue, record, listOfNotNull(target), on = false, settings = null, problem)
     }
 
@@ -223,18 +221,20 @@ private class TimelineBatch(
         if (op.cueIds.isEmpty()) return problem("cueIds is empty")
         val from = recordOf(op.from.source, problem)
         val to = recordOf(op.to.source, problem)
-        val fromTarget = targetOf(op.from.target, problem)
-        val toTarget = targetOf(op.to.target, problem)
         if (from == null || to == null) return
-        if ((op.from.target != null && fromTarget == null) || (op.to.target != null && toTarget == null)) return
+        val fromTarget = cellTargetOf(from, op.from.target, problem)
+        val toTarget = cellTargetOf(to, op.to.target, problem)
+        if ((from is PressedRecord.Palette && op.from.target != null && fromTarget == null) ||
+            (to is PressedRecord.Palette && op.to.target != null && toTarget == null)
+        ) return
         if (from.source == to.source && fromTarget == toTarget) return problem("from and to are the same cell")
         val cues = op.cueIds.map { cueOf(it, problem) }
         if (cues.any { it == null }) return
         for (cue in cues.filterNotNull()) {
             val layers = layersOf(cue)
-            val fromLayer = layers.lastOrNull { it.isOf(from) && it.fills(fromTarget) } ?: continue
+            val fromLayer = layers.lastOrNull { it.fills(from, fromTarget) } ?: continue
             when {
-                layers.any { it.isOf(to) && it.fills(toTarget) } ->
+                layers.any { it.fills(to, toTarget) } ->
                     press(cue, from, listOfNotNull(fromTarget), on = false, settings = null, problem)
                 op.keepSettings -> replaceInPlace(cue, layers, fromLayer, from, fromTarget, to, toTarget, problem)
                 else -> {
@@ -373,8 +373,8 @@ private class TimelineBatch(
 
     private fun recordOf(source: TimelineSourceRef, problem: (String) -> Unit): PressedRecord.Found? {
         val read = when (source.kind.uppercase()) {
-            "LOOK" -> readPressedRecord(project, null, source.id, fixtures)
-            "TEMPLATE" -> readPressedRecord(project, source.id, null, fixtures)
+            "LOOK" -> readPressedRecord(project, null, source.id)
+            "TEMPLATE" -> readPressedRecord(project, source.id, null)
             else -> return null.also { problem("source.kind must be LOOK or TEMPLATE, not '${source.kind}'") }
         }
         return when (read) {
@@ -383,8 +383,12 @@ private class TimelineBatch(
         }
     }
 
-    private fun targetOf(target: CueTargetDto?, problem: (String) -> Unit): CueTargetDto? {
-        if (target == null) return null
+    /**
+     * A cell's target: a palette's as named, checked; a Look's none, whatever an op names, since a
+     * Look lands whole (absolute-looks plan D1).
+     */
+    private fun cellTargetOf(record: PressedRecord.Found, target: CueTargetDto?, problem: (String) -> Unit): CueTargetDto? {
+        if (record is PressedRecord.Look || target == null) return null
         if (TargetRef.ofOrNull(target.type, target.key) == null) {
             return null.also { problem("A layer's target must be a fixture or a group: ${target.type}:${target.key}") }
         }
@@ -523,9 +527,12 @@ private fun sceneryItemOf(change: SceneryChangeDto): JsonObject = JsonObject(
 private fun CueLayerDto.isOf(record: PressedRecord.Found): Boolean =
     source?.kind == record.source.kind.name && source.id == record.source.id
 
-/** Whether this layer fills the cell of [target] — names it, or names none for a record's own heads (§3.2). */
-private fun CueLayerDto.fills(target: CueTargetDto?): Boolean =
-    if (target == null) targets.isEmpty() else target in targets
+/**
+ * Whether this layer fills [record]'s cell of [target]: any layer of a Look, which lands whole; a
+ * palette's naming [target], or naming none for its own heads (§3.2).
+ */
+private fun CueLayerDto.fills(record: PressedRecord.Found, target: CueTargetDto?): Boolean =
+    isOf(record) && (record is PressedRecord.Look || if (target == null) targets.isEmpty() else target in targets)
 
 /** The op bodies are decoded strictly, so a misspelled field is named rather than ignored. */
 private val OP_JSON = Json {

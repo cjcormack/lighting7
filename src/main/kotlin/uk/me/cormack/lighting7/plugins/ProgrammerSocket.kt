@@ -293,11 +293,8 @@ data class IncludedTargetDto(
 )
 
 /**
- * Apply a Look to the programmer as a **layer**, on top of the stack.
- *
- * The busking-pad and picker gesture, and the WS twin of `POST /looks/{id}/toggle` — which stays
- * for the desk's existing call sites. Unlike the retired preset toggle this carries the whole Look:
- * a **bound** row lands on the fixture it names, because a layer has somewhere to put a target set.
+ * Apply a Look or a palette to the programmer as a **layer**, on top of the stack — the Make layer
+ * sheet's gesture. A Look's layer carries the whole Look: every row lands on the fixture it names.
  */
 @Serializable
 @SerialName("programmer.addLayer")
@@ -305,6 +302,7 @@ data class ProgrammerAddLayerInMessage(
     /** Exactly one of [lookId] / [templateId]. */
     val lookId: Int? = null,
     val templateId: Int? = null,
+    /** A palette layer's targets; a Look's layer names none, so any given for one are dropped. */
     val targets: List<CueTargetDto> = emptyList(),
     val propertyMask: String? = null,
     val blendMode: String? = null,
@@ -349,6 +347,7 @@ data class ProgrammerPatchLayerInMessage(
     val amount: Double? = null,
     val propertyMask: String? = null,
     val blendMode: String? = null,
+    /** A palette layer's targets; a Look's layer keeps naming none. */
     val targets: List<CueTargetDto>? = null,
     val stomp: Boolean? = null,
     val fadeMs: Long? = null,

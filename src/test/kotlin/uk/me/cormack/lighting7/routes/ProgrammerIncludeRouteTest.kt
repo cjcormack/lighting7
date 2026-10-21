@@ -23,6 +23,8 @@ import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
+import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.programmerChannel
@@ -494,33 +496,34 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a layer's group target is reported as a group key`() = testApplication {
+    fun `a palette layer's group target is reported as a group key, and a Look layer names none`() = testApplication {
         // Real information rather than inferred: the layer names the group, where the old preset
-        // path had to cross-product property names with targets to guess.
+        // path had to cross-product property names with targets to guess. A Look layer names no
+        // targets — it lands whole — so only a palette's says anything here.
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
         LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
-        // The row names the **group**, which is what makes the group key real information rather
-        // than something Include had to infer. A Look row may target a group; only a template's may
-        // not, because a template names no targets of its own at all.
-        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
-            client, projectId, "Warm", mapOf("dimmer" to "200"),
-            targetKey = "front-wash", targetType = "group",
-        )
+        val half = client.post("/api/rest/projects/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = "Half", rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "dimmer", "pct:50"))))
+        }.body<TemplateDto>()
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "Warm", mapOf("rgbColour" to "#ff8800"))
         val cueId = createCue(
             client, "layered",
             layers = listOf(
-                CueLayerDto(lookId = warm.id, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash"))),
+                CueLayerDto(templateId = half.id, sortOrder = 0, targets = listOf(CueTargetDto("group", "front-wash"))),
+                CueLayerDto(lookId = warm.id, sortOrder = 1),
             ),
         )
 
         val response: ProgrammerIncludeResponse = client.include(cueId).body()
 
         assertEquals(listOf("front-wash"), response.groupKeys)
-        assertEquals(200u.toUByte(), programmerChannel(state, 0, 1))
-        assertEquals(200u.toUByte(), programmerChannel(state, 0, 13))
+        for (head in listOf("hex-1", "hex-2")) {
+            assertEquals(ProgrammerOwner.LAYERS, state.show.programmerStore.get(head, "dimmer")?.owner, "$head's level is the palette layer's")
+        }
     }
 
     // ─── helpers ────────────────────────────────────────────────────────

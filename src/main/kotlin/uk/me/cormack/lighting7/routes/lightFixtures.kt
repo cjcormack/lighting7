@@ -8,21 +8,14 @@ import io.ktor.server.routing.*
 import io.ktor.server.routing.get
 import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.core.SortOrder
-import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import org.jetbrains.exposed.v1.core.eq
-import org.jetbrains.exposed.v1.core.inList
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fixture.trait.*
 import uk.me.cormack.lighting7.show.Fixtures
-import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
-import uk.me.cormack.lighting7.models.DaoLookEffects
-import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 
-internal fun Fixture.details(fixtures: Fixtures, compatibleLookIds: List<Int> = emptyList()): FixtureDetails {
+internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
     val fixtureGroups = fixtures.groupsForFixture(this.key)
 
     return when (this) {
@@ -57,13 +50,12 @@ internal fun Fixture.details(fixtures: Fixtures, compatibleLookIds: List<Int> = 
                 elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
                 mode = modeInfo,
                 capabilities = capabilities,
-                compatibleLookIds = compatibleLookIds,
                 gelCode = patchMetadata?.gelCode,
                 infrastructure = patchMetadata?.infrastructure == true,
             )
         }
         is HueFixture -> {
-            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups, compatibleLookIds)
+            HueFixtureDetails(this.fixtureName, this.key, this.typeKey, fixtureGroups)
         }
     }
 }
@@ -90,77 +82,6 @@ private fun DmxFixture.detectCapabilities(): List<String> {
     return caps
 }
 
-/**
- * Infer which capability categories a Look's effects require.
- *
- * Only `dimmer` / `colour` / `position` are recognised; anything else — notably `controls` —
- * contributes nothing, so it never narrows compatibility.
- */
-internal fun inferLookCapabilities(categories: List<String>): Set<String> {
-    val caps = mutableSetOf<String>()
-    for (category in categories) {
-        when (category) {
-            "dimmer" -> caps.add("dimmer")
-            "colour" -> caps.add("colour")
-            "position" -> caps.add("position")
-        }
-    }
-    return caps
-}
-
-/**
- * What compatibility filtering needs to know about one Look.
- *
- * Just the effect categories now. There was an `editorFixtureType` beside them, and dropping it is
- * D6: compatibility is **capability-only** — "can this head mix a colour at all", never "was this
- * authored against that model". The type gate is what made one colour need one Look per fixture
- * type, and it went with the column when templates became their own entity.
- */
-internal data class LookCompatibilityInfo(
-    val id: Int,
-    val effectCategories: List<String>,
-)
-
-/**
- * Load the compatibility metadata for every Look in [projectId]. Two DB round-trips, not one per
- * Look: a preset's effects were a JSON column that came along with the parent row, but a Look's are
- * a table, so touching `look.effects` per Look would be a lazy query each — on every `GET /fixtures`
- * and `GET /groups`.
- */
-internal fun loadLookCompatibilityInfos(state: State, projectId: Int): List<LookCompatibilityInfo> =
-    transaction(state.database) {
-        val looks = DaoLook.find { DaoLooks.project eq projectId }.toList()
-        if (looks.isEmpty()) return@transaction emptyList()
-        val categoriesByLook = DaoLookEffect
-            .find { DaoLookEffects.look inList looks.map { it.id } }
-            .groupBy({ it.look.id.value }, { it.category })
-        looks.map { look ->
-            LookCompatibilityInfo(
-                id = look.id.value,
-                effectCategories = categoriesByLook[look.id.value].orEmpty(),
-            )
-        }
-    }
-
-/**
- * The ids of Looks offerable for a target with these [capabilities].
- *
- * **Capability-only** (D6). There used to be a type gate here as well — a deferred Look was refused
- * unless its `editorFixtureType` was the target's own type, exactly as an FX preset was — and that
- * gate is the whole reason "Amber Key" authored against a MAC Aura was refused to the LED bar beside
- * it. It is gone with the column: what remains is the honest question, whether the head can do the
- * thing at all. An effect needing colour is still no use on a fixture that cannot mix one.
- *
- * `allowedTypeKeys` went with it. Every caller passed the target's own type(s) and nothing else
- * reads them, so keeping the parameter would only preserve the shape of a filter that no longer
- * exists.
- */
-internal fun List<LookCompatibilityInfo>.compatibleIdsFor(
-    capabilities: Set<String>,
-): List<Int> = filter { look ->
-    inferLookCapabilities(look.effectCategories).all { it in capabilities }
-}.map { it.id }
-
 internal fun Route.routeApiRestLightsFixtures(state: State) {
     // Two sibling resources, not one tree: `/fixtures` is the patched rig, `/fixture-types` is a
     // vocabulary enumeration of every type the build knows about — most of which are not patched.
@@ -168,18 +89,7 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
     route("/fixtures") {
         get {
             val fixtures = state.show.fixtures
-            val currentProject = state.projectManager.currentProject
-
-            val looks = loadLookCompatibilityInfos(state, currentProject.id.value)
-
-            call.respond(fixtures.fixtures.map { fixture ->
-                val capabilities = when (fixture) {
-                    is DmxFixture -> fixture.detectCapabilities().toSet()
-                    else -> emptySet()
-                }
-                val compatibleIds = looks.compatibleIdsFor(capabilities)
-                fixture.details(fixtures, compatibleIds)
-            })
+            call.respond(fixtures.fixtures.map { it.details(fixtures) })
         }
 
         get<FixtureKey> {
@@ -232,10 +142,8 @@ sealed interface FixtureDetails {
     val groups: List<String>
 
     /**
-     * Ids of the **Looks** this fixture can be pointed at, filtered by inferred capability alone
-     * — see [compatibleIdsFor], and the D6 note on its KDoc for the type gate that used to be here
-     * too. A Look's *rows* name their own targets, so the question is only ever about its effects:
-     * a Look holding no effect is compatible with everything.
+     * Always empty: a Look lands whole, so none can be pointed at one fixture (absolute-looks plan
+     * P7). Kept on the wire until the client stops reading it.
      */
     val compatibleLookIds: List<Int>
 }

@@ -34,12 +34,10 @@ import uk.me.cormack.lighting7.routes.BuskPressService
 import uk.me.cormack.lighting7.routes.HandService
 import uk.me.cormack.lighting7.routes.familyOf
 import uk.me.cormack.lighting7.routes.isGenericTemplate
-import uk.me.cormack.lighting7.routes.LookTargetResolution
 import uk.me.cormack.lighting7.routes.pressWouldRelease
-import uk.me.cormack.lighting7.routes.resolveLookToggleTargets
 import uk.me.cormack.lighting7.routes.TemplatePressLog
 import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
-import uk.me.cormack.lighting7.routes.toggleSource
+import uk.me.cormack.lighting7.routes.layerSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.state.SubselectMode
@@ -149,11 +147,7 @@ interface SurfaceActions {
      */
     fun locateSelection()
 
-    /**
-     * Press a Look onto **its own fixtures** — never the selection (D6). A Look that has gained a
-     * deferred effect since it was bound has no own targets, so the press is dropped; health has
-     * already marked it and the router's dead gate drops it before this is reached.
-     */
+    /** Press a Look, whole — never onto the selection (D6; absolute-looks plan D1). */
     fun applyLook(lookUuid: String)
 
     /**
@@ -466,10 +460,9 @@ class DefaultSurfaceActions(
     }
 
     /**
-     * A Look onto its own fixtures, through the same `ProgrammerLayerStack.toggle` the toggle route
-     * uses — with **no targets**, which is exactly what makes `resolveLookToggleTargets` fall back
-     * to the Look's own. A refusal there (a deferred effect, or nothing patched left) is logged: a
-     * MIDI press has no reply channel, so the log line is the only trace the operator gets.
+     * A Look, whole, through the same `ProgrammerLayerStack.toggle` the toggle route uses: on puts
+     * one layer of it on, off takes every layer of it off. A failure is logged: a MIDI press has no
+     * reply channel, so the log line is the only trace the operator gets.
      */
     override fun applyLook(lookUuid: String) {
         val uuid = uuidOrNull(lookUuid) ?: run {
@@ -480,19 +473,14 @@ class DefaultSurfaceActions(
         val source = transaction(state.database) {
             DaoLook.find { (DaoLooks.uuid eq uuid) and (DaoLooks.project eq projectId) }
                 .firstOrNull()
-                ?.toggleSource(state.show.fixtures)
+                ?.layerSource()
         }
         if (source == null) {
             logger.warn("Surface applyLook dropped: no Look {} in project {}", lookUuid, projectId)
             return
         }
-        when (val resolved = resolveLookToggleTargets(emptyList(), source)) {
-            is LookTargetResolution.Refused ->
-                logger.warn("Surface applyLook dropped: {}", resolved.message)
-            is LookTargetResolution.Targets -> runCatching {
-                state.show.programmerLayerStack.toggle(source = source.source, targets = resolved.targets)
-            }.onFailure { logger.warn("Surface applyLook failed: {}", it.message) }
-        }
+        runCatching { state.show.programmerLayerStack.toggle(source = source, targets = emptyList()) }
+            .onFailure { logger.warn("Surface applyLook failed: {}", it.message) }
     }
 
     /**

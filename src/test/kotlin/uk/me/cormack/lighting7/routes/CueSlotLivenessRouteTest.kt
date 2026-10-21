@@ -14,7 +14,8 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
-import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.fx.ProgrammerOwner
+import uk.me.cormack.lighting7.models.LayerSourceKind
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -225,7 +226,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a slot's Look toggled with no targets comes on on its own fixtures`() = testApplication {
+    fun `a slot's Look toggled with no targets comes on whole, and its tile lights`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -233,7 +234,7 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         val warm = createLook(client, "warm", effect = false)
         assign(client, AssignCueSlotRequest(page = 1, slotIndex = 1, lookId = warm))
 
-        // The tile's press: the overlay has no selection, so it sends none and the route derives.
+        // The tile's press: the overlay has no selection, so it sends none; a Look lands whole.
         val on = client.post("/api/rest/projects/$projectId/looks/$warm/toggle") {
             contentType(ContentType.Application.Json)
             setBody(ToggleLookRequest())
@@ -241,7 +242,12 @@ class CueSlotLivenessRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, on.status, on.bodyAsText())
         assertEquals("applied", on.body<ToggleLookResponse>().action)
         val layer = state.show.programmerStore.layers.single()
-        assertEquals(listOf(CueTargetDto("fixture", "hex-1")), layer.targets, "the layer names the Look's own fixture, so the tile lights")
+        assertTrue(layer.targets.isEmpty(), "a Look layer names no targets")
+        assertEquals(ProgrammerOwner.LAYERS, state.show.programmerStore.get("hex-1", "dimmer")?.owner, "its row landed on its own fixture")
+        assertTrue(
+            state.show.programmerLayerStack.appliedState().any { it.source.id == warm && it.source.kind == LayerSourceKind.LOOK },
+            "the tile lights from the applied state (P4)",
+        )
 
         val off = client.post("/api/rest/projects/$projectId/looks/$warm/toggle") {
             contentType(ContentType.Application.Json)

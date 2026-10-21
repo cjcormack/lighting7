@@ -59,7 +59,7 @@ The console-style programmer: a sparse per-(fixture, property) overlay of sticky
 
 Writers: web busking (`programmer.*` ops and the `updateChannel` compatibility shim), MIDI surface faders, surface flash buttons, FX preset toggles / editor previews, Locate, and the unpark hand-down.
 
-The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look` and `apply_palette` (each unless `asValues`) and `create_look`'s `applyToTargets` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
+The AI surface is a writer here too — `set_programmer` writes plain values as `WEB`, `clear_programmer` and `set_blind` are the desk's Clear, Release and Blind, and `apply_look` and `apply_palette` (each unless `asValues`) and `create_look`'s `apply` go through `ProgrammerLayerStack.toggle` — so `get_current_state`'s `programmer` section reports the layer stack, the winning entry per (fixture, property), the blind flag and the include target back. A *toggle* the model cannot read is a toggle it undoes on the second attempt. The programmer's save gestures are on that surface too — `record_cue`, `record_look`, `include_into_programmer` and `update_from_programmer` — sharing the routes' orchestration (`routes/programmerSurface.kt`, `performProgrammerRecordLook`) rather than reimplementing it, since which rows an Update overwrites is decided by the include-target bookkeeping described above and not by the caller.
 
 **There is exactly one programmer, and it is shared by every client — by design, not by omission.** A second device is a second *window onto one desk*, not a second seat: whoever signs in elsewhere sees this state and may edit it, and the three broadcast frames (`provenanceState`, `programmer.includeTarget`, `programmer.layerState`) exist to keep those windows honest. Concurrent authorship is explicitly not a scenario this desk designs for, which is what spares it a merge rule: `LayerResolver.fallbackFor` returns **one** value per (fixture, property) because DMX is one byte per channel, so two authors would force a "whose value wins?" policy that nothing here expresses — HTP cannot be it (see the line above), and the `Slot.seq` bands are the only extensible axis. Decided 2026-08-23; the reasoning, and two places the cost of the alternative was previously misjudged, are in [`FU-PROG-PER-USER`](plans/followups.md#fu-prog-per-user).
 
@@ -178,6 +178,11 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
   children are never touched by any mode** — they are not programmer state, and `CueTriggerManager`
   owns the timed ones. Recording into the live cue of a stack republishes its Layer 4, or the DB
   and the published layer would disagree and the next Clear would snap the rig back.
+- **Look layers** — matched on their source, never their targets, since a Look lands whole. A scoped
+  Record (*Selection only*) takes a Look — the cue's to replace, the programmer's to write — only
+  when it lands on fixtures and every one is in scope (absolute-looks plan P5): one reaching outside
+  the selection, or landing on none, stays on the cue as it is, and the programmer's is left out with
+  a warning naming it.
 - **Scenery** — `scenery` (default true) records what the programmer's scenery overlay **holds**,
   never what the stage merely shows, whatever the `source`, `mask` or `targets` say: scenery is
   addressed by element, not through the selection (scenery-programmer plan D3, D7). Into a cue, a
@@ -488,6 +493,15 @@ no targets of its own. A **Layer** applies either, inside a cue at a declared po
 cue's stack — `DaoCueLayers` carries two nullable FKs (`look_id` / `template_id`) with exactly one
 set, and `DaoCueLayer.source` is the only reader.
 
+**A Look is an absolute state** (absolute-looks plan D1): pressed or layered, it lands its own rows,
+effects and scenery, never narrower and never wider. So a Look layer names no targets — the cook
+ignores any an older write left (`CueComposer.LayerTargets` filters palette layers only), every stored
+write drops them (`withStoredTargets`, `layerTargets`), the importer drops them from any archive, and
+`state/LookLayerTargetsMigration.kt` cleared each database's once (`PRAGMA user_version` 3). A Look
+layer's **mask** is a layer setting like its amount or blend (D3): no press sets one, and the layer
+popover, the cue editor, the Timeline's *Settings…* and MCP do; the cook applies it to the Look's
+rows. To point something at the selection, use a palette.
+
 **Storage still says template.** Palettes were called templates until venue-visit plan D2 renamed
 everything a person or Claude reads: the copy, the `/palettes` paths, the `paletteListChanged` /
 `palettePressed` frames, the `PALETTE_*` codes and the `create_palette` / `apply_palette` tools. The
@@ -513,8 +527,9 @@ warning), by the importer, and was deleted from each database once
 Look effect, its target non-null; a palette's effect is a bare `StoredEffect`, which
 `CueComposer.effectsForLayer` runs on each of the layer's targets.
 
-Sweep item B6 removed the row-side plumbing that outlived the rule: there is no `isDeferred` on a
-Look row at any layer any more, `LookRowEntry.target` is non-null, and `loadLookSnapshot` drops a
+Sweep item B6 removed the row-side plumbing that outlived the rule, and absolute-looks session 2 the
+effect side's: there is no `isDeferred` on a Look row or a Look effect at any layer any more,
+`LookRowEntry.target` is non-null, and `loadLookSnapshot` drops a
 `deferred` row an older database wrote rather than handing the composer a row with nothing to apply
 to. The targets-supply-the-row arm of `CueComposer.applyLayer` survives — it is a *palette*
 layer's now.
@@ -601,10 +616,12 @@ the effects under it ends with it.
 
 **Apply as values** is the same end with no layer ever on the stack. For a palette it is
 `POST /palettes/{id}/apply`, described above. For a Look it is `POST /looks/{id}/apply`
-`{targets, families?, fadeMs?}` (`ProgrammerLayerStack.applyAsValues`): the Look cooked on top of
-the stack as the layer a press would add — targets and mask by the toggle's own rules — the keys it
-wins written as `WEB` values at their own fades (or `fadeMs`), its effects started as Local effects
-at the rank that layer would have had, its scenery handed to the programmer's own. Not a toggle.
+`{targets, families?, fadeMs?}` (`ProgrammerLayerStack.applyAsValues`): the Look cooked whole on top
+of the stack as the layer a press would add — the request's targets and mask read and ignored
+(absolute-looks plan P6) — the keys it wins written as `WEB` values at their own fades (or `fadeMs`),
+its effects started as Local effects at the rank that layer would have had, its scenery handed to the
+programmer's own. Not a toggle. Both Detach and Apply as values write each value under the group its
+row names (`sourceGroup`), else the group a palette layer names it through.
 
 `POST /palettes/{id}/apply` with `write: false` is the focused-Look arm (D7): the same resolve and
 fan-out, answered as `values` — each head's literal in the Look row grammar, a cell by its element
@@ -652,7 +669,17 @@ a cloned project someone else's habits.
 
 ### A press is per target
 
-**A press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press
+**A Look is not pressed per target: it is pressed whole** (absolute-looks plan P1). On puts one layer
+of it on top, naming no targets and no mask, whatever the door sends; off takes every layer of it off,
+whatever is selected; a press never adds a second layer of a Look. A Look none of whose fixtures is
+patched still goes on and lands nothing, as a cue does. Every door follows it — the programmer's
+toggle, `POST /cues/{id}/layers/press`, a busk pad, a cue slot, MCP's `apply_look` and the MIDI
+`ApplyLook` and `PressPad` — and the doors keep their `targets` and `families` fields, which a palette
+press reads (P2). In `fx/LayerPress.kt` a Look's layer is *whole* (`Ops.whole`): its arm is "any layer
+of it is on", nothing is narrowed off it or widened onto it, and in a solo bank it comes and goes
+whole (§"The busk layout"). Everything below in this section is a **palette**'s.
+
+**A palette press is per target, on both arms, and it is the exact inverse of the pad's ring.** The press
 means *these targets are now this record's, or they are now nobody's*: "already on" is the record
 covering **every** pressed target, counted over all of its layers, which is precisely what lights a
 full ring (§"Applied state is resolved by the desk"). An off press therefore takes the pressed
@@ -706,11 +733,10 @@ hand, which is the point. A group the press does not touch keeps its own spellin
 case never splits, and a group that no longer resolves stands for itself rather than covering
 everything or nothing.
 
-One thing stays outside the subtraction: a **Look's** layer with **empty** targets applies its own
-bound rows, whose fixtures are not in the target list at all, so nothing here can expand it. The
-cook answers that question; a coverage comparison must not guess at it. A per-fixture palette's is
-different, since its rows name exactly its heads: it reads as naming them, a subtraction rewrites it
-to the rest, and `appliedState` lights its ring. The exception is a press
+A **Look's** layer stays outside the subtraction altogether: it names no targets, and its rows'
+landing is the cook's answer, which a coverage comparison must not guess at. A per-fixture palette's
+layer naming none is different, since its rows name exactly its heads: it reads as naming them, a
+subtraction rewrites it to the rest, and `appliedState` lights its ring. The exception is a press
 that itself names no targets — the same gesture as the layer, so it toggles its own such layer off
 and takes a sibling's off outright, there being nothing to narrow it to.
 
@@ -769,27 +795,24 @@ one gap left in this family, and it is the FX engine's rather than the fan-out's
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
 the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`,
 `/palettes/{id}/toggle`, `/looks/{id}/toggle` and `/looks/{id}/apply`; the MIDI `PressPad` and `PressTemplate` doors
-pass the desk's — `ApplyLook` reads no selection at all, so there is no mask for it to honour). Null
-is every
-attribute, today's press. Under a mask, by kind: a **palette** is one family, so it either lands
-whole or not at all — family ∉ mask is refused by name, `PALETTE_OUTSIDE_MASK`, on every door,
-the same dead-pad reading as `PALETTE_NEEDS_SELECTION`; inside the mask its layer is masked to
-its own family exactly as before, the intersection being the family itself. A **Look** spans
-families, so its layer goes on with `propertyMask = mask ∩ look.families`, the cook skips the rows
-outside it, and the response names them (`skippedFamilies`) so the pressing window can toast
-*Position rows skipped* — nothing shared is `LOOK_OUTSIDE_MASK`. A **cue** ignores the mask: it has
-no targets to be masked on. A `Sel · property` fader ignores it too: the control names its own
+pass the desk's — `ApplyLook` reads no selection at all). Null is every attribute. Under a mask, by
+kind: a **palette** is one family, so it either lands whole or not at all — family ∉ mask is refused
+by name, `PALETTE_OUTSIDE_MASK`, on every door, the same dead-pad reading as
+`PALETTE_NEEDS_SELECTION`; inside the mask its layer is masked to its own family exactly as before,
+the intersection being the family itself. A **Look** ignores the mask (absolute-looks plan D3): it
+lands whole, and a Look layer's mask is a setting made on the layer afterwards. The `skippedFamilies`
+a Look press used to answer is always empty, kept on the wire while the client reads it. A **cue**
+ignores the mask too: it has no targets to be masked on. A `Sel · property` fader ignores it too: the control names its own
 attribute, as a cell edit is not masked by a marquee elsewhere. **The mask is tested on the on arm
 only**: it is a fact about what a press puts on, so a press that is taking a record off comes off
 under any mask — a lit Intensity pad is still released while a Colour marquee stands, and a surface
 button never reads dead. Each door asks `pressWouldRelease` (`routes/pressArm.kt`) before the
 press, which is `LayerPress.wouldRelease` — the decision `LayerPress.press` itself makes — over the
-programmer's stack; the cue's press asks the same function over the cue's layers. `ProgrammerLayerStack.toggle` already took `propertyMask`, and the "already on" comparison
-still reads coverage by targets, so a Look on the stack under a Colour mask pressed again unmasked
-comes **off** rather than widening; pressing twice still means off. One limit worth knowing: the cook applies a layer's
-`propertyMask` to its **rows**, not to its effects (a pre-existing property of the mask, not of the
-press), so a Look's *effect* in a skipped family still runs — it is still named in
-`skippedFamilies`, which is the honest report.
+programmer's stack; the cue's press asks the same function over the cue's layers. The "already on"
+comparison reads coverage by targets, never the mask, so a palette on the stack pressed again under
+another mask comes **off** rather than widening; pressing twice still means off. One limit worth
+knowing: the cook applies a layer's `propertyMask` to its **rows**, not to its effects, so a Look
+layer the operator has masked to Colour still runs its Intensity effect.
 
 **There is one mask, the selection's, and every surface reads it** (apply-model plan D3). It is set
 three ways: a marquee publishes its heads and names its columns and a rows-only click publishes its
@@ -852,33 +875,28 @@ solo siblings — a palette's family replacement is `toggle`'s own, so it runs o
 exactly as a cue slot presses: a toggle, live above every stack without being any stack's playhead,
 drawn solid while the press holds it and as an outline while only a stack does.
 
-**Solo has one meaning for every kind** (D6): pressing one pad *on* turns its siblings off. A layer
-sibling under a layer press is narrowed on the pressed heads by `toggle`'s own rule — the per-target
-reading the ring uses, so a sibling holding exactly the pressed heads comes off, one that overlaps
-is narrowed, a disjoint one is untouched. A cue sibling that is live is stopped. A **cue press**
-takes its layer siblings off *wholesale* through `ProgrammerLayerStack.release` — the one
+**Solo has one meaning for every kind** (D6): pressing one pad *on* turns its siblings off. A palette
+sibling under a palette press is narrowed on the pressed heads by `toggle`'s own rule — the
+per-target reading the ring uses, so a sibling holding exactly the pressed heads comes off, one that
+overlaps is narrowed, a disjoint one is untouched. A **Look** comes and goes whole, as a cue does
+(absolute-looks plan P3): a Look sibling, which cannot be narrowed, comes off whole under any press,
+and a Look press takes every layer sibling off whole. A cue sibling that is live is stopped. A **cue
+press** takes its layer siblings off *wholesale* through `ProgrammerLayerStack.release` — the one
 additive method the layout gave the engine, one mutation and one recook — because a cue has no
 targets to narrow by. An **off** press releases nothing, whatever the kind; a stacking bank (solo
 off) has no siblings at all. Nothing in the cook reads the layout: a bank changes what a press
 does, never what a cue composes to.
 
-**A Look with no deferred effect can be pressed with no selection.** Its rows are always bound, so
-`/looks/{id}/toggle` with empty targets derives them from the Look's own rows and bound effects,
-keeping only fixtures still in the patch (`DaoLook.ownTargets`) — that is how a cue-slot tile,
-which has no selection, presses a Look (D7). A Look with a deferred effect and no targets asserts
-nothing and is refused (`LOOK_NEEDS_SELECTION`), as is a Look none of whose fixtures are patched
-(`LOOK_NO_TARGETS`): a toggle that applied nothing and reported success would read as a dead pad.
-Neither refuses an off press — a layer of the Look already naming no targets comes off whatever its
-targets would now resolve to (`routes/pressArm.kt`'s `resolveLookPress`).
-The derived targets are passed to the layer explicitly, so the applied state below lights the tile.
-The busk press applies the same reading to a **generic** palette — its rows take their targets
-from the press, so with none it is refused (`PALETTE_NEEDS_SELECTION`) — while a per-fixture
-palette names its own heads and lands on them.
+**A Look needs no selection.** It lands whole (absolute-looks plan D1), so a press with nothing
+selected and one with anything selected are the same press — which is how a cue-slot tile, which has
+no selection, presses a Look (D7), and why a slot takes any Look. A **generic** palette's rows take
+their targets from the press, so with none it is refused (`PALETTE_NEEDS_SELECTION`), while a
+per-fixture palette names its own heads and lands on them.
 
 **A pad has a second door, and it is the same press.** A MIDI control surface can hold a
 `PressPad(padUuid)` binding, which runs the whole of the above through `BuskPressService` with the
 **desk selection** — its targets *and* its attribute mask — as the press's. The service exists
-precisely so the two cannot diverge: the solo rules, the empty-selection refusals, the mask rules
+precisely so the two cannot diverge: the solo rules, a palette's empty-selection and mask refusals
 and the cue toggle are the *pad's* behaviour, not the HTTP endpoint's. It answers an outcome
 rather than responding, because a MIDI press has nowhere to put a 400. See
 `docs/midi-control-surface-engineering.md` §"The busk press, from two doors".
@@ -1037,8 +1055,13 @@ head the fan takes out of its travel is skipped `out of reach` rather than clamp
 
 A busk pad's ring asks one question — *is this record on for what I have selected?* — and the desk
 answers it. `ProgrammerLayerStack.appliedState` folds the layer stack into one entry per Look or
-palette listing **every target it covers**: each covered fixture, and each group marked `all` or
-`some` by how many of its heads the record holds. It rides on the `programmer.layerState` frame and
+palette. A palette's lists **every target it covers**: each covered fixture, and each group marked
+`all` or `some` by how many of its heads the record holds. **A Look is on or off** (absolute-looks
+plan P4): with a layer of it on the stack, its entry lists every fixture, cell and group of the rig as
+`all`, so a ring folded over any selection reads it lit, and with none it has no entry — "a layer of
+it is on", in the vocabulary a palette's ring already reads. A surface's `ApplyLook` button and a Look
+pad's LED read the entry's presence (`SurfaceFeedbackPublisher`'s `LOOK_APPLIED`), lit with or without
+a selection. It rides on the `programmer.layerState` frame and
 the connect snapshot as `applied`, beside the layer list rather than instead of it — the Layers pane
 edits layers, the pads read coverage, and those are two questions about one stack.
 
@@ -1056,10 +1079,8 @@ patch or group edit changes what the standing layers cover without changing a la
 
 This is deliberately not a client-side rule reading group membership over the wire. The desk already
 owns target expansion, coverage and precedence; a second copy in the browser is a copy that drifts
-and that no test on the rig can reach. The blind spot the desk keeps for itself is a layer with
-**empty** targets — its source's own bound rows decide where it lands, which is the cook's answer,
-so such a layer contributes no applied state. Enabled-ness is ignored: a disabled layer is still on
-the stack and a press still takes it off, so its ring stays lit.
+and that no test on the rig can reach. Enabled-ness is ignored: a disabled layer is still on the
+stack and a press still takes it off, so its ring stays lit.
 
 ### A palette holds a value *or* an effect
 

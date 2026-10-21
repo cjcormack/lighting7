@@ -110,7 +110,7 @@ lose its row: a procedure listed in neither table is one nobody will find again.
 | [`FU-MANUAL-WALLCLOCK-RATE`](#fu-manual-wallclock-rate) | an unassigned wall-clock effect no longer follows master 1's tempo | Sweep C6, 2026-08-26 |
 | [`FU-MANUAL-RECONNECT-RESYNC`](#fu-manual-reconnect-resync) | a widened reconnect resync heals a slept tab without a refetch storm | Frontend sweep, 2026-08-29 |
 | [`FU-MANUAL-WS-SINGLE-PARSE`](#fu-manual-ws-single-parse) | the single-parse WS seam loses no frame on any bridge | Frontend sweep, 2026-08-29 |
-| [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and Look compatibility still refreshes | Frontend sweep, 2026-08-30 |
+| [`FU-MANUAL-SAVELOOK-INVALIDATION`](#fu-manual-savelook-invalidation) | a layer-scope drag stays smooth, and a Look rename or delete still refreshes the library | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-DISPATCH`](#fu-manual-fade-dispatch) | fades still draw, join mid-fade, and complete once with the 60 Hz dispatch gone | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-FADE-SHOWBAR`](#fu-manual-fade-showbar) | the ShowBar's FADING countdown reads right at 10 Hz and the chrome sits out fades | Frontend sweep, 2026-08-30 |
 | [`FU-MANUAL-PROGRAMMER-MEMO`](#fu-manual-programmer-memo) | non-fade `/programmer` traffic no longer re-renders the whole grid/rail subtree | Frontend sweep, 2026-08-30 |
@@ -2780,8 +2780,8 @@ MIDI half, the timeout, and the two gestures in step 6.
    a **cue slot** — an **empty** one, which is a deliberate narrowing (a filled tile's press is
    live), so a lit ring on a filled tile is a defect rather than a pass. Both busk targets **do**
    offer themselves during *Edit layout*, drawn solid rather than dashed so they cannot be mistaken
-   for a drop slot; a band that fails to appear there is the gate having crept back. A template and
-   a deferred-effect Look must be refused at a slot, exactly as dragging one is refused today. Then
+   for a drop slot; a band that fails to appear there is the gate having crept back. A template must
+   be refused at a slot, exactly as dragging one is refused today; any Look is accepted. Then
    the
    **programmer's layer stack** with a selection standing on Screen 2,
    which lands on the desk selection and masks a template to its own family; and a **cue's stack**
@@ -2903,13 +2903,13 @@ row and be separately addressable (plan D9). 20–30 minutes.
 **What it proves**: *a marquee on one screen is a masked press on the other* — multi-screen plan
 §5 S1 / §9, backend af3575a and the lighting-react session-1 commit. The desk selection is one
 fact `{targets, families, source}`; a marquee publishes its rows and its attribute families with
-the window's name; every press carries the pair it acts on and the desk masks or refuses it on the
-**on** arm only; the desk chip reads whose selection each window is showing and flips follow/local
+the window's name; every palette press carries the pair it acts on and the desk masks or refuses it
+on the **on** arm only, while a Look press ignores it (absolute-looks plan D3); the desk chip reads whose selection each window is showing and flips follow/local
 per tab.
 
 **Test**: two browser windows on the desk and an iPad, all following. Steps marked *browser-checked*
 were run in the review of the frontend commit with two tabs of the desktop app's browser pane as
-the two screens (review of 2026-09-16 — project Experiment, tabs named `Window 5b55` and `Screen 2`; no colour+position Look existed there, so step 3 ran on *Lark 2*, intensity + colour, toasting *Intensity rows skipped*); the X-Touch and iPad halves are open.
+the two screens (review of 2026-09-16 — project Experiment, tabs named `Window 5b55` and `Screen 2`); the X-Touch and iPad halves are open, and so is step 3, rewritten for absolute-looks session 2.
 
 1. Marquee three Colour cells on Screen 1. Screen 2's band lights the three heads and shows a
    Colour pill; the iPad's too; both chips read *Desk · from Screen 1*; Screen 1's reads *Desk*.
@@ -2917,8 +2917,10 @@ the two screens (review of 2026-09-16 — project Experiment, tabs named `Window
 2. Press a colour template pad on Screen 2. The three cells on Screen 1 ring *You* and the colour
    lands; nothing else moves. Press a position template pad: Screen 2 toasts the refusal by name
    and the rig does not move. *Browser-checked* (Green landed on the three heads only; Fig 8 refused: *'Fig 8' is a Position template, and the selection is masked to Colour*).
-3. Press a Look holding colour and position rows: the colour lands, Screen 2 toasts *Position rows
-   skipped*, and `LookStack` on Screen 1 shows the layer badged Colour. *Browser-checked* with Lark 2; the second press came off with no toast. **Open**: a Look holding colour *and* position rows, so *Position rows skipped* is read.
+3. Press a Look holding colour and position rows: both land on its own fixtures, with no toast and
+   no mask badge on its layer in `LookStack` on Screen 1, since a Look press ignores the selection's
+   mask. Set a Colour mask in that layer's popover: its position rows come off, and the next press
+   takes the layer off whole. **Open**.
 4. Tap a fourth head on the iPad's band: it joins under the Colour mask (Screen 1's marquee grows
    a row, the pill stays Colour). Press the X-Touch select button for a group: same. *Browser-checked* for the band half (a fourth head tapped on Screen 2's band joined under the mask; Screen 1's selection grew a row, the pill stayed Colour). **Open**: the iPad tap and the X-Touch select button.
 5. Pick one head in the narrow-width picker: the mask clears (no pill anywhere). *Browser-checked* (Screen 2 at phone width; the pill cleared on both screens).
@@ -3422,25 +3424,22 @@ firing and means a real bug to file, and no frame should ever be reported as unp
 
 ## `FU-MANUAL-SAVELOOK-INVALIDATION`
 
-**A layer-scope drag no longer refetches the fixture list, and compatibility still refreshes when
-it must** · frontend sweep `FS-PERF-SAVELOOK-INVALIDATION`, 2026-08-30
+**A layer-scope drag no longer refetches the fixture list** · frontend sweep
+`FS-PERF-SAVELOOK-INVALIDATION`, 2026-08-30
 
 `saveLook` used to invalidate `Fixture` and `GroupList` on every PUT. `LookRowStore` writes a
 rows-only body every 400 ms for the length of a layer-scope drag, so each tick refetched the
-fixture list — 48 consumers client-side, `loadLookCompatibilityInfos` + `detectCapabilities` per
-fixture server-side — and handed every consumer a new array identity mid-drag. Those two tags are
-now sent only when the body writes `effects`, which is the only thing `compatibleIdsFor` reads.
+fixture list — 48 consumers client-side, a capability read per fixture server-side — and handed
+every consumer a new array identity mid-drag. Those two tags are now sent only when the body writes
+`effects`. The Look compatibility they once refreshed is gone (absolute-looks plan P7).
 This is a **code-read** change: the saving is arithmetic over a request that is no longer sent, not
 a measurement, and nothing in-tree drags a real grid against a real server.
 
 **Test**: on a rig with enough patched fixtures to make the list expensive, focus a LOOK layer in
 the Programmer and drag a value across several targeted heads for a few seconds. The grid must stay
 responsive and the rows must not visibly rebuild under the drag; in the network panel the 400 ms
-saves should appear with **no** accompanying `GET /fixtures` or `GET /groups`. Then confirm the
-other half still works: with the Look library open beside a second browser, add the first effect of
-a new family to a Look (`+ Effect` with a layer focused) and check it becomes offerable — it must
-appear in `LookTogglePicker` without a manual reload.
-Rename a Look and delete one too; both must still refresh the library. 10 minutes.
+saves should appear with **no** accompanying `GET /fixtures` or `GET /groups`. Then rename a Look
+and delete one; both must still refresh the library. 10 minutes.
 
 ---
 
@@ -4169,19 +4168,19 @@ session 5. Checks 1 and 7 need a re-run on the fixed build; 2–6 and 8 have not
 
 1. **Build a page from empty.** Two rows, a column with one bank stacked under another, and one
    bank set to `COLUMN` flow. Reload the browser: the same page, the same shape, the same order.
-2. **Solo across kinds.** One solo bank holding a position template and a movement Look. Press each
-   on the movers → the other goes dark *on those heads* and nothing else on stage moves. Now press
-   the Look on two heads only → the template stays lit on the rest, and both pads show a partial
-   ring rather than a full one.
+2. **Solo across kinds.** One solo bank holding a position template and a movement Look. Press the
+   template on the movers, then the Look with any selection → the Look lands whole on its own
+   fixtures, the template goes dark everywhere, and the Look's ring is full. Press the template on
+   the movers → the Look comes off whole. Nothing else on stage moves (absolute-looks plan P3).
 3. **A cue in the same solo bank.** Pressing it turns both of the above off and lights the cue;
    pressing it again stops the cue and lights nothing. GO on the ShowBar must be unaffected
    throughout, and the Show view's cursor must not move — a cue pad is live without being the
    playhead.
 4. **One record, two pads, two pages.** The same template on a pad on each page: lit on both, and
    either one turns it off.
-5. **A bound Look on a cue slot.** Drag it from the busk view's edit-mode palette into a slot; tap
-   it on the Show view with *nothing selected* → it comes on on its own fixtures and lights the
-   tile. A busk-only Look (one with a deferred effect) must refuse the drop.
+5. **A Look on a cue slot.** Drag it from the busk view's edit-mode palette into a slot; tap it on
+   the Show view with *nothing selected* → it comes on whole, on its own fixtures, and lights the
+   tile.
 6. **A delete takes its pads.** Put one template on three pads, check the library row says *on n
    pages* and the delete confirm names them, then delete it: the pads go, the pages still render,
    no 500.

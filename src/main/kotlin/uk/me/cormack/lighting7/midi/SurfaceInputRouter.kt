@@ -303,7 +303,7 @@ class SurfaceInputRouter(
                 "Strip binding {} reached button dispatch — resolve should have derived it", binding.id,
             )
             is BindingTarget.SpeedMasterTap -> actions.tapSpeedMaster(target.masterUuid)
-            // Records: one behaviour each (D6). The Look onto its own fixtures, the template onto
+            // Records: one behaviour each (D6). The Look whole, the template onto
             // the selection, the pad through its own bank's plan — never any of the three onto
             // whatever the other two would have chosen.
             is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)

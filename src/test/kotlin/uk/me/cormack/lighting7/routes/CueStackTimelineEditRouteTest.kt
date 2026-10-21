@@ -227,6 +227,37 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `a Look goes on a cue whole, whatever cell an op names, and off takes every layer of it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val warm = client.look("Warm")
+        val lavender = client.palette("Lavender")
+        val act = client.stack("Act 1")
+        val q1 = client.cue(act, "Q1")
+
+        client.edit(act, layerOn(q1, "LOOK", warm, "hex-2"))
+        assertEquals(listOf("Warm: "), client.layers(q1), "a Look layer names no target")
+        client.edit(act, layerOn(q1, "TEMPLATE", lavender, "hex-2"))
+        client.edit(act, layerOn(q1, "LOOK", warm, null))
+        assertEquals(listOf("Warm: ", "Lavender: hex-2"), client.layers(q1), "the Look was on already: no second layer")
+
+        // A second layer of it, as an older write could have left one.
+        transaction(state.database) {
+            uk.me.cormack.lighting7.models.DaoCueLayer.new {
+                cue = uk.me.cormack.lighting7.models.DaoCue[q1]
+                look = uk.me.cormack.lighting7.models.DaoLook[warm]
+                targets = emptyList()
+                sortOrder = 2
+            }
+        }
+        assertEquals(listOf("Warm: ", "Lavender: hex-2", "Warm: "), client.layers(q1))
+
+        client.edit(act, layerOff(q1, "LOOK", warm, "hex-1"))
+        assertEquals(listOf("Lavender: hex-2"), client.layers(q1))
+    }
+
+    @Test
     fun `layerSettings writes a layer's fields and names every bad one`() = testApplication {
         mountTestApp(state)
         seedRig()

@@ -2,7 +2,6 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.fx.TemplateRegistry
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
@@ -18,11 +17,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The programmer's Look-layer stack, at the value level.
+ * The programmer's layer stack, at the value level.
  *
  * Effects need a real `State` (the FX registry and target resolution both take one) and are covered
- * in `ProgrammerLayerStackEffectsTest`; everything here runs against a map-backed [LookRegistry] and
- * no database, which is what keeps the composition rules cheap to assert.
+ * in `ProgrammerLayerStackEffectsTest`; everything here runs against map-backed [LookRegistry] and
+ * [TemplateRegistry]s and no database, which is what keeps the composition rules cheap to assert.
+ * A Look lands whole, so the per-target press rules are a palette's and are asserted on palettes.
  */
 class ProgrammerLayerStackTest {
 
@@ -35,6 +35,7 @@ class ProgrammerLayerStackTest {
         val stack: ProgrammerLayerStack,
         val looks: MutableMap<UUID, LookSnapshot>,
         val registry: LookRegistry,
+        val palettes: MutableMap<UUID, TemplateSnapshot>,
     )
 
     private fun newRig(): Rig {
@@ -51,6 +52,8 @@ class ProgrammerLayerStackTest {
         val store = ProgrammerStore()
         val looks = HashMap<UUID, LookSnapshot>()
         val registry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
+        val palettes = HashMap<UUID, TemplateSnapshot>()
+        val templateRegistry = TemplateRegistry(loader = { palettes[it] })
         val engine = FxEngine(
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
@@ -60,51 +63,66 @@ class ProgrammerLayerStackTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
-            // Nothing in these tests layers a template, and a `TemplateRegistry` with a loader that
-            // answers null is exactly what "there are none" means to the cook.
-            templateRegistry = { TemplateRegistry(loader = { null }) },
+            templateRegistry = { templateRegistry },
             engine = { engine },
             store = store,
-            // No effects in these looks, so nothing ever reaches the spawn path.
+            // No effects in these Looks or palettes, so nothing ever reaches the spawn path.
             state = { null },
         )
-        return Rig(fixtures, store, engine, stack, looks, registry)
+        return Rig(fixtures, store, engine, stack, looks, registry, palettes)
     }
 
-    /**
-     * Register a Look holding a bound dimmer row for **every** head in the rig, and return its uuid.
-     *
-     * Covering the whole rig rather than only the head a layer names is what keeps the
-     * layer-targets-filter-bound-rows rule under test: a Look row is always bound (sweep item B6),
-     * so if the layer's target set did nothing, every one of these layers would land on both heads.
-     */
-    private fun Rig.look(name: String, dimmer: Int): UUID {
+    /** Register a Look holding a dimmer row on each of [fixtureKeys] (every head when none), and return its uuid. */
+    private fun Rig.look(name: String, dimmer: Int, vararg fixtureKeys: String): UUID {
         val uuid = UUID.nameUUIDFromBytes(name.toByteArray())
         looks[uuid] = LookSnapshot(
             lookId = name.hashCode(),
             lookUuid = uuid,
             name = name,
-            rows = rowsForWholeRig(dimmer),
+            rows = rowsFor(dimmer, *fixtureKeys),
             effects = emptyList(),
         )
         return uuid
     }
 
-    private fun Rig.rowsForWholeRig(dimmer: Int) = fixtures.fixtures.map {
-        LookRowEntry(target = TargetRef.Fixture(it.key), propertyName = "dimmer", value = dimmer.toString())
+    private fun Rig.rowsFor(dimmer: Int, vararg fixtureKeys: String) =
+        fixtureKeys.ifEmpty { fixtures.fixtures.map { it.key }.toTypedArray() }.map {
+            LookRowEntry(target = TargetRef.Fixture(it), propertyName = "dimmer", value = dimmer.toString())
+        }
+
+    private fun Rig.lookSource(name: String, dimmer: Int, vararg fixtureKeys: String) =
+        LayerSource.look(name.hashCode(), look(name, dimmer, *fixtureKeys), name)
+
+    /** Add a layer of a Look whose rows are a dimmer on [fixtureKeys]. */
+    private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
+        stack.add(source = lookSource(name, dimmer, *fixtureKeys), targets = emptyList()).first
+
+    /** A generic palette of one row, `property` at `value` (a [TemplateIntent] string), and its source. */
+    private fun Rig.palette(name: String, property: String, value: String): LayerSource {
+        val uuid = UUID.nameUUIDFromBytes("palette:$name".toByteArray())
+        palettes[uuid] = TemplateSnapshot(
+            templateId = name.hashCode(),
+            templateUuid = uuid,
+            name = name,
+            fadeDurationMs = null,
+            rows = listOf(TemplateRowEntry(target = null, propertyName = property, value = value)),
+        )
+        return LayerSource.template(name.hashCode(), uuid, name)
     }
 
-    private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
-        stack.add(
-            source = LayerSource.look(name.hashCode(), look(name, dimmer), name),
-            targets = fixtureKeys.map { CueTargetDto("fixture", it) },
-        ).first
+    /** A UV palette: `dmx:` is a literal level, so [valueOf] reads [level] back exactly. */
+    private fun Rig.uv(name: String, level: Int) = palette(name, "uv", "dmx:$level")
+
+    /** A dimmer palette, in another family from [uv]'s, so neither replaces the other on a press. */
+    private fun Rig.dimmer(name: String, percent: Int) = palette(name, "dimmer", "pct:$percent")
 
     /** The programmer's winning value for a key, as an Int, or null when it holds nothing. */
     private fun Rig.valueOf(fixtureKey: String, propertyName: String = "dimmer"): Int? {
         val slot = store.get(fixtureKey, propertyName) ?: return null
         return (slot.value.resolved as CueAssignmentResolver.PropertyValue.Slider).value.toInt()
     }
+
+    private fun on(vararg keys: String) = keys.map { CueTargetDto("fixture", it) }
 
     // ─── Materialising ──────────────────────────────────────────────────
 
@@ -115,13 +133,13 @@ class ProgrammerLayerStackTest {
 
         assertEquals(200, rig.valueOf("hex-1"))
         assertEquals(ProgrammerOwner.LAYERS, rig.store.get("hex-1", "dimmer")!!.owner)
-        assertNull(rig.valueOf("hex-2"), "a layer asserts only over its own targets")
+        assertNull(rig.valueOf("hex-2"), "a Look asserts only where its rows land")
     }
 
     @Test
     fun `a later layer wins the keys it shares with an earlier one`() {
         val rig = newRig()
-        rig.add("Warm", 200, "hex-1", "hex-2")
+        rig.add("Warm", 200)
         rig.add("Cool", 40, "hex-1")
 
         assertEquals(40, rig.valueOf("hex-1"), "later layer wins")
@@ -131,7 +149,7 @@ class ProgrammerLayerStackTest {
     @Test
     fun `removing a layer releases the keys nothing else covers`() {
         val rig = newRig()
-        val warm = rig.add("Warm", 200, "hex-1", "hex-2")
+        val warm = rig.add("Warm", 200)
         rig.add("Cool", 40, "hex-1")
 
         rig.stack.remove(warm.layerId)
@@ -177,6 +195,20 @@ class ProgrammerLayerStackTest {
         assertEquals(200, rig.valueOf("hex-1"), "the layer beneath shows through")
     }
 
+    @Test
+    fun `a Look layer added with targets lands whole and names none`() {
+        val rig = newRig()
+        val (layer, _) = rig.stack.add(source = rig.lookSource("Warm", 200), targets = on("hex-1"))
+
+        assertTrue(layer.targets.isEmpty())
+        assertEquals(200, rig.valueOf("hex-1"))
+        assertEquals(200, rig.valueOf("hex-2"), "the Look's rows land wherever they are bound")
+
+        rig.stack.patch(layer.layerId, targets = on("hex-2"))
+        assertTrue(rig.store.layers.single().targets.isEmpty(), "and a patch gives it none")
+        assertEquals(200, rig.valueOf("hex-1"))
+    }
+
     // ─── Against the operator's own writes ──────────────────────────────
 
     @Test
@@ -214,9 +246,7 @@ class ProgrammerLayerStackTest {
         // two steps `republishForLookEdit` performs, in the same order. Without the invalidate the
         // recook reads the cached expansion and nothing moves, which is precisely the stale-cache
         // failure that path's step 1 exists to prevent.
-        rig.looks[warmUuid] = rig.looks.getValue(warmUuid).copy(
-            rows = rig.rowsForWholeRig(77),
-        )
+        rig.looks[warmUuid] = rig.looks.getValue(warmUuid).copy(rows = rig.rowsFor(77, "hex-1"))
         rig.registry.invalidate(warmUuid)
         val moved = rig.stack.recookIfReferences(warmUuid)
 
@@ -265,81 +295,78 @@ class ProgrammerLayerStackTest {
         assertEquals(200, rig.valueOf("hex-1"))
     }
 
-    // ─── The pad gesture ────────────────────────────────────────────────
+    // ─── A Look's press is whole ────────────────────────────────────────
 
     @Test
-    fun `toggle adds the layer, then removes the one it added`() {
+    fun `a Look press puts one untargeted layer on, whatever is selected, and the next takes it off`() {
         val rig = newRig()
-        val uuid = rig.look("Warm", 200)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val warm = rig.lookSource("Warm", 200)
 
-        val applied = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
+        val applied = rig.stack.toggle(warm, on("hex-1"), propertyMask = "COLOUR")
         assertEquals("applied", applied.action)
+        val layer = rig.store.layers.single()
+        assertTrue(layer.targets.isEmpty(), "the selection is not the Look's")
+        assertNull(layer.propertyMask, "and nor is the selection's mask")
         assertEquals(200, rig.valueOf("hex-1"))
+        assertEquals(200, rig.valueOf("hex-2"))
 
-        val removed = rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), targets)
+        val removed = rig.stack.toggle(warm, on("hex-2"))
         assertEquals("removed", removed.action)
+        assertTrue(rig.store.layers.isEmpty())
         assertNull(rig.valueOf("hex-1"))
     }
 
     @Test
-    fun `the same Look pressed on two targets widens, and comes off per target`() {
-        // "Already on" is per target: pressing the Look on a second head widens its layer, and a
-        // press on the first takes only that head off.
+    fun `a Look press with nothing selected is the same press`() {
         val rig = newRig()
-        val uuid = rig.look("Warm", 200)
+        val warm = rig.lookSource("Warm", 200, "hex-1")
 
-        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
-        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-2")))
-        // The top layer widens rather than stacking a second (apply-model P3).
-        assertEquals(1, rig.store.layers.size)
-
-        rig.stack.toggle(LayerSource.look("Warm".hashCode(), uuid, "Warm"), listOf(CueTargetDto("fixture", "hex-1")))
-
-        assertEquals(listOf(CueTargetDto("fixture", "hex-2")), rig.store.layers.single().targets)
-        assertNull(rig.valueOf("hex-1"))
-        assertEquals(200, rig.valueOf("hex-2"), "the other pad is still on")
-    }
-
-    @Test
-    fun `toggle matches the same targets in a different order`() {
-        // A7: the same fixture set re-sent in a different order (e.g. re-derived from a Set on the
-        // client) must still toggle the existing layer off, not stack a second one on top.
-        val rig = newRig()
-        val uuid = rig.look("Warm", 200)
-        val source = LayerSource.look("Warm".hashCode(), uuid, "Warm")
-        val targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))
-        val reordered = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1"))
-
-        val applied = rig.stack.toggle(source, targets)
-        assertEquals("applied", applied.action)
-        assertEquals(1, rig.store.layers.size)
-
-        val removed = rig.stack.toggle(source, reordered)
-        assertEquals("removed", removed.action)
+        assertEquals("applied", rig.stack.toggle(warm, emptyList()).action)
+        assertEquals(200, rig.valueOf("hex-1"))
+        assertEquals("removed", rig.stack.toggle(warm, on("hex-1", "hex-2")).action)
         assertTrue(rig.store.layers.isEmpty())
     }
 
-    /**
-     * A pad must keep working after the record behind it is renamed.
-     *
-     * `LayerSource` is a `data class`, so its equality includes `name` — and a name is mutable.
-     * Matching on the whole value meant a rename left the pad unable to turn its own layer off:
-     * the stored layer held the old name, the press carried the new one, so "already on" said no
-     * and a second layer stacked on top. The first was then removable only by id from the FX
-     * sheet. `toggle` matches on `source.uuid`, which is what identity actually means here.
-     */
+    @Test
+    fun `a mask set on a Look layer afterwards is kept, and filters its rows`() {
+        val rig = newRig()
+        val warm = rig.lookSource("Warm", 200)
+        rig.stack.toggle(warm, on("hex-1"))
+        val layer = rig.store.layers.single()
+
+        rig.stack.patch(layer.layerId, propertyMask = "COLOUR")
+
+        assertEquals("COLOUR", rig.store.layers.single().propertyMask)
+        assertNull(rig.valueOf("hex-1"), "a dimmer row is outside a colour mask")
+    }
+
+    @Test
+    fun `an off press takes every layer of the Look off`() {
+        val rig = newRig()
+        val warm = rig.lookSource("Warm", 200)
+        rig.stack.add(source = warm, targets = emptyList())
+        rig.add("Between", 10, "hex-1")
+        rig.stack.add(source = warm, targets = emptyList())
+
+        val off = rig.stack.toggle(warm, on("hex-1"))
+
+        assertEquals("removed", off.action)
+        assertEquals(listOf("Between"), rig.store.layers.map { it.source.name })
+        assertEquals(10, rig.valueOf("hex-1"))
+        assertNull(rig.valueOf("hex-2"))
+    }
+
     @Test
     fun `a renamed record's pad still toggles its own layer off`() {
+        // `LayerSource` is a data class, so its equality includes the mutable name: a pad matching on
+        // the whole value stacked a second layer after a rename. The match is on `source.uuid`.
         val rig = newRig()
         val uuid = rig.look("Warm", 200)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
-        rig.stack.toggle(LayerSource.look(1, uuid, "Warm"), targets)
+        rig.stack.toggle(LayerSource.look(1, uuid, "Warm"), on("hex-1"))
         assertEquals(1, rig.store.layers.size)
 
-        // The same record, renamed — same id and uuid, new name.
-        val renamed = rig.stack.toggle(LayerSource.look(1, uuid, "Warm Wash"), targets)
+        val renamed = rig.stack.toggle(LayerSource.look(1, uuid, "Warm Wash"), on("hex-1"))
 
         assertEquals("removed", renamed.action, "a rename must not make the pad stack a second layer")
         assertTrue(rig.store.layers.isEmpty())
@@ -348,44 +375,174 @@ class ProgrammerLayerStackTest {
 
     /**
      * The int PK is *not* enough on its own, which is why the match is not simply `source.id`: a
-     * Look and a template can share one, and their pads must not cancel each other.
+     * Look and a palette can share one, and their pads must not cancel each other.
      */
     @Test
-    fun `a Look and a template sharing an int PK toggle independently`() {
+    fun `a Look and a palette sharing an int PK toggle independently`() {
         val rig = newRig()
         val uuid = rig.look("Warm", 200)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
 
-        rig.stack.toggle(LayerSource.look(7, uuid, "Warm"), targets)
-        // Same id, different record. The template resolves to null here (the rig has no templates),
+        rig.stack.toggle(LayerSource.look(7, uuid, "Warm"), on("hex-1"))
+        // Same id, different record. The palette resolves to null here (the map does not hold it),
         // so it contributes no values — but it must still take a layer of its own.
-        rig.stack.toggle(
-            LayerSource.template(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"),
-            targets,
-        )
+        rig.stack.toggle(LayerSource.template(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"), on("hex-1"))
 
         assertEquals(2, rig.store.layers.size, "sharing an int PK must not collapse two pads into one")
         assertEquals(200, rig.valueOf("hex-1"), "the Look's pad is still on")
     }
 
-    // ─── Template groups: exclusivity ───────────────────────────────────
+    // ─── A palette's press is per target ────────────────────────────────
 
-    /**
-     * Two "templates" that are really Looks under the hood: the rig has no template registry, and
-     * exclusivity is keyed on `source.uuid` alone, so a Look-backed source with a template's shape
-     * exercises exactly the same path while letting [valueOf] prove which layer won.
-     */
-    private fun Rig.groupedSource(name: String, dimmer: Int): LayerSource =
-        LayerSource.look(name.hashCode(), look(name, dimmer), name)
+    @Test
+    fun `toggle matches the same targets in a different order`() {
+        // The same fixture set re-sent in a different order (e.g. re-derived from a Set on the
+        // client) must still toggle the existing layer off, not stack a second one on top.
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        assertEquals("applied", rig.stack.toggle(red, on("hex-1", "hex-2")).action)
+        assertEquals(1, rig.store.layers.size)
+
+        assertEquals("removed", rig.stack.toggle(red, on("hex-2", "hex-1")).action)
+        assertTrue(rig.store.layers.isEmpty())
+    }
+
+    @Test
+    fun `the same palette pressed on two targets widens, and comes off per target`() {
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, on("hex-1"))
+        rig.stack.toggle(red, on("hex-2"))
+        // The top layer widens rather than stacking a second (apply-model P3).
+        assertEquals(1, rig.store.layers.size)
+
+        rig.stack.toggle(red, on("hex-1"))
+
+        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"), "the other head is still on")
+    }
+
+    @Test
+    fun `a press extends its own layer to a wider selection`() {
+        // Red on hex-1, then hex-2 added to the selection and the pad pressed: the press extends the
+        // record rather than stacking a second layer over hex-1, or the next press could only take
+        // one of them off.
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, on("hex-1"))
+        val press = rig.stack.toggle(red, on("hex-1", "hex-2"))
+
+        assertEquals("applied", press.action, "the record covered only part of the selection")
+        assertEquals(0, press.released, "extending its own layer releases no other pad")
+        assertEquals(1, rig.store.layers.size, "one layer per record per head, not two")
+        assertEquals(200, rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"))
+    }
+
+    @Test
+    fun `pressing off clears the record from every pressed target`() {
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+        val both = on("hex-1", "hex-2")
+
+        rig.stack.toggle(red, on("hex-1"))
+        rig.stack.toggle(red, both)
+        val off = rig.stack.toggle(red, both)
+
+        assertEquals("removed", off.action)
+        assertTrue(rig.store.layers.isEmpty(), "nothing of the record survives the press")
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertNull(rig.valueOf("hex-2", "uv"))
+    }
+
+    @Test
+    fun `an off press narrows a layer to the heads it did not name`() {
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, on("hex-1", "hex-2"))
+        val off = rig.stack.toggle(red, on("hex-1"))
+
+        assertEquals("removed", off.action, "the record covered every target the press named")
+        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"))
+    }
+
+    @Test
+    fun `a press on one head of a lit group turns that head off`() {
+        // Coverage, not target lists: the wash is lit, so pressing with one of its heads selected
+        // is an *off* press for that head — the same answer the pad's own ring gives.
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, listOf(CueTargetDto("group", "wash")))
+        val off = rig.stack.toggle(red, on("hex-1"))
+
+        assertEquals("removed", off.action)
+        assertEquals(on("hex-2"), rig.store.layers.single().targets)
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"))
+    }
+
+    @Test
+    fun `a pad on a group is turned off by a press naming its members`() {
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, listOf(CueTargetDto("group", "wash")))
+        val outcome = rig.stack.toggle(red, on("hex-1", "hex-2"))
+
+        assertEquals("removed", outcome.action)
+        assertTrue(rig.store.layers.isEmpty())
+    }
+
+    @Test
+    fun `a record covered by two layers reads as on`() {
+        // Coverage is the union over the record's layers, so two half-selections add up to an off
+        // press rather than a third layer — which is what the pad's ring already showed.
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        rig.stack.toggle(red, on("hex-1"))
+        // A layer between the two presses, so the second adds a layer rather than widening the first.
+        rig.add("Between", 10, "hex-1")
+        rig.stack.toggle(red, on("hex-2"))
+        assertEquals(2, rig.store.layers.count { it.source == red }, "two presses on two selections are two layers")
+
+        val off = rig.stack.toggle(red, on("hex-1", "hex-2"))
+
+        assertEquals("removed", off.action)
+        assertTrue(rig.store.layers.none { it.source == red }, "both layers give up the pressed heads")
+    }
+
+    @Test
+    fun `a palette press naming no targets toggles its own untargeted layer off`() {
+        // A press with nothing selected and the layer it made are the same gesture: there is no
+        // coverage to compare, so the literal twin is the answer, or the pad could never go off.
+        val rig = newRig()
+        val red = rig.uv("Red", 200)
+
+        assertEquals("applied", rig.stack.toggle(red, emptyList()).action)
+        assertEquals("removed", rig.stack.toggle(red, emptyList()).action)
+        assertTrue(rig.store.layers.isEmpty())
+    }
+
+    // ─── Solo banks ─────────────────────────────────────────────────────
+
+    // A UV and a dimmer palette are in different families, so neither press replaces the other
+    // through its family: what is released here is released by the bank alone.
 
     @Test
     fun `toggling with siblings releases a sibling on the same targets in one mutation`() {
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(amber, targets, releaseSiblings = setOf(blue.uuid))
+        rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
         assertEquals(1, rig.store.layers.size)
 
         // Every `layerState` frame the press produces. `Unconfined` so `tryEmit` delivers to the
@@ -397,169 +554,131 @@ class ProgrammerLayerStackTest {
         }
         frames.clear()
 
-        val outcome = rig.stack.toggle(blue, targets, releaseSiblings = setOf(amber.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
         collector.cancel()
 
         assertEquals("applied", outcome.action)
         assertEquals(1, outcome.released, "Amber's layer on the same targets is released")
         assertEquals(1, rig.store.layers.size, "release and add are one stack, not two")
         assertEquals(blue.uuid, rig.store.layers.single().source.uuid)
-        assertEquals(100, rig.valueOf("hex-1"), "the new sibling's value wins outright")
+        assertNull(rig.valueOf("hex-1", "uv"), "Amber is off")
+        assertEquals(102, rig.valueOf("hex-1"), "Blue is on")
         assertEquals(1, frames.size, "release and add must be one store mutation, so one layerState frame")
         assertEquals(listOf(blue.uuid), frames.single().map { it.source.uuid })
     }
 
     @Test
     fun `a sibling on a disjoint target set survives`() {
-        // Amber on hex-1 and Blue on hex-2 are two pads on two rigs — the press names neither of
-        // the other's targets, so there is nothing to take away.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(amber, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(blue.uuid))
-        val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-2")), releaseSiblings = setOf(amber.uuid))
+        rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-2"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(0, outcome.released)
         assertEquals(2, rig.store.layers.size)
-        assertEquals(200, rig.valueOf("hex-1"), "Amber on hex-1 is untouched")
-        assertEquals(100, rig.valueOf("hex-2"))
+        assertEquals(200, rig.valueOf("hex-1", "uv"), "Amber on hex-1 is untouched")
+        assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
     fun `a press over a sibling's whole target set takes the sibling off`() {
-        // The bug the whole-set rule shipped with: Amber on hex-1, then Blue on hex-1 *and* hex-2.
-        // Blue's layer sat on top so the stage looked right, but Amber's layer still covered hex-1
-        // — which is what lit its pad — and releasing Blue would have popped Amber back.
+        // Amber on hex-1, then Blue on hex-1 *and* hex-2: Amber's layer must go, or releasing Blue
+        // would pop it back.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(amber, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(blue.uuid))
-        val outcome = rig.stack.toggle(
-            blue,
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-            releaseSiblings = setOf(amber.uuid),
-        )
+        rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1", "hex-2"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released, "Amber held nothing the press did not name")
         assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid })
-        assertEquals(100, rig.valueOf("hex-1"))
-        assertEquals(100, rig.valueOf("hex-2"))
+        assertEquals(102, rig.valueOf("hex-1"))
+        assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
     fun `a press narrows a sibling to the targets it did not name`() {
-        // The other half of per-target release: Amber keeps hex-2, which the press never claimed.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(
-            amber,
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-            releaseSiblings = setOf(blue.uuid),
-        )
-        val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(amber.uuid))
+        rig.stack.toggle(amber, on("hex-1", "hex-2"), releaseSiblings = setOf(blue.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released, "a narrowed sibling counts as released from the pressed targets")
         assertEquals(2, rig.store.layers.size)
-        assertEquals(
-            listOf(CueTargetDto("fixture", "hex-2")),
-            rig.store.layers.single { it.source.uuid == amber.uuid }.targets,
-        )
-        assertEquals(100, rig.valueOf("hex-1"), "the press owns hex-1 outright")
-        assertEquals(200, rig.valueOf("hex-2"), "and Amber keeps the head it never lost")
+        assertEquals(on("hex-2"), rig.store.layers.single { it.source.uuid == amber.uuid }.targets)
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"), "Amber keeps the head it never lost")
     }
 
     @Test
     fun `a sibling layer with no targets is left alone`() {
-        // Empty targets means "the source's own bound rows", whose fixtures this class cannot read
-        // off the list — so a press has nothing to subtract and must not guess.
+        // A generic palette's untargeted layer lands on nothing, so a press has nothing to
+        // subtract from it and must not guess.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
         rig.stack.add(source = amber, targets = emptyList())
-        val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(amber.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(0, outcome.released)
         assertEquals(2, rig.store.layers.size)
-        assertEquals(200, rig.valueOf("hex-2"), "Amber's rig-wide rows still hold hex-2")
     }
 
     @Test
     fun `turning a grouped pad off leaves its siblings alone`() {
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
-        val hex1 = listOf(CueTargetDto("fixture", "hex-1"))
-        val hex2 = listOf(CueTargetDto("fixture", "hex-2"))
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(amber, hex2, releaseSiblings = setOf(blue.uuid))
-        rig.stack.toggle(blue, hex1, releaseSiblings = setOf(amber.uuid))
+        rig.stack.toggle(amber, on("hex-2"), releaseSiblings = setOf(blue.uuid))
+        rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
         assertEquals(2, rig.store.layers.size)
 
         // Press Blue again on hex-1: off. Amber on hex-2 is a sibling, but a remove never releases.
-        val outcome = rig.stack.toggle(blue, hex1, releaseSiblings = setOf(amber.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals("removed", outcome.action)
         assertEquals(0, outcome.released)
         assertEquals(1, rig.store.layers.size)
-        assertEquals(200, rig.valueOf("hex-2"), "the sibling is still on")
+        assertEquals(200, rig.valueOf("hex-2", "uv"), "the sibling is still on")
     }
 
     @Test
     fun `a press on a group releases a sibling held on one of its members`() {
-        // A group is its fixtures: pressing the wash covers hex-1, so Amber's layer on hex-1 goes.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
-        rig.stack.toggle(amber, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(blue.uuid))
+        rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(blue.uuid))
         val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("group", "wash")), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released)
         assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid })
-        assertEquals(100, rig.valueOf("hex-1"))
-        assertEquals(100, rig.valueOf("hex-2"))
+        assertEquals(102, rig.valueOf("hex-1"))
+        assertEquals(102, rig.valueOf("hex-2"))
     }
 
     @Test
     fun `a press on a member narrows a sibling held on the group`() {
-        // The other direction, and the one that costs the layer its group spelling: Amber keeps
-        // hex-2 as a fixture target, because "the wash minus hex-1" has no other way to be written.
+        // Amber keeps hex-2 as a fixture target, because "the wash minus hex-1" has no other way to
+        // be written.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
         rig.stack.toggle(amber, listOf(CueTargetDto("group", "wash")), releaseSiblings = setOf(blue.uuid))
-        val outcome = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(amber.uuid))
+        val outcome = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(
-            listOf(CueTargetDto("fixture", "hex-2")),
-            rig.store.layers.single { it.source.uuid == amber.uuid }.targets,
-        )
-        assertEquals(100, rig.valueOf("hex-1"))
-        assertEquals(200, rig.valueOf("hex-2"))
-    }
-
-    @Test
-    fun `a pad on a group is turned off by a press naming its members`() {
-        // "Already on" reads coverage too, so selecting the wash and selecting both its heads are
-        // the same press: the second one takes the layer off rather than stacking a twin.
-        val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-
-        rig.stack.toggle(amber, listOf(CueTargetDto("group", "wash")))
-        val outcome = rig.stack.toggle(
-            amber,
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-        )
-
-        assertEquals("removed", outcome.action)
-        assertTrue(rig.store.layers.isEmpty())
+        assertEquals(on("hex-2"), rig.store.layers.single { it.source.uuid == amber.uuid }.targets)
+        assertNull(rig.valueOf("hex-1", "uv"))
+        assertEquals(200, rig.valueOf("hex-2", "uv"))
     }
 
     @Test
@@ -568,12 +687,12 @@ class ProgrammerLayerStackTest {
         // and a press on a real fixture leaves it alone rather than treating it as covering
         // everything or nothing.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
         val gone = listOf(CueTargetDto("group", "deleted-wash"))
 
         rig.stack.toggle(amber, gone, releaseSiblings = setOf(blue.uuid))
-        val press = rig.stack.toggle(blue, listOf(CueTargetDto("fixture", "hex-1")), releaseSiblings = setOf(amber.uuid))
+        val press = rig.stack.toggle(blue, on("hex-1"), releaseSiblings = setOf(amber.uuid))
         assertEquals(0, press.released, "a group nothing resolves covers no fixture")
 
         val off = rig.stack.toggle(amber, gone, releaseSiblings = setOf(blue.uuid))
@@ -581,149 +700,80 @@ class ProgrammerLayerStackTest {
     }
 
     @Test
-    fun `a press extends its own layer to a wider selection`() {
-        // The reported bug, first half: Red on hex-1, then hex-2 added to the selection and the pad
-        // pressed. The press has to *extend* the record rather than stack a second layer over
-        // hex-1, or the press that follows can only take one of them off.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-
-        rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
-        val press = rig.stack.toggle(
-            red,
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-        )
-
-        assertEquals("applied", press.action, "the record covered only part of the selection")
-        assertEquals(0, press.released, "extending its own layer releases no other pad")
-        assertEquals(1, rig.store.layers.size, "one layer per record per head, not two")
-        assertEquals(200, rig.valueOf("hex-1"))
-        assertEquals(200, rig.valueOf("hex-2"))
-    }
-
-    @Test
-    fun `pressing off clears the record from every pressed target`() {
-        // The reported bug, second half. Before this the off-press removed the one layer whose
-        // target set matched and left the earlier hex-1 layer behind, so the pad went from "full"
-        // to "partial" on a gesture that says *off*.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-        val both = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))
-
-        rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
-        rig.stack.toggle(red, both)
-        val off = rig.stack.toggle(red, both)
-
-        assertEquals("removed", off.action)
-        assertTrue(rig.store.layers.isEmpty(), "nothing of the record survives the press")
-        assertNull(rig.valueOf("hex-1"))
-        assertNull(rig.valueOf("hex-2"))
-    }
-
-    @Test
-    fun `an off press narrows a layer to the heads it did not name`() {
-        // "Take red off this head" — the same per-target rule the sibling release uses, applied to
-        // the record's own layer. The pad reads dark for hex-1 and lit for hex-2 afterwards.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-
-        rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")))
-        val off = rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
-
-        assertEquals("removed", off.action, "the record covered every target the press named")
-        assertEquals(
-            listOf(CueTargetDto("fixture", "hex-2")),
-            rig.store.layers.single().targets,
-        )
-        assertNull(rig.valueOf("hex-1"))
-        assertEquals(200, rig.valueOf("hex-2"))
-    }
-
-    @Test
-    fun `a press on one head of a lit group turns that head off`() {
-        // Coverage, not target lists: the wash is lit, so pressing with one of its heads selected
-        // is an *off* press for that head — the same answer the pad's own ring gives.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-
-        rig.stack.toggle(red, listOf(CueTargetDto("group", "wash")))
-        val off = rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
-
-        assertEquals("removed", off.action)
-        assertEquals(listOf(CueTargetDto("fixture", "hex-2")), rig.store.layers.single().targets)
-        assertNull(rig.valueOf("hex-1"))
-        assertEquals(200, rig.valueOf("hex-2"))
-    }
-
-    @Test
-    fun `a record covered by two layers reads as on`() {
-        // Coverage is the union over the record's layers, so two half-selections add up to an off
-        // press rather than a third layer — which is what the pad's ring already showed.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-
-        rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-1")))
-        // A layer between the two presses, so the second adds a layer rather than widening the first.
-        rig.add("Between", 10, "hex-1")
-        rig.stack.toggle(red, listOf(CueTargetDto("fixture", "hex-2")))
-        assertEquals(2, rig.store.layers.count { it.source == red }, "two presses on two selections are two layers")
-
-        val off = rig.stack.toggle(
-            red,
-            listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-        )
-
-        assertEquals("removed", off.action)
-        assertTrue(rig.store.layers.none { it.source == red }, "both layers give up the pressed heads")
-    }
-
-    @Test
-    fun `a press naming no targets toggles its own rig-wide layer off`() {
-        // A layer with no targets asserts its source's own bound rows, and a press with nothing
-        // selected is that same gesture — there is no coverage to compare, so the literal twin is
-        // the answer. Otherwise such a pad could be pressed on but never off.
-        val rig = newRig()
-        val red = rig.groupedSource("Red", 200)
-
-        rig.stack.toggle(red, emptyList())
-        assertEquals(200, rig.valueOf("hex-1"), "the rows landed on the whole rig")
-
-        val off = rig.stack.toggle(red, emptyList())
-        assertEquals("removed", off.action)
-        assertTrue(rig.store.layers.isEmpty())
-    }
-
-    @Test
     fun `a target-less press releases a target-less sibling`() {
         // Both pads say "my own rows, wherever they land", so they are exclusive in the only terms
-        // they have. Nothing can be subtracted from an empty target list, so the sibling's layer
-        // goes outright — the whole-set rule's one correct case, kept.
+        // they have: nothing can be subtracted from an empty target list, so the sibling goes.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val blue = rig.groupedSource("Blue", 100)
+        val amber = rig.uv("Amber", 200)
+        val blue = rig.dimmer("Blue", 40)
 
         rig.stack.toggle(amber, emptyList(), releaseSiblings = setOf(blue.uuid))
         val press = rig.stack.toggle(blue, emptyList(), releaseSiblings = setOf(amber.uuid))
 
-        assertEquals(1, press.released, "the sibling's rig-wide layer is the one thing it could give up")
+        assertEquals(1, press.released, "the sibling's untargeted layer is the one thing it could give up")
         assertEquals(listOf(blue.uuid), rig.store.layers.map { it.source.uuid })
-        assertEquals(100, rig.valueOf("hex-1"))
     }
 
     @Test
     fun `siblings never release a layer whose uuid is not named`() {
-        // The match is on uuid, the same identity the pad itself uses — so a Look sharing a
-        // template's int PK, or an unrelated template on the same targets, is never collateral.
         val rig = newRig()
-        val amber = rig.groupedSource("Amber", 200)
-        val stranger = rig.groupedSource("Stranger", 50)
-        val targets = listOf(CueTargetDto("fixture", "hex-1"))
+        val amber = rig.uv("Amber", 200)
+        val stranger = rig.dimmer("Stranger", 20)
 
-        rig.stack.toggle(stranger, targets)
-        val outcome = rig.stack.toggle(amber, targets, releaseSiblings = setOf(UUID.nameUUIDFromBytes("blue".toByteArray())))
+        rig.stack.toggle(stranger, on("hex-1"))
+        val outcome = rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(UUID.nameUUIDFromBytes("blue".toByteArray())))
 
         assertEquals(0, outcome.released)
         assertEquals(2, rig.store.layers.size, "an unnamed layer on the same targets is left alone")
+    }
+
+    @Test
+    fun `a Look press in a solo bank takes every sibling layer off whole`() {
+        val rig = newRig()
+        val amber = rig.uv("Amber", 200)
+        val cool = rig.lookSource("Cool", 40)
+        val warm = rig.lookSource("Warm", 200, "hex-1")
+
+        rig.stack.toggle(amber, on("hex-1", "hex-2"))
+        rig.stack.toggle(cool, emptyList())
+        val press = rig.stack.toggle(warm, on("hex-2"), releaseSiblings = setOf(amber.uuid, cool.uuid))
+
+        assertEquals("applied", press.action)
+        assertEquals(2, press.released, "the palette on heads the Look's rows never reach goes too")
+        assertEquals(listOf(warm.uuid), rig.store.layers.map { it.source.uuid })
+        assertEquals(200, rig.valueOf("hex-1"))
+        assertNull(rig.valueOf("hex-2"))
+        assertNull(rig.valueOf("hex-2", "uv"))
+    }
+
+    @Test
+    fun `a palette press in a solo bank takes a Look sibling off whole`() {
+        // A Look's layer cannot be narrowed to the heads the press did not name, so it goes.
+        val rig = newRig()
+        val warm = rig.lookSource("Warm", 200)
+        val amber = rig.uv("Amber", 150)
+
+        rig.stack.toggle(warm, emptyList())
+        val press = rig.stack.toggle(amber, on("hex-1"), releaseSiblings = setOf(warm.uuid))
+
+        assertEquals(1, press.released)
+        assertEquals(listOf(amber.uuid), rig.store.layers.map { it.source.uuid })
+        assertNull(rig.valueOf("hex-2"), "the Look is off its heads the press never named too")
+    }
+
+    @Test
+    fun `a Look's off press in a solo bank releases nothing`() {
+        val rig = newRig()
+        val warm = rig.lookSource("Warm", 200)
+        val amber = rig.uv("Amber", 150)
+
+        rig.stack.toggle(warm, emptyList())
+        rig.stack.add(source = amber, targets = on("hex-1"))
+        val off = rig.stack.toggle(warm, on("hex-1"), releaseSiblings = setOf(amber.uuid))
+
+        assertEquals("removed", off.action)
+        assertEquals(0, off.released)
+        assertEquals(listOf(amber.uuid), rig.store.layers.map { it.source.uuid })
     }
 
     // ─── Applied state ──────────────────────────────────────────────────
@@ -732,12 +782,14 @@ class ProgrammerLayerStackTest {
     private fun AppliedSource.described() =
         targets.map { "${it.target.type}:${it.target.key}=${it.extent.name.lowercase()}" }.sorted()
 
+    private val wholeRig = listOf("fixture:hex-1=all", "fixture:hex-2=all", "group:wash=all")
+
     @Test
     fun `applied state reports a covered fixture and its group as partial`() {
         // What a pad needs for a one-head press: hex-1 is lit outright, and the wash the head
         // belongs to is lit *partly* — which is the ring the operator sees with the wash selected.
         val rig = newRig()
-        rig.add("Warm", 200, "hex-1")
+        rig.stack.add(source = rig.uv("Warm", 200), targets = on("hex-1"))
 
         val applied = rig.stack.appliedState().single()
         assertEquals("Warm", applied.source.name)
@@ -746,42 +798,52 @@ class ProgrammerLayerStackTest {
 
     @Test
     fun `a layer on a group reports the group and every head in it`() {
-        // The other direction of the same rule: naming the wash covers its heads, so a pad with
-        // either the wash or its members selected reads full.
         val rig = newRig()
-        rig.stack.add(source = rig.groupedSource("Warm", 200), targets = listOf(CueTargetDto("group", "wash")))
+        rig.stack.add(source = rig.uv("Warm", 200), targets = listOf(CueTargetDto("group", "wash")))
 
-        val applied = rig.stack.appliedState().single()
-        assertEquals(
-            listOf("fixture:hex-1=all", "fixture:hex-2=all", "group:wash=all"),
-            applied.described(),
-        )
+        assertEquals(wholeRig, rig.stack.appliedState().single().described())
     }
 
     @Test
     fun `two layers of one record fold into one entry`() {
         // A record applied to two selections is one pad, and its ring reads the union — otherwise
-        // pressing the same template on hex-1 and then hex-2 would leave the wash reading partial.
+        // pressing the same palette on hex-1 and then hex-2 would leave the wash reading partial.
         val rig = newRig()
-        val warm = rig.groupedSource("Warm", 200)
-        rig.stack.add(source = warm, targets = listOf(CueTargetDto("fixture", "hex-1")))
-        rig.stack.add(source = warm, targets = listOf(CueTargetDto("fixture", "hex-2")))
+        val warm = rig.uv("Warm", 200)
+        rig.stack.add(source = warm, targets = on("hex-1"))
+        rig.stack.add(source = warm, targets = on("hex-2"))
 
-        val applied = rig.stack.appliedState().single()
-        assertEquals(
-            listOf("fixture:hex-1=all", "fixture:hex-2=all", "group:wash=all"),
-            applied.described(),
-        )
+        assertEquals(wholeRig, rig.stack.appliedState().single().described())
     }
 
     @Test
-    fun `a layer with no targets contributes no applied state`() {
-        // Empty targets means "the source's own bound rows" — where those land is the cook's
-        // answer, not a coverage comparison's, so the pad reports nothing rather than guessing.
+    fun `a generic palette's layer with no targets contributes no applied state`() {
         val rig = newRig()
-        rig.stack.add(source = rig.groupedSource("Warm", 200), targets = emptyList())
+        rig.stack.add(source = rig.uv("Warm", 200), targets = emptyList())
 
         assertTrue(rig.stack.appliedState().isEmpty())
+    }
+
+    @Test
+    fun `a Look reads applied on the whole rig, whatever its rows reach`() {
+        // A Look's ring is on or off: lit whatever is selected while a layer of it is on.
+        val rig = newRig()
+        rig.add("Warm", 200, "hex-1")
+
+        val applied = rig.stack.appliedState().single()
+        assertEquals("Warm", applied.source.name)
+        assertEquals(wholeRig, applied.described())
+    }
+
+    @Test
+    fun `a Look and a palette read side by side`() {
+        val rig = newRig()
+        rig.add("Warm", 200, "hex-1")
+        rig.stack.add(source = rig.uv("Amber", 150), targets = on("hex-2"))
+
+        val bySource = rig.stack.appliedState().associate { it.source.name to it.described() }
+        assertEquals(wholeRig, bySource["Warm"])
+        assertEquals(listOf("fixture:hex-2=all", "group:wash=some"), bySource["Amber"])
     }
 
     @Test
@@ -793,7 +855,7 @@ class ProgrammerLayerStackTest {
         rig.stack.patch(layer.layerId, enabled = false)
 
         assertNull(rig.valueOf("hex-1"), "a disabled layer asserts no value")
-        assertEquals(listOf("fixture:hex-1=all", "group:wash=some"), rig.stack.appliedState().single().described())
+        assertEquals(wholeRig, rig.stack.appliedState().single().described())
     }
 
     @Test

@@ -66,8 +66,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-PRESS-REPLACE-LOOKS`](#fu-press-replace-looks) | Trigger | Look | an operator expects a Look to take another off the same heads outside a solo bank |
 | [`FU-PRESS-LAYER-MASTER`](#fu-press-layer-master) | Trigger | Look | an operator wants a programmer layer's effects on another speed or rate master |
 | [`FU-LOOK-STOMP-GRANULAR`](#fu-look-stomp-granular) | Trigger | Look | per-layer stomp proves too coarse |
-| [`FU-LOOK-COMPAT-ROW-COVERAGE`](#fu-look-compat-row-coverage) | Trigger | Look | a rows-only Look offered on a pad where it asserts nothing |
-| [`FU-SLOT-LOOK-ELIGIBILITY`](#fu-slot-look-eligibility) | Trigger | Look | a rows-only Look on a cue slot that asserts nothing on the fixtures it names |
 | [`FU-TMPL-VIRTUAL-DIMMER`](#fu-tmpl-virtual-dimmer) | Ready | Tmpl | — |
 | [`FU-TMPL-MULTI-EFFECT`](#fu-tmpl-multi-effect) | Trigger | Tmpl | The same pair of same-family effect palettes pressed together, again and again |
 | [`FU-TMPL-USAGE-RETAG`](#fu-tmpl-usage-retag) | Trigger | Tmpl | retagging a master's usage and expecting stamped templates to follow |
@@ -1301,52 +1299,6 @@ Judge granularity only after that has been used on a rig — the Layer 3/4 bound
 around may turn out to bite in one specific place rather than generally.
 
 **Trigger**: per-layer stomp proves too coarse in practice.
-
-### `FU-LOOK-COMPAT-ROW-COVERAGE`
-
-**Look compatibility ignores rows, so a rows-only Look is compatible with everything** · Trigger ·
-frontend sweep §14 `FS-BE-COMPATIBLEIDS`, 2026-08-29
-
-`compatibleIdsFor` (`routes/lightFixtures.kt`) filters a Look against a target by its *inferred
-effect capabilities* only. A Look holding no effects has an empty capability set, `all {}` over it
-is vacuously true, and the Look is therefore reported compatible with every fixture and group in
-the rig — so `LookTogglePicker` offers pads that assert nothing about the head under them.
-
-`FixtureDetails.compatibleLookIds`'s KDoc says this deliberately ("a Look holding no effect is
-compatible with everything"), on the grounds that a Look's *rows* name their own targets so the only
-open question is its effects. That is defensible for a Look whose rows happen to cover the target
-and wrong for one whose rows cover nothing near it.
-
-**The decision to take** is whether compatibility should also require row coverage — and if so,
-whether that means "covers at least one of the target's fixtures" or "covers all of them". Row
-coverage is per fixture, so the group case needs its own answer.
-
-`FS-DOCS-COMPATIBLELOOKIDS` landed (`0bcda19`) by documenting the hole rather than claiming it
-closed, which is why nothing is blocked on this; it is only still true.
-
-**Trigger**: an operator presses a Look pad the picker offered and nothing on the selected head
-moves.
-
----
-
-### `FU-SLOT-LOOK-ELIGIBILITY`
-
-**A cue slot takes any Look with no deferred effect, including one that asserts nothing on the
-fixtures it names** · Trigger · Busk-layout plan (2026-09-04), §8
-
-A slot may hold a Look with no deferred effect, and that is the whole eligibility test (D7): the
-rows of such a Look are always bound, so pressing it with no selection derives the targets from the
-Look's own rows. `POST /cue-slots` refuses a deferred-effect Look by name
-(`CUE_SLOT_LOOK_NEEDS_SELECTION`) and the palette dims it; nothing checks that the Look's fixtures
-are still patched, or that its rows assert anything on them.
-
-The press itself is honest — `LOOK_NO_TARGETS` when none of its fixtures is patched — so the failure
-is a tile that looks fine and refuses when tapped, rather than a silent no-op. That is the same
-question `FU-LOOK-COMPAT-ROW-COVERAGE` asks of a busk pad, one surface along, and it should get the
-same answer when it gets one: row coverage is per fixture, and a rule for one surface that is not
-the rule for the other would be worse than the hole.
-
-**Trigger**: a rows-only Look sits on a slot and asserts nothing on the fixtures it names.
 
 ### `FU-TMPL-VIRTUAL-DIMMER`
 
@@ -3111,6 +3063,12 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-SLOT-LOOK-ELIGIBILITY` — retired: a Look lands whole, so a cue slot takes any Look, and one
+  none of whose fixtures is patched goes on, lands nothing and lights its tile, as a cue does;
+  `CUE_SLOT_LOOK_NEEDS_SELECTION` and `LOOK_NO_TARGETS` are gone (absolute-looks plan session 2).
+- `FU-LOOK-COMPAT-ROW-COVERAGE` — retired with its question: a Look cannot be put on one fixture
+  (absolute-looks plan P7), so `compatibleIdsFor` is gone and `compatibleLookIds` answers empty until
+  the client's picker goes in session 3.
 - `FU-BUSK-PAD-STALE-NUMBER` — a reorder, a sort-by-number, `POST /cues` and Record CREATE into a
   stack announce the stack's cue pads, through the one announce every placing handler ends in
   (`announceEntriesPlaced`), and a cue delete those of the cues left in its stacks (venue-visit plan
@@ -3185,11 +3143,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   session 5
 - `FU-LOOK-MIDI-RECALL` — `BindingTarget.ApplyLook(lookUuid)`. The item asked which of three
   behaviours a button should have and answered its own question: the one that behaves identically
-  every press. So it presses the Look onto **its own fixtures** — never the desk selection, and
-  never a target set baked into the binding, which would have been a second place to keep in step
-  with the Look. A Look with a deferred effect has no own fixtures, so it is refused at bind time
-  (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one after —
-  midi-surface plan session 4
+  every press. So it presses the Look **whole** — never the desk selection, and never a target set
+  baked into the binding, which would have been a second place to keep in step with the Look; every
+  Look can be bound (absolute-looks plan) — midi-surface plan session 4
 - `FU-BUSK-PAGE-MIDI` — `BuskPageNext` / `BuskPagePrev` / `BuskPageSet(pageUuid)` over a
   project-scoped, transient `BuskPageState` (`busk.pageState` / `busk.setPage`), which the busk view
   now follows and `?page=` mirrors. The item's "keep the showing page where `?page=` keeps it today"

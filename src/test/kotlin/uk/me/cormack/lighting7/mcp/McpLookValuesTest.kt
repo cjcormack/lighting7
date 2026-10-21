@@ -211,6 +211,24 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
+    fun `apply_look lands the Look whole, whatever targets a call names`() {
+        patchRig()
+        val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
+        val created = call(
+            "create_look",
+            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}]}""",
+        )
+        assertTrue(created.success, created.result)
+        val lookId = created.json()["lookId"]!!.jsonPrimitive.int
+
+        val on = call("apply_look", """{"lookId":$lookId,"targets":[{"type":"fixture","key":"hex-1"}]}""")
+        assertTrue(on.success, on.result)
+        assertEquals("applied", on.json()["action"]!!.jsonPrimitive.content)
+        assertEquals(200, controller.getEffectiveValue(70).toInt(), "on its own fixture, not the one named")
+        assertTrue(state.show.programmerStore.layers.single().targets.isEmpty())
+    }
+
+    @Test
     fun `apply_look with asValues writes the values with no layer, and is not a toggle`() {
         patchRig()
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController

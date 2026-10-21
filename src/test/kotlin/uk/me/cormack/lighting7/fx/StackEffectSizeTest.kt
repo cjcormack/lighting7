@@ -11,7 +11,6 @@ import kotlinx.coroutines.runBlocking
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
-import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -36,36 +35,38 @@ import kotlin.test.assertTrue
  * the stack being the one whose hold is on top of the cue (§11, question 21), 100 % under a loose
  * hold; kept by a reload, dropped by a project switch.
  *
- * The rig is hex-1 and hex-2, and an effect-only Look with a Pulse on each head's dimmer, which a cue
- * layers onto a fixture, the layer's target keeping that head's.
+ * The rig is hex-1 and hex-2, and an effect-only Look per head with a Pulse on its dimmer; a Look
+ * lands whole, so a cue puts one head's Pulse on through that head's Look.
  */
 class StackEffectSizeTest : RouteIntegrationTest() {
 
     private val manager get() = state.show.cueStackManager
     private val engine get() = state.show.fxEngine
 
-    private suspend fun HttpClient.pulseLook(): LookDetails {
+    /** The Pulse Look of each head, by head. */
+    private suspend fun HttpClient.pulseLook(): Map<String, LookDetails> {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 21)
-        return post("/api/rest/projects/$projectId/looks") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                CreateLookRequest(
-                    name = "Pulse",
-                    effects = listOf("hex-1", "hex-2").mapIndexed { i, head ->
-                        LookEffectDto(
-                            targetType = "fixture", targetKey = head,
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
-                            sortOrder = i,
-                        )
-                    },
-                ),
-            )
-        }.body()
+        return listOf("hex-1", "hex-2").associateWith { head ->
+            post("/api/rest/projects/$projectId/looks") {
+                contentType(ContentType.Application.Json)
+                setBody(
+                    CreateLookRequest(
+                        name = "Pulse $head",
+                        effects = listOf(
+                            LookEffectDto(
+                                targetType = "fixture", targetKey = head,
+                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
+                                beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            ),
+                        ),
+                    ),
+                )
+            }.body<LookDetails>()
+        }
     }
 
-    private fun cue(name: String, look: LookDetails, fixture: String, fadeMs: Long? = null): Int = transaction(state.database) {
+    private fun cue(name: String, looks: Map<String, LookDetails>, fixture: String, fadeMs: Long? = null): Int = transaction(state.database) {
         val cue = DaoCue.new {
             project = DaoProject.findById(projectId)!!
             this.name = name
@@ -73,8 +74,8 @@ class StackEffectSizeTest : RouteIntegrationTest() {
         }
         DaoCueLayer.new {
             this.cue = cue
-            this.look = DaoLook[look.id]
-            targets = listOf(CueTargetDto("fixture", fixture))
+            this.look = DaoLook[looks.getValue(fixture).id]
+            targets = emptyList()
             sortOrder = 0
         }
         cue.id.value

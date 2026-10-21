@@ -2019,8 +2019,9 @@ association, its run or its fade.
 
 ### Layers
 
-A cue layer stores a **reference** to a Look (by id) plus the targets it operates over. At apply
-time the Look is read fresh through `LookRegistry`, so editing a Look is reflected the next time the
+A cue layer stores a **reference** to a Look or a palette (by id), and a palette's layer the
+targets it operates over; a Look's names none, since a Look lands whole. At apply time the Look is
+read fresh through `LookRegistry`, so editing a Look is reflected the next time the
 cue is applied — and, for a *live* cue, immediately, via `republishForLookEdit`. Each layer's effects
 are created as `FxInstance`s tagged with the cue id.
 
@@ -2029,8 +2030,8 @@ order.** `sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` wi
 the monotonic creation counter (a split copy keeps its parent's, §"Local effects follow the
 selection"), and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`, so
 same-priority effects already resolve last-created-wins. No priority arithmetic is needed and the
-uniform per-cue priority stays. A palette's effect fans over the layer's targets; a Look's uses its
-own, filtered by the layer's target set when that set is non-empty.
+uniform per-cue priority stays. A palette's effect fans over the layer's targets; a Look's runs on
+its own targets, whole.
 
 The one limit worth stating: effects are Layer 3 and static values are Layer 4, so an effect sits
 above a static value regardless of layer order. See `lighting-composition-model.md`
@@ -2072,9 +2073,10 @@ and `cueStackListChanged`, whose layer counts moved.
 
 The "create from current state" operation captures the live FX engine state:
 
-1. Effects with a non-null `lookId` are grouped **by Look**, collecting their targets into cue layer
-   rows. A Look applied twice to different targets therefore collapses into one layer covering both
-   — the honest reading of a *snapshot*, since the stage cannot tell you it was two gestures.
+1. Effects from a Look or a palette are grouped **by that record** into cue layer rows. A palette's
+   row collects their targets, so one applied twice to different targets collapses into one layer
+   covering both — the honest reading of a *snapshot*, since the stage cannot tell you it was two
+   gestures. A Look's row names no targets: it lands whole.
 2. Effects with a null `lookId` are stored as individual `CueAdHocEffect` rows with all effect fields
    captured.
 

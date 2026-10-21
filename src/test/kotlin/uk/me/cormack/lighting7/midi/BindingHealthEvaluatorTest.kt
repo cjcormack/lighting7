@@ -38,7 +38,6 @@ class BindingHealthEvaluatorTest {
     private val liveStack: UUID = UUID.fromString("66666666-7777-8888-9999-000000000000")
 
     private val liveLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001")
-    private val deferredLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000002")
     private val liveTemplate: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
     private val livePad: UUID = UUID.fromString("cccccccc-0000-4000-8000-000000000001")
     private val livePage: UUID = UUID.fromString("dddddddd-0000-4000-8000-000000000001")
@@ -60,8 +59,7 @@ class BindingHealthEvaluatorTest {
         validCueUuids = setOf(liveCue),
         selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
         colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
-        validLookUuids = setOf(liveLook, deferredLook),
-        looksNeedingSelection = setOf(deferredLook),
+        validLookUuids = setOf(liveLook),
         validTemplateUuids = setOf(liveTemplate),
         validPadUuids = setOf(livePad),
         validBankUuids = setOf(liveBank),
@@ -82,16 +80,6 @@ class BindingHealthEvaluatorTest {
         assertIs<AssignmentHealth.MissingTemplate>(BindingHealthEvaluator.evaluate(BindingTarget.PressTemplate("$gone"), ctx))
         assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$gone"), ctx))
         assertIs<AssignmentHealth.MissingPage>(BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$gone"), ctx))
-    }
-
-    @Test
-    fun `a Look that gained a deferred effect is unpressable rather than missing`() {
-        // Two states, not one, because the fixes differ: a Look that is gone has to be rebound, one
-        // that has gained a deferred effect only has to be given targets. Both drop the press.
-        assertEquals(
-            AssignmentHealth.LookNeedsSelection("$deferredLook"),
-            BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$deferredLook"), context()),
-        )
     }
 
     @Test

@@ -117,7 +117,7 @@ private class TimelineReads(
 ) {
     private val coverage = TargetCoverage { fixtures }
     private val lookFamilies = HashMap<Int, List<String>>()
-    private val lookOwn = HashMap<Int, Pair<List<CueTargetDto>, Boolean>>()
+    private val lookOwn = HashMap<Int, List<String>>()
     private val paletteFamilies = HashMap<Int, List<String>>()
     private val paletteRows = HashMap<Int, Set<CueTargetDto>?>()
 
@@ -131,14 +131,14 @@ private class TimelineReads(
             else -> emptyList()
         }
         val heads = when {
-            look != null -> lookHeads(look, layer.targets)
+            look != null -> lookHeads(look)
             template != null -> paletteHeads(template, layer.targets)
             else -> emptyList()
         }
         return TimelineLayerDto(
             id = layer.id.value,
             source = TimelineSourceDto(source.kind.name, source.id, source.uuid.toString(), source.name, families),
-            targets = layer.targets,
+            targets = layerTargets(source, layer.targets),
             heads = heads,
             sortOrder = layer.sortOrder,
             rank = rank,
@@ -177,21 +177,9 @@ private class TimelineReads(
 
     private fun headsOf(targets: List<CueTargetDto>): List<String> = coverage.expand(targets).map { it.key }.distinct()
 
-    /**
-     * The heads a Look layer lands on, as the cook reads it: its bound rows' and effects' own heads,
-     * filtered to the layer's [targets] where it names any (`CueComposer.LayerTargets.covers` — a
-     * target covers itself and its cells, never its parent), and the targets themselves where a
-     * deferred effect takes them.
-     */
-    private fun lookHeads(look: DaoLook, targets: List<CueTargetDto>): List<String> {
-        val (own, deferred) = lookOwn.getOrPut(look.id.value) {
-            coverage.expand(look.ownTargets(fixtures)).distinct() to look.effects.any { it.isDeferred }
-        }
-        if (targets.isEmpty()) return own.map { it.key }
-        val held = coverage.expand(targets).toSet()
-        val bound = own.filter { coverage.covers(held, it) }
-        return (if (deferred) bound + held else bound).map { it.key }.distinct()
-    }
+    /** The heads a Look layer lands on: the Look's own fixtures, since it lands whole (absolute-looks plan D1). */
+    private fun lookHeads(look: DaoLook): List<String> =
+        lookOwn.getOrPut(look.id.value) { headsOf(look.ownTargets(fixtures)) }
 
     /**
      * The heads a palette layer lands on: a generic palette's targets; a per-fixture palette's own
@@ -306,8 +294,9 @@ internal data class TimelineSourceDto(
 internal data class TimelineLayerDto(
     val id: Int,
     val source: TimelineSourceDto,
+    /** A palette layer's targets; a Look's none, since it lands whole. */
     val targets: List<CueTargetDto>,
-    /** The fixture keys the layer reaches: its targets with groups expanded, else its source's own. */
+    /** The fixture keys the layer reaches: a Look's own, a palette's targets with groups expanded, else its own rows'. */
     val heads: List<String>,
     val sortOrder: Int,
     /** Its place in the cue's stored layer order, from 1 at the bottom — a layer whose source is gone still counted. */

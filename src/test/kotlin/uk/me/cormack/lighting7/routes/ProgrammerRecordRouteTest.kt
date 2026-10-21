@@ -19,7 +19,9 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.SliderTarget
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.TemplateRowDto
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
@@ -824,19 +826,16 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     @Test
     fun `MERGE matches an existing layer whose targets arrive in a different order`() = testApplication {
         // A7 sibling: appendFxChildren's layer upsert used to key on order-sensitive target
-        // equality. Re-busking the same Look onto the same fixtures, with the client sending the
+        // equality. Re-busking the same palette onto the same fixtures, with the client sending the
         // target list in a different order the second time, must update the existing layer rather
         // than append a duplicate.
         mountTestApp(state)
         val client = jsonClient()
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
-        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
-            client, projectId, "Warm", mapOf("dimmer" to "200"),
-        )
-        val uuid = java.util.UUID.fromString(warm.uuid)
+        val red = createPalette(client, "Red")
         state.show.programmerLayerStack.add(
-            source = LayerSource.look(warm.id, uuid, warm.name),
+            source = red,
             targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
         )
         val created: ProgrammerRecordResponse = client.record(
@@ -849,7 +848,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         clearProgrammer()
         state.show.programmerLayerStack.add(
-            source = LayerSource.look(warm.id, uuid, warm.name),
+            source = red,
             targets = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1")),
         )
         val merged: ProgrammerRecordResponse = client.record(
@@ -869,12 +868,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-1", 1)
         seedHex("hex-2", 13)
-        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
-            client, projectId, "Warm", mapOf("dimmer" to "200"),
-        )
-        val uuid = java.util.UUID.fromString(warm.uuid)
+        val red = createPalette(client, "Red")
         state.show.programmerLayerStack.add(
-            source = LayerSource.look(warm.id, uuid, warm.name),
+            source = red,
             targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
         )
         val created: ProgrammerRecordResponse = client.record(
@@ -887,7 +883,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
         clearProgrammer()
         state.show.programmerLayerStack.add(
-            source = LayerSource.look(warm.id, uuid, warm.name),
+            source = red,
             targets = listOf(CueTargetDto("fixture", "hex-2"), CueTargetDto("fixture", "hex-1")),
         )
         val removed: ProgrammerRecordResponse = client.record(
@@ -897,6 +893,157 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         ).body()
 
         assertTrue(removed.cue.layers.isEmpty(), "the reordered send still matched and removed the layer")
+    }
+
+    @Test
+    fun `MERGE upserts a Look layer on its source, whatever is selected`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = warmLook(client)
+        state.show.programmerLayerStack.add(source = warm, targets = emptyList())
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+
+        clearProgrammer()
+        val (layer, _) = state.show.programmerLayerStack.add(source = warm, targets = listOf(CueTargetDto("fixture", "hex-2")))
+        state.show.programmerLayerStack.patch(layer.layerId, amount = 0.5)
+        val merged: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), mode = "MERGE", cueId = created.cue.id),
+        ).body()
+
+        val stored = merged.cue.layers.single()
+        assertEquals(0.5, stored.amount, "the existing layer took the programmer's settings")
+        assertTrue(stored.targets.isEmpty())
+    }
+
+    @Test
+    fun `REMOVE takes a Look layer off on its source`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = warmLook(client)
+        state.show.programmerLayerStack.add(source = warm, targets = emptyList())
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+
+        clearProgrammer()
+        state.show.programmerLayerStack.toggle(warm, listOf(CueTargetDto("fixture", "hex-1")))
+        val removed: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(projectId = projectId.toString(), mode = "REMOVE", cueId = created.cue.id),
+        ).body()
+
+        assertTrue(removed.cue.layers.isEmpty())
+    }
+
+    @Test
+    fun `a scoped Record keeps a cue's Look layer that reaches outside the selection`() = testApplication {
+        // A Look cannot be narrowed, so *Selection only* on hex-1 neither replaces Warm, which also
+        // lands on hex-2, nor writes the programmer's layer of it.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = warmLook(client)
+        state.show.programmerLayerStack.add(source = warm, targets = emptyList())
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+        val storedUuid = created.cue.layers.single().uuid
+
+        clearProgrammer()
+        val (layer, _) = state.show.programmerLayerStack.add(source = warm, targets = emptyList())
+        state.show.programmerLayerStack.patch(layer.layerId, amount = 0.5)
+        setProgrammer("hex-1", "uv", "90")
+        val updated: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
+                targets = listOf(CueTargetDto("fixture", "hex-1")),
+            )
+        ).body()
+
+        val kept = updated.cue.layers.single()
+        assertEquals(storedUuid, kept.uuid, "the cue's own layer of Warm, untouched")
+        assertEquals(1.0, kept.amount)
+        assertEquals("90", updated.cue.propertyAssignments.single { it.propertyName == "uv" }.value, "the scoped row is still written")
+        assertEquals(0, updated.fxWritten, "the left-out Look is not counted as written")
+        assertTrue(updated.warnings.any { "'Warm'" in it }, "${updated.warnings}")
+    }
+
+    @Test
+    fun `a scoped Record keeps a cue's layer of a Look that lands on no fixture`() = testApplication {
+        // A scenery-only Look, as Pre-show's Set is, is in no selection: a scoped Record leaves it.
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        val set = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "Set", emptyMap())
+        state.show.programmerLayerStack.add(
+            source = LayerSource.look(set.id, java.util.UUID.fromString(set.uuid), set.name),
+            targets = emptyList(),
+        )
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "Pre-show",
+            )
+        ).body()
+        assertEquals(1, created.cue.layers.size)
+
+        clearProgrammer()
+        setProgrammer("hex-1", "dimmer", "90")
+        val updated: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
+                targets = listOf(CueTargetDto("fixture", "hex-1")),
+            )
+        ).body()
+
+        assertEquals(listOf("Set"), updated.cue.layers.map { it.source?.name })
+    }
+
+    @Test
+    fun `a scoped Record replaces a cue's Look layer whose fixtures are all in scope`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+        seedHex("hex-1", 1)
+        seedHex("hex-2", 13)
+        val warm = warmLook(client)
+        val key = ProgrammerRouteTestSupport.createLookBoundTo(client, projectId, "Key", mapOf("dimmer" to "120"))
+        val keySource = LayerSource.look(key.id, java.util.UUID.fromString(key.uuid), key.name)
+        state.show.programmerLayerStack.add(source = warm, targets = emptyList())
+        state.show.programmerLayerStack.add(source = keySource, targets = emptyList())
+        val created: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "CREATE",
+                cueStackId = createStack(client, "s"), name = "layered",
+            )
+        ).body()
+        assertEquals(2, created.cue.layers.size)
+
+        // Key lands on hex-1 alone, so a Record of hex-1 holding no layers takes it out; Warm stays.
+        clearProgrammer()
+        setProgrammer("hex-1", "uv", "90")
+        val updated: ProgrammerRecordResponse = client.record(
+            ProgrammerRecordRequest(
+                projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
+                targets = listOf(CueTargetDto("fixture", "hex-1")),
+            )
+        ).body()
+
+        assertEquals(listOf("Warm"), updated.cue.layers.map { it.source?.name })
     }
 
     @Test
@@ -938,6 +1085,24 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         assertTrue(onSeconds.seconds)
         assertEquals(8.0, onSeconds.beatDivision)
         assertNull(onSeconds.speedMasterUuid)
+    }
+
+    /** A Look whose one group row lands on hex-1 and hex-2, as a layer source. */
+    private suspend fun warmLook(client: HttpClient): LayerSource {
+        LocateTestSupport.seedGroup(state, projectId, "front-wash", "hex-1", "hex-2")
+        val warm = ProgrammerRouteTestSupport.createLookBoundTo(
+            client, projectId, "Warm", mapOf("dimmer" to "200"), targetType = "group", targetKey = "front-wash",
+        )
+        return LayerSource.look(warm.id, java.util.UUID.fromString(warm.uuid), warm.name)
+    }
+
+    /** A generic UV palette, as a layer source. */
+    private suspend fun createPalette(client: HttpClient, name: String): LayerSource {
+        val created: TemplateDto = client.post("/api/rest/projects/$projectId/palettes") {
+            contentType(ContentType.Application.Json)
+            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))))
+        }.body()
+        return LayerSource.template(created.id, java.util.UUID.fromString(created.uuid), created.name)
     }
 
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =

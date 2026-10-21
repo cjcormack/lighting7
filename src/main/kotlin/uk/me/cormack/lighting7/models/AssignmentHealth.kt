@@ -139,18 +139,6 @@ sealed class AssignmentHealth {
     data class MissingWindow(val windowName: String) : AssignmentHealth()
 
     /**
-     * An `applyLook` binding names a Look that exists but has gained a **deferred effect**, so it
-     * has no own targets to press onto and a button has no selection to supply. Refused at bind
-     * time; this is the state a Look edited afterwards falls into. Control-surface-only.
-     *
-     * Distinct from [MissingLook] because the fix is different: the Look is still there, and either
-     * the effect is bound to targets or the button is rebound.
-     */
-    @Serializable
-    @SerialName("lookNeedsSelection")
-    data class LookNeedsSelection(val lookUuid: String) : AssignmentHealth()
-
-    /**
      * The binding's persisted payload carries a `type` discriminator this build does not know
      * — an archive written by a newer desk. The row is kept, dead and rebindable, rather than
      * refusing the project. Control-surface-only.
@@ -184,5 +172,4 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.MissingBank -> "missing busk bank ${health.bankUuid}"
     is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"
     is AssignmentHealth.MissingWindow -> "no connected window named '${health.windowName}'"
-    is AssignmentHealth.LookNeedsSelection -> "Look ${health.lookUuid} has a deferred effect and needs a selection"
 }

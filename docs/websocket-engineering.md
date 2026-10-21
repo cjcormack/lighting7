@@ -584,11 +584,11 @@ always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect pa
 | `programmer.clearAll` | `fadeMs?` | `programmer.cleared` |
 | `programmer.setBlind` | `blind: Boolean`, `fadeMs?` | `programmer.blindState` |
 | `programmer.state` | — | `programmer.state` |
-| `programmer.addLayer` | exactly one of `lookId`/`templateId`, `targets`, `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.addLayer` | exactly one of `lookId`/`templateId`, `targets` (dropped for a Look, which lands whole), `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
 | `programmer.detachLayer` | `layerId: Int` | `programmer.layerState` — the layer's values become Local `web` values and its effects Local effects, and it comes off with nothing on stage moving (`ProgrammerLayerStack.detach`; `lighting-composition-model.md` §"Detach and Apply as values") |
 | `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
-| `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?`, `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.patchLayer` | `layerId`, `enabled?`, `amount?`, `propertyMask?`, `blendMode?`, `targets?` (dropped for a Look layer), `stomp?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.setScenery` | `elementUuid`, `state: {visible?, open?, trimM?}`, `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
 | `programmer.clearScenery` | `elementUuid?` (absent: everything held), `fadeMs?` | `programmer.sceneryState` \| `programmer.error` |
 | `programmer.keyStack` | `targetType`, `targetKey`, `propertyName`, `requestId?` | `programmer.keyStack` (to this socket only) |
@@ -1077,7 +1077,9 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 
 `applied` is the same stack resolved: one entry per Look or palette with every target it covers,
 each group marked `all` or `some` by how many of its heads the record holds
-(`ProgrammerLayerStack.appliedState`). It rides beside `layers` rather than replacing it — the
+(`ProgrammerLayerStack.appliedState`). A Look is lit whatever is selected (absolute-looks plan P4),
+so until the client reads presence alone its entry lists every fixture, cell and group of the rig
+as `all`. It rides beside `layers` rather than replacing it — the
 Layers pane edits layers, a busk pad's ring reads coverage, and the desk answers the coverage
 question so the client never expands a group or matches a target itself. Because that resolution
 reads **live** group membership, this frame is re-sent on `fixturesChanged` too: a patch or group

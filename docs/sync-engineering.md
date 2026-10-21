@@ -290,6 +290,12 @@ whatever applied its Look, is dropped from any archive by `importLooks` with a w
 here, and this desk's next push writes the Look without it; that is the decision, not a degraded
 record, and the Look it leaves is a valid v37 state. So the writer is still v37.
 
+A Look layer naming no targets (absolute-looks plan D1, P8) took none either, by the same question.
+Every Look layer this desk exports names none, which a v37 reader imports as what it is: a layer of
+the whole Look. `importCueLayers` drops the targets of a Look layer from any archive with a warning,
+naming its cue and Look, as `state/LookLayerTargetsMigration.kt` cleared the ones this database held;
+an older desk's targeted Look layer comes in whole, and this desk's next push writes it naming none.
+
 **A master's `usage` gaining `beam` (effects plan session 6) took no bump, by the same question.**
 `usage` is a free string on the wire: an older reader imports `beam` verbatim, its bank routes
 nothing on it (no effect in its library is `beam`), its write boundary re-validates a usage only when
@@ -1048,7 +1054,7 @@ is dead.
 embedded inline the way a Look carries its rows, so a drag changes one file. A pad names its
 palette, Look or cue by uuid as `templateUuid` / `lookUuid` / `cueUuid`, exactly one set — the
 `CueLayerJson` pattern, three-armed. And `CueSlotJson.lookUuid` joins `cueUuid` on a cue slot: a
-Look with no deferred effect, pressed onto its own fixtures.
+Look, pressed whole.
 
 `minReader` stays at **5**: a missing folder reads as empty and the field defaults to null, so
 every older archive imports untouched. The writer's number moves for v9's reason, verbatim: a

@@ -48,11 +48,6 @@ object BindingHealthEvaluator {
      *   does not read it: an axis is refused when it is bound, never reported afterwards, and a
      *   head that stops being a colour under a re-patch simply drops the move.
      * @param validLookUuids Looks that exist in the project
-     * @param looksNeedingSelection the subset of [validLookUuids] carrying a **deferred effect**, so
-     *   an [BindingTarget.ApplyLook] on one has no own targets to press onto. A separate set rather
-     *   than a filter on the first, because "does it exist" and "can a button press it" are
-     *   different questions with different answers and different fixes — and the second cannot be
-     *   derived from a set of uuids at all.
      * @param validTemplateUuids templates that exist in the project
      * @param validPadUuids busk pads that exist — a pad dragged off a page, or swept by its
      *   record's delete, is gone
@@ -75,7 +70,6 @@ object BindingHealthEvaluator {
         val selectionProperties: Set<String> = emptySet(),
         val colourProperties: Set<String> = emptySet(),
         val validLookUuids: Set<UUID> = emptySet(),
-        val looksNeedingSelection: Set<UUID> = emptySet(),
         val validTemplateUuids: Set<UUID> = emptySet(),
         val validPadUuids: Set<UUID> = emptySet(),
         val validBankUuids: Set<UUID> = emptySet(),
@@ -136,14 +130,9 @@ object BindingHealthEvaluator {
             else AssignmentHealth.UnknownProperty(target.propertyName)
         BindingTarget.ClearSelection -> AssignmentHealth.Ok
         BindingTarget.LocateSelection -> AssignmentHealth.Ok
-        // Two failures, not one, because the fixes differ: a Look that is gone has to be rebound,
-        // one that has gained a deferred effect only has to be given targets. Both drop the press.
-        is BindingTarget.ApplyLook -> when (val uuid = uuidOrNull(target.lookUuid)) {
-            null -> AssignmentHealth.MissingLook(target.lookUuid)
-            !in context.validLookUuids -> AssignmentHealth.MissingLook(target.lookUuid)
-            in context.looksNeedingSelection -> AssignmentHealth.LookNeedsSelection(target.lookUuid)
-            else -> AssignmentHealth.Ok
-        }
+        // A Look lands whole (absolute-looks plan D1), so the one failure is a Look that is gone.
+        is BindingTarget.ApplyLook ->
+            uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
         // A template's *emptiness* is not a health question: a generic template pressed with
         // nothing selected is a dropped press, which is a fact about the selection at that moment
         // and not about the binding — the same line `SelectionProperty` draws.

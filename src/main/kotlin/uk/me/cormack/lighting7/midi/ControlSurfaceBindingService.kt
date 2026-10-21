@@ -267,7 +267,6 @@ class ControlSurfaceBindingService(
         // Resolved once and reused for both the refusal check and the health tag below, rather
         // than rebuilding the whole snapshot (stacks/cues/masters/looks/templates/pages) twice.
         val healthContext = resolveHealthContext(projectId)
-        refuseUnpressableLook(healthContext, target)
         refuseAxisOnNonColour(healthContext, target)
         refuseTriggerProperty(healthContext, target)
         val resolved = synchronized(lockFor(projectId)) {
@@ -321,7 +320,6 @@ class ControlSurfaceBindingService(
         // the multi-query DB read this triggers.
         val healthContext = resolveHealthContext(projectId)
         target?.let {
-            refuseUnpressableLook(healthContext, it)
             refuseAxisOnNonColour(healthContext, it)
             refuseTriggerProperty(healthContext, it)
         }
@@ -417,10 +415,9 @@ class ControlSurfaceBindingService(
         }
         ensureLoaded(projectId)
         // Resolved once for the whole batch — one refusal check per create still runs, but each
-        // reuses this snapshot instead of rebuilding it from scratch per ApplyLook target.
+        // reuses this snapshot instead of rebuilding it from scratch per target.
         val healthContext = resolveHealthContext(projectId)
         creates.forEach {
-            refuseUnpressableLook(healthContext, it.target)
             refuseAxisOnNonColour(healthContext, it.target)
             refuseTriggerProperty(healthContext, it.target)
         }
@@ -667,42 +664,6 @@ class ControlSurfaceBindingService(
     }
 
     /**
-     * A Look whose press has no targets cannot be put on a button (D6).
-     *
-     * [BindingTarget.ApplyLook] presses onto the Look's **own** fixtures, and a Look with a deferred
-     * effect has none to fall back on — a button has no selection to supply. Refused at bind time so
-     * the operator is told at the drop rather than by a silent press; a Look that gains one
-     * afterwards reads as [AssignmentHealth.LookNeedsSelection] instead.
-     *
-     * Judged through the health context, so the refusal and the health arm cannot disagree about
-     * what "needs a selection" means. No context (tests, pre-show init) means no refusal.
-     *
-     * Takes an already-resolved [context] rather than a `projectId` — callers resolve it once
-     * (it's a multi-query DB snapshot) and reuse it for both this check and the created/updated
-     * row's health tag, rather than rebuilding it per call.
-     */
-    private fun refuseUnpressableLook(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
-        if (target !is BindingTarget.ApplyLook) return
-        if (context == null) return
-        val uuid = try {
-            java.util.UUID.fromString(target.lookUuid)
-        } catch (_: IllegalArgumentException) {
-            // Malformed input, not "needs a selection" — don't reuse that code, or a client
-            // branching on it (per BindingRefused's doc comment) would show the wrong fix for a
-            // garbage uuid. Uncoded, like refuseUnknown / refuseWrongSlot's shape refusals, and
-            // consistent with BindingHealthEvaluator mapping the same input to MissingLook rather
-            // than LookNeedsSelection.
-            throw IllegalArgumentException("'${target.lookUuid}' is not a Look uuid")
-        }
-        if (uuid in context.looksNeedingSelection) {
-            throw BindingRefused(
-                "This Look has a deferred effect, so it needs a selection — a button has none to give",
-                CODE_BINDING_LOOK_NEEDS_SELECTION,
-            )
-        }
-    }
-
-    /**
      * A [ColourAxis] on a property that is not a colour has nothing to drive.
      *
      * Judged with the **dispatch** lookup — [PropertyChannelResolver.describePropertyRead] answering
@@ -719,7 +680,7 @@ class ControlSurfaceBindingService(
      * property it wraps, so a flash cannot smuggle in an axis a direct binding would be refused.
      *
      * Here rather than in the routes for [refuseWrongSlot]'s reason — one door, MIDI Learn's commit
-     * included. No context (tests, pre-show init) means no refusal, as for [refuseUnpressableLook].
+     * included. No context (tests, pre-show init) means no refusal.
      */
     private fun refuseAxisOnNonColour(context: BindingHealthEvaluator.Context?, target: BindingTarget) {
         if (context == null) return

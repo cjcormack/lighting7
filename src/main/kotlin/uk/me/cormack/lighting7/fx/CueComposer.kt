@@ -364,7 +364,7 @@ internal object CueComposer {
             // Off the content already resolved above, so the effects and the rows come from one
             // version of it.
             if (collectEffects != null) {
-                effectsForLayer(fixtures, cueId, layer, content, layerTargets, collectEffects)
+                effectsForLayer(cueId, layer, content, layerTargets, collectEffects)
             }
         }
 
@@ -474,8 +474,8 @@ internal object CueComposer {
      * [FxTarget.applyValue]. So same-priority effects already resolve last-created-wins, and layer
      * order becomes effect order for free.
      *
-     * A palette's effect runs on each of the layer's targets; a Look's uses its own target,
-     * filtered by the layer's target set when that set is non-empty — the same rule rows follow.
+     * A palette's effect runs on each of the layer's targets; a Look's every effect runs on its own
+     * target, as its rows land whole.
      */
     fun cookEffects(
         fixtures: Fixtures,
@@ -497,7 +497,7 @@ internal object CueComposer {
         val out = ArrayList<Triple<CookLayer, StoredEffect, EffectTargetRef>>()
         for (layer in contributingLayers(layers, includeTimed)) {
             val content = resolveContent(layer.source, resolveLook, resolveTemplate) ?: continue
-            effectsForLayer(fixtures, cueId, layer, content, LayerTargets(fixtures, cueId, layer), out)
+            effectsForLayer(cueId, layer, content, LayerTargets(fixtures, cueId, layer), out)
         }
         return out
     }
@@ -510,7 +510,6 @@ internal object CueComposer {
      * copy of this fan-out would be a new way for the two answers to drift.
      */
     private fun effectsForLayer(
-        fixtures: Fixtures,
         cueId: Int,
         layer: CookLayer,
         content: LayerContent,
@@ -518,16 +517,11 @@ internal object CueComposer {
         layerTargets: LayerTargets,
         out: MutableList<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
     ) {
-        val refs = layerTargets.refs
         when (content) {
-            is LayerContent.OfLook -> for (entry in content.look.effects) {
-                // A Look effect survives the layer's restriction only if the layer covers it — a
-                // selection, if it covers any item, as a group survives on any member.
-                if (refs.isEmpty() || entry.target.items.any { coversTarget(fixtures, layerTargets, it) }) {
-                    out.add(Triple(layer, entry.effect, entry.target))
-                }
-            }
+            // A Look lands whole (absolute-looks plan D1): every effect on its own target.
+            is LayerContent.OfLook -> for (entry in content.look.effects) out.add(Triple(layer, entry.effect, entry.target))
             is LayerContent.OfTemplate -> {
+                val refs = layerTargets.refs
                 val effect = content.template.effect ?: return
                 if (refs.isEmpty()) {
                     logger.warn(
@@ -660,15 +654,14 @@ internal object CueComposer {
         val blendMode = parseLayerBlendMode(layer.blendMode, layer.source.name, cueId)
         val amount = layer.amount.coerceIn(0.0, 1.0)
 
-        // The layer's targets both *supply* targets to a template's generic rows and *filter* bound
-        // ones — one meaning serving two jobs, and what lets the migration preserve coverage exactly.
+        // A palette layer's targets both *supply* targets to its generic rows and *filter* its bound
+        // ones. A Look layer's are none ([LayerTargets]), so its rows land whole.
         val layerFixtures: List<Expanded>? = layerTargets.expanded
 
         // Memoised out of the row loop (sweep item C8): the rows of one source overwhelmingly name
         // the same handful of targets, so a 60-row Look re-expanded the same group 60 times — and
         // this also collapses the "group missing" warning to one line per target rather than one
-        // per row. The allowed-set moved further out still, onto [LayerTargets], because the effect
-        // half asks the same question of the same targets.
+        // per row. The allowed-set moved further out still, onto [LayerTargets].
         val rowExpansions = HashMap<TargetRef, List<Expanded>>()
 
         val pending = ArrayList<Pending>()
@@ -690,10 +683,7 @@ internal object CueComposer {
             if (elementKey != null) {
                 // An **element row** — a Look's value for one cell of a multi-head fixture — composes
                 // onto that cell, keyed by its element key beside its parent's (`FU-LOOK-ELEMENT-ROWS`,
-                // closed by the busk-further plan's session 1). The layer's targets filter it by the
-                // parent↔cell rule: a layer on the whole bar carries its cells' rows, a layer on one
-                // cell carries that cell's alone.
-                if (layerFixtures != null && !layerTargets.covers(elementKey)) continue
+                // closed by the busk-further plan's session 1). Only a Look has one, and it lands whole.
                 val element = try {
                     fixtures.untypedGroupableFixture(elementKey)
                 } catch (_: IllegalStateException) {
@@ -897,12 +887,13 @@ internal object CueComposer {
     }
 
     /**
-     * A layer's own target set, expanded **once per layer** and shared by both halves of the cook.
+     * A **palette** layer's own target set, expanded **once per layer** and shared by both halves of
+     * the cook.
      *
-     * The layer's targets serve three jobs — they supply targets to a template's generic rows,
-     * filter bound ones, and decide whether a bound *effect* survives ([coversTarget]) — and each of
-     * the three used to expand them for itself, so a Look layer with rows and effects walked its
-     * groups twice per cook on top of the per-row rebuild (sweep item C8).
+     * The layer's targets supply targets to a palette's generic rows, filter its bound ones and name
+     * where its effect runs. A Look layer names none (absolute-looks plan D1): its rows and effects
+     * land whole, so [refs] is empty for one — whatever an older write left on it — and nothing it
+     * holds is filtered.
      *
      * Both derived forms are computed **on first ask and only then**. A palette's effect runs on
      * [refs] as named and never expands them, which is what keeps a bare [cookEffects] from paying
@@ -917,7 +908,8 @@ internal object CueComposer {
         private val cueId: Int,
         private val layer: CookLayer,
     ) {
-        val refs: List<TargetRef> = layer.targets.map { it.target }
+        val refs: List<TargetRef> =
+            if (layer.source.kind == LayerSourceKind.LOOK) emptyList() else layer.targets.map { it.target }
 
         private var expandedCache: List<Expanded>? = null
 
@@ -936,10 +928,7 @@ internal object CueComposer {
 
         private var keysCache: Set<String>? = null
 
-        /**
-         * [expanded] as a target-key set — the allowed-set for bound rows and the coverage set for
-         * bound effects, which are the same question asked twice.
-         */
+        /** [expanded] as a target-key set — the allowed-set for bound rows. */
         val keys: Set<String>
             get() = keysCache
                 ?: (expanded?.mapTo(HashSet()) { it.fixture.targetKey } ?: emptySet<String>())
@@ -1003,35 +992,6 @@ internal object CueComposer {
             }
         }
         return out
-    }
-
-    /**
-     * True when the layer covers [target] — by naming it, by naming a group containing it, or by
-     * naming the parent of a cell it is.
-     *
-     * [LayerTargets] is what makes this cheap: the layer's targets are expanded once for the whole
-     * cook, and [LayerTargets.keys] is not built at all unless a bound effect actually reaches past
-     * the name match below.
-     */
-    private fun coversTarget(
-        fixtures: Fixtures,
-        layerTargets: LayerTargets,
-        target: TargetRef,
-    ): Boolean {
-        // Kept ahead of the expansion, and not only as a shortcut: a layer naming a *missing* group
-        // with a bound effect on that same group is covered by this check and by nothing below it,
-        // where the expansion answers "no members" and would drop the effect here instead of
-        // letting the spawner report the missing group.
-        if (target in layerTargets.refs) return true
-        val targetKeys = when (target) {
-            is TargetRef.Fixture -> setOf(target.key)
-            is TargetRef.Group -> runCatching { fixtures.untypedGroup(target.key) }.getOrNull()
-                ?.fixtures?.mapTo(HashSet()) { it.targetKey }
-                ?: return false
-        }
-        if (targetKeys.isEmpty()) return false
-        // Through `covers`, so a bound effect on a cell survives under a layer on its parent.
-        return targetKeys.any { layerTargets.covers(it) }
     }
 
     // ─── Blending ───────────────────────────────────────────────────────

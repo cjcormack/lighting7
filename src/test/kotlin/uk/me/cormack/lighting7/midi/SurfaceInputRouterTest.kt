@@ -825,12 +825,11 @@ class SurfaceInputRouterTest {
         val lookUuid = "11111111-1111-4111-8111-111111111111"
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(
-            // The state a Look that gained a deferred effect after it was bound falls into: it is
-            // still there, but a button has no selection to give it, so the press must be dropped
-            // rather than reaching a `toggle` that would refuse it one layer down.
+            // A Look deleted since it was bound: the press must be dropped rather than reaching a
+            // `toggle` that has nothing to put on.
             binding(
                 1, "btn-1", BindingTarget.ApplyLook(lookUuid),
-                health = AssignmentHealth.LookNeedsSelection(lookUuid),
+                health = AssignmentHealth.MissingLook(lookUuid),
             ),
         ))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))

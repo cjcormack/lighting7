@@ -445,14 +445,12 @@ object DaoCueLayers : IntIdTable("cue_layers") {
     val enabled = bool("enabled").default(true)
 
     /**
-     * The target set this layer operates over. **One meaning serving two jobs**: when non-empty it
-     * *supplies* targets to a template layer's generic rows and to its *effect*, and
-     * *filters* every bound row and effect. That single rule is what lets the migration preserve
-     * coverage exactly — a cue that referenced a palette for two fixtures must not start asserting
-     * every fixture the palette covers.
+     * A palette layer's target set. **One meaning serving two jobs**: when non-empty it *supplies*
+     * targets to the palette's generic rows and to its *effect*, and *filters* its bound rows. Empty
+     * means "the palette's own rows' targets"; a generic palette is not complete without targets.
      *
-     * Empty means "the source's own targets, unfiltered". A Look row always names one, so a Look
-     * layer is complete without targets; a generic template row is not.
+     * A Look's layer names none (absolute-looks plan D1): a Look lands whole, every stored write
+     * drops targets given for one, and `LookLayerTargetsMigration.kt` cleared those this database held.
      */
     val targets = json<List<CueTargetDto>>("targets", Json)
 

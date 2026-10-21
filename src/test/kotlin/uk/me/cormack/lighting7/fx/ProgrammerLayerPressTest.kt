@@ -169,11 +169,24 @@ class ProgrammerLayerPressTest {
 
         assertEquals(0, rig.press(green, "hex-1").released)
         assertEquals(1, rig.press(rig.colour("Blue", "#0000ff"), "hex-1").released, "Red only")
-        assertEquals(listOf("Green wash: hex-1", "Blue: hex-1"), rig.layers())
+        assertEquals(listOf("Green wash: ", "Blue: hex-1"), rig.layers(), "a Look's layer names no heads")
     }
 
     @Test
     fun `a solo bank still releases siblings of other kinds`() {
+        val rig = newRig()
+        val red = rig.colour("Red", "#ff0000")
+        val half = rig.level("Half", 50)
+        rig.press(red, "hex-1", "hex-2")
+
+        val outcome = rig.press(half, "hex-1", siblings = setOf(red.uuid))
+
+        assertEquals(1, outcome.released)
+        assertEquals(listOf("Red: hex-2", "Half: hex-1"), rig.layers())
+    }
+
+    @Test
+    fun `a solo bank takes a Look sibling off whole`() {
         val rig = newRig()
         val green = rig.look("Green wash")
         val half = rig.level("Half", 50)
@@ -182,7 +195,7 @@ class ProgrammerLayerPressTest {
         val outcome = rig.press(half, "hex-1", siblings = setOf(green.uuid))
 
         assertEquals(1, outcome.released)
-        assertEquals(listOf("Green wash: hex-2", "Half: hex-1"), rig.layers())
+        assertEquals(listOf("Half: hex-1"), rig.layers(), "a Look cannot be narrowed to the heads the press left")
     }
 
     @Test
