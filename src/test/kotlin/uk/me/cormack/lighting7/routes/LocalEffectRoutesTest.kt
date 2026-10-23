@@ -16,9 +16,12 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.BlendMode
 import uk.me.cormack.lighting7.fx.EffectDto
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
+import uk.me.cormack.lighting7.fx.FxStacking
+import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -29,6 +32,7 @@ import uk.me.cormack.lighting7.plugins.FxErrorOutMessage
 import uk.me.cormack.lighting7.plugins.InMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerClearTargetInMessage
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
+import uk.me.cormack.lighting7.plugins.ProgrammerMoveFxInMessage
 import uk.me.cormack.lighting7.plugins.UpdateFxInMessage
 import uk.me.cormack.lighting7.testsupport.EffectTestSupport
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -104,7 +108,7 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
         assertIs<FxTargetRef.SelectionRef>(instance.target.targetRef)
         assertEquals(hexes, engine.fixtureKeysCoveredBy(instance))
         assertTrue(instance.isLocalEffect, "the programmer's own")
-        assertEquals(FxEngine.PROGRAMMER_FX_PRIORITY_BASE, instance.priority)
+        assertEquals(FxEngine.localFxPriority(0), instance.priority, "the first Local FX on its heads")
         assertEquals(BeatDivision.ONE_BAR, instance.timing.beatDivision, "one bar when no division is sent (D16)")
     }
 
@@ -406,7 +410,155 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
         assertEquals(hexes, children().map { it.targetKey }.sorted(), "a second Update retires nothing more")
     }
 
+    // ── The band and Stack (FX editor plan §3.5, §3.6) ─────────────────────────
+
+    @Test
+    fun `a Local Pulse pressed after a palette's FX on the same heads applies above it`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val layered = pressPaletteLayer(client, quad)
+
+        val pulse = live(client.pressed(pulse(quad)).effectId)
+
+        assertTrue(pulse.priority > layered.priority, "every Local FX is above every layer's FX")
+        assertEquals(pulse, engine.getActiveEffects().maxWith(compareBy({ it.priority }, { it.composeOrder })))
+    }
+
+    @Test
+    fun `stack adds on top, stopping and narrowing nothing, and starts on the family's row`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val first = client.pressed(pulse(quad)).effectId
+
+        val stacked = client.pressed(sine(fixtures("hex-0", "hex-1")).copy(stack = true))
+
+        assertEquals(ProgrammerEffectResponse(stacked.effectId), stacked, "stopped and narrowed are empty")
+        assertEquals(quad.single().key, live(first).target.targetKey, "the first runs on, whole")
+        val instance = live(stacked.effectId)
+        assertTrue(instance.isLocalEffect)
+        assertEquals(BlendMode.MULTIPLY, instance.blendMode, "Intensity stacks Within")
+        assertEquals(1.0, instance.dynamics.size)
+        assertTrue(instance.priority > live(first).priority, "on top of the FX it shares heads with")
+    }
+
+    @Test
+    fun `each family starts on its row of the stacking table`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "spot-1", 200)
+        val client = jsonClient()
+        val spot = fixtures("spot-1")
+
+        val colour = live(
+            client.pressed(ProgrammerEffectRequest("Pulse", "uv", targets = fixtures("hex-0"), stack = true)).effectId,
+        )
+        assertEquals(BlendMode.OVERRIDE to 0.5, colour.blendMode to colour.dynamics.size, "a Pulse on UV is Colour")
+
+        val position = live(client.pressed(ProgrammerEffectRequest("Circle", "position", targets = spot, stack = true)).effectId)
+        assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.size)
+        assertEquals("128", position.effect.parameters["panCenter"])
+        assertEquals("128", position.effect.parameters["tiltCenter"])
+
+        val beam = live(client.pressed(ProgrammerEffectRequest("Pulse", "focus", targets = spot, stack = true)).effectId)
+        assertEquals(BlendMode.OVERRIDE to 0.5, beam.blendMode to beam.dynamics.size)
+
+        val centred = setOf("panCenter", "tiltCenter")
+        assertEquals(
+            listOf(PropertyMaskGroup.INTENSITY, PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR, PropertyMaskGroup.BEAM)
+                .map { FxStacking.startFor(it, centred).let { start -> start.blendMode to start.size } },
+            listOf(BlendMode.MULTIPLY to 1.0, BlendMode.ADDITIVE to 1.0, BlendMode.OVERRIDE to 0.5, BlendMode.OVERRIDE to 0.5),
+        )
+        assertEquals(
+            FxStacking.Start(BlendMode.OVERRIDE, 1.0),
+            FxStacking.startFor(PropertyMaskGroup.POSITION, setOf("panCenter")),
+            "a Position FX without both centres (Palette Steps) outputs where to go, so it replaces at full",
+        )
+    }
+
+    @Test
+    fun `an explicit blend or Amount wins over the stacking table`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-15ch", "spot-1", 200)
+        val client = jsonClient()
+
+        val both = live(client.pressed(pulse(quad).copy(stack = true, blendMode = "ADDITIVE", size = 0.3)).effectId)
+        assertEquals(BlendMode.ADDITIVE to 0.3, both.blendMode to both.dynamics.size)
+
+        val blendOnly = live(client.pressed(pulse(quad).copy(stack = true, blendMode = "MAX")).effectId)
+        assertEquals(BlendMode.MAX to 1.0, blendOnly.blendMode to blendOnly.dynamics.size, "the Amount still the table's")
+
+        val sizeOnly = live(client.pressed(pulse(quad).copy(stack = true, size = 0.4)).effectId)
+        assertEquals(BlendMode.MULTIPLY to 0.4, sizeOnly.blendMode to sizeOnly.dynamics.size, "the blend still the table's")
+
+        val absolute = live(
+            client.pressed(
+                ProgrammerEffectRequest(
+                    "Circle", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
+                    parameters = mapOf("panCenter" to "40"),
+                ),
+            ).effectId,
+        )
+        assertEquals("40", absolute.effect.parameters["panCenter"], "a centre the press names is kept")
+
+        val unstacked = live(client.pressed(pulse(quad)).effectId)
+        assertEquals(BlendMode.OVERRIDE to 1.0, unstacked.blendMode to unstacked.dynamics.size, "Replace keeps its defaults")
+    }
+
+    @Test
+    fun `moveFx re-ranks a Local FX, answering each FX whose priority moved`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val low = client.pressed(pulse(quad)).effectId
+        val high = client.pressed(sine(quad).copy(stack = true)).effectId
+        val applyOrder = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+        fun appliesUnder(a: Long, b: Long) = applyOrder.compare(live(a), live(b)) < 0
+        assertTrue(appliesUnder(low, high))
+
+        createWsClient().webSocket("/api") {
+            sendSerialized<InMessage>(ProgrammerMoveFxInMessage(high, above = low))
+            val moved = List(2) { awaitOfType<FxChangedOutMessage>() }
+            assertTrue(moved.all { it.changeType == FxChangeType.UPDATED })
+            assertEquals<Set<Long?>>(setOf(low, high), moved.map { it.effectId }.toSet())
+            assertTrue(appliesUnder(high, low))
+
+            sendSerialized<InMessage>(ProgrammerMoveFxInMessage(low, above = null))
+            awaitOfType<FxChangedOutMessage>()
+            assertTrue(appliesUnder(low, high), "a second move undoes it")
+        }
+    }
+
+    @Test
+    fun `moveFx on an FX that is not Local is FX_MOVE_NOT_LOCAL`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val layered = pressPaletteLayer(client, quad)
+        val mine = client.pressed(pulse(quad)).effectId
+        val priorities = engine.getActiveEffects().associate { it.id to it.priority }
+
+        createWsClient().webSocket("/api") {
+            sendSerialized<InMessage>(ProgrammerMoveFxInMessage(layered.id))
+            val error = awaitOfType<FxErrorOutMessage>()
+            assertEquals(layered.id, error.effectId)
+            assertEquals(CODE_FX_MOVE_NOT_LOCAL, error.code)
+
+            sendSerialized<InMessage>(ProgrammerMoveFxInMessage(mine, above = layered.id))
+            assertEquals(CODE_FX_MOVE_NOT_LOCAL, awaitOfType<FxErrorOutMessage>().code, "nor below one")
+
+            sendSerialized<InMessage>(ProgrammerMoveFxInMessage(987_654L))
+            assertEquals(CODE_FX_NOT_FOUND, awaitOfType<FxErrorOutMessage>().code)
+        }
+        assertEquals(priorities, engine.getActiveEffects().associate { it.id to it.priority })
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private fun sine(targets: List<CueTargetDto>) =
+        ProgrammerEffectRequest(effectType = "SineWave", propertyName = "dimmer", targets = targets)
 
     /** An effect palette pressed as a layer onto [targets]; answers the instance it spawned. */
     private suspend fun pressPaletteLayer(client: HttpClient, targets: List<CueTargetDto>): FxInstance {

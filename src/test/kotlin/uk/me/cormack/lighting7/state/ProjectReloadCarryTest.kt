@@ -11,6 +11,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
+import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
 import uk.me.cormack.lighting7.fx.takeLooseCue
@@ -140,6 +141,23 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             state.show.fxEngine.getActiveEffects().any { it.target.targetKey == "hex-3" && it.cueId == null },
             "the hand-run effect is running again",
         )
+    }
+
+    @Test
+    fun `a reload keeps the order of the Local FX on a key, a moved one included`() = runBlocking {
+        LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
+        val types = listOf("SineWave", "Pulse", "CandleFlicker")
+        val started = types.map { EffectTestSupport.start(state, it, "hex-1", "dimmer", programmerBand = true) }
+        assertTrue(state.show.fxEngine.moveLocalEffect(started.last().id, aboveId = started.first().id) is FxEngine.LocalMoveOutcome.Moved)
+        fun applyOrder() = state.show.fxEngine.getActiveEffects()
+            .sortedWith(compareBy({ it.priority }, { it.composeOrder }, { it.id }))
+            .map { it.registrationId }
+        val before = applyOrder()
+        assertEquals(listOf("CandleFlicker", "SineWave", "Pulse"), before)
+
+        state.projectManager.switchProject(projectId, reload = true)
+
+        assertEquals(before, applyOrder())
     }
 
     @Test

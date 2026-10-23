@@ -56,3 +56,25 @@ describe('createFxApi — updateFx and fxError (fixture-fx-sheets plan W3)', () 
     expect(sent).toEqual([{ type: 'fxState' }])
   })
 })
+
+describe('createFxApi — programmer.moveFx (FX editor plan §3.5)', () => {
+  it('sends the FX and the one it goes under, null for the bottom', () => {
+    const { conn, sent } = fakeWsConnection()
+    const api = createFxApi(conn)
+
+    expect(api.moveFx(12, 7)).toBe(true)
+    expect(api.moveFx(12, null)).toBe(true)
+    expect(sent).toEqual([
+      { type: 'programmer.moveFx', effectId: 12, above: 7 },
+      { type: 'programmer.moveFx', effectId: 12, above: null },
+    ])
+  })
+
+  it('is a gesture: a dead socket sends nothing and answers false', () => {
+    const { conn, sent, setOpen } = fakeWsConnection()
+    const api = createFxApi(conn)
+    setOpen(false)
+    expect(api.moveFx(12, null)).toBe(false)
+    expect(sent).toEqual([])
+  })
+})

@@ -948,6 +948,34 @@ press — or at full at once over a value the programmer holds (effects plan §3
 at full first). Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
 with reason `BLIND`.
 
+**Local FX sit above every layer's FX** (FX editor plan D5, §3.5). Within the band, a programmer
+layer's FX sit at `BASE + layer index` (`ProgrammerLayerStack.priorityFor`, clamped at
+`PROGRAMMER_FX_RANK_CLAMP`) and Local FX (`FxInstance.isLocalEffect`) at
+`BASE + LOCAL_OFFSET + localRank`, `LOCAL_OFFSET = 200_000`, above the clamp — so every Local FX
+applies above every layer's FX, as Local values sit above every layer.
+`isProgrammerFxPriority` is unchanged, so suppression's exemption, Blind's hold, Clear and Release
+read the whole band as before. **This changed what wins:** a pressed FX palette that used to apply
+over a Local FX on the same key (any layer above the bottom one did) now applies under it.
+
+- **The rank.** `FxEngine.insert` ranks every new Local FX, whichever door made it (the bare press,
+  `/fx/add` with `programmerOwned`, *Apply as values*, Include's children): `localRank` is one above the
+  highest Local FX sharing a key with it — a head it covers and its attribute — else 0, so a new FX
+  takes the top of its lane. A head copy (a split, a narrowing) and an edit's swap keep their
+  parent's priority, taken again under the rank lock at the swap, so a move made meanwhile holds. A
+  layer's FX that **Detach** makes Local moves to the bottom of the Local FX, in the order it had,
+  so it stays under the Local FX it was already under, as Detach writes a layer's values beneath the
+  Local values already held. It also moves above every layer's FX, so where a higher layer's FX beat
+  it on a key, it now wins there (agreed with Chris in session 3a). A reload (`Show.resume`) adds
+  the carried FX back in apply order, so each lane's order survives it.
+- **`programmer.moveFx {effectId, above}`** (`FxEngine.moveLocalEffect`) re-ranks a Local FX directly
+  below `above`'s FX, or at the bottom of the Local FX for a null `above`. Every Local FX is put in one
+  list in apply order, the moved one taken out and put back below `above`, and from the bottom each
+  keeps its rank if it still applies after the one below it, else takes the lowest rank that does; the
+  moved FX always takes that lowest rank, so moving the other one back restores the order. Only
+  priorities change: nothing restarts. Answered `fxChanged(UPDATED)` per FX whose priority moved, or
+  `fxError` — `FX_MOVE_NOT_LOCAL` when either FX is not Local, `FX_NOT_FOUND` when either is not running.
+  Nothing is stored: Record's FX order is session 3b's.
+
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
 (fixture, property) and the effect — and the compose pass, provenance (`ProvenanceService.compute`)
@@ -1049,6 +1077,9 @@ Priority assignment:
 - Manual effects: `priority = 0`
 - Cue-owned effects: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
   (leaves gaps for future fine-tuning without renumbering)
+- A programmer layer's effects: `PROGRAMMER_FX_PRIORITY_BASE + layer index`
+- Local effects: `PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank`, above every layer's
+  (§"Programmer suppression and the priority band")
 
 The sorted snapshot is cached in one `@Volatile` field (`sortedEffects`) and rebuilt under a
 `synchronized` block on every mutation. The compose pass reads it lock-free.
@@ -1295,6 +1326,19 @@ effect). The route fixes only where it runs and whose it is:
   the new effect are one engine mutation (`FxEngine.replaceEffects`), so no head drops to the layer
   below between the old effect and the new; an effect another request swapped meanwhile is taken
   off its current instance. Answers `{effectId, stopped, narrowed: [{effectId, into}]}`.
+- **Stacking** (FX editor plan D6, §3.6). `stack: true` skips the replacement: the FX is added over
+  the selection and no other Local FX is stopped or narrowed, answered `{effectId, stopped: [],
+  narrowed: []}`. A blend or Amount (`size`) the request leaves out takes its family's stacking
+  start from `fx/FxStacking.kt`: Intensity `MULTIPLY` (*Within it*) at 100 %, Position `ADDITIVE`
+  (*Around current position*) at 100 % with `panCenter` and `tiltCenter` at 128 where the press
+  names neither the blend nor that centre — only for an FX that declares both centres; any other
+  Position FX (Palette Steps) outputs where to go, not an offset, and starts on `OVERRIDE` at 100 % —
+  and Colour and Beam `OVERRIDE` (*Replace it*) at 50 %. A blend or Amount the press names wins over the table. Without `stack` the
+  press is unchanged: `OVERRIDE` at 100 % when absent. MCP has no bare press, so no tool takes
+  `stack`.
+
+A new Local FX takes the top of its lane either way (§"Programmer suppression and the priority
+band"), so a stacked one applies above the Local FX it shares heads with.
 
 **The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, cells and groups, as a press
 names them), decided by `planSplit` against the heads the effect **paints** (`FxEngine.paintedHeads`:

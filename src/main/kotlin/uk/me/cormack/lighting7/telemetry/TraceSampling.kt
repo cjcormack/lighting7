@@ -83,6 +83,7 @@ object TraceSampling {
             "programmer.clearScenery",
             "programmer.clearTarget",
             "programmer.detachLayer",
+            "programmer.moveFx",
             "programmer.moveLayer",
             "programmer.removeLayer",
             "programmer.setBlind",

@@ -95,6 +95,12 @@ class FxEngine(
 
     // Read lock-free by the compose pass; rebuilt under [effectSnapshotLock] on mutation.
     private val effectSnapshotLock = Any()
+
+    /**
+     * Held while a Local FX's rank is read or written, or copied to an instance that replaces it: an
+     * insert, a swap, a Detach and a move.
+     */
+    private val localRankLock = Any()
     private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
 
     /** Every effect, beat and wall-clock alike, in apply order — what one compose pass folds. */
@@ -383,8 +389,23 @@ class FxEngine(
          */
         const val PROGRAMMER_FX_RANK_CLAMP = 100_000
 
+        /**
+         * Where Local FX start within the band (FX editor plan D5, §3.5): `BASE + LOCAL_OFFSET + localRank`,
+         * above every programmer layer's `BASE + layer index`, as Local values sit above every layer.
+         * Above [PROGRAMMER_FX_RANK_CLAMP], so no layer rank reaches it.
+         */
+        const val LOCAL_OFFSET = 200_000
+
         /** True when [priority] sits in the programmer-owned effect band. */
         fun isProgrammerFxPriority(priority: Int): Boolean = priority >= PROGRAMMER_FX_PRIORITY_BASE
+
+        /** The priority of a Local FX at [localRank]. */
+        fun localFxPriority(localRank: Int): Int =
+            PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank.coerceIn(0, PROGRAMMER_FX_RANK_CLAMP)
+
+        /** A Local FX's rank in the band, or -1 for a priority below the Local FX's part of it. */
+        fun localRankOf(priority: Int): Int =
+            (priority - (PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET)).coerceAtLeast(-1)
     }
 
     /**
@@ -897,7 +918,15 @@ class FxEngine(
         effect.speedMasterSlot = speedMasters.slotFor(effect.speedMasterUuid)
         effect.rateMasterSlot = rateSlotFor(effect.rateSpeedMasterUuid)
 
-        activeEffects[id] = effect
+        if (!carried && effect.isLocalEffect) {
+            // Ranked and published under the one lock, so a move or another insert sees it.
+            synchronized(localRankLock) {
+                effect.priority = localFxPriority(topLocalRankFor(effect))
+                activeEffects[id] = effect
+            }
+        } else {
+            activeEffects[id] = effect
+        }
         return id
     }
 
@@ -948,14 +977,18 @@ class FxEngine(
     ): Set<Long> {
         // By identity, so a copy is only ever added for a parent this call took out. The compose
         // pass keeps painting the parent from the sorted snapshot until the one rebuild below.
-        val removed = replace.keys.filter { activeEffects.remove(it.id, it) }
-        for (parent in removed) {
-            for (copy in replace.getValue(parent)) {
-                copy.takeRunningStateFrom(parent)
-                insert(copy, carried = true)
+        // Under the rank lock, so a move between building the copies and this swap reaches them.
+        val removed = synchronized(localRankLock) {
+            val removed = replace.keys.filter { activeEffects.remove(it.id, it) }
+            for (parent in removed) {
+                for (copy in replace.getValue(parent)) {
+                    copy.takeRunningStateFrom(parent)
+                    insert(copy, carried = true)
+                }
             }
+            fresh.forEach { insert(it) }
+            removed
         }
-        fresh.forEach { insert(it) }
         if (removed.isEmpty() && fresh.isEmpty()) return emptySet()
         rebuildSortedSnapshots()
         resetUncoveredProperties(removed)
@@ -1048,6 +1081,7 @@ class FxEngine(
 
     /** What a copy takes from its parent each time it is built or swapped in ([headCopies]). */
     private fun FxInstance.takeRunningStateFrom(parent: FxInstance) {
+        priority = parent.priority
         dynamicsRef.set(parent.dynamics.copy(elementFilter = ElementFilter.ALL))
         carryEnvelope(parent.envelope)
         lastPhase = parent.lastPhase
@@ -1381,8 +1415,13 @@ class FxEngine(
             }
 
             if (needsSwap) {
-                // By identity: a plain put would bring back an instance a split has just replaced.
-                if (!activeEffects.replace(effectId, existing, updated)) continue
+                // By identity: a plain put would bring back an instance a split has just replaced. The
+                // priority is taken again under the rank lock, so a move made since the copy holds.
+                val swapped = synchronized(localRankLock) {
+                    updated.priority = existing.priority
+                    activeEffects.replace(effectId, existing, updated)
+                }
+                if (!swapped) continue
                 rebuildSortedSnapshots()
             } else {
                 // A non-swap update can still move coverage (elementFilter changes the expansion);
@@ -1486,19 +1525,117 @@ class FxEngine(
     /**
      * A programmer layer's *Detach*, effect half: every instance [layerId] spawned loses its layer
      * key and its [FxInstance.source], so it is a Local effect ([FxInstance.isLocalEffect]) that
-     * keeps its id, phase and band priority and that no recook will retract. A spent N-shot is
-     * removed instead, since only a layer keeps one. Returns how many keep running.
+     * keeps its id and phase and that no recook will retract. It moves into the Local FX's part of
+     * the band at their bottom, in the order it had, so it stays under every Local FX it shares a
+     * key with — as Detach puts a layer's values beneath the Local values already held. A spent
+     * N-shot is removed instead, since only a layer keeps one. Returns how many keep running.
      */
     fun detachProgrammerLayerEffects(layerId: Int): Int {
         val spawned = activeEffects.values.filter { it.programmerLayerEffectKey?.layerId == layerId && !it.leaving }
         if (spawned.isEmpty()) return 0
         val (spent, running) = spawned.partition { it.spent }
-        for (effect in running) {
-            effect.programmerLayerEffectKey = null
-            effect.source = null
+        synchronized(localRankLock) {
+            val detached = running.sortedWith(sortedEffectsComparator)
+            val others = activeEffects.values.filter { it.isLocalEffect }.sortedWith(sortedEffectsComparator)
+            for (effect in detached) {
+                effect.programmerLayerEffectKey = null
+                effect.source = null
+            }
+            rerankLocal(detached + others, placed = detached.toSet())
         }
+        if (running.isNotEmpty()) rebuildSortedSnapshots()
         if (spent.isNotEmpty()) removeEffects(spent.map { it.id }) else emitStateUpdate()
         return running.size
+    }
+
+    /** What [moveLocalEffect] did. */
+    sealed interface LocalMoveOutcome {
+        /** The FX whose priority moved, the moved one included when it did. */
+        data class Moved(val changed: List<Long>) : LocalMoveOutcome
+
+        /** [effectId] is not running. */
+        data class NotFound(val effectId: Long) : LocalMoveOutcome
+
+        /** [effectId] is running but is not a Local FX, so it has no place among them. */
+        data class NotLocal(val effectId: Long) : LocalMoveOutcome
+    }
+
+    /**
+     * Re-rank Local FX [effectId] to sit directly below [aboveId]'s, or at the bottom of the Local FX
+     * when [aboveId] is null (`programmer.moveFx`, FX editor plan §3.5): every Local FX in one list in
+     * apply order, the moved one taken out and put back, then [rerankLocal]. Nothing restarts: only
+     * priorities change.
+     */
+    fun moveLocalEffect(effectId: Long, aboveId: Long?): LocalMoveOutcome {
+        val changed = ArrayList<Long>()
+        synchronized(localRankLock) {
+            val moved = activeEffects[effectId] ?: return LocalMoveOutcome.NotFound(effectId)
+            if (!moved.isLocalEffect) return LocalMoveOutcome.NotLocal(effectId)
+            val above = aboveId?.let { id ->
+                val found = activeEffects[id] ?: return LocalMoveOutcome.NotFound(id)
+                if (!found.isLocalEffect) return LocalMoveOutcome.NotLocal(id)
+                found
+            }
+            if (above === moved) return LocalMoveOutcome.Moved(emptyList())
+            val order = activeEffects.values.filter { it.isLocalEffect && it !== moved }
+                .sortedWith(sortedEffectsComparator).toMutableList()
+            val at = if (above == null) 0 else order.indexOf(above)
+            // [above] stopped being Local (a release let it go) since it was read.
+            if (at < 0) return LocalMoveOutcome.NotFound(aboveId!!)
+            order.add(at, moved)
+            changed += rerankLocal(order, placed = setOf(moved))
+        }
+        if (changed.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            emitStateUpdate()
+        }
+        return LocalMoveOutcome.Moved(changed)
+    }
+
+    /**
+     * Give Local FX [order], bottom first, the ranks that apply them in that order, answering the ids
+     * whose priority moved. From the bottom, each keeps its rank if that still applies it after the one
+     * below it, else takes the lowest rank that does; [placed] always take that lowest rank, so moving
+     * one back where it was restores the order. Under [localRankLock].
+     */
+    private fun rerankLocal(order: List<FxInstance>, placed: Set<FxInstance>): List<Long> {
+        val changed = ArrayList<Long>()
+        var below: FxInstance? = null
+        var belowRank = -1
+        for (effect in order) {
+            val rank = localRankOf(effect.priority)
+            val lowest = when {
+                below == null -> 0
+                compareValuesBy(effect, below, { it.composeOrder }, { it.id }) > 0 -> belowRank
+                else -> belowRank + 1
+            }
+            val next = if (effect !in placed && rank >= lowest) rank else lowest
+            if (next != rank) {
+                effect.priority = localFxPriority(next)
+                changed += effect.id
+            }
+            below = effect
+            belowRank = next
+        }
+        return changed
+    }
+
+    /**
+     * The rank that puts Local FX [effect] at the top of its lanes: one above the highest FX in the
+     * Local part of the band sharing a key with it — a head it covers and its attribute — else 0. One
+     * still fading out counts, so a new FX never starts under it. Under [localRankLock].
+     */
+    private fun topLocalRankFor(effect: FxInstance): Int {
+        val propertyName = effect.target.propertyName
+        val keys = resolveEffectFixtureKeys(effect).toHashSet()
+        var highest = -1
+        for (other in activeEffects.values) {
+            if (other === effect || other.target.propertyName != propertyName) continue
+            val rank = localRankOf(other.priority)
+            if (rank <= highest) continue
+            if (resolveEffectFixtureKeys(other).any { it in keys }) highest = rank
+        }
+        return highest + 1
     }
 
     /**

@@ -10,6 +10,7 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.BeatDivision
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
+import uk.me.cormack.lighting7.fx.FxStacking
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -48,6 +49,14 @@ internal const val CODE_EFFECT_NEEDS_SELECTION = "EFFECT_NEEDS_SELECTION"
  *   a palette's or a Look's, is left alone: the press's twin for layers is the family replacement in
  *   `fx/LayerPress.kt`. All of it, the new effect included, is one engine mutation, so no head
  *   drops to the layer below between the old effect and the new.
+ * - **Stacking** (FX editor plan D6, §3.6). `stack: true` skips the replacement: the FX is added on
+ *   top of the Local FX already running, and nothing is stopped or narrowed. A blend or Amount
+ *   (`size`) the request leaves out takes its family's stacking start ([FxStacking]): Intensity
+ *   *Within it*, Position *Around current position* with its centres at 128, Colour and Beam
+ *   *Replace it* at 50 %.
+ *
+ * A new Local FX takes the top of its lanes (FX editor plan §3.5, [FxEngine.addEffect]), so it
+ * applies above every Local FX it shares a key with, stacked or not.
  *
  * Every field `POST /fx/add` reads that describes the effect is taken (the timing and dynamics
  * fields of S15 and the effects plan's sessions 1–2 among them), and built by the same
@@ -87,7 +96,8 @@ internal data class ProgrammerEffectRequest(
     val parameters: Map<String, String> = emptyMap(),
     /** One bar when absent (venue-visit plan D16). */
     val beatDivision: Double? = null,
-    val blendMode: String = "OVERRIDE",
+    /** `OVERRIDE` when absent, or the family's stacking start under [stack]. */
+    val blendMode: String? = null,
     val startOnBeat: Boolean = true,
     val phaseOffset: Double = 0.0,
     val distributionStrategy: String? = null,
@@ -98,13 +108,16 @@ internal data class ProgrammerEffectRequest(
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     val seconds: Boolean = false,
-    val size: Double = 1.0,
+    /** 1.0 when absent, or the family's stacking start under [stack]. */
+    val size: Double? = null,
     val direction: String = "FORWARD",
     val nShot: Int? = null,
     val spread: Double = 1.0,
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
+    /** Add the FX on top of the Local FX on the selection, replacing none (FX editor plan D6). */
+    val stack: Boolean = false,
 )
 
 /**
@@ -142,35 +155,36 @@ internal fun pressBareEffect(
     } else {
         usageMasterUuidFor(state.show.fxRegistry, engine.speedMasters, request.effectType)?.toString()
     }
-    val instance = try {
-        buildEffectInstance(
-            state,
-            AddEffectRequest(
-                effectType = request.effectType,
-                propertyName = request.propertyName,
-                targets = request.targets,
-                beatDivision = request.beatDivision ?: BeatDivision.ONE_BAR,
-                blendMode = request.blendMode,
-                startOnBeat = request.startOnBeat,
-                phaseOffset = request.phaseOffset,
-                parameters = request.parameters,
-                distributionStrategy = request.distributionStrategy,
-                elementMode = request.elementMode,
-                elementFilter = request.elementFilter,
-                stepTiming = request.stepTiming,
-                speedMasterUuid = stamped,
-                rateSpeedMasterUuid = request.rateSpeedMasterUuid,
-                seconds = request.seconds,
-                size = request.size,
-                direction = request.direction,
-                nShot = request.nShot,
-                spread = request.spread,
-                wings = request.wings,
-                blocks = request.blocks,
-                groups = request.groups,
-                programmerOwned = true,
-            ),
-        )
+    fun build(start: FxStacking.Start?) = buildEffectInstance(
+        state,
+        AddEffectRequest(
+            effectType = request.effectType,
+            propertyName = request.propertyName,
+            targets = request.targets,
+            beatDivision = request.beatDivision ?: BeatDivision.ONE_BAR,
+            blendMode = request.blendMode ?: start?.blendMode?.name ?: "OVERRIDE",
+            startOnBeat = request.startOnBeat,
+            phaseOffset = request.phaseOffset,
+            parameters = request.parameters + stackingParameters(request, start),
+            distributionStrategy = request.distributionStrategy,
+            elementMode = request.elementMode,
+            elementFilter = request.elementFilter,
+            stepTiming = request.stepTiming,
+            speedMasterUuid = stamped,
+            rateSpeedMasterUuid = request.rateSpeedMasterUuid,
+            seconds = request.seconds,
+            size = request.size ?: start?.size ?: 1.0,
+            direction = request.direction,
+            nShot = request.nShot,
+            spread = request.spread,
+            wings = request.wings,
+            blocks = request.blocks,
+            groups = request.groups,
+            programmerOwned = true,
+        ),
+    )
+    var instance = try {
+        build(start = null)
     } catch (e: Exception) {
         return BareEffectOutcome.Invalid(e.message ?: "Could not start the effect")
     }
@@ -180,6 +194,21 @@ internal fun pressBareEffect(
             "'${request.propertyName}' is ${family?.name ?: "no attribute"}, outside the selection's mask",
             CODE_EFFECT_OUTSIDE_MASK,
         )
+    }
+
+    if (request.stack) {
+        // The family is read off a built instance, so one that stacks is built again on its start.
+        if (family != null && (request.blendMode == null || request.size == null)) {
+            val declared = state.show.fxRegistry.getRegistration(request.effectType)?.parameters
+                ?.mapTo(HashSet()) { it.name }.orEmpty()
+            instance = try {
+                build(FxStacking.startFor(family, declared))
+            } catch (e: Exception) {
+                return BareEffectOutcome.Invalid(e.message ?: "Could not start the effect")
+            }
+        }
+        engine.addEffect(instance)
+        return BareEffectOutcome.Done(ProgrammerEffectResponse(effectId = instance.id))
     }
 
     // Local replacement: the selected heads come off every other Local effect of this family.
@@ -216,6 +245,15 @@ internal fun pressBareEffect(
             narrowed = narrowed.map { (id, copies) -> NarrowedEffectDto(id, copies.map { it.id }) },
         ),
     )
+}
+
+/**
+ * The parameters a stacking start adds: those it names that the request does not set, and only when
+ * the start's blend is the one used — Position's centres belong to *Around*.
+ */
+private fun stackingParameters(request: ProgrammerEffectRequest, start: FxStacking.Start?): Map<String, String> {
+    if (start == null || request.blendMode != null) return emptyMap()
+    return start.parameters.filterKeys { it !in request.parameters }
 }
 
 /**

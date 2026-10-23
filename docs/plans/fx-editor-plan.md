@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; session 2 of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 2 and 3a of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -228,7 +228,9 @@ The bare FX press gains `stack: true`: the FX is added over the selection, no ot
 stopped or narrowed, and an absent blend or Amount takes the family's stacking start
 (`fx/FxStacking.kt`, one table: Intensity `MULTIPLY` at 100 %, Position `ADDITIVE` with both centres
 at 128 at 100 %, Colour and Beam `OVERRIDE` at 50 %). The answer is `{effectId, stopped: 0,
-narrowed: 0}`. MCP's FX tools take the same `stack` field.
+narrowed: 0}`. No MCP tool presses a bare FX (`apply_palette`, `clear_effects` and the stored FX on
+`create_look` and `create_cue` are the FX tools), so none takes `stack`; agreed with Chris during
+session 3a.
 
 ## 4. UX
 
@@ -414,7 +416,7 @@ Why each gate is where it is:
   N-shot ends behave per clock as before; once 1a has landed, the parity test gains a mixed pair.
 - **Docs**: the corrected §"Beat ↔ Wall-Clock interaction"; `FU-PERF-FRAME-TXN-UNIFY` to Completed.
 
-### Session 3a: the band and Stack (backend)
+### Session 3a: the band and Stack (backend) — done, `4e01c253`
 
 **Gate: none.** Best landed before terminology session 5.
 
@@ -422,7 +424,7 @@ Why each gate is where it is:
   Nothing stored. The client's types and the store's mutation for the frame and the field; no UI.
 - **Tests**: a Local FX sits above a layer FX on the same key; a move re-ranks and a second move
   undoes it; a non-Local FX's move is `FX_MOVE_NOT_LOCAL`; `stack: true` stops nothing and starts on
-  the family table; MCP schemas.
+  the family table. No MCP schema: no tool presses a bare FX (§3.6).
 - **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", with the behaviour
   change, and §"Effect iteration order" (which still says `id` breaks ties; it is `composeOrder`).
 
