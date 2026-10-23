@@ -34,7 +34,7 @@ describe('usage vocabulary vs the effect library', () => {
   it('excludes the two categories that cannot own a tempo', () => {
     // `controls` is settings sliders — a level has no beat. `composite` spans families, so no
     // single master is *the* default for it. Both land on master 1 through a null uuid, which
-    // is what an unmatched category is defined to do. lighting7's SpeedMasterUsageVocabularyTest
+    // is what an unmatched category is defined to do. lighting7's GlossaryVocabularyTest
     // asserts the same two exclusions on the server's copy of this list.
     expect(SPEED_MASTER_USAGES).not.toContain('controls')
     expect(SPEED_MASTER_USAGES).not.toContain('composite')

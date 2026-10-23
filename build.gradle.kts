@@ -1036,6 +1036,12 @@ tasks.test {
     // eight lines of WARNING that bury anything real.
     jvmArgs(application.applicationDefaultJvmArgs)
 
+    // GlossaryVocabularyTest reads docs/glossary.md, which is on no classpath: without this input a
+    // glossary-only edit is restored from the build cache and never checked.
+    inputs.file(layout.projectDirectory.file("docs/glossary.md"))
+        .withPropertyName("glossary")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+
     // Forward opt-in test flags to the forked test JVM. `fx.benchmark` gates the
     // FxEngineBenchmark harness; `dmx.benchmark` gates the DMX setValues benchmark. Both are
     // skipped by default and run for ~10 s when enabled. (`cueedit.profile` used to be a third
