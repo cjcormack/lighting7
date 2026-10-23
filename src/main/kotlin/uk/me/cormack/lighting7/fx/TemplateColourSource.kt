@@ -195,6 +195,23 @@ private fun resolveTemplateColour(registry: TemplateRegistry, uuid: UUID): Exten
 }
 
 /**
+ * Why [parameters] are refused for an effect of [schema], or null: a `colourList` parameter — Colour
+ * Cycle's `colours` — takes literal colours only (terminology plan D14), and Palette Steps is the FX
+ * that steps through palettes. Every write boundary that takes an effect's parameters asks this,
+ * through `routes/storedFxRules.kt`'s `fxWriteProblem`.
+ */
+fun colourListPaletteProblem(schema: List<ParameterInfo>, parameters: Map<String, String>): String? {
+    val named = schema.firstOrNull { p ->
+        p.type == "colourList" && parameters[p.name].orEmpty().split(",").any { isTemplateColourRef(it) }
+    } ?: return null
+    return "'${named.name}' takes literal colours only, not a palette — Palette Steps steps through palettes"
+}
+
+/** [colourListPaletteProblem] for the effect type [effectType] names; null for a type this desk lacks. */
+fun FxRegistry.colourListPaletteProblem(effectType: String, parameters: Map<String, String>): String? =
+    getRegistration(effectType)?.let { colourListPaletteProblem(it.parameters, parameters) }
+
+/**
  * Every template uuid the `tmpl:` references in [parameters] name — the whole set a spawning
  * effect depends on, which is both what has to be pre-warmed and what its colour cache's version
  * is scoped to ([TemplateRegistry.versionFor]).

@@ -1807,11 +1807,6 @@ class FxEngine(
 
     /**
      * Calculate the output for an effect, handling stateless and stateful effects.
-     *
-     * A [CompositeEffect] needs no arm of its own: one [FxInstance] drives one
-     * [FxTarget], so its `calculate` default picks the entry matching the effect's
-     * primary [Effect.outputType] out of the composite map and the rest are ignored.
-     * See `docs/fx-engineering.md` §"Composite Effects".
      */
     private fun calculateEffectOutput(
         effect: FxInstance,

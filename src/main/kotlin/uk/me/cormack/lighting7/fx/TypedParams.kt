@@ -76,7 +76,7 @@ class TypedParams(
      * `GET /fx/library` served `defaultValue: ""`, the Add FX sheet seeded its form from that, and
      * the resulting `{"min":"","max":""}` was persisted into `cue_effects` / `look_effects` /
      * `cue_ad_hoc_effects` verbatim. Those rows exist on the desk today. Preferring a present-but-
-     * empty value over the schema default would leave every one of them dead — a `Breathe` parked
+     * empty value over the schema default would leave every one of them dead — a `SineWave` parked
      * at 0, a `Circle` with no radius — while an identical newly-added effect worked, with nothing
      * in the UI to tell them apart. No effect parameter has a meaningful empty value, so treating
      * blank as "not set" heals the stored rows and costs nothing.
@@ -135,12 +135,10 @@ class TypedParams(
     }
 
     /**
-     * Parse a comma-separated list of colour strings, resolving template references.
-     * Results are cached and only re-resolved when the colour source's version changes.
-     *
-     * A reference the source refuses is **dropped** rather than replaced, which is the one place
-     * this differs from [colour]: a list is allowed to be shorter, and a white entry in the middle
-     * of a colour cycle reads as a deliberate flash.
+     * Parse a comma-separated list of literal colours (terminology plan D14). A palette reference
+     * names no colour here — Palette Steps is the FX that steps through palettes — so one is
+     * **dropped** like any other entry that is no colour, as [colourListPaletteProblem] refuses it at
+     * every write boundary. Cached as [colour] is.
      */
     fun colourList(name: String): List<ExtendedColour> {
         return currentColourCaches().colourLists.getOrPut(name) {
@@ -152,8 +150,7 @@ class TypedParams(
                 value.split(",").mapNotNull { str ->
                     val trimmed = str.trim()
                     when {
-                        trimmed.isEmpty() -> null
-                        isTemplateColourRef(trimmed) -> resolveColourSource?.invoke(trimmed)
+                        trimmed.isEmpty() || isTemplateColourRef(trimmed) -> null
                         else -> parseExtendedColour(trimmed)
                     }
                 }

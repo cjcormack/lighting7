@@ -9,7 +9,6 @@ package uk.me.cormack.lighting7.scripts
  * - [FX_APPLICATION] — scripts that apply effects to fixtures/groups with implicit engine
  * - [FX_CALC] — FX calculate body (phase, context, params → FxOutput)
  * - [FX_CALC_STATEFUL] — FX stateful calculate body (tick, deltaMs, context, params, state → FxOutput)
- * - [FX_CALC_COMPOSITE] — FX composite calculate body (phase, context, params → Map)
  */
 enum class ScriptType {
     /** Full-power script using [LightingScript] base class. */
@@ -26,7 +25,4 @@ enum class ScriptType {
 
     /** FX stateful calculate body using [FxStatefulCalcScript] base class. */
     FX_CALC_STATEFUL,
-
-    /** FX composite calculate body using [FxCompositeCalcScript] base class. */
-    FX_CALC_COMPOSITE,
 }

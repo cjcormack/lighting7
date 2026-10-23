@@ -54,7 +54,7 @@ const TEMPLATES: TemplateSummary[] = [
     requiredEmitters: [],
     rows: [],
     effect: {
-      effectType: 'ColourPulse',
+      effectType: 'ColourWave',
       category: 'colour',
       beatDivision: 0.5,
       blendMode: 'OVERRIDE',

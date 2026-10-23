@@ -78,7 +78,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
             // No stack makes a loose cue (cue model plan D1).
             val cueStackId = newCue.cueStackId
-            validateCueChildren(newCue.adHocEffects, newCue.layers, newCue.propertyAssignments)?.let { problem ->
+            validateCueChildren(newCue.adHocEffects, newCue.layers, newCue.propertyAssignments, state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -117,6 +117,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     newCue.triggers,
                     newCue.layers,
                     created = true,
+                    registry = state.show.fxRegistry,
                 )
                 // Its place is its entry's: at `sortOrder` (a position in the list), else appended.
                 // A cue created without a number gets one derived from where it landed.
@@ -179,7 +180,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewCue>()
-            validateCueChildren(updatedData.adHocEffects, updatedData.layers, updatedData.propertyAssignments)?.let { problem ->
+            validateCueChildren(updatedData.adHocEffects, updatedData.layers, updatedData.propertyAssignments, state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -210,6 +211,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     updatedData.propertyAssignments,
                     updatedData.triggers,
                     updatedData.layers,
+                    registry = state.show.fxRegistry,
                 )
                 stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
@@ -259,7 +261,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val layers = if (hasLayers)
                 json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
             else null
-            validateCueChildren(effects ?: emptyList(), layers ?: emptyList(), assignments ?: emptyList())?.let { problem ->
+            validateCueChildren(effects ?: emptyList(), layers ?: emptyList(), assignments ?: emptyList(), state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -290,7 +292,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 if (speedMasters != null) cue.speedMasters = speedMasters
 
                 // Only the lists present are replaced; a null one is left alone.
-                writeCueChildren(cue, effects, assignments, triggers, layers)
+                writeCueChildren(cue, effects, assignments, triggers, layers, registry = state.show.fxRegistry)
                 stageChanged = stageBefore != null && cue.stageContent() != stageBefore
 
                 cue.toCueDetails(isCurrentProject = true, state.show.fixtures)

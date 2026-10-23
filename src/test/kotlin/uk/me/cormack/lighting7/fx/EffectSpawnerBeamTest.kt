@@ -16,8 +16,8 @@ import kotlin.test.assertNull
  */
 class EffectSpawnerBeamTest : RouteIntegrationTest() {
 
-    private val zoomBreathe = LookEffectSpec(
-        effectType = "ZoomBreathe", category = "beam", beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+    private val zoomWave = LookEffectSpec(
+        effectType = "ZoomWave", category = "beam", beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR",
     )
 
     private fun seed() {
@@ -30,21 +30,21 @@ class EffectSpawnerBeamTest : RouteIntegrationTest() {
     fun `a selection whose first item lacks the property still drives the head that has it`() {
         seed()
         val selection = EffectTargetRef.of(listOf(TargetRef.Fixture("hex-1"), TargetRef.Fixture("rev-1")))
-        val target = EffectSpawner.resolveTargetForCue(state, selection, zoomBreathe)
+        val target = EffectSpawner.resolveTargetForCue(state, selection, zoomWave)
         assertEquals(SliderTarget(FxTargetRef.SelectionRef(selection as EffectTargetRef.Selection), "zoom"), target)
     }
 
     @Test
     fun `a group where a member lacks the property is skipped, as a dimmer effect on a dimmerless group is`() {
         seed()
-        assertNull(EffectSpawner.resolveTargetForCue(state, EffectTargetRef.Single(TargetRef.Group("mixed")), zoomBreathe))
+        assertNull(EffectSpawner.resolveTargetForCue(state, EffectTargetRef.Single(TargetRef.Group("mixed")), zoomWave))
     }
 
     @Test
     fun `a group whose members have the property takes it`() {
         seed()
         LocateTestSupport.seedGroup(state, projectId, "revs", "rev-1")
-        val target = EffectSpawner.resolveTargetForCue(state, EffectTargetRef.Single(TargetRef.Group("revs")), zoomBreathe)
+        val target = EffectSpawner.resolveTargetForCue(state, EffectTargetRef.Single(TargetRef.Group("revs")), zoomWave)
         assertEquals(SliderTarget(FxTargetRef.group("revs"), "zoom"), target)
     }
 }

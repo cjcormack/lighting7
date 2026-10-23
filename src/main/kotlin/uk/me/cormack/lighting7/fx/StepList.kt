@@ -12,12 +12,22 @@ const val PALETTE_STEPS_ID = "PaletteSteps"
 const val SLOT_STEPS_ID = "SlotSteps"
 
 /**
- * The category Palette Steps registers under, which names no family on purpose: the effect sits in
- * the family of the palettes it is given (§3.6, §4.4), so a stored Palette Steps carries that
- * family's category (`colour`, `position`, `dimmer`, `beam`) and [paletteStepsCategory] is what
- * says which.
+ * The category the Steps FX, Palette Steps and Slot Steps, register under: the library's Steps
+ * family (terminology plan D23). It names no attribute family on purpose, since each sits in the
+ * family of what it steps, and a stored one carries that family's category ([stepsFxCategory]).
  */
-const val PALETTE_STEPS_CATEGORY = "palette"
+const val STEPS_CATEGORY = "palette"
+
+/**
+ * The category a Steps FX is stored and stamped under, or null for any other FX, whose own category
+ * stands: Slot Steps steps a setting, so Beam; Palette Steps the family of its palettes, which only
+ * the caller can name ([paletteFamilyCategory], null when it cannot).
+ */
+fun stepsFxCategory(fxId: String, paletteFamilyCategory: String?): String? = when {
+    fxId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
+    fxId.equals(PALETTE_STEPS_ID, ignoreCase = true) -> paletteFamilyCategory
+    else -> null
+}
 
 /**
  * The property sentinels an effect registration may declare and the client offers an effect

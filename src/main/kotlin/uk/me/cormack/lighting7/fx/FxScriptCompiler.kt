@@ -145,11 +145,6 @@ class FxScriptCompiler(
                         providedProperties(Pair("params", TypedParams(emptyMap(), emptyList())))
                         providedProperties(Pair("state", mutableMapOf<String, Any>()))
                     }
-                    EffectMode.COMPOSITE -> {
-                        providedProperties(Pair("phase", 0.0))
-                        providedProperties(Pair("context", EffectContext.SINGLE))
-                        providedProperties(Pair("params", TypedParams(emptyMap(), emptyList())))
-                    }
                 }
             })
         }
@@ -190,22 +185,17 @@ class FxScriptCompiler(
                 @Suppress("UNCHECKED_CAST")
                 lambda as? (MasterClock.ClockTick, Long, EffectContext, TypedParams, MutableMap<String, Any>) -> FxOutput
             } else null,
-            compositeFn = if (effectMode == EffectMode.COMPOSITE) {
-                @Suppress("UNCHECKED_CAST")
-                lambda as? (Double, EffectContext, TypedParams) -> Map<FxOutputType, FxOutput>
-            } else null,
         )
     }
 
     /**
-     * FX-calc effect modes are the same three script types the rest of the app knows, under a
+     * FX-calc effect modes are the same two script types the rest of the app knows, under a
      * different name — mapping here keeps [ScriptSourceWrapper] the only place that knows how
      * either is wrapped or configured.
      */
     private fun EffectMode.asScriptType() = when (this) {
         EffectMode.STANDARD -> ScriptType.FX_CALC
         EffectMode.STATEFUL -> ScriptType.FX_CALC_STATEFUL
-        EffectMode.COMPOSITE -> ScriptType.FX_CALC_COMPOSITE
     }
 
     private fun compilationConfigFor(effectMode: EffectMode) =
@@ -240,7 +230,7 @@ class FxScriptCompiler(
 /**
  * A compiled FX script with an extracted lambda for direct invocation.
  *
- * Exactly one of [standardFn], [statefulFn], or [compositeFn] will be non-null
+ * Exactly one of [standardFn] or [statefulFn] will be non-null
  * for successful compilations, matching the [effectMode].
  */
 data class CompiledFxScript(
@@ -251,8 +241,6 @@ data class CompiledFxScript(
     val standardFn: ((Double, EffectContext, TypedParams) -> FxOutput)? = null,
     /** Direct lambda for STATEFUL effects: (tick, deltaMs, context, params, state) -> FxOutput */
     val statefulFn: ((MasterClock.ClockTick, Long, EffectContext, TypedParams, MutableMap<String, Any>) -> FxOutput)? = null,
-    /** Direct lambda for COMPOSITE effects: (phase, context, params) -> Map<FxOutputType, FxOutput> */
-    val compositeFn: ((Double, EffectContext, TypedParams) -> Map<FxOutputType, FxOutput>)? = null,
 )
 
 data class FxCompileDiagnostic(

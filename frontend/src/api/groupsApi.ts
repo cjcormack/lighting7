@@ -64,7 +64,6 @@ export type DistributionStrategy =
   | 'CENTER_OUT'
   | 'EDGES_IN'
   | 'REVERSE'
-  | 'SPLIT'
   | 'PING_PONG'
   | 'RANDOM'
   | 'POSITIONAL'

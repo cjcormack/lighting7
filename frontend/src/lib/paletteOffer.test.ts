@@ -53,9 +53,9 @@ describe('paletteFits', () => {
         effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR', parameters: {}, ...extra },
       })
     const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
-    const library = [{ name: 'ZoomBreathe', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
+    const library = [{ name: 'ZoomWave', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
     // A beam built-in by the library's property.
-    expect(paletteFits(effect('ZoomBreathe'), zoomFit, { library })).toBe(true)
+    expect(paletteFits(effect('ZoomWave'), zoomFit, { library })).toBe(true)
     expect(paletteFits(effect('IrisPulse'), zoomFit, { library })).toBe(false)
     // Slot Steps by the setting it names.
     expect(paletteFits(effect('SlotSteps', { propertyName: 'gobo' }), { ...zoomFit, property: 'gobo' })).toBe(true)

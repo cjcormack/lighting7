@@ -16,7 +16,7 @@ import java.awt.Color
  *        Effects use this to decide whether to chase (windowed) or apply uniformly.
  * @param numDistinctSlots Number of unique offset positions in the distribution. Equals
  *        groupSize for asymmetric distributions (LINEAR, REVERSE, RANDOM), but fewer for
- *        symmetric ones (CENTER_OUT, SPLIT) where multiple members share an offset.
+ *        symmetric ones (CENTER_OUT, EDGES_IN) where multiple members share an offset.
  *        A step chase uses this for window width: `1/numDistinctSlots`.
  * @param trianglePhase When true, the base phase should be remapped through a triangle wave
  *        before windowing, so the chase sweeps forward then backward (PING_PONG).
@@ -69,8 +69,6 @@ enum class EffectMode {
     STANDARD,
     /** Maintains state across ticks: receives (tick, deltaMs, context, params, state) → FxOutput */
     STATEFUL,
-    /** Produces multiple output types: receives (phase, context, params) → Map<FxOutputType, FxOutput> */
-    COMPOSITE,
 }
 
 /**
@@ -131,6 +129,13 @@ interface Effect {
      * per-instance via [FxInstance.stepTiming].
      */
     val defaultStepTiming: Boolean get() = false
+
+    /**
+     * Default [EffectDirection] for new instances: Bounce for an FX written as one way of a there and
+     * back (Colour Fade, Focus Pull, the sweeps), else Forward. Read from the frontmatter's
+     * `defaultDirection`, as [defaultStepTiming] is from `defaultStepTiming`.
+     */
+    val defaultDirection: EffectDirection get() = EffectDirection.FORWARD
 
     /**
      * Calculate the output value for the given phase.
@@ -198,66 +203,6 @@ interface StatefulEffect : Effect {
             FxOutputType.STEPS -> FxOutput.Steps(0, 0, 0.0, StepList.EMPTY)
         }
     }
-}
-
-/**
- * An effect whose calculation naturally produces a map of outputs, of which the engine
- * applies exactly one: the entry matching [outputType].
- *
- * **Composite effects are primary-output-only.** An [FxInstance] drives one [FxTarget], so
- * a single instance can only write one property; entries in the returned map other than
- * [outputType] are computed and discarded. The interface exists because some effects are
- * most naturally *written* as a coordinated set — `LightningStrike` derives its flash
- * brightness and its white→blue colour shift from one phase — and because `.fx.kts`
- * definitions can declare [EffectMode.COMPOSITE].
- *
- * Coordinating two properties therefore means two instances, one per property, on the same
- * speed master. There is no multi-target wiring: a `FxInstance.compositeTargets` field and
- * the engine branch that read it existed but were never populated, and were removed rather
- * than finished (sweep item A4). Restoring the ambition means giving [FxInstance] secondary
- * targets *and* an authoring surface that can name them — see `FU-SPEED-PER-ATTRIBUTE` in
- * `docs/plans/followups.md` for the design note.
- *
- * Because only one entry survives, an effect's `compatibleProperties` must list only
- * properties of its [outputType]; advertising others makes the engine silently drop the
- * output ([FxTarget] ignores a mismatched [FxOutput]).
- *
- * Example:
- * ```
- * class LightningStrike : CompositeEffect {
- *     override val outputType = FxOutputType.SLIDER   // the one that is applied
- *
- *     override fun calculateComposite(phase: Double, context: EffectContext): Map<FxOutputType, FxOutput> {
- *         val intensity = if (phase < 0.1) 255 else (255 * (1.0 - phase)).toInt()
- *         return mapOf(
- *             FxOutputType.SLIDER to FxOutput.Slider(intensity.toUByte()),
- *             FxOutputType.COLOUR to FxOutput.Colour(blendExtendedColours(white, blue, phase))
- *         )
- *     }
- * }
- * ```
- */
-interface CompositeEffect : Effect {
-    /**
-     * Calculate outputs for all property types this effect coordinates. Only the
-     * [outputType] entry is applied; see the interface KDoc.
-     *
-     * @param phase Position in the effect cycle, from 0.0 (start) to 1.0 (end)
-     * @param context Information about the distribution group (size, member index)
-     * @return Map of output type to calculated value
-     */
-    fun calculateComposite(
-        phase: Double,
-        context: EffectContext = EffectContext.SINGLE,
-    ): Map<FxOutputType, FxOutput>
-
-    /**
-     * Picks the primary output out of the composite map — the engine's only entry point,
-     * so this is what makes composites primary-output-only.
-     */
-    override fun calculate(phase: Double, context: EffectContext): FxOutput =
-        calculateComposite(phase, context)[outputType]
-            ?: error("CompositeEffect did not produce output for primary type $outputType")
 }
 
 /** Serialize a Color to a hex string (e.g., "#ff0000") */

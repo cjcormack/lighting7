@@ -58,7 +58,7 @@ data class EffectDto(
     val lookId: Int? = null,
     /** The template this effect came from, when it came from one. Never set beside [lookId]. */
     val templateId: Int? = null,
-    /** That record's name — what `FX running` renders as *in Amber Breathe*, with no second lookup. */
+    /** That record's name — what `FX running` renders as *in Amber Wave*, with no second lookup. */
     val sourceName: String? = null,
     /** The programmer layer that spawned this effect, when one did. */
     val programmerLayerId: Int? = null,

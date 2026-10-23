@@ -130,6 +130,7 @@ internal fun performProgrammerRecord(
                 cueNumber = cueNumber?.takeIf { it.isNotBlank() },
                 sortOrder = sortOrder,
                 cueType = cueType,
+                registry = state.show.fxRegistry,
             )
             if (stack != null) priorities = stackEntryPriorities(stack)
             val cue = DaoCue.findById(outcome.cueId)!!

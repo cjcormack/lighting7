@@ -62,13 +62,6 @@ object ScriptSourceWrapper {
             "tick, deltaMs, context, params, state",
             userScript,
         )
-
-        ScriptType.FX_CALC_COMPOSITE -> calcLambda(
-            "(Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) " +
-                "-> Map<uk.me.cormack.lighting7.fx.FxOutputType, uk.me.cormack.lighting7.fx.FxOutput>",
-            "phase, context, params",
-            userScript,
-        )
     }
 
     /** The compilation configuration for [scriptType]'s template. */
@@ -79,7 +72,6 @@ object ScriptSourceWrapper {
             ScriptType.FX_APPLICATION -> createJvmCompilationConfigurationFromTemplate<FxApplicationScript>()
             ScriptType.FX_CALC -> createJvmCompilationConfigurationFromTemplate<FxCalcScript>()
             ScriptType.FX_CALC_STATEFUL -> createJvmCompilationConfigurationFromTemplate<FxStatefulCalcScript>()
-            ScriptType.FX_CALC_COMPOSITE -> createJvmCompilationConfigurationFromTemplate<FxCompositeCalcScript>()
         }
 
     /**

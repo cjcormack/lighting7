@@ -13,14 +13,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 import { FxColourListPicker } from './FxColourListPicker'
 import { store } from '@/store'
 
-/**
- * The colour swatches, in order, by rendered background.
- *
- * A **template reference** shows as `rgb(0, 0, 0)` here: the swatch is painted from the template's
- * own colour, and these tests run with no project in the route, so the template query is skipped and
- * nothing resolves. That is the right shape to assert on — what matters below is that the reference
- * survives as a *list entry* with a stable identity, not what colour it happens to paint.
- */
+/** The colour swatches, in order, by rendered background. */
 const swatchLabels = (container: HTMLElement) =>
   Array.from(container.querySelectorAll('button[style*="background-color"]')).map(
     (b) => (b as HTMLElement).style.backgroundColor,
@@ -28,8 +21,6 @@ const swatchLabels = (container: HTMLElement) =>
 
 const addColour = () => fireEvent.click(screen.getByTitle('Add colour'))
 
-// A Router is required: `useColourTemplates` reads `projectId` from the route. No project here, so
-// the template list query is skipped — see the note on `swatchLabels`.
 const withStore = (ui: React.ReactNode) => (
   <Provider store={store}>
     <MemoryRouter>{ui}</MemoryRouter>
@@ -40,7 +31,6 @@ const HAND_OVER = 'hand over a different list'
 const handOver = () => fireEvent.click(screen.getByTitle(HAND_OVER))
 
 const WARM = 'tmpl:2f1c8a3e-0000-4000-8000-000000000001'
-const COLD = 'tmpl:2f1c8a3e-0000-4000-8000-000000000002'
 
 /**
  * Mirrors how the effect editor (`FxEffectFields`) drives the picker: whatever comes out of
@@ -97,50 +87,41 @@ describe('FxColourListPicker', () => {
     expect(swatchLabels(container)).toEqual(['rgb(0, 0, 255)'])
   })
 
-  // A list is a mix of literals and references, and an edit to one entry must leave the other's
-  // *text* alone. Serialising a reference back as a literal is the failure this guards: it would
-  // silently sever the effect from the template it was told to follow.
-  it('keeps a palette reference verbatim through an edit elsewhere in the list', () => {
+  // Colour Cycle takes literal colours only (terminology plan D14): a reference names no colour in
+  // a list, so it is dropped as the desk drops it, and a swatch's editor offers no palette.
+  it('takes literal colours only, dropping a palette reference and offering none', () => {
     const onEmit = vi.fn()
-    render(withStore(<ControlledPicker initial={`${WARM},#00ff00`} onEmit={onEmit} />))
+    const { container } = render(withStore(<ControlledPicker initial={`${WARM},#00ff00`} onEmit={onEmit} />))
+    expect(swatchLabels(container)).toEqual(['rgb(0, 255, 0)'])
 
     addColour()
-
-    expect(onEmit).toHaveBeenCalledWith(`${WARM},#00ff00,#ffffff`)
-  })
-
-  // There is no successor to the old "use entire palette" (`P*`) wildcard, and nothing should
-  // reintroduce a checkbox here: a template holds one colour, so there is no set to expand.
-  it('offers no all-of-them toggle', () => {
-    const { container } = render(withStore(<FxColourListPicker value={WARM} onChange={() => {}} />))
-    expect(container.querySelector('input[type="checkbox"]')).toBeNull()
+    expect(onEmit).toHaveBeenCalledWith('#00ff00,#ffffff')
+    expect(screen.queryByText('Palettes')).toBeNull()
   })
 
   // Regression guard: the sync must compare against the value we last emitted,
-  // not against a re-serialisation of `items`. emitChange keeps a reference as
-  // `tmpl:…` while the parsed item carries a #000000 placeholder, so an
-  // items-vs-value comparison never matches on a list holding one and re-parses
-  // on every edit. Content survives that (parse/serialize round-trips), but fresh
-  // makeId()s do not: SortableColourSwatch is keyed on item.id and owns the
-  // hex field's state, so the swatch the user is typing into gets remounted.
+  // not against a re-serialisation of `items`, which need not match the text it
+  // was parsed from (`red` comes back `#ff0000`). Content survives a re-parse,
+  // but fresh makeId()s do not: SortableColourSwatch is keyed on item.id and
+  // owns the hex field's state, so the swatch the user is typing into gets remounted.
   it('keeps swatch identity when the parent echoes our own edit back', () => {
     const onEmit = vi.fn()
     const { container } = render(
-      withStore(<ControlledPicker initial={`${WARM},${COLD}`} onEmit={onEmit} />),
+      withStore(<ControlledPicker initial="red,blue" onEmit={onEmit} />),
     )
     expect(swatchLabels(container)).toHaveLength(2)
     const firstSwatchBefore = container.querySelector('button[style*="background-color"]')
 
     addColour()
 
-    expect(onEmit).toHaveBeenCalledWith(`${WARM},${COLD},#ffffff`)
+    expect(onEmit).toHaveBeenCalledWith('#ff0000,#0000ff,#ffffff')
     expect(swatchLabels(container)).toHaveLength(3)
     // Same DOM node — the existing items kept their ids rather than being
     // re-parsed into new ones behind the edit.
     expect(container.querySelector('button[style*="background-color"]')).toBe(firstSwatchBefore)
 
     addColour()
-    expect(onEmit).toHaveBeenLastCalledWith(`${WARM},${COLD},#ffffff,#ffffff`)
+    expect(onEmit).toHaveBeenLastCalledWith('#ff0000,#0000ff,#ffffff,#ffffff')
     expect(container.querySelector('button[style*="background-color"]')).toBe(firstSwatchBefore)
   })
 

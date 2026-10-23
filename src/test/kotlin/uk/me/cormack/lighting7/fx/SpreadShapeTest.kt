@@ -123,7 +123,7 @@ class SpreadShapeTest {
 
     @Test
     fun `wings under a mirrored order are ignored by the plan and refused at the write boundary`() {
-        for (order in listOf(DistributionStrategy.CENTER_OUT, DistributionStrategy.EDGES_IN, DistributionStrategy.SPLIT)) {
+        for (order in listOf(DistributionStrategy.CENTER_OUT, DistributionStrategy.EDGES_IN)) {
             val winged = DistributionPlan.forElements(order, 8, SpreadShape(wings = 2))
             val plain = DistributionPlan.forElements(order, 8)
             assertContentEquals(plain.offsets, winged.offsets, "$order: a stored winged row runs as if unwinged")

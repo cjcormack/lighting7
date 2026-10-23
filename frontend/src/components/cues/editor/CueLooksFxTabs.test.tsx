@@ -527,13 +527,13 @@ describe('the FX tab', () => {
     data.cue = cueOf({ adHocEffects: [pulse(), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 1 })] })
     // Another client put a Strobe in front.
     data.desk = cueOf({
-      adHocEffects: [pulse({ effectType: 'Strobe', uuid: 'e-0', sortOrder: 0 }), pulse({ sortOrder: 1 }), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 2 })],
+      adHocEffects: [pulse({ effectType: 'DimmerStrobe', uuid: 'e-0', sortOrder: 0 }), pulse({ sortOrder: 1 }), pulse({ effectType: 'SineWave', uuid: 'e-2', sortOrder: 2 })],
     })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: 'Remove SineWave' }))
-    expect(((await patched(1)).adHocEffects as CueAdHocEffect[]).map((e) => e.effectType)).toEqual(['Strobe', 'Pulse'])
+    expect(((await patched(1)).adHocEffects as CueAdHocEffect[]).map((e) => e.effectType)).toEqual(['DimmerStrobe', 'Pulse'])
     // Another client deleted the Pulse: an edit of it writes nothing, and the header is not left Unsaved.
-    data.desk = cueOf({ adHocEffects: [pulse({ effectType: 'Strobe', uuid: 'e-0', sortOrder: 0 })] })
+    data.desk = cueOf({ adHocEffects: [pulse({ effectType: 'DimmerStrobe', uuid: 'e-0', sortOrder: 0 })] })
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
     const high = screen.getByRole('spinbutton', { name: /^High/ })
     fireEvent.change(high, { target: { value: '50' } })
@@ -573,7 +573,7 @@ describe('the FX tab', () => {
 })
 
 it('a bare effect picked from a band appends after every effect, and a second pick swaps it and nothing else', async () => {
-  const a = pulse({ effectType: 'Strobe', uuid: 'e-a', sortOrder: 0 })
+  const a = pulse({ effectType: 'DimmerStrobe', uuid: 'e-a', sortOrder: 0 })
   const b = pulse({ effectType: 'Flicker', uuid: 'e-b', sortOrder: 1 })
   data.cue = cueOf({ adHocEffects: [a, b] })
   const probe: { cue?: PressCue | null } = {}
@@ -589,11 +589,11 @@ it('a bare effect picked from a band appends after every effect, and a second pi
   const first = pulse()
   act(() => void probe.cue!.pickEffect(first, null))
   const appended = (await patched(1)).adHocEffects as CueAdHocEffect[]
-  expect(appended.map((e) => [e.effectType, e.sortOrder])).toEqual([['Strobe', 0], ['Flicker', 1], ['Pulse', 2]])
+  expect(appended.map((e) => [e.effectType, e.sortOrder])).toEqual([['DimmerStrobe', 0], ['Flicker', 1], ['Pulse', 2]])
   data.desk = cueOf({ adHocEffects: appended.map((e, i) => ({ ...e, uuid: e.uuid ?? `e-${i}` })) })
   act(() => void probe.cue!.pickEffect(pulse({ effectType: 'SineWave' }), first))
   const swapped = (await patched(2)).adHocEffects as CueAdHocEffect[]
-  expect(swapped.map((e) => e.effectType)).toEqual(['Strobe', 'Flicker', 'SineWave'])
+  expect(swapped.map((e) => e.effectType)).toEqual(['DimmerStrobe', 'Flicker', 'SineWave'])
 })
 
 it('a press after a save that failed leaves Save failed standing', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { beatsToSeconds, isOnSeconds, secondsToBeats } from './effectTiming'
+import { beatsToSeconds, isOnSeconds, newEffectDirection, newEffectDivision, secondsToBeats, swappedTiming } from './effectTiming'
 
 /** Venue-visit plan D7: an effect follows a master, or runs on Seconds — read one way for both kinds. */
 describe('isOnSeconds', () => {
@@ -40,5 +40,23 @@ describe('the conversions that keep a speed across the move', () => {
   it('leaves the number alone with no tempo to convert at', () => {
     expect(beatsToSeconds(4, 0)).toBe(4)
     expect(secondsToBeats(4, 0)).toBe(4)
+  })
+})
+
+/** Terminology plan D24: an FX that bounces starts at its own half bar, Bounce; every other one bar, Forward. */
+describe('a new FX\'s cycle and Direction', () => {
+  const sweep = { defaultBeatDivision: 2, defaultDirection: 'BOUNCE' }
+  const sine = { defaultBeatDivision: 4, defaultDirection: 'FORWARD' }
+
+  it('is its type\'s own, else one bar and Forward', () => {
+    expect([newEffectDivision(sweep), newEffectDirection(sweep)]).toEqual([2, 'BOUNCE'])
+    expect([newEffectDivision({}), newEffectDirection({})]).toEqual([4, 'FORWARD'])
+    expect([newEffectDivision(undefined), newEffectDirection({ defaultDirection: 'SIDEWAYS' })]).toEqual([4, 'FORWARD'])
+  })
+
+  it('follows a swap where it stood at the old type\'s default, and stays where the operator put it', () => {
+    expect(swappedTiming({ beatDivision: 4, direction: 'FORWARD' }, sine, sweep, true)).toEqual({ beatDivision: 2, direction: 'BOUNCE' })
+    expect(swappedTiming({ beatDivision: 8, direction: 'BACKWARD' }, sine, sweep, true)).toEqual({ beatDivision: 8, direction: 'BACKWARD' })
+    expect(swappedTiming({ beatDivision: 8, direction: 'FORWARD' }, sine, sweep, false)).toEqual({ beatDivision: 2, direction: 'BOUNCE' })
   })
 })

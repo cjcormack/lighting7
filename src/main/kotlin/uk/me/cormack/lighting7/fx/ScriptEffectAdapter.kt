@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 /**
- * Creates [Effect] / [StatefulEffect] / [CompositeEffect] instances from compiled FX scripts.
+ * Creates [Effect] / [StatefulEffect] instances from compiled FX scripts.
  *
  * The adapter wraps extracted lambdas (from [FxScriptCompiler]) in thin Effect implementations.
  * Per-tick calls are direct lambda invocations — no scripting host, no coroutine bridge,
@@ -22,6 +22,7 @@ object ScriptEffectAdapter {
         outputType: FxOutputType,
         defaultStepTiming: Boolean = false,
         registrationId: String? = null,
+        defaultDirection: EffectDirection = EffectDirection.FORWARD,
     ): EffectFactory {
         return { params, resolveColourSource, colourSourceVersion ->
             val typedParams = TypedParams(params, schema, resolveColourSource, colourSourceVersion)
@@ -30,17 +31,12 @@ object ScriptEffectAdapter {
                 EffectMode.STANDARD -> {
                     val fn = compiled.standardFn
                         ?: throw IllegalStateException("No standard lambda in compiled script for '$effectName'")
-                    StandardScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
+                    StandardScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, defaultDirection, registrationId)
                 }
                 EffectMode.STATEFUL -> {
                     val fn = compiled.statefulFn
                         ?: throw IllegalStateException("No stateful lambda in compiled script for '$effectName'")
-                    StatefulScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
-                }
-                EffectMode.COMPOSITE -> {
-                    val fn = compiled.compositeFn
-                        ?: throw IllegalStateException("No composite lambda in compiled script for '$effectName'")
-                    CompositeScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
+                    StatefulScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, defaultDirection, registrationId)
                 }
             }
         }
@@ -57,6 +53,7 @@ private class StandardScriptEffect(
     private val effectOutputType: FxOutputType,
     private val rawParams: Map<String, String>,
     private val effectDefaultStepTiming: Boolean,
+    override val defaultDirection: EffectDirection,
     override val registrationId: String?,
 ) : Effect {
     override val name: String get() = effectName
@@ -79,6 +76,7 @@ private class StatefulScriptEffect(
     private val effectOutputType: FxOutputType,
     private val rawParams: Map<String, String>,
     private val effectDefaultStepTiming: Boolean,
+    override val defaultDirection: EffectDirection,
     override val registrationId: String?,
 ) : StatefulEffect {
     override val name: String get() = effectName
@@ -98,28 +96,5 @@ private class StatefulScriptEffect(
         context: EffectContext,
     ): FxOutput {
         return fn(tick, deltaMs, context, typedParams, state)
-    }
-}
-
-/**
- * Composite script effect — invokes an extracted lambda returning a map of outputs, of
- * which only the [outputType] entry is applied (see [CompositeEffect]).
- */
-private class CompositeScriptEffect(
-    private val fn: (Double, EffectContext, TypedParams) -> Map<FxOutputType, FxOutput>,
-    private val typedParams: TypedParams,
-    private val effectName: String,
-    private val effectOutputType: FxOutputType,
-    private val rawParams: Map<String, String>,
-    private val effectDefaultStepTiming: Boolean,
-    override val registrationId: String?,
-) : CompositeEffect {
-    override val name: String get() = effectName
-    override val outputType: FxOutputType get() = effectOutputType
-    override val parameters: Map<String, String> get() = rawParams
-    override val defaultStepTiming: Boolean get() = effectDefaultStepTiming
-
-    override fun calculateComposite(phase: Double, context: EffectContext): Map<FxOutputType, FxOutput> {
-        return fn(phase, context, typedParams)
     }
 }

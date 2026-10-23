@@ -134,13 +134,12 @@ behind in the cycle and the visual sweep flows in the natural direction.
 | `CENTER_OUT` | Rank-based: center → edges | ⌈N/2⌉ | `rank / ⌈N/2⌉` (center=0) |
 | `EDGES_IN` | Rank-based: edges → center | ⌈N/2⌉ | `(maxRank - rank) / ⌈N/2⌉` |
 | `REVERSE` | Evenly spaced, element N → 0 | N | `(N-1-index) / N` |
-| `SPLIT` | Mirrored halves | ⌈N/2⌉ | `min(index, N-1-index) / ⌈N/2⌉` |
 | `PING_PONG` | LINEAR + triangle phase bounce | N | `index / N` (triangle remap at phase level) |
 | `RANDOM(seed)` | Fisher-Yates shuffle of even offsets | N | Deterministic permutation of `i/N` |
 | `POSITIONAL` | Based on normalized position | N | `member.normalizedPosition` |
 | `CUSTOM(fn)` | Lambda-based calculation | N | User-defined |
 
-**Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
+**Symmetric strategies** (CENTER_OUT, EDGES_IN) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. This is exposed via
 `distinctSlots(groupSize)` and used by a windowed step chase for gap-free window sizing.
 

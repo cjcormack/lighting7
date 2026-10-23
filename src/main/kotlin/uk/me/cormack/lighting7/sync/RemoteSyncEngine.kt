@@ -517,6 +517,40 @@ class RemoteSyncEngine(
     }
 
     /**
+     * `project.json`'s [ProjectJson.fxLibrary], like `formatVersion.json`, would stay the remote's, so a
+     * merge with a remote written before [LegacyNames.FX_LIBRARY] would have the import read this
+     * desk's bouncing FX, which name no `pingPong`, as if they had it on. The merge says this desk's
+     * marker instead, and first spells out, on every record the remote's tree supplies and this desk
+     * did not write, the `pingPong` its older writer meant by naming none.
+     */
+    private fun stampFxLibrary(
+        tree: Path,
+        outcomes: Map<RecordKey, DiffOutcome>,
+        localSnapshots: Map<RecordKey, RecordSnapshot>,
+        remoteSnapshots: Map<RecordKey, RecordSnapshot>,
+    ) {
+        val path = tree.resolve("project.json")
+        if (!Files.exists(path)) return
+        val project = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(path)) }.getOrNull() ?: return
+        if (project.fxLibrary >= LegacyNames.FX_LIBRARY) return
+        val definitions = tree.resolve("fxDefinitions").takeIf { Files.isDirectory(it) }
+            ?.let { dir -> Files.list(dir).use { files -> files.toList() } }
+            .orEmpty()
+            .let { files -> LegacyNames.definitionIds(files.asSequence().map(Files::readString)) }
+        for ((key, remote) in remoteSnapshots) {
+            if (remote.isDeleted || outcomes[key] is DiffOutcome.TakeLocal || outcomes[key] is DiffOutcome.TakeManual) continue
+            val local = localSnapshots[key]
+            for ((relPath, content) in remote.files) {
+                if (local?.files?.get(relPath) == content) continue
+                val file = tree.resolve(relPath)
+                if (!Files.exists(file)) continue
+                LegacyNames.spellOutAbsentPingPong(Files.readString(file), definitions)?.let { Files.writeString(file, it) }
+            }
+        }
+        Files.writeString(path, canonicalEncode(ProjectJson.serializer(), project.copy(fxLibrary = LegacyNames.FX_LIBRARY)))
+    }
+
+    /**
      * Refuse to pull [remote] into project [projectId] when it is another kind of project, or a show
      * pinned to a venue version this desk does not hold (`VENUE_MISSING`, naming the venue and the
      * repo it syncs from).
@@ -666,6 +700,7 @@ class RemoteSyncEngine(
         // on a show that already synced) and taking its rig with it. Merge the pin three-way.
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
         stampFormatVersion(workingTreePath)
+        stampFxLibrary(workingTreePath, outcomes, localSnapshots, remoteSnapshots)
 
         val clashes = importTree(projectId, workingTreePath)
 

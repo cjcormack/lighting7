@@ -35,14 +35,16 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-SCRIPT-RAW-CLOCK`](#fu-speed-script-raw-clock) | Trigger | Speed | a script retunes a clock and surfaces show stale tempo |
 | [`FU-SPEED-LINK-PUT-STALE-BPM`](#fu-speed-link-put-stale-bpm) | Trigger | Speed | a client renders a link PUT's response without the WS state |
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
-| [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
+| [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | an operator wants one FX to drive two attributes |
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
 | [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
+| [`FU-FX-STEP-WIDTH`](#fu-fx-step-width) | Trigger | FX | an operator asks for an uneven step |
+| [`FU-FX-LIBRARY-GAPS`](#fu-fx-library-gaps) | Trigger | FX | an operator reaches for a square, diamond or TiltDim |
+| [`FU-FX-FLICKER-REPEATS`](#fu-fx-flicker-repeats) | Trigger | FX | someone sees a flicker repeat on a long cycle |
 | [`FU-FX-KEYSTACK-STACK-SIZE`](#fu-fx-keystack-stack-size) | Trigger | FX | an operator misreads a property's stack under a stack below full |
 | [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
 | [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the effect over it to fade together on a programmer gesture |
-| [`FU-FX-SPLIT-DUPLICATE`](#fu-fx-split-duplicate) | Ready | FX | — |
 | [`FU-FX-BEAM-ANY-SLIDER`](#fu-fx-beam-any-slider) | Trigger | FX | an operator wants to breathe prism or a fixture's own speed channel |
 | [`FU-FX-STEPS-COLOUR-WHEEL`](#fu-fx-steps-colour-wheel) | Trigger | FX | an operator steps colour palettes over a group holding a colour-wheel head |
 | [`FU-BUSK-MOMENTARY`](#fu-busk-momentary) | Trigger | Busk | an operator asks to flash a pad rather than latch it |
@@ -428,26 +430,24 @@ what `deltaMs` means for every stateful effect — a bigger decision than it loo
 
 ### `FU-SPEED-PER-ATTRIBUTE`
 
-**Per-attribute masters inside one FX instance** · Trigger · Programmer redesign §3.6, promoted
-2026-08-14
+**One FX driving several attributes, each on its own master** · Trigger · Programmer redesign §3.6,
+promoted 2026-08-14; widened by terminology plan session 3 (§9), 2026-10-23
 
-`FxInstance.speedMasterUuid` is per *instance*, which already gives per-property speeds — a
-position wave on master 2 and a dimmer chase on master 1 are simply two instances. MA3 assigns
-masters per-attribute *inside* one phaser; here that would mean a composite
-(`Effect.calculateComposite`, e.g. `LightningStrike`) whose outputs advance on different clocks.
+`FxInstance.speedMasterUuid` is per *instance*, which already gives per-attribute speeds — a
+position wave on master 2 and a dimmer chase on master 1 are simply two instances. An instance
+drives one attribute: one `FxTarget`, one output. MagicQ's waveform FX drives every attribute it
+holds, and MA3 assigns masters per attribute *inside* one phaser.
 
-Cut deliberately: a composite computes every output from a single phase, and that coupling is why
-it's a composite rather than N instances. Splitting it means `calculateComposite` taking a
-per-output phase map, plus a picker that can address a constituent.
+The composite mode was the only gesture at this, and it never got there: a composite computed
+several outputs from one phase and applied the one its `outputType` named (sweep item A4), so
+Lightning Strike's colour half was computed and discarded. The terminology plan removed the mode
+(D27); Lightning Strike is an Intensity FX with the same output.
 
-**Prerequisite as of A4** (2026-08-24): composites are now documented and enforced as
-primary-output-only — the never-populated `FxInstance.compositeTargets` and the engine branch
-that read it are gone, so a composite applies exactly one property. Per-attribute masters
-therefore need multi-output composites *wired at all* first (secondary targets on `FxInstance`
-plus an authoring surface that can name a constituent), not just a per-output phase map.
+The shape, if it is wanted: an FX that outputs a map again, secondary targets on `FxInstance` and an
+authoring surface that can name each attribute; then, for tempos, a phase per attribute rather than
+one for the instance.
 
-**Trigger**: an operator wants one shipped composite's constituents on different tempos and can't
-express it as separate instances.
+**Trigger**: an operator wants one FX to drive two attributes and can't express it as two FX.
 
 ---
 
@@ -512,6 +512,52 @@ segment.
 
 ---
 
+### `FU-FX-STEP-WIDTH`
+
+**A Width for each step of Palette Steps and Colour Cycle** · Trigger · terminology plan session 3 (§9),
+2026-10-23
+
+Palette Steps and Colour Cycle give every entry an equal share of the cycle (`stepsAt` in
+`fx/StepList.kt`, Colour Cycle's own `segmentSize`), with one `fadeRatio` across them. MagicQ's Width
+on its 2col, 3col and 4col FX lets one step hold longer than the rest.
+
+The shape: a per-entry weight in the step list's grammar (`tmpl:{uuid}*2`, `#ff0000*2`), read by both
+FX as the share of the cycle that entry holds.
+
+**Trigger**: an operator asks for an uneven step — one colour or palette held longer than the others.
+
+---
+
+### `FU-FX-LIBRARY-GAPS`
+
+**MagicQ's square, diamond and TiltDim** · Trigger · terminology plan session 3 (§9), 2026-10-23
+
+The terminology survey matched MagicQ's waveform library against lighting7's built-ins. Three of its
+shapes have no FX here: *square* (a position square), *diamond* (a position diamond) and *TiltDim*
+(tilt and dimmer moving together, a two-attribute FX — see `FU-SPEED-PER-ATTRIBUTE`).
+
+The shape: square and diamond are `.fx.kts` files beside Circle and Figure 8; TiltDim needs one FX to
+drive two attributes first.
+
+**Trigger**: an operator reaches for one of the three.
+
+---
+
+### `FU-FX-FLICKER-REPEATS`
+
+**Flicker, Colour Flicker and Random Position repeat every cycle** · Trigger · terminology plan
+session 3 (§9), 2026-10-23
+
+The three are phase-based: their randomness is a function of the phase, so each cycle is the same as
+the last. On a short cycle that reads as random; on a long one an operator can see it repeat. Candle
+Flicker and Fluorescent Flicker are stateful and do not.
+
+The shape: say so in the three descriptions, or make them stateful as Candle Flicker is.
+
+**Trigger**: someone sees the repeat on a long cycle.
+
+---
+
 ### `FU-FX-KEYSTACK-STACK-SIZE`
 
 **The stack's effect size in `programmer.keyStack`** · Trigger · effects plan session 5 (D10), 2026-10-17
@@ -565,27 +611,6 @@ cue layer has, so the reset pass reads a value part-way through its fade.
 
 **Trigger**: an operator wants a busked effect and the value under it to fade out (or in) together on
 one gesture.
-
----
-
-### `FU-FX-SPLIT-DUPLICATE`
-
-**`SPLIT` and `EDGES_IN` are one Order under two names** · Ready · effects plan session 2 (§10),
-2026-10-16
-
-`DistributionStrategy.SPLIT` ranks a member `min(i, N−1−i)` over `⌈N/2⌉` slots; `EDGES_IN` inverts
-Centre out's rank over the same slots, which is the same distance from the nearer end. The two give
-identical offsets at every group size (`docs/fx-engineering.md` §"Distribution Strategies"), so the
-editor's Order select offers one thing twice, and the busk Spread tab's Split-like curve is a third
-spelling of the same idea.
-
-The shape: keep both names readable (P6 — a stored effect names either), map `SPLIT` to `EDGES_IN` at
-the one parse (`DistributionStrategy.byName`), drop *Split* from the Order select and the MCP schema's
-description, and say in `fx-engineering.md` that a stored `SPLIT` is Edges in. No `formatVersion`: no
-field changes and no stored effect changes what it plays. `SpreadShapeTest`'s vector cases for Split
-stay valid, since its offsets are Edges in's.
-
-**Ready**: nothing to wait for; it is a tidy-up the plan chose not to fold into session 2.
 
 ---
 
@@ -3081,6 +3106,8 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-FX-SPLIT-DUPLICATE` — `SPLIT` folded into `EDGES_IN` (*Centre in*): the parse no longer knows
+  it, and database step 4 and `sync/LegacyNames.kt` rewrite a stored one (terminology plan session 3).
 - `FU-FX-SIZE-OVER-100` — folded into `FU-FX-AMPLITUDE` (terminology plan session 2).
 - `FU-SLOT-LOOK-ELIGIBILITY` — retired: a Look lands whole, so a cue slot takes any Look, and one
   none of whose fixtures is patched goes on, lands nothing and lights its tile, as a cue does;

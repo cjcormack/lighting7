@@ -183,7 +183,7 @@ class ProjectRoundTripTest {
         assertEquals("amber-breathe", effectTemplate.name)
         assertTrue(effectTemplate.rows.isEmpty(), "an effect template holds no rows (D1)")
         val effect = effectTemplate.effect!!
-        assertEquals("ColourPulse", effect.effectType)
+        assertEquals("ColourWave", effect.effectType)
         assertEquals("colour", effect.category)
         // The off-default fields, which are the ones a copier can silently drop: canonical JSON
         // omits defaults, so a field left at its default is invisible to the round trip.

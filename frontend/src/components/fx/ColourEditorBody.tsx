@@ -27,10 +27,13 @@ interface ColourEditorBodyProps {
   onColourChange: (colour: ExtendedColour) => void
   /** The raw stored value, read only for which template chip is highlighted. */
   rawValue: string
-  /** Pick a template: the caller receives a `tmpl:` reference string. */
-  onPickTemplate: (ref: string) => void
+  /**
+   * Pick a template: the caller receives a `tmpl:` reference string. Absent where a colour may not
+   * name a palette — Colour Cycle's list takes literal colours only — and no palettes are offered.
+   */
+  onPickTemplate?: (ref: string) => void
   /** The offerable colour templates, from `useColourTemplates`. */
-  templates: TemplateSummary[]
+  templates?: TemplateSummary[]
   /** Which extended channels the target fixtures actually have. */
   extendedChannels?: Partial<ExtendedChannelFlags>
 }
@@ -122,15 +125,17 @@ export function ColourEditorBody({
         ))}
       </div>
 
-      <FxColourTemplateRow
-        templates={templates}
-        currentHex={colour.hex}
-        // The sliders below are part of the colour being dialled in, so *Save as template…* saves
-        // them too — it used to keep the hex and silently drop the amber the operator had just set.
-        currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
-        selectedUuid={parseTemplateRefUuid(rawValue)}
-        onPick={onPickTemplate}
-      />
+      {onPickTemplate != null && (
+        <FxColourTemplateRow
+          templates={templates ?? []}
+          currentHex={colour.hex}
+          // The sliders below are part of the colour being dialled in, so *Save as template…* saves
+          // them too — it used to keep the hex and silently drop the amber the operator had just set.
+          currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
+          selectedUuid={parseTemplateRefUuid(rawValue)}
+          onPick={onPickTemplate}
+        />
+      )}
 
       {/* Extended channels (W/A/UV) */}
       {hasExtended && (

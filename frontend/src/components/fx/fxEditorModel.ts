@@ -324,7 +324,7 @@ export function timingChoicePatch(
 
 /**
  * The draft patch for choosing an Order (effects plan D4): the Order, and — onto a mirrored one
- * (Centre out, Edges in, Split, two wings already) — Wings back to 1 in the same write, since the
+ * (Centre out, Centre in, two wings already) — Wings back to 1 in the same write, since the
  * desk refuses wings under a mirrored Order and the editor hides the field there.
  */
 export function orderPatch(draft: Pick<FxDraft, 'wings'>, order: string): Partial<FxDraft> {
@@ -481,14 +481,13 @@ export const PICKER_FAMILY_LABELS: Record<PickerFamily, string> = {
 }
 
 /**
- * The picker's segment an effect sits under, from its library category. A composite (Lightning
- * Strike) is applied through its dimmer half, so it is Intensity; a category the others do not name —
- * `controls`, or a script's own — is Controls, so nothing the library holds goes unlisted.
+ * The picker's segment an effect sits under, from the category it drives ([drivenCategoryOf]). A
+ * category the others do not name — `controls`, or a script's own — is Controls, so nothing the
+ * library holds goes unlisted.
  */
 export function pickerFamilyOf(category: string): PickerFamily {
   switch (category.toLowerCase()) {
     case 'dimmer':
-    case 'composite':
       return 'INTENSITY'
     case 'colour':
     case 'color':

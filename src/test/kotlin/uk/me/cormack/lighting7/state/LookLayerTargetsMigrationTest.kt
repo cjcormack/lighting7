@@ -108,7 +108,7 @@ class LookLayerTargetsMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, "user_version ${userVersion()}")
     }
 
     @Test
@@ -125,7 +125,7 @@ class LookLayerTargetsMigrationTest {
             listOf("Pre-show" to "[]", "Pre-show" to """[{"type":"fixture","key":"house-1"}]"""),
             storedLayers(),
         )
-        assertEquals(LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(1, logs.size, "one line per cue: $logs")
         val line = logs.single()
         assertTrue("'Pre-show' in 'Sleeping Beauty'" in line && "Act 1, Scene 1 — Set" in line && "house-2" in line, line)
@@ -166,7 +166,7 @@ class LookLayerTargetsMigrationTest {
         }
 
         assertEquals("""[{"type":"fixture","key":"house-1"}]""", storedLayers().first().second)
-        assertEquals(LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, userVersion())
+        assertTrue(userVersion() >= LOOK_LAYER_TARGETS_CLEARED_USER_VERSION, "user_version ${userVersion()}")
         assertEquals(emptyList(), logs)
     }
 }

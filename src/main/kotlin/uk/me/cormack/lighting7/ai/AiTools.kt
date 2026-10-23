@@ -231,7 +231,7 @@ class AiTools(private val state: State) {
             validateLookRows(values.rows)?.let { return errorResult(it) }
         }
         val effects = effectsArray?.let { parseLookEffects(it) }
-        effects?.let { validateLookEffects(it) }?.let { return errorResult(it) }
+        effects?.let { validateLookEffects(it, state.show.fxRegistry) }?.let { return errorResult(it) }
 
         val project = state.projectManager.currentProject
         val scenery = sceneryArray?.let { items ->
@@ -1226,7 +1226,7 @@ class AiTools(private val state: State) {
                 this.project = project
                 this.speedMasters = speedMasters
             }
-            writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true)
+            writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true, registry = state.show.fxRegistry)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             val entry = placement?.let { placeCueInStack(it.stack, newCue, cueNumber = it.number, position = it.position) }
@@ -2254,6 +2254,8 @@ class AiTools(private val state: State) {
             blocks = spec.blocks,
             groups = spec.groups,
         )?.let { throw IllegalArgumentException(it) }
+        state.show.fxRegistry.fxWriteProblem(spec.effectType, spec.parameters)
+            ?.let { throw IllegalArgumentException("$at: $it") }
         return spec
     }
 
@@ -2326,7 +2328,7 @@ class AiTools(private val state: State) {
                 ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE")
             EffectSpecCoercion.Names.direction(raw)?.name
                 ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE, got '$raw'")
-        } ?: EffectDirection.FORWARD.name
+        } ?: (registrationFor(obj)?.defaultDirection ?: EffectDirection.FORWARD).name
         val nShot = obj.present("nShot")?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
                 ?: throw IllegalArgumentException("$at: 'nShot' must be a whole number of cycles")
@@ -2360,7 +2362,7 @@ class AiTools(private val state: State) {
      * The timing fields of one effect out of a tool call (venue-visit plan D7, D16).
      *
      * *Seconds* beside a master is refused — two answers to one question. An omitted `beatDivision`
-     * is one bar, and a **beat** effect that names no master and is not on Seconds is stamped with
+     * is the FX's own default (one bar but where its frontmatter says otherwise), and a **beat** effect that names no master and is not on Seconds is stamped with
      * the master whose `usage` matches its family — the library's category for its type, else the
      * call's — as the effect editor stamps a new effect. Null keeps meaning master 1 everywhere: the
      * stamp is a uuid written at creation, never a rule resolved later. A wall-clock effect is left
@@ -2373,11 +2375,19 @@ class AiTools(private val state: State) {
         val speed = checkedSpeedMasterUuid(obj["speedMasterUuid"])
         val rate = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"])
         secondsTimingConflict(seconds, speed, rate)?.let { throw IllegalArgumentException("$at: $it") }
-        val beatDivision = if (obj.present("beatDivision") == null) BeatDivision.ONE_BAR else obj.requiredDouble("beatDivision", at)
+        val beatDivision = if (obj.present("beatDivision") == null) {
+            registrationFor(obj)?.defaultBeatDivision ?: BeatDivision.ONE_BAR
+        } else {
+            obj.requiredDouble("beatDivision", at)
+        }
         if (beatDivision <= 0.0) throw IllegalArgumentException("$at: 'beatDivision' must be greater than 0")
         val stamped = speed ?: if (seconds) null else usageMasterFor(obj)
         return ParsedEffectTiming(beatDivision, stamped, rate, seconds)
     }
+
+    /** The registration of the effect [obj] names, whose defaults fill what the call leaves out. */
+    private fun registrationFor(obj: JsonObject) =
+        obj["effectType"]?.jsonPrimitive?.contentOrNull?.let { state.show.fxRegistry.getRegistration(it) }
 
     /** D16's default master for a beat effect named in [obj]: the one tagged for its family, or null. */
     private fun usageMasterFor(obj: JsonObject): String? {

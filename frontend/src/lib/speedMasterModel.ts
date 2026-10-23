@@ -20,11 +20,10 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
 /**
  * The categories a master's usage may name.
  *
- * This is the effect library's own `category` vocabulary, minus the three that cannot sensibly own
- * a tempo: `controls` (a settings slider has no beat), `composite` (spans families, so no single
- * master is *the* default for it) and `palette` (Palette Steps' own, which names no family — it is
- * stamped by its palettes' family's usage instead). Effects in the first two land on master 1, which
- * is what an unmatched category is defined to do. `speedMasterModel.test.ts` pins this against
+ * This is the effect library's own `category` vocabulary, minus the two that cannot sensibly own
+ * a tempo: `controls` (a settings slider has no beat) and `palette` (the Steps FX's own, which names
+ * no family — each is stamped by the family it steps instead). Effects in `controls` land on master
+ * 1, which is what an unmatched category is defined to do. `speedMasterModel.test.ts` pins this against
  * `EFFECT_CATEGORY_INFO`, and lighting7's `GlossaryVocabularyTest` pins the server's
  * copy against the shipped `.fx.kts` files — the two ends of one list.
  */
@@ -240,7 +239,7 @@ export interface RoutableMaster {
  * usage matches the effect's library category.
  *
  * Returns null — meaning master 1 — when nothing matches, which covers an untagged bank, an
- * effect in `composite`/`controls`, and a category a user's own `.fx.kts` invented. That is the
+ * effect in `controls`, and a category a user's own `.fx.kts` invented. That is the
  * defined behaviour rather than a gap: `null` is master 1 on every wire in this system, and the
  * routing is visible and editable afterwards on the effect itself.
  *

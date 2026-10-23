@@ -827,15 +827,6 @@ class Show(
                         })
                         result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
                     }
-
-                    ScriptType.FX_CALC_COMPOSITE -> {
-                        val runResult = show.scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
-                            providedProperties(Pair("phase", 0.5))
-                            providedProperties(Pair("context", uk.me.cormack.lighting7.fx.EffectContext.SINGLE))
-                            providedProperties(Pair("params", uk.me.cormack.lighting7.fx.TypedParams(emptyMap(), emptyList())))
-                        })
-                        result = ScriptResult(compiledResult, runResult, null, script.lineOffset)
-                    }
                 }
             }
         }

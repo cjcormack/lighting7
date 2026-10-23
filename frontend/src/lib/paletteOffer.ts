@@ -32,7 +32,7 @@ export interface EffectFitContext {
  * they offer one set: the family, every emitter the palette names somewhere in the selection (a
  * **union**, as `targetEmitters` is built — the desk reports a head without it as a skip), and for a
  * Beam property the property the palette sets — a value palette's own rows, an effect palette's
- * driven property ([effectPaletteDrives]) — so a zoom cell is offered *Wide* and Zoom Breathe, a gobo
+ * driven property ([effectPaletteDrives]) — so a zoom cell is offered *Wide* and Zoom Wave, a gobo
  * cell the Slot Steps that steps its gobo.
  */
 export function paletteFits(template: TemplateSummary, fit: PaletteFit, context: EffectFitContext = {}): boolean {
@@ -72,7 +72,7 @@ export function effectPaletteDrives(template: TemplateSummary, context: EffectFi
   return entry?.compatibleProperties ?? null
 }
 
-/** An effect's name as the library matches it: `Zoom Breathe` and `ZoomBreathe` are one. */
+/** An effect's name as the library matches it: `Zoom Wave` and `ZoomWave` are one. */
 const effectKey = (name: string) => name.replace(/[\s_]/g, '').toLowerCase()
 
 /**

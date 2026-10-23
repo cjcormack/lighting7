@@ -1,5 +1,5 @@
 /*---
-id: Strobe
+id: DimmerStrobe
 name: Dimmer Strobe
 category: dimmer
 outputType: SLIDER

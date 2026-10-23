@@ -44,7 +44,7 @@ describe('spreadOffsets', () => {
   })
 
   it('runs a mirrored order unwinged', () => {
-    for (const order of ['CENTER_OUT', 'EDGES_IN', 'SPLIT']) {
+    for (const order of ['CENTER_OUT', 'EDGES_IN']) {
       expect(isMirroredOrder(order)).toBe(true)
       expect(spreadOffsets(order, 8, { ...DEFAULT_SPREAD_SHAPE, wings: 2 })).toEqual(
         spreadOffsets(order, 8, DEFAULT_SPREAD_SHAPE),

@@ -47,7 +47,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
     )
 
     private fun colourEffect(
-        effectType: String = "ColourPulse",
+        effectType: String = "ColourWave",
         category: String = "colour",
         parameters: Map<String, String> = emptyMap(),
     ) = TemplateEffectDto(
@@ -854,7 +854,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         assertTrue(captured.layers.isEmpty(), "a detached copy is nobody's layer")
         val snapshotChild = captured.adHocEffects.single()
         assertEquals("hex-1", snapshotChild.targetKey)
-        assertEquals("ColourPulse", snapshotChild.effectType)
+        assertEquals("ColourWave", snapshotChild.effectType)
 
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
         val recorded: ProgrammerRecordResponse = client.post("/api/rest/programmer/record") {
@@ -866,7 +866,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             )
         }.body()
         assertTrue(recorded.cue.layers.isEmpty(), "and nobody's layer on the programmer path either")
-        assertEquals("ColourPulse", recorded.cue.adHocEffects.single().effectType)
+        assertEquals("ColourWave", recorded.cue.adHocEffects.single().effectType)
     }
 
     /**
@@ -906,7 +906,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
 
         val still = state.show.fxEngine.getActiveEffects().single()
         assertEquals(0.5, still.timing.beatDivision, "the copy kept its own timing")
-        assertEquals("ColourPulse", still.registrationId, "and its own effect")
+        assertEquals("ColourWave", still.registrationId, "and its own effect")
     }
 
     /**
@@ -1351,7 +1351,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         // Derived from the effect's `category`, not from rows it does not have (D4).
         assertEquals("COLOUR", created.family)
         assertTrue(created.rows.isEmpty())
-        assertEquals("ColourPulse", created.effect?.effectType)
+        assertEquals("ColourWave", created.effect?.effectType)
         // An effect fans over whatever the layer names, so there is no per-fixture case for it to
         // be — true rather than the false an "all rows are deferred" test would give (D3).
         assertTrue(created.isGeneric, "an effect template is always generic")
@@ -1459,7 +1459,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
 
-        for ((effectType, category) in listOf("LightningStrike" to "composite", "Whatever" to "controls")) {
+        for ((effectType, category) in listOf("Whatever" to "controls", "PaletteSteps" to "palette")) {
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
                 setBody(
@@ -1490,7 +1490,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             setBody(
                 TemplateInput(
                     name = "zoom-breathe",
-                    effect = colourEffect(effectType = "ZoomBreathe", category = "beam").copy(propertyName = null),
+                    effect = colourEffect(effectType = "ZoomWave", category = "beam").copy(propertyName = null),
                 )
             )
         }

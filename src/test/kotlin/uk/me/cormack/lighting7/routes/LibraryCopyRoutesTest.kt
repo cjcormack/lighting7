@@ -129,7 +129,7 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         val master = UUID.randomUUID().toString()
         val rateMaster = UUID.randomUUID().toString()
         val effect = TemplateEffectDto(
-            effectType = "ColourPulse",
+            effectType = "ColourWave",
             category = "colour",
             propertyName = "rgbColour",
             beatDivision = 0.5,

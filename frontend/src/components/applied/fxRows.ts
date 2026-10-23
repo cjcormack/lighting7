@@ -25,8 +25,7 @@ export function layerHomesOf(
  *  - **The programmer must own it.** A copy of an effect that already belongs to a Look or a
  *    template is not a new named thing — the named thing exists, and *Edit template* is the gesture.
  *    An effect on a cue is that cue's, and a base effect belongs to the show.
- *  - **Its category must map to a template family.** `controls` has no tempo and `composite` spans
- *    families, so neither can name one.
+ *  - **Its category must map to a template family.** `controls` has no tempo, so names none.
  *
  * Returns a reason rather than false, because the item is **shown disabled** in both cases. A menu
  * that silently loses an entry teaches nobody why.

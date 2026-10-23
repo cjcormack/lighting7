@@ -1364,6 +1364,11 @@ class State(val config: ApplicationConfig) {
             // (absolute-looks plan D1). `LookLayerTargetsMigration.kt`.
             clearLookLayerTargets()
 
+            // Once per database: every stored FX onto today's library — renamed ids, Breathe as Sine
+            // Wave, `pingPong` as Bounce, Colour Cycle on literal colours (terminology plan §5 step 4).
+            // `FxLibraryMigration.kt`.
+            rewriteFxLibrary()
+
             ensureInstallRow()
         }
 

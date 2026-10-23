@@ -130,7 +130,7 @@ internal fun pressCueLayer(
             if (cue.layersInOrder().mapNotNull { it.toDto() } != layers) return@transaction null
             val writesStage = state.show.cueStackManager.holds.isHeld(cueId)
             val stageBefore = if (writesStage) cue.stageContent() else null
-            writeCueChildren(cue, layers = decided.result.layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) })
+            writeCueChildren(cue, layers = decided.result.layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) }, registry = state.show.fxRegistry)
             val stageChanged = stageBefore != null && cue.stageContent() != stageBefore
             val applied = decided.result is LayerPress.Result.Applied
             CueLayerPressOutcome.Pressed(

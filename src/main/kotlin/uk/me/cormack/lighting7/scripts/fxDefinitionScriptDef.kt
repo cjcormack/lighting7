@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.scripts
 
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.show.Show
 import kotlin.script.experimental.annotations.KotlinScript
@@ -64,6 +65,9 @@ abstract class FxDefinitionScript(
      * cleaned up when this script is unloaded.
      */
     fun registerEffect(registration: EffectRegistration) {
+        require(!LegacyNames.isRetiredFxId(registration.id)) {
+            "'${registration.id}' was a built-in FX's id and is retired; register the FX under another id"
+        }
         val scriptReg = registration.copy(source = EffectSource.USER, sourceDefinitionId = scriptId)
         show.fxRegistry.register(scriptReg)
         registeredEffectIds.add(scriptReg.id)

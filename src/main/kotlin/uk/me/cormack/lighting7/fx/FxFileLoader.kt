@@ -206,6 +206,7 @@ class FxFileLoader(
                     outputType = p.outputType,
                     defaultStepTiming = p.metadata.defaultStepTiming,
                     registrationId = p.metadata.id,
+                    defaultDirection = p.metadata.defaultDirection,
                 )
 
                 val timingSource = try {
@@ -226,6 +227,8 @@ class FxFileLoader(
                     source = EffectSource.BUILT_IN,
                     script = p.scriptBody,
                     defaultStepTiming = p.metadata.defaultStepTiming,
+                    defaultDirection = p.metadata.defaultDirection,
+                    defaultBeatDivision = p.metadata.defaultBeatDivision,
                     timingSource = timingSource,
                     factory = factory,
                 ))
@@ -292,6 +295,8 @@ class FxFileLoader(
             var outputType = "SLIDER"
             var effectMode = "STANDARD"
             var defaultStepTiming = false
+            var defaultDirection = EffectDirection.FORWARD
+            var defaultBeatDivision = BeatDivision.ONE_BAR
             var timingSource = "BEAT"
             var compatibleProperties = listOf<String>()
             var aliases: List<String>? = null
@@ -376,6 +381,10 @@ class FxFileLoader(
                     "outputType" -> outputType = value
                     "effectMode" -> effectMode = value
                     "defaultStepTiming" -> defaultStepTiming = value.toBooleanStrictOrNull() ?: false
+                    "defaultDirection" -> defaultDirection = EffectDirection.byName(value)
+                        ?: throw IllegalArgumentException("Unknown defaultDirection '$value'")
+                    "defaultBeatDivision" -> defaultBeatDivision = value.toDoubleOrNull()?.takeIf { it > 0.0 }
+                        ?: throw IllegalArgumentException("defaultBeatDivision must be a positive number of beats, got '$value'")
                     "timingSource" -> timingSource = value
                     "compatibleProperties" -> compatibleProperties = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
@@ -404,6 +413,8 @@ class FxFileLoader(
                 outputType = outputType,
                 effectMode = effectMode,
                 defaultStepTiming = defaultStepTiming,
+                defaultDirection = defaultDirection,
+                defaultBeatDivision = defaultBeatDivision,
                 timingSource = timingSource,
                 compatibleProperties = compatibleProperties,
                 aliases = aliases,
@@ -434,6 +445,9 @@ data class FxFileMetadata(
     val outputType: String = "SLIDER",
     val effectMode: String = "STANDARD",
     val defaultStepTiming: Boolean = false,
+    val defaultDirection: EffectDirection = EffectDirection.FORWARD,
+    /** A new instance's cycle, in beats (one bar unless the frontmatter says otherwise). */
+    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
     val timingSource: String = "BEAT",
     val compatibleProperties: List<String> = emptyList(),
     val aliases: List<String>? = null,

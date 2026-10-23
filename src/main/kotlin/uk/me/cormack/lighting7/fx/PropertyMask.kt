@@ -140,9 +140,9 @@ fun maskAllows(mask: Set<PropertyMaskGroup>?, group: PropertyMaskGroup?): Boolea
  * The attribute family an effect's declared [category] belongs to.
  *
  * The category vocabulary is the effect library's own (`"dimmer"` / `"colour"` / `"position"` /
- * `"beam"` / `"controls"`, plus `"composite"`).
- * `"controls"`, `"composite"` and anything unrecognised answer null rather than defaulting into
- * BEAM, so an unknown category under-banks rather than mis-banks.
+ * `"beam"` / `"palette"` / `"controls"`). `"palette"` (the Steps FX), `"controls"` and anything
+ * unrecognised answer null rather than defaulting into BEAM, so an unknown category under-banks
+ * rather than mis-banks: a Steps FX's family is what it steps ([stepsFxCategory]).
  *
  * One map for a Look's families, a palette's (fx-templates D4) and the press's family replacement:
  * two copies would be two answers to "which column of the busk view does this belong in".

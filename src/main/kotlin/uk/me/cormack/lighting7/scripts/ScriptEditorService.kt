@@ -220,7 +220,6 @@ class ScriptEditorService(
         ScriptType.FX_APPLICATION -> "fxapp.kts"
         ScriptType.FX_CALC -> "fxcalc.kts"
         ScriptType.FX_CALC_STATEFUL -> "fxstateful.kts"
-        ScriptType.FX_CALC_COMPOSITE -> "fxcomposite.kts"
     }
 
     companion object {

@@ -153,6 +153,9 @@ export function FxEffectFields({
   const levelMode = level ? levelModeOf(draft.blendMode) : null
 
   const stepTiming = scope.stepTiming ?? scope.heads
+  // A whole cycle in the phase offset is Bounce's parity (a migrated `pingPong` FX keeps one): the
+  // Phase control edits the part within the cycle and leaves it be.
+  const phaseCycles = Math.floor(draft.phaseOffset)
   const roles = entry.parameters.map((param) => ({ param, role: paramRole(entry, param) }))
   // Around hides the centre: it is pinned at 128, and showing it would offer a knob that turns the
   // orbit into an offset nobody asked for.
@@ -244,7 +247,7 @@ export function FxEffectFields({
       <Disclosure
         label="Advanced"
         summary={[
-          `phase ${Math.round(draft.phaseOffset * 360)}°`,
+          `phase ${Math.round((draft.phaseOffset - phaseCycles) * 360)}°`,
           draft.blendMode.toLowerCase(),
           ...(draft.nShot != null ? [runsWord(draft.nShot)] : []),
           ...(stepTiming ? [`timing per ${draft.stepTiming ? 'head' : 'cycle'}`] : []),
@@ -253,7 +256,7 @@ export function FxEffectFields({
         <SliderRow
           label="Phase"
           unit="°"
-          value={draft.phaseOffset}
+          value={draft.phaseOffset - phaseCycles}
           min={0}
           max={1}
           step={0.01}
@@ -261,7 +264,7 @@ export function FxEffectFields({
           fromDisplay={(d) => Math.max(0, Math.min(1, d / 360))}
           displayMax={360}
           readOnly={readOnly}
-          onChange={(v, release) => set({ phaseOffset: v }, release)}
+          onChange={(v, release) => set({ phaseOffset: phaseCycles + v }, release)}
         />
         <RunsRow draft={draft} readOnly={readOnly} set={set} />
         <SelectRow
@@ -413,7 +416,7 @@ const NOTIONAL_HEADS = 8
  *
  * The desk shapes the heads (P2): this writes the four fields and draws the dials from
  * `lib/spreadShape.ts`, the one client copy of the rule, pinned to the desk's by a shared vector.
- * Wings are hidden under a mirrored Order (Centre out, Centre in, Split — two wings already).
+ * Wings are hidden under a mirrored Order (Centre out, Centre in — two wings already).
  */
 function SpreadSection({
   draft,

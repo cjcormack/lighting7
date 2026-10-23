@@ -109,7 +109,11 @@ data class LookEffectDto(
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
      */
     val size: Double = 1.0,
-    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    /**
+     * Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. A stored
+     * FX's field, absent Forward as its archive reads it; the doors that make a new FX (the picker,
+     * the palette editor, MCP) write its type's own Direction (`EffectRegistration.defaultDirection`).
+     */
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
     val nShot: Int? = null,
@@ -332,7 +336,11 @@ data class LookEffectSpec(
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
      */
     val size: Double = 1.0,
-    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. */
+    /**
+     * Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. A stored
+     * FX's field, absent Forward as its archive reads it; the doors that make a new FX (the picker,
+     * the palette editor, MCP) write its type's own Direction (`EffectRegistration.defaultDirection`).
+     */
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
     val nShot: Int? = null,

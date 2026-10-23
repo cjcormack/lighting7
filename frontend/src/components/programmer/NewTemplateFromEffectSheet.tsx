@@ -205,7 +205,7 @@ export function NewTemplateFromEffectSheet({
               id="new-effect-template-name"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Amber Breathe"
+              placeholder="Amber Wave"
               autoFocus
             />
           </div>

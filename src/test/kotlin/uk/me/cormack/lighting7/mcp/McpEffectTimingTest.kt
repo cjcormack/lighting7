@@ -65,7 +65,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
             createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Beam", usage = "beam")),
         ).dto.uuid
 
-        val zoom = call("create_look", """{"name":"Zoom","effects":[${effect("ZoomBreathe", "beam")}]}""")
+        val zoom = call("create_look", """{"name":"Zoom","effects":[${effect("ZoomWave", "beam")}]}""")
         assertTrue(zoom.success, zoom.result)
         assertEquals(StoredEffect(BeatDivision.ONE_BAR, beamMaster, false), storedEffect("Zoom"))
     }

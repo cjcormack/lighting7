@@ -121,18 +121,11 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `SPLIT divides group into mirrored halves`() {
-        val strategy = DistributionStrategy.SPLIT
-        val groupSize = 4
-
-        val offsets = (0 until groupSize).map { idx ->
-            strategy.calculateOffset(createMember(idx, groupSize), groupSize)
-        }
-
-        // First and last should have same offset
-        assertEquals(offsets[0], offsets[3], 0.001)
-        // Second and third should have same offset
-        assertEquals(offsets[1], offsets[2], 0.001)
+    fun `SPLIT is no Order of its own`() {
+        // Centre in gave Split's offsets exactly (terminology plan D18); a stored SPLIT is rewritten
+        // to EDGES_IN by database step 4 and the importer, and nothing else reads the name.
+        assertEquals(null, DistributionStrategy.byName("SPLIT"))
+        assertTrue("SPLIT" !in DistributionStrategy.availableStrategies)
     }
 
     @Test
@@ -220,7 +213,6 @@ class DistributionStrategyTest {
             DistributionStrategy.CENTER_OUT,
             DistributionStrategy.EDGES_IN,
             DistributionStrategy.REVERSE,
-            DistributionStrategy.SPLIT,
             DistributionStrategy.PING_PONG,
             DistributionStrategy.POSITIONAL,
             DistributionStrategy.RANDOM(42),
@@ -269,7 +261,6 @@ class DistributionStrategyTest {
         assertEquals(DistributionStrategy.CENTER_OUT, DistributionStrategy.fromName("CENTER_OUT"))
         assertEquals(DistributionStrategy.EDGES_IN, DistributionStrategy.fromName("EDGES_IN"))
         assertEquals(DistributionStrategy.REVERSE, DistributionStrategy.fromName("REVERSE"))
-        assertEquals(DistributionStrategy.SPLIT, DistributionStrategy.fromName("SPLIT"))
         assertEquals(DistributionStrategy.PING_PONG, DistributionStrategy.fromName("PING_PONG"))
         assertEquals(DistributionStrategy.POSITIONAL, DistributionStrategy.fromName("POSITIONAL"))
     }
@@ -296,7 +287,6 @@ class DistributionStrategyTest {
         assertTrue(available.contains("CENTER_OUT"))
         assertTrue(available.contains("EDGES_IN"))
         assertTrue(available.contains("REVERSE"))
-        assertTrue(available.contains("SPLIT"))
         assertTrue(available.contains("PING_PONG"))
         assertTrue(available.contains("POSITIONAL"))
     }
@@ -309,7 +299,6 @@ class DistributionStrategyTest {
             DistributionStrategy.CENTER_OUT,
             DistributionStrategy.EDGES_IN,
             DistributionStrategy.REVERSE,
-            DistributionStrategy.SPLIT,
             DistributionStrategy.PING_PONG,
             DistributionStrategy.POSITIONAL,
             DistributionStrategy.RANDOM(42)

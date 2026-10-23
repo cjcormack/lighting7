@@ -63,6 +63,8 @@ class FxRegistrationTargetCompatibilityTest {
     private data class BuiltIn(
         val path: String,
         val id: String,
+        val category: String,
+        val effectMode: String,
         val outputType: FxOutputType,
         val compatibleProperties: List<String>,
     )
@@ -80,6 +82,8 @@ class FxRegistrationTargetCompatibilityTest {
             BuiltIn(
                 path = path,
                 id = metadata.id,
+                category = metadata.category,
+                effectMode = metadata.effectMode,
                 outputType = FxOutputType.valueOf(metadata.outputType),
                 compatibleProperties = metadata.compatibleProperties,
             )
@@ -123,6 +127,30 @@ class FxRegistrationTargetCompatibilityTest {
         }
 
         assertTrue(failures.isEmpty(), "Incompatible compatibleProperties:\n" + failures.joinToString("\n"))
+    }
+
+    /**
+     * The library by family (terminology plan §4.2): the renamed ids, no Breathe, Lightning Strike a
+     * standard Intensity FX, and the two Steps FX one family. `dimmer` and `palette` are Intensity's
+     * and Steps' stored spellings.
+     */
+    @Test
+    fun `the library's families hold today's ids`() {
+        val byFamily = builtIns().groupBy({ it.category }, { it.id }).mapValues { it.value.toSet() }
+        assertEquals(
+            mapOf(
+                "dimmer" to setOf(
+                    "SineWave", "RampUp", "RampDown", "Ramp", "Pulse", "SquareWave", "DimmerStrobe", "Flicker",
+                    "CandleFlicker", "FluorescentFlicker", "LightningStrike",
+                ),
+                "colour" to setOf("ColourCycle", "RainbowCycle", "ColourStrobe", "ColourWave", "ColourFade", "ColourFlicker"),
+                "position" to setOf("Circle", "Figure8", "Sweep", "PanSweep", "TiltSweep", "RandomPosition"),
+                "beam" to setOf("ZoomWave", "IrisPulse", "FrostPulse", "FocusPull"),
+                STEPS_CATEGORY to setOf(PALETTE_STEPS_ID, SLOT_STEPS_ID),
+            ),
+            byFamily,
+        )
+        assertTrue(builtIns().all { it.effectMode == "STANDARD" || it.effectMode == "STATEFUL" }, "the composite mode is gone")
     }
 
     // ─── The coercion itself ────────────────────────────────────────────────

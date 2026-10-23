@@ -43,7 +43,7 @@ sealed interface DistributionStrategy {
      * Number of distinct offset slots for a given group size.
      *
      * For asymmetric distributions (LINEAR, REVERSE), this equals groupSize.
-     * For symmetric distributions (CENTER_OUT, SPLIT), this is fewer because
+     * For symmetric distributions (CENTER_OUT, EDGES_IN), this is fewer because
      * multiple members share the same offset. A step chase uses this for
      * window width: `1/distinctSlots` ensures no gaps in the chase.
      *
@@ -74,7 +74,7 @@ sealed interface DistributionStrategy {
         DoubleArray(members.size) { calculateOffset(members[it], groupSize) }
 
     /**
-     * Whether this Order is two mirrored wings already (Centre out, Edges in, Split — effects plan
+     * Whether this Order is two mirrored wings already (Centre out, Centre in — effects plan
      * §3.3 step 3), so Wings has nothing to add under it: refused at the write boundary, ignored by
      * [uk.me.cormack.lighting7.fx.SpreadShaping] if a stored row holds one anyway.
      */
@@ -261,27 +261,6 @@ sealed interface DistributionStrategy {
     }
 
     /**
-     * Split distribution: left and right halves run simultaneously.
-     *
-     * The group is split in half, with each half running the same
-     * linear distribution from center outward. Members at mirrored
-     * positions share the same offset and fire together.
-     */
-    data object SPLIT : DistributionStrategy {
-        override val isMirrored: Boolean = true
-
-        override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
-
-        override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            if (groupSize <= 1) return 0.0
-            val slots = distinctSlots(groupSize)
-            // Mirror: member i and member (N-1-i) get the same rank
-            val rank = minOf(member.index, groupSize - 1 - member.index)
-            return rank.toDouble() / slots
-        }
-    }
-
-    /**
      * Position-based distribution using the member's normalized position.
      *
      * Uses the member's normalizedPosition directly as the offset,
@@ -328,7 +307,6 @@ sealed interface DistributionStrategy {
                 "RANDOM" -> RANDOM()
                 "PING_PONG" -> PING_PONG
                 "REVERSE" -> REVERSE
-                "SPLIT" -> SPLIT
                 "POSITIONAL" -> POSITIONAL
                 else -> null
             }
@@ -351,7 +329,7 @@ sealed interface DistributionStrategy {
          */
         val availableStrategies = listOf(
             "LINEAR", "UNIFIED", "CENTER_OUT", "EDGES_IN",
-            "RANDOM", "PING_PONG", "REVERSE", "SPLIT", "POSITIONAL"
+            "RANDOM", "PING_PONG", "REVERSE", "POSITIONAL"
         )
 
         /**
@@ -367,7 +345,7 @@ sealed interface DistributionStrategy {
 /**
  * Member `i`'s **step** under this strategy in a group of [groupSize]: its place in the order the
  * members come round, 1 first. Members sharing an offset share a step — a pair under `CENTER_OUT` or
- * `SPLIT`, everyone under `UNIFIED` — so the steps run 1…[DistributionStrategy.distinctSlots].
+ * `EDGES_IN`, everyone under `UNIFIED` — so the steps run 1…[DistributionStrategy.distinctSlots].
  *
  * A function of the size alone, because no strategy reads more than a member's index and its
  * `i / (n - 1)` position: a group's members are numbered in their stored order (`sort_order`), and

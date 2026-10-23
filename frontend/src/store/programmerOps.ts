@@ -353,7 +353,7 @@ export type SpreadCurve = 'LINE' | 'MIRROR' | 'ARROW' | 'WINGS'
  * (`state/BuskRigOrder.kt`) — or, for a spread whose one target is a group, that group's member
  * order (venue-visit plan S7) — `REVERSE` the other way, `CENTER_OUT` folds the two ends together,
  * `RANDOM` is a permutation seeded from the request. The strategy has more names (`EDGES_IN`,
- * `PING_PONG`, `SPLIT`, `POSITIONAL`, `UNIFIED`); the Spread tab offers these four, and
+ * `PING_PONG`, `POSITIONAL`, `UNIFIED`); the Spread tab offers these four, and
  * `lib/spreadIntent.ts` says which of the design's labels has no desk order yet.
  */
 export type SpreadOrder = 'LINEAR' | 'REVERSE' | 'CENTER_OUT' | 'RANDOM'
