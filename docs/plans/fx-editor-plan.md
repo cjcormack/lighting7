@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 2 and 3a of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 2 and 3a of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -382,7 +382,7 @@ Why each gate is where it is:
   large diffs over the same TypeScript at once is the conflict the gates exist to avoid. After it is
   preferred, since it is mechanical and quick.
 
-### Session 1a: the sampler (backend)
+### Session 1a: the sampler (backend) — done, `21aca965`
 
 **Gate: terminology session 3.**
 

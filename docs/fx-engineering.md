@@ -1100,7 +1100,8 @@ idiom read twice across a concurrent edit records an explicit value where track-
 ### Phase Calculation
 
 The phase passed to each effect determines where in the cycle it evaluates. For group/multi-element
-effects, `FxInstance.calculatePhaseForMember` computes:
+effects, `FxInstance.calculatePhaseForMember` computes, through the pure `FxPhase.beatPhaseAt` (its
+wall-clock twin `wallClockPhaseAt`; §"Previewing an FX"):
 
 ```
 memberPhase = (baseClock + phaseOffset - distributionOffset) % 1.0
@@ -1199,6 +1200,81 @@ spread's shape** (§"The spread's shape"), so Blocks and Groups leave no empty s
 creating new `FxInstance`s. A step chase (a user effect windowed as above) declares `true`;
 every built-in is a continuous effect (SineWave, Pulse, etc.) and defaults to `false` (full
 cycle). The value can be overridden per-instance via the API.
+
+## Previewing an FX
+
+Nothing on the stage evaluates an FX for a moment it has not reached, so the FX editor's graph (FX
+editor plan D7) comes from `fx/FxSampler.kt`: an FX's output on each head over a window, for a running
+FX or a draft (an `FxInstance` never added to the engine), with the engine's own maths and none of its
+state (P3, P4). `FxEngine.sampler(freshEffect)` builds one over the engine; the preview route
+(session 1b) is its only caller.
+
+**What it reuses.** The members and their offsets are the compose pass's: `FxEngine`'s expansion and
+`DistributionPlan`, read through the instance's caches while they are valid and built, never stored,
+when they are not. The order is the engine's own `sortedEffectsComparator`, so Local FX fold above
+every programmer layer's FX (§"Programmer suppression and the priority band"). A step is resolved
+per head by its target (`outputByte`, `outputColour`, `outputPosition`, `outputLevel` on the targets,
+which `applyValueToFixture` calls too). What is held back is `EffectSuppression.heldBackReason`,
+the rule the property-stack read asks, against one snapshot of the programmer and Blind.
+
+**What it splits out.** Two pieces were fused with state and are now pure, with the engine calling
+them:
+
+- `fx/FxPhase.kt`: a member's phase from one reading of its clock — a master tick (`beatPhaseAt`) or
+  scaled milliseconds (`wallClockPhaseAt`) — its dynamics and its Runs anchor, or NaN while it holds.
+  The instance keeps its writes outside: anchoring `nShotStartTick` / `nShotStartScaledMs`,
+  `lastPhase`, and the Runs tally (`NShotTally`) the compose pass reads to end a spent FX.
+- `fx/FxBlend.kt`: the blend and weight as functions of (before, output, blend, weight) — a byte,
+  RGB, a position axis (*Around* about 128) and a setting's slot (from half weight up) — and the
+  weight itself, Amount × envelope × FX amount. Every target's `applyValueToFixture` writes through
+  it; `FxBlendTest` pins it to the values the targets wrote before.
+
+**The fold.** For each head and attribute: what is underneath (`LayerResolver.fallbackFor`, read
+once and held across the window; a fade underneath is not drawn), then every FX painting it in apply
+order, each blended over the running result and weighed by its Amount × its stack's FX amount × 1
+for the envelope (a fade in or out is not drawn either). An FX that a stomp, the programmer or Blind
+holds back on that key is sampled — its own output is in the answer — but left out of *Result*, and
+reported `heldBack` with its reason. A member outside its Runs, a paused FX, or one that cannot be
+evaluated holds; its samples repeat what it would have blended over and its `holding` ranges say
+where. Where nothing running covers a key, the pass neither resets nor paints it, so the stage keeps
+the frame a paused FX left; *Result* is that frame, read off the head. *Result* is before Layer 1: a
+row whose channels are all parked is marked `parked`, and the park is what is sent. Each attribute
+is folded on its own, so where two share channels (a colour FX's bundled W, A and UV beside a `uv`
+FX, `pan` beside `position`) the stage's single fold is not reproduced
+(`FU-FX-PREVIEW-SHARED-CHANNELS`). *Include* `STACK` folds every running FX reaching the rows as well
+as the ones asked for; `ONLY` folds those alone.
+
+**Drafts.** A draft is ordered where adding it would put it — a Local draft at the top of its lane,
+any draft after the running FX of its priority — and runs on the masters its uuids name, which only
+adding it would bind to slots. Previewing an edit to a running FX is the route's (session 1b).
+
+**Clocks.** Sampling starts from one reading of every clock (`FxSampleClock`: each master's tick and
+its length, each rate master's scale). A beat FX's tick at a sample is its master's tick plus the
+sample's offset in that master's ticks, so it lands on the ticks the stage paints; a wall-clock FX's
+is its accumulator plus the offset at its rate. A Runs FX counts from its anchor, or from the window's
+start before its first pass.
+
+**Stateful FX.** Candle Flicker and Fluorescent Flicker keep state, shared on stage by every member.
+The sampler runs a fresh object per head, `initialize()`d and stepped once a sample from the window's
+start, its tick count starting at 0 so the same request answers the same, and marks the FX
+`representative`: its shape, not the stage's frames. Every other FX is evaluated on a fresh effect
+object too (`freshEffect`, `createEffectWithTemplates` in production), so a sample never shares one
+with the pass.
+
+**Caps.** 48 samples to a cycle of the first FX asked for (its whole cycle, Timing *Per head*
+included), at most 1024 a row; at most 96 rows and 8 FX a request. Past a cap the answer is cut and
+`truncated` names which. A row is a head; its samples are a byte a sample per plane — a slider or a
+setting's level, RGB plus each bundled W, A and UV the head has, or pan and tilt — and a Steps FX's
+own output carries the step it shows beside the steps' labels.
+
+**Nothing changes.** The sampler never writes an instance's clocks, Runs anchors, stateful state,
+envelope or `lastPhase`, or its expansion and plan caches, and never writes DMX: the one transaction it makes is
+a staging one it never applies, to read a paused FX's frame off a head. `FxSamplerParityTest`
+drives the engine a pass at a time and holds *Result* to the committed DMX at every sampled tick —
+every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, Timing *Per head*, *Replace*
+under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, a Seconds FX, each
+element mode and filter, a held-back FX, a Local FX over a layer's, and a beat FX with a wall-clock FX
+*Within* it — and checks that sampling leaves every instance field and the controller as they were.
 
 ## Easing Curves
 
@@ -1909,6 +1985,9 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/EffectParamUtils.kt` | Parameter parsing utilities (parseExtendedColour, toUByteParam, etc.) |
 | `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, speed-master refs |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
+| `fx/FxBlend.kt` | Blend and weight as pure functions, written through by every target and folded by the sampler |
+| `fx/FxPhase.kt` | A member's phase as a pure function of one clock reading, its dynamics and its Runs anchor |
+| `fx/FxSampler.kt` | Evaluates FX off the stage over a window, for the FX editor's graph (§"Previewing an FX") |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
 | `fx/FxEngine.kt` | The compose pass and its wake sources, active-effect set, group expansion (post-E1 split) |
 | `fx/CascadePublisher.kt` | Layer-4/cascade → controller transmit, the Layer 4 publish lock, channel-covering-key lookup |

@@ -851,22 +851,11 @@ class ProvenanceService internal constructor(
         return KeyStack(fixtureKey, propertyName, blind, layers)
     }
 
-    /**
-     * Why [painting]'s effect is not painting its key, or null when it is: the tick's own two
-     * questions — [EffectSuppression.isSuppressed] and [BlindHold] — against the request's snapshot,
-     * asked in [KeyStackLayer.HeldBackReason]'s order. The stomp and the programmer halves are
-     * [EffectSuppression]'s own two, so the reason never disagrees with its answer.
-     */
-    private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? {
-        val effect = painting.effect
-        return when {
-            isLayerStomped(effect, painting.fixtureKey, painting.propertyName) -> KeyStackLayer.HeldBackReason.STOMP
-            EffectSuppression.heldBackByProgrammer(read.held, painting.fixtureKey, painting.propertyName, effect.priority) ->
-                KeyStackLayer.HeldBackReason.PROGRAMMER
-            BlindHold.holds(read.blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
-            else -> null
-        }
-    }
+    /** Why [painting]'s effect is not painting its key, or null when it is, against the request's snapshot. */
+    private fun heldBackReason(read: KeyStackRead, painting: Painting): KeyStackLayer.HeldBackReason? =
+        EffectSuppression.heldBackReason(
+            read.held, read.blind, painting.fixtureKey, painting.propertyName, painting.effect, isLayerStomped,
+        )
 
     /** An [FxOutput] in the literal grammar of [target]'s property. */
     private fun FxOutput.asPropertyValueFor(target: FxTarget): CueAssignmentResolver.PropertyValue = when (this) {

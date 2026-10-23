@@ -4,7 +4,6 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.group.DistributionStrategy
 import uk.me.cormack.lighting7.models.LayerSource
 import java.util.concurrent.atomic.AtomicReference
-import kotlin.math.floor
 
 /**
  * Filter for selecting which elements of a multi-element fixture receive an effect.
@@ -358,7 +357,7 @@ data class ProgrammerLayerEffectKey(
  *
  * - [groupSize] is the size of the list the member was spread over. A step-timed member's cycle is
  *   its division times the list's distinct slots, and a ping-pong's sweep is scaled by its slot count
- *   (`FxInstance.memberCycleDivision`, `shapeMemberPhase`); a copy of one head would have neither.
+ *   ([FxPhase.memberDivision], [FxPhase]'s shaping); a copy of one head would have neither.
  *   Agreed with Chris during session 2: the split carries them.
  * - [offset] is the member's distribution offset, which puts the copy where it was in the cycle, and
  *   holds an N-shot's window back by it and counts Bounce's cycles from it, as a member's are.
@@ -803,7 +802,7 @@ class FxInstance internal constructor(
      * Takes the caller's per-pass snapshot, like every other tick-path read.
      */
     fun weight(dynamics: FxDynamics, stackSize: Double = 1.0): Double =
-        (dynamics.size * intensityMultiplier * stackSize).coerceIn(0.0, 1.0)
+        FxBlend.weight(dynamics.size, intensityMultiplier, stackSize)
 
     /**
      * Where an N-shot's count began ([FxDynamics.nShot], D9): the master tick of a beat effect's first
@@ -1051,10 +1050,8 @@ class FxInstance internal constructor(
     ): Double = beatPhase(tick, memberCycleDivision(dynamics, groupSize), groupSize, dynamics, distributionOffset)
 
     /**
-     * A beat effect's clock at [tick] as whole cycles and the fraction of the current one — from the
-     * effect's own start for an N-shot (anchoring [nShotStartTick] on its first pass), from the
-     * master's tick 0 otherwise — handed to [shapeMemberPhase]. Integer arithmetic, as
-     * [MasterClock.phaseForDivision] always was, so a forever effect's phase is unchanged.
+     * A beat effect's phase at [tick] ([FxPhase.beatPhaseAt]) — from the effect's own start for an
+     * N-shot, anchoring [nShotStartTick] on its first pass, from the master's tick 0 otherwise.
      */
     private fun beatPhase(
         tick: MasterClock.ClockTick,
@@ -1063,83 +1060,26 @@ class FxInstance internal constructor(
         dynamics: FxDynamics,
         distributionOffset: Double,
     ): Double {
-        val ticksPerCycle = (MasterClock.TICKS_PER_BEAT * division).toLong()
-        if (ticksPerCycle <= 0) return 0.0
-        var ticks = tick.tickNumber
+        // A cycle too short to count leaves the anchor alone.
+        if (FxPhase.beatCycleTicks(division) <= 0) return 0.0
+        val ticks = tick.tickNumber
         if (dynamics.nShot == null) {
             nShotStartTick = UNANCHORED
-        } else {
+        } else if (nShotStartTick == UNANCHORED || ticks < nShotStartTick) {
             // A master whose count went backwards (a reload) re-anchors rather than counting negative.
-            if (nShotStartTick == UNANCHORED || ticks < nShotStartTick) nShotStartTick = ticks
-            ticks -= nShotStartTick
+            nShotStartTick = ticks
         }
-        return shapeMemberPhase(
-            cycles = ticks / ticksPerCycle,
-            basePhase = (ticks % ticksPerCycle).toDouble() / ticksPerCycle,
-            dynamics = dynamics,
-            distributionOffset = distributionOffset,
-            groupSize = groupSize,
-        )
+        return FxPhase.beatPhaseAt(ticks, nShotStartTick, division, groupSize, dynamics, distributionOffset, nShotTally)
     }
 
-    /**
-     * The effective beat division for a member pass: for step-timed effects, the beat
-     * division is scaled by the number of distinct distribution slots — after the spread's shape
-     * (effects plan §3.3: the rank count after step 4) — so it controls time-per-step rather than
-     * total cycle time, and a chase over Blocks or Groups has no empty steps.
-     */
+    /** The effective cycle length for a member pass; see [FxPhase.memberDivision]. */
     private fun memberCycleDivision(dynamics: FxDynamics, groupSize: Int): Double =
-        if (dynamics.stepTiming && groupSize > 1) {
-            timing.beatDivision * dynamics.distinctSlots(groupSize)
-        } else {
-            timing.beatDivision
-        }
+        FxPhase.memberDivision(timing.beatDivision, dynamics, groupSize)
 
-    /**
-     * The member-phase shaping shared by the beat and wall-clock forms, which differ only in where
-     * the clock comes from: [cycles] whole cycles and [basePhase] of the current one.
-     *
-     * In order (effects plan §3.3): the distribution's own shaping and offset — the offset already
-     * shaped by Spread, Wings, Blocks and Groups (steps 2–5, in [DistributionPlan]); then N-shot
-     * (D9), whose member runs while its own clock — the effect's less its offset — is in `[0, N)`,
-     * holding underneath before and after (NaN); then direction (D5, step 6), Bounce counting
-     * cycles on that same own clock.
-     */
-    private fun shapeMemberPhase(
-        cycles: Long,
-        basePhase: Double,
-        dynamics: FxDynamics,
-        distributionOffset: Double,
-        groupSize: Int,
-    ): Double {
-        // PING_PONG: apply triangle wave remap to the base clock phase so that
-        // ALL effects (not just static ones) sweep forward then backward.
-        // Scale to [0, (N-1)/N] to match the NORMAL offset range and avoid
-        // wrapping artifacts at the turnaround points. N is the Order's own slot count, never the
-        // spread's shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every
-        // other Order, and leave the sweep alone (effects plan §3.3) — so the sweep is never scaled
-        // to nothing, and an effect that names no shape bounces bit for bit as before (P6).
-        var shaped = basePhase
-        if (dynamics.distributionStrategy.usesTrianglePhase && groupSize > 1) {
-            val slots = dynamics.distributionStrategy.distinctSlots(groupSize)
-            val tri = if (shaped < 0.5) shaped * 2.0 else 2.0 * (1.0 - shaped)
-            shaped = tri * (slots - 1.0) / slots
-        }
-
-        // Subtract distribution offset so that higher-offset members are *behind*
-        // in the cycle, making the visual sweep flow in the natural direction
-        // (element 0 → element N for NORMAL, etc.).
-        val phase = ((shaped + dynamics.phaseOffset - distributionOffset) % 1.0 + 1.0) % 1.0
-
-        // The member's own clock, in cycles: the effect's, less this member's offset.
-        val own = cycles + basePhase - distributionOffset
-        dynamics.nShot?.let { runs ->
-            nShotEvaluated = true
-            if (own < runs) nShotPending = true
-            if (own < 0.0 || own >= runs) return Double.NaN
-        }
-        val ownCycle = floor(own + dynamics.phaseOffset).toLong()
-        return dynamics.direction.apply(phase, ownCycle)
+    /** Counts this pass's N-shot members for the compose pass; see [nShotPending]. */
+    private val nShotTally = NShotTally { pending ->
+        nShotEvaluated = true
+        if (pending) nShotPending = true
     }
 
     /**
@@ -1210,21 +1150,15 @@ class FxInstance internal constructor(
         dynamics: FxDynamics,
         distributionOffset: Double,
     ): Double {
-        val cycleDurationMs = division * 1000.0
-        if (cycleDurationMs <= 0.0) return 0.0
-        var elapsed = accumulatedScaledMs
+        if (FxPhase.wallClockCycleMs(division) <= 0.0) return 0.0
+        val elapsed = accumulatedScaledMs
         if (dynamics.nShot == null) {
             nShotStartScaledMs = Double.NaN
-        } else {
-            if (nShotStartScaledMs.isNaN() || elapsed < nShotStartScaledMs) nShotStartScaledMs = elapsed
-            elapsed -= nShotStartScaledMs
+        } else if (nShotStartScaledMs.isNaN() || elapsed < nShotStartScaledMs) {
+            nShotStartScaledMs = elapsed
         }
-        return shapeMemberPhase(
-            cycles = floor(elapsed / cycleDurationMs).toLong(),
-            basePhase = (elapsed % cycleDurationMs) / cycleDurationMs,
-            dynamics = dynamics,
-            distributionOffset = distributionOffset,
-            groupSize = groupSize,
+        return FxPhase.wallClockPhaseAt(
+            elapsed, nShotStartScaledMs, division, groupSize, dynamics, distributionOffset, nShotTally,
         )
     }
 

@@ -101,7 +101,17 @@ class FxEngine(
      * insert, a swap, a Detach and a move.
      */
     private val localRankLock = Any()
-    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+    private val sortedEffectsComparator = applyOrder({ it.priority }, { it.composeOrder }, { it.id })
+
+    /**
+     * The apply order over the three keys the compose pass sorts by, here so the sampler can order a
+     * draft by the keys [insert] would give it without a second copy of the order.
+     */
+    private fun applyOrder(
+        priority: (FxInstance) -> Int,
+        composeOrder: (FxInstance) -> Long,
+        id: (FxInstance) -> Long,
+    ): Comparator<FxInstance> = compareBy(priority, composeOrder, id)
 
     /** Every effect, beat and wall-clock alike, in apply order — what one compose pass folds. */
     @Volatile private var sortedEffects: List<FxInstance> = emptyList()
@@ -1625,15 +1635,18 @@ class FxEngine(
      * Local part of the band sharing a key with it — a head it covers and its attribute — else 0. One
      * still fading out counts, so a new FX never starts under it. Under [localRankLock].
      */
-    private fun topLocalRankFor(effect: FxInstance): Int {
+    private fun topLocalRankFor(
+        effect: FxInstance,
+        keysOf: (FxInstance) -> List<String> = ::resolveEffectFixtureKeys,
+    ): Int {
         val propertyName = effect.target.propertyName
-        val keys = resolveEffectFixtureKeys(effect).toHashSet()
+        val keys = keysOf(effect).toHashSet()
         var highest = -1
         for (other in activeEffects.values) {
             if (other === effect || other.target.propertyName != propertyName) continue
             val rank = localRankOf(other.priority)
             if (rank <= highest) continue
-            if (resolveEffectFixtureKeys(other).any { it in keys }) highest = rank
+            if (keysOf(other).any { it in keys }) highest = rank
         }
         return highest + 1
     }
@@ -2434,16 +2447,29 @@ class FxEngine(
         // Read the version BEFORE the lookups it stamps — see [Fixtures.structureVersion].
         val version = fixtures.structureVersion
         val filter = dyn.elementFilter
-        val cached = effect.expansion
-        if (cached != null && cached.structureVersion == version && cached.elementFilter == filter) {
-            return cached
-        }
+        validExpansion(effect, version, filter)?.let { return it }
         // Clearing the plans here is not needed for correctness — [plansFor] compares the
         // expansion by identity, so a rebuild invalidates them anyway. It is needed so a stale
         // plan (and, through it, the whole superseded expansion's key lists) isn't pinned on an
         // effect whose new expansion is DIRECT_FIXTURE or NONE, which never reach [plansFor].
         effect.distributionPlans = null
         return buildExpansion(effect, version, filter).also { effect.expansion = it }
+    }
+
+    /** [effect]'s cached expansion when it is still valid for the register at [version] and [filter]. */
+    private fun validExpansion(effect: FxInstance, version: Long, filter: ElementFilter): FxTargetExpansion? =
+        effect.expansion?.takeIf { it.structureVersion == version && it.elementFilter == filter }
+
+    /** [effect]'s cached plans when they were built from [expansion] under [dyn]'s Order and shape. */
+    private fun validPlans(effect: FxInstance, expansion: FxTargetExpansion, dyn: FxDynamics): FxDistributionPlans? {
+        val cached = effect.distributionPlans ?: return null
+        // The shape's four fields compared one by one rather than through `dyn.spreadShape`, which
+        // would allocate on every pass for a cache hit.
+        return cached.takeIf {
+            it.expansion === expansion && it.strategy == dyn.distributionStrategy &&
+                it.shape.spread == dyn.spread && it.shape.wings == dyn.wings &&
+                it.shape.blocks == dyn.blocks && it.shape.groups == dyn.groups
+        }
     }
 
     /**
@@ -2466,17 +2492,89 @@ class FxEngine(
         expansion: FxTargetExpansion,
         dyn: FxDynamics,
     ): FxDistributionPlans {
-        val strategy = dyn.distributionStrategy
-        val cached = effect.distributionPlans
-        // The shape's four fields compared one by one rather than through `dyn.spreadShape`, which
-        // would allocate on every pass for a cache hit.
-        if (cached != null && cached.expansion === expansion && cached.strategy == strategy &&
-            cached.shape.spread == dyn.spread && cached.shape.wings == dyn.wings &&
-            cached.shape.blocks == dyn.blocks && cached.shape.groups == dyn.groups
-        ) {
-            return cached
+        validPlans(effect, expansion, dyn)?.let { return it }
+        return FxDistributionPlans.build(expansion, dyn.distributionStrategy, dyn.spreadShape).also { effect.distributionPlans = it }
+    }
+
+    /**
+     * The sampler over this engine (FX editor plan §3.2): the compose pass's own order, expansions,
+     * plans, underneath and held-back rule, read and never written (P4). [freshEffect] builds a new
+     * effect object for an FX, so a sample never shares one with the pass.
+     */
+    internal fun sampler(freshEffect: (FxInstance) -> Effect): FxSampler = FxSampler(samplerView, freshEffect)
+
+    private val samplerView = object : FxSampler.View {
+        // A draft (never inserted) sorts where [insert] would put it: a Local one at the top of its
+        // lane, and after every running FX of its priority. Its rank is read without the rank lock;
+        // a preview racing an insert may place it one off.
+        override fun applyOrder(): Comparator<FxInstance> {
+            val draftPriority = HashMap<FxInstance, Int>()
+            return applyOrder(
+                priority = {
+                    if (isDraft(it) && it.isLocalEffect) {
+                        draftPriority.getOrPut(it) { localFxPriority(topLocalRankFor(it, ::previewKeys)) }
+                    } else it.priority
+                },
+                composeOrder = { if (isDraft(it)) Long.MAX_VALUE else it.composeOrder },
+                id = { if (isDraft(it)) Long.MAX_VALUE else it.id },
+            )
         }
-        return FxDistributionPlans.build(expansion, strategy, dyn.spreadShape).also { effect.distributionPlans = it }
+
+        private fun isDraft(effect: FxInstance) = activeEffects[effect.id] !== effect
+
+        private fun previewKeys(effect: FxInstance) = expansion(effect, effect.dynamics).coverageKeys
+
+        override fun running(): List<FxInstance> = sortedEffects
+
+        override fun fixture(key: String): GroupableFixture = fixtures.untypedGroupableFixture(key)
+
+        override fun underneath(target: FxTarget, fixture: GroupableFixture, key: String): FxOutput =
+            layerResolver.fallbackFor(target, fixture, key)
+
+        // The caches when they are still valid, else built and not kept: storing them is the pass's.
+        override fun expansion(effect: FxInstance, dynamics: FxDynamics): FxTargetExpansion {
+            val version = fixtures.structureVersion
+            return validExpansion(effect, version, dynamics.elementFilter)
+                ?: buildExpansion(effect, version, dynamics.elementFilter)
+        }
+
+        override fun plans(effect: FxInstance, expansion: FxTargetExpansion, dynamics: FxDynamics): FxDistributionPlans =
+            validPlans(effect, expansion, dynamics)
+                ?: FxDistributionPlans.build(expansion, dynamics.distributionStrategy, dynamics.spreadShape)
+
+        // A staging transaction that is never applied: the only way to read a head's values.
+        override fun current(target: FxTarget, key: String): FxOutput? = try {
+            target.currentValue(fixtures.withTransaction(ControllerTransaction(fixtures.controllers)).untypedGroupableFixture(key))
+        } catch (_: Exception) {
+            null
+        }
+
+        override fun coveredByRunning(key: String, property: String): Boolean = (key to property) in coveredByRunningEffects()
+
+        override fun parked(target: FxTarget, fixture: GroupableFixture): Boolean = cascade.allChannelsParked(target, fixture)
+
+        override fun speedSlot(uuid: UUID?): Int = speedMasters.slotFor(uuid)
+
+        override fun rateSlot(uuid: UUID?): Int = rateSlotFor(uuid)
+
+        override fun heldBack(): (FxInstance, String, String) -> KeyStackLayer.HeldBackReason? {
+            val blind = programmerStore.blind
+            val held = programmerSuppression(blind)
+            return { effect, key, property -> EffectSuppression.heldBackReason(held, blind, key, property, effect, isLayerStomped) }
+        }
+
+        override fun stackAmount(effect: FxInstance): Double = stackEffectSizes?.weightOf(effect) ?: StackEffectSizes.FULL
+
+        override fun clock(): FxSampleClock {
+            val frame = speedMasters.snapshotFrame()
+            val scales = speedMasters.rateScales()
+            fun bpm(slot: Int) = scales.getOrElse(slot) { scales.getOrElse(0) { 1.0 } } * MasterClock.DEFAULT_BPM
+            return FxSampleClock(
+                ticks = { frame.tick(it).tickNumber },
+                msPerTicks = { 60_000.0 / bpm(it) / MasterClock.TICKS_PER_BEAT },
+                rateScales = { scales.getOrElse(it) { 1.0 } },
+            )
+        }
     }
 
     /**
