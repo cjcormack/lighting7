@@ -444,8 +444,8 @@ provenance *synchronously inside every measured frame* rather than coalescing as
 `[crossfade]` numbers include a per-frame provenance recompute a real desk pays ~20×/s at most.
 
 **2026-08-26 — sweep item C4 (palette colour-cache versioning): no comparison taken, and why.**
-C4's cost lives on the *invalidation* path — a palette edit re-resolving `tmpl:` colour parameters,
-and the DB read that resolve opens — and none of the five scenarios has a `tmpl:` parameter in it.
+C4's cost lives on the *invalidation* path — a palette edit re-resolving `pal:` colour parameters,
+and the DB read that resolve opens — and none of the five scenarios has a `pal:` parameter in it.
 The harness's effects are the frozen `testsupport/TestEffects.kt` copies, which do not go through
 `TypedParams` at all, so nothing here calls `colourSourceVersion` once, let alone 50×/s. A
 before/after pair would have measured run-to-run noise and then sat in this section looking like

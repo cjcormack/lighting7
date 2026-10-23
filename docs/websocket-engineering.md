@@ -583,7 +583,7 @@ invalidation broadcast.
 `targetType` is `fixture` or `group`; `targetKey` is that target's key. `value` uses the same
 canonical grammar as a stored cue assignment: `"0".."255"` for sliders and settings, `"#rrggbb"`
 (plus optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer value is
-always a **literal** — a `tmpl:{uuid}` reference is legal only in an effect parameter.
+always a **literal** — a `pal:{uuid}` reference is legal only in an effect parameter.
 
 | Message | Fields | Reply |
 |---|---|---|

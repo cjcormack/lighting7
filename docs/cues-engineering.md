@@ -23,7 +23,7 @@ A **Cue** is a named, project-scoped entity that captures a complete lighting lo
 
 A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
 effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
-gone: an effect parameter names a **colour palette** instead (`tmpl:{uuid}`, see
+gone: an effect parameter names a **colour palette** instead (`pal:{uuid}`, see
 `fx/TemplateColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
 
 Key behaviours:
@@ -76,7 +76,7 @@ cue_layers
 ├── random_window (Duration, nullable — randomisation for recurring)
 └── uuid
 
-cue_ad_hoc_effects
+cue_ad_hoc_fx
 ├── id (auto-increment PK)
 ├── cue_id (FK → cues)
 ├── target_type (varchar 50)
@@ -134,7 +134,7 @@ the list onto entries (`state/CueModelMigration.kt`).
 
 - **Separate child tables with FKs** rather than JSON columns for layers and ad-hoc effects. This provides referential integrity (FK from a layer to its Look), simpler queries for usage counts — the delete guard is a plain indexed FK query where the named-palette era could only scan opaque value text — and proper normalization.
 - **Targets stored as JSON** within `cue_layers` because each application has a small, variable-length list of targets that doesn't benefit from its own table.
-- **Parameters stored as JSON**, matching `cue_ad_hoc_effects` and `look_effects`.
+- **Parameters stored as JSON**, matching `cue_ad_hoc_fx` and `look_fx`.
 - **A write keeps its children's uuids** (show-cue-editing plan P3, §3.4). Every cue write — the
   REST `POST`, `PUT` and `PATCH`, Record's `CREATE` and `UPDATE_EXISTING`, and the AI tools'
   `create_cue` and `build_cue_stack` — goes through `writeCueChildren` (`routes/projectCuesHelpers.kt`),
@@ -153,7 +153,7 @@ the list onto entries (`state/CueModelMigration.kt`).
   `MERGE`, and with it Update, already upserted in place, and Update's layer diff keeps a layer by
   its id. `deleteCueChildren` is only for a cue being deleted. A copy into another project, a clone
   and the importer still mint or carry uuids as they always did.
-- **Effect runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_effects.run_uuid` is an ad-hoc
+- **Effect runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_fx.run_uuid` is an ad-hoc
   effect's **run key**: rows of neighbouring cues that share one are one run, for the stack's Timeline
   to draw as one bar and a GO to hand the effect on (stack-timeline plan sessions 2 and 3). It is the
   timeline's to write. `CueAdHocEffectDto.runUuid` is read only, like `uuid`, and `take()` leaves it
@@ -270,7 +270,7 @@ allowed to name a uuid that has no palette yet.
 
 There were two `createEffectInstance` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
-because that fallback silently reached the *global* list when the cue was not live. A `tmpl:`
+because that fallback silently reached the *global* list when the cue was not live. A `pal:`
 reference has one answer wherever it is read, so the fork had nothing left to be about and the two
 collapsed into one.
 
@@ -526,7 +526,7 @@ layers, own rows, effects, script hooks, scenery and events. Within one project 
 kept as it is. Across projects each is resolved **in the target**:
 
 - **A Look or palette** a layer applies is the target's of that name, else copied with the cue, and
-  so is one a `tmpl:{uuid}` effect parameter names — a colour reference, or an item of a list
+  so is one a `pal:{uuid}` effect parameter names — a colour reference, or an item of a list
   (a colour list, Palette Steps' `palettes`). A copied Look or palette has its own references
   mapped the same way. The answer names each under `looksCopied` / `looksLinked` /
   `palettesCopied` / `palettesLinked`.
@@ -642,7 +642,7 @@ same `performProgrammerRecord` / `performProgrammerInclude` / `performProgrammer
 `routes/programmerSurface.kt` that the REST routes render — the mode/mask/scope rules and the
 include-target bookkeeping decide which rows get overwritten, so there is exactly one copy of them.
 `create_palette` completes the set: the named, referenceable value an effect parameter points at
-with `tmpl:{uuid}`.
+with `pal:{uuid}`.
 
 The `get_current_state` tool includes `cueId` on active effects and `cues` in its default include set, returning each cue's name, counts and `entries` (its places, empty for a loose cue), and `cue_holds`, what holds each live cue.
 
@@ -650,7 +650,7 @@ The MCP `instructions` and `describe_rig` (`ai/RigBriefing.kt`) describe:
 - Multiple concurrent cues, applied alongside one another
 - Each cue's places, `in: Act 1 Q14, Act 2 Q3` or `loose`; that a cue may be shared; and that only
   `delete_cues` deletes one
-- Colour palettes, listed with their uuids under `palettes`, and the `tmpl:{uuid}` grammar an
+- Colour palettes, listed with their uuids under `palettes`, and the `pal:{uuid}` grammar an
   effect parameter uses to name one
 - Active effects display includes `cueId` for each effect
 
@@ -669,13 +669,13 @@ Neither capability was lost; each moved up a level. A dependency on a *named loo
 **`DaoCueLayer`**, which names its Look through a real FK — an FK cannot be half-rewritten by an
 import, the delete guard is an indexed query rather than a scan over opaque text, and a
 `propertyMask` expresses "only this cue's colour comes from Warm" without a reference per row. A
-dependency on a *named colour* inside an **effect parameter** is `tmpl:{uuid}`, which is the one
+dependency on a *named colour* inside an **effect parameter** is `pal:{uuid}`, which is the one
 consumer with no layer to hang off.
 
 Three things outlived those grammars, all deliberately. `validateLookRows` rejects both a `ref:`- and
-a `tmpl:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
+a `pal:`-shaped value at the Look write boundary — that rejection *is* the no-nesting guarantee, so
 it survives as an inlined shape check with its own local constant.
-`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `tmpl:`-shaped value rather than
+`CueAssignmentResolver.parseAssignmentValue` returns **null** for a `pal:`-shaped value rather than
 letting `parseExtendedColour` answer white. The third was the migration that folded `ref:` rows from
 a v4 database into layers; it was removed on 2026-08-24 with the rest of them (see
 [InstallBootstrap.kt](../src/main/kotlin/uk/me/cormack/lighting7/state/InstallBootstrap.kt)), so a

@@ -138,7 +138,7 @@ CLAUDE.md §"One selection, two shapes" and §"The desk selection has a mask".
 
 ## Records on buttons
 
-Session 4 added six targets: `applyLook`, `pressTemplate`, `pressPad`, and the three busk-page ones.
+Session 4 added six targets: `applyLook`, `pressPalette`, `pressPad`, and the three busk-page ones.
 All are buttons. Five things about them on this side:
 
 - **The library rows are not `TargetRowItem`s.** That component exists to mount

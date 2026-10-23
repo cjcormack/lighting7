@@ -415,7 +415,8 @@ Every fade on these is `fadeSeconds`, 0–600.
 `sourceKind`. All of them say palette now, with no alias, because Claude reads them and the desk
 stores none of them. A client connected before the rename holds a stale `tools/list` and must
 reconnect to see the new names; a call to an old name is refused as an unknown tool. The stored side
-— the tables, `tmpl:` references, the `templates/` archive folder — keeps the old word.
+moved too, in terminology plan session 4: the `palettes` tables, `pal:` references and the
+`palettes/` archive folder.
 
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
@@ -624,7 +625,7 @@ with every clash at once. A stack's cues are copied through the one cue copier
 (`docs/cues-engineering.md` §"Copying"), which `POST /cues/copy-from` shares: a scenery change finds
 the target's element — by uuid between two projects on one venue, else one copied in the same call,
 else by name — a cue event its patch by uuid on one venue, else by key and type, a script trigger its
-script by name, a speed master by index; a cue layer's Look or palette, and one a `tmpl:` effect
+script by name, a speed master by index; a cue layer's Look or palette, and one a `pal:` effect
 parameter names, is the target's of that name (`looksLinked`) or is copied along. A platform's
 region is found by name. What cannot resolve is listed in `unresolved` rather
 than guessed: rows naming a fixture or group the target lacks are kept, reading as missing, as a

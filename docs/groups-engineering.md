@@ -129,17 +129,17 @@ behind in the cycle and the visual sweep flows in the natural direction.
 
 | Strategy | Description | Distinct Slots | Offset Formula |
 |----------|-------------|---------------|----------------|
-| `LINEAR` | Evenly spaced, element 0 → N | N | `index / N` |
+| `NORMAL` | Evenly spaced, element 0 → N | N | `index / N` |
 | `UNIFIED` | All same phase (synchronized) | 1 | `0` |
-| `CENTER_OUT` | Rank-based: center → edges | ⌈N/2⌉ | `rank / ⌈N/2⌉` (center=0) |
-| `EDGES_IN` | Rank-based: edges → center | ⌈N/2⌉ | `(maxRank - rank) / ⌈N/2⌉` |
+| `CENTRE_OUT` | Rank-based: center → edges | ⌈N/2⌉ | `rank / ⌈N/2⌉` (centre=0) |
+| `CENTRE_IN` | Rank-based: edges → center | ⌈N/2⌉ | `(maxRank - rank) / ⌈N/2⌉` |
 | `REVERSE` | Evenly spaced, element N → 0 | N | `(N-1-index) / N` |
-| `PING_PONG` | LINEAR + triangle phase bounce | N | `index / N` (triangle remap at phase level) |
+| `PING_PONG` | NORMAL + triangle phase bounce | N | `index / N` (triangle remap at phase level) |
 | `RANDOM(seed)` | Fisher-Yates shuffle of even offsets | N | Deterministic permutation of `i/N` |
 | `POSITIONAL` | Based on normalized position | N | `member.normalizedPosition` |
 | `CUSTOM(fn)` | Lambda-based calculation | N | User-defined |
 
-**Symmetric strategies** (CENTER_OUT, EDGES_IN) have fewer distinct offset slots
+**Symmetric strategies** (CENTRE_OUT, CENTRE_IN) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. This is exposed via
 `distinctSlots(groupSize)` and used by a windowed step chase for gap-free window sizing.
 
@@ -163,7 +163,7 @@ val group = fixtures.group<HexFixture>("front-wash")
 group.applyDimmerFx(
     fxEngine,
     Pulse(),
-    distribution = DistributionStrategy.LINEAR
+    distribution = DistributionStrategy.NORMAL
 )
 
 // Synchronized colour - all same
@@ -177,7 +177,7 @@ group.applyColourFx(
 group.applyDimmerFx(
     fxEngine,
     SineWave(),
-    distribution = DistributionStrategy.CENTER_OUT
+    distribution = DistributionStrategy.CENTRE_OUT
 )
 ```
 
@@ -243,11 +243,11 @@ The key architectural decision is that group effects create a single `FxInstance
 ```kotlin
 // This creates ONE effect that targets the group
 val effectId = group.applyDimmerFx(fxEngine, Pulse(),
-    distribution = DistributionStrategy.LINEAR)
+    distribution = DistributionStrategy.NORMAL)
 
 // The FxInstance stores:
 // - target: FxTargetRef.GroupRef("front-wash")
-// - distributionStrategy: LINEAR
+// - distributionStrategy: NORMAL
 
 // At processing time, FxEngine:
 // 1. Looks up the group by name
@@ -269,7 +269,7 @@ group.fx(fxEngine) {
     dimmer<HexFixture>(
         Pulse(),
         beatDivision = BeatDivision.QUARTER,
-        distribution = DistributionStrategy.LINEAR
+        distribution = DistributionStrategy.NORMAL
     )
     colour<HexFixture>(
         RainbowCycle(),
@@ -358,7 +358,7 @@ fxEngine.addEffect(FxInstance(
     target = ColourTarget("quad-mover-1"),
     timing = FxTiming(BeatDivision.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.LINEAR
+    distributionStrategy = DistributionStrategy.NORMAL
 })
 ```
 
@@ -369,7 +369,7 @@ POST /api/rest/fx/add
   "effectType": "RainbowCycle",
   "fixtureKey": "quad-mover-1",
   "propertyName": "rgbColour",
-  "distributionStrategy": "LINEAR"
+  "distributionStrategy": "NORMAL"
 }
 ```
 
@@ -382,7 +382,7 @@ When a group contains multi-element fixtures and the effect targets an element-l
 | Mode | Behaviour | Example (2 quad movers, 4 heads each) |
 |------|-----------|---------------------------------------|
 | `PER_FIXTURE` | Each fixture gets the effect independently across its own elements. All fixtures look the same. | Head #0 on both fixtures = same colour. Distribution across 4 heads per fixture. |
-| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (0-7). A LINEAR chase sweeps across all 8 heads sequentially. |
+| `FLAT` | All elements across all fixtures form one flat list. Distribution runs across the entire set. | 8 elements total (0-7). A NORMAL chase sweeps across all 8 heads sequentially. |
 
 `elementMode` defaults to `PER_FIXTURE` and is only relevant when group members are multi-element fixtures whose elements have the target property. When members directly have the property, `elementMode` is ignored.
 
@@ -396,7 +396,7 @@ fxEngine.addEffect(FxInstance(
     target = ColourTarget.forGroup("all-movers"),
     timing = FxTiming(BeatDivision.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.LINEAR
+    distributionStrategy = DistributionStrategy.NORMAL
     elementMode = ElementMode.PER_FIXTURE
 })
 
@@ -406,7 +406,7 @@ fxEngine.addEffect(FxInstance(
     target = ColourTarget.forGroup("all-movers"),
     timing = FxTiming(BeatDivision.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.LINEAR
+    distributionStrategy = DistributionStrategy.NORMAL
     elementMode = ElementMode.FLAT
 })
 ```
@@ -417,7 +417,7 @@ POST /api/rest/groups/all-movers/fx
 {
   "effectType": "RainbowCycle",
   "propertyName": "colour",
-  "distribution": "LINEAR",
+  "distribution": "NORMAL",
   "elementMode": "FLAT"
 }
 ```
@@ -436,7 +436,7 @@ createGroup<WithPosition>("all-heads") {
 fixtures.group<WithPosition>("all-heads").applyPositionFx(
     fxEngine,
     Circle(),
-    distribution = DistributionStrategy.LINEAR
+    distribution = DistributionStrategy.NORMAL
 )
 ```
 
@@ -501,7 +501,7 @@ GET /api/rest/groups
     "memberCount": 4,
     "capabilities": ["dimmer", "colour", "uv"],
     "symmetricMode": "MIRROR",
-    "defaultDistribution": "LINEAR"
+    "defaultDistribution": "NORMAL"
   }
 ]
 ```
@@ -517,7 +517,7 @@ GET /api/rest/groups/front-wash/fx
     "propertyName": "dimmer",
     "beatDivision": 1.0,
     "blendMode": "OVERRIDE",
-    "distribution": "LINEAR",
+    "distribution": "NORMAL",
     "elementMode": null,
     "isRunning": true
   }
@@ -534,7 +534,7 @@ POST /api/rest/groups/front-wash/fx
   "propertyName": "dimmer",
   "beatDivision": 1.0,
   "blendMode": "OVERRIDE",
-  "distribution": "LINEAR",
+  "distribution": "NORMAL",
   "elementMode": "PER_FIXTURE",
   "parameters": {
     "min": "0",
@@ -685,8 +685,8 @@ Groups can be configured with symmetric effect behavior:
 |------|-------------|
 | `NONE` | No symmetry |
 | `MIRROR` | Left/right halves mirror each other |
-| `CENTER_OUT` | Effects radiate from center |
-| `EDGES_IN` | Effects converge to center |
+| `CENTRE_OUT` | Effects radiate from center |
+| `CENTRE_IN` | Effects converge to center |
 
 These modes work with the `symmetricInvert` member metadata to automatically invert effect directions for symmetric positioning.
 

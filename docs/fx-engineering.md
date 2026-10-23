@@ -86,8 +86,8 @@ skipped, as it refuses every tempo write. A master a cue names is a use for the 
 Two nullable per-master settings, added for the busk view (see
 `docs/plans/completed/busking-view-plan.md` §2, decisions D1–D7):
 
-- **`usage`** (`dimmer` / `colour` / `position` / `beam` — the effect library's own `category`
-  vocabulary, pinned by `GlossaryVocabularyTest`) names the master an *apply-time
+- **`usage`** (`intensity` / `colour` / `position` / `beam` — the FX library's own family
+  vocabulary, stored as `speed_masters.family`, pinned by `GlossaryVocabularyTest`) names the master an *apply-time
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
   meaning master 1, everywhere, forever. `controls` is deliberately not routable; its effects
@@ -324,7 +324,7 @@ declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the
 
 | Effect | Category | Steps through | Parameters |
 |--------|----------|---------------|------------|
-| `PaletteSteps` | its palettes' family | generic value palettes, `tmpl:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
+| `PaletteSteps` | its palettes' family | generic value palettes, `pal:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
 | `SlotSteps` | `beam` | one setting's option names | `slots` (`slotList`) |
 
 The two are one family in the library, *Steps* (terminology plan D23): both register under `palette`
@@ -543,10 +543,10 @@ fx_definitions table (user effects only):
 ├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step Effects)
 ├── effect_mode       — STANDARD or STATEFUL
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
-├── compatible_properties — JSON array of property names
+├── compatible_attributes — JSON array of attribute names
 ├── script            — the calculate() body only
 ├── project_id        — owning project (required)
-├── default_step_timing
+├── default_timing    — CYCLE or HEAD
 └── timing_source     — BEAT or WALL_CLOCK
 ```
 
@@ -565,7 +565,7 @@ params.ubyte("min")          → UByte (default from schema)
 params.int("count")          → Int
 params.double("fadeRatio")   → Double
 params.boolean("enabled")    → Boolean
-params.colour("baseColor")   → ExtendedColour (resolves a template reference, "tmpl:{uuid}")
+params.colour("baseColor")   → ExtendedColour (resolves a palette reference, "pal:{uuid}")
 params.colourList("colours") → List<ExtendedColour> (literal colours only; a palette is dropped)
 params.easingCurve("curve")  → EasingCurve
 params.string("name")        → String
@@ -726,8 +726,8 @@ How effect output combines with fixture's base value:
 ### Size, direction and N-shot (effects plan session 1)
 
 Three fields of every running effect, edited in place (they are `FxDynamics` fields, so an edit
-keeps the phase), stored on the four effect homes — a live instance, `look_effects`,
-`cue_ad_hoc_effects` and an effect palette (`template_effects`) — and carried by `LookEffectSpec`,
+keeps the phase), stored on the four effect homes — a live instance, `look_fx`,
+`cue_ad_hoc_fx` and an effect palette (`palette_fx`) — and carried by `LookEffectSpec`,
 `StoredEffect` and `LookEffectSettings` between them, so Record and Include keep them. They sync
 from `formatVersion` 30 (`docs/sync-engineering.md` §"Version 30"). The desk owns every rule (the
 effects plan's P2); the editor only writes the three fields.
@@ -796,7 +796,7 @@ effects plan's P2); the editor only writes the three fields.
   /projects/{id}/cue-stacks/{sid}/effect-size` `{size}` (400 `STACK_EFFECT_SIZE_INVALID` outside 0–1,
   404 for another project's stack, current project only, both roles — a runtime gesture on a venue),
   the `stackEffectSize.state` / `.set` frames (`docs/websocket-engineering.md` §"Stack effect size")
-  and the MIDI `stackEffectSize` fader (`docs/midi-control-surface-engineering.md`). The frontend's
+  and the MIDI `stackFxAmount` fader (`docs/midi-control-surface-engineering.md`). The frontend's
   *FX size* slider sits on the stack's row in the Show view and in the phone runner.
 - **Direction** (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, applied to each member's phase after the
   spread (§3.3 step 6, `EffectDirection.apply`): Backward is `1 − p`, kept inside `[0, 1)` so an
@@ -863,7 +863,7 @@ in session 5 (D16); stored palettes keep `OVERRIDE` and read as Absolute (call 6
 ### Reading `blendMode` and friends out of a string
 
 `blendMode`, `distributionStrategy`, `elementMode` and `elementFilter` all arrive as strings —
-from a REST body, from a stored `look_effects` / `cue_effects` / `cue_layers` row — and
+from a REST body, from a stored `look_fx` / `cue_ad_hoc_fx` / `cue_layers` row — and
 `fx/EffectSpecCoercion.kt` is the only place any of them is parsed. It offers exactly two named
 policies, because there are exactly two situations:
 
@@ -880,7 +880,7 @@ policies, because there are exactly two situations:
 
 Both accept any casing and tolerate surrounding whitespace. **The strict path is stricter than it
 was before sweep item E4**: `distributionStrategy` and `elementFilter` used to degrade an
-unrecognised value to `LINEAR` / `ALL` and add the effect anyway, so a legacy or typo'd value from
+unrecognised value to `NORMAL` / `ALL` and add the effect anyway, so a legacy or typo'd value from
 a MIDI, AI or third-party caller now loses the whole request instead of one attribute. The shipped
 UI only ever sends canonical names, so nothing in-tree changes.
 
@@ -1108,7 +1108,7 @@ memberPhase = (baseClock + phaseOffset - distributionOffset) % 1.0
 ```
 
 The distribution offset is **subtracted** so that higher-offset members are behind in the
-cycle. This makes the visual sweep flow in the natural direction (element 0 → N for LINEAR).
+cycle. This makes the visual sweep flow in the natural direction (element 0 → N for NORMAL).
 
 For PING_PONG distribution, a triangle wave remap is applied to the base clock phase before
 adding offsets, causing all effects to sweep forward then backward:
@@ -1159,7 +1159,7 @@ user effect that should read as a **step chase** — one member lit at a time �
 for a window of each cycle. The window width is `1 / numDistinctSlots`, which accounts for
 symmetric distributions where multiple members share an offset.
 
-For standard distributions (LINEAR, CENTER_OUT, etc.), a modular distance check determines
+For standard distributions (NORMAL, CENTRE_OUT, etc.), a modular distance check determines
 which member is active:
 
 ```
@@ -1193,7 +1193,7 @@ effectiveDivision = beatDivision × dynamics.distinctSlots(groupSize)
 ```
 
 This uses `distinctSlots` rather than `groupSize` so that symmetric distributions
-(CENTER_OUT, EDGES_IN) scale correctly — symmetric pairs share a slot — and it is the count **after the
+(CENTRE_OUT, CENTRE_IN) scale correctly — symmetric pairs share a slot — and it is the count **after the
 spread's shape** (§"The spread's shape"), so Blocks and Groups leave no empty steps either.
 
 **Default values**: Each effect type declares `defaultStepTiming` which is used when
@@ -1535,10 +1535,10 @@ wash.fx {
 }
 
 movers.fx {
-    dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTER_OUT)
+    dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTRE_OUT)
     colour(
         effect("RainbowCycle"), BeatDivision.TWO_BAR,
-        distribution = DistributionStrategy.LINEAR,
+        distribution = DistributionStrategy.NORMAL,
         // Run this one off speed master 2 rather than the global tempo (sweep item B2).
         speedMasterUuid = speedMasterUuidAt(2),
     )
@@ -1567,7 +1567,7 @@ fixture.clearFx(fxEngine)
 
 // Group with distribution
 val group = fixtures.group<HexFixture>("front-wash")
-group.applyDimmerFx(fxEngine, effect("Pulse"), distribution = DistributionStrategy.LINEAR)
+group.applyDimmerFx(fxEngine, effect("Pulse"), distribution = DistributionStrategy.NORMAL)
 ```
 
 ## Group Effect Processing
@@ -1614,23 +1614,23 @@ at the element level. It has no effect when members directly have the target pro
 
 | Strategy | Description | Distinct Slots |
 |----------|-------------|---------------|
-| `LINEAR` | Evenly spaced phases, element 0 → N | N |
+| `NORMAL` | Evenly spaced phases, element 0 → N | N |
 | `UNIFIED` | All fixtures same phase (synchronized) | 1 |
-| `CENTER_OUT` | Rank-based: center fires first, radiates outward | ⌈N/2⌉ |
-| `EDGES_IN` | Rank-based: edges fire first, converges to center | ⌈N/2⌉ |
+| `CENTRE_OUT` | Rank-based: center fires first, radiates outward | ⌈N/2⌉ |
+| `CENTRE_IN` | Rank-based: edges fire first, converges to center | ⌈N/2⌉ |
 | `REVERSE` | Evenly spaced phases, element N → 0 | N |
-| `PING_PONG` | LINEAR offsets + triangle phase remap for bounce | N |
+| `PING_PONG` | NORMAL offsets + triangle phase remap for bounce | N |
 | `RANDOM(seed)` | Deterministic Fisher-Yates shuffle of evenly-spaced offsets | N |
 | `POSITIONAL` | Based on normalized position | N |
 
-**Symmetric strategies** (CENTER_OUT, EDGES_IN) have fewer distinct offset slots
+**Symmetric strategies** (CENTRE_OUT, CENTRE_IN) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. A windowed step chase uses
 `numDistinctSlots` for window width to ensure gap-free chases.
 
-**`EDGES_IN` is the one Order from the edges in**, *Centre in* on screen (terminology plan D18).
+**`CENTRE_IN` is the one Order from the edges in** (terminology plan D18).
 `SPLIT` ranked a member `min(i, N−1−i)`, the same distance from the nearer end as Centre out's rank
-inverted, so it gave Edges in's offsets at every group size and was folded into it: the parse no longer
-knows it, and database step 4 and `sync/LegacyNames.kt` rewrite a stored one.
+inverted, so it gave Centre in's offsets at every group size and was folded into it: the parse no longer
+knows it, and database steps 4 and 5 and `sync/LegacyNames.kt` rewrite a stored one.
 
 ### The spread's shape (effects plan session 2)
 
@@ -1638,8 +1638,8 @@ The strategy is the **Order** (§3.1 of the effects plan — renamed in the UI o
 first. Four more fields shape what the Order gives — **Spread**, **Wings**, **Blocks** and
 **Groups** (D4) — and with the Order they are the spread. All four are `FxDynamics` fields, edited
 in place as the Order is (an edit keeps the phase), stored on the four effect homes beside it
-(`look_effects`, `cue_ad_hoc_effects`, `template_effects` as `spread` and `spread_wings` /
-`spread_blocks` / `spread_groups` — `GROUPS` is an SQLite keyword — and a live instance), carried by
+(`look_fx`, `cue_ad_hoc_fx`, `palette_fx` as `spread` and `spread_wings` /
+`spread_segments` / `spread_parts` — the prefix because `GROUPS` was an SQLite keyword — and a live instance), carried by
 `LookEffectSpec`, `StoredEffect` and `LookEffectSettings` so Record, Include and Update keep them, and
 synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
 
@@ -1715,7 +1715,7 @@ to the same offsets, Random's shuffle included.
 | `usesTrianglePhase` | Whether the base clock should be triangle-remapped (true for PING_PONG) |
 | `distinctSlots(groupSize)` | Number of unique offset positions for a given group size |
 | `ranks(members, groupSize)` | Each member's rank over `distinctSlots` ranks — what the spread's shape works on |
-| `isMirrored` | Two mirrored wings already (CENTER_OUT, EDGES_IN) — Wings is refused under it |
+| `isMirrored` | Two mirrored wings already (CENTRE_OUT, CENTRE_IN) — Wings is refused under it |
 
 ## Multi-Element Fixture Expansion
 
@@ -1755,7 +1755,7 @@ Element keys follow the convention `"parent-key.suffix"` (e.g. `"quad-mover-1.he
 
 ### Distribution Strategy Support
 
-Multi-element expansion uses the same `DistributionStrategy` machinery as group effects. The `distributionStrategy` field on `FxInstance` (which defaults to `LINEAR`) is used to calculate per-element phase offsets based on element index and normalized position.
+Multi-element expansion uses the same `DistributionStrategy` machinery as group effects. The `distributionStrategy` field on `FxInstance` (which defaults to `NORMAL`) is used to calculate per-element phase offsets based on element index and normalized position.
 
 The REST API `AddEffectRequest` includes an optional `distributionStrategy` field for fixture effects targeting multi-element fixtures.
 
@@ -1767,7 +1767,7 @@ POST /api/rest/fx/add
   "effectType": "RainbowCycle",
   "fixtureKey": "quad-mover-1",
   "propertyName": "rgbColour",
-  "distributionStrategy": "LINEAR"
+  "distributionStrategy": "NORMAL"
 }
 ```
 
@@ -1842,7 +1842,7 @@ GET  /api/rest/fx/library          → [EffectTypeInfo...]
     "min": "0",
     "max": "255"
   },
-  "distributionStrategy": "LINEAR",
+  "distributionStrategy": "NORMAL",
   "stepTiming": true,
   "speedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
   "rateSpeedMasterUuid": null
@@ -1872,7 +1872,7 @@ heads has the property is refused. The distribution and element fields then appl
   "beatDivision": 2.0,
   "blendMode": "ADDITIVE",
   "phaseOffset": 0.25,
-  "distributionStrategy": "CENTER_OUT",
+  "distributionStrategy": "CENTRE_OUT",
   "elementMode": "FLAT",
   "stepTiming": false,
   "rateSpeedMasterUuid": "7d444840-9dc0-11d1-b245-5ffdce74fad2",
@@ -2156,7 +2156,7 @@ above a static value regardless of layer order. See `lighting-composition-model.
 
 ### Ad-Hoc Effects
 
-Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_effects`
+Effects belonging to no Look are stored as full effect definitions in the `cue_ad_hoc_fx`
 table. At apply time these are converted directly to `FxInstance`s tagged with the cue id.
 
 **A cue effect is edited in draft** (show-cue-editing plan session 6, D17): the cue editor's FX tab
@@ -2377,8 +2377,8 @@ exercises rate scaling end to end; author a STANDARD + WALL_CLOCK definition to 
 An effect's **timing** is one of two things: it follows a speed master, or it runs on *Seconds* —
 its own cycle, with no master, for a slow breathe or drift that must not move when the tempo does.
 It is one question for every effect, asked by one chip (`Seconds | M1 | M2…`), and stored as one
-flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`template_effects`), a
-Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`), with
+flag, `seconds`, on every effect home: a live `FxInstance`, an effect palette (`palette_fx`), a
+Look's effects (`look_fx`) and a cue's ad-hoc effects (`cue_ad_hoc_fx`), with
 `LookEffectSpec`, `StoredEffect` and `LookEffectSettings` carrying it between them. It syncs from
 `formatVersion` 29. The rules are `fx/EffectTiming.kt`'s:
 
