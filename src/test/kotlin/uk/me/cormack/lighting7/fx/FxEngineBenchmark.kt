@@ -35,7 +35,8 @@ import kotlin.test.Test
  *
  * 1. **`beat and wall-clock tick throughput`** — the original scenario. 4 universes of
  *    [HexFixture] with a beat [SliderTarget] and a wall-clock [SliderTarget] per fixture.
- *    Deliberately frozen: it is what the 2026-04-22 baseline was measured on.
+ *    Deliberately frozen: it is what the 2026-04-22 baseline was measured on. Since one compose
+ *    pass paints every running effect, both its windows time all of them.
  * 2. **`group colour chase on multi-element fixtures across two masters`** — sweep item
  *    C1 (per-tick target re-expansion) and the C6 allocation bundle.
  * 3. **`crossfade republish throughput`** — sweep item C3.

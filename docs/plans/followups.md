@@ -19,7 +19,6 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-DIST-ICONS`](#fu-dist-icons) | Ready | Dist | — |
 | [`FU-SYNC-FORMAT-MIGRATIONS`](#fu-sync-format-migrations) | Blocked | Sync | a real breaking `formatVersion` bump |
 | [`FU-DIST-NO-BUNDLED-JRE`](#fu-dist-no-bundled-jre) | Rejected | Dist | decision record — do not re-propose |
-| [`FU-PERF-FRAME-TXN-UNIFY`](#fu-perf-frame-txn-unify) | Trigger | Perf | visible flicker where beat + wall-clock share a universe |
 | [`FU-TMPL-REWARM-BOUND`](#fu-tmpl-rewarm-bound) | Trigger | Perf | a template list change visibly stalls a template-heavy show |
 | [`FU-FX-TICKFLOW-UNUSED`](#fu-fx-tickflow-unused) | Ready | Perf | — |
 | [`FU-PERF-FXSCRIPT-CACHE-BOUND`](#fu-perf-fxscript-cache-bound) | Trigger | Perf | metaspace/classloader growth that tracks FX editing, not show size |
@@ -169,37 +168,6 @@ rather than in a new doc.
 ---
 
 ## Performance
-
-### `FU-PERF-FRAME-TXN-UNIFY`
-
-**FX beat + wall-clock frame-transaction unification** · Trigger · Control-surface Phase 8 step 2,
-deferred 2026-04-23
-
-The two FX tick loops (`processBeatTickSuspend` ~120 Hz, `processWallClockTickSuspend` 50 Hz)
-each build their own `ControlTransaction` and commit independently within the same ~20 ms window
-on the same universe.
-
-Continuous streaming (2026-08-18) removed the packet-rate half of this: `ArtNetController` emits
-exactly one frame per universe per `refreshIntervalMs` however many transactions committed. What
-remains is purely value-domain — two transactions 5 ms apart write different values to the same
-channel and the loop transmits whichever landed last. (The per-channel delta filter in
-`sendCurrentValues()` no longer suppresses packets at all, only redundant WebSocket
-notifications.)
-
-Phase 8 sketched a `FrameTransaction`: the two loops share one `ControlTransaction` when their
-tick times fall inside a configurable fuzz window (default 10 ms), else commit independently.
-Needs an `AtomicReference<FrameTransaction?>` plus a short mutex around the open/close edge —
-both loops run on `Dispatchers.Default`.
-
-**Trigger** (either): an operator reports visible flicker or double-stepping where beat and
-wall-clock effects share a universe; or a future effect category pushes wall-clock density high
-enough that the tick windows overlap often (today's 50 Hz + ~120 Hz worst case doesn't).
-
-*The old packet-rate trigger is obsolete — under continuous streaming the rate is
-`1000 / refreshIntervalMs` by construction, so `GET /api/rest/perf/artnet-rates` now reads as a
-configuration check, not a contention one.*
-
----
 
 ### `FU-TMPL-REWARM-BOUND`
 
@@ -3081,6 +3049,9 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-PERF-FRAME-TXN-UNIFY` — one compose pass: a beat wake or the ticker runs one pass over every
+  running FX, beat and wall-clock, in one transaction, so FX on one key blend across clocks (FX editor
+  plan session 2; its done-marker cites the commit).
 - `FU-FX-SIZE-OVER-100` — folded into `FU-FX-AMPLITUDE` (terminology plan session 2).
 - `FU-SLOT-LOOK-ELIGIBILITY` — retired: a Look lands whole, so a cue slot takes any Look, and one
   none of whose fixtures is patched goes on, lands nothing and lights its tile, as a cue does;

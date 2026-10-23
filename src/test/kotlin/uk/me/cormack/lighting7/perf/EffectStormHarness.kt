@@ -30,10 +30,8 @@ import kotlin.test.Test
  * Effect-storm harness — drives the backend's FX add/remove hot path via REST.
  *
  * Phase B item 4 of the follow-up drain plan; companion to `MidiFloodHarness`.
- * Referenced by `FU-PERF-FRAME-TXN-UNIFY` (sustained add/remove churn raises the per-universe
- * ArtNet packet rate; the trigger condition for that follow-up is "> ~40 pkts/sec per
- * universe under effect load") and by `FU-MANUAL-SUSPEND-PATH` (Phase 8 sanity check —
- * 100 effects/sec while a fader runs the same property).
+ * Referenced by `FU-MANUAL-SUSPEND-PATH` (Phase 8 sanity check — 100 effects/sec while a
+ * fader runs the same property).
  *
  * Operationally: sustains 100 add/remove ops/sec by default. Each iteration randomises an
  * effect type from `/api/rest/fx/library` (filtered to dimmer/colour effects) and a target
