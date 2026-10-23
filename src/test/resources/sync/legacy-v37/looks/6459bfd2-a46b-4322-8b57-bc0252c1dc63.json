@@ -1,0 +1,64 @@
+{
+  "effects": [
+    {
+      "beatDivision": 2.0,
+      "blendMode": "OVERRIDE",
+      "category": "dimmer",
+      "distribution": "REVERSE",
+      "effectType": "SineWave",
+      "parameters": {
+        "min": "40"
+      },
+      "propertyName": "dimmer",
+      "targetKey": "[{\"key\":\"hex-3\",\"type\":\"fixture\"},{\"key\":\"front-wash\",\"type\":\"group\"}]",
+      "targetType": "selection",
+      "uuid": "c207b41f-59ac-49d9-8474-d019047ae064"
+    }
+  ],
+  "name": "Warm Amber",
+  "notes": "act one wash",
+  "rows": [
+    {
+      "fadeDurationMs": 750,
+      "propertyName": "colour",
+      "targetKey": "hex-1",
+      "targetType": "fixture",
+      "uuid": "6de59942-0e7b-47fd-8c70-659f36633c63",
+      "value": "#ff8800"
+    },
+    {
+      "propertyName": "colour",
+      "sortOrder": 1,
+      "targetKey": "front-wash",
+      "targetType": "group",
+      "uuid": "400ac7ce-65ec-4a73-acb2-3a0b7f968963",
+      "value": "#ffaa44"
+    },
+    {
+      "propertyName": "position",
+      "sortOrder": 2,
+      "targetKey": "hex-3",
+      "targetType": "fixture",
+      "uuid": "6caead50-b468-4d38-a74b-b8409775a328",
+      "value": "120,64"
+    }
+  ],
+  "scenery": [
+    {
+      "elementUuid": "33fde3c7-a71c-4c15-b90a-129097b611b9",
+      "state": {
+        "visible": true
+      },
+      "uuid": "72492c95-b41d-45f2-8ac9-0daa994ff945"
+    },
+    {
+      "elementUuid": "23db3784-5ee0-4ebb-9263-5769dd4ceb16",
+      "sortOrder": 1,
+      "state": {
+        "open": 0.75
+      },
+      "uuid": "ece6f7e5-6acb-49f7-a5a1-77be94beeabc"
+    }
+  ],
+  "uuid": "6459bfd2-a46b-4322-8b57-bc0252c1dc63"
+}

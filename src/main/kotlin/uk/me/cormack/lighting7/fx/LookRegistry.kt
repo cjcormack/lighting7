@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.models.stepTimingOf
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -308,7 +309,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                         ?: return@mapNotNull null
                     LookRowEntry(
                         target = target,
-                        propertyName = row.propertyName,
+                        propertyName = row.attribute,
                         value = row.value,
                         fadeDurationMs = row.fadeDuration?.toMillis(),
                         elementKey = row.elementKey,
@@ -320,7 +321,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                     if (effect.targetType == DEFERRED_TARGET_TYPE) {
                         snapshotLogger.warn(
                             "Look '{}': effect {} ({}) names no target of its own; dropping it",
-                            look.name, effect.uuid, effect.effectType,
+                            look.name, effect.uuid, effect.fxType,
                         )
                     }
                     effect.toEffectEntry()
@@ -343,27 +344,27 @@ internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
 /** This row's settings, without its target. Must be called inside a transaction. */
 private fun DaoLookEffect.toStoredEffect(): StoredEffect =
     StoredEffect(
-        effectType = effectType,
-        category = category,
-        propertyName = propertyName,
-        beatDivision = beatDivision,
+        effectType = fxType,
+        category = family,
+        propertyName = attribute,
+        beatDivision = cycle,
         blendMode = blendMode,
-        distribution = distribution,
+        distribution = order,
         phaseOffset = phaseOffset,
         elementMode = elementMode,
         elementFilter = elementFilter,
-        stepTiming = stepTiming,
+        stepTiming = stepTimingOf(timing),
         parameters = parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
         seconds = seconds,
-        size = size,
+        size = amount,
         direction = direction,
-        nShot = nShot,
+        nShot = runs,
         spread = spread,
         wings = wings,
-        blocks = blocks,
-        groups = groups,
+        blocks = segments,
+        groups = parts,
         uuid = uuid,
     )
 

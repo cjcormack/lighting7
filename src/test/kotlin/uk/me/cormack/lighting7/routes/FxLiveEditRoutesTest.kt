@@ -57,11 +57,11 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
 
     private val pulse = TemplateEffectDto(
         effectType = "Pulse",
-        category = "dimmer",
+        category = "intensity",
         propertyName = "dimmer",
         beatDivision = 0.5,
         blendMode = "OVERRIDE",
-        distribution = "LINEAR",
+        distribution = "NORMAL",
     )
 
     private suspend fun HttpClient.template(name: String, effect: TemplateEffectDto = pulse): TemplateDto =

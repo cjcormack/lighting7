@@ -349,14 +349,14 @@ export interface ProgrammerConflict {
 export type SpreadCurve = 'LINE' | 'MIRROR' | 'ARROW' | 'WINGS'
 
 /**
- * A `DistributionStrategy` name the desk resolves through `byName`: `LINEAR` is rig order
+ * A `DistributionStrategy` name the desk resolves through `byName`: `NORMAL` is rig order
  * (`state/BuskRigOrder.kt`) — or, for a spread whose one target is a group, that group's member
- * order (venue-visit plan S7) — `REVERSE` the other way, `CENTER_OUT` folds the two ends together,
- * `RANDOM` is a permutation seeded from the request. The strategy has more names (`EDGES_IN`,
+ * order (venue-visit plan S7) — `REVERSE` the other way, `CENTRE_OUT` folds the two ends together,
+ * `RANDOM` is a permutation seeded from the request. The strategy has more names (`CENTRE_IN`,
  * `PING_PONG`, `POSITIONAL`, `UNIFIED`); the Spread tab offers these four, and
  * `lib/spreadIntent.ts` says which of the design's labels has no desk order yet.
  */
-export type SpreadOrder = 'LINEAR' | 'REVERSE' | 'CENTER_OUT' | 'RANDOM'
+export type SpreadOrder = 'NORMAL' | 'REVERSE' | 'CENTRE_OUT' | 'RANDOM'
 
 /** Whether a multi-head fixture is one step or each of its cells is. */
 export type SpreadOver = 'HEADS' | 'CELLS'
@@ -364,7 +364,7 @@ export type SpreadOver = 'HEADS' | 'CELLS'
 /**
  * `POST /projects/{id}/programmer/spread` — a mirror of lighting7's `SpreadRequest`
  * (`routes/programmerSpread.kt`). `from` and `to` are serialised `TemplateIntent`s of the
- * property's shape, or `tmpl:{uuid}` for a colour; the desk interpolates in the intent's own space
+ * property's shape, or `pal:{uuid}` for a colour; the desk interpolates in the intent's own space
  * and resolves one literal per head, so nothing here is a value (busk-further plan D9).
  */
 export interface SpreadRequest {

@@ -139,7 +139,7 @@ class FxRegistrationTargetCompatibilityTest {
         val byFamily = builtIns().groupBy({ it.category }, { it.id }).mapValues { it.value.toSet() }
         assertEquals(
             mapOf(
-                "dimmer" to setOf(
+                "intensity" to setOf(
                     "SineWave", "RampUp", "RampDown", "Ramp", "Pulse", "SquareWave", "DimmerStrobe", "Flicker",
                     "CandleFlicker", "FluorescentFlicker", "LightningStrike",
                 ),

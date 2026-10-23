@@ -111,7 +111,7 @@ export interface GrandMasterFaderTarget {
  * 0–100 %. The desk stamps `stackUuid` from `stackId` on write, as on the stack buttons.
  */
 export interface StackEffectSizeTarget {
-  type: "stackEffectSize"
+  type: "stackFxAmount"
   stackId: number
   stackUuid?: string | null
 }
@@ -254,8 +254,8 @@ export interface ApplyLookTarget {
  * template's rows, so nothing here sends one.
  */
 export interface PressTemplateTarget {
-  type: "pressTemplate"
-  templateUuid: string
+  type: "pressPalette"
+  paletteUuid: string
 }
 
 /**

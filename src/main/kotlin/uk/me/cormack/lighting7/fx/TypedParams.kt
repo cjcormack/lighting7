@@ -25,14 +25,14 @@ import java.util.concurrent.ConcurrentHashMap
  * ```kotlin
  * val min = params.ubyte("min")
  * val max = params.ubyte("max")
- * val colour = params.colour("baseColor")   // literal, or a "tmpl:{uuid}" reference
+ * val colour = params.colour("baseColor")   // literal, or a "pal:{uuid}" reference
  * ```
  */
 class TypedParams(
     private val raw: Map<String, String>,
     private val schema: List<ParameterInfo>,
     /**
-     * Resolves a colour string that names something rather than stating it — today a `tmpl:`
+     * Resolves a colour string that names something rather than stating it — today a `pal:`
      * template reference; see [templateColourSource]. Answers null for a literal, and for a
      * reference it cannot honour, so a caller always has its own parser to fall back to.
      */
@@ -113,7 +113,7 @@ class TypedParams(
     fun string(name: String): String = raw(name)
 
     /**
-     * Parse a colour parameter, resolving a template reference (`tmpl:{uuid}`) through the colour
+     * Parse a colour parameter, resolving a template reference (`pal:{uuid}`) through the colour
      * source. Results are cached and only re-resolved when the source's version changes.
      *
      * A reference the source refuses falls through to [parseExtendedColour], which reads an
@@ -159,7 +159,7 @@ class TypedParams(
     }
 
     /**
-     * Palette Steps' list (effects plan §3.6): a comma-separated list of `tmpl:{uuid}` references to
+     * Palette Steps' list (effects plan §3.6): a comma-separated list of `pal:{uuid}` references to
      * generic value palettes, each read off the palette as its rows' intents and resolved per head by
      * the target. Cached against the colour source's version, as a colour list is, so retuning a
      * palette moves the running steps without rebuilding the effect.

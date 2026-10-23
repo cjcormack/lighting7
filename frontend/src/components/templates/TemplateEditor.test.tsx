@@ -62,7 +62,7 @@ const library: EffectLibraryEntry[] = [
   },
   {
     name: 'Sine Dim',
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'LEVEL',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -71,7 +71,7 @@ const library: EffectLibraryEntry[] = [
   },
   {
     name: 'PaletteSteps',
-    category: 'palette',
+    category: 'steps',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -84,7 +84,7 @@ const library: EffectLibraryEntry[] = [
   {
     name: 'SlotSteps',
     // The Steps family's, as the desk files it (terminology plan D23); a palette stores it as Beam.
-    category: 'palette',
+    category: 'steps',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -465,7 +465,7 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
           propertyName: null,
           beatDivision: 1,
           blendMode: 'OVERRIDE',
-          distribution: 'LINEAR',
+          distribution: 'NORMAL',
           phaseOffset: 0,
           parameters: { panCenter: '90', tiltCenter: '100', panRadius: '64', tiltRadius: '64' },
           speedMasterUuid: null,
@@ -500,7 +500,7 @@ describe('size, direction and runs in a palette (effects plan session 1)', () =>
         propertyName: null,
         beatDivision: 1,
         blendMode: 'OVERRIDE',
-        distribution: 'LINEAR',
+        distribution: 'NORMAL',
         phaseOffset: 0,
         parameters: { colourA: '#FF9D4A' },
         speedMasterUuid: null,
@@ -554,7 +554,7 @@ describe('the step effects (effects plan session 7)', () => {
       effectType: 'PaletteSteps',
       category: 'position',
       propertyName: null,
-      parameters: { palettes: 'tmpl:uuid-Centre,tmpl:uuid-Downstage', fadeRatio: '0.5' },
+      parameters: { palettes: 'pal:uuid-Centre,pal:uuid-Downstage', fadeRatio: '0.5' },
     })
   })
 

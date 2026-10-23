@@ -65,12 +65,12 @@ internal const val CODE_SPREAD_NEEDS_SELECTION = "SPREAD_NEEDS_SELECTION"
  * Blind previews it, and Clear releases it like any busked value (D10: a spread is a result, not a
  * template).
  *
- * `order` is a `DistributionStrategy` name: `LINEAR` is **rig order** (`state/BuskRigOrder.kt` — a
+ * `order` is a `DistributionStrategy` name: `NORMAL` is **rig order** (`state/BuskRigOrder.kt` — a
  * group in member order, cells in element order), `REVERSE` the other way, `RANDOM` seeded from the
  * request. A spread whose one target is a group runs in **that group's member order** instead (cells
  * in element order), because rig order places a fixture at its first appearance on the rig and can
  * so disagree with the order the group sheet shows (venue-visit plan S7). `over = CELLS` spreads across every cell of every multi-head fixture in the selection;
- * `HEADS` treats each fixture as one step. A `tmpl:{uuid}` endpoint resolves the template's generic
+ * `HEADS` treats each fixture as one step. A `pal:{uuid}` endpoint resolves the template's generic
  * colour, as an FX colour reference does. The selection's attribute mask is honoured: a property
  * outside it writes nothing and answers `skippedFamilies`.
  *
@@ -136,13 +136,13 @@ internal data class SpreadRequest(
     val families: List<String>? = null,
     /** A `TemplateProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
     val property: String,
-    /** Serialised `TemplateIntent`s, or `tmpl:{uuid}` for a colour. `ENDS` only; a fan has none. */
+    /** Serialised `TemplateIntent`s, or `pal:{uuid}` for a colour. `ENDS` only; a fan has none. */
     val from: String = "",
     val to: String = "",
     /** `LINE` · `MIRROR` · `ARROW` · `WINGS`. */
     val curve: String = "LINE",
-    /** A `DistributionStrategy` name; `LINEAR` is rig order. */
-    val order: String = "LINEAR",
+    /** A `DistributionStrategy` name; `NORMAL` is rig order. */
+    val order: String = "NORMAL",
     val parts: Int = 1,
     /** `HEADS` · `CELLS`. */
     val over: String = "HEADS",
@@ -318,7 +318,7 @@ internal fun spreadIntoProgrammer(
         heads.values.removeIf { it is FixtureElement<*> && it.parentFixture.key in heads }
     }
 
-    // Rig order first (LINEAR); the strategy then says where along the curve each sits. A spread
+    // Rig order first (NORMAL); the strategy then says where along the curve each sits. A spread
     // over **one group** keeps that group's own member order (venue-visit plan S7) — what the group
     // sheet shows and its effects run in — where rig order places each fixture at its first
     // appearance on the rig, which an earlier group or tile holding it can put anywhere.
@@ -541,7 +541,7 @@ private fun fanIntent(head: GroupableFixture, base: PropertyValue.Position, fan:
 }
 
 /**
- * One endpoint: a serialised intent of [property]'s shape, or — for a colour — a `tmpl:{uuid}`
+ * One endpoint: a serialised intent of [property]'s shape, or — for a colour — a `pal:{uuid}`
  * resolved to the template's generic colour row (its hex and policy), the way an FX colour
  * reference resolves one. Null when it is neither.
  */

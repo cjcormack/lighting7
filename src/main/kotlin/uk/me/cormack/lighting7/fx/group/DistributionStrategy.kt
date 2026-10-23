@@ -42,8 +42,8 @@ sealed interface DistributionStrategy {
     /**
      * Number of distinct offset slots for a given group size.
      *
-     * For asymmetric distributions (LINEAR, REVERSE), this equals groupSize.
-     * For symmetric distributions (CENTER_OUT, EDGES_IN), this is fewer because
+     * For asymmetric distributions (NORMAL, REVERSE), this equals groupSize.
+     * For symmetric distributions (CENTRE_OUT, CENTRE_IN), this is fewer because
      * multiple members share the same offset. A step chase uses this for
      * window width: `1/distinctSlots` ensures no gaps in the chase.
      *
@@ -107,7 +107,7 @@ sealed interface DistributionStrategy {
      * Creates a classic chase effect where each fixture fires in sequence.
      * Member 0 has offset 0.0, and offsets increase linearly.
      */
-    data object LINEAR : DistributionStrategy {
+    data object NORMAL : DistributionStrategy {
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             return if (groupSize > 1) member.index.toDouble() / groupSize else 0.0
         }
@@ -132,7 +132,7 @@ sealed interface DistributionStrategy {
      * Symmetric pairs (equidistant from center) share the same offset and fire together.
      * Useful for "explosion" or "bloom" effects.
      */
-    data object CENTER_OUT : DistributionStrategy {
+    data object CENTRE_OUT : DistributionStrategy {
         override val isMirrored: Boolean = true
 
         override fun distinctSlots(groupSize: Int): Int = (groupSize + 1) / 2
@@ -157,18 +157,18 @@ sealed interface DistributionStrategy {
      *
      * Edge fixtures fire first (offset 0.0), with center fixtures firing last.
      * Symmetric pairs share the same offset and fire together.
-     * The inverse of CENTER_OUT.
+     * The inverse of CENTRE_OUT.
      */
-    data object EDGES_IN : DistributionStrategy {
+    data object CENTRE_IN : DistributionStrategy {
         override val isMirrored: Boolean = true
 
-        override fun distinctSlots(groupSize: Int): Int = CENTER_OUT.distinctSlots(groupSize)
+        override fun distinctSlots(groupSize: Int): Int = CENTRE_OUT.distinctSlots(groupSize)
 
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
             if (groupSize <= 1) return 0.0
             val slots = distinctSlots(groupSize)
-            val centerOutOffset = CENTER_OUT.calculateOffset(member, groupSize)
-            // Invert: rank 0 (center in CENTER_OUT) becomes rank (slots-1)
+            val centerOutOffset = CENTRE_OUT.calculateOffset(member, groupSize)
+            // Invert: rank 0 (center in CENTRE_OUT) becomes rank (slots-1)
             val centerOutRank = (centerOutOffset * slots).toInt().coerceIn(0, slots - 1)
             val invertedRank = slots - 1 - centerOutRank
             return invertedRank.toDouble() / slots
@@ -237,21 +237,21 @@ sealed interface DistributionStrategy {
      * back and forth across the group. One full cycle goes from
      * left edge to right edge and back.
      *
-     * Uses LINEAR offsets combined with a triangle wave phase remap
+     * Uses NORMAL offsets combined with a triangle wave phase remap
      * so that a windowed step chase sweeps forward then backward.
      */
     data object PING_PONG : DistributionStrategy {
         override val usesTrianglePhase: Boolean = true
 
         override fun calculateOffset(member: DistributionMemberInfo, groupSize: Int): Double {
-            return LINEAR.calculateOffset(member, groupSize)
+            return NORMAL.calculateOffset(member, groupSize)
         }
     }
 
     /**
      * Reverse linear distribution: effect travels in reverse order.
      *
-     * Same as LINEAR but in the opposite direction.
+     * Same as NORMAL but in the opposite direction.
      * Last member has offset 0.0, first member fires last.
      */
     data object REVERSE : DistributionStrategy {
@@ -300,10 +300,10 @@ sealed interface DistributionStrategy {
          */
         fun byName(name: String): DistributionStrategy? {
             return when (name.trim().uppercase()) {
-                "LINEAR" -> LINEAR
+                "NORMAL" -> NORMAL
                 "UNIFIED" -> UNIFIED
-                "CENTER_OUT" -> CENTER_OUT
-                "EDGES_IN" -> EDGES_IN
+                "CENTRE_OUT" -> CENTRE_OUT
+                "CENTRE_IN" -> CENTRE_IN
                 "RANDOM" -> RANDOM()
                 "PING_PONG" -> PING_PONG
                 "REVERSE" -> REVERSE
@@ -313,22 +313,22 @@ sealed interface DistributionStrategy {
         }
 
         /**
-         * Parse a distribution strategy from a string name, falling back to [LINEAR].
+         * Parse a distribution strategy from a string name, falling back to [NORMAL].
          *
          * Kept for the places whose input is internal rather than a boundary — a group's own
          * `defaultDistributionName` metadata — where there is no caller to report to. Anything
          * reading a request body or a stored spec should go through [uk.me.cormack.lighting7.fx.EffectSpecCoercion].
          *
          * @param name Strategy name (case-insensitive)
-         * @return The distribution strategy, or LINEAR if not found
+         * @return The distribution strategy, or NORMAL if not found
          */
-        fun fromName(name: String): DistributionStrategy = byName(name) ?: LINEAR
+        fun fromName(name: String): DistributionStrategy = byName(name) ?: NORMAL
 
         /**
          * All available strategy names for API documentation.
          */
         val availableStrategies = listOf(
-            "LINEAR", "UNIFIED", "CENTER_OUT", "EDGES_IN",
+            "NORMAL", "UNIFIED", "CENTRE_OUT", "CENTRE_IN",
             "RANDOM", "PING_PONG", "REVERSE", "POSITIONAL"
         )
 
@@ -344,8 +344,8 @@ sealed interface DistributionStrategy {
 
 /**
  * Member `i`'s **step** under this strategy in a group of [groupSize]: its place in the order the
- * members come round, 1 first. Members sharing an offset share a step — a pair under `CENTER_OUT` or
- * `EDGES_IN`, everyone under `UNIFIED` — so the steps run 1…[DistributionStrategy.distinctSlots].
+ * members come round, 1 first. Members sharing an offset share a step — a pair under `CENTRE_OUT` or
+ * `CENTRE_IN`, everyone under `UNIFIED` — so the steps run 1…[DistributionStrategy.distinctSlots].
  *
  * A function of the size alone, because no strategy reads more than a member's index and its
  * `i / (n - 1)` position: a group's members are numbered in their stored order (`sort_order`), and

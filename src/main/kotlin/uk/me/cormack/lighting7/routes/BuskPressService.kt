@@ -75,7 +75,7 @@ internal object BuskPressService {
         val bank = pad.bank
         if (bank.column.page.project.id.value != projectId) return null
         val record = when (pad.kind) {
-            BuskPadKind.TEMPLATE -> pad.template!!.let { t ->
+            BuskPadKind.TEMPLATE -> pad.palette!!.let { t ->
                 PressRecord.Template(
                     source = LayerSource.template(t.id.value, t.uuid, t.name),
                     family = t.familyOf(),
@@ -105,7 +105,7 @@ internal object BuskPressService {
             layerSiblings = siblings
                 .mapNotNullTo(HashSet()) { sibling ->
                     when (sibling.kind) {
-                        BuskPadKind.TEMPLATE -> sibling.template!!.uuid
+                        BuskPadKind.TEMPLATE -> sibling.palette!!.uuid
                         BuskPadKind.LOOK -> sibling.look!!.uuid
                         BuskPadKind.CUE, null -> null
                     }

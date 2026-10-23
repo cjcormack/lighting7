@@ -30,7 +30,7 @@ const withStore = (ui: React.ReactNode) => (
 const HAND_OVER = 'hand over a different list'
 const handOver = () => fireEvent.click(screen.getByTitle(HAND_OVER))
 
-const WARM = 'tmpl:2f1c8a3e-0000-4000-8000-000000000001'
+const WARM = 'pal:2f1c8a3e-0000-4000-8000-000000000001'
 
 /**
  * Mirrors how the effect editor (`FxEffectFields`) drives the picker: whatever comes out of

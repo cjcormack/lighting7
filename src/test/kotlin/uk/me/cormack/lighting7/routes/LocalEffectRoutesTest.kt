@@ -147,7 +147,7 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
 
         val tagged = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
-            setBody(CreateSpeedMasterRequest(name = "Chase", usage = "dimmer"))
+            setBody(CreateSpeedMasterRequest(name = "Chase", usage = "intensity"))
         }.body<SpeedMasterDto>()
         assertEquals(tagged.uuid, live(client.pressed(pulse(quad)).effectId).speedMasterUuid.toString())
 
@@ -276,7 +276,7 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
         val id = client.pressed(pulse(quad)).effectId
         val order = live(id).distributionStrategy.javaClass.simpleName
 
-        val moved = client.edit(id, UpdateEffectRequest(distributionStrategy = "CENTER_OUT", blocks = 2, targets = fixtures("hex-0")))
+        val moved = client.edit(id, UpdateEffectRequest(distributionStrategy = "CENTRE_OUT", blocks = 2, targets = fixtures("hex-0")))
         assertEquals(HttpStatusCode.BadRequest, moved.status)
         val message = moved.body<ErrorResponse>().error
         assertContains(message, "distributionStrategy")
@@ -568,8 +568,8 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
                 TemplateInput(
                     name = "Chase ${engine.getActiveEffects().size}",
                     effect = TemplateEffectDto(
-                        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                     ),
                 ),
             )

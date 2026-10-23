@@ -142,8 +142,8 @@ describe('BuskSpeedRail — the three arms', () => {
   })
 
   it('gives a manual master its own TAP and its usage badge', () => {
-    liveMasters = [live(1), live(4, { name: 'Strobe', usage: 'dimmer' })]
-    rows = [row(1), row(4, { name: 'Strobe', usage: 'dimmer' })]
+    liveMasters = [live(1), live(4, { name: 'Strobe', usage: 'intensity' })]
+    rows = [row(1), row(4, { name: 'Strobe', usage: 'intensity' })]
     render(<BuskSpeedRail />)
 
     expect(screen.getByLabelText('Tap tempo for master 4')).toBeInTheDocument()

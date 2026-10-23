@@ -36,7 +36,7 @@ import kotlin.script.experimental.jvm.jvmTarget
  * }
  *
  * movers.fx {
- *     dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTER_OUT)
+ *     dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTRE_OUT)
  * }
  *
  * // Run one effect off speed master 2 rather than the global tempo
@@ -95,7 +95,7 @@ abstract class FxApplicationScript(
      * Type names are matched case-insensitively, ignoring spaces and underscores, against
      * built-in effects and any user effect in `fx_definitions`. Parameter names and their string
      * formats are the ones the effect declares — `GET /api/rest/fx/library` lists them, and a
-     * `colour` parameter accepts the extended syntax (`"red;w128;uv64"`) or a `tmpl:{uuid}`
+     * `colour` parameter accepts the extended syntax (`"red;w128;uv64"`) or a `pal:{uuid}`
      * template reference.
      *
      * @throws IllegalArgumentException if no effect is registered under [id]

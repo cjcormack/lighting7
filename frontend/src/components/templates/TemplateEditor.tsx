@@ -262,7 +262,7 @@ export function TemplateEditor({
           propertyName: extra?.propertyName ?? null,
           beatDivision: timing.beatDivision,
           blendMode: spec.blendMode,
-          distribution: prev?.distribution ?? 'LINEAR',
+          distribution: prev?.distribution ?? 'NORMAL',
           phaseOffset: prev?.phaseOffset ?? 0,
           elementMode: null,
           elementFilter: null,
@@ -596,7 +596,7 @@ function EffectControls({
     if (isPaletteSteps(chosen.name) && stepOffer != null) {
       return {
         category: categoryForFamily(family),
-        parameters: { palettes: serializeStepList(stepOffer.palettes.map((p) => `tmpl:${p.uuid}`)) },
+        parameters: { palettes: serializeStepList(stepOffer.palettes.map((p) => `pal:${p.uuid}`)) },
       }
     }
     if (isSlotSteps(chosen.name)) {

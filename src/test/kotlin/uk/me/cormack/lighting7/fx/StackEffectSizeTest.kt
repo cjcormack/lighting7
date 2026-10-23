@@ -56,8 +56,8 @@ class StackEffectSizeTest : RouteIntegrationTest() {
                         effects = listOf(
                             LookEffectDto(
                                 targetType = "fixture", targetKey = head,
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                                beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
                             ),
                         ),
                     ),

@@ -27,7 +27,7 @@ internal class CopyReport {
  * into [target]. The cue's Duplicate, `POST /cues/copy-from` and MCP's `copy_to_project` all copy
  * through it. Within one project every reference is kept as it is. Across projects:
  *
- *  - A Look or palette a layer applies, or a `tmpl:` reference in an effect parameter names, is the
+ *  - A Look or palette a layer applies, or a `pal:` reference in an effect parameter names, is the
  *    target's of that name, else copied with the cue (its own references mapped the same way).
  *  - A speed master maps by index, a script by name. One the target lacks is reported: a layer's or
  *    effect's is left to master 1, a cue's own tempo pair and a script hook are left out.
@@ -96,11 +96,11 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
             DaoCueLayer.new {
                 this.cue = copy
                 look = layer.look?.let(::look)
-                template = layer.template?.let(::template)
+                palette = layer.palette?.let(::template)
                 sortOrder = layer.sortOrder
                 enabled = layer.enabled
                 this.targets = targets
-                propertyMask = layer.propertyMask
+                attributeMask = layer.attributeMask
                 blendMode = layer.blendMode
                 amount = layer.amount
                 stomp = layer.stomp
@@ -117,7 +117,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 this.cue = copy
                 targetType = assignment.targetType
                 targetKey = assignment.targetKey
-                propertyName = assignment.propertyName
+                attribute = assignment.attribute
                 value = assignment.value
                 fadeDuration = assignment.fadeDuration
                 sortOrder = assignment.sortOrder
@@ -130,16 +130,16 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 this.cue = copy
                 targetType = effect.targetType
                 targetKey = effect.targetKey
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 delay = effect.delay
                 interval = effect.interval
@@ -148,13 +148,13 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
                 runUuid = effect.runUuid?.let { runKeys.getOrPut(it) { UUID.randomUUID() } }
             }
         }
@@ -221,7 +221,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 this.look = copy
                 targetType = row.targetType
                 targetKey = row.targetKey
-                propertyName = row.propertyName
+                attribute = row.attribute
                 value = row.value
                 fadeDuration = row.fadeDuration
                 elementKey = row.elementKey
@@ -234,27 +234,27 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 this.look = copy
                 targetType = effect.targetType
                 targetKey = effect.targetKey
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
                 sortOrder = effect.sortOrder
             }
         }
@@ -292,45 +292,45 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
         for (row in template.rows.sortedBy { it.sortOrder }) {
             checkTarget(row.targetType, row.targetKey, by)
             DaoTemplateRow.new {
-                this.template = copy
+                this.palette = copy
                 targetType = row.targetType
                 targetKey = row.targetKey
-                propertyName = row.propertyName
+                attribute = row.attribute
                 value = row.value
                 sortOrder = row.sortOrder
             }
         }
         for (effect in template.effects) {
             DaoTemplateEffect.new {
-                this.template = copy
-                effectType = effect.effectType
-                category = effect.category
-                propertyName = effect.propertyName
-                beatDivision = effect.beatDivision
+                this.palette = copy
+                fxType = effect.fxType
+                family = effect.family
+                attribute = effect.attribute
+                cycle = effect.cycle
                 blendMode = effect.blendMode
-                distribution = effect.distribution
+                order = effect.order
                 phaseOffset = effect.phaseOffset
                 elementMode = effect.elementMode
                 elementFilter = effect.elementFilter
-                stepTiming = effect.stepTiming
+                timing = effect.timing
                 parameters = parameters(effect.parameters, by)
                 speedMasterUuid = master(effect.speedMasterUuid, by)
                 rateSpeedMasterUuid = master(effect.rateSpeedMasterUuid, by)
                 seconds = effect.seconds
-                size = effect.size
+                amount = effect.amount
                 direction = effect.direction
-                nShot = effect.nShot
+                runs = effect.runs
                 spread = effect.spread
                 wings = effect.wings
-                blocks = effect.blocks
-                groups = effect.groups
+                segments = effect.segments
+                parts = effect.parts
             }
         }
         return copy
     }
 
     /**
-     * [parameters] with every `tmpl:{uuid}` mapped as a layer's palette is — a colour reference, or an
+     * [parameters] with every `pal:{uuid}` mapped as a layer's palette is — a colour reference, or an
      * item of a comma-separated list (a colour list, Palette Steps' `palettes`). Anything else is kept
      * byte for byte.
      */

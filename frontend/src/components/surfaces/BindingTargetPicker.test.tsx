@@ -168,7 +168,7 @@ describe('BindingTargetPicker record targets', () => {
   // unlisted variant shows "Fixture property" and nothing else.
   it.each([
     ['Look — apply', 'Look', { type: 'applyLook', lookUuid: 'look-warm' } as BindingTarget],
-    ['Palette — press', 'Palette', { type: 'pressTemplate', templateUuid: 'tmpl-red' } as BindingTarget],
+    ['Palette — press', 'Palette', { type: 'pressPalette', paletteUuid: 'tmpl-red' } as BindingTarget],
     ['Busk pad — press', 'Busk pad', { type: 'pressPad', padUuid: 'pad-1' } as BindingTarget],
     ['Busk page — show', 'Page', { type: 'buskPageSet', pageUuid: 'page-verse' } as BindingTarget],
   ])('offers %s and renders its body', (kindLabel, fieldLabel, value) => {
@@ -209,13 +209,13 @@ describe('BindingTargetPicker record targets', () => {
   })
 
   it("offers a stack's FX amount on a fader, and a change of stack lets the old stack's uuid go", () => {
-    const onChange = renderPicker(true, { type: 'stackEffectSize', stackId: 4, stackUuid: 'uuid-act-1' })
+    const onChange = renderPicker(true, { type: 'stackFxAmount', stackId: 4, stackUuid: 'uuid-act-1' })
     expect(screen.getByText('Cue stack — FX amount')).toBeInTheDocument()
     expect(screen.getByText('Act 1')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))
     // The uuid wins at dispatch, so keeping Act 1's would leave the fader on Act 1.
-    expect(onChange).toHaveBeenLastCalledWith({ type: 'stackEffectSize', stackId: 9, stackUuid: null })
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'stackFxAmount', stackId: 9, stackUuid: null })
   })
 
   it('offers the selection fan on a fader, with its axis', () => {

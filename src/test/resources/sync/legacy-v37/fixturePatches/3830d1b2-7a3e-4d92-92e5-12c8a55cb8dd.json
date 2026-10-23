@@ -1,0 +1,19 @@
+{
+  "baseYawDeg": -90.0,
+  "beamAngleDeg": 26,
+  "colour": "red",
+  "displayName": "Hex 1",
+  "fixtureTypeKey": "hex-fixture",
+  "gelCode": "L201",
+  "headNumber": 104,
+  "key": "hex-1",
+  "kindOverride": "wash",
+  "riggingUuid": "2b2a7134-9bb0-4136-b25c-bce9d6968cf2",
+  "sortOrder": 1,
+  "stageX": -1.0,
+  "stageY": 4.5,
+  "stageZ": -1.5,
+  "startChannel": 10,
+  "universeConfigUuid": "12191f6e-b7cd-46c3-b886-651c9fe935ce",
+  "uuid": "3830d1b2-7a3e-4d92-92e5-12c8a55cb8dd"
+}

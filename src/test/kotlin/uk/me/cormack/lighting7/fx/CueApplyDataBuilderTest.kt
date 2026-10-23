@@ -52,7 +52,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             DaoLookRow.new {
                 this.look = look
                 targetType = "fixture"; targetKey = fixtureKey
-                propertyName = "colour"; value = hex; sortOrder = 0
+                attribute = "colour"; value = hex; sortOrder = 0
             }
             look
         }
@@ -112,13 +112,13 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "128"; sortOrder = 0
+                attribute = "dimmer"; value = "128"; sortOrder = 0
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 delay = Duration.ofMillis(750L)
             }

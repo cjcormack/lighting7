@@ -39,7 +39,7 @@ export interface FxCreateRequest {
    * with — a single-head fixture, or the pad's one-tap.
    *
    * The two routes treat absence differently, and deliberately: the group route requires a
-   * distribution, so it falls back to `LINEAR`, while the fixture route's is optional and is left
+   * distribution, so it falls back to `NORMAL`, while the fixture route's is optional and is left
    * off entirely rather than pinning a choice nobody made onto the instance.
    */
   distribution?: DistributionStrategy
@@ -112,7 +112,7 @@ export function fxCreateAddition(
       groupName: target.groupName,
       payload: {
         ...shared,
-        distribution: request.distribution ?? 'LINEAR',
+        distribution: request.distribution ?? 'NORMAL',
         ...(request.elementMode ? { elementMode: request.elementMode } : {}),
       },
     }

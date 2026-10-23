@@ -44,7 +44,7 @@ export interface TemplateSheetRow extends SheetRow {
 type MemberRow = TemplateSheetRow & { template: TemplateSummary }
 
 export function templateRowId(templateId: number): string {
-  return `tmpl:${templateId}`
+  return `pal:${templateId}`
 }
 
 /**

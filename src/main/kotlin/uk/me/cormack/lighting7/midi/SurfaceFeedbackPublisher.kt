@@ -969,7 +969,7 @@ class SurfaceFeedbackPublisher(
                         }
                         is BindingTarget.PressTemplate -> {
                             recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.templateUuid(target.templateUuid),
+                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.templateUuid(target.paletteUuid),
                             )
                             true
                         }

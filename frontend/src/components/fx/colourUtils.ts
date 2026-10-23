@@ -182,14 +182,14 @@ export function detectExtendedChannels(
  *
  * Mirrors `fx/TemplateColourSource.kt`, which owns it. Two things about the split are deliberate:
  * this half **serialises and parses only** — resolving a reference to a colour is per-head
- * arithmetic that `TemplateResolver` must be the single answer to — and the prefix is `tmpl:`
+ * arithmetic that `TemplateResolver` must be the single answer to — and the prefix is `pal:`
  * rather than `ref:`, because `ref:{uuid}` is retired *and* still actively rejected at the Look
  * write boundary as the no-nesting guarantee.
  *
  * It replaced the positional colour list (`P1` / `P2` / `P*`), which was the last thing the word
  * "palette" meant in this codebase.
  */
-const TEMPLATE_REF_PREFIX = 'tmpl:'
+const TEMPLATE_REF_PREFIX = 'pal:'
 
 /** Is this colour string a template reference? Shape only — says nothing about the template existing. */
 export function isTemplateRef(value: string): boolean {

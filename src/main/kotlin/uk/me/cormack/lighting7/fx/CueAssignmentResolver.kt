@@ -171,7 +171,7 @@ class CueAssignmentResolver {
          *   [PropertyValue.Position]. This matches the `createFixtureTargetForCue` special case.
          * - [PropertyCategory.COLOUR]: hex / named / extended string consumed by
          *   [parseExtendedColour] → [PropertyValue.Colour]. A **template reference**
-         *   (`tmpl:{uuid}`) is refused here and returns null: an assignment value is a literal,
+         *   (`pal:{uuid}`) is refused here and returns null: an assignment value is a literal,
          *   and a dependency on a template is expressed by a *layer*. Letting it through would
          *   hand [parseExtendedColour] an unparseable string, which answers white — the same
          *   silent failure the retired positional-palette grammar had when its list was empty.

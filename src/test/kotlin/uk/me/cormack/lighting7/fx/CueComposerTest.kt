@@ -624,11 +624,11 @@ class CueComposerTest {
                     target = EffectTargetRef.Single(TargetRef.Fixture("hex-1")),
                     effect = StoredEffect(
                         effectType = "SineWave",
-                        category = "dimmer",
+                        category = "intensity",
                         propertyName = "dimmer",
                         beatDivision = 1.0,
                         blendMode = "OVERRIDE",
-                        distribution = "LINEAR",
+                        distribution = "NORMAL",
                         phaseOffset = 0.0,
                         elementMode = null,
                         elementFilter = null,

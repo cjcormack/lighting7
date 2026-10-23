@@ -131,8 +131,8 @@ class EffectSizeDirectionRoutesTest : RouteIntegrationTest() {
         val base = "/api/rest/projects/$projectId/looks"
         fun look(name: String, effect: LookEffectDto) = CreateLookRequest(name = name, effects = listOf(effect))
         val pulse = LookEffectDto(
-            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
-            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
+            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
 
         val created = client.post(base) {
@@ -163,8 +163,8 @@ class EffectSizeDirectionRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val spec = LookEffectSpec(
-            effectType = "Pulse", category = "dimmer", propertyName = "dimmer", beatDivision = 1.0,
-            blendMode = "OVERRIDE", distribution = "LINEAR", size = 0.3, direction = "BOUNCE", nShot = 4,
+            effectType = "Pulse", category = "intensity", propertyName = "dimmer", beatDivision = 1.0,
+            blendMode = "OVERRIDE", distribution = "NORMAL", size = 0.3, direction = "BOUNCE", nShot = 4,
         )
         val target = FxTargetFactory.forFixture("hex-1", "dimmer", null, state.show.fixtures.untypedGroupableFixture("hex-1"))
         val instance = EffectSpawner.createEffectInstance(spec, target, state)
@@ -188,8 +188,8 @@ class EffectSizeDirectionRoutesTest : RouteIntegrationTest() {
     @Test
     fun `Include carries a cue effect's size, direction and runs`() {
         val child = CueAdHocEffectDto(
-            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
-            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
+            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "NORMAL",
             size = 0.5, direction = "BACKWARD", nShot = 2,
         )
         val spec = child.toEffectSpec()

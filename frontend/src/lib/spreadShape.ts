@@ -55,7 +55,7 @@ export function isDefaultShape(shape: SpreadShape): boolean {
  * has nothing to add: the desk refuses it, and the editor hides the field (§3.3 step 3).
  */
 export function isMirroredOrder(order: string): boolean {
-  return order === 'CENTER_OUT' || order === 'EDGES_IN'
+  return order === 'CENTRE_OUT' || order === 'CENTRE_IN'
 }
 
 /** The Order's words (§3.1: the strategy, renamed in the UI only) — `lib/orderLabels.ts`'s, one vocabulary. */
@@ -73,8 +73,8 @@ export function orderRanks(order: string, n: number): { ranks: number[]; count: 
       return { ranks: Array.from({ length: n }, (_, i) => n - 1 - i), count: n }
     case 'UNIFIED':
       return { ranks: Array.from({ length: n }, () => 0), count: 1 }
-    case 'CENTER_OUT':
-    case 'EDGES_IN': {
+    case 'CENTRE_OUT':
+    case 'CENTRE_IN': {
       const slots = Math.floor((n + 1) / 2)
       if (n <= 1) return { ranks: Array.from({ length: n }, () => 0), count: slots }
       const centre = (n - 1) / 2
@@ -83,7 +83,7 @@ export function orderRanks(order: string, n: number): { ranks: number[]; count: 
         return n % 2 === 0 ? Math.trunc(d - 0.5) : Math.trunc(d)
       }
       return {
-        ranks: Array.from({ length: n }, (_, i) => (order === 'CENTER_OUT' ? centreOut(i) : slots - 1 - centreOut(i))),
+        ranks: Array.from({ length: n }, (_, i) => (order === 'CENTRE_OUT' ? centreOut(i) : slots - 1 - centreOut(i))),
         count: slots,
       }
     }
@@ -99,7 +99,7 @@ export function orderRanks(order: string, n: number): { ranks: number[]; count: 
     }
     case 'POSITIONAL':
       return { ranks: Array.from({ length: n }, (_, i) => (n > 1 ? i / (n - 1) : 0.5) * n), count: n }
-    // LINEAR, PING_PONG, and an Order this copy does not know (drawn as the rig's).
+    // NORMAL, PING_PONG, and an Order this copy does not know (drawn as the rig's).
     default:
       return { ranks: linear(), count: n }
   }

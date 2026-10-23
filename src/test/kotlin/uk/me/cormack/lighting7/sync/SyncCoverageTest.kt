@@ -132,10 +132,10 @@ class SyncCoverageTest {
         DaoFxDefinitions to Disposition.Portable("fxDefinitions"),
         DaoLooks to Disposition.Portable("looks"),
         DaoLookRows to Disposition.Portable("looks", "rows"),
-        DaoTemplates to Disposition.Portable("templates"),
-        DaoTemplateRows to Disposition.Portable("templates", "rows"),
-        DaoTemplateEffects to Disposition.Portable("templates", "effect"),
-        DaoLookEffects to Disposition.Portable("looks", "effects"),
+        DaoTemplates to Disposition.Portable("palettes"),
+        DaoTemplateRows to Disposition.Portable("palettes", "rows"),
+        DaoTemplateEffects to Disposition.Portable("palettes", "fx"),
+        DaoLookEffects to Disposition.Portable("looks", "fx"),
         // Five `Excluded` dispositions stood here and just below — `DaoFxPresets`,
         // `DaoFxPresetPropertyAssignments`, `DaoPalettes`, `DaoPaletteEntries` and
         // `DaoCuePresetApplications`. They were excluded rather than portable at formatVersion 5,
@@ -173,9 +173,9 @@ class SyncCoverageTest {
         // entry — markers included — so a drag rewrites one file and two desks adding to one stack add
         // two. Until then each cue's one entry rode inside its cue file.
         DaoCueStackEntries to Disposition.Portable("cueStackEntries"),
-        DaoCuePropertyAssignments to Disposition.Portable("cuePropertyAssignments"),
+        DaoCuePropertyAssignments to Disposition.Portable("cueAttributeAssignments"),
         DaoCueLayers to Disposition.Portable("cueLayers"),
-        DaoCueAdHocEffects to Disposition.Portable("cueAdHocEffects"),
+        DaoCueAdHocEffects to Disposition.Portable("cueAdHocFx"),
         DaoCueTriggers to Disposition.Portable("cueTriggers"),
         DaoCueSlots to Disposition.Portable("cueSlots"),
         DaoBuskPages to Disposition.Portable("buskPages"),

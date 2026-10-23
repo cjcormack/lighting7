@@ -67,7 +67,7 @@ class TimeColumnsTest {
 
         assertEquals(
             250_000_000L,
-            readRaw("SELECT fade_duration FROM templates WHERE id = $id") { it.getLong(1) },
+            readRaw("SELECT fade_duration FROM palettes WHERE id = $id") { it.getLong(1) },
             "250 ms must be stored as 250,000,000 ns",
         )
         assertEquals(
@@ -109,7 +109,7 @@ class TimeColumnsTest {
 
             assertEquals(
                 "2026-09-14 10:00:00.123Z",
-                readRaw("SELECT last_pressed_at FROM templates WHERE id = $id") { it.getString(1) },
+                readRaw("SELECT last_pressed_at FROM palettes WHERE id = $id") { it.getString(1) },
                 "stored as UTC text, not local wall-clock",
             )
             assertEquals(

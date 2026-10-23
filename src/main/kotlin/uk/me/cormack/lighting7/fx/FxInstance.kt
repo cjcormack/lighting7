@@ -411,7 +411,7 @@ data class FxDynamics(
     /**
      * How group-member phase offsets are derived. Ignored for fixture targets.
      */
-    val distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR,
+    val distributionStrategy: DistributionStrategy = DistributionStrategy.NORMAL,
 
     /**
      * Element mode for group effects on multi-element fixtures: distribution per fixture, or
@@ -1114,7 +1114,7 @@ class FxInstance internal constructor(
     ): Double {
         // PING_PONG: apply triangle wave remap to the base clock phase so that
         // ALL effects (not just static ones) sweep forward then backward.
-        // Scale to [0, (N-1)/N] to match the LINEAR offset range and avoid
+        // Scale to [0, (N-1)/N] to match the NORMAL offset range and avoid
         // wrapping artifacts at the turnaround points. N is the Order's own slot count, never the
         // spread's shape: Spread, Wings, Blocks and Groups set the members' offsets, as under every
         // other Order, and leave the sweep alone (effects plan §3.3) — so the sweep is never scaled
@@ -1128,7 +1128,7 @@ class FxInstance internal constructor(
 
         // Subtract distribution offset so that higher-offset members are *behind*
         // in the cycle, making the visual sweep flow in the natural direction
-        // (element 0 → element N for LINEAR, etc.).
+        // (element 0 → element N for NORMAL, etc.).
         val phase = ((shaped + dynamics.phaseOffset - distributionOffset) % 1.0 + 1.0) % 1.0
 
         // The member's own clock, in cycles: the effect's, less this member's offset.

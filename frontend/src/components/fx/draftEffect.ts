@@ -9,10 +9,10 @@ import type { DraftEffectPick, FxTarget } from './FxPicker'
 export function storedEffectOf(pick: DraftEffectPick, target: FxTarget): CueAdHocEffect {
   const where =
     target.type === 'fixture'
-      ? { targetType: 'fixture' as const, targetKey: target.fixture.key, distribution: 'LINEAR' }
+      ? { targetType: 'fixture' as const, targetKey: target.fixture.key, distribution: 'NORMAL' }
       : target.type === 'group'
-        ? { targetType: 'group' as const, targetKey: target.group.name, distribution: target.group.defaultDistribution || 'LINEAR' }
-        : { targetType: 'selection' as const, targetKey: selectionKeyOf(target.targets), distribution: 'LINEAR' }
+        ? { targetType: 'group' as const, targetKey: target.group.name, distribution: target.group.defaultDistribution || 'NORMAL' }
+        : { targetType: 'selection' as const, targetKey: selectionKeyOf(target.targets), distribution: 'NORMAL' }
   return {
     ...where,
     effectType: pick.effectType,

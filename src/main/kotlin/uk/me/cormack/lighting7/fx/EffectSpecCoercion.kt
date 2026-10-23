@@ -11,7 +11,7 @@ import uk.me.cormack.lighting7.fx.group.DistributionStrategy
  * this object existed each direction had its own parse. Two of the four enums threw
  * (`BlendMode.valueOf`, `ElementMode.valueOf`, both case-*sensitive*) while the other two
  * silently defaulted (`DistributionStrategy.fromName`, `ElementFilter.fromName`), so one bad
- * string produced a 400 or a quiet LINEAR depending purely on which field it landed in — and
+ * string produced a 400 or a quiet NORMAL depending purely on which field it landed in — and
  * `"override"` in lower case was a 400 while `"linear"` was fine.
  *
  * There are exactly two legitimate policies, and they are named rather than implied:
@@ -122,8 +122,8 @@ object EffectSpecCoercion {
             size?.let { sizeProblem(it)?.let { problem -> return problem } }
             nShot?.let { nShotProblem(it)?.let { problem -> return problem } }
             if (spread != null || wings != null || blocks != null || groups != null) {
-                // An absent Order is the default one, LINEAR, which every stored spec falls back to.
-                val order = distribution?.let { Names.distribution(it) } ?: DistributionStrategy.LINEAR
+                // An absent Order is the default one, NORMAL, which every stored spec falls back to.
+                val order = distribution?.let { Names.distribution(it) } ?: DistributionStrategy.NORMAL
                 spreadProblem(spread, wings, blocks, groups, order)?.let { return it }
             }
             return null
@@ -167,8 +167,8 @@ object EffectSpecCoercion {
         }
 
         private fun orderName(order: DistributionStrategy): String = when (order) {
-            DistributionStrategy.CENTER_OUT -> "Centre out"
-            DistributionStrategy.EDGES_IN -> "Centre in"
+            DistributionStrategy.CENTRE_OUT -> "Centre out"
+            DistributionStrategy.CENTRE_IN -> "Centre in"
             else -> order.javaClass.simpleName
         }
 
@@ -213,7 +213,7 @@ object EffectSpecCoercion {
             resolve(raw, context, "elementFilter", ElementFilter.ALL, Names::elementFilter)
 
         fun distribution(raw: String?, context: () -> String): DistributionStrategy =
-            resolve(raw, context, "distributionStrategy", DistributionStrategy.LINEAR, Names::distribution)
+            resolve(raw, context, "distributionStrategy", DistributionStrategy.NORMAL, Names::distribution)
 
         fun direction(raw: String?, context: () -> String): EffectDirection =
             resolve(raw, context, "direction", EffectDirection.FORWARD, Names::direction)

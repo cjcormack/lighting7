@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.stepTimingOf
 import java.time.Duration
 
 import kotlinx.serialization.Serializable
@@ -98,7 +100,7 @@ private val DaoCueAdHocEffect.isTimed: Boolean get() = delay != null || interval
 private fun assignmentKey(targetType: String, targetKey: String, propertyName: String) =
     Triple(targetType, targetKey, canonicalPropertyName(propertyName))
 
-private fun DaoCuePropertyAssignment.matchKey() = assignmentKey(targetType, targetKey, propertyName)
+private fun DaoCuePropertyAssignment.matchKey() = assignmentKey(targetType, targetKey, attribute)
 private fun CuePropertyAssignmentDto.matchKey() = assignmentKey(targetType, targetKey, propertyName)
 
 /**
@@ -197,7 +199,7 @@ internal fun writeRecordingIntoCue(
                         this.cue = cue
                         targetType = row.targetType
                         targetKey = row.targetKey
-                        propertyName = row.propertyName
+                        attribute = row.propertyName
                         value = row.value
                         fadeDuration = row.fadeDurationMs.asDuration()
                         sortOrder = row.sortOrder
@@ -228,7 +230,7 @@ internal fun writeRecordingIntoCue(
                 it.targetType == TargetRef.Group.TYPE
             }
             for (groupRow in remainingGroupRows) {
-                val property = canonicalPropertyName(groupRow.propertyName)
+                val property = canonicalPropertyName(groupRow.attribute)
                 val members = try {
                     state.show.fixtures.untypedGroup(groupRow.targetKey).fixtures.map { it.targetKey }
                 } catch (_: Exception) {
@@ -340,11 +342,11 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
         DaoCueLayer.new {
             this.cue = cue
             this.look = resolved.look
-            this.template = resolved.template
+            this.palette = resolved.template
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
             this.targets = layer.withStoredTargets().targets
-            this.propertyMask = layer.propertyMask
+            this.attributeMask = layer.propertyMask
             this.blendMode = layer.blendMode
             this.amount = layer.amount
             this.stomp = layer.stomp
@@ -369,8 +371,8 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
             !it.isTimed &&
                 it.targetType == effect.targetType &&
                 it.targetKey == effect.targetKey &&
-                it.effectType == effect.effectType &&
-                it.propertyName == effect.propertyName
+                it.fxType == effect.effectType &&
+                it.attribute == effect.propertyName
         }
         if (match != null) {
             if (!match.matches(effect)) {
@@ -394,7 +396,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
 private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
     var changed = false
     if (enabled != dto.enabled) { enabled = dto.enabled; changed = true }
-    if (propertyMask != dto.propertyMask) { propertyMask = dto.propertyMask; changed = true }
+    if (attributeMask != dto.propertyMask) { attributeMask = dto.propertyMask; changed = true }
     if (blendMode != dto.blendMode) { blendMode = dto.blendMode; changed = true }
     if (amount != dto.amount) { amount = dto.amount; changed = true }
     if (stomp != dto.stomp) { stomp = dto.stomp; changed = true }
@@ -407,43 +409,43 @@ private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
 
 /** True when the stored child already says exactly what [dto] says (ignoring cue-owned timing). */
 private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
-    category == dto.category &&
-        beatDivision == dto.beatDivision &&
+    family == dto.category &&
+        cycle == dto.beatDivision &&
         blendMode == dto.blendMode &&
-        distribution == dto.distribution &&
+        order == dto.distribution &&
         phaseOffset == dto.phaseOffset &&
         elementMode == dto.elementMode &&
         elementFilter == dto.elementFilter &&
-        stepTiming == dto.stepTiming &&
+        stepTimingOf(timing) == dto.stepTiming &&
         parameters == dto.parameters &&
         speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid) &&
         rateSpeedMasterUuid == speedMasterUuidOrNull(dto.rateSpeedMasterUuid) &&
         seconds == dto.seconds &&
-        size == dto.size &&
+        amount == dto.size &&
         direction == dto.direction &&
-        nShot == dto.nShot
+        runs == dto.nShot
 
 /** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
 private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
-    category = dto.category
-    beatDivision = dto.beatDivision
+    family = dto.category
+    cycle = dto.beatDivision
     blendMode = dto.blendMode
-    distribution = dto.distribution
+    order = dto.distribution
     phaseOffset = dto.phaseOffset
     elementMode = dto.elementMode
     elementFilter = dto.elementFilter
-    stepTiming = dto.stepTiming
+    timing = timingOf(dto.stepTiming)
     parameters = dto.parameters
     speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
     rateSpeedMasterUuid = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
     seconds = dto.seconds
-    size = dto.size
+    amount = dto.size
     direction = EffectSpecCoercion.Names.canonicalDirection(dto.direction)
-    nShot = dto.nShot
+    runs = dto.nShot
     this.spread = dto.spread
     this.wings = dto.wings
-    this.blocks = dto.blocks
-    this.groups = dto.groups
+    this.segments = dto.blocks
+    this.parts = dto.groups
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
@@ -454,8 +456,8 @@ private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording
             !it.isTimed &&
                 it.targetType == effect.targetType &&
                 it.targetKey == effect.targetKey &&
-                it.effectType == effect.effectType &&
-                it.propertyName == effect.propertyName
+                it.fxType == effect.effectType &&
+                it.attribute == effect.propertyName
         } ?: continue
         match.delete()
         removed++
@@ -526,7 +528,7 @@ private fun replaceImmediateFxChildren(
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = source.look
-                    this.template = source.template
+                    this.palette = source.template
                     take(layer)
                 }
             }
@@ -548,8 +550,8 @@ private fun replaceImmediateFxChildren(
             expandTargetsToFixtureKeys(state, listOf(CueTargetDto(effect.targetType, effect.targetKey))),
             cue.adHocEffects
                 .filter {
-                    it.id.value !in pending && !it.isTimed && it.effectType == effect.effectType &&
-                        it.propertyName == effect.propertyName
+                    it.id.value !in pending && !it.isTimed && it.fxType == effect.effectType &&
+                        it.attribute == effect.propertyName
                 }
                 .map { listOf(CueTargetDto(it.targetType, it.targetKey)) },
         )
@@ -591,7 +593,7 @@ private fun shadowingCoverage(
 }
 
 private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocEffect): PropertyMaskGroup? {
-    val propertyName = effect.propertyName ?: return null
+    val propertyName = effect.attribute ?: return null
     val fixture = state.show.fixtures.referenceFixtureFor(effect.target) ?: return null
     return uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
 }

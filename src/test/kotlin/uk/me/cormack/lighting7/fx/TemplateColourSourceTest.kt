@@ -9,7 +9,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * The `tmpl:` colour grammar, the fixture-free resolution behind it, and what [TypedParams] does
+ * The `pal:` colour grammar, the fixture-free resolution behind it, and what [TypedParams] does
  * with a reference it cannot honour.
  *
  * This is the replacement for the positional-palette tests that used to live in
@@ -47,10 +47,10 @@ class TemplateColourSourceTest {
 
     @Test
     fun `the grammar recognises a reference and parses its uuid`() {
-        assertTrue(isTemplateColourRef("tmpl:$templateUuid"))
-        assertTrue(isTemplateColourRef("  TMPL:$templateUuid  "), "case and surrounding space are not significant")
-        assertEquals(templateUuid, parseTemplateColourRefUuid("tmpl:$templateUuid"))
-        assertEquals("tmpl:$templateUuid", serializeTemplateColourRef(templateUuid))
+        assertTrue(isTemplateColourRef("pal:$templateUuid"))
+        assertTrue(isTemplateColourRef("  PAL:$templateUuid  "), "case and surrounding space are not significant")
+        assertEquals(templateUuid, parseTemplateColourRefUuid("pal:$templateUuid"))
+        assertEquals("pal:$templateUuid", serializeTemplateColourRef(templateUuid))
     }
 
     @Test
@@ -58,9 +58,9 @@ class TemplateColourSourceTest {
         assertTrue(!isTemplateColourRef("#ff0000"))
         assertNull(parseTemplateColourRefUuid("#ff0000"))
         // Shape yes, uuid no: the caller must treat this as an unresolvable reference rather than
-        // fall through to the literal parser, which would answer white for `tmpl:oops`.
-        assertTrue(isTemplateColourRef("tmpl:oops"))
-        assertNull(parseTemplateColourRefUuid("tmpl:oops"))
+        // fall through to the literal parser, which would answer white for `pal:oops`.
+        assertTrue(isTemplateColourRef("pal:oops"))
+        assertNull(parseTemplateColourRefUuid("pal:oops"))
     }
 
     @Test
@@ -118,7 +118,7 @@ class TemplateColourSourceTest {
     @Test
     fun `a generic colour template resolves`() {
         val source = templateColourSource(registryOf(template(colourRow())))
-        val resolved = source("tmpl:$templateUuid")!!
+        val resolved = source("pal:$templateUuid")!!
         assertEquals(74u.toUByte(), resolved.white)
     }
 
@@ -144,9 +144,9 @@ class TemplateColourSourceTest {
         )
         val source = templateColourSource(registryOf(position, perFixture))
 
-        assertNull(source("tmpl:$templateUuid"), "no such template")
-        assertNull(source("tmpl:${position.templateUuid}"), "a position template holds no colour")
-        assertNull(source("tmpl:${perFixture.templateUuid}"), "a per-fixture template holds no single colour")
+        assertNull(source("pal:$templateUuid"), "no such template")
+        assertNull(source("pal:${position.templateUuid}"), "a position template holds no colour")
+        assertNull(source("pal:${perFixture.templateUuid}"), "a per-fixture template holds no single colour")
     }
 
     // ─── What TypedParams does with the answers ─────────────────────────
@@ -168,7 +168,7 @@ class TemplateColourSourceTest {
         // Colour Cycle takes literal colours (terminology plan D14): a reference resolves to nothing
         // in a list, even one that names a real colour palette, and the list comes back shorter.
         val registry = registryOf(template(colourRow()))
-        val p = params(mapOf("colours" to "#ff0000,tmpl:$templateUuid,tmpl:oops,#0000ff"), registry)
+        val p = params(mapOf("colours" to "#ff0000,pal:$templateUuid,pal:oops,#0000ff"), registry)
         val colours = p.colourList("colours")
         assertEquals(listOf(Color.RED, Color.BLUE), colours.map { it.color })
     }
@@ -176,8 +176,8 @@ class TemplateColourSourceTest {
     @Test
     fun `a palette reference in a colourList is refused at the write boundary`() {
         val schema = listOf(ParameterInfo("colours", "colourList", "#ff0000"), ParameterInfo("colour", "colour", "#ffffff"))
-        assertEquals(null, colourListPaletteProblem(schema, mapOf("colours" to "#ff0000,#0000ff", "colour" to "tmpl:$templateUuid")))
-        val problem = colourListPaletteProblem(schema, mapOf("colours" to "#ff0000, tmpl:$templateUuid"))
+        assertEquals(null, colourListPaletteProblem(schema, mapOf("colours" to "#ff0000,#0000ff", "colour" to "pal:$templateUuid")))
+        val problem = colourListPaletteProblem(schema, mapOf("colours" to "#ff0000, pal:$templateUuid"))
         assertTrue(problem != null && "'colours'" in problem, "$problem")
     }
 
@@ -185,7 +185,7 @@ class TemplateColourSourceTest {
     fun `a single colour falls back to the literal parser, which reads a bad reference as white`() {
         // Loud rather than dark: a black head is indistinguishable from an intentional blackout,
         // and the refusal has already been logged with its reason.
-        val p = params(mapOf("colour" to "tmpl:oops"), registryOf())
+        val p = params(mapOf("colour" to "pal:oops"), registryOf())
         assertEquals(Color.WHITE, p.colour("colour").color)
     }
 
@@ -197,7 +197,7 @@ class TemplateColourSourceTest {
         val registry = TemplateRegistry(loader = { uuid ->
             template(colourRow(value = stored), uuid = uuid).takeIf { uuid == templateUuid }
         })
-        val p = params(mapOf("colour" to "tmpl:$templateUuid"), registry)
+        val p = params(mapOf("colour" to "pal:$templateUuid"), registry)
         assertEquals(Color.RED, p.colour("colour").color)
 
         stored = "#0000ff;policy=rgbonly"
@@ -219,7 +219,7 @@ class TemplateColourSourceTest {
             loaded += uuid
             template(colourRow(value = stored), uuid = uuid)
         })
-        val p = params(mapOf("colour" to "tmpl:$templateUuid"), registry)
+        val p = params(mapOf("colour" to "pal:$templateUuid"), registry)
         assertEquals(Color.RED, p.colour("colour").color)
         loaded.clear()
 

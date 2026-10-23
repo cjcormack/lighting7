@@ -29,7 +29,7 @@ import {
 
 const entry = (over: Partial<EffectLibraryEntry>): EffectLibraryEntry => ({
   name: 'X',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   compatibleProperties: ['dimmer'],
@@ -84,7 +84,7 @@ describe('fxEditorModel', () => {
 
   it('writes the core every time and an optional field only once touched', () => {
     const draft = draftOf(makeActiveEffect({ parameters: { min: '0' }, distributionStrategy: null }))
-    expect(draft.distributionStrategy).toBe('LINEAR')
+    expect(draft.distributionStrategy).toBe('NORMAL')
     // Nothing touched: the DTO's absent distribution is a guess, never sent.
     expect(updateRequestOf(draft)).toEqual({ parameters: { min: '0' }, beatDivision: 1, blendMode: 'OVERRIDE', phaseOffset: 0 })
     const touched = new Set(['distributionStrategy', 'elementFilter', 'speedMasterUuid', 'rateSpeedMasterUuid'] as const)
@@ -93,7 +93,7 @@ describe('fxEditorModel', () => {
       beatDivision: 1,
       blendMode: 'OVERRIDE',
       phaseOffset: 0,
-      distributionStrategy: 'LINEAR',
+      distributionStrategy: 'NORMAL',
       elementFilter: 'ALL',
       // A null master is spelled as master 1 where the caller says so (Revert); a null rate
       // master has no spelling and stays absent.
@@ -139,10 +139,10 @@ describe('fxEditorModel', () => {
   it('writes a palette effect\'s size, direction and runs where they say something, and reads them as edits', () => {
     const palette = {
       effectType: 'Pulse',
-      category: 'dimmer',
+      category: 'intensity',
       beatDivision: 1,
       blendMode: 'OVERRIDE',
-      distribution: 'LINEAR',
+      distribution: 'NORMAL',
       parameters: {},
     }
     const draft = templateDraftOf(palette)
@@ -171,19 +171,19 @@ describe('fxEditorModel', () => {
   })
 
   it('takes wings back to 1 when the order moves onto a mirrored one', () => {
-    expect(orderPatch({ wings: 2 }, 'CENTER_OUT')).toEqual({ distributionStrategy: 'CENTER_OUT', wings: 1 })
-    expect(orderPatch({ wings: 2 }, 'EDGES_IN')).toEqual({ distributionStrategy: 'EDGES_IN', wings: 1 })
-    expect(orderPatch({ wings: 1 }, 'EDGES_IN')).toEqual({ distributionStrategy: 'EDGES_IN' })
+    expect(orderPatch({ wings: 2 }, 'CENTRE_OUT')).toEqual({ distributionStrategy: 'CENTRE_OUT', wings: 1 })
+    expect(orderPatch({ wings: 2 }, 'CENTRE_IN')).toEqual({ distributionStrategy: 'CENTRE_IN', wings: 1 })
+    expect(orderPatch({ wings: 1 }, 'CENTRE_IN')).toEqual({ distributionStrategy: 'CENTRE_IN' })
     expect(orderPatch({ wings: 3 }, 'REVERSE')).toEqual({ distributionStrategy: 'REVERSE' })
   })
 
   it('writes a palette effect\'s shape where it says something, and reads it as an edit', () => {
     const palette = {
       effectType: 'Pulse',
-      category: 'dimmer',
+      category: 'intensity',
       beatDivision: 1,
       blendMode: 'OVERRIDE',
-      distribution: 'LINEAR',
+      distribution: 'NORMAL',
       parameters: {},
     }
     const draft = templateDraftOf(palette)
@@ -298,7 +298,7 @@ describe('fxEditorModel', () => {
   })
 
   it('files an unknown category under Controls', () => {
-    expect(pickerFamilyOf('dimmer')).toBe('INTENSITY')
+    expect(pickerFamilyOf('intensity')).toBe('INTENSITY')
     expect(pickerFamilyOf('scripted')).toBe('CONTROLS')
   })
 
@@ -314,19 +314,19 @@ describe("a pad's instance against its palette (§3.3, D20)", () => {
     category: 'position',
     beatDivision: 1,
     blendMode: 'ADDITIVE',
-    distribution: 'CENTER_OUT',
+    distribution: 'CENTRE_OUT',
     phaseOffset: 0,
     parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
     speedMasterUuid: null,
     rateSpeedMasterUuid: null,
   }
-  // A single fixture's instance: the desk leaves its distribution out, which `draftOf` reads LINEAR.
+  // A single fixture's instance: the desk leaves its distribution out, which `draftOf` reads NORMAL.
   const instance = draftOf(
     makeActiveEffect({ effectType: 'Circle', blendMode: 'ADDITIVE', distributionStrategy: null, parameters: { ...template.parameters, panRadius: '64.0' } }),
   )
 
   it('is not edited for a distribution the instance never said, nor for a number spelled differently', () => {
-    expect(instance.distributionStrategy).toBe('LINEAR')
+    expect(instance.distributionStrategy).toBe('NORMAL')
     expect(differsFromTemplate(instance, template, 'm1', {}, { distribution: false })).toBe(false)
     // Asked to compare it, the guess reads as an edit — which is why the editor does not.
     expect(differsFromTemplate(instance, template, 'm1', {}, { distribution: true })).toBe(true)
@@ -336,7 +336,7 @@ describe("a pad's instance against its palette (§3.3, D20)", () => {
   })
 
   it('keeps the palette’s own distribution on Update where the instance said none', () => {
-    expect(withTemplateDraft(template, instance, { distribution: false }).distribution).toBe('CENTER_OUT')
+    expect(withTemplateDraft(template, instance, { distribution: false }).distribution).toBe('CENTRE_OUT')
     expect(withTemplateDraft(template, { ...instance, distributionStrategy: 'RANDOM' }).distribution).toBe('RANDOM')
   })
 })

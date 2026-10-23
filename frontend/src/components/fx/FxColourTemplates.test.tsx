@@ -54,7 +54,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
 }
 
 const WARM = template()
-const REF = 'tmpl:u1'
+const REF = 'pal:u1'
 
 /** Mounted under a project, which is what `useColourTemplates` reads the route for. */
 function render() {
@@ -110,7 +110,7 @@ describe('useColourTemplates offerability', () => {
     const { result } = render()
     expect(result.current.templates.map((t) => t.name)).toEqual(['Warm Key'])
     // The hex, not the UV row that follows it.
-    expect(result.current.swatchFor('tmpl:u1')).toBe('#ff9d4a')
+    expect(result.current.swatchFor('pal:u1')).toBe('#ff9d4a')
   })
 
   it('excludes an effect palette — an effect is not a colour', () => {

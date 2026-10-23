@@ -242,7 +242,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         val cueId = recorded["cueId"]!!.jsonPrimitive.int
 
         val rows = transaction(state.database) {
-            DaoCue[cueId].propertyAssignments.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value) }
+            DaoCue[cueId].propertyAssignments.map { listOf(it.targetType, it.targetKey, it.attribute, it.value) }
         }
         assertEquals(listOf(listOf("group", "FOH", "dimmer", "128")), rows)
     }
@@ -416,7 +416,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
 
     private fun storedRows(name: String): Set<LookRowDto> = transaction(state.database) {
         DaoLook.find { DaoLooks.name eq name }.single().rows.map {
-            LookRowDto(it.targetType, it.targetKey, it.propertyName, it.value, elementKey = it.elementKey)
+            LookRowDto(it.targetType, it.targetKey, it.attribute, it.value, elementKey = it.elementKey)
         }.toSet()
     }
 }

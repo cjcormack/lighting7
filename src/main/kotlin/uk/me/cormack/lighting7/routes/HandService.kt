@@ -70,7 +70,7 @@ internal object HandService {
                 }
                 // Safe: `kind` is derived from exactly these three FK columns' `readValues`, which
                 // is why `DaoBuskPad.toDto` and `BuskPressService` unwrap them the same way.
-                BuskPadKind.TEMPLATE -> kind to pad.template!!.id.value
+                BuskPadKind.TEMPLATE -> kind to pad.palette!!.id.value
                 BuskPadKind.LOOK -> kind to pad.look!!.id.value
                 BuskPadKind.CUE -> kind to pad.cue!!.id.value
             }

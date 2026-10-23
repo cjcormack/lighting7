@@ -19,8 +19,8 @@ export interface SpeedMaster {
   source: 'MANUAL' | 'TAP'
   notes?: string | null
   /**
-   * Effect-library category this master is the apply-time default for (`dimmer` / `colour` /
-   * `position`), or null/absent to route nothing. Unique within a project — the server 409s
+   * Effect-library category this master is the apply-time default for (`intensity` / `colour` /
+   * `position` / `beam`), or null/absent to route nothing. Unique within a project — the server 409s
    * with `SPEED_MASTER_USAGE_TAKEN` on a second claimant.
    */
   usage?: string | null

@@ -1,0 +1,25 @@
+{
+  "category": "dimmer",
+  "compatibleProperties": [
+    "dimmer"
+  ],
+  "defaultStepTiming": true,
+  "effectId": "custom-flicker",
+  "name": "Custom Flicker",
+  "outputType": "SLIDER",
+  "parameters": [
+    {
+      "defaultValue": "0.8",
+      "description": "flicker depth",
+      "name": "depth",
+      "type": "double"
+    },
+    {
+      "defaultValue": "7",
+      "name": "seed",
+      "type": "int"
+    }
+  ],
+  "script": "// effect",
+  "uuid": "b51a861f-ccf3-4005-90d1-4c1210be2e6b"
+}

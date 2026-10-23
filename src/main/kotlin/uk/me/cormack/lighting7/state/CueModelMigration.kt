@@ -1,10 +1,8 @@
 package uk.me.cormack.lighting7.state
 
 import org.jetbrains.exposed.v1.core.Table
-import org.jetbrains.exposed.v1.core.statements.StatementType
 import org.jetbrains.exposed.v1.jdbc.Database
 import org.jetbrains.exposed.v1.jdbc.JdbcTransaction
-import org.jetbrains.exposed.v1.jdbc.SchemaUtils
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 import org.slf4j.LoggerFactory
@@ -12,13 +10,10 @@ import uk.me.cormack.lighting7.models.CueStackEntryKind
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoPromptBookAnchors
-import java.nio.file.Files
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.ResultSet
 import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 import javax.sql.DataSource
 
@@ -84,9 +79,6 @@ internal object CueModelMigration {
         val anchorsDropped: Int,
     )
 
-    private val BACKUP_STAMP: DateTimeFormatter =
-        DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'").withZone(ZoneOffset.UTC)
-
     /**
      * Run the migration if [dataSource]'s database still needs it. [dbPath] is the database file,
      * the backup's directory and stem; null skips the backup (an in-memory database has no file to
@@ -96,32 +88,13 @@ internal object CueModelMigration {
         val needed = dataSource.connection.use { connection -> columnExists(connection, "cues", "cue_stack_id") }
         if (!needed) return null
 
-        val backup = dbPath?.let { backUp(dataSource, it, now) }
+        val backup = dbPath?.let { backUpDatabase(dataSource, it, "pre-cue-model", now) }
         val outcome = transaction(database) { migrate() }.copy(backup = backup)
         logger.info(
             "Cue model migration: {} entr(ies), {} marker(s), {} anchor(s) re-pointed, {} dropped; backup {}",
             outcome.entries, outcome.markers, outcome.anchorsRepointed, outcome.anchorsDropped, backup ?: "skipped",
         )
         return outcome
-    }
-
-    /** `VACUUM INTO` the backup beside [dbPath], outside any transaction. */
-    private fun backUp(dataSource: DataSource, dbPath: String, now: Instant): Path {
-        val target = Path.of("$dbPath.pre-cue-model-${BACKUP_STAMP.format(now)}.db")
-        check(!Files.exists(target)) { "Cue model migration: backup $target already exists" }
-        dataSource.connection.use { connection ->
-            val wasAutoCommit = connection.autoCommit
-            if (!wasAutoCommit) {
-                connection.commit()
-                connection.autoCommit = true
-            }
-            try {
-                connection.createStatement().use { it.execute("VACUUM INTO ${sqlText(target.toString())}") }
-            } finally {
-                if (!wasAutoCommit) connection.autoCommit = false
-            }
-        }
-        return target
     }
 
     /** One old `cues` row, as much of it as the migration moves. */
@@ -261,43 +234,9 @@ internal object CueModelMigration {
         "cue_scenery", "cue_events", "busk_pads", "cue_slots",
     )
 
-    /**
-     * Replace [table] with the model's shape of it: the old table renamed aside, the new one created
-     * from `SchemaUtils.createStatements`, [copy] given the old table's name to fill it from, and the
-     * old one dropped. `legacy_alter_table` keeps every other table's references naming the real
-     * table rather than following the rename.
-     */
-    private fun JdbcTransaction.rebuild(table: Table, copy: JdbcTransaction.(old: String) -> Unit) {
-        val name = table.tableName
-        val old = "${name}_pre_cue_model"
-        // The old table's indexes would otherwise travel with it and clash by name with the new ones.
-        val indexes = mutableListOf<String>()
-        exec("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ${sqlText(name)} AND sql IS NOT NULL") { rs ->
-            while (rs.next()) indexes += rs.getString("name")
-        }
-        indexes.forEach { exec("DROP INDEX IF EXISTS \"$it\"") }
-        exec("PRAGMA legacy_alter_table = ON", explicitStatementType = StatementType.OTHER)
-        try {
-            exec("ALTER TABLE $name RENAME TO $old")
-        } finally {
-            exec("PRAGMA legacy_alter_table = OFF", explicitStatementType = StatementType.OTHER)
-        }
-        createFromModel(table)
-        copy(old)
-        exec("DROP TABLE $old")
-    }
-
-    /**
-     * Create [table] from the model. `createStatements` also sorts in every table [table]
-     * references and skips each one that exists — judged by Exposed's **cached** table list, which
-     * this migration's own DDL makes stale (it would recreate `cue_stack_entries`' indexes, or skip
-     * a renamed-aside `cues` it still remembers). So the cache is refreshed first, and only [table]
-     * is ever missing.
-     */
-    private fun JdbcTransaction.createFromModel(table: Table) {
-        currentDialectMetadata.resetCaches()
-        SchemaUtils.createStatements(table).forEach { exec(it) }
-    }
+    /** [table] rebuilt in the model's shape, its old self renamed aside as `<name>_pre_cue_model` ([rebuildFromModel]). */
+    private fun JdbcTransaction.rebuild(table: Table, copy: JdbcTransaction.(old: String) -> Unit) =
+        rebuildFromModel(table.tableName, table, "pre_cue_model", copy)
 
     // ─── Raw SQL helpers ─────────────────────────────────────────────────────
 
@@ -310,26 +249,11 @@ internal object CueModelMigration {
             }
         }
 
-    private fun JdbcTransaction.tableExists(table: String): Boolean {
-        var exists = false
-        exec("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ${sqlText(table)}") { rs -> exists = rs.next() }
-        return exists
-    }
-
-    private fun JdbcTransaction.columnsOf(table: String): Set<String> {
-        val columns = mutableSetOf<String>()
-        exec("PRAGMA table_info($table)") { rs -> while (rs.next()) columns += rs.getString("name") }
-        return columns
-    }
-
     private fun JdbcTransaction.lastInsertRowId(): Int {
         var id = 0
         exec("SELECT last_insert_rowid() AS id") { rs -> if (rs.next()) id = rs.getInt("id") }
         return id
     }
-
-    private fun sqlText(value: String?): String =
-        if (value == null) "NULL" else "'" + value.replace("'", "''") + "'"
 
     private fun sqlBool(value: Boolean): String = if (value) "1" else "0"
 

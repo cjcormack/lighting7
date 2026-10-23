@@ -36,7 +36,7 @@ internal const val FX_LIBRARY_REWRITTEN_USER_VERSION = 4
 /**
  * Rewrite every stored FX onto today's FX library, once per database (terminology plan §4.2, §5
  * step 4): the renamed ids, Breathe as Sine Wave, `pingPong` as Direction Bounce, Colour Cycle on
- * literal colours, `SPLIT` as `EDGES_IN` and Lightning Strike out of the composite category — each
+ * literal colours, `SPLIT` as `CENTRE_IN` and Lightning Strike out of the composite category — each
  * by [LegacyNames.rewriteFx], which the importer shares, and each named in the log by its Look, cue
  * or palette. A script FX definition or script on the composite mode, which went, is moved to the
  * standard one and named, since its script returns a map no FX applies any more; and every script
@@ -70,9 +70,9 @@ internal fun JdbcTransaction.rewriteFxLibrary() {
         owner = DaoLookEffects.look,
         owners = DaoLooks.selectAll().associate { it[DaoLooks.id].value to (it[DaoLooks.name] to it[DaoLooks.project].value) },
         columns = FxColumns(
-            DaoLookEffects.effectType, DaoLookEffects.category, DaoLookEffects.beatDivision,
-            DaoLookEffects.distribution, DaoLookEffects.phaseOffset, DaoLookEffects.parameters,
-            DaoLookEffects.direction, DaoLookEffects.nShot, DaoLookEffects.spread,
+            DaoLookEffects.fxType, DaoLookEffects.family, DaoLookEffects.cycle,
+            DaoLookEffects.order, DaoLookEffects.phaseOffset, DaoLookEffects.parameters,
+            DaoLookEffects.direction, DaoLookEffects.runs, DaoLookEffects.spread,
         ),
         projects = projects,
         contextOf = contextOf,
@@ -83,9 +83,9 @@ internal fun JdbcTransaction.rewriteFxLibrary() {
         owner = DaoCueAdHocEffects.cue,
         owners = DaoCues.selectAll().associate { it[DaoCues.id].value to (it[DaoCues.name] to it[DaoCues.project].value) },
         columns = FxColumns(
-            DaoCueAdHocEffects.effectType, DaoCueAdHocEffects.category, DaoCueAdHocEffects.beatDivision,
-            DaoCueAdHocEffects.distribution, DaoCueAdHocEffects.phaseOffset, DaoCueAdHocEffects.parameters,
-            DaoCueAdHocEffects.direction, DaoCueAdHocEffects.nShot, DaoCueAdHocEffects.spread,
+            DaoCueAdHocEffects.fxType, DaoCueAdHocEffects.family, DaoCueAdHocEffects.cycle,
+            DaoCueAdHocEffects.order, DaoCueAdHocEffects.phaseOffset, DaoCueAdHocEffects.parameters,
+            DaoCueAdHocEffects.direction, DaoCueAdHocEffects.runs, DaoCueAdHocEffects.spread,
         ),
         projects = projects,
         contextOf = contextOf,
@@ -93,12 +93,12 @@ internal fun JdbcTransaction.rewriteFxLibrary() {
     rewriteHome(
         home = "Palette",
         table = DaoTemplateEffects,
-        owner = DaoTemplateEffects.template,
+        owner = DaoTemplateEffects.palette,
         owners = DaoTemplates.selectAll().associate { it[DaoTemplates.id].value to (it[DaoTemplates.name] to it[DaoTemplates.project].value) },
         columns = FxColumns(
-            DaoTemplateEffects.effectType, DaoTemplateEffects.category, DaoTemplateEffects.beatDivision,
-            DaoTemplateEffects.distribution, DaoTemplateEffects.phaseOffset, DaoTemplateEffects.parameters,
-            DaoTemplateEffects.direction, DaoTemplateEffects.nShot, DaoTemplateEffects.spread,
+            DaoTemplateEffects.fxType, DaoTemplateEffects.family, DaoTemplateEffects.cycle,
+            DaoTemplateEffects.order, DaoTemplateEffects.phaseOffset, DaoTemplateEffects.parameters,
+            DaoTemplateEffects.direction, DaoTemplateEffects.runs, DaoTemplateEffects.spread,
         ),
         projects = projects,
         contextOf = contextOf,
@@ -110,25 +110,25 @@ internal fun JdbcTransaction.rewriteFxLibrary() {
 
 /** The columns of one FX home that [LegacyNames.StoredFx] reads, which every home names alike. */
 private class FxColumns(
-    val effectType: Column<String>,
-    val category: Column<String>,
-    val beatDivision: Column<Double>,
-    val distribution: Column<String>,
+    val fxType: Column<String>,
+    val family: Column<String>,
+    val cycle: Column<Double>,
+    val order: Column<String>,
     val phaseOffset: Column<Double>,
     val parameters: Column<Map<String, String>>,
     val direction: Column<String>,
-    val nShot: Column<Int?>,
+    val runs: Column<Int?>,
     val spread: Column<Double>,
 ) {
     fun read(row: ResultRow) = LegacyNames.StoredFx(
-        effectType = row[effectType],
-        category = row[category],
-        beatDivision = row[beatDivision],
-        distribution = row[distribution],
+        fxType = row[fxType],
+        family = row[family],
+        cycle = row[cycle],
+        order = row[order],
         phaseOffset = row[phaseOffset],
         parameters = row[parameters],
         direction = row[direction],
-        nShot = row[nShot],
+        runs = row[runs],
         spread = row[spread],
     )
 }
@@ -149,18 +149,18 @@ private fun <T : IntIdTable> rewriteHome(
         val rewrite = LegacyNames.rewriteFx(fx, contextOf(projectId)) ?: continue
         val out = rewrite.fx
         table.update({ table.id eq id }) {
-            it[columns.effectType] = out.effectType
-            it[columns.category] = out.category
-            it[columns.beatDivision] = out.beatDivision
-            it[columns.distribution] = out.distribution
+            it[columns.fxType] = out.fxType
+            it[columns.family] = out.family
+            it[columns.cycle] = out.cycle
+            it[columns.order] = out.order
             it[columns.phaseOffset] = out.phaseOffset
             it[columns.parameters] = out.parameters
             it[columns.direction] = out.direction
-            it[columns.nShot] = out.nShot
+            it[columns.runs] = out.runs
             it[columns.spread] = out.spread
         }
         val said = "$home '{}' in '{}': {} — {}"
-        val args = arrayOf(name, projectId?.let { projects[it] } ?: "no project", fx.effectType, rewrite.changes.joinToString("; "))
+        val args = arrayOf(name, projectId?.let { projects[it] } ?: "no project", fx.fxType, rewrite.changes.joinToString("; "))
         if (rewrite.notes.isEmpty()) {
             logger.info(said, *args)
         } else {
@@ -171,12 +171,12 @@ private fun <T : IntIdTable> rewriteHome(
 
 /** Every palette's rows, by its uuid, for Colour Cycle's references. */
 private fun palettesByUuid(): Map<UUID, LegacyNames.Palette> {
-    val withFx = DaoTemplateEffects.selectAll().mapTo(HashSet()) { it[DaoTemplateEffects.template].value }
+    val withFx = DaoTemplateEffects.selectAll().mapTo(HashSet()) { it[DaoTemplateEffects.palette].value }
     val rows = DaoTemplateRows.selectAll().orderBy(DaoTemplateRows.sortOrder).groupBy(
-        { it[DaoTemplateRows.template].value },
+        { it[DaoTemplateRows.palette].value },
         {
             LegacyNames.PaletteRow(
-                propertyName = it[DaoTemplateRows.propertyName],
+                attribute = it[DaoTemplateRows.attribute],
                 value = it[DaoTemplateRows.value],
                 deferred = it[DaoTemplateRows.targetType] == DEFERRED_TARGET_TYPE,
             )
@@ -190,11 +190,11 @@ private fun palettesByUuid(): Map<UUID, LegacyNames.Palette> {
 
 /**
  * Every project's script FX definitions, by normalised effect id, as [LegacyNames.rewriteFx] reads
- * one. Raw SQL, since `effect_mode` may still hold the composite mode the enum no longer knows.
+ * one. Raw SQL, since `fx_mode` may still hold the composite mode the enum no longer knows.
  */
 private fun JdbcTransaction.definitionsByProject(): Map<Int?, Map<String, LegacyNames.Definition>> {
     val out = HashMap<Int?, HashMap<String, LegacyNames.Definition>>()
-    exec("SELECT project_id, effect_id, output_type, parameters FROM fx_definitions") { rs ->
+    exec("SELECT project_id, fx_id, output_type, parameters FROM fx_definitions") { rs ->
         while (rs.next()) {
             val projectId = rs.getInt(1).takeUnless { rs.wasNull() }
             val parameters = runCatching {
@@ -223,24 +223,24 @@ private fun JdbcTransaction.leaveCompositeMode(projects: Map<Int, String>) {
         }
         return found
     }
-    data class Composite(val id: Int, val effectId: String, val projectId: Int?, val category: String, val outputType: String)
+    data class Composite(val id: Int, val effectId: String, val projectId: Int?, val family: String, val outputType: String)
     val composites = ArrayList<Composite>()
-    exec("SELECT id, effect_id, project_id, category, output_type FROM fx_definitions WHERE effect_mode = 'COMPOSITE' OR category = 'composite'") { rs ->
+    exec("SELECT id, fx_id, project_id, family, output_type FROM fx_definitions WHERE fx_mode = 'COMPOSITE' OR family = 'composite'") { rs ->
         while (rs.next()) {
             composites += Composite(rs.getInt(1), rs.getString(2), rs.getInt(3).takeUnless { rs.wasNull() }, rs.getString(4), rs.getString(5))
         }
     }
     for (d in composites) {
-        val category = LegacyNames.category(d.category, d.outputType)
+        val family = LegacyNames.familyOf(d.family, d.outputType)
         exec(
-            "UPDATE fx_definitions SET category = ?, effect_mode = CASE WHEN effect_mode = 'COMPOSITE' " +
-                "THEN '${LegacyNames.effectMode("COMPOSITE")}' ELSE effect_mode END WHERE id = ?",
-            listOf(VarCharColumnType() to category, IntegerColumnType() to d.id),
+            "UPDATE fx_definitions SET family = ?, fx_mode = CASE WHEN fx_mode = 'COMPOSITE' " +
+                "THEN '${LegacyNames.fxMode("COMPOSITE")}' ELSE fx_mode END WHERE id = ?",
+            listOf(VarCharColumnType() to family, IntegerColumnType() to d.id),
         )
         logger.warn(
             "FX definition '{}' in '{}': the composite mode is gone, so it is a standard FX filed under {} — " +
                 "its script must now return one output",
-            d.effectId, d.projectId?.let { id -> projects[id] } ?: "no project", category,
+            d.effectId, d.projectId?.let { id -> projects[id] } ?: "no project", family,
         )
     }
     named("SELECT name, project_id FROM scripts WHERE script_type = 'FX_CALC_COMPOSITE'").forEach {
@@ -274,7 +274,7 @@ internal fun scriptEdits(source: String): List<String> = buildList {
         if ("\"$id\"" in source) add("$id bounces by Direction now, each leg a whole cycle, so it runs at half its old rate")
     }
     if ("pingPong" in source) add("pingPong is gone; set the FX's Direction instead")
-    if (Regex("\\bSPLIT\\b").containsMatchIn(source)) add("SPLIT is gone; EDGES_IN gives its offsets")
+    if (Regex("\\bSPLIT\\b").containsMatchIn(source)) add("SPLIT is gone; CENTRE_IN gives its offsets")
     if ("CompositeEffect" in source || "calculateComposite" in source || "FX_CALC_COMPOSITE" in source) {
         add("the composite mode is gone; an FX applies one output")
     }

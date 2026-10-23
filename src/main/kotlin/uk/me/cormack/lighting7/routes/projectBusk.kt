@@ -486,7 +486,7 @@ internal fun appendBuskPad(
     DaoBuskPad.new {
         this.bank = bank
         sortOrder = next
-        template = newTemplate
+        palette = newTemplate
         look = newLook
         cue = newCue
     }
@@ -611,7 +611,7 @@ internal fun applyBuskLayout(
                     pad.bank = bank
                     pad.sortOrder = padIndex
                     // Refs rewritten from the document, not merged: a pad is what the page says it is.
-                    pad.template = d.templateId?.let { templates.getValue(it) }
+                    pad.palette = d.templateId?.let { templates.getValue(it) }
                     pad.look = d.lookId?.let { looks.getValue(it) }
                     pad.cue = d.cueId?.let { cues.getValue(it) }
                     keptPads += pad.id.value
@@ -681,7 +681,7 @@ internal class BuskRecordCache(private val state: State) {
     fun prime(contents: BuskPageContents) {
         val pads = contents.pads.values
         if (pads.isEmpty()) return
-        templateUsages = templateUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.template]?.value }.distinct())
+        templateUsages = templateUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.palette]?.value }.distinct())
         val lookIds = pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct()
         lookUsages = lookUsageFor(lookIds)
         lookScenery = lookScenerySummariesFor(lookIds)
@@ -787,7 +787,7 @@ private fun DaoBuskPage.toDto(records: BuskRecordCache, contents: BuskPageConten
 private fun DaoBuskPad.toDto(records: BuskRecordCache): BuskPadDto? {
     val kind = kind ?: run { warnMalformedBuskPad { uuid.toString() }; return null }
     return when (kind) {
-        BuskPadKind.TEMPLATE -> BuskPadDto(id.value, uuid.toString(), kind.name, template = records.dto(template!!))
+        BuskPadKind.TEMPLATE -> BuskPadDto(id.value, uuid.toString(), kind.name, template = records.dto(palette!!))
         BuskPadKind.LOOK -> BuskPadDto(id.value, uuid.toString(), kind.name, look = records.dto(look!!))
         BuskPadKind.CUE -> BuskPadDto(id.value, uuid.toString(), kind.name, cue = records.dto(cue!!))
     }

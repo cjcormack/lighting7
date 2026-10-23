@@ -79,9 +79,9 @@ cues/{uuid}.json               # what a cue is; v20+: `scenery` embedded, each c
 cueStackEntries/{uuid}.json    # v32+: one place in a stack's list — cueStackUuid, cueUuid (a cue
                                # entry) or kind MARKER + label, a double ordinal, the number only
                                # when explicit, the follow; see §"Version 32"
-cuePropertyAssignments/{uuid}.json   # carries cueUuid
-cueLayers/{uuid}.json          # carries cueUuid + lookUuid + optional speedMasterUuid
-cueAdHocEffects/{uuid}.json    # carries cueUuid + optional speedMasterUuid
+cueAttributeAssignments/{uuid}.json  # carries cueUuid; `cuePropertyAssignments/` before v38
+cueLayers/{uuid}.json          # carries cueUuid + lookUuid or paletteUuid + optional speedMasterUuid
+cueAdHocFx/{uuid}.json         # carries cueUuid + optional speedMasterUuid; `cueAdHocEffects/` before v38
 cueTriggers/{uuid}.json        # carries cueUuid + scriptUuid
 fixturePatches/{uuid}.json     # carries universeConfigUuid + optional riggingUuid; a paired
                                # dimmer's other lanterns embedded as `extraPlacements` (v14+);
@@ -100,11 +100,11 @@ stageElements/{uuid}.json      # v18+: the scene document — venue and set elem
 stageViewpoints/{uuid}.json    # v18+: saved views and seats; a seat view names its seating by
                                # `seatElementUuid`
 fixtureGroups/{uuid}.json      # members embedded inline
-looks/{uuid}.json              # rows and effects embedded inline; v20+: `scenery` too
-templates/{uuid}.json          # palettes — rows embedded inline; one attribute family each (v6+).
-                               # Still `templates` on disk and in the DTOs (venue-visit plan D2)
+looks/{uuid}.json              # rows and FX (`fx`, `effects` before v38) embedded inline; v20+: `scenery` too
+palettes/{uuid}.json           # rows or one FX (`fx`) embedded inline; one attribute family each
+                               # (v6+). `templates/` before v38
 speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default. Also carries
-                               # optional `usage` + `followNum`/`followDen` + `followTargetUuid`
+                               # optional `family` (`usage` before v38) + `followNum`/`followDen` + `followTargetUuid`
                                # (busk-view routing and follow — additive nullable fields, no
                                # formatVersion bump; the exporter writes the ratio through the
                                # sanitising `followRatio` getter, the importer writes it verbatim
@@ -116,7 +116,7 @@ speedMasters/{uuid}.json       # named tempo buses; bpm is the starting default.
 fxDefinitions/{uuid}.json
 cueSlots/{uuid}.json           # exactly one of cueUuid / lookUuid (lookUuid v10+)
 buskPages/{uuid}.json          # v10+: the busk layout — columns, banks and pads embedded inline;
-                               # a pad names a template, Look or cue by uuid
+                               # a pad names a palette (`paletteUuid`), Look or cue by uuid
 buskRig/{uuid}.json            # v12+: the busk rig — one document per row, tiles embedded inline;
                                # a tile names a group or a patch by uuid and a cell by its element key.
                                # v13+: a row also carries `flow` (a BuskFlow name, default SCROLL)
@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 37`, `minReader = 5`. Rules for future
+Current writer emits `formatVersion = 38`, `minReader = 38`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -316,16 +316,35 @@ the cases session 4's `formatVersion` 38 closes.
 
 `sync/LegacyNames.kt` is the one place an old name lives (terminology plan P3, P5): the registry, the
 REST layer and the client know only today's. It maps by **field**, never by version, because an old
-name never returns with a new meaning in the same field — so it applies to every archive, and
-`ProjectImporter` runs every FX through it:
+name never returns with a new meaning in the same field — so it applies to every archive, and to a
+tree that mixes two. `ProjectImporter.readDir` reads each folder under its old names too and passes
+every record through `LegacyNames.record` before decoding it, a record in today's folder winning over
+its namesake in an old one; then every FX goes through `LegacyNames.rewriteFx`. `RecordHasher` keys a
+record in an old folder by today's name, so a merge across the rename pairs a record with itself.
 
-| Field | Old | Today |
+| Where | Old | Today |
 |---|---|---|
-| `effectType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
-| `distribution` | `SPLIT` | `EDGES_IN` |
-| an FX's `category` | `composite` | the family of its output: `dimmer` for Lightning Strike and any slider, else `colour` or `position` |
-| an FX definition's `effectMode` | `COMPOSITE` | `STANDARD` (its script must then return one output; logged) |
+| folder | `templates/`, `cueAdHocEffects/`, `cuePropertyAssignments/` | `palettes/`, `cueAdHocFx/`, `cueAttributeAssignments/` |
+| a stored FX, in any home | `effectType`, `category`, `propertyName`, `beatDivision`, `distribution`, `stepTiming` (boolean), `size`, `nShot`, `blocks`, `groups` | `fxType`, `family`, `attribute`, `cycle`, `order`, `timing` (`HEAD` / `CYCLE`), `amount`, `runs`, `segments`, `parts` |
+| a Look's and a palette's FX | `effects`, `effect` | `fx` |
+| a value row (Look, palette, cue) | `propertyName` | `attribute` |
+| a cue layer | `templateUuid`, `propertyMask` | `paletteUuid`, `attributeMask` |
+| a busk pad | `templateUuid` | `paletteUuid` |
+| a speed master | `usage` | `family` |
+| an FX definition | `effectId`, `category`, `effectMode`, `compatibleProperties`, `defaultStepTiming` (boolean) | `fxId`, `family`, `fxMode`, `compatibleAttributes`, `defaultTiming` |
+| `fxType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
+| `order` | `LINEAR`, `CENTER_OUT`, `EDGES_IN`, `SPLIT` | `NORMAL`, `CENTRE_OUT`, `CENTRE_IN`, `CENTRE_IN` |
+| `family`, a master's too | `dimmer`, `palette` | `intensity`, `steps` |
+| an FX's `family` | `composite` | the family of its output: `intensity` for Lightning Strike and any slider, else `colour` or `position` |
+| a palette reference, in an FX parameter or a row's value | `tmpl:{uuid}`, any case | `pal:{uuid}` |
+| a surface binding's `targetType` and payload `type` | `pressTemplate`, `stackEffectSize` | `pressPalette`, `stackFxAmount` |
+| a palette press's payload | `templateUuid` | `paletteUuid` |
+| an FX definition's `fxMode` | `COMPOSITE` | `STANDARD` (its script must then return one output; logged) |
 | a script's `scriptType` | `FX_CALC_COMPOSITE` | `FX_CALC` (likewise) |
+
+A cue's `fadeCurve` is an easing curve, not an Order, and its `LINEAR` stays. The binding types
+`fixtureProperty`, `groupProperty` and `selectionProperty` and their payloads' `propertyName` are
+not renamed: the plan names only the two above.
 
 `LegacyNames.rewriteFx` is §4.2's rewrite of one stored FX, shared with database step 4
 (`state/FxLibraryMigration.kt`, `PRAGMA user_version` 4), which ran it once over every Look, cue and
@@ -345,23 +364,25 @@ palette FX this database held, each named in the log:
 
 What keeps the maps by field is that nothing written today holds an old name: every boundary that
 writes or starts an FX refuses a retired id and a `pingPong` on the five FX that bounce
-(`LegacyNames.writeProblem`, through `routes/storedFxRules.kt`), and no FX definition may take a
-retired id (`fxDefinitions.kt`, `registerEffect`).
+(`LegacyNames.writeProblem`, through `routes/storedFxRules.kt`), no FX definition may take a retired
+id (`fxDefinitions.kt`, `registerEffect`), and every field and value the v38 rename moved is written
+only under its new name.
 
 **An absent `pingPong` is the one rewrite not by name.** Before session 3 a bouncing FX naming none
 ran with it on, its default; since, one naming none means what its Direction says. Step 4 ran once,
-before this database could hold the second kind, so it read an absent one as on. An archive can hold
-either, so the exporter stamps `project.json` with `fxLibrary: 2` (`LegacyNames.FX_LIBRARY`), an
-optional field an older reader ignores: an archive without it reads an absent `pingPong` as on, one
-with it as today's. A merge with a remote that lacks it says this desk's marker, after writing an
-explicit `pingPong: "true"` into each bouncing FX that names none in the records the remote supplies
-(`RemoteSyncEngine.stampFxLibrary`).
+before this database could hold the second kind, so it read an absent one as on. A v37 archive can
+hold either, so a session-3 desk stamped `project.json` with `fxLibrary: 2` (`LegacyNames.FX_LIBRARY`):
+a v37 archive without it reads an absent `pingPong` as on, one with it as today's. From v38 the
+version says it — every v38 archive is written against library 2 — so `project.json` no longer
+carries `fxLibrary`, and `ProjectJson.fxLibrary` is read, never written
+(`LegacyNames.absentPingPongIsOn`). A merge with a v37 remote that says no library first writes an
+explicit `pingPong: "true"` into each bouncing FX that names none in the records the remote supplies,
+then drops the remote's `fxLibrary` (`RemoteSyncEngine.spellOutRemotePingPong`), before the merged
+tree takes this desk's `formatVersion`.
 
-Two mixed-version cases stay open until session 4's `formatVersion` 38 refuses the older reader. An
-older desk plays a bouncing FX written since as `pingPong` on over Direction Bounce, twice as fast
-and folded; and it writes `project.json` back without `fxLibrary`, so what it pushes reads as written
-before session 3 — a new FX it carried through unchanged is read as `pingPong` on, by the merge as
-by a fast-forward pull.
+The two mixed-version cases session 3 left open — an older desk playing a bouncing FX written since as
+`pingPong` on, and writing `project.json` back without `fxLibrary` — are closed by v38: no desk older
+than v38 reads a v38 archive (§"Version 38").
 
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
@@ -393,6 +414,39 @@ command's band on a property sharing its channel, and logging how many went. An 
 imports such a row back would hold nothing worse than it held before; on this desk the output's band
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
+
+### Version 38 — the glossary's words
+
+Terminology plan session 4 (§4.4, the storage half of §4.3): the archive says what the screen says.
+Three folders and every field §"Old names" lists take their new names, and four stored values that are
+also wire values move with them — the Order constants (`NORMAL`, `CENTRE_OUT`, `CENTRE_IN`), palette
+references (`pal:{uuid}`), the family values (`intensity`, and `steps` for the Steps FX's library
+family) and the two surface binding names (`pressPalette`, `stackFxAmount`). A stored FX's Timing is
+`timing`, `CYCLE` or `HEAD`, where it was the boolean `stepTiming`; an FX definition's is `defaultTiming`.
+`project.json` no longer writes `fxLibrary`, since the version implies it.
+
+`SUPPORTED_FORMAT_VERSION = 38`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because every old name is
+read through `LegacyNames` — `LegacyV37ArchiveTest` imports `src/test/resources/sync/legacy-v37/`,
+`RichProjectFixture` as main exported it at v37 (frozen: never regenerate it), and re-exports it as the
+same archive with only its names moved. **`minReader` moves to 38**, the truly breaking case: a v37
+reader would find every renamed required field (`effectType`, `beatDivision`, `distribution`) missing
+and refuse each FX, or read a renamed optional one (`size`, `nShot`, `templateUuid`) as absent and
+write it away on its next push. As the doc above says, what actually stops an older desk is its own
+`SUPPORTED_FORMAT_VERSION` of 37, which refuses a v38 repo before the working tree moves; `minReader`
+says the same to a reader that checks it.
+
+The database moved in the same session — database step 5, `state/TerminologyMigration.kt`,
+`PRAGMA user_version` 5, backed up first to `<db>.pre-terminology-<utc>.db` (CLAUDE.md §Database) —
+and so did the sync engine's machine-local record keys (`sync_state.table_name`,
+`sync_session_conflict.table_name`), so the first sync after the upgrade sees each record under its
+new folder rather than a deletion and an addition.
+
+A record is **hashed in today's words** (`RecordHasher.recordHash`, the record put through
+`LegacyNames.record` first), so a v37 file and this desk's export of the same record hash alike. The
+hash `sync_state` holds for a commit made before v38 is of the old bytes, so the three-way diff
+re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`); without it
+every record would read as changed here, and a peer's edit to one this desk never touched would be a
+conflict. `PreV38BaseSyncTest` is that case.
 
 ### Version 37 — effect runs
 

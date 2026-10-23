@@ -186,7 +186,7 @@ object DaoLookRows : IntIdTable("look_rows") {
     val targetType = varchar("target_type", 50)
 
     val targetKey = varchar("target_key", 255)
-    val propertyName = varchar("property_name", 255)
+    val attribute = varchar("attribute", 255)
     val value = text("value")
     val fadeDuration = duration("fade_duration").nullable()
 
@@ -207,7 +207,7 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
     var look by DaoLook referencedOn DaoLookRows.look
     var targetType by DaoLookRows.targetType
     var targetKey by DaoLookRows.targetKey
-    var propertyName by DaoLookRows.propertyName
+    var attribute by DaoLookRows.attribute
     var value by DaoLookRows.value
     var fadeDuration by DaoLookRows.fadeDuration
     var elementKey by DaoLookRows.elementKey
@@ -228,7 +228,7 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
 
 // ─── Look Effects table ────────────────────────────────────────────────
 
-object DaoLookEffects : IntIdTable("look_effects") {
+object DaoLookEffects : IntIdTable("look_fx") {
     val look = reference("look_id", DaoLooks)
 
     /**
@@ -242,16 +242,16 @@ object DaoLookEffects : IntIdTable("look_effects") {
      * beside [DEFERRED_TARGET_TYPE].
      */
     val targetKey = text("target_key")
-    val effectType = varchar("effect_type", 255)
-    val category = varchar("category", 50)
-    val propertyName = varchar("property_name", 255).nullable()
-    val beatDivision = double("beat_division")
+    val fxType = varchar("fx_type", 255)
+    val family = varchar("family", 50)
+    val attribute = varchar("attribute", 255).nullable()
+    val cycle = double("cycle")
     val blendMode = varchar("blend_mode", 50)
-    val distribution = varchar("distribution", 50)
+    val order = varchar("spread_order", 50)
     val phaseOffset = double("phase_offset").default(0.0)
     val elementMode = varchar("element_mode", 50).nullable()
     val elementFilter = varchar("element_filter", 50).nullable()
-    val stepTiming = bool("step_timing").nullable()
+    val timing = varchar("timing", 8).nullable()
     val parameters = json<Map<String, String>>("parameters", Json)
 
     /** Speed master this effect subscribes to (null → master 1). */
@@ -262,13 +262,13 @@ object DaoLookEffects : IntIdTable("look_effects") {
     val seconds = bool("seconds").default(false)
 
     /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
-    val size = double("size").default(1.0)
+    val amount = double("amount").default(1.0)
 
     /** Direction (D5) by name; see [LookEffectSpec.direction]. */
     val direction = varchar("direction", 16).default("FORWARD")
 
     /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
-    val nShot = integer("n_shot").nullable()
+    val runs = integer("runs").nullable()
 
     /**
      * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
@@ -276,8 +276,8 @@ object DaoLookEffects : IntIdTable("look_effects") {
      */
     val spread = double("spread").default(1.0)
     val wings = integer("spread_wings").default(1)
-    val blocks = integer("spread_blocks").default(1)
-    val groups = integer("spread_groups").default(0)
+    val segments = integer("spread_segments").default(1)
+    val parts = integer("spread_parts").default(0)
     val sortOrder = integer("sort_order").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 }
@@ -369,27 +369,27 @@ class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
     var look by DaoLook referencedOn DaoLookEffects.look
     var targetType by DaoLookEffects.targetType
     var targetKey by DaoLookEffects.targetKey
-    var effectType by DaoLookEffects.effectType
-    var category by DaoLookEffects.category
-    var propertyName by DaoLookEffects.propertyName
-    var beatDivision by DaoLookEffects.beatDivision
+    var fxType by DaoLookEffects.fxType
+    var family by DaoLookEffects.family
+    var attribute by DaoLookEffects.attribute
+    var cycle by DaoLookEffects.cycle
     var blendMode by DaoLookEffects.blendMode
-    var distribution by DaoLookEffects.distribution
+    var order by DaoLookEffects.order
     var phaseOffset by DaoLookEffects.phaseOffset
     var elementMode by DaoLookEffects.elementMode
     var elementFilter by DaoLookEffects.elementFilter
-    var stepTiming by DaoLookEffects.stepTiming
+    var timing by DaoLookEffects.timing
     var parameters by DaoLookEffects.parameters
     var speedMasterUuid by DaoLookEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoLookEffects.rateSpeedMasterUuid
     var seconds by DaoLookEffects.seconds
-    var size by DaoLookEffects.size
+    var amount by DaoLookEffects.amount
     var direction by DaoLookEffects.direction
-    var nShot by DaoLookEffects.nShot
+    var runs by DaoLookEffects.runs
     var spread by DaoLookEffects.spread
     var wings by DaoLookEffects.wings
-    var blocks by DaoLookEffects.blocks
-    var groups by DaoLookEffects.groups
+    var segments by DaoLookEffects.segments
+    var parts by DaoLookEffects.parts
     var sortOrder by DaoLookEffects.sortOrder
     var uuid by DaoLookEffects.uuid
 

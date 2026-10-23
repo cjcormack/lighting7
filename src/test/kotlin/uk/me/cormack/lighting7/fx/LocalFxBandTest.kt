@@ -69,8 +69,8 @@ class LocalFxBandTest {
             it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
                 layerId,
                 StoredEffect(
-                    effectType = effect.name, category = "dimmer", propertyName = "dimmer", beatDivision = 1.0,
-                    blendMode = "OVERRIDE", distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,
+                    effectType = effect.name, category = "intensity", propertyName = "dimmer", beatDivision = 1.0,
+                    blendMode = "OVERRIDE", distribution = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, stepTiming = null, parameters = emptyMap(), speedMasterUuid = null,
                     rateSpeedMasterUuid = null,
                 ),

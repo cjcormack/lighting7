@@ -47,12 +47,12 @@ class CueCookedSourceTargetRouteTest : RouteIntegrationTest() {
             DaoLookRow.new {
                 this.look = look
                 targetType = "group"; targetKey = "Front"
-                propertyName = "colour"; value = "#ff8800"; sortOrder = 0
+                attribute = "colour"; value = "#ff8800"; sortOrder = 0
             }
             DaoLookRow.new {
                 this.look = look
                 targetType = "fixture"; targetKey = "hex-3"
-                propertyName = "colour"; value = "#0000ff"; sortOrder = 1
+                attribute = "colour"; value = "#0000ff"; sortOrder = 1
             }
             val stack = DaoCueStack.new {
                 this.project = project
@@ -63,12 +63,12 @@ class CueCookedSourceTargetRouteTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "group"; targetKey = "Front"
-                propertyName = "dimmer"; value = "120"; sortOrder = 0
+                attribute = "dimmer"; value = "120"; sortOrder = 0
             }
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "200"; sortOrder = 1
+                attribute = "dimmer"; value = "200"; sortOrder = 1
             }
             DaoCueLayer.new {
                 this.cue = cue

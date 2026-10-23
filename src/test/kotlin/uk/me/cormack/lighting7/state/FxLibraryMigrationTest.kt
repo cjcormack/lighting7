@@ -61,7 +61,7 @@ class FxLibraryMigrationTest {
 
     /** Every FX of [table], in [order], as the columns step 4 moves. */
     private fun stored(table: String, order: String = "sort_order, id"): List<List<Any?>> = query(
-        "SELECT effect_type, category, beat_division, distribution, phase_offset, parameters, direction, n_shot, spread FROM $table ORDER BY $order",
+        "SELECT fx_type, family, cycle, spread_order, phase_offset, parameters, direction, runs, spread FROM $table ORDER BY $order",
     ) { rs -> (1..9).map { rs.getObject(it) } }
 
     private lateinit var red: String
@@ -75,8 +75,8 @@ class FxLibraryMigrationTest {
             val project = DaoProject[projectId]
             fun colourPalette(name: String, hex: String) = DaoTemplate.new { this.project = project; this.name = name }.also {
                 DaoTemplateRow.new {
-                    template = it; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-                    propertyName = "rgbColour"; value = "$hex;policy=rgbonly"
+                    palette = it; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+                    attribute = "rgbColour"; value = "$hex;policy=rgbonly"
                 }
             }
             red = colourPalette("Red", "#ff0000").uuid.toString()
@@ -86,35 +86,35 @@ class FxLibraryMigrationTest {
             fun lookFx(effectType: String, category: String, parameters: Map<String, String>, sort: Int, nShot: Int? = null, spread: Double = 1.0) =
                 DaoLookEffect.new {
                     this.look = look; targetType = "group"; targetKey = "front"
-                    this.effectType = effectType; this.category = category; propertyName = null
-                    beatDivision = 4.0; blendMode = "OVERRIDE"; distribution = "LINEAR"; phaseOffset = 0.25
-                    this.parameters = parameters; sortOrder = sort; this.nShot = nShot; this.spread = spread
+                    this.fxType = effectType; this.family = category; attribute = null
+                    cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"; phaseOffset = 0.25
+                    this.parameters = parameters; sortOrder = sort; this.runs = nShot; this.spread = spread
                 }
             lookFx("Breathe", "dimmer", mapOf("min" to "0", "max" to "255"), 0)
             lookFx("Sweep", "position", emptyMap(), 1, nShot = 2, spread = 0.75)
-            lookFx("ColourCycle", "colour", mapOf("colours" to "tmpl:$red,tmpl:$blue"), 2)
+            lookFx("ColourCycle", "colour", mapOf("colours" to "pal:$red,pal:$blue"), 2)
 
             val cue = DaoCue.new { this.project = project; name = "Cue 1" }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "Triangle"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "SPLIT"; parameters = emptyMap(); sortOrder = 0
+                fxType = "Triangle"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "SPLIT"; parameters = emptyMap(); sortOrder = 0
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "ColourCycle"; category = "colour"; propertyName = "rgbColour"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
-                parameters = mapOf("colours" to "tmpl:$red,#00ff00"); sortOrder = 1
+                fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
+                parameters = mapOf("colours" to "pal:$red,#00ff00"); sortOrder = 1
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap(); sortOrder = 2
+                fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap(); sortOrder = 2
             }
             val strike = DaoTemplate.new { this.project = project; name = "Strike" }
             DaoTemplateEffect.new {
-                template = strike; effectType = "LightningStrike"; category = "composite"; propertyName = "dimmer"
-                beatDivision = 4.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                palette = strike; fxType = "LightningStrike"; family = "composite"; attribute = "dimmer"
+                cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = mapOf("maxBrightness" to "200", "flashColour" to "#ffffff")
             }
         }
@@ -122,11 +122,11 @@ class FxLibraryMigrationTest {
         // The composite mode is gone from the enums the DAO reads, so a database holding it is
         // written as an older desk wrote it.
         sql(
-            "INSERT INTO fx_definitions (effect_id, name, category, output_type, effect_mode, script, project_id, uuid) " +
+            "INSERT INTO fx_definitions (fx_id, name, family, output_type, fx_mode, script, project_id, uuid) " +
                 "VALUES ('my-strike', 'My Strike', 'composite', 'SLIDER', 'COMPOSITE', 'mapOf()', $projectId, X'00112233445566778899aabbccddeeff')",
         )
         sql(
-            "INSERT INTO fx_definitions (effect_id, name, category, output_type, effect_mode, script, project_id, uuid) " +
+            "INSERT INTO fx_definitions (fx_id, name, family, output_type, fx_mode, script, project_id, uuid) " +
                 "VALUES ('my-glow', 'My Glow', 'composite', 'COLOUR', 'COMPOSITE', 'mapOf()', $projectId, X'00112233445566778899aabbccddeef0')",
         )
         sql(
@@ -141,7 +141,7 @@ class FxLibraryMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(FX_LIBRARY_REWRITTEN_USER_VERSION, userVersion())
+        assertEquals(TERMINOLOGY_RENAMED_USER_VERSION, userVersion())
     }
 
     @Test
@@ -154,39 +154,39 @@ class FxLibraryMigrationTest {
 
         assertEquals(
             listOf(
-                listOf("SineWave", "dimmer", 4.0, "LINEAR", 0.0, """{"min":"0","max":"255"}""", "FORWARD", null, 1.0),
-                listOf("Sweep", "position", 2.0, "LINEAR", 0.5, "{}", "BOUNCE", 4, 1.5),
-                listOf("PaletteSteps", "colour", 4.0, "LINEAR", 0.25, """{"palettes":"tmpl:$red,tmpl:$blue"}""", "FORWARD", null, 1.0),
+                listOf("SineWave", "intensity", 4.0, "NORMAL", 0.0, """{"min":"0","max":"255"}""", "FORWARD", null, 1.0),
+                listOf("Sweep", "position", 2.0, "NORMAL", 0.5, "{}", "BOUNCE", 4, 1.5),
+                listOf("PaletteSteps", "colour", 4.0, "NORMAL", 0.25, """{"palettes":"pal:$red,pal:$blue"}""", "FORWARD", null, 1.0),
             ),
-            stored("look_effects"),
+            stored("look_fx"),
         )
         assertEquals(
             listOf(
-                listOf("Ramp", "dimmer", 1.0, "EDGES_IN", 0.0, "{}", "FORWARD", null, 1.0),
-                listOf("ColourCycle", "colour", 1.0, "LINEAR", 0.0, """{"colours":"#ff0000,#00ff00"}""", "FORWARD", null, 1.0),
-                listOf("Pulse", "dimmer", 1.0, "LINEAR", 0.0, "{}", "FORWARD", null, 1.0),
+                listOf("Ramp", "intensity", 1.0, "CENTRE_IN", 0.0, "{}", "FORWARD", null, 1.0),
+                listOf("ColourCycle", "colour", 1.0, "NORMAL", 0.0, """{"colours":"#ff0000,#00ff00"}""", "FORWARD", null, 1.0),
+                listOf("Pulse", "intensity", 1.0, "NORMAL", 0.0, "{}", "FORWARD", null, 1.0),
             ),
-            stored("cue_ad_hoc_effects"),
+            stored("cue_ad_hoc_fx"),
         )
         assertEquals(
-            listOf(listOf("LightningStrike", "dimmer", 4.0, "LINEAR", 0.0, """{"maxBrightness":"200"}""", "FORWARD", null, 1.0)),
-            stored("template_effects", order = "id"),
+            listOf(listOf("LightningStrike", "intensity", 4.0, "NORMAL", 0.0, """{"maxBrightness":"200"}""", "FORWARD", null, 1.0)),
+            stored("palette_fx", order = "id"),
         )
         assertEquals(
-            listOf("STANDARD" to "dimmer", "STANDARD" to "colour"),
-            query("SELECT effect_mode, category FROM fx_definitions ORDER BY id") { it.getString(1) to it.getString(2) },
+            listOf("STANDARD" to "intensity", "STANDARD" to "colour"),
+            query("SELECT fx_mode, family FROM fx_definitions ORDER BY id") { it.getString(1) to it.getString(2) },
             "a composite is filed under the family of the output it applied",
         )
         assertEquals(listOf("FX_CALC", "GENERAL"), query("SELECT script_type FROM scripts ORDER BY name") { it.getString(1) })
-        assertEquals(FX_LIBRARY_REWRITTEN_USER_VERSION, userVersion())
+        assertEquals(TERMINOLOGY_RENAMED_USER_VERSION, userVersion())
 
         fun logged(vararg words: String) = assertTrue(logs.any { line -> words.all { it in line } }, "${words.toList()} in $logs")
         logged("Look 'S3 Old FX' in 'Experiment'", "Breathe is now Sine Wave")
         logged("Look 'S3 Old FX'", "pingPong is now Direction Bounce")
         logged("Look 'S3 Old FX'", "Colour Cycle over 'Red', 'Blue' is now Palette Steps", "each palette now lands on each head")
-        logged("Cue 'Cue 1'", "Triangle is now Ramp", "Order SPLIT is now EDGES_IN")
+        logged("Cue 'Cue 1'", "Triangle is now Ramp", "Order SPLIT is now CENTRE_IN")
         logged("Cue 'Cue 1'", "palettes are now the colours")
-        logged("Palette 'Strike'", "category composite is now dimmer")
+        logged("Palette 'Strike'", "family composite is now intensity")
         logged("FX definition 'my-strike'", "composite mode is gone")
         logged("Script 'calc'", "composite calculate body is gone")
         logged("Script 'chase'", "needs editing", "Triangle is now Ramp")
@@ -198,14 +198,14 @@ class FxLibraryMigrationTest {
         seedOldShow()
         startDesk()
         stopDesk()
-        val once = listOf(stored("look_effects"), stored("cue_ad_hoc_effects"), stored("template_effects", order = "id"))
+        val once = listOf(stored("look_fx"), stored("cue_ad_hoc_fx"), stored("palette_fx", order = "id"))
 
         val (_, logs) = captureLogs("FxLibraryMigration") {
             startDesk()
             stopDesk()
         }
 
-        assertEquals(once, listOf(stored("look_effects"), stored("cue_ad_hoc_effects"), stored("template_effects", order = "id")))
+        assertEquals(once, listOf(stored("look_fx"), stored("cue_ad_hoc_fx"), stored("palette_fx", order = "id")))
         assertEquals(emptyList(), logs)
     }
 }

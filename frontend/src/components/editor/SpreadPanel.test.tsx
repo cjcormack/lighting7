@@ -221,7 +221,7 @@ describe('the request', () => {
       from: 'pct:0',
       to: 'pct:60',
       curve: 'LINE',
-      order: 'LINEAR',
+      order: 'NORMAL',
       parts: 1,
       over: 'HEADS',
       seed: 0,
@@ -269,7 +269,7 @@ describe('the request', () => {
     expect(within(screen.getByRole('radiogroup', { name: 'Order' })).queryByRole('radio', { name: 'Stage L→R' })).toBeNull()
     expect(document.querySelector('[data-spread-order-unavailable="Stage L→R"]')).toHaveTextContent('not on the desk yet')
     apply()
-    expect(lastBody()).toMatchObject({ curve: 'WINGS', order: 'CENTER_OUT', parts: 3, over: 'CELLS' })
+    expect(lastBody()).toMatchObject({ curve: 'WINGS', order: 'CENTRE_OUT', parts: 3, over: 'CELLS' })
     fireEvent.click(radio('Order', 'Random'))
     apply()
     expect(lastBody()).toMatchObject({ order: 'RANDOM', seed: 0 })

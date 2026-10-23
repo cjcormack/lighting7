@@ -209,8 +209,8 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 effects = listOf(
                     LookEffectDto(
                         targetType = "fixture", targetKey = "hex-1",
-                        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                     ),
                 ),
             )
@@ -237,9 +237,9 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                         adHocEffects = listOf(
                             CueAdHocEffectDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "SineWave", category = "dimmer",
+                                effectType = "SineWave", category = "intensity",
                                 propertyName = "dimmer", beatDivision = 1.0,
-                                blendMode = "OVERRIDE", distribution = "LINEAR",
+                                blendMode = "OVERRIDE", distribution = "NORMAL",
                             ),
                         ),
                     )

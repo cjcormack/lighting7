@@ -24,12 +24,12 @@ class LookSnapshotLoadTest : RouteIntegrationTest() {
         look = this@effect
         this.targetType = targetType
         this.targetKey = targetKey
-        this.effectType = effectType
-        category = "dimmer"
-        propertyName = "dimmer"
-        beatDivision = 1.0
+        this.fxType = effectType
+        family = "intensity"
+        attribute = "dimmer"
+        cycle = 1.0
         blendMode = "OVERRIDE"
-        distribution = "LINEAR"
+        order = "NORMAL"
         parameters = emptyMap()
         this.sortOrder = sortOrder
     }

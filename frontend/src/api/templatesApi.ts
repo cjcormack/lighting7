@@ -63,7 +63,7 @@ export interface TemplateEffect {
   effectType: string
   /**
    * The effect's library category, and what the template's **family** is derived from (D4):
-   * `dimmer` → Intensity, `colour` → Colour, `position` → Position. It is a denormalisation of the
+   * `intensity` → Intensity, `colour` → Colour, `position` → Position. It is a denormalisation of the
    * library's own answer, and the write boundary checks the two agree.
    */
   category: string
@@ -77,7 +77,7 @@ export interface TemplateEffect {
   elementMode?: string | null
   elementFilter?: string | null
   stepTiming?: boolean | null
-  /** May hold a `tmpl:{uuid}` colour reference — but never to this template's own uuid (D12). */
+  /** May hold a `pal:{uuid}` colour reference — but never to this template's own uuid (D12). */
   parameters: Record<string, string>
   /** Stamped at authoring time from the family's usage master (D8); null still means master 1. */
   speedMasterUuid?: string | null
@@ -163,7 +163,7 @@ export interface TemplateSummary {
    *
    * What the programmer's row of recent chips is ordered by. It is a **desk** fact rather than a
    * tab's — the server stamps it, on a chip's tap and its *Apply as values*, on a busk pad press and
-   * on a MIDI `pressTemplate` — so every client and every surface agrees on what was reached for, and
+   * on a MIDI `pressPalette` — so every client and every surface agrees on what was reached for, and
    * a press made from the desk's own hardware counts. Toggling a layer **off** is not a press and
    * leaves it where it was.
    *
@@ -265,7 +265,7 @@ export interface TemplateInUseError {
   cueIds: number[]
   cueNames: string[]
   /**
-   * Effect parameters holding a `tmpl:{uuid}` reference to this template.
+   * Effect parameters holding a `pal:{uuid}` reference to this template.
    *
    * A second kind of usage, and it fails differently from a layer: `force` deletes the *layers* but
    * cannot rewrite a parameter, so a forced delete leaves those effects naming nothing — and an

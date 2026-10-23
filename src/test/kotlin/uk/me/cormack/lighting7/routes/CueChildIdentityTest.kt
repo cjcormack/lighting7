@@ -64,8 +64,8 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun base() = "/api/rest/projects/$projectId/cues"
 
     private val pulse = CueAdHocEffectDto(
-        targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
-        propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+        targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
+        propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
     )
 
     private fun rows() = listOf(
@@ -250,7 +250,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(before.keys, after.keys, "no record added or removed")
         val changed = before.keys.filter { before[it] != after[it] }
         val row = children(cue.id).rows.getValue(Row("hex-2", "rgbColour"))
-        assertEquals(listOf("cuePropertyAssignments/$row.json"), changed)
+        assertEquals(listOf("cueAttributeAssignments/$row.json"), changed)
     }
 
     @Test
@@ -463,7 +463,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     @Test
     fun `create_cue gives its effects no run key, whatever the tool call says`() = testApplication {
         mountTestApp(state)
-        val effect = """{"targetType":"fixture","targetKey":"hex-1","effectType":"Pulse","category":"dimmer","propertyName":"dimmer",""" +
+        val effect = """{"targetType":"fixture","targetKey":"hex-1","effectType":"Pulse","category":"intensity","propertyName":"dimmer",""" +
             """"beatDivision":0.5,"blendMode":"OVERRIDE","runUuid":"${UUID.randomUUID()}"}"""
         val created = AiTools(state).executeTool(
             "create_cue",
@@ -506,7 +506,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun children(cueId: Int): Children = transaction(state.database) {
         val cue = DaoCue[cueId]
         Children(
-            rows = cue.propertyAssignments.associate { Row(it.targetKey, it.propertyName) to it.uuid },
+            rows = cue.propertyAssignments.associate { Row(it.targetKey, it.attribute) to it.uuid },
             layers = cue.layers.mapTo(HashSet()) { it.uuid },
             effects = cue.adHocEffects.mapTo(HashSet()) { it.uuid },
             hooks = cue.triggers.mapTo(HashSet()) { it.uuid },

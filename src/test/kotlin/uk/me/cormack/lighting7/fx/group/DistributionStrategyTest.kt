@@ -28,8 +28,8 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `LINEAR distributes offsets evenly`() {
-        val strategy = DistributionStrategy.LINEAR
+    fun `NORMAL distributes offsets evenly`() {
+        val strategy = DistributionStrategy.NORMAL
         val groupSize = 4
 
         val offsets = (0 until groupSize).map { idx ->
@@ -55,8 +55,8 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `CENTER_OUT starts from center and expands outward`() {
-        val strategy = DistributionStrategy.CENTER_OUT
+    fun `CENTRE_OUT starts from centre and expands outward`() {
+        val strategy = DistributionStrategy.CENTRE_OUT
         val groupSize = 5
         // distinctSlots(5) = 3 (center, mid, edge)
 
@@ -77,8 +77,8 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `EDGES_IN starts from edges and converges to center`() {
-        val strategy = DistributionStrategy.EDGES_IN
+    fun `CENTRE_IN starts from the edges and converges to the centre`() {
+        val strategy = DistributionStrategy.CENTRE_IN
         val groupSize = 5
 
         val offsets = (0 until groupSize).map { idx ->
@@ -99,8 +99,8 @@ class DistributionStrategyTest {
     }
 
     @Test
-    fun `REVERSE is the opposite of LINEAR`() {
-        val linear = DistributionStrategy.LINEAR
+    fun `REVERSE is the opposite of NORMAL`() {
+        val linear = DistributionStrategy.NORMAL
         val reverse = DistributionStrategy.REVERSE
         val groupSize = 4
 
@@ -123,13 +123,13 @@ class DistributionStrategyTest {
     @Test
     fun `SPLIT is no Order of its own`() {
         // Centre in gave Split's offsets exactly (terminology plan D18); a stored SPLIT is rewritten
-        // to EDGES_IN by database step 4 and the importer, and nothing else reads the name.
+        // to CENTRE_IN by database steps 4 and 5 and the importer, and nothing else reads the name.
         assertEquals(null, DistributionStrategy.byName("SPLIT"))
         assertTrue("SPLIT" !in DistributionStrategy.availableStrategies)
     }
 
     @Test
-    fun `PING_PONG uses LINEAR offsets with triangle phase`() {
+    fun `PING_PONG uses NORMAL offsets with triangle phase`() {
         val strategy = DistributionStrategy.PING_PONG
         val groupSize = 4
 
@@ -137,7 +137,7 @@ class DistributionStrategyTest {
             strategy.calculateOffset(createMember(idx, groupSize), groupSize)
         }
 
-        // Should match LINEAR distribution offsets
+        // Should match NORMAL distribution offsets
         assertEquals(0.0, offsets[0], 0.001)
         assertEquals(0.25, offsets[1], 0.001)
         assertEquals(0.5, offsets[2], 0.001)
@@ -208,10 +208,10 @@ class DistributionStrategyTest {
     @Test
     fun `offsets agrees with calculateOffset for every strategy`() {
         val strategies = listOf(
-            DistributionStrategy.LINEAR,
+            DistributionStrategy.NORMAL,
             DistributionStrategy.UNIFIED,
-            DistributionStrategy.CENTER_OUT,
-            DistributionStrategy.EDGES_IN,
+            DistributionStrategy.CENTRE_OUT,
+            DistributionStrategy.CENTRE_IN,
             DistributionStrategy.REVERSE,
             DistributionStrategy.PING_PONG,
             DistributionStrategy.POSITIONAL,
@@ -256,10 +256,10 @@ class DistributionStrategyTest {
 
     @Test
     fun `fromName returns correct strategy`() {
-        assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("LINEAR"))
+        assertEquals(DistributionStrategy.NORMAL, DistributionStrategy.fromName("NORMAL"))
         assertEquals(DistributionStrategy.UNIFIED, DistributionStrategy.fromName("UNIFIED"))
-        assertEquals(DistributionStrategy.CENTER_OUT, DistributionStrategy.fromName("CENTER_OUT"))
-        assertEquals(DistributionStrategy.EDGES_IN, DistributionStrategy.fromName("EDGES_IN"))
+        assertEquals(DistributionStrategy.CENTRE_OUT, DistributionStrategy.fromName("CENTRE_OUT"))
+        assertEquals(DistributionStrategy.CENTRE_IN, DistributionStrategy.fromName("CENTRE_IN"))
         assertEquals(DistributionStrategy.REVERSE, DistributionStrategy.fromName("REVERSE"))
         assertEquals(DistributionStrategy.PING_PONG, DistributionStrategy.fromName("PING_PONG"))
         assertEquals(DistributionStrategy.POSITIONAL, DistributionStrategy.fromName("POSITIONAL"))
@@ -267,25 +267,25 @@ class DistributionStrategyTest {
 
     @Test
     fun `fromName is case insensitive`() {
-        assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("linear"))
-        assertEquals(DistributionStrategy.CENTER_OUT, DistributionStrategy.fromName("center_out"))
+        assertEquals(DistributionStrategy.NORMAL, DistributionStrategy.fromName("normal"))
+        assertEquals(DistributionStrategy.CENTRE_OUT, DistributionStrategy.fromName("centre_out"))
         assertEquals(DistributionStrategy.PING_PONG, DistributionStrategy.fromName("Ping_Pong"))
     }
 
     @Test
-    fun `fromName defaults to LINEAR for unknown names`() {
-        assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("unknown"))
-        assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName(""))
+    fun `fromName defaults to NORMAL for unknown names`() {
+        assertEquals(DistributionStrategy.NORMAL, DistributionStrategy.fromName("unknown"))
+        assertEquals(DistributionStrategy.NORMAL, DistributionStrategy.fromName(""))
     }
 
     @Test
     fun `availableStrategies contains all named strategies`() {
         val available = DistributionStrategy.availableStrategies
 
-        assertTrue(available.contains("LINEAR"))
+        assertTrue(available.contains("NORMAL"))
         assertTrue(available.contains("UNIFIED"))
-        assertTrue(available.contains("CENTER_OUT"))
-        assertTrue(available.contains("EDGES_IN"))
+        assertTrue(available.contains("CENTRE_OUT"))
+        assertTrue(available.contains("CENTRE_IN"))
         assertTrue(available.contains("REVERSE"))
         assertTrue(available.contains("PING_PONG"))
         assertTrue(available.contains("POSITIONAL"))
@@ -294,10 +294,10 @@ class DistributionStrategyTest {
     @Test
     fun `all offsets are within 0 to 1 range`() {
         val strategies = listOf(
-            DistributionStrategy.LINEAR,
+            DistributionStrategy.NORMAL,
             DistributionStrategy.UNIFIED,
-            DistributionStrategy.CENTER_OUT,
-            DistributionStrategy.EDGES_IN,
+            DistributionStrategy.CENTRE_OUT,
+            DistributionStrategy.CENTRE_IN,
             DistributionStrategy.REVERSE,
             DistributionStrategy.PING_PONG,
             DistributionStrategy.POSITIONAL,
@@ -317,10 +317,10 @@ class DistributionStrategyTest {
     @Test
     fun `single member group handles edge cases`() {
         val strategies = listOf(
-            DistributionStrategy.LINEAR,
+            DistributionStrategy.NORMAL,
             DistributionStrategy.UNIFIED,
-            DistributionStrategy.CENTER_OUT,
-            DistributionStrategy.EDGES_IN,
+            DistributionStrategy.CENTRE_OUT,
+            DistributionStrategy.CENTRE_IN,
             DistributionStrategy.PING_PONG,
             DistributionStrategy.POSITIONAL
         )

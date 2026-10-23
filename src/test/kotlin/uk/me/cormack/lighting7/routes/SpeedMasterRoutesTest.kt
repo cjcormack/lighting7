@@ -140,8 +140,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
-                blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 speedMasterUuid = UUID.fromString(master2.uuid)
             }
@@ -189,8 +189,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "CandleFlicker"; category = "dimmer"; beatDivision = 4.0
-                blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "CandleFlicker"; family = "intensity"; cycle = 4.0
+                blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 // Deliberately no speedMasterUuid — the rate role alone must count.
                 rateSpeedMasterUuid = UUID.fromString(master2.uuid)
@@ -231,8 +231,8 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             }.inStack(stack, sortOrder = 0)
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
-                blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 speedMasterUuid = UUID.fromString(master2.uuid)
                 rateSpeedMasterUuid = UUID.fromString(master2.uuid)
@@ -518,7 +518,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         // over them — carried-forward values go through the sanitisers, not re-validation.
         transaction(state.database) {
             val dao = DaoSpeedMaster.findById(master2.id)!!
-            dao.usageCategory = "color" // non-canonical spelling
+            dao.family = "color" // non-canonical spelling
             dao.followNum = 1           // half-written pair
             dao.followDen = null
         }

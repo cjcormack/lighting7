@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
+import uk.me.cormack.lighting7.models.stepTimingOf
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -292,7 +293,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
             // A query of its own rather than `template.rows`: ordering a referrer collection the
             // caller's transaction has already loaded throws, and the Timeline's batch decides its
             // presses inside one transaction that may have read this palette's rows already.
-            rows = DaoTemplateRow.find { DaoTemplateRows.template eq template.id }
+            rows = DaoTemplateRow.find { DaoTemplateRows.palette eq template.id }
                 .orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)
                 .mapNotNull { row ->
                     // A deferred row legitimately has no target; a row whose discriminator names no
@@ -304,7 +305,7 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
                     }
                     TemplateRowEntry(
                         target = target,
-                        propertyName = row.propertyName,
+                        propertyName = row.attribute,
                         value = row.value,
                     )
                 },
@@ -314,27 +315,27 @@ internal fun loadTemplateSnapshot(database: Database, templateUuid: UUID): Templ
             // round trips, not rows.
             effect = template.effect?.let { fx ->
                 StoredEffect(
-                    effectType = fx.effectType,
-                    category = fx.category,
-                    propertyName = fx.propertyName,
-                    beatDivision = fx.beatDivision,
+                    effectType = fx.fxType,
+                    category = fx.family,
+                    propertyName = fx.attribute,
+                    beatDivision = fx.cycle,
                     blendMode = fx.blendMode,
-                    distribution = fx.distribution,
+                    distribution = fx.order,
                     phaseOffset = fx.phaseOffset,
                     elementMode = fx.elementMode,
                     elementFilter = fx.elementFilter,
-                    stepTiming = fx.stepTiming,
+                    stepTiming = stepTimingOf(fx.timing),
                     parameters = fx.parameters,
                     speedMasterUuid = fx.speedMasterUuid,
                     rateSpeedMasterUuid = fx.rateSpeedMasterUuid,
                     seconds = fx.seconds,
-                    size = fx.size,
+                    size = fx.amount,
                     direction = fx.direction,
-                    nShot = fx.nShot,
+                    nShot = fx.runs,
                     spread = fx.spread,
                     wings = fx.wings,
-                    blocks = fx.blocks,
-                    groups = fx.groups,
+                    blocks = fx.segments,
+                    groups = fx.parts,
                     uuid = fx.uuid,
                 )
             },

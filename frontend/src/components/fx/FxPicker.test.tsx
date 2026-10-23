@@ -67,7 +67,7 @@ const position = (name: string): EffectLibraryEntry => ({
 })
 const PULSE: EffectLibraryEntry = {
   name: 'Pulse',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   compatibleProperties: ['dimmer', 'uv'],
@@ -326,7 +326,7 @@ describe('the Beam family (effects plan §4.4)', () => {
 describe('the step effects (effects plan session 7, §4.4)', () => {
   const PALETTE_STEPS: EffectLibraryEntry = {
     name: 'PaletteSteps',
-    category: 'palette',
+    category: 'steps',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -339,7 +339,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
   const SLOT_STEPS: EffectLibraryEntry = {
     name: 'SlotSteps',
     // The Steps family's, as the desk files it (terminology plan D23); it is still offered in Beam.
-    category: 'palette',
+    category: 'steps',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -442,7 +442,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
       propertyName: 'position',
       blendMode: 'OVERRIDE',
       speedMasterUuid: 'm-position',
-      parameters: { palettes: 'tmpl:uuid-Centre,tmpl:uuid-Downstage', fadeRatio: '0.5' },
+      parameters: { palettes: 'pal:uuid-Centre,pal:uuid-Downstage', fadeRatio: '0.5' },
     })
   })
 

@@ -343,7 +343,7 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
     property,
     ...defaultSpreadEndpoints(property),
     curve: base?.curve ?? 'LINE',
-    order: base?.order ?? 'LINEAR',
+    order: base?.order ?? 'NORMAL',
     parts: base?.parts ?? 1,
     over: base?.over ?? 'HEADS',
     seed: base?.seed ?? 0,
@@ -1624,7 +1624,7 @@ function ColourEndpoints({
   templates: readonly TemplateSummary[]
   onTemplate: (uuid: string | null) => void
   policy: WhitePolicy
-  /** From is a `tmpl:` reference: the desk reads the policy off the template's own row, so the control is inert and says so. */
+  /** From is a `pal:` reference: the desk reads the policy off the template's own row, so the control is inert and says so. */
   policyFromTemplate: boolean
   onPolicy: (policy: WhitePolicy) => void
   children: ReactNode

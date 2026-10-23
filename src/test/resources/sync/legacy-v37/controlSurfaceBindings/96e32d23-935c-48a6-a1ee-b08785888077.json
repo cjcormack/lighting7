@@ -1,0 +1,8 @@
+{
+  "controlId": "button-5",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 6,
+  "targetPayload": "{\"type\":\"fireCue\",\"cueId\":1,\"cueUuid\":\"8a7fb5bd-171f-4b45-b5ef-84a4f290647c\"}",
+  "targetType": "fireCue",
+  "uuid": "96e32d23-935c-48a6-a1ee-b08785888077"
+}

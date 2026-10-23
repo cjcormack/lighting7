@@ -278,22 +278,22 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
 
 // ─── Cue Ad-Hoc Effects table ──────────────────────────────────────────
 
-object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
+object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_fx") {
     val cue = reference("cue_id", DaoCues)
     val targetType = varchar("target_type", 50)
 
     /** `text`, not a `varchar(255)`: a selection's canonical key outgrows any fixed width. */
     val targetKey = text("target_key")
-    val effectType = varchar("effect_type", 255)
-    val category = varchar("category", 50)
-    val propertyName = varchar("property_name", 255).nullable()
-    val beatDivision = double("beat_division")
+    val fxType = varchar("fx_type", 255)
+    val family = varchar("family", 50)
+    val attribute = varchar("attribute", 255).nullable()
+    val cycle = double("cycle")
     val blendMode = varchar("blend_mode", 50)
-    val distribution = varchar("distribution", 50)
+    val order = varchar("spread_order", 50)
     val phaseOffset = double("phase_offset").default(0.0)
     val elementMode = varchar("element_mode", 50).nullable()
     val elementFilter = varchar("element_filter", 50).nullable()
-    val stepTiming = bool("step_timing").nullable()
+    val timing = varchar("timing", 8).nullable()
     val parameters = json<Map<String, String>>("parameters", Json)
     val delay = duration("delay").nullable()
     val interval = duration("interval").nullable()
@@ -307,13 +307,13 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
     val seconds = bool("seconds").default(false)
 
     /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
-    val size = double("size").default(1.0)
+    val amount = double("amount").default(1.0)
 
     /** Direction (D5) by name; see [LookEffectSpec.direction]. */
     val direction = varchar("direction", 16).default("FORWARD")
 
     /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
-    val nShot = integer("n_shot").nullable()
+    val runs = integer("runs").nullable()
 
     /**
      * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
@@ -321,8 +321,8 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_effects") {
      */
     val spread = double("spread").default(1.0)
     val wings = integer("spread_wings").default(1)
-    val blocks = integer("spread_blocks").default(1)
-    val groups = integer("spread_groups").default(0)
+    val segments = integer("spread_segments").default(1)
+    val parts = integer("spread_parts").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 
     /** The run key (stack-timeline plan D7), null for an effect in no run; see [CueAdHocEffectDto.runUuid]. */
@@ -344,16 +344,16 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
             targetKey = value.key
         }
 
-    var effectType by DaoCueAdHocEffects.effectType
-    var category by DaoCueAdHocEffects.category
-    var propertyName by DaoCueAdHocEffects.propertyName
-    var beatDivision by DaoCueAdHocEffects.beatDivision
+    var fxType by DaoCueAdHocEffects.fxType
+    var family by DaoCueAdHocEffects.family
+    var attribute by DaoCueAdHocEffects.attribute
+    var cycle by DaoCueAdHocEffects.cycle
     var blendMode by DaoCueAdHocEffects.blendMode
-    var distribution by DaoCueAdHocEffects.distribution
+    var order by DaoCueAdHocEffects.order
     var phaseOffset by DaoCueAdHocEffects.phaseOffset
     var elementMode by DaoCueAdHocEffects.elementMode
     var elementFilter by DaoCueAdHocEffects.elementFilter
-    var stepTiming by DaoCueAdHocEffects.stepTiming
+    var timing by DaoCueAdHocEffects.timing
     var parameters by DaoCueAdHocEffects.parameters
     var delay by DaoCueAdHocEffects.delay
     var interval by DaoCueAdHocEffects.interval
@@ -362,24 +362,24 @@ class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
     var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
     var seconds by DaoCueAdHocEffects.seconds
-    var size by DaoCueAdHocEffects.size
+    var amount by DaoCueAdHocEffects.amount
     var direction by DaoCueAdHocEffects.direction
-    var nShot by DaoCueAdHocEffects.nShot
+    var runs by DaoCueAdHocEffects.runs
     var spread by DaoCueAdHocEffects.spread
     var wings by DaoCueAdHocEffects.wings
-    var blocks by DaoCueAdHocEffects.blocks
-    var groups by DaoCueAdHocEffects.groups
+    var segments by DaoCueAdHocEffects.segments
+    var parts by DaoCueAdHocEffects.parts
     var uuid by DaoCueAdHocEffects.uuid
     var runUuid by DaoCueAdHocEffects.runUuid
 }
 
 // ─── Cue Property Assignments table ────────────────────────────────────
 
-object DaoCuePropertyAssignments : IntIdTable("cue_property_assignments") {
+object DaoCuePropertyAssignments : IntIdTable("cue_attribute_assignments") {
     val cue = reference("cue_id", DaoCues)
     val targetType = varchar("target_type", 50)
     val targetKey = varchar("target_key", 255)
-    val propertyName = varchar("property_name", 255)
+    val attribute = varchar("attribute", 255)
     val value = text("value")
     val fadeDuration = duration("fade_duration").nullable()
     val sortOrder = integer("sort_order").default(0)
@@ -393,7 +393,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
     var cue by DaoCue referencedOn DaoCuePropertyAssignments.cue
     var targetType by DaoCuePropertyAssignments.targetType
     var targetKey by DaoCuePropertyAssignments.targetKey
-    var propertyName by DaoCuePropertyAssignments.propertyName
+    var attribute by DaoCuePropertyAssignments.attribute
     var value by DaoCuePropertyAssignments.value
     var fadeDuration by DaoCuePropertyAssignments.fadeDuration
     var sortOrder by DaoCuePropertyAssignments.sortOrder
@@ -444,7 +444,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      * because archive JSON is untrusted input with a diagnostic channel of its own.
      */
     val look = reference("look_id", DaoLooks).nullable()
-    val template = reference("template_id", DaoTemplates).nullable()
+    val palette = reference("palette_id", DaoTemplates).nullable()
     val sortOrder = integer("sort_order").default(0)
     val enabled = bool("enabled").default(true)
 
@@ -464,7 +464,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      * else local" is one `COLOUR`-masked layer, not a separate feature. Parsed with the existing
      * [uk.me.cormack.lighting7.fx.parseMaskGroups] / [uk.me.cormack.lighting7.fx.maskAllows].
      */
-    val propertyMask = varchar("property_mask", 255).nullable()
+    val attributeMask = varchar("attribute_mask", 255).nullable()
 
     /** How this layer combines with what has accumulated beneath: OVERRIDE / MAX / MIN / MULTIPLY. */
     val blendMode = varchar("blend_mode", 50).default("OVERRIDE")
@@ -509,7 +509,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
         // the warn-and-drop paths are what hold the line on a DB that predates it. Don't read a
         // green test run as proof the constraint fires on the operator's desk.
         check("cue_layer_exactly_one_source") {
-            (look.isNotNull() and template.isNull()) or (look.isNull() and template.isNotNull())
+            (look.isNotNull() and palette.isNull()) or (look.isNull() and palette.isNotNull())
         }
     }
 }
@@ -545,7 +545,7 @@ enum class LayerSourceShape {
 }
 
 /**
- * The `DaoCueLayers.look`/[DaoCueLayers.template] exactly-one rule, decided in one place.
+ * The `DaoCueLayers.look`/[DaoCueLayers.palette] exactly-one rule, decided in one place.
  *
  * Takes `Any?` because the rule is purely about which of the two is *present*: the read path holds
  * entities, the REST write path int ids and the importer uuid strings, and all three want the same
@@ -580,11 +580,11 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
 
     var cue by DaoCue referencedOn DaoCueLayers.cue
     var look by DaoLook optionalReferencedOn DaoCueLayers.look
-    var template by DaoTemplate optionalReferencedOn DaoCueLayers.template
+    var palette by DaoTemplate optionalReferencedOn DaoCueLayers.palette
     var sortOrder by DaoCueLayers.sortOrder
     var enabled by DaoCueLayers.enabled
     var targets by DaoCueLayers.targets
-    var propertyMask by DaoCueLayers.propertyMask
+    var attributeMask by DaoCueLayers.attributeMask
     var blendMode by DaoCueLayers.blendMode
     var amount by DaoCueLayers.amount
     var stomp by DaoCueLayers.stomp
@@ -609,7 +609,7 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
      */
     val source: LayerSource? get() {
         val look = look
-        val template = template
+        val template = palette
         if (!layerSourceShape(look, template).wellFormedOrWarn { "id ${id.value}" }) return null
         return if (look != null) {
             LayerSource.look(look.id.value, look.uuid, look.name)
@@ -632,7 +632,7 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
 internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     targetType = targetType,
     targetKey = targetKey,
-    propertyName = propertyName,
+    propertyName = attribute,
     value = value,
     fadeDurationMs = fadeDuration?.toMillis(),
     sortOrder = sortOrder,
@@ -643,16 +643,16 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
 internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     targetType = targetType,
     targetKey = targetKey,
-    effectType = effectType,
-    category = category,
-    propertyName = propertyName,
-    beatDivision = beatDivision,
+    effectType = fxType,
+    category = family,
+    propertyName = attribute,
+    beatDivision = cycle,
     blendMode = blendMode,
-    distribution = distribution,
+    distribution = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTiming,
+    stepTiming = stepTimingOf(timing),
     parameters = parameters,
     delayMs = delay?.toMillis(),
     intervalMs = interval?.toMillis(),
@@ -661,13 +661,13 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     seconds = seconds,
-    size = size,
+    size = amount,
     direction = direction,
-    nShot = nShot,
+    nShot = runs,
     spread = spread,
     wings = wings,
-    blocks = blocks,
-    groups = groups,
+    blocks = segments,
+    groups = parts,
     uuid = uuid.toString(),
     runUuid = runUuid?.toString(),
 )

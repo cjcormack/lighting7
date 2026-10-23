@@ -87,8 +87,8 @@ class EffectFadeTest : RouteIntegrationTest() {
                     effects = heads.mapIndexed { i, head ->
                         LookEffectDto(
                             targetType = "fixture", targetKey = head,
-                            effectType = effectType, category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = effectType, category = "intensity", propertyName = "dimmer",
+                            beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
                             nShot = nShot, sortOrder = i,
                         )
                     },
@@ -489,18 +489,18 @@ class EffectFadeTest : RouteIntegrationTest() {
         seconds: Boolean = false,
         nShot: Int? = null,
         sort: Int = 0,
-        order: String = "LINEAR",
+        order: String = "NORMAL",
         wings: Int = 1,
     ): UUID = transaction(state.database) {
         DaoCueAdHocEffect.new {
             cue = DaoCue[cueId]
             targetType = "fixture"; targetKey = fixture
-            effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
-            beatDivision = division; blendMode = "OVERRIDE"; distribution = order
+            fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+            cycle = division; blendMode = "OVERRIDE"; this.order = order
             parameters = emptyMap()
             this.wings = wings
             this.seconds = seconds
-            this.nShot = nShot
+            this.runs = nShot
             sortOrder = sort
             runUuid = run
         }.uuid
@@ -716,7 +716,7 @@ class EffectFadeTest : RouteIntegrationTest() {
         val run = UUID.randomUUID()
         // Wings under Centre out spawn (the stored row is read leniently) but are refused by an edit
         // that moves the Order back onto it.
-        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run, order = "CENTER_OUT", wings = 2) }
+        val q1 = cue("Q1", null).also { adHoc(it, "hex-1", run, order = "CENTRE_OUT", wings = 2) }
         val q2 = cue("Q2", null).also { adHoc(it, "hex-1", run, wings = 2) }
         val (s, entries) = runStack(q1, q2)
         val id = one(q1).id
@@ -732,7 +732,7 @@ class EffectFadeTest : RouteIntegrationTest() {
         holds.giveBack(state, acquired.adopted, respawnFor = q2)
 
         assertEquals(id, one(q1).id, "Q1 has its effect back")
-        assertEquals(DistributionStrategy.LINEAR, one(q1).distributionStrategy, "still as Q2 had it")
+        assertEquals(DistributionStrategy.NORMAL, one(q1).distributionStrategy, "still as Q2 had it")
         assertTrue(holds.isEdited(q1), "so Q1 reads edited since GO")
     }
 
@@ -769,7 +769,7 @@ class EffectFadeTest : RouteIntegrationTest() {
         val (s, _) = runStack(q1, q2)
         manager.advanceStack(state, s, CueStackManager.AdvanceDirection.FORWARD)
         val running = one(q2)
-        transaction(state.database) { DaoCue[q2].adHocEffects.single { it.uuid == row2 }.beatDivision = 0.25 }
+        transaction(state.database) { DaoCue[q2].adHocEffects.single { it.uuid == row2 }.cycle = 0.25 }
 
         val answer = assertNotNull(uk.me.cormack.lighting7.routes.updateStage(state, q2, dryRun = false))
 
@@ -823,8 +823,8 @@ class EffectFadeTest : RouteIntegrationTest() {
             DaoCueAdHocEffect.new {
                 cue = DaoCue[q1]
                 targetType = "fixture"; targetKey = "hex-2"
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
         }

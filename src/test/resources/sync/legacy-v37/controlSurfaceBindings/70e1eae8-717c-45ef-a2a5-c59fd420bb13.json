@@ -1,0 +1,9 @@
+{
+  "bank": "bank-a",
+  "controlId": "fader-1",
+  "deviceTypeKey": "xtouch-mini",
+  "takeoverPolicy": "PICKUP",
+  "targetPayload": "{\"type\":\"fixtureProperty\",\"key\":\"hex-1\",\"property\":\"dimmer\"}",
+  "targetType": "fixtureProperty",
+  "uuid": "70e1eae8-717c-45ef-a2a5-c59fd420bb13"
+}

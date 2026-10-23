@@ -26,28 +26,28 @@ fun stripTriggerRows(project: DaoProject): Int {
     val looks = DaoLook.find { DaoLooks.project eq project.id }.map { it.id }
     if (looks.isNotEmpty()) {
         DaoLookRow.find { DaoLookRows.look inList looks }
-            .filter { refused(it.targetType, it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey, it.propertyName) }
+            .filter { refused(it.targetType, it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
         DaoLookEffect.find { DaoLookEffects.look inList looks }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.template inList templates }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+        DaoTemplateRow.find { DaoTemplateRows.palette inList templates }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.template inList templates }
-            .filter { refused(null, null, it.propertyName) }
+        DaoTemplateEffect.find { DaoTemplateEffects.palette inList templates }
+            .filter { refused(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val cues = DaoCue.find { DaoCues.project eq project.id }.map { it.id }
     if (cues.isNotEmpty()) {
         DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
         DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
-            .filter { refused(it.targetType, it.targetKey, it.propertyName) }
+            .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     return stripped

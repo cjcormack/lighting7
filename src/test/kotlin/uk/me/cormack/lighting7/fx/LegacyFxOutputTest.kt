@@ -49,9 +49,9 @@ class LegacyFxOutputTest {
     private fun dynamicsOf(fx: LegacyNames.StoredFx) = FxDynamics(
         stepTiming = false,
         phaseOffset = fx.phaseOffset,
-        distributionStrategy = DistributionStrategy.byName(fx.distribution)!!,
+        distributionStrategy = DistributionStrategy.byName(fx.order)!!,
         direction = EffectDirection.byName(fx.direction)!!,
-        nShot = fx.nShot,
+        nShot = fx.runs,
         spread = fx.spread,
     )
 
@@ -66,7 +66,7 @@ class LegacyFxOutputTest {
     /** Every head's output of [effect] on [fx]'s fields at every tick in [ticks], null where it holds. */
     private fun run(effect: Effect, fx: LegacyNames.StoredFx, heads: Int, ticks: LongRange): List<List<FxOutput?>> {
         val dynamics = dynamicsOf(fx)
-        val instance = FxInstance(effect, SliderTarget("front", "dimmer"), FxTiming(beatDivision = fx.beatDivision))
+        val instance = FxInstance(effect, SliderTarget("front", "dimmer"), FxTiming(beatDivision = fx.cycle))
         val plan = DistributionPlan.forElements(dynamics.distributionStrategy, heads, SpreadShape(spread = dynamics.spread))
         return ticks.map { n ->
             (0 until heads).map { i ->
@@ -101,12 +101,12 @@ class LegacyFxOutputTest {
 
     @Test
     fun `a Breathe and the Sine Wave it becomes land the same levels`() {
-        val stored = LegacyNames.StoredFx("Breathe", "dimmer", 2.0, "LINEAR", 0.4, mapOf("min" to "20", "max" to "230"), "BACKWARD", null, 0.5)
+        val stored = LegacyNames.StoredFx("Breathe", "intensity", 2.0, "NORMAL", 0.4, mapOf("min" to "20", "max" to "230"), "BACKWARD", null, 0.5)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 2 * 3).toLong()
         assertSameOutput(
             run(breathe(20, 230), stored, HEADS, ticks),
-            run(registry.createEffect(rewritten.effectType, rewritten.parameters), rewritten, HEADS, ticks),
+            run(registry.createEffect(rewritten.fxType, rewritten.parameters), rewritten, HEADS, ticks),
             "Breathe",
         )
     }
@@ -117,7 +117,7 @@ class LegacyFxOutputTest {
             "startPan" to "10", "startTilt" to "40", "endPan" to "245", "endTilt" to "200",
             "curve" to "SINE_IN_OUT", "pingPong" to "true",
         )
-        val stored = LegacyNames.StoredFx("Sweep", "position", 4.0, "LINEAR", 0.3, params, "FORWARD", 2, 0.75)
+        val stored = LegacyNames.StoredFx("Sweep", "position", 4.0, "NORMAL", 0.3, params, "FORWARD", 2, 0.75)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
         assertEquals("BOUNCE", rewritten.direction)
         val today = registry.createEffect("Sweep", rewritten.parameters)

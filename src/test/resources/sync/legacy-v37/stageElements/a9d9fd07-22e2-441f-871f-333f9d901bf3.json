@@ -1,0 +1,32 @@
+{
+  "emissive": true,
+  "finishColour": "#6a2733",
+  "finishPattern": "PLAIN",
+  "hidden": true,
+  "kind": "SEATING",
+  "layer": "VENUE",
+  "name": "Stalls",
+  "params": {
+    "aisles": [
+      {
+        "afterSeat": 5,
+        "widthM": 1.1
+      }
+    ],
+    "block": "FIXED",
+    "chair": "BANQUET",
+    "firstRow": "B",
+    "frameColour": "#c9a44c",
+    "rakeM": 0.1,
+    "rowPitchM": 0.95,
+    "rows": 8,
+    "seatPitchM": 0.52,
+    "seatsPerRow": 10
+  },
+  "positionX": 0.5,
+  "positionY": -3.0,
+  "positionZ": -0.9,
+  "sortOrder": 2,
+  "uuid": "a9d9fd07-22e2-441f-871f-333f9d901bf3",
+  "yawDeg": 5.0
+}

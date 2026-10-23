@@ -1,0 +1,10 @@
+{
+  "displayName": "Hex 4",
+  "fixtureTypeKey": "hex-fixture",
+  "key": "hex-4",
+  "sortOrder": 4,
+  "stageHidden": true,
+  "startChannel": 40,
+  "universeConfigUuid": "672f63c9-d4b9-4058-9b97-3cfa44c11a2f",
+  "uuid": "060eaaed-d5d8-4565-ab96-0f557a2aeeed"
+}

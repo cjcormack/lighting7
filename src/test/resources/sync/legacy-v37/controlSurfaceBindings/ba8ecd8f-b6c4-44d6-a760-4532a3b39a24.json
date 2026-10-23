@@ -1,0 +1,8 @@
+{
+  "controlId": "button-10",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 12,
+  "targetPayload": "{\"type\":\"buskPageSet\",\"pageUuid\":\"3245bd61-8ee7-4237-b186-37dc092668e8\"}",
+  "targetType": "buskPageSet",
+  "uuid": "ba8ecd8f-b6c4-44d6-a760-4532a3b39a24"
+}

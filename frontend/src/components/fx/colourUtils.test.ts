@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { isTemplateRef, parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
 
 /**
- * The `tmpl:` grammar, pinned against `fx/TemplateColourSource.kt`, which owns it.
+ * The `pal:` grammar, pinned against `fx/TemplateColourSource.kt`, which owns it.
  *
  * The file this sits beside did not exist until the positional palette went, and
  * `lib/programmerValue.test.ts` had been claiming for a while that it did. This half of the mirror
@@ -13,13 +13,13 @@ describe('palette colour references', () => {
   const uuid = '2f1c8a3e-0000-4000-8000-000000000001'
 
   it('recognises a reference regardless of case or surrounding space', () => {
-    expect(isTemplateRef(`tmpl:${uuid}`)).toBe(true)
-    expect(isTemplateRef(`  TMPL:${uuid}  `)).toBe(true)
-    expect(parseTemplateRefUuid(`  tmpl:${uuid} `)).toBe(uuid)
+    expect(isTemplateRef(`pal:${uuid}`)).toBe(true)
+    expect(isTemplateRef(`  PAL:${uuid}  `)).toBe(true)
+    expect(parseTemplateRefUuid(`  pal:${uuid} `)).toBe(uuid)
   })
 
   it('round-trips through serialize', () => {
-    expect(serializeTemplateRef(uuid)).toBe(`tmpl:${uuid}`)
+    expect(serializeTemplateRef(uuid)).toBe(`pal:${uuid}`)
     expect(parseTemplateRefUuid(serializeTemplateRef(uuid))).toBe(uuid)
   })
 
@@ -40,9 +40,9 @@ describe('palette colour references', () => {
   it('reports a malformed uuid as a reference with a bad target, not as a literal', () => {
     // The caller's question is "which template is this pointing at". Answering null here would make
     // a broken reference render as a colour, which is how a dangling one gets missed.
-    expect(isTemplateRef('tmpl:oops')).toBe(true)
-    expect(parseTemplateRefUuid('tmpl:oops')).toBe('oops')
+    expect(isTemplateRef('pal:oops')).toBe(true)
+    expect(parseTemplateRefUuid('pal:oops')).toBe('oops')
     // Nothing after the prefix is not a target at all.
-    expect(parseTemplateRefUuid('tmpl:')).toBeNull()
+    expect(parseTemplateRefUuid('pal:')).toBeNull()
   })
 })

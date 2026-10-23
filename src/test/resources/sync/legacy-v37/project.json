@@ -1,0 +1,11 @@
+{
+  "description": "exercises every synced table",
+  "detachedFromVenueUuid": "5b0e6c1a-7f2d-4c3e-9a8b-1d2e3f4a5b6c",
+  "detachedFromVersion": 7,
+  "fxLibrary": 2,
+  "name": "round-trip-rich",
+  "stageDepthM": 8.0,
+  "stageHeightM": 6.0,
+  "stageWidthM": 12.0,
+  "uuid": "a3191fa1-322a-4707-a67f-ebce49208d79"
+}

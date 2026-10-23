@@ -96,7 +96,7 @@ class LookLayerTargetsMigrationTest {
             }
             DaoCueLayer.new {
                 cue = preShow
-                template = amber
+                palette = amber
                 targets = house.take(1)
                 sortOrder = 1
             }

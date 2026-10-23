@@ -209,7 +209,7 @@ private fun ExposedSQLException.friendlyConstraintMessage(): String {
             "That cue number is already used in this stack."
         text.contains("uq_cue_stack_name_per_project") || text.contains("cue_stacks.name") ->
             "A cue stack with that name already exists in this project."
-        text.contains("fx_definitions") && text.contains("effect_id") ->
+        text.contains("fx_definitions") && text.contains("fx_id") ->
             "An FX definition with that effect ID already exists in this project."
         else -> "That value is already in use."
     }

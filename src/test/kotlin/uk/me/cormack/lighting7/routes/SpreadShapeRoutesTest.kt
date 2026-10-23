@@ -85,8 +85,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         seedQuad()
         val client = jsonClient()
         for (request in listOf(
-            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "CENTER_OUT", wings = 2),
-            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "EDGES_IN", wings = 2),
+            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "CENTRE_OUT", wings = 2),
+            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "CENTRE_IN", wings = 2),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", spread = 2.5),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", blocks = 0),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", groups = -1),
@@ -99,7 +99,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         }
         LocateTestSupport.seedHex(state, projectId, "hex-9", 101)
         val fixture = client.add(
-            AddEffectRequest(effectType = "Pulse", fixtureKey = "hex-9", propertyName = "dimmer", distributionStrategy = "EDGES_IN", wings = 3),
+            AddEffectRequest(effectType = "Pulse", fixtureKey = "hex-9", propertyName = "dimmer", distributionStrategy = "CENTRE_IN", wings = 3),
         )
         assertEquals(HttpStatusCode.BadRequest, fixture.status)
         assertTrue(engine.getActiveEffects().isEmpty(), "nothing was added")
@@ -128,8 +128,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
 
         for (refused in listOf(
             // Moving a winged effect onto Centre out is refused as surely as sending wings to one.
-            UpdateEffectRequest(distributionStrategy = "CENTER_OUT"),
-            UpdateEffectRequest(distributionStrategy = "EDGES_IN", wings = 3),
+            UpdateEffectRequest(distributionStrategy = "CENTRE_OUT"),
+            UpdateEffectRequest(distributionStrategy = "CENTRE_IN", wings = 3),
             UpdateEffectRequest(spread = -1.0),
             UpdateEffectRequest(wings = 0),
             UpdateEffectRequest(blocks = 600),
@@ -141,8 +141,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         assertEquals(2, effect(id).dynamics.wings, "a refused update moves nothing")
 
         // Taking the wings off first lets the order move.
-        val moved = client.update(id, UpdateEffectRequest(distributionStrategy = "CENTER_OUT", wings = 1)).body<EffectDto>()
-        assertEquals("CENTER_OUT", moved.distributionStrategy)
+        val moved = client.update(id, UpdateEffectRequest(distributionStrategy = "CENTRE_OUT", wings = 1)).body<EffectDto>()
+        assertEquals("CENTRE_OUT", moved.distributionStrategy)
         assertEquals(1, moved.wings)
     }
 
@@ -153,8 +153,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         val base = "/api/rest/projects/$projectId/looks"
         fun look(name: String, effect: LookEffectDto) = CreateLookRequest(name = name, effects = listOf(effect))
         val pulse = LookEffectDto(
-            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
-            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
+            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
 
         val created = client.post(base) {
@@ -169,7 +169,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         assertEquals(4, stored.groups)
 
         for ((name, bad) in listOf(
-            "Winged Bloom" to pulse.copy(distribution = "CENTER_OUT", wings = 2),
+            "Winged Bloom" to pulse.copy(distribution = "CENTRE_OUT", wings = 2),
             "Too Wide" to pulse.copy(spread = 2.1),
             "No Blocks" to pulse.copy(blocks = 0),
         )) {
@@ -186,8 +186,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedQuad()
         val spec = LookEffectSpec(
-            effectType = "Pulse", category = "dimmer", propertyName = "dimmer", beatDivision = 1.0,
-            blendMode = "OVERRIDE", distribution = "LINEAR", spread = 0.75, wings = 2, blocks = 1, groups = 2,
+            effectType = "Pulse", category = "intensity", propertyName = "dimmer", beatDivision = 1.0,
+            blendMode = "OVERRIDE", distribution = "NORMAL", spread = 0.75, wings = 2, blocks = 1, groups = 2,
         )
         val target = FxTargetFactory.forGroup("quad", "dimmer", null, null)
         val instance = EffectSpawner.createEffectInstance(spec, target, state)
@@ -211,8 +211,8 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
     @Test
     fun `Include carries a cue effect's shape`() {
         val child = CueAdHocEffectDto(
-            targetType = "group", targetKey = "quad", effectType = "Pulse", category = "dimmer",
-            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "group", targetKey = "quad", effectType = "Pulse", category = "intensity",
+            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "NORMAL",
             spread = 0.5, wings = 3, blocks = 2, groups = 4,
         )
         val spec = child.toEffectSpec()

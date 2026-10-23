@@ -402,8 +402,8 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
             ),
             effects = listOf(
                 CueAdHocEffectDto(
-                    targetType = "group", targetKey = "wash", effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                    beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+                    targetType = "group", targetKey = "wash", effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                    beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
                 ),
             ),
         )

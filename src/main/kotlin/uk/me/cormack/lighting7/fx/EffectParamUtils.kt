@@ -39,7 +39,7 @@ fun parseColor(colorString: String): Color {
  * that reason: a string of exactly six (or three) non-hex characters used to throw
  * `NumberFormatException` out of here, and this function is reached from an effect's `calculate` on
  * the 50 Hz tick loop — via [TypedParams.colour], whose fallback for a template reference it cannot
- * honour is precisely "hand the raw string to this parser". `tmpl:1` is six characters.
+ * honour is precisely "hand the raw string to this parser". `pal:1` is six characters.
  */
 fun parseExtendedColour(colorString: String): ExtendedColour {
     val parts = colorString.split(";")

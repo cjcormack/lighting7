@@ -160,7 +160,7 @@ class BuildCueAssignmentsForCueTest {
 
     @Test
     fun `a template reference in a value is skipped rather than resolved`() {
-        // A cue row is a literal. `tmpl:` is legal in an effect *parameter* only, and letting one
+        // A cue row is a literal. `pal:` is legal in an effect *parameter* only, and letting one
         // through here would read as white — see `CueAssignmentResolver.parseAssignmentValue`.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
@@ -168,7 +168,7 @@ class BuildCueAssignmentsForCueTest {
                 targetType = "fixture",
                 targetKey = "hex-1",
                 propertyName = "colour",
-                value = "tmpl:2f1c8a3e-0000-4000-8000-000000000001",
+                value = "pal:2f1c8a3e-0000-4000-8000-000000000001",
             ),
         ))
         assertTrue(out.isEmpty(), "the row must be dropped with a warn")

@@ -88,7 +88,7 @@ class CueHoldsTest : RouteIntegrationTest() {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = fixture
-                    propertyName = "rgbColour"; value = "#%02x0000".format(level); sortOrder = 0
+                    attribute = "rgbColour"; value = "#%02x0000".format(level); sortOrder = 0
                 }
             }
             fun entry(stack: DaoCueStack, cue: DaoCue, ordinal: Double, number: String, follows: Boolean = false) =
@@ -107,7 +107,7 @@ class CueHoldsTest : RouteIntegrationTest() {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-1"
-                    propertyName = "dimmer"; value = "100"; sortOrder = 1
+                    attribute = "dimmer"; value = "100"; sortOrder = 1
                 }
             }
             val d = cue("D", "hex-1", 200, null)
@@ -237,8 +237,8 @@ class CueHoldsTest : RouteIntegrationTest() {
             DaoCueAdHocEffect.new {
                 this.cue = DaoCue[rig.c]
                 targetType = "fixture"; targetKey = "hex-2"
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
         }

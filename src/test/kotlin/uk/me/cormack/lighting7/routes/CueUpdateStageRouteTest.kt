@@ -82,7 +82,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-1"
-                    propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                    attribute = "dimmer"; value = "$level"; sortOrder = 0
                 }
             }
             fun entry(stack: DaoCueStack, cue: DaoCue, ordinal: Double) =
@@ -212,8 +212,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         fun effect(fixture: String, type: String, property: String, division: Double = 0.5, size: Double = 1.0) = CueAdHocEffectDto(
-            targetType = "fixture", targetKey = fixture, effectType = type, category = "dimmer",
-            propertyName = property, beatDivision = division, blendMode = "OVERRIDE", distribution = "LINEAR", size = size,
+            targetType = "fixture", targetKey = fixture, effectType = type, category = "intensity",
+            propertyName = property, beatDivision = division, blendMode = "OVERRIDE", distribution = "NORMAL", size = size,
         )
         val sine = effect("hex-1", "SineWave", "dimmer")
         val pulse = effect("hex-2", "Pulse", "dimmer")
@@ -263,8 +263,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         // A Look per head, each a Pulse on its head: a Look lands whole.
         val looks = listOf("hex-1", "hex-2").associateWith { head ->
             val pulse = LookEffectDto(
-                targetType = "fixture", targetKey = head, effectType = "Pulse", category = "dimmer",
-                propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                targetType = "fixture", targetKey = head, effectType = "Pulse", category = "intensity",
+                propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
             )
             client.post("$base/looks") {
                 contentType(ContentType.Application.Json)
@@ -295,8 +295,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
     }
 
     private fun dimmerEffect(fixture: String, type: String = "SineWave", division: Double = 0.5) = CueAdHocEffectDto(
-        targetType = "fixture", targetKey = fixture, effectType = type, category = "dimmer",
-        propertyName = "dimmer", beatDivision = division, blendMode = "OVERRIDE", distribution = "LINEAR",
+        targetType = "fixture", targetKey = fixture, effectType = type, category = "intensity",
+        propertyName = "dimmer", beatDivision = division, blendMode = "OVERRIDE", distribution = "NORMAL",
     )
 
     private suspend fun HttpClient.setEffects(cueId: Int, vararg effects: CueAdHocEffectDto) = assertEquals(
@@ -377,8 +377,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookEffectDto(
-            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "dimmer",
-            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "intensity",
+            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val look = client.post("$base/looks") {
             contentType(ContentType.Application.Json)
@@ -413,8 +413,8 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val rig = seed()
         val pulse = LookEffectDto(
-            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "dimmer",
-            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-2", effectType = "Pulse", category = "intensity",
+            propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val look = client.post("$base/looks") {
             contentType(ContentType.Application.Json)

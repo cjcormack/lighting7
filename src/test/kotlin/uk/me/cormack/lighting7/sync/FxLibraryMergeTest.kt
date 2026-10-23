@@ -17,8 +17,7 @@ import uk.me.cormack.lighting7.models.DaoSyncConfigs
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
-import uk.me.cormack.lighting7.sync.dto.LookEffectJson
-import uk.me.cormack.lighting7.sync.dto.LookJson
+import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -29,8 +28,9 @@ import java.util.UUID
 import kotlin.test.assertEquals
 
 /**
- * A merge with a remote an older desk wrote ([LegacyNames.FX_LIBRARY] 1): its bouncing FX naming no
- * `pingPong` ran with it on, this desk's mean their Direction, and the merged tree carries one marker.
+ * A merge with a remote an older desk wrote (v37, [LegacyNames.FX_LIBRARY] 1): its bouncing FX naming
+ * no `pingPong` ran with it on, this desk's mean their Direction, and the merged tree says this desk's
+ * `formatVersion`, which implies the library.
  */
 class FxLibraryMergeTest {
 
@@ -70,27 +70,30 @@ class FxLibraryMergeTest {
             val project = tree.resolve("project.json")
             val json = canonicalDecode(ProjectJson.serializer(), Files.readString(project))
             Files.writeString(project, canonicalEncode(ProjectJson.serializer(), json.copy(fxLibrary = 1)))
-            val effect = LookEffectJson(
-                uuid = UUID.randomUUID().toString(), targetType = "group", targetKey = "front",
-                effectType = "Sweep", category = "position", beatDivision = 4.0, blendMode = "OVERRIDE",
-                distribution = "LINEAR",
+            write(tree, "formatVersion.json", canonicalEncode(FormatVersionJson.serializer(), FormatVersionJson(formatVersion = 37, minReader = 5)))
+            // In the older desk's words: a v37 Look's FX under `effects`, each field by its old name.
+            write(
+                tree, "looks/$theirs.json",
+                """{"effects":[{"beatDivision":4.0,"blendMode":"OVERRIDE","category":"position","distribution":"LINEAR",""" +
+                    """"effectType":"Sweep","targetKey":"front","targetType":"group","uuid":"${UUID.randomUUID()}"}],""" +
+                    """"name":"Theirs","uuid":"$theirs"}""",
             )
-            write(tree, "looks/$theirs.json", canonicalEncode(LookJson.serializer(), LookJson(uuid = theirs.toString(), name = "Theirs", effects = listOf(effect))))
         }
 
         transaction(state.database) {
             val look = DaoLook.new { project = DaoProject[projectId]; name = "Ours" }
             DaoLookEffect.new {
                 this.look = look; targetType = "group"; targetKey = "front"
-                effectType = "Sweep"; category = "position"; beatDivision = 2.0; blendMode = "OVERRIDE"
-                distribution = "LINEAR"; direction = "BOUNCE"; parameters = emptyMap(); sortOrder = 0
+                fxType = "Sweep"; family = "position"; cycle = 2.0; blendMode = "OVERRIDE"
+                order = "NORMAL"; direction = "BOUNCE"; parameters = emptyMap(); sortOrder = 0
             }
         }
 
         assertEquals(SyncOutcome.MERGED, runSync(projectId).outcome)
         assertEquals(mapOf("Ours" to (2.0 to "BOUNCE"), "Theirs" to (2.0 to "BOUNCE")), sweeps(projectId))
         val pushed = cloneRemote()
-        assertEquals(LegacyNames.FX_LIBRARY, canonicalDecode(ProjectJson.serializer(), Files.readString(pushed.resolve("project.json"))).fxLibrary)
+        assertEquals(null, canonicalDecode(ProjectJson.serializer(), Files.readString(pushed.resolve("project.json"))).fxLibrary)
+        assertEquals(FormatVersionJson().formatVersion, canonicalDecode(FormatVersionJson.serializer(), Files.readString(pushed.resolve("formatVersion.json"))).formatVersion)
 
         runSync(projectId)
         assertEquals(SyncOutcome.NO_OP, runSync(projectId).outcome)
@@ -100,7 +103,7 @@ class FxLibraryMergeTest {
     private fun sweeps(projectId: Int): Map<String, Pair<Double, String>> = transaction(state.database) {
         DaoLook.find { DaoLooks.project eq projectId }.associate { look ->
             val effect = look.effects.single()
-            look.name to (effect.beatDivision to effect.direction)
+            look.name to (effect.cycle to effect.direction)
         }
     }
 

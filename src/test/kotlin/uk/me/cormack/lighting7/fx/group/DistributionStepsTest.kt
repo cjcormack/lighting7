@@ -11,19 +11,19 @@ class DistributionStepsTest {
 
     @Test
     fun `each strategy's steps over six members`() {
-        assertEquals(listOf(1, 2, 3, 4, 5, 6), DistributionStrategy.LINEAR.steps(6))
+        assertEquals(listOf(1, 2, 3, 4, 5, 6), DistributionStrategy.NORMAL.steps(6))
         assertEquals(listOf(6, 5, 4, 3, 2, 1), DistributionStrategy.REVERSE.steps(6))
         assertEquals(listOf(1, 1, 1, 1, 1, 1), DistributionStrategy.UNIFIED.steps(6))
-        assertEquals(listOf(3, 2, 1, 1, 2, 3), DistributionStrategy.CENTER_OUT.steps(6))
-        assertEquals(listOf(1, 2, 3, 3, 2, 1), DistributionStrategy.EDGES_IN.steps(6))
+        assertEquals(listOf(3, 2, 1, 1, 2, 3), DistributionStrategy.CENTRE_OUT.steps(6))
+        assertEquals(listOf(1, 2, 3, 3, 2, 1), DistributionStrategy.CENTRE_IN.steps(6))
         assertEquals(listOf(1, 2, 3, 4, 5, 6), DistributionStrategy.PING_PONG.steps(6))
         assertEquals(listOf(1, 2, 3, 4, 5, 6), DistributionStrategy.POSITIONAL.steps(6))
     }
 
     @Test
     fun `an odd group's centre is its own step`() {
-        assertEquals(listOf(3, 2, 1, 2, 3), DistributionStrategy.CENTER_OUT.steps(5))
-        assertEquals(listOf(1, 2, 3, 2, 1), DistributionStrategy.EDGES_IN.steps(5))
+        assertEquals(listOf(3, 2, 1, 2, 3), DistributionStrategy.CENTRE_OUT.steps(5))
+        assertEquals(listOf(1, 2, 3, 2, 1), DistributionStrategy.CENTRE_IN.steps(5))
     }
 
     @Test
@@ -38,8 +38,8 @@ class DistributionStepsTest {
 
     @Test
     fun `empty and single groups`() {
-        assertEquals(emptyList(), DistributionStrategy.LINEAR.steps(0))
-        assertEquals(listOf(1), DistributionStrategy.CENTER_OUT.steps(1))
+        assertEquals(emptyList(), DistributionStrategy.NORMAL.steps(0))
+        assertEquals(listOf(1), DistributionStrategy.CENTRE_OUT.steps(1))
         assertEquals(DistributionStrategy.availableStrategies.toSet(), DistributionStrategy.stepsBySize(3).keys)
     }
 }

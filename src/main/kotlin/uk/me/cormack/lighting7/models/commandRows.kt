@@ -53,33 +53,33 @@ fun stripCommandRows(project: DaoProject): Int {
         DaoLookRow.find { DaoLookRows.look inList looks }
             .filter {
                 val key = it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey
-                namedCommand(it.targetType, key, it.propertyName) ||
-                    (it.elementKey == null && inSharedBand(it.targetType, it.targetKey, it.propertyName, it.value))
+                namedCommand(it.targetType, key, it.attribute) ||
+                    (it.elementKey == null && inSharedBand(it.targetType, it.targetKey, it.attribute, it.value))
             }
             .forEach { it.delete(); stripped++ }
         DaoLookEffect.find { DaoLookEffects.look inList looks }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.template inList templates }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+        DaoTemplateRow.find { DaoTemplateRows.palette inList templates }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.template inList templates }
-            .filter { namedCommand(null, null, it.propertyName) }
+        DaoTemplateEffect.find { DaoTemplateEffects.palette inList templates }
+            .filter { namedCommand(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     val cues = DaoCue.find { DaoCues.project eq project.id }.map { it.id }
     if (cues.isNotEmpty()) {
         DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
             .filter {
-                namedCommand(it.targetType, it.targetKey, it.propertyName) ||
-                    inSharedBand(it.targetType, it.targetKey, it.propertyName, it.value)
+                namedCommand(it.targetType, it.targetKey, it.attribute) ||
+                    inSharedBand(it.targetType, it.targetKey, it.attribute, it.value)
             }
             .forEach { it.delete(); stripped++ }
         DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
-            .filter { namedCommand(it.targetType, it.targetKey, it.propertyName) }
+            .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
     return stripped

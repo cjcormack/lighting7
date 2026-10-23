@@ -37,7 +37,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
 
     private fun storedEffect(look: String): StoredEffect = transaction(state.database) {
         val effect = DaoLook.find { DaoLooks.name eq look }.single().effects.single()
-        StoredEffect(effect.beatDivision, effect.speedMasterUuid?.toString(), effect.seconds)
+        StoredEffect(effect.cycle, effect.speedMasterUuid?.toString(), effect.seconds)
     }
 
     private fun effect(type: String, category: String, extra: String = "") =
@@ -72,7 +72,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
 
     @Test
     fun `an effect on Seconds follows no master, and asking for both is refused`() {
-        createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", usage = "dimmer"))
+        createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", usage = "intensity"))
 
         val breathe = call(
             "create_look",

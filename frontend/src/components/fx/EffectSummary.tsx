@@ -201,7 +201,7 @@ interface Swatch {
  * Colour/ColourList params → flat array of swatches.
  * Other params → labelled text values.
  *
- * A `tmpl:` value resolves through [ColourTemplates] rather than the literal parser, so a summary
+ * A `pal:` value resolves through [ColourTemplates] rather than the literal parser, so a summary
  * shows the colour the template *currently* holds — and names it on hover, because the whole reason
  * to reference one is that it has a name.
  */

@@ -54,10 +54,10 @@ const MASTERS = [master(1, 'Global'), master(2, 'Colour'), master(3, 'Movement')
 function effect(over: Partial<TemplateEffect> = {}): TemplateEffect {
   return {
     effectType: 'Dimmer Pulse',
-    category: 'dimmer',
+    category: 'intensity',
     beatDivision: 0.25,
     blendMode: 'OVERRIDE',
-    distribution: 'LINEAR',
+    distribution: 'NORMAL',
     parameters: {},
     timingSource: 'BEAT',
     ...over,
@@ -156,7 +156,7 @@ function draw(over: Partial<React.ComponentProps<typeof TemplateSheet>> = {}) {
 }
 
 function row(id: number): HTMLElement {
-  return document.querySelector(`[data-row-id="tmpl:${id}"]`) as HTMLElement
+  return document.querySelector(`[data-row-id="pal:${id}"]`) as HTMLElement
 }
 
 /** A marquee down one column over the rows at 1-based positions `from`..`to` (36px rows). */

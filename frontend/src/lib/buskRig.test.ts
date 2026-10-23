@@ -57,7 +57,7 @@ const frontWash: GroupSummary = {
   memberCount: 2,
   capabilities: [],
   symmetricMode: 'NONE',
-  defaultDistribution: 'LINEAR',
+  defaultDistribution: 'NORMAL',
   compatibleLookIds: [],
 }
 

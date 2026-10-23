@@ -66,8 +66,8 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                     effects = if (!effect) emptyList() else listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = keys.first(),
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 ),

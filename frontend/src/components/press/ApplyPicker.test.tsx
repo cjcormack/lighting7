@@ -188,7 +188,7 @@ const EFFECT = template({
     category: 'colour',
     beatDivision: 0.5,
     blendMode: 'OVERRIDE',
-    distribution: 'LINEAR',
+    distribution: 'NORMAL',
     parameters: {},
     timingSource: 'BEAT',
   },
@@ -530,7 +530,7 @@ describe('ApplyPicker — effects', () => {
     const first = fxPicker.mock.lastCall![0]
     expect(first.press).toBeUndefined()
     expect(first.onEdit).toBeUndefined()
-    const pick = { effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pick = { effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
     act(() => first.draft.onPick(pick))
     expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ targetType: 'fixture', targetKey: 'hex-1', effectType: 'Pulse' }), null)
     const second = fxPicker.mock.lastCall![0]
@@ -553,7 +553,7 @@ describe('ApplyPicker — effects', () => {
     const pickEffect = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(false))
     focus.cue = { cueLabel: 'Q4', layered: new Set(), pickEffect }
     render(picker({ library: 'effects', pair: MASKED }))
-    const pick = { effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pick = { effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick(pick))
     expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, effectType: 'SineWave' }))

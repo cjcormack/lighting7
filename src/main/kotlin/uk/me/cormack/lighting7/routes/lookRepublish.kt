@@ -111,7 +111,7 @@ internal fun republishForTemplateEdit(state: State, templateUuid: UUID): LookRep
         // One call, not the old invalidate-then-re-warm pair: `refresh` reads the new snapshot on
         // this thread and publishes it *with* the version bump. That bump is what a running effect
         // naming this template watches (`TypedParams`, keyed on `TemplateRegistry.versionFor`), so
-        // any gap between the two lets the first re-resolve of a `tmpl:` parameter happen on the
+        // any gap between the two lets the first re-resolve of a `pal:` parameter happen on the
         // 50 Hz tick loop and open a transaction there — the one thing `prewarmTemplateColours`
         // exists to keep off that thread.
         invalidate = { state.show.templateRegistry.refresh(templateUuid) },
@@ -264,7 +264,7 @@ internal fun cuesReferencingTemplate(
     restrictTo: Set<Int>?,
 ): Set<Int> = cuesLayering(state, restrictTo) {
     DaoTemplate.find { DaoTemplates.uuid eq templateUuid }.firstOrNull()
-        ?.let { DaoCueLayers.template eq it.id }
+        ?.let { DaoCueLayers.palette eq it.id }
 }
 
 /**

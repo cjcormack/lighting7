@@ -33,11 +33,11 @@ describe('usage vocabulary vs the effect library', () => {
 
   it('excludes the two categories that cannot own a tempo', () => {
     // `controls` is settings sliders — a level has no beat, so it lands on master 1 through a null
-    // uuid, which is what an unmatched category is defined to do. `palette` is the Steps FX's,
+    // uuid, which is what an unmatched category is defined to do. `steps` is the Steps FX's,
     // stamped by the family each one steps instead. lighting7's GlossaryVocabularyTest asserts the
     // same exclusions on the server's copy of this list.
     expect(SPEED_MASTER_USAGES).not.toContain('controls')
-    expect(SPEED_MASTER_USAGES).not.toContain('palette')
+    expect(SPEED_MASTER_USAGES).not.toContain('steps')
   })
 
   it('labels a usage the way the effect library labels the category', () => {
@@ -151,7 +151,7 @@ describe('resolveSpeedMasterForCategory', () => {
     // null is master 1 on every wire in this system, so these three are one answer, not three
     // failure modes: an untagged family, a settings effect, and a category a user's own .fx.kts
     // invented.
-    expect(resolveSpeedMasterForCategory(bank, 'dimmer')).toBeNull()
+    expect(resolveSpeedMasterForCategory(bank, 'intensity')).toBeNull()
     expect(resolveSpeedMasterForCategory(bank, 'controls')).toBeNull()
     expect(resolveSpeedMasterForCategory(bank, 'sparkle')).toBeNull()
     expect(resolveSpeedMasterForCategory(bank, null)).toBeNull()
@@ -161,7 +161,7 @@ describe('resolveSpeedMasterForCategory', () => {
   it('ignores a claimant with no uuid', () => {
     // The pre-load synthetic master 1 has a null uuid; stamping an effect with it would be
     // stamping nothing.
-    expect(resolveSpeedMasterForCategory([{ uuid: null, usage: 'dimmer' }], 'dimmer')).toBeNull()
+    expect(resolveSpeedMasterForCategory([{ uuid: null, usage: 'intensity' }], 'intensity')).toBeNull()
   })
 })
 

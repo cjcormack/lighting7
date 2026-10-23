@@ -62,7 +62,7 @@ import {
 } from './fxEditorModel'
 
 const CURVES = [
-  'LINEAR',
+  'NORMAL',
   'SINE_IN',
   'SINE_OUT',
   'SINE_IN_OUT',

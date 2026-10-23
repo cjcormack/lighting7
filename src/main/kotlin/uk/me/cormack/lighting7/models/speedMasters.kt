@@ -56,14 +56,12 @@ object DaoSpeedMasters : IntIdTable("speed_masters") {
     val notes = text("notes").nullable()
 
     /**
-     * Effect-library category (`dimmer` / `colour` / `position`) this master is the apply-time
-     * default for; null routes nothing. Named `usageCategory` in Kotlin because "usage" already
-     * means reference-counting in this codebase (`SpeedMasterUsage`, the delete guard); the
-     * column itself is `usage`. Unique per project, enforced by [validateSpeedMasterSettings]
+     * FX family (`intensity` / `colour` / `position` / `beam`) this master is the apply-time
+     * default for; null routes nothing. Unique per project, enforced by [validateSpeedMasterSettings]
      * rather than a partial index — the check needs a friendly 409 with a code, and
      * `friendlyConstraintMessage` would render a constraint hit as a codeless generic.
      */
-    val usageCategory = varchar("usage", 16).nullable()
+    val family = varchar("family", 16).nullable()
 
     /**
      * Time-signature numerator/denominator: both null = manual tempo, both positive = this
@@ -103,7 +101,7 @@ class DaoSpeedMaster(id: EntityID<Int>) : IntEntity(id) {
     var bpm by DaoSpeedMasters.bpm
     var source by DaoSpeedMasters.bpmSource
     var notes by DaoSpeedMasters.notes
-    var usageCategory by DaoSpeedMasters.usageCategory
+    var family by DaoSpeedMasters.family
     var followNum by DaoSpeedMasters.followNum
     var followDen by DaoSpeedMasters.followDen
     var followTargetUuid by DaoSpeedMasters.followTargetUuid
@@ -158,7 +156,7 @@ const val DEFAULT_SPEED_MASTER_COUNT = 4
  * Steps' Beam, Palette Steps' its palettes' (effects plan §3.6, [stepsFxCategory]). Pinned against
  * the shipped `.fx.kts` files by `GlossaryVocabularyTest`.
  */
-val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position", "beam")
+val SPEED_MASTER_USAGES: Set<String> = setOf("intensity", "colour", "position", "beam")
 
 // The write-boundary half of the speed-master error vocabulary (shared by REST and the WS
 // socket). The delete-guard half (CODE_SPEED_MASTER_PROTECTED / _IN_USE) follows the house
@@ -268,7 +266,7 @@ fun validateSpeedMasterSettings(
             )
         }
         val holder = DaoSpeedMaster
-            .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.usageCategory eq usage) }
+            .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.family eq usage) }
             .firstOrNull { it.id.value != excludeId }
         if (holder != null) {
             return SpeedMasterSettingsError.Conflict(

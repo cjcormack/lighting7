@@ -383,7 +383,7 @@ class FxEngineBenchmark {
             blendMode = BlendMode.OVERRIDE,
         ).apply {
             elementMode = ElementMode.FLAT
-            distributionStrategy = DistributionStrategy.LINEAR
+            distributionStrategy = DistributionStrategy.NORMAL
         }
         engine.addEffect(flatChase)
 
@@ -999,11 +999,11 @@ class FxEngineBenchmark {
                     target = EffectTargetRef.Single(TargetRef.Fixture(heads[i % heads.size])),
                     effect = StoredEffect(
                         effectType = "SineWave",
-                        category = "dimmer",
+                        category = "intensity",
                         propertyName = "dimmer",
                         beatDivision = BeatDivision.HALF,
                         blendMode = "OVERRIDE",
-                        distribution = "LINEAR",
+                        distribution = "NORMAL",
                         phaseOffset = 0.0,
                         elementMode = null,
                         elementFilter = null,

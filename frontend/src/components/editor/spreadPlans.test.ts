@@ -26,8 +26,8 @@ describe('spreadFractions', () => {
 
   it('orders as the desk does: Reverse runs the other way, Centre folds the ends together', () => {
     expect(spreadPositions(4, 'REVERSE')).toEqual([1, 2 / 3, 1 / 3, 0])
-    expect(spreadPositions(4, 'CENTER_OUT')).toEqual([1, 0, 0, 1])
-    expect(spreadPositions(5, 'CENTER_OUT')).toEqual([1, 0.5, 0, 0.5, 1])
+    expect(spreadPositions(4, 'CENTRE_OUT')).toEqual([1, 0, 0, 1])
+    expect(spreadPositions(5, 'CENTRE_OUT')).toEqual([1, 0.5, 0, 0.5, 1])
   })
 
   it('deals Random exactly as the desk does — java.util.Random(seed * 31 + n) and a Fisher–Yates walk', () => {
@@ -60,10 +60,10 @@ describe('spreadFractions', () => {
   })
 
   it('cuts the order into parts, the first runs one longer when it does not divide', () => {
-    expect(spreadFractions(4, 'LINE', 'LINEAR', 2)).toEqual([0, 1, 0, 1])
-    expect(spreadFractions(5, 'LINE', 'LINEAR', 2)).toEqual([0, 0.5, 1, 0, 1])
+    expect(spreadFractions(4, 'LINE', 'NORMAL', 2)).toEqual([0, 1, 0, 1])
+    expect(spreadFractions(5, 'LINE', 'NORMAL', 2)).toEqual([0, 0.5, 1, 0, 1])
     // More parts than heads is one head per run.
-    expect(spreadFractions(2, 'LINE', 'LINEAR', 5)).toEqual([0, 0])
+    expect(spreadFractions(2, 'LINE', 'NORMAL', 5)).toEqual([0, 0])
   })
 })
 

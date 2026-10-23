@@ -15,7 +15,7 @@ import { sendGesture } from './wsGesture'
  * - `stackEffectSize.set` `{stackId, size}` — the *FX amount* slider, at frame rate.
  *
  * REST reads and sets the same value (`GET/PUT projects/{id}/cue-stacks/{sid}/effect-size`), and a
- * MIDI `stackEffectSize` binding moves it too, so this frame is what keeps every slider honest.
+ * MIDI `stackFxAmount` binding moves it too, so this frame is what keeps every slider honest.
  */
 export interface StackEffectSizeState {
   projectId: number | null

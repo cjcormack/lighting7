@@ -257,7 +257,7 @@ private fun stackingParameters(request: ProgrammerEffectRequest, start: FxStacki
 
 /**
  * The attribute family an effect lands on: its property's group on the first head it paints
- * ([maskGroupForProperty], as Record and Include read it), so a dimmer-category Pulse on `uv` is
+ * ([maskGroupForProperty], as Record and Include read it), so an Intensity Pulse on `uv` is
  * Colour. Null when it paints nothing; a null family is in no mask and replaces nothing. Agreed
  * with Chris during session 2 over the library category an effect palette's family reads.
  */

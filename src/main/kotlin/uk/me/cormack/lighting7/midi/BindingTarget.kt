@@ -152,7 +152,7 @@ sealed class BindingTarget {
      * 0–100 %. [stackUuid] wins over [stackId] when set, as on the stack buttons above.
      */
     @Serializable
-    @SerialName("stackEffectSize")
+    @SerialName("stackFxAmount")
     data class StackEffectSize(val stackId: Int, val stackUuid: String? = null) : BindingTarget()
 
     /**
@@ -312,8 +312,8 @@ sealed class BindingTarget {
      * The family mask is derived from the template's own rows server-side, never sent.
      */
     @Serializable
-    @SerialName("pressTemplate")
-    data class PressTemplate(val templateUuid: String) : BindingTarget()
+    @SerialName("pressPalette")
+    data class PressTemplate(val paletteUuid: String) : BindingTarget()
 
     /**
      * Press a **busk pad** on button press — the pad's own plan, solo siblings included.

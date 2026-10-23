@@ -722,7 +722,7 @@ class State(val config: ApplicationConfig) {
     val selectionFan: SelectionFan by lazy { SelectionFan(this) }
 
     /**
-     * The effective rig order for `selection.subselect` and a spread's `LINEAR` order
+     * The effective rig order for `selection.subselect` and a spread's `NORMAL` order
      * (`state/BuskRigOrder.kt`), read fresh from the current project's rig tables at gesture time —
      * a rig write is rare next to a press, and holding a cached copy would be one more thing to
      * invalidate on `buskRigChanged`. Null before the show is up.
@@ -966,7 +966,7 @@ class State(val config: ApplicationConfig) {
             val pads = buskPageContents(pages.map { it.first }).pads.values
                 .mapNotNull { pad ->
                     when (pad.kind) {
-                        BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.template!!.uuid, isLook = false)
+                        BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.palette!!.uuid, isLook = false)
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
                         // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
                         BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
@@ -1306,6 +1306,11 @@ class State(val config: ApplicationConfig) {
         // the exception its KDoc explains. A no-op on a fresh or already-converted database.
         CueModelMigration.runIfNeeded(ds, database, dbPath)
 
+        // Terminology plan step 5: tables, columns and stored values in the glossary's words —
+        // before the reconciliation too, which would otherwise create every renamed column empty
+        // beside the old one. A no-op on a fresh or already-renamed database.
+        TerminologyMigration.runIfNeeded(ds, database, dbPath)
+
         transaction(database) {
             // Create tables - order matters for FK constraints
             // DaoProjects now includes all columns (FK columns as plain integers)
@@ -1368,6 +1373,10 @@ class State(val config: ApplicationConfig) {
             // Wave, `pingPong` as Bounce, Colour Cycle on literal colours (terminology plan §5 step 4).
             // `FxLibraryMigration.kt`.
             rewriteFxLibrary()
+
+            // Step 5's version, recorded once the steps above have run over its renamed shape
+            // (`TerminologyMigration.kt`).
+            markTerminologyRenamed()
 
             ensureInstallRow()
         }

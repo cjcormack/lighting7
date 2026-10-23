@@ -627,7 +627,7 @@ class AiTools(private val state: State) {
             }
 
             if ("palettes" in include) {
-                // Generic colour templates only: they are the ones a `tmpl:` colour parameter can
+                // Generic colour templates only: they are the ones a `pal:` colour parameter can
                 // name, and the uuid is what it names them by.
                 val project = state.projectManager.currentProject
                 val templates = transaction(state.database) {
@@ -635,11 +635,11 @@ class AiTools(private val state: State) {
                         // [genericColourRows] owns this rule — see its doc for why the row count is
                         // not one of its clauses any more.
                         val rows = genericColourRows(
-                            template.rows.toList(), { it.propertyName }, { it.isDeferred },
+                            template.rows.toList(), { it.attribute }, { it.isDeferred },
                         ) ?: return@mapNotNull null
                         buildJsonObject {
                             put("name", template.name)
-                            put("ref", "tmpl:${template.uuid}")
+                            put("ref", "pal:${template.uuid}")
                             put("intent", rows.joinToString(" ") { it.value })
                         }
                     }
@@ -2192,7 +2192,7 @@ class AiTools(private val state: State) {
                     (result.template.effect
                         ?.let { "(effect: ${it.effectType})" }
                         ?: "(${result.template.rows.size} row(s))") +
-                    " — reference it as tmpl:${result.template.uuid}",
+                    " — reference it as pal:${result.template.uuid}",
                 result = buildJsonObject {
                     put("paletteId", result.template.id)
                     put("uuid", result.template.uuid)
@@ -2254,7 +2254,7 @@ class AiTools(private val state: State) {
             blocks = spec.blocks,
             groups = spec.groups,
         )?.let { throw IllegalArgumentException(it) }
-        state.show.fxRegistry.fxWriteProblem(spec.effectType, spec.parameters)
+        state.show.fxRegistry.fxWriteProblem(spec.effectType, spec.parameters, spec.category)
             ?.let { throw IllegalArgumentException("$at: $it") }
         return spec
     }
@@ -2345,7 +2345,7 @@ class AiTools(private val state: State) {
         val wings = count("wings", 1)
         val blocks = count("blocks", 1)
         val groups = count("groups", 0)
-        EffectSpecCoercion.Strict.spreadProblem(spread, wings, blocks, groups, DistributionStrategy.LINEAR)
+        EffectSpecCoercion.Strict.spreadProblem(spread, wings, blocks, groups, DistributionStrategy.NORMAL)
             ?.let { throw IllegalArgumentException("$at: $it") }
         return ParsedEffectDynamics(size, direction, nShot, spread, wings, blocks, groups)
     }

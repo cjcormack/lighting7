@@ -191,8 +191,8 @@ class EffectSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val master = java.util.UUID.fromString(masterUuid(0))
         val spec = LookEffectSpec(
-            effectType = "Pulse", category = "dimmer", propertyName = "dimmer", beatDivision = 5.0,
-            blendMode = "OVERRIDE", distribution = "LINEAR", seconds = true,
+            effectType = "Pulse", category = "intensity", propertyName = "dimmer", beatDivision = 5.0,
+            blendMode = "OVERRIDE", distribution = "NORMAL", seconds = true,
         )
         val target = uk.me.cormack.lighting7.fx.FxTargetFactory.forFixture(
             "hex-1", "dimmer", null, state.show.fixtures.untypedGroupableFixture("hex-1"),
@@ -216,7 +216,7 @@ class EffectSecondsTimingTest : RouteIntegrationTest() {
     @Test
     fun `a layer's division override leaves an effect on Seconds alone`() {
         val spec = LookEffectSpec(
-            effectType = "Pulse", category = "dimmer", beatDivision = 12.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            effectType = "Pulse", category = "intensity", beatDivision = 12.0, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         assertEquals(2.0, spec.withBeatDivisionOverride(2.0).beatDivision)
         assertEquals(12.0, spec.copy(seconds = true).withBeatDivisionOverride(2.0).beatDivision)
@@ -227,8 +227,8 @@ class EffectSecondsTimingTest : RouteIntegrationTest() {
     fun `Include carries a cue effect's timing`() {
         val master = "8b0d5f7e-2c1a-4f53-9d2e-6a1b3c4d5e6f"
         val child = CueAdHocEffectDto(
-            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "dimmer",
-            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
+            beatDivision = 2.0, blendMode = "OVERRIDE", distribution = "NORMAL",
             speedMasterUuid = master,
         )
         assertEquals(master, child.toEffectSpec().speedMasterUuid, "the master was dropped on Include before S15")

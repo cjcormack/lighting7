@@ -253,12 +253,12 @@ class ProjectCloneTest {
 
             // The routing/follow columns (busking-view session 1) travel with the master —
             // "export/import carries the three columns" is exactly this assertion.
-            assertEquals("position", cloneMaster.usageCategory)
+            assertEquals("position", cloneMaster.family)
             assertEquals(1, cloneMaster.followNum)
             assertEquals(2, cloneMaster.followDen)
             assertEquals(
-                "dimmer",
-                clone.speedMasters.single { it.masterIndex == 1 }.usageCategory,
+                "intensity",
+                clone.speedMasters.single { it.masterIndex == 1 }.family,
             )
             assertNull(
                 cloneMaster.followTargetUuid,
@@ -330,7 +330,7 @@ class ProjectCloneTest {
      * colour parameter naming a value colour template.
      *
      * Worth its own test rather than folding into the master one above: the master columns are
-     * real uuid columns, whereas this is a uuid embedded in a `tmpl:` string inside a JSON value,
+     * real uuid columns, whereas this is a uuid embedded in a `pal:` string inside a JSON value,
      * and only the remapper being deliberately *not* field-aware makes it work. A cloned effect
      * still naming the source project's template would resolve to nothing and silently run white.
      */
@@ -349,7 +349,7 @@ class ProjectCloneTest {
 
             val effect = clone.templates.single { it.name == "amber-breathe" }.effect!!
             assertEquals(
-                "tmpl:${cloneColour.uuid}", effect.parameters["colours"],
+                "pal:${cloneColour.uuid}", effect.parameters["colours"],
                 "the parameter must name the clone's own colour template",
             )
         }
@@ -373,11 +373,11 @@ class ProjectCloneTest {
             assertEquals(8, pads.size)
             assertTrue(
                 pads.all { pad ->
-                    (pad.template?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
+                    (pad.palette?.project?.id ?: pad.look?.project?.id ?: pad.cue?.project?.id) == clone.id
                 },
                 "every pad points at a record of the clone, never of the source",
             )
-            assertEquals(2, pads.count { it.template?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
+            assertEquals(2, pads.count { it.palette?.name == "amber-key" }, "the record on two pads is on two pads of the clone")
             assertEquals(clone.id, clone.cueSlots.single { it.look != null }.look!!.project.id, "the Look slot points at the clone's Look")
         }
     }

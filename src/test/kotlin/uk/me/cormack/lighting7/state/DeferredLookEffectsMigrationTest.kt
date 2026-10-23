@@ -58,7 +58,7 @@ class DeferredLookEffectsMigrationTest {
     private fun storedEffects(): List<Pair<String, String>> =
         DriverManager.getConnection("jdbc:sqlite:${IntegrationTestDb.path}").use { connection ->
             connection.createStatement().use { s ->
-                s.executeQuery("SELECT target_type, effect_type FROM look_effects ORDER BY id").use { rs ->
+                s.executeQuery("SELECT target_type, fx_type FROM look_fx ORDER BY id").use { rs ->
                     buildList { while (rs.next()) add(rs.getString(1) to rs.getString(2)) }
                 }
             }
@@ -68,12 +68,12 @@ class DeferredLookEffectsMigrationTest {
         look = this@effect
         this.targetType = targetType
         this.targetKey = targetKey
-        this.effectType = effectType
-        category = "dimmer"
-        propertyName = "dimmer"
-        beatDivision = 1.0
+        this.fxType = effectType
+        family = "intensity"
+        attribute = "dimmer"
+        cycle = 1.0
         blendMode = "OVERRIDE"
-        distribution = "LINEAR"
+        order = "NORMAL"
         parameters = emptyMap()
     }
 

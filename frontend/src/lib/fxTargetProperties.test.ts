@@ -83,7 +83,7 @@ function fixture(over: Partial<Fixture> = {}): Fixture {
 function effect(over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
   return {
     name: 'SineWave',
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'PHASE',
     parameters: [],

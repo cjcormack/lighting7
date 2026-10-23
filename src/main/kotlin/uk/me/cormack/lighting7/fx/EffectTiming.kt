@@ -57,8 +57,8 @@ fun secondsTimingConflict(seconds: Boolean?, speedMasterUuid: String?, rateSpeed
 
 /**
  * Venue-visit plan D16's default master for a new effect of [effectType]: the speed master whose
- * `usage` is the effect's family — its registration's category, else [fallbackCategory] (always for
- * a Steps FX, whose `palette` category names no family: Slot Steps is Beam's, Palette Steps the
+ * `family` is the effect's family — its registration's category, else [fallbackCategory] (always for
+ * a Steps FX, whose `steps` category names no family: Slot Steps is Beam's, Palette Steps the
  * caller's) — or null,
  * which is master 1. Null too for a wall-clock effect, whose Seconds is having no rate master, since
  * "one bar on a master" means nothing to an effect timed in seconds.

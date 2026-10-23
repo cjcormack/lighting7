@@ -114,8 +114,8 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
 
         // Fresh child uuids, and the source's rows untouched.
         transaction(state.database) {
-            val sourceRowUuids = DaoTemplateRow.find { DaoTemplateRows.template eq source.id }.map { it.uuid }.toSet()
-            val copyRowUuids = DaoTemplateRow.find { DaoTemplateRows.template eq answer.templateId }.map { it.uuid }.toSet()
+            val sourceRowUuids = DaoTemplateRow.find { DaoTemplateRows.palette eq source.id }.map { it.uuid }.toSet()
+            val copyRowUuids = DaoTemplateRow.find { DaoTemplateRows.palette eq answer.templateId }.map { it.uuid }.toSet()
             assertEquals(2, sourceRowUuids.size)
             assertEquals(2, copyRowUuids.size)
             assertTrue(sourceRowUuids.intersect(copyRowUuids).isEmpty(), "every row uuid is fresh")
@@ -134,7 +134,7 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
             propertyName = "rgbColour",
             beatDivision = 0.5,
             blendMode = "ADDITIVE",
-            distribution = "LINEAR",
+            distribution = "NORMAL",
             phaseOffset = 0.25,
             elementMode = "PER_FIXTURE",
             stepTiming = true,
@@ -159,8 +159,8 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         assertEquals(rateMaster, copy.effect?.rateSpeedMasterUuid)
 
         transaction(state.database) {
-            val sourceUuid = DaoTemplateEffect.find { DaoTemplateEffects.template eq source.id }.single().uuid
-            val copyUuid = DaoTemplateEffect.find { DaoTemplateEffects.template eq answer.templateId }.single().uuid
+            val sourceUuid = DaoTemplateEffect.find { DaoTemplateEffects.palette eq source.id }.single().uuid
+            val copyUuid = DaoTemplateEffect.find { DaoTemplateEffects.palette eq answer.templateId }.single().uuid
             assertNotEquals(sourceUuid, copyUuid)
         }
     }
@@ -193,10 +193,10 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
                 name = "far-amber"
             }
             DaoTemplateRow.new {
-                this.template = template
+                this.palette = template
                 targetType = DEFERRED_TARGET_TYPE
                 targetKey = ""
-                propertyName = "rgbColour"
+                attribute = "rgbColour"
                 value = "#FF9D4A;policy=extract"
             }
             template.id.value

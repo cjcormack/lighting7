@@ -1106,9 +1106,9 @@ class FxEnginePipelineTest {
             it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
                 layerId = 3,
                 effect = StoredEffect(
-                    effectType = "Pulse", category = "dimmer",
+                    effectType = "Pulse", category = "intensity",
                     propertyName = "dimmer", beatDivision = 1.0, blendMode = "ADDITIVE",
-                    distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,
+                    distribution = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, stepTiming = null, parameters = emptyMap(),
                     speedMasterUuid = null, rateSpeedMasterUuid = null,
                 ),

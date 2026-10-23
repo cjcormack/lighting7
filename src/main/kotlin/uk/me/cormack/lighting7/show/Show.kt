@@ -574,7 +574,7 @@ class Show(
                     name = it.name,
                     bpm = it.bpm,
                     source = it.sourceEnum,
-                    usage = it.usageCategory,
+                    usage = it.family,
                     followNum = it.followRatio?.first,
                     followDen = it.followRatio?.second,
                     followTargetUuid = it.followTarget,
@@ -615,7 +615,7 @@ class Show(
                     if (result.success) {
                         loaded++
                     } else {
-                        val effectId = transaction(state.database) { definition.effectId }
+                        val effectId = transaction(state.database) { definition.fxId }
                         System.err.println("Failed to load user FX definition '$effectId':")
                         result.diagnostics.forEach { d ->
                             System.err.println("  ${d.severity}: ${d.message} ${d.location ?: ""}")

@@ -223,7 +223,7 @@ data class AddGroupFxRequest(
     /** The FX's own default cycle when omitted — see [AddEffectRequest.beatDivision]. */
     val beatDivision: Double? = null,
     val blendMode: String = "OVERRIDE",
-    val distribution: String = "LINEAR",
+    val distribution: String = "NORMAL",
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
     val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT

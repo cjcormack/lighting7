@@ -281,7 +281,7 @@ export function FxPicker({
     if (isPaletteSteps(entry.name)) {
       const offer = stepOffers.get(family)
       if (offer != null) {
-        spec.parameters = { ...spec.parameters, palettes: serializeStepList(offer.palettes.map((p) => `tmpl:${p.uuid}`)) }
+        spec.parameters = { ...spec.parameters, palettes: serializeStepList(offer.palettes.map((p) => `pal:${p.uuid}`)) }
       }
     } else if (isSlotSteps(entry.name)) {
       spec.parameters = { ...spec.parameters, slots: seedSlots(settingProps.find((p) => p.name === propertyName)) }

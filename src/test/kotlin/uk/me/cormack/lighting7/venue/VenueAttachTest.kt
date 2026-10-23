@@ -291,8 +291,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             val vu = DaoUniverseConfig.new { project = DaoProject[h.venueId]; subnet = 0; universe = 9; controllerType = "MOCK" }
             DaoFixturePatch.new { project = DaoProject[h.venueId]; universeConfig = vu; fixtureTypeKey = "generic-dimmer"; key = "house-spot"; displayName = "House spot"; startChannel = 1 }
             val palette = DaoTemplate.new { project = show; name = "Spot level" }
-            DaoTemplateRow.new { template = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; propertyName = "dimmer"; value = "pct:50"; sortOrder = 0 }
-            DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); template = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
+            DaoTemplateRow.new { this.palette = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
+            DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); this.palette = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
             DaoControlSurfaceBinding.new {
                 project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureProperty"
                 targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("panto-spot", "dimmer"))
@@ -366,17 +366,17 @@ class VenueAttachTest : RouteIntegrationTest() {
             patch(h.showId, "hex-3").key = "hex-3b"
             RigKeyReferences.rewrite(show, mapOf("hex-3" to "hex-3b"), emptyMap(), emptyList(), keys)
             val cue = DaoCue.find { DaoCues.project eq h.showId }.first()
-            val assignment = DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "hex-3b"; propertyName = "dimmer"; value = "200" }
+            val assignment = DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "200" }
             val effect = DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = EffectTargetRef.Selection.TYPE
                 targetKey = EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3b"), TargetRef.Fixture("hex-1"))).key
-                effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "Pulse"; family = "intensity"; cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
             val look = DaoLook.new { project = show; name = "Hex 3 special" }
-            val lookRow = DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "hex-3b"; propertyName = "dimmer"; value = "128"; sortOrder = 0 }
+            val lookRow = DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "128"; sortOrder = 0 }
             val palette = DaoTemplate.new { project = show; name = "hex-3 focus" }
-            val paletteRow = DaoTemplateRow.new { template = palette; targetType = "fixture"; targetKey = "hex-3b"; propertyName = "dimmer"; value = "90"; sortOrder = 0 }
+            val paletteRow = DaoTemplateRow.new { this.palette = palette; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "90"; sortOrder = 0 }
             val binding = DaoControlSurfaceBinding.new {
                 project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "fixtureProperty"
                 targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("hex-3b", "dimmer"))

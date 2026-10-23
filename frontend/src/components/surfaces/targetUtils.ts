@@ -68,7 +68,7 @@ export function matchesBindingTarget(
         (eff.type === "cueStackGo" ||
           eff.type === "cueStackBack" ||
           eff.type === "cueStackPause" ||
-          eff.type === "stackEffectSize") &&
+          eff.type === "stackFxAmount") &&
         eff.stackId === match.stackId
       )
   }
@@ -99,7 +99,7 @@ export function describeTarget(target: BindingTarget): string {
       return "Grand Master"
     case "grandMasterFader":
       return "Grand Master fader"
-    case "stackEffectSize":
+    case "stackFxAmount":
       return `FX amount · stack ${target.stackId}`
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
@@ -139,8 +139,8 @@ export function describeTarget(target: BindingTarget): string {
     // between two bindings of the same kind without pretending to be a name.
     case "applyLook":
       return `Apply Look ${shortUuid(target.lookUuid)}`
-    case "pressTemplate":
-      return `Press palette ${shortUuid(target.templateUuid)}`
+    case "pressPalette":
+      return `Press palette ${shortUuid(target.paletteUuid)}`
     case "pressPad":
       return `Press pad ${shortUuid(target.padUuid)}`
     // The hand's three (multi-screen plan §3.5). Same uuid rule as the record variants above.

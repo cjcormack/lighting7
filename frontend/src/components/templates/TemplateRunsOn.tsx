@@ -91,7 +91,7 @@ export function TemplateRunsOn({
 
   /**
    * Up to two colours off the effect's own `colour` parameters, so a colour effect previews in the
-   * colours it will actually run in. A `tmpl:` reference resolves through the same lookup the
+   * colours it will actually run in. A `pal:` reference resolves through the same lookup the
    * pickers use; anything else falls back to the family tint rather than to black, which would read
    * as a real (and wrong) preview.
    */

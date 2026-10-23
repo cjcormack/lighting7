@@ -51,7 +51,7 @@ class FxInstanceTest {
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
         instance.stepTiming = false
-        instance.distributionStrategy = DistributionStrategy.LINEAR
+        instance.distributionStrategy = DistributionStrategy.NORMAL
 
         val groupSize = 4
         // One beat = 24 ticks. With stepTiming=false, one full cycle = 24 ticks.
@@ -59,7 +59,7 @@ class FxInstanceTest {
         val phaseAt12 = instance.phaseForMember(tick(12), memberInfo(0, groupSize), groupSize)
 
         // At tick 12 of 24-tick cycle, base phase should be 0.5
-        // Member 0 with LINEAR has offset 0, so phase ≈ 0.5
+        // Member 0 with NORMAL has offset 0, so phase ≈ 0.5
         assertEquals(0.5, phaseAt12, 0.01)
         assertEquals(0.0, phaseAt0, 0.01)
     }
@@ -72,10 +72,10 @@ class FxInstanceTest {
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
         instance.stepTiming = true
-        instance.distributionStrategy = DistributionStrategy.LINEAR
+        instance.distributionStrategy = DistributionStrategy.NORMAL
 
         val groupSize = 4
-        // With stepTiming=true and LINEAR (4 distinct slots):
+        // With stepTiming=true and NORMAL (4 distinct slots):
         // effectiveDivision = 1.0 * 4 = 4.0 beats = 96 ticks per cycle
         // At tick 24 (1 beat into 4-beat cycle), base phase = 24/96 = 0.25
         val phaseAt24 = instance.phaseForMember(tick(24), memberInfo(0, groupSize), groupSize)
@@ -95,11 +95,11 @@ class FxInstanceTest {
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
         instance.stepTiming = true
-        instance.distributionStrategy = DistributionStrategy.CENTER_OUT
+        instance.distributionStrategy = DistributionStrategy.CENTRE_OUT
 
         val groupSize = 4
-        // CENTER_OUT with 4 members has ceil(4/2) = 2 distinct slots
-        val distinctSlots = DistributionStrategy.CENTER_OUT.distinctSlots(groupSize)
+        // CENTRE_OUT with 4 members has ceil(4/2) = 2 distinct slots
+        val distinctSlots = DistributionStrategy.CENTRE_OUT.distinctSlots(groupSize)
         assertEquals(2, distinctSlots)
 
         // effectiveDivision = 1.0 * 2 = 2.0 beats = 48 ticks per cycle
@@ -109,9 +109,9 @@ class FxInstanceTest {
         val phaseAt24 = instance.phaseForMember(tick(24), memberInfo(1, groupSize), groupSize)
         assertEquals(0.5, phaseAt24, 0.01)
 
-        // Compare: with LINEAR (4 slots), effectiveDivision = 4.0 beats = 96 ticks
+        // Compare: with NORMAL (4 slots), effectiveDivision = 4.0 beats = 96 ticks
         // At tick 24, base phase = 24/96 = 0.25
-        instance.distributionStrategy = DistributionStrategy.LINEAR
+        instance.distributionStrategy = DistributionStrategy.NORMAL
         val phaseLinear = instance.phaseForMember(tick(24), memberInfo(0, groupSize), groupSize)
         assertEquals(0.25, phaseLinear, 0.01)
     }
@@ -123,7 +123,7 @@ class FxInstanceTest {
             target = stubTarget,
             timing = FxTiming(beatDivision = BeatDivision.QUARTER),
         )
-        instance.distributionStrategy = DistributionStrategy.LINEAR
+        instance.distributionStrategy = DistributionStrategy.NORMAL
 
         val groupSize = 1
         val member = memberInfo(0, groupSize)

@@ -29,7 +29,7 @@ data class BuskRigTileSpec(
 
 /**
  * The **effective rig order** — the one sequence the desk walks for `selection.subselect`'s *Next* /
- * *Prev* and for a spread's `LINEAR` order (busk-further plan §3.3, D9, D12).
+ * *Prev* and for a spread's `NORMAL` order (busk-further plan §3.3, D9, D12).
  *
  * Rows in order, tiles in order, and each tile as the operator would press it:
  *

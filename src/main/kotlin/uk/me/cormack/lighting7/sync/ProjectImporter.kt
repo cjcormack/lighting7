@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 37
+internal const val SUPPORTED_FORMAT_VERSION = 38
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -702,7 +702,7 @@ class ProjectImporter(private val state: State) {
      * path; the topological order matters because parent rows must exist before children
      * dereference them through the maps returned by each step.
      */
-    private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int, fxLibrary: Int): List<CueNumberClash> {
+    private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int, fxLibrary: Int?): List<CueNumberClash> {
         // v24: a show on a venue links into the pinned snapshot's rows, which its archive does not
         // carry. Every map starts from them, and the archive's own rows are laid over the top — so a
         // link resolves to the show's own row where it has one (a Preset seating it copied keeps the
@@ -716,7 +716,7 @@ class ProjectImporter(private val state: State) {
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
         val scriptMap = importScripts(sourceDir, project)
-        val legacy = legacyContext(sourceDir, importFxDefinitions(sourceDir, project).values, fxLibrary)
+        val legacy = legacyContext(sourceDir, importFxDefinitions(sourceDir, project).values, formatVersion, fxLibrary)
         val lookMap = importLooks(sourceDir, project, elementMap, legacy)
         val templateMap = importTemplates(sourceDir, project, legacy)
         importSpeedMasters(sourceDir, project)
@@ -920,23 +920,23 @@ class ProjectImporter(private val state: State) {
     private fun importFxDefinitions(dir: Path, project: DaoProject): Map<UUID, DaoFxDefinition> =
         readDir(dir.resolve("fxDefinitions")) { json ->
             val d = canonicalDecode(FxDefinitionJson.serializer(), json)
-            if (LegacyNames.effectMode(d.effectMode) != d.effectMode) {
-                logger.warn("Import: FX definition '{}': the composite mode is gone, so its script must now return one output", d.effectId)
+            if (LegacyNames.fxMode(d.fxMode) != d.fxMode) {
+                logger.warn("Import: FX definition '{}': the composite mode is gone, so its script must now return one output", d.fxId)
             }
             val uuid = UUID.fromString(d.uuid)
             val dao = DaoFxDefinition.new {
-                effectId = d.effectId
+                fxId = d.fxId
                 name = d.name
-                category = LegacyNames.category(d.category, d.outputType.name)
+                family = LegacyNames.familyOf(d.family, d.outputType.name)
                 outputType = d.outputType
-                effectMode = EffectMode.valueOf(LegacyNames.effectMode(d.effectMode))
+                fxMode = EffectMode.valueOf(LegacyNames.fxMode(d.fxMode))
                 parameters = d.parameters?.let {
                     canonicalJson.decodeFromJsonElement(ListSerializer(ParameterInfo.serializer()), it)
                 } ?: emptyList()
-                compatibleProperties = d.compatibleProperties
+                compatibleAttributes = d.compatibleAttributes
                 script = d.script
                 this.project = project
-                defaultStepTiming = d.defaultStepTiming
+                defaultTiming = d.defaultTiming
                 timingSource = d.timingSource
                 this.uuid = uuid
             }
@@ -968,7 +968,7 @@ class ProjectImporter(private val state: State) {
                     look = dao
                     targetType = r.targetType
                     targetKey = r.targetKey
-                    propertyName = r.propertyName
+                    attribute = r.attribute
                     value = r.value
                     fadeDuration = r.fadeDurationMs.asDuration()
                     elementKey = r.elementKey
@@ -983,9 +983,9 @@ class ProjectImporter(private val state: State) {
             //
             // A deferred effect is dropped: a Look effect names its own target (absolute-looks plan
             // D2), and one an older desk wrote ran on whatever applied the Look.
-            l.effects.forEach { stored ->
+            l.fx.forEach { stored ->
                 if (stored.targetType == DEFERRED_TARGET_TYPE) {
-                    logger.warn("Import: Look '{}' ({}): effect {} ({}) names no target of its own; dropping it", l.name, l.uuid, stored.uuid, stored.effectType)
+                    logger.warn("Import: Look '{}' ({}): effect {} ({}) names no target of its own; dropping it", l.name, l.uuid, stored.uuid, stored.fxType)
                     return@forEach
                 }
                 val e = legacyFx("Look '${l.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
@@ -993,27 +993,27 @@ class ProjectImporter(private val state: State) {
                     look = dao
                     targetType = e.targetType
                     targetKey = e.targetKey
-                    effectType = e.effectType
-                    category = e.category
-                    propertyName = e.propertyName
-                    beatDivision = e.beatDivision
+                    fxType = e.fxType
+                    family = e.family
+                    attribute = e.attribute
+                    cycle = e.cycle
                     blendMode = e.blendMode
-                    distribution = e.distribution
+                    order = e.order
                     phaseOffset = e.phaseOffset
                     elementMode = e.elementMode
                     elementFilter = e.elementFilter
-                    stepTiming = e.stepTiming
+                    timing = e.timing
                     parameters = e.parameters
                     speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                     rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                     seconds = e.seconds
-                    size = e.size
+                    amount = e.amount
                     direction = e.direction
-                    nShot = e.nShot
+                    runs = e.runs
                     this.spread = e.spread
                     this.wings = e.wings
-                    this.blocks = e.blocks
-                    this.groups = e.groups
+                    this.segments = e.segments
+                    this.parts = e.parts
                     sortOrder = e.sortOrder
                     this.uuid = UUID.fromString(e.uuid)
                 }
@@ -1110,7 +1110,7 @@ class ProjectImporter(private val state: State) {
                 // Written verbatim like every other imported row — the write-boundary rules
                 // don't run on import, and the bank degrades a malformed pair (or a ratio on
                 // master 1) to "manual" rather than failing the show.
-                usageCategory = m.usage
+                family = m.family
                 followNum = m.followNum
                 followDen = m.followDen
                 followTargetUuid = m.followTargetUuid?.let { UUID.fromString(it) }
@@ -1580,7 +1580,7 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importCuePropertyAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
-        readDir(dir.resolve("cuePropertyAssignments")) { json ->
+        readDir(dir.resolve("cueAttributeAssignments")) { json ->
             val a = canonicalDecode(CuePropertyAssignmentJson.serializer(), json)
             val cueUuid = UUID.fromString(a.cueUuid)
             val cue = cueMap[cueUuid]
@@ -1590,7 +1590,7 @@ class ProjectImporter(private val state: State) {
                 this.cue = cue
                 targetType = a.targetType
                 targetKey = a.targetKey
-                propertyName = a.propertyName
+                attribute = a.attribute
                 value = a.value
                 fadeDuration = a.fadeDurationMs.asDuration()
                 sortOrder = a.sortOrder
@@ -1606,7 +1606,7 @@ class ProjectImporter(private val state: State) {
         project: DaoProject,
         legacy: LegacyNames.Context,
     ): Map<UUID, DaoTemplate> =
-        readDir(dir.resolve("templates")) { json ->
+        readDir(dir.resolve("palettes")) { json ->
             val t = canonicalDecode(TemplateJson.serializer(), json)
             val uuid = UUID.fromString(t.uuid)
             val dao = DaoTemplate.new {
@@ -1618,10 +1618,10 @@ class ProjectImporter(private val state: State) {
             }
             t.rows.forEach { r ->
                 DaoTemplateRow.new {
-                    template = dao
+                    palette = dao
                     targetType = r.targetType
                     targetKey = r.targetKey
-                    propertyName = r.propertyName
+                    attribute = r.attribute
                     value = r.value
                     sortOrder = r.sortOrder
                     this.uuid = UUID.fromString(r.uuid)
@@ -1631,31 +1631,31 @@ class ProjectImporter(private val state: State) {
             // boundary's rules don't run on import, so a snapshot from a *newer* build whose
             // category or blend mode this one does not recognise still lands rather than aborting
             // the pull. `EffectSpecCoercion.Lenient` warns if it eventually fails to spawn.
-            t.effect?.let { stored ->
+            t.fx?.let { stored ->
                 val e = legacyFx("Palette '${t.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
                 DaoTemplateEffect.new {
-                    template = dao
-                    effectType = e.effectType
-                    category = e.category
-                    propertyName = e.propertyName
-                    beatDivision = e.beatDivision
+                    palette = dao
+                    fxType = e.fxType
+                    family = e.family
+                    attribute = e.attribute
+                    cycle = e.cycle
                     blendMode = e.blendMode
-                    distribution = e.distribution
+                    order = e.order
                     phaseOffset = e.phaseOffset
                     elementMode = e.elementMode
                     elementFilter = e.elementFilter
-                    stepTiming = e.stepTiming
+                    timing = e.timing
                     parameters = e.parameters
                     speedMasterUuid = e.speedMasterUuid?.let { m -> UUID.fromString(m) }
                     rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { m -> UUID.fromString(m) }
                     seconds = e.seconds
-                    size = e.size
+                    amount = e.amount
                     direction = e.direction
-                    nShot = e.nShot
+                    runs = e.runs
                     this.spread = e.spread
                     this.wings = e.wings
-                    this.blocks = e.blocks
-                    this.groups = e.groups
+                    this.segments = e.segments
+                    this.parts = e.parts
                     this.uuid = UUID.fromString(e.uuid)
                 }
             }
@@ -1684,10 +1684,10 @@ class ProjectImporter(private val state: State) {
             // JSON is untrusted input arriving through a call that can fail, so here it fails —
             // silently losing a layer of someone's show on a sync pull is the worse outcome.
             val lookUuidRaw = l.lookUuid
-            val templateUuidRaw = l.templateUuid
+            val templateUuidRaw = l.paletteUuid
             layerSourceShape(lookUuidRaw, templateUuidRaw).problem?.let { problem ->
                 throw ImportError.invalidArchive(
-                    "Cue layer ${l.uuid} names $problem; exactly one of lookUuid / templateUuid is required",
+                    "Cue layer ${l.uuid} names $problem; exactly one of lookUuid / paletteUuid is required",
                 )
             }
             var look: DaoLook? = null
@@ -1715,11 +1715,11 @@ class ProjectImporter(private val state: State) {
             DaoCueLayer.new {
                 this.cue = cue
                 this.look = look
-                this.template = template
+                this.palette = template
                 sortOrder = l.sortOrder
                 enabled = l.enabled
                 targets = if (look != null) emptyList() else l.targets
-                propertyMask = l.propertyMask
+                attributeMask = l.attributeMask
                 blendMode = l.blendMode
                 amount = l.amount
                 stomp = l.stomp
@@ -1735,7 +1735,7 @@ class ProjectImporter(private val state: State) {
     }
 
     private fun importCueAdHocEffects(dir: Path, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
-        readDir(dir.resolve("cueAdHocEffects")) { json ->
+        readDir(dir.resolve("cueAdHocFx")) { json ->
             val stored = canonicalDecode(CueAdHocEffectJson.serializer(), json)
             val cueUuid = UUID.fromString(stored.cueUuid)
             val cue = cueMap[cueUuid]
@@ -1746,16 +1746,16 @@ class ProjectImporter(private val state: State) {
                 this.cue = cue
                 targetType = e.targetType
                 targetKey = e.targetKey
-                effectType = e.effectType
-                category = e.category
-                propertyName = e.propertyName
-                beatDivision = e.beatDivision
+                fxType = e.fxType
+                family = e.family
+                attribute = e.attribute
+                cycle = e.cycle
                 blendMode = e.blendMode
-                distribution = e.distribution
+                order = e.order
                 phaseOffset = e.phaseOffset
                 elementMode = e.elementMode
                 elementFilter = e.elementFilter
-                stepTiming = e.stepTiming
+                timing = e.timing
                 parameters = e.parameters
                 delay = e.delayMs.asDuration()
                 interval = e.intervalMs.asDuration()
@@ -1764,13 +1764,13 @@ class ProjectImporter(private val state: State) {
                 speedMasterUuid = e.speedMasterUuid?.let { UUID.fromString(it) }
                 rateSpeedMasterUuid = e.rateSpeedMasterUuid?.let { UUID.fromString(it) }
                 seconds = e.seconds
-                size = e.size
+                amount = e.amount
                 direction = e.direction
-                nShot = e.nShot
+                runs = e.runs
                 this.spread = e.spread
                 this.wings = e.wings
-                this.blocks = e.blocks
-                this.groups = e.groups
+                this.segments = e.segments
+                this.parts = e.parts
                 this.uuid = uuid
                 runUuid = e.runUuid?.let { UUID.fromString(it) }
             }
@@ -1933,24 +1933,24 @@ class ProjectImporter(private val state: State) {
                         this.uuid = UUID.fromString(b.uuid)
                     }
                     b.pads.forEach { d ->
-                        if (buskPadKind(d.templateUuid, d.lookUuid, d.cueUuid) == null) {
+                        if (buskPadKind(d.paletteUuid, d.lookUuid, d.cueUuid) == null) {
                             logger.warn("Busk pad {} on page {} names no record or more than one; dropping the pad", d.uuid, p.name)
                             return@forEach
                         }
-                        val template = d.templateUuid?.let { templateMap[UUID.fromString(it)] }
+                        val template = d.paletteUuid?.let { templateMap[UUID.fromString(it)] }
                         val look = d.lookUuid?.let { lookMap[UUID.fromString(it)] }
                         val cue = d.cueUuid?.let { cueMap[UUID.fromString(it)] }
                         if (template == null && look == null && cue == null) {
                             logger.warn(
                                 "Busk pad {} on page {} names record {} which the archive does not carry; dropping the pad",
-                                d.uuid, p.name, d.templateUuid ?: d.lookUuid ?: d.cueUuid,
+                                d.uuid, p.name, d.paletteUuid ?: d.lookUuid ?: d.cueUuid,
                             )
                             return@forEach
                         }
                         DaoBuskPad.new {
                             this.bank = bank
                             sortOrder = d.sortOrder
-                            this.template = template
+                            this.palette = template
                             this.look = look
                             this.cue = cue
                             this.uuid = UUID.fromString(d.uuid)
@@ -2192,30 +2192,30 @@ class ProjectImporter(private val state: State) {
 
     /**
      * What [LegacyNames.rewriteFx] reads beside an archive's FX: its palettes, read only if an FX
-     * names one; its script FX definitions; and whether an FX naming no `pingPong` predates it —
-     * an archive written before [LegacyNames.FX_LIBRARY] was stamped on `project.json`.
+     * names one; its script FX definitions; and whether an FX naming no `pingPong` predates it
+     * ([LegacyNames.absentPingPongIsOn]).
      */
-    private fun legacyContext(dir: Path, definitions: Collection<DaoFxDefinition>, fxLibrary: Int): LegacyNames.Context {
+    private fun legacyContext(dir: Path, definitions: Collection<DaoFxDefinition>, formatVersion: Int, fxLibrary: Int?): LegacyNames.Context {
         val palettes by lazy {
-            readDir(dir.resolve("templates")) { json ->
+            readDir(dir.resolve("palettes")) { json ->
                 val t = canonicalDecode(TemplateJson.serializer(), json)
                 UUID.fromString(t.uuid) to LegacyNames.Palette(
                     name = t.name,
                     rows = t.rows.sortedBy { it.sortOrder }.map {
-                        LegacyNames.PaletteRow(it.propertyName, it.value, it.targetType == DEFERRED_TARGET_TYPE)
+                        LegacyNames.PaletteRow(it.attribute, it.value, it.targetType == DEFERRED_TARGET_TYPE)
                     },
-                    holdsFx = t.effect != null,
+                    holdsFx = t.fx != null,
                 )
             }
         }
         val byId = definitions.associate { d ->
-            normalizeEffectType(d.effectId) to
+            normalizeEffectType(d.fxId) to
                 LegacyNames.Definition(d.outputType.name, d.parameters.filter { it.type == "colourList" }.mapTo(HashSet()) { it.name })
         }
         return LegacyNames.Context(
             palettes = { palettes[it] },
             definitions = { byId[normalizeEffectType(it)] },
-            absentPingPongIsOn = fxLibrary < LegacyNames.FX_LIBRARY,
+            absentPingPongIsOn = LegacyNames.absentPingPongIsOn(formatVersion, fxLibrary),
         )
     }
 
@@ -2223,31 +2223,38 @@ class ProjectImporter(private val state: State) {
     private fun legacyFx(what: String, fx: LegacyNames.StoredFx, legacy: LegacyNames.Context): LegacyNames.StoredFx? {
         val rewrite = LegacyNames.rewriteFx(fx, legacy) ?: return null
         if (rewrite.notes.isEmpty()) {
-            logger.info("Import: {}: {} — {}", what, fx.effectType, rewrite.changes.joinToString("; "))
+            logger.info("Import: {}: {} — {}", what, fx.fxType, rewrite.changes.joinToString("; "))
         } else {
             logger.warn(
                 "Import: {}: {} — {}; output moves: {}",
-                what, fx.effectType, rewrite.changes.joinToString("; "), rewrite.notes.joinToString("; "),
+                what, fx.fxType, rewrite.changes.joinToString("; "), rewrite.notes.joinToString("; "),
             )
         }
         return rewrite.fx
     }
 
     /**
-     * Reads every `*.json` file under [dir], applying [block] inside the existing transaction.
-     * Returns a UUID-keyed map of whatever [block] produces. No-op (empty map) if [dir] doesn't
-     * exist — every section is optional, so an export with zero scripts produces no `scripts/`.
+     * Read every record file under [dir], and under the folder's old names ([LegacyNames.oldFolders]),
+     * each in today's words ([LegacyNames.record]), applying [block] inside the existing transaction;
+     * a null answer from [block] reads the file but keeps nothing. Returns a UUID-keyed map of whatever
+     * [block] produces, empty when no folder exists — every section is optional. A merged tree can hold
+     * one record in both, so a file in today's folder is read and its namesake in an old one is not.
      */
-    /** Read every record file under [dir]; a null answer from [block] reads the file but keeps nothing. */
     private fun <T> readDir(dir: Path, block: (String) -> Pair<UUID, T>?): Map<UUID, T> {
-        if (!dir.exists() || !dir.isDirectory()) return emptyMap()
+        val folder = dir.fileName.toString()
+        val files = LinkedHashMap<String, Path>()
+        for (source in listOf(dir) + LegacyNames.oldFolders(folder).map(dir::resolveSibling)) {
+            if (!source.exists() || !source.isDirectory()) continue
+            Files.list(source).use { stream ->
+                stream.filter { it.fileName.toString().endsWith(".json") && !it.fileName.toString().endsWith(".meta.json") }
+                    .sorted()
+                    .forEach { files.putIfAbsent(it.fileName.toString(), it) }
+            }
+        }
         val out = mutableMapOf<UUID, T>()
-        Files.list(dir).use { stream ->
-            stream.filter { it.fileName.toString().endsWith(".json") && !it.fileName.toString().endsWith(".meta.json") }
-                .forEach { file ->
-                    val (uuid, value) = block(Files.readString(file)) ?: return@forEach
-                    out[uuid] = value
-                }
+        for (file in files.values) {
+            val (uuid, value) = block(LegacyNames.record(folder, Files.readString(file))) ?: continue
+            out[uuid] = value
         }
         return out
     }

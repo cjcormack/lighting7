@@ -57,7 +57,7 @@ export function saveAsTemplateOffer(
     }
   }
   // A step effect is banked by its palettes' family or as Beam on its setting, never by its library
-  // category — Palette Steps' `palette` names no family at all.
+  // category — Palette Steps' `steps` names no family at all.
   const step = stepEffectPaletteShape(effect, templates)
   if (step != null) return step.reason != null ? { enabled: false, reason: step.reason } : { enabled: true }
   const family = familyForEffectCategory(entry.category)

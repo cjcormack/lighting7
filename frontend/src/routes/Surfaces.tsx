@@ -415,7 +415,7 @@ function describePlacements(
     // The record rows key by uuid, matching `SurfaceLibrary`'s own row keys. No collision with the
     // two above: a `CueTarget` type is only ever `fixture` or `group`. A pad badges the **page** it
     // sits on, which is the row the library draws it in.
-    else if (target.type === "pressTemplate") key = `template:${target.templateUuid}`
+    else if (target.type === "pressPalette") key = `template:${target.paletteUuid}`
     else if (target.type === "applyLook") key = `look:${target.lookUuid}`
     else if (target.type === "buskPageSet") key = `busk-page:${target.pageUuid}`
     if (key == null) continue

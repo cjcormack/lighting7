@@ -94,7 +94,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
     private fun cue(arguments: String): Int = ok("create_cue", arguments)["cueId"]!!.jsonPrimitive.int
 
-    private val pulse = """{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+    private val pulse = """{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
 
     @Test
     fun `update_look replacing values moves a live cue without a re-fire`() {
@@ -134,7 +134,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         assertEquals(effectsBefore, effectsAfter)
         transaction(state.database) {
             assertEquals("90", DaoLook[lookId].rows.single { it.targetKey == "foh-1" }.value)
-            assertEquals(2.0, DaoLook[lookId].effects.single().beatDivision)
+            assertEquals(2.0, DaoLook[lookId].effects.single().cycle)
         }
     }
 
@@ -317,7 +317,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         )["paletteId"]!!.jsonPrimitive.int
         val cueId = cue("""{"name":"Q1","layers":[{"paletteId":$templateId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
         transaction(state.database) {
-            assertEquals(templateId, DaoCueLayer.find { DaoCueLayers.cue eq cueId }.single().template?.id?.value)
+            assertEquals(templateId, DaoCueLayer.find { DaoCueLayers.cue eq cueId }.single().palette?.id?.value)
         }
         ok("apply_cue", """{"cueId":$cueId}""")
         assertEquals(102, level(70))
@@ -358,22 +358,22 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         )
         refused(
             "create_look",
-            """{"name":"A","effects":[$pulse,{"effectType":"Pulse","category":"dimmer","beatDivision":1.0}]}""",
+            """{"name":"A","effects":[$pulse,{"effectType":"Pulse","category":"intensity","beatDivision":1.0}]}""",
             "effects[1] is missing 'blendMode'",
         )
         refused(
             "create_look",
-            """{"name":"A","effects":[{"effectType":"Pulse","category":"dimmer","beatDivision":"fast","blendMode":"OVERRIDE"}]}""",
+            """{"name":"A","effects":[{"effectType":"Pulse","category":"intensity","beatDivision":"fast","blendMode":"OVERRIDE"}]}""",
             "effects[0]: 'beatDivision' must be a number",
         )
-        refused("create_palette", """{"name":"T","effect":{"category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE"}}""", "effect is missing 'effectType'")
+        refused("create_palette", """{"name":"T","effect":{"category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE"}}""", "effect is missing 'effectType'")
         refused(
             "create_cue",
-            """{"name":"Q","adHocEffects":[{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","beatDivision":1.0}]}""",
+            """{"name":"Q","adHocEffects":[{"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"intensity","beatDivision":1.0}]}""",
             "adHocEffects[0] is missing 'blendMode'",
         )
         val lookId = look("FOH", foh1("dmx:200"))
-        refused("update_look", """{"lookId":$lookId,"effects":[{"category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""", "effects[0] is missing 'effectType'")
+        refused("update_look", """{"lookId":$lookId,"effects":[{"category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""", "effects[0] is missing 'effectType'")
         assertEquals(lookCount + 1, transaction(state.database) { DaoLook.all().count() })
         transaction(state.database) { assertTrue(DaoLookEffect.all().empty()) }
     }
@@ -382,7 +382,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `create_cue takes an ad-hoc effect over a selection as one effect`() {
         patchRig()
         val targets = """[{"type":"fixture","key":"foh-2"},{"type":"group","key":"Wash"}]"""
-        val effect = """{"targets":$targets,"effectType":"Pulse","category":"dimmer","propertyName":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val effect = """{"targets":$targets,"effectType":"Pulse","category":"intensity","propertyName":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
         val cueId = cue("""{"name":"Ripple","adHocEffects":[$effect]}""")
         transaction(state.database) {
             val stored = DaoCue[cueId].adHocEffects.single()
@@ -396,12 +396,12 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
         refused(
             "create_cue",
-            """{"name":"Q","adHocEffects":[{"targets":$targets,"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"dimmer","blendMode":"OVERRIDE","parameters":{}}]}""",
+            """{"name":"Q","adHocEffects":[{"targets":$targets,"targetType":"fixture","targetKey":"foh-1","effectType":"Pulse","category":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
             "send targets, or targetType and targetKey",
         )
         refused(
             "create_cue",
-            """{"name":"Q","adHocEffects":[{"targets":[{"type":"selection","key":"x"}],"effectType":"Pulse","category":"dimmer","blendMode":"OVERRIDE","parameters":{}}]}""",
+            """{"name":"Q","adHocEffects":[{"targets":[{"type":"selection","key":"x"}],"effectType":"Pulse","category":"intensity","blendMode":"OVERRIDE","parameters":{}}]}""",
             "type must be 'fixture' or 'group'",
         )
     }

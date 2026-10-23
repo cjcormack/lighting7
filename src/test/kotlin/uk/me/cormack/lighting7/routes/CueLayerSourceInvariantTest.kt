@@ -60,10 +60,10 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
             this.name = name
         }
         DaoTemplateRow.new {
-            this.template = template
+            this.palette = template
             targetType = DEFERRED_TARGET_TYPE
             targetKey = ""
-            propertyName = "rgbColour"
+            attribute = "rgbColour"
             value = "#ff9d4a"
             sortOrder = 0
         }
@@ -129,7 +129,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = look
-                    this.template = template
+                    this.palette = template
                     targets = emptyList()
                     sortOrder = 0
                 }
@@ -169,7 +169,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         val (sourceCueId, templateId) = transaction(state.database) {
             DaoCueLayer.new {
                 this.cue = cue
-                this.template = template
+                this.palette = template
                 targets = emptyList()
                 sortOrder = 0
             }
@@ -186,7 +186,7 @@ class CueLayerSourceInvariantTest : RouteIntegrationTest() {
         transaction(state.database) {
             val layer = DaoCue.findById(copiedCueId)!!.layers.single()
             assertEquals(
-                templateId, layer.template?.id?.value,
+                templateId, layer.palette?.id?.value,
                 "the copied layer should still name the template",
             )
             assertNull(layer.look, "and should not have grown a look")

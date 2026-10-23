@@ -50,7 +50,7 @@ describe('paletteFits', () => {
         family: 'BEAM',
         kind: 'effect',
         rows: [],
-        effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR', parameters: {}, ...extra },
+        effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'NORMAL', parameters: {}, ...extra },
       })
     const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
     const library = [{ name: 'ZoomWave', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
@@ -62,7 +62,7 @@ describe('paletteFits', () => {
     expect(paletteFits(effect('SlotSteps', { propertyName: 'prism' }), { ...zoomFit, property: 'gobo' })).toBe(false)
     // Palette Steps by its palettes' rows.
     const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
-    const steps = effect('PaletteSteps', { parameters: { palettes: 'tmpl:w' } })
+    const steps = effect('PaletteSteps', { parameters: { palettes: 'pal:w' } })
     expect(paletteFits(steps, zoomFit, { templates: [wide] })).toBe(true)
     expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { templates: [wide] })).toBe(false)
     // Without what it needs to read, it is not narrowed.

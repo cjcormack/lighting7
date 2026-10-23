@@ -21,13 +21,13 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
  * The categories a master's usage may name.
  *
  * This is the effect library's own `category` vocabulary, minus the two that cannot sensibly own
- * a tempo: `controls` (a settings slider has no beat) and `palette` (the Steps FX's own, which names
+ * a tempo: `controls` (a settings slider has no beat) and `steps` (the Steps FX's own, which names
  * no family — each is stamped by the family it steps instead). Effects in `controls` land on master
  * 1, which is what an unmatched category is defined to do. `speedMasterModel.test.ts` pins this against
  * `EFFECT_CATEGORY_INFO`, and lighting7's `GlossaryVocabularyTest` pins the server's
  * copy against the shipped `.fx.kts` files — the two ends of one list.
  */
-export const SPEED_MASTER_USAGES = ['dimmer', 'colour', 'position', 'beam'] as const
+export const SPEED_MASTER_USAGES = ['intensity', 'colour', 'position', 'beam'] as const
 
 export type SpeedMasterUsage = (typeof SPEED_MASTER_USAGES)[number]
 

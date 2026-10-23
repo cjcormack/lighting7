@@ -222,8 +222,8 @@ internal object RigKeyReferences {
 
         val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.associateBy { it.id.value }
         if (templates.isNotEmpty()) {
-            DaoTemplateRow.find { DaoTemplateRows.template inList templates.keys.toList() }.forEach { row ->
-                val templateId = row.readValues[DaoTemplateRows.template].value
+            DaoTemplateRow.find { DaoTemplateRows.palette inList templates.keys.toList() }.forEach { row ->
+                val templateId = row.readValues[DaoTemplateRows.palette].value
                 val template = templates.getValue(templateId)
                 visit(User("PALETTE", templateId, template.name), row.targetType, row.targetKey)
                     ?.let { row.targetKey = it; touched.templates += template.uuid }

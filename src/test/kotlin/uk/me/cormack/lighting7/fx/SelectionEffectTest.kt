@@ -64,7 +64,7 @@ class SelectionEffectTest {
 
     private fun selection(vararg items: TargetRef) = EffectTargetRef.Selection(items.toList())
 
-    private fun dimmerOver(sel: EffectTargetRef.Selection, strategy: DistributionStrategy = DistributionStrategy.LINEAR) =
+    private fun dimmerOver(sel: EffectTargetRef.Selection, strategy: DistributionStrategy = DistributionStrategy.NORMAL) =
         FxInstance(
             effect = PhaseSlider(),
             target = SliderTarget(FxTargetRef.SelectionRef(sel), "dimmer"),
@@ -100,7 +100,7 @@ class SelectionEffectTest {
         val order = pars + groupMembers
         assertEquals(order, rig.engine.fixtureKeysCoveredBy(effect))
 
-        // LINEAR over twelve: member i sits i/12 of a cycle behind member 0, so at the top of the
+        // NORMAL over twelve: member i sits i/12 of a cycle behind member 0, so at the top of the
         // clock every member after the first paints a little less than the one before it.
         rig.engine.processBeatTick(tick(0))
         val levels = order.drop(1).map { rig.dimmerOf(it) }

@@ -307,7 +307,7 @@ class SurfaceInputRouter(
             // the selection, the pad through its own bank's plan — never any of the three onto
             // whatever the other two would have chosen.
             is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)
-            is BindingTarget.PressTemplate -> actions.pressTemplate(target.templateUuid)
+            is BindingTarget.PressTemplate -> actions.pressTemplate(target.paletteUuid)
             is BindingTarget.PressPad -> actions.pressPad(target.padUuid)
             // The hand (multi-screen plan §3.5). A hand-off like the records above: what a pick-up
             // reads and what a place appends live in `HandService`, which the window's own doors

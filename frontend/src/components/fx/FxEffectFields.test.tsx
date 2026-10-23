@@ -56,7 +56,7 @@ import type { FxDraft, FxScope } from './fxEditorModel'
 
 const FLICKER: EffectLibraryEntry = {
   name: 'Flicker',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   timingSource: 'WALL_CLOCK',
@@ -75,7 +75,7 @@ const draft = (over: Partial<FxDraft> = {}): FxDraft => ({
   blendMode: 'OVERRIDE',
   phaseOffset: 0,
   stepTiming: false,
-  distributionStrategy: 'LINEAR',
+  distributionStrategy: 'NORMAL',
   elementMode: 'PER_FIXTURE',
   elementFilter: 'ALL',
   speedMasterUuid: null,
@@ -209,7 +209,7 @@ describe('FxEffectFields', () => {
     expect(screen.queryByRole('button', { name: /^Spread/ })).toBeNull()
     expect(screen.queryByRole('combobox', { name: 'Order' })).toBeNull()
     cleanup()
-    fields(PULSE, draft({ distributionStrategy: 'LINEAR', spread: 0.5, wings: 2 }), HEADS)
+    fields(PULSE, draft({ distributionStrategy: 'NORMAL', spread: 0.5, wings: 2 }), HEADS)
     // Folded, the summary says the non-defaults. The label and the summary are two spans with only
     // a CSS gap between them, so the accessible name has no space after "Spread".
     expect(screen.getByRole('button', { name: /^Spread\s*· 50 % · 2 wings$/ })).toBeTruthy()
@@ -246,7 +246,7 @@ describe('FxEffectFields', () => {
   })
 
   it('hides Wings under a mirrored order, which is two wings already', () => {
-    fields(PULSE, draft({ distributionStrategy: 'CENTER_OUT' }), HEADS)
+    fields(PULSE, draft({ distributionStrategy: 'CENTRE_OUT' }), HEADS)
     fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
     expect(screen.queryByRole('spinbutton', { name: 'Wings' })).toBeNull()
     expect(screen.getByText('two already')).toBeTruthy()

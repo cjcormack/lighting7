@@ -17,7 +17,7 @@ import java.util.UUID
  *
  * It replaced the positional colour list (`P1` / `P2` / `P*`, scoped `look > cue > global` by a
  * `PaletteCascade`), which was the last surviving sense of the word "palette" in this codebase.
- * `tmpl:` rather than `ref:` on purpose: `ref:{uuid}` is retired *and* still actively rejected at
+ * `pal:` rather than `ref:` on purpose: `ref:{uuid}` is retired *and* still actively rejected at
  * the Look write boundary as the `FU-LOOK-NESTED` non-recursion guarantee, so reusing it would
  * collide with a live check.
  *
@@ -44,7 +44,7 @@ import java.util.UUID
  */
 
 /** The prefix marking a colour parameter as a reference to a template rather than a literal. */
-const val TEMPLATE_COLOUR_REF_PREFIX = "tmpl:"
+const val TEMPLATE_COLOUR_REF_PREFIX = "pal:"
 
 /** Is this colour string a template reference? Shape only — says nothing about the template existing. */
 fun isTemplateColourRef(value: String): Boolean =
@@ -62,14 +62,14 @@ fun parseTemplateColourRefUuid(value: String): UUID? {
 fun serializeTemplateColourRef(templateUuid: UUID): String = "$TEMPLATE_COLOUR_REF_PREFIX$templateUuid"
 
 /**
- * The colour-family rows of a template a `tmpl:` reference may name, or **null** when it may not.
+ * The colour-family rows of a template a `pal:` reference may name, or **null** when it may not.
  *
  * One predicate for the four places that ask the same question — [resolveTemplateColour] here, the
  * MCP `describe_rig` briefing (`RigBriefing`), the `get_current_state` tool (`AiTools`), and `isOfferable` in the
  * client's `FxColourTemplates.tsx`. Three of those were independent `rows.singleOrNull()` copies of
  * "exactly one row", and relaxing that rule for emitters moved only one of them: a generic colour
  * template holding a hex *and* an explicit amber resolved correctly on the desk while being
- * invisible to the AI, which could not offer a `tmpl:` ref it was never told about.
+ * invisible to the AI, which could not offer a `pal:` ref it was never told about.
  *
  * Two clauses, and the row count is deliberately not one of them:
  *
@@ -99,7 +99,7 @@ fun <R> genericColourRows(
 private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.fx.TemplateColourSource")
 
 /**
- * A colour-source function for [TypedParams]: resolves a `tmpl:` reference, and answers **null** for
+ * A colour-source function for [TypedParams]: resolves a `pal:` reference, and answers **null** for
  * anything else so the caller falls through to its own literal parser.
  *
  * Null is also the answer for a reference that cannot be honoured — an unknown uuid, a template in
@@ -115,7 +115,7 @@ private val logger = LoggerFactory.getLogger("uk.me.cormack.lighting7.fx.Templat
 fun templateColourSource(registry: TemplateRegistry): (String) -> ExtendedColour? = TemplateSource(registry)
 
 /**
- * What an effect's `tmpl:` parameters resolve through: one [TemplateRegistry], read from its cache.
+ * What an effect's `pal:` parameters resolve through: one [TemplateRegistry], read from its cache.
  * Invoked as a function it is the colour source ([templateColourSource]); [paletteStep] is the same
  * registry read for a step of Palette Steps (effects plan §3.6), which `TypedParams.paletteSteps`
  * reaches by asking whether its colour source is one of these.
@@ -133,7 +133,7 @@ class TemplateSource(private val registry: TemplateRegistry) : (String) -> Exten
     }
 
     /**
-     * The palette a `tmpl:` step names, as the intents of its rows, or null — with a warn saying
+     * The palette a `pal:` step names, as the intents of its rows, or null — with a warn saying
      * which way — when it cannot be a step: no such palette, an effect palette, a per-fixture one
      * (it holds a value per head, not one for every head), or a row whose intent does not parse.
      */
@@ -212,7 +212,7 @@ fun FxRegistry.colourListPaletteProblem(effectType: String, parameters: Map<Stri
     getRegistration(effectType)?.let { colourListPaletteProblem(it.parameters, parameters) }
 
 /**
- * Every template uuid the `tmpl:` references in [parameters] name — the whole set a spawning
+ * Every template uuid the `pal:` references in [parameters] name — the whole set a spawning
  * effect depends on, which is both what has to be pre-warmed and what its colour cache's version
  * is scoped to ([TemplateRegistry.versionFor]).
  *
@@ -230,7 +230,7 @@ fun templateColourRefsIn(parameters: Map<String, String>): Set<UUID> {
 }
 
 /**
- * Read every `tmpl:` reference in [parameters] through [registry] once, so the registry's cache is
+ * Read every `pal:` reference in [parameters] through [registry] once, so the registry's cache is
  * warm before the effect starts ticking.
  *
  * Call this on the request thread at every spawn site. The return value is deliberately ignored —
@@ -246,7 +246,7 @@ fun prewarmTemplateColours(registry: TemplateRegistry, parameters: Map<String, S
 /**
  * Create an effect from a registered type name, with colour-template references resolved.
  *
- * This is the whole spawn contract in one place: pre-warm the `tmpl:` references off the tick
+ * This is the whole spawn contract in one place: pre-warm the `pal:` references off the tick
  * thread, then hand the factory a live resolver and a version counter so a template edited later
  * re-resolves without the effect being rebuilt. Every surface that names an effect by string goes
  * through here — REST add and update, cue spawn, group add, and the script `effect()` helper —
@@ -262,7 +262,7 @@ fun FxRegistry.createEffectWithTemplates(
 ): Effect {
     // The values `TypedParams` will actually read, resolved by its own rule: a supplied value
     // wins unless it is blank, otherwise the schema default (see `TypedParams.raw`). Declared
-    // defaults have to be in here — a default that is itself a `tmpl:` reference would otherwise
+    // defaults have to be in here — a default that is itself a `pal:` reference would otherwise
     // first resolve from the 50 Hz tick thread, exactly what pre-warming exists to prevent (no
     // built-in declares one, but a user `fx_definitions` effect can, and `effect("my-fx")` with
     // no parameters is ordinary) — and an *overridden* default has to be out, or an effect whose

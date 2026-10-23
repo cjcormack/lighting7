@@ -64,7 +64,7 @@ export function isOfferableColourTemplate(template: TemplateSummary): boolean {
 
 /**
  * A template a **spread** endpoint may name: the offer rule above **and** a `rgbColour` row. The
- * desk's `spreadEndpoint` resolves a `tmpl:` through the template's colour row alone and answers
+ * desk's `spreadEndpoint` resolves a `pal:` through the template's colour row alone and answers
  * 400 `SPREAD_INVALID` for a template made only of emitter rows (a UV-only template is a legal
  * template but has no hex to interpolate), so one is not offered rather than refused after the
  * press. Here beside its sibling rather than in `editor/SpreadPanel.tsx`, which is store-free and
@@ -81,15 +81,15 @@ const isOfferable = isOfferableColourTemplate
 export interface ColourTemplates {
   /** The offerable templates, in library order. Empty while loading, or outside a project. */
   templates: TemplateSummary[]
-  /** The template a `tmpl:` value names, or null for a literal *or* a reference that no longer resolves. */
+  /** The template a `pal:` value names, or null for a literal *or* a reference that no longer resolves. */
   templateFor: (value: string) => TemplateSummary | null
   /**
-   * What to draw a `tmpl:` value as: its name, a wait marker while the library is still arriving, or
+   * What to draw a `pal:` value as: its name, a wait marker while the library is still arriving, or
    * a plain marker once it has arrived without it. The three are distinct because "broken" and "not
    * loaded yet" look identical from here and only one of them is worth acting on.
    */
   labelFor: (value: string) => string
-  /** The hex to draw a `tmpl:` value as, or null when it cannot be resolved. */
+  /** The hex to draw a `pal:` value as, or null when it cannot be resolved. */
   swatchFor: (value: string) => string | null
 }
 

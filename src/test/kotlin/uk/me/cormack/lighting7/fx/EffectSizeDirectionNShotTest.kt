@@ -257,7 +257,7 @@ class EffectSizeDirectionNShotTest {
 
         rig.engine.processBeatTick(tick(6))
 
-        // LINEAR over two: offsets 0 and 0.5, so the members sit at 0.25 and 0.75 — read backward,
+        // NORMAL over two: offsets 0 and 0.5, so the members sit at 0.25 and 0.75 — read backward,
         // 0.75 and 0.25.
         assertEquals(160, rig.controller.currentValues.getValue(1).toInt(), "hex-a at 1 − 0.25")
         assertEquals(60, rig.controller.currentValues.getValue(13).toInt(), "hex-b at 1 − 0.75")
@@ -320,8 +320,8 @@ class EffectSizeDirectionNShotTest {
         effect.programmerLayerEffectKey = ProgrammerLayerEffectKey(
             layerId = 7,
             effect = StoredEffect(
-                effectType = "Level", category = "dimmer", propertyName = "dimmer",
-                beatDivision = BeatDivision.QUARTER, blendMode = "OVERRIDE", distribution = "LINEAR",
+                effectType = "Level", category = "intensity", propertyName = "dimmer",
+                beatDivision = BeatDivision.QUARTER, blendMode = "OVERRIDE", distribution = "NORMAL",
                 phaseOffset = 0.0, elementMode = null, elementFilter = null, stepTiming = null,
                 parameters = emptyMap(), speedMasterUuid = null, rateSpeedMasterUuid = null, nShot = 1,
             ),

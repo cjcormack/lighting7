@@ -1,0 +1,16 @@
+{
+  "beatDivision": 0.5,
+  "blendMode": "OVERRIDE",
+  "category": "dimmer",
+  "cueUuid": "af4334f7-a598-4a0c-ba69-42e843eae913",
+  "distribution": "LINEAR",
+  "effectType": "Pulse",
+  "parameters": {
+    "depth": "0.8"
+  },
+  "propertyName": "dimmer",
+  "runUuid": "3c9d2e7a-41f6-4b8e-a0d5-6e2f8c1b9a47",
+  "targetKey": "hex-1",
+  "targetType": "fixture",
+  "uuid": "c9eaf172-2b6d-447c-8255-8e58f12cbb1b"
+}

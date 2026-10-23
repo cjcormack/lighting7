@@ -29,7 +29,7 @@ class WallClockTimingTest {
         val reg = EffectRegistration(
             id = "TestEffect",
             name = "Test Effect",
-            category = "dimmer",
+            category = "intensity",
             outputType = FxOutputType.SLIDER,
             compatibleProperties = listOf("dimmer"),
             factory = { _, _, _ -> SineSlider() },
@@ -42,7 +42,7 @@ class WallClockTimingTest {
         val reg = EffectRegistration(
             id = "CandleFlicker",
             name = "Candle Flicker",
-            category = "dimmer",
+            category = "intensity",
             outputType = FxOutputType.SLIDER,
             timingSource = TimingSource.WALL_CLOCK,
             compatibleProperties = listOf("dimmer"),
@@ -57,7 +57,7 @@ class WallClockTimingTest {
     fun `EffectTypeInfo defaults to BEAT`() {
         val info = EffectTypeInfo(
             name = "TestEffect",
-            category = "dimmer",
+            category = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
             compatibleProperties = listOf("dimmer"),
@@ -69,7 +69,7 @@ class WallClockTimingTest {
     fun `EffectTypeInfo can be WALL_CLOCK`() {
         val info = EffectTypeInfo(
             name = "CandleFlicker",
-            category = "dimmer",
+            category = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
             compatibleProperties = listOf("dimmer"),
@@ -82,13 +82,13 @@ class WallClockTimingTest {
 
     @Test
     fun `FxFileMetadata defaults to BEAT`() {
-        val meta = FxFileMetadata(id = "test", name = "Test", category = "dimmer")
+        val meta = FxFileMetadata(id = "test", name = "Test", category = "intensity")
         assertEquals("BEAT", meta.timingSource)
     }
 
     @Test
     fun `FxFileMetadata can be WALL_CLOCK`() {
-        val meta = FxFileMetadata(id = "test", name = "Test", category = "dimmer", timingSource = "WALL_CLOCK")
+        val meta = FxFileMetadata(id = "test", name = "Test", category = "intensity", timingSource = "WALL_CLOCK")
         assertEquals("WALL_CLOCK", meta.timingSource)
     }
 

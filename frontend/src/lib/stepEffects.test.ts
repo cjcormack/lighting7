@@ -55,14 +55,14 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
   })
 
   it('files Slot Steps under the Beam it drives, though the library files it under Steps', () => {
-    expect(drivenCategoryOf({ name: 'SlotSteps', category: 'palette' })).toBe('beam')
+    expect(drivenCategoryOf({ name: 'SlotSteps', category: 'steps' })).toBe('beam')
     expect(drivenCategoryOf({ name: 'ZoomWave', category: 'beam' })).toBe('beam')
-    expect(drivenCategoryOf({ name: 'PaletteSteps', category: 'palette' })).toBe('palette')
+    expect(drivenCategoryOf({ name: 'PaletteSteps', category: 'steps' })).toBe('steps')
   })
 
   it('files Palette Steps under its palettes’ family’s category, the desk’s spelling', () => {
     expect(['INTENSITY', 'COLOUR', 'POSITION', 'BEAM'].map((f) => categoryForFamily(f as never))).toEqual([
-      'dimmer',
+      'intensity',
       'colour',
       'position',
       'beam',
@@ -85,7 +85,7 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
     const red = palette('Red', 'COLOUR', [['rgbColour', '#FF0000']])
     const uv = palette('UV', 'COLOUR', [['uv', 'dmx:200']])
     const down = palette('Down', 'POSITION', [['position', 'pos:0,0']])
-    const ref = (t: TemplateSummary) => `tmpl:${t.uuid}`
+    const ref = (t: TemplateSummary) => `pal:${t.uuid}`
     const steps = (...list: TemplateSummary[]) => ({ effectType: 'PaletteSteps', parameters: { palettes: list.map(ref).join(',') } })
 
     expect(stepEffectPaletteShape(steps(red, uv), [red, uv, down])).toEqual({ family: 'COLOUR', category: 'colour', propertyName: null })
@@ -119,7 +119,7 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
   })
 
   it('spells a step list as its entries, comma-separated, empty entries dropped', () => {
-    expect(parseStepList(' tmpl:a , ,tmpl:b')).toEqual(['tmpl:a', 'tmpl:b'])
+    expect(parseStepList(' pal:a , ,pal:b')).toEqual(['pal:a', 'pal:b'])
     expect(parseStepList(undefined)).toEqual([])
     expect(serializeStepList(['GOBO_1', 'GOBO_2'])).toBe('GOBO_1,GOBO_2')
   })

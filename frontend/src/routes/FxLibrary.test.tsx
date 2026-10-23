@@ -33,7 +33,7 @@ vi.mock('../store/projects', () => ({
 function entry(name: string, over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
   return {
     name,
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -60,7 +60,7 @@ function definition(id: number, effectId: string, name: string): FxDefinition {
     id,
     effectId,
     name,
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'STANDARD',
     parameters: [],
@@ -167,7 +167,7 @@ describe('FX Library sheet', () => {
 
   it('groups the rows under category dividers under All, and a chip narrows them', () => {
     draw()
-    expect(divider('dimmer')).toHaveTextContent('Intensity · 3')
+    expect(divider('intensity')).toHaveTextContent('Intensity · 3')
     expect(divider('colour')).toHaveTextContent('Colour · 2')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Category' })).getByRole('button', { name: /Colour/ }))
     expect(divider('colour')).toBeNull()
@@ -213,7 +213,7 @@ describe('FX Library sheet', () => {
     expect(createDefinition.mock.calls[0][0]).toMatchObject({
       effectId: 'PulseCustom2',
       name: 'Pulse (Custom 2)',
-      category: 'dimmer',
+      category: 'intensity',
       outputType: 'SLIDER',
       effectMode: 'STANDARD',
       compatibleProperties: ['dimmer'],

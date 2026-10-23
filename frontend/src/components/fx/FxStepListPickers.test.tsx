@@ -48,20 +48,20 @@ describe('FxPaletteListPicker', () => {
     ]
     const onChange = vi.fn()
     render(
-      <FxPaletteListPicker label="Palettes" value="tmpl:uuid-Centre,tmpl:uuid-Downstage" propertyName="position" readOnly={false} onChange={onChange} />,
+      <FxPaletteListPicker label="Palettes" value="pal:uuid-Centre,pal:uuid-Downstage" propertyName="position" readOnly={false} onChange={onChange} />,
     )
     const steps = within(screen.getByRole('list', { name: 'Palettes' })).getAllByRole('listitem')
     expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['Centre', 'Downstage'])
 
     fireEvent.click(screen.getByRole('button', { name: 'Move Downstage earlier' }))
-    expect(onChange).toHaveBeenLastCalledWith('tmpl:uuid-Downstage,tmpl:uuid-Centre')
+    expect(onChange).toHaveBeenLastCalledWith('pal:uuid-Downstage,pal:uuid-Centre')
     fireEvent.click(screen.getByRole('button', { name: 'Remove Centre' }))
-    expect(onChange).toHaveBeenLastCalledWith('tmpl:uuid-Downstage')
+    expect(onChange).toHaveBeenLastCalledWith('pal:uuid-Downstage')
   })
 
   it('names a reference it cannot find as missing, and asks for two or more', () => {
     wire.templates = [palette('Centre', 'POSITION', 'position', 'pos:0,0')]
-    render(<FxPaletteListPicker label="Palettes" value="tmpl:uuid-gone" readOnly={false} onChange={() => {}} />)
+    render(<FxPaletteListPicker label="Palettes" value="pal:uuid-gone" readOnly={false} onChange={() => {}} />)
     expect(screen.getByText('Missing palette')).toBeTruthy()
     expect(screen.getByText(/Two palettes or more/)).toBeTruthy()
   })

@@ -544,7 +544,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
 
         val rows = transaction(state.database) {
             DaoTemplate.find { DaoTemplates.name eq "Wall focus" }.single().rows
-                .associate { it.targetKey to (it.propertyName to it.value) }
+                .associate { it.targetKey to (it.attribute to it.value) }
         }
         // One fixture-specific position row per aimed head, centre-relative (venue-visit plan P3):
         // its own coarse bytes about DMX 128 — spot-fine is at 127/127, a step short of mid-travel.

@@ -429,5 +429,5 @@ private fun groupSummary(fixtures: Fixtures, dao: DaoFixtureGroup): GroupSummary
             memberCount = dao.members.count().toInt(),
             capabilities = emptyList(),
             symmetricMode = SymmetricMode.NONE.name,
-            defaultDistribution = "LINEAR",
+            defaultDistribution = "NORMAL",
         )

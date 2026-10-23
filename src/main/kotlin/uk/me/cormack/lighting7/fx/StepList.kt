@@ -16,7 +16,7 @@ const val SLOT_STEPS_ID = "SlotSteps"
  * family (terminology plan D23). It names no attribute family on purpose, since each sits in the
  * family of what it steps, and a stored one carries that family's category ([stepsFxCategory]).
  */
-const val STEPS_CATEGORY = "palette"
+const val STEPS_CATEGORY = "steps"
 
 /**
  * The category a Steps FX is stored and stamped under, or null for any other FX, whose own category
@@ -315,7 +315,7 @@ data class PaletteStepsShape(val family: PropertyMaskGroup, val category: String
 
 /** The effect category a family is offered under — [familyForEffectCategory] read backwards. */
 fun effectCategoryForFamily(family: PropertyMaskGroup): String = when (family) {
-    PropertyMaskGroup.INTENSITY -> "dimmer"
+    PropertyMaskGroup.INTENSITY -> "intensity"
     PropertyMaskGroup.COLOUR -> "colour"
     PropertyMaskGroup.POSITION -> "position"
     PropertyMaskGroup.BEAM -> "beam"

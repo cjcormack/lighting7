@@ -45,8 +45,8 @@ class LookRowIdentityTest : RouteIntegrationTest() {
 
     private val pulse = LookEffectDto(
         targetType = "fixture", targetKey = "hex-1",
-        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+        effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
     )
 
     @Test
@@ -152,11 +152,11 @@ class LookRowIdentityTest : RouteIntegrationTest() {
     private data class Row(val targetKey: String, val propertyName: String)
 
     private fun rowUuids(lookId: Int): Map<Row, UUID> = transaction(state.database) {
-        DaoLook[lookId].rows.associate { Row(it.targetKey, it.propertyName) to it.uuid }
+        DaoLook[lookId].rows.associate { Row(it.targetKey, it.attribute) to it.uuid }
     }
 
     private fun orderedRowUuids(lookId: Int): List<Pair<String, UUID>> = transaction(state.database) {
-        DaoLook[lookId].rows.sortedBy { it.sortOrder }.map { it.propertyName to it.uuid }
+        DaoLook[lookId].rows.sortedBy { it.sortOrder }.map { it.attribute to it.uuid }
     }
 
     private fun effectUuids(lookId: Int): List<UUID> = transaction(state.database) {

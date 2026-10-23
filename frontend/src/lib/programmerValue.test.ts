@@ -136,7 +136,7 @@ describe('parseProgrammerEntryValue', () => {
   // `parsePaletteRefUuid` / `isPaletteRefValue` / `serializePaletteRef` — including that they were
   // strict about the uuid shape (a corrupt value had to read as "not a reference" rather than as a
   // reference to nothing) and that they were never confused with the positional `P1` form. Both
-  // grammars retired in session 4. The one live reference grammar is `tmpl:`, which is an FX
+  // grammars retired in session 4. The one live reference grammar is `pal:`, which is an FX
   // colour *parameter* rather than a value, and `colourUtils.test.ts` covers it.
   it('reads a literal entry directly', () => {
     expect(parseProgrammerEntryValue({ value: '200' })).toEqual({ kind: 'level', value: 200 })

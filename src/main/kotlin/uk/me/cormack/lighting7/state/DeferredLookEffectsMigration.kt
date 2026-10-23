@@ -31,15 +31,15 @@ internal fun JdbcTransaction.dropDeferredLookEffects() {
     val dropped = ArrayList<Dropped>()
     exec(
         """
-        SELECT e.look_id AS look_id, p.name AS project, l.name AS look, e.effect_type AS effect
-          FROM look_effects e LEFT JOIN looks l ON l.id = e.look_id LEFT JOIN projects p ON p.id = l.project_id
+        SELECT e.look_id AS look_id, p.name AS project, l.name AS look, e.fx_type AS effect
+          FROM look_fx e LEFT JOIN looks l ON l.id = e.look_id LEFT JOIN projects p ON p.id = l.project_id
          WHERE e.target_type = '$DEFERRED_TARGET_TYPE'
          ORDER BY p.name, l.name, e.sort_order, e.id
         """.trimIndent(),
     ) { rs ->
         while (rs.next()) dropped += Dropped(rs.getInt("look_id"), rs.getString("project"), rs.getString("look"), rs.getString("effect"))
     }
-    exec("DELETE FROM look_effects WHERE target_type = '$DEFERRED_TARGET_TYPE'")
+    exec("DELETE FROM look_fx WHERE target_type = '$DEFERRED_TARGET_TYPE'")
     dropped.groupBy { it.lookId }.forEach { (lookId, effects) ->
         logger.warn(
             "Look '{}' in '{}': dropped {} that named no target of its own ({})",

@@ -465,7 +465,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val look = ai.executeTool("create_look", buildJsonObject {
             put("name", "Bang")
             put("effects", Json.parseToJsonElement(
-                """[{"targetType":"fixture","targetKey":"cannon","effectType":"Pulse","category":"dimmer","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
+                """[{"targetType":"fixture","targetKey":"cannon","effectType":"Pulse","category":"intensity","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
             ))
         })
         assertFalse(look.success, look.description)
@@ -483,10 +483,10 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val stripped = transaction(state.database) {
             val project = DaoProject[projectId]
             val look = DaoLook.new { this.project = project; name = "Old" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; propertyName = "output1"; value = "255" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; propertyName = "master"; value = "255" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "dimmer-x"; propertyName = "dimmer"; value = "255" }
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "cannon"; propertyName = "output2"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; attribute = "output1"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "cannon"; attribute = "master"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "dimmer-x"; attribute = "dimmer"; value = "255" }
+            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "cannon"; attribute = "output2"; value = "255" }
             stripTriggerRows(project)
         }
         assertEquals(3, stripped)

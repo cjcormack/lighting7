@@ -317,7 +317,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         val ai = AiTools(state).executeTool(
             "create_look",
             Json.parseToJsonElement(
-                """{"name":"X","effects":[{"targetType":"fixture","targetKey":"vary","effectType":"Pulse","category":"dimmer","propertyName":"reset","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""",
+                """{"name":"X","effects":[{"targetType":"fixture","targetKey":"vary","effectType":"Pulse","category":"intensity","propertyName":"reset","beatDivision":1.0,"blendMode":"OVERRIDE"}]}""",
             ).jsonObject,
         )
         assertFalse(ai.success, ai.description)
@@ -395,16 +395,16 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
             val project = DaoProject[projectId]
             val look = DaoLook.new { this.project = project; name = "Old" }
             // The Varytec's reset was a two-option setting: stored by name.
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "vary"; propertyName = "reset"; value = "255" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "vary"; attribute = "reset"; value = "255" }
             // The Fusion's and the Orbit's lost RESET options: stored by level.
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "fusion"; propertyName = "motorMode"; value = "251" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "orbit"; propertyName = "program"; value = "200" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "fusion"; attribute = "motorMode"; value = "251" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "orbit"; attribute = "program"; value = "200" }
             // Kept: an ordinary option on the same channels.
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "fusion"; propertyName = "motorMode"; value = "151" }
-            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "orbit"; propertyName = "program"; value = "100" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "fusion"; attribute = "motorMode"; value = "151" }
+            DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "orbit"; attribute = "program"; value = "100" }
             // A typed MAC strobe row past its clamp, in the reset band — and an open one, kept.
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; propertyName = "strobe"; value = "210" }
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; propertyName = "strobe"; value = "35" }
+            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "210" }
+            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "35" }
             stripCommandRows(project)
         }
         assertEquals(4, stripped)

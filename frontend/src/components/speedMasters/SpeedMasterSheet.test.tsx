@@ -57,7 +57,7 @@ const BANK: SpeedMaster[] = [
   m(1, { referenceCount: 14, notes: 'The desk tempo' }),
   m(2, { followNum: 1, followDen: 2, usage: 'colour', referenceCount: 6 }),
   m(3, { bpm: 96, usage: 'position' }),
-  m(4, { followNum: 1, followDen: 1, usage: 'dimmer' }),
+  m(4, { followNum: 1, followDen: 1, usage: 'intensity' }),
   m(5, { bpm: 60 }),
   m(6, { followNum: 1, followDen: 2, followTargetUuid: U(3) }),
 ]

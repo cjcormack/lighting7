@@ -489,7 +489,7 @@ class LookRecordTest : RouteIntegrationTest() {
                 look = DaoLook[lookId]
                 targetType = "fixture"
                 targetKey = "hex-2"
-                propertyName = "dimmer"
+                attribute = "dimmer"
                 value = "80"
                 sortOrder = 9
             }

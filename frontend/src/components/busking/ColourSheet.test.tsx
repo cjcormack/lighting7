@@ -22,7 +22,7 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
 const groupList = vi.hoisted(() => () => ({
-  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] })),
+  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] })),
 }))
 vi.mock('sonner', () => ({ toast }))
 
@@ -129,7 +129,7 @@ import { ColourSheet, planColourWrites, writeTargetsOf } from './ColourSheet'
 const groupOf = (name: string, memberCount: number): BuskingTarget => ({
   type: 'group',
   name,
-  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
 })
 /** Mixed: par-1 (RGB), par-2 (RGBW) and a dimmer-only head. */
 const group = groupOf('Front wash', 3)

@@ -87,7 +87,7 @@ function moveEarlier<T>(list: readonly T[], index: number): T[] {
 }
 
 /**
- * Palette Steps' `palettes`: generic value palettes, in step order, by reference (`tmpl:{uuid}`), so
+ * Palette Steps' `palettes`: generic value palettes, in step order, by reference (`pal:{uuid}`), so
  * retuning a palette moves the running steps. The colour list's picker for any family: on an effect
  * palette only that palette's [family] is offered, once a palette is in the list only its family, and
  * on a running effect only the palettes naming the property it drives. A palette may appear more
