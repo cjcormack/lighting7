@@ -42,6 +42,25 @@ object EffectSuppression {
     }
 
     /**
+     * Why [effect] does not paint `(fixtureKey, propertyName)`, or null when it does: [isSuppressed]'s
+     * two reasons and [BlindHold], asked in [KeyStackLayer.HeldBackReason]'s order, so the reason never
+     * disagrees with the answer the compose pass acts on. Read by the property-stack read and the sampler.
+     */
+    fun heldBackReason(
+        held: Map<String, Set<String>>,
+        blind: Boolean,
+        fixtureKey: String,
+        propertyName: String,
+        effect: FxInstance,
+        isLayerStomped: (FxInstance, String, String) -> Boolean,
+    ): KeyStackLayer.HeldBackReason? = when {
+        isLayerStomped(effect, fixtureKey, propertyName) -> KeyStackLayer.HeldBackReason.STOMP
+        heldBackByProgrammer(held, fixtureKey, propertyName, effect.priority) -> KeyStackLayer.HeldBackReason.PROGRAMMER
+        BlindHold.holds(blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
+        else -> null
+    }
+
+    /**
      * The programmer half alone: the programmer holds `(fixtureKey, propertyName)` in [held], so an
      * effect at [priority] must not paint over it — unless it sits in the programmer priority band,
      * whose effects modulate *on top of* programmer values rather than fighting them.
