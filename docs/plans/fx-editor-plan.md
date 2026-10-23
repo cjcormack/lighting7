@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; session 2 of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 2 and 3a of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -416,7 +416,7 @@ Why each gate is where it is:
   N-shot ends behave per clock as before; once 1a has landed, the parity test gains a mixed pair.
 - **Docs**: the corrected §"Beat ↔ Wall-Clock interaction"; `FU-PERF-FRAME-TXN-UNIFY` to Completed.
 
-### Session 3a: the band and Stack (backend)
+### Session 3a: the band and Stack (backend) — done, `4e01c253`
 
 **Gate: none.** Best landed before terminology session 5.
 
