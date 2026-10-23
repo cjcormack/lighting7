@@ -49,7 +49,7 @@ export function usageLabel(usage: string | null | undefined): string | null {
 /** One-line description for the usage select, so the sheet says what routing *does*. */
 export function usageOptionLabel(usage: SpeedMasterUsage): string {
   const label = usageLabel(usage) ?? usage
-  return usage === 'position' ? `${label} / movement effects` : `${label} effects`
+  return usage === 'position' ? `${label} / movement FX` : `${label} FX`
 }
 
 /** A follow ratio as the server stores it: two positive integers, never a float. */

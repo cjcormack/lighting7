@@ -14,7 +14,7 @@ import type { CellOwnershipSource } from './useRowOwnership'
 export const LEGEND_GLOSS: Record<CellOwnershipSource, string> = {
   programmer: 'You — Record takes this',
   cue: 'Cue',
-  effect: 'Effect runs here',
+  effect: 'FX runs here',
   parked: 'Parked',
   baseline: 'Nothing asserts it',
 }
@@ -28,7 +28,7 @@ export const LENS_HELD_GLOSS = 'Held back by a value above it, a stomp or Blind'
  *
  * The legend is a 22px footer since the space plan's session 1, so it has one line and no wrap.
  * `LEGEND_GLOSS` is what an operator needs the *first* time; this is what fits once they know it,
- * and the two differ only where a word earns a sentence — "You — Record takes this", "Effect runs
+ * and the two differ only where a word earns a sentence — "You — Record takes this", "FX runs
  * here". The rest are
  * the same string in both maps on purpose: a short form invented for its own sake would be a
  * second vocabulary for one idea. The long form is still one hover away at every width.
@@ -36,7 +36,7 @@ export const LENS_HELD_GLOSS = 'Held back by a value above it, a stomp or Blind'
 export const LEGEND_SHORT: Record<CellOwnershipSource, string> = {
   programmer: 'You',
   cue: 'Cue',
-  effect: 'Effect',
+  effect: 'FX',
   parked: 'Parked',
   baseline: 'Nothing asserts it',
 }

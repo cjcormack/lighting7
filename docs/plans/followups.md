@@ -37,7 +37,8 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-SPEED-RATEMASTER-STATEFUL`](#fu-speed-ratemaster-stateful) | Trigger | Speed | a stateful wall-clock effect wants a rate master |
 | [`FU-SPEED-PER-ATTRIBUTE`](#fu-speed-per-attribute) | Trigger | Speed | a composite needs split tempos |
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
-| [`FU-FX-SIZE-OVER-100`](#fu-fx-size-over-100) | Trigger | FX | an operator wants an effect bigger than it was written |
+| [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
+| [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
 | [`FU-FX-KEYSTACK-STACK-SIZE`](#fu-fx-keystack-stack-size) | Trigger | FX | an operator misreads a property's stack under a stack below full |
 | [`FU-FX-PRESS-FADE-CLIENT`](#fu-fx-press-fade-client) | Ready | FX | — |
 | [`FU-FX-VALUE-FADE-UNDER-EFFECT`](#fu-fx-value-fade-under-effect) | Trigger | FX | an operator wants a value and the effect over it to fade together on a programmer gesture |
@@ -473,24 +474,41 @@ differently named parameter on each.
 
 ---
 
-### `FU-FX-SIZE-OVER-100`
+### `FU-FX-AMPLITUDE`
 
-**Size above 100 %** · Trigger · effects plan session 1 (§9, §10), 2026-10-15
+**An FX's swing, scaled about its centre** · Trigger · terminology plan session 2 (§9), 2026-10-23
 
-Size (D2) stops at 100 %: the weight `out = before + (blended − before) × w` is clamped to `[0, 1]`
-(`FxInstance.weight`), and every write boundary refuses a size above 1
-(`EffectSpecCoercion.Strict.sizeProblem`). MagicQ goes to 800 % and Eos to 2000 % per instance, which
-makes an effect bigger than it was written — a wider circle, a deeper breathe — rather than weighing
-it over what is underneath.
+Amount (terminology plan D2, the old Size) is a mix, not an amplitude: the weight
+`out = before + (blended − before) × w` is clamped to `[0, 1]` (`FxInstance.weight`), and every write
+boundary refuses an amount above 1 (`EffectSpecCoercion.Strict.sizeProblem`). MagicQ's Size goes to
+800 % and Eos's to 2000 % per instance, which makes an FX bigger than it was written — a wider circle,
+a deeper sine — rather than weighing it over what is underneath.
 
-Above 1 the formula extrapolates past the effect (`before + 2 × (blended − before)`), which is a
-different meaning from "more of the effect": a Replace dimmer at 200 % would overshoot its own high,
-clamped at 255. The honest version scales the effect's *amplitude about its own centre* — a second
-operation beside the weight, per effect kind (a circle's radius, a sine's depth) — which is the
-declined *amplitude 0–200 %* of the plan's Question 2.
+Letting Amount pass 1 would extrapolate past the FX (`before + 2 × (blended − before)`): a Replace
+dimmer at 200 % overshoots its own high and clamps at 255. The honest version is a second control
+beside Amount that scales the FX's swing about its own centre, per FX kind (a circle's radius, a
+sine's depth, a sweep's range), stored as its own field. It absorbs `FU-FX-SIZE-OVER-100`.
 
-**Trigger**: an operator wants an effect bigger than it was written and the effect's own parameters
-(a radius, a range) are not the way they want to reach it.
+**Trigger**: an operator wants an FX bigger than it was written, and its own parameters (a radius, a
+range) are not how they want to reach it.
+
+---
+
+### `FU-FX-PER-STEP-TIMING`
+
+**Timing *Per step*: a longer list runs longer** · Trigger · terminology plan session 2 (§9), 2026-10-23
+
+Timing offers *Per cycle* (the Cycle is the FX's whole length) and *Per head* (`stepTiming`: the
+Cycle times `distinctSlots`, `docs/fx-engineering.md` §"Step Timing"). MagicQ's Timing also has
+*Per Step*, its default: each step of the FX takes the Cycle, so a Palette Steps or Colour Cycle with
+five entries runs five Cycles where one with two runs two. Here adding an entry squeezes the same
+cycle into more steps.
+
+The shape: a third value of the stored timing (`CYCLE` / `HEAD` / `STEP` once session 4 stores it as
+an enum), read by the step FX as a multiplier of their entry count, and a third option on the Timing
+segment.
+
+**Trigger**: an operator expects a longer list to run slower and finds each step shorter instead.
 
 ---
 
@@ -3063,6 +3081,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
 
 ### 2026-10
 
+- `FU-FX-SIZE-OVER-100` — folded into `FU-FX-AMPLITUDE` (terminology plan session 2).
 - `FU-SLOT-LOOK-ELIGIBILITY` — retired: a Look lands whole, so a cue slot takes any Look, and one
   none of whose fixtures is patched goes on, lands nothing and lights its tile, as a cue does;
   `CUE_SLOT_LOOK_NEEDS_SELECTION` and `LOOK_NO_TARGETS` are gone (absolute-looks plan session 2).

@@ -124,7 +124,7 @@ function FixturesContainer({ projectId }: { projectId: number }) {
           onValueChange={(value) => value && setViewMode(value as FixtureViewMode)}
           className="shrink-0"
         >
-          <ToggleGroupItem value="properties" aria-label="Show properties" title="Properties">
+          <ToggleGroupItem value="properties" aria-label="Show attributes" title="Attributes">
             <Settings2 className="h-4 w-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">

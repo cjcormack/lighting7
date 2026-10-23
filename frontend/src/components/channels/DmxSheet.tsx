@@ -774,7 +774,7 @@ export function DmxSheet({
           [
             ['programmer', 'You'],
             ['cue', 'Cue'],
-            ['effect', 'Effect'],
+            ['effect', 'FX'],
             ['parked', 'Parked'],
           ] as const
         ).map(([source, name]) => (

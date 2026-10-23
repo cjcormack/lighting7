@@ -159,7 +159,7 @@ describe('LookSheet', () => {
     draw()
     expect(row(2)).toHaveTextContent('Intensity')
     expect(row(2)).toHaveTextContent('Position')
-    expect(row(1)).toHaveTextContent('1 fx · effects follow the layer')
+    expect(row(1)).toHaveTextContent('1 FX · FX follow the layer')
     // Notes is the one value cell; every other column is a read-out and takes no selection.
     expect(row(2).querySelector('[data-cell="notes"] button')).not.toBeNull()
     expect(row(2).querySelector('[data-cell="families"]')).toBeNull()
@@ -317,7 +317,7 @@ describe('LookSheet', () => {
 describe('describeLookContents', () => {
   it('says what a Look covers in one line, the effect count folded in', () => {
     expect(describeLookContents(LOOKS[3])).toBe('8 fixtures · 8 rows')
-    expect(describeLookContents(look(5, { effectCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 fx')
+    expect(describeLookContents(look(5, { effectCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 FX')
     expect(describeLookContents(look(6, { targetCount: 0, effectCount: 0 }))).toBe('Empty')
     // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10).
     expect(

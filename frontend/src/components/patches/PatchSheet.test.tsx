@@ -357,7 +357,7 @@ describe('PatchSheet', () => {
     draw({ rows: [rows[0], rows[3], rows[1], rows[2]] })
     dragAddresses(0, 2)
     expect(screen.getByText('3 cells')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
     const from = await screen.findByLabelText('From')
     fireEvent.change(from, { target: { value: '300' } })
     // Visible order is PAR 1 (6), Bar SL (18), PAR 2 (6): 300, 306, 324.

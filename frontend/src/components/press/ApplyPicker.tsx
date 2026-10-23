@@ -216,7 +216,7 @@ export function ApplyPicker({
       for (const look of all) {
         const reason =
           lookOwn && look.hasDeferredEffects
-            ? 'its effects take the selection — select fixtures first'
+            ? 'its FX take the selection — select fixtures first'
             : lookOutsideMaskReason(look.families, mask)
         if (reason == null) inside.push(look)
         else outside.push({ look, reason })
@@ -245,7 +245,7 @@ export function ApplyPicker({
       { key: 'per-fixture', label: 'Per fixture', caption: 'name their own heads', items: palettes(inside.filter((t) => !t.isGeneric)) },
       {
         key: 'effects',
-        label: 'Effects',
+        label: 'FX',
         caption: 'one running instance each',
         items: [...palettes(inside.filter((t) => t.kind === 'effect')), { kind: 'bare' as const }],
       },
@@ -364,13 +364,13 @@ export function ApplyPicker({
                       key="bare"
                       type="button"
                       data-picker-bare-effects
-                      title="A library effect over the selection — one Local effect, taking these heads off the family’s others"
+                      title="A library FX over the selection — one Local FX, taking these heads off the family’s others"
                       onClick={() => setEffectsView(true)}
                       className={cn(padClass('none'), 'border-dashed')}
                     >
                       <span className="flex items-center gap-1.5">
                         <Plus className={EFFECT_GLYPH_CLASS} />
-                        <PadName presence="none">Effect…</PadName>
+                        <PadName presence="none">FX…</PadName>
                       </span>
                       <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">from the library</span>
                     </button>
@@ -440,7 +440,7 @@ export function ApplyPicker({
 
   const title =
     shown === 'effects'
-      ? 'Effects'
+      ? 'FX'
       : library === 'looks'
         ? 'Looks'
         : family != null
@@ -680,7 +680,7 @@ function LookPad({
           </span>
           <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
             {look.families.map((f) => FAMILY_LABELS[f].singular).join(' · ')}
-            {look.effectCount > 0 && ` · ${look.effectCount} effect${look.effectCount === 1 ? '' : 's'}`}
+            {look.effectCount > 0 && ` · ${look.effectCount} FX`}
           </span>
           <PadReason reason={reason} />
           <PadDot presence={presence} />
@@ -817,7 +817,7 @@ function EffectsArm({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-2">
         {target == null ? (
-          <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">Select the heads the effect should drive first.</p>
+          <p className="px-0.5 py-6 text-center text-xs text-muted-foreground">Select the heads the FX should drive first.</p>
         ) : cue != null ? (
           <div className="pt-1">
             <FxPicker
@@ -843,7 +843,7 @@ function EffectsArm({
           <div className="flex flex-col gap-2 pt-1">
             <Button variant="ghost" size="sm" className="h-7 self-start gap-1 px-1.5 text-xs" onClick={() => setEditing(false)}>
               <ChevronLeft className="size-3.5" />
-              Effects
+              FX
             </Button>
             <FxEditor
               key={`${live.id}:${live.effectType}`}
@@ -874,7 +874,7 @@ function EffectsArm({
         {palettes.length > 0 && !(editing && live != null) && (
           <section data-picker-section="effect-palettes">
             <div className="flex items-center gap-2 px-0.5 pt-3 pb-1.5">
-              <EditorLabel className="whitespace-nowrap">Effect palettes</EditorLabel>
+              <EditorLabel className="whitespace-nowrap">FX palettes</EditorLabel>
               <span className="text-[10px] text-muted-foreground">a layer tracking the palette</span>
             </div>
             <div className="grid grid-cols-[repeat(auto-fill,minmax(110px,1fr))] gap-2">

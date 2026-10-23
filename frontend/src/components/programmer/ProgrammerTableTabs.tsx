@@ -218,7 +218,7 @@ function countSentence(table: ProgrammerTable, count: number): string {
     case 'stack':
       return `${count} layer${count === 1 ? '' : 's'}`
     case 'fx':
-      return `${count} effect${count === 1 ? '' : 's'} running`
+      return `${count} FX running`
     case 'scenery':
       return `${count} piece${count === 1 ? '' : 's'} of scenery held`
     default:

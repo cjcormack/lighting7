@@ -23,7 +23,7 @@ function draw(openFan: (() => void) | null, heads = 3, onOpened = vi.fn()) {
   return onOpened
 }
 
-const button = () => screen.getByRole('button', { name: 'Spread…' })
+const button = () => screen.getByRole('button', { name: 'Fan…' })
 
 afterEach(() => {
   cleanup()
@@ -42,7 +42,7 @@ describe('PositionSpreadTool', () => {
 
   it('is not drawn where nothing can open a fan', () => {
     draw(null)
-    expect(screen.queryByRole('button', { name: 'Spread…' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Fan…' })).toBeNull()
   })
 
   it('refuses one head, Output and a palette layer, and stays live in a Look layer', () => {

@@ -254,8 +254,8 @@ export function SpeedMasterDetailSheet({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              A busked effect with no explicit speed master follows the master whose usage
-              matches its family. One master per usage — unmatched effects stay on Master 1.
+              A busked FX with no explicit speed master follows the master whose usage
+              matches its family. One master per usage — unmatched FX stay on Master 1.
             </p>
           </div>
 
@@ -407,8 +407,8 @@ export function SpeedMasterDetailSheet({
           {master.referenceCount > 0 && (
             <p className="text-xs text-muted-foreground">
               {master.referenceCount} saved{' '}
-              {master.referenceCount === 1 ? 'reference' : 'references'} — look effects, cue
-              effects and per-layer overrides that follow this master.
+              {master.referenceCount === 1 ? 'reference' : 'references'} — look FX, cue
+              FX and per-layer overrides that follow this master.
             </p>
           )}
 

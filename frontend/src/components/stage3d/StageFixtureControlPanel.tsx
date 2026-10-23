@@ -57,7 +57,7 @@ export function StageFixtureControls({ patchKey, projectId, canAim, onAimOnPlan,
       onClose={onClose}
       form={form}
       modal={false}
-      description="The fixture's values, its channels, its focus and its effects"
+      description="The fixture's values, its channels, its focus and its FX"
     >
       {shown != null ? (
         <StageFixtureSheet patchKey={shown} projectId={projectId} canAim={canAim} host="phone" />

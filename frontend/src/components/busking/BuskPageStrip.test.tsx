@@ -121,7 +121,7 @@ describe('the pad row', () => {
     )
     expect(order).toEqual([
       'Ballads', 'Dance', 'Page: Own',
-      'Spread…', 'Locate', 'Highlight',
+      'Fan…', 'Locate', 'Highlight',
       'PAR 1 · 1 head', 'Colour', 'Targets: This window', 'Focus here',
     ])
     // The label is the row's first thing, and folds by its rung.
@@ -129,7 +129,7 @@ describe('the pad row', () => {
     expect(label.className).toContain(PAD_LABEL_CLASS)
     expect(row.querySelector('[data-pad-row-tabs]')!.firstElementChild).toBe(label)
     // No Cells menu, no steps, no Clear: those act on tiles.
-    expect(within(row).queryByRole('button', { name: /^Cells:/ })).toBeNull()
+    expect(within(row).queryByRole('button', { name: /^Elements:/ })).toBeNull()
     expect(within(row).queryByRole('button', { name: 'Clear' })).toBeNull()
     expect(within(row).queryByRole('button', { name: /along the rig/ })).toBeNull()
     // The controls end the state group.
@@ -160,7 +160,7 @@ describe('the pad row', () => {
       )
       expect(order).toEqual([
         'Ballads', 'Dance', 'Page: Own',
-        'Spread…', 'Locate', 'Highlight',
+        'Fan…', 'Locate', 'Highlight',
         'PAR 1 · 1 head', 'Colour', 'Blind', 'Targets: This window', 'Focus here',
       ])
       cleanup()
@@ -200,7 +200,7 @@ describe('the pad row', () => {
   it('presses the host’s handlers from the three verbs, with the band’s aria-labels', () => {
     const mocks = verbs()
     draw({ pads: padsOf(mocks.v) })
-    fireEvent.click(screen.getByRole('button', { name: 'Spread…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fan…' }))
     expect(mocks.spread).toHaveBeenCalledTimes(1)
     fireEvent.click(screen.getByRole('button', { name: 'Locate' }))
     expect(mocks.locate).toHaveBeenCalledTimes(1)
@@ -210,7 +210,7 @@ describe('the pad row', () => {
     fireEvent.pointerUp(highlight)
     expect(mocks.release).toHaveBeenCalledTimes(1)
     // Each verb's word folds by the pad row's own rung, not the rig row's.
-    for (const name of ['Spread…', 'Locate', 'Highlight']) {
+    for (const name of ['Fan…', 'Locate', 'Highlight']) {
       const word = [...screen.getByRole('button', { name }).querySelectorAll('span')].find((el) => el.textContent === name)!
       expect(word.className).toBe(PAD_VERB_WORD_CLASS)
     }

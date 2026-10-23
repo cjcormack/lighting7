@@ -9,7 +9,7 @@ import type { BuskingTarget } from './buskingTypes'
  * The busk Effects tab (fixture-fx-sheets plan D20, apply-model plan §4.5): what runs on the
  * selection — a pad's effect and the operator's own, editable, and a cue's, read-only — each
  * editable row opening the live editor that follows the busk selection (the split), a pad's row
- * marked *edited* while its running instance differs from the template's effect; *+ Effect…* opens
+ * marked *edited* while its running instance differs from the template's effect; *+ FX…* opens
  * the one picker's effects arm on the busk pair.
  */
 
@@ -128,7 +128,7 @@ describe('EffectsSheet', () => {
   it('marks a pad’s instance edited while it differs from its palette, and only then', () => {
     state.effects = [padCircle('80'), ownPulse]
     render(<EffectsSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} families={null} />)
-    expect(screen.getByText('Running on 1 head · 2 effects')).toBeTruthy()
+    expect(screen.getByText('Running on 1 head · 2 FX')).toBeTruthy()
     const pad = document.querySelector('[data-effect-row="21"]') as HTMLElement
     expect(within(pad).getByText('edited')).toBeTruthy()
     expect(within(pad).getByText(/pad · Big circle/)).toBeTruthy()
@@ -191,7 +191,7 @@ describe('EffectsSheet', () => {
     state.effects = [washChase]
     render(<EffectsSheet projectId={1} selectedTargets={new Map()} families={null} />)
     expect(screen.getByText(/Select heads on the rig/)).toBeTruthy()
-    expect(screen.getByRole('button', { name: /Effect…/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /FX…/ })).toBeDisabled()
     cleanup()
     render(<EffectsSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} families={null} />)
     expect(screen.getByText(/Nothing runs on the selection/)).toBeTruthy()
@@ -205,7 +205,7 @@ describe('EffectsSheet', () => {
     expect(within(row).queryByRole('button')).toBeNull()
   })
 
-  it('opens + Effect… as the one picker’s effects arm on the busk pair, writing Local', () => {
+  it('opens + FX… as the one picker’s effects arm on the busk pair, writing Local', () => {
     state.effects = []
     const spots: BuskingTarget = { type: 'group', name: 'Spots', group: { name: 'Spots', memberCount: 2 } } as BuskingTarget
     render(
@@ -215,7 +215,7 @@ describe('EffectsSheet', () => {
         families={['INTENSITY']}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: /Effect…/ }))
+    fireEvent.click(screen.getByRole('button', { name: /FX…/ }))
     expect(screen.getByTestId('apply-picker')).toBeTruthy()
     expect(picker.props).toMatchObject({
       library: 'effects',

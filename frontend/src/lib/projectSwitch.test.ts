@@ -132,12 +132,12 @@ describe('the confirmation', () => {
   it("names the incoming show's parks", () => {
     expect(switchConfirmOf(show(26, 'TCH Test', { parks: 4 }), current, NOTHING_SAFE)).toEqual({
       title: 'Put TCH Test on the rig?',
-      body: 'Sleeping Beauty’s cues, programmer and effects stop, and every channel goes dark except those TCH Test parks (4).',
+      body: 'Sleeping Beauty’s cues, programmer and FX stop, and every channel goes dark except those TCH Test parks (4).',
       lines: [],
       confirmLabel: 'Put TCH Test on the rig',
     })
     expect(switchConfirmOf(show(26, 'TCH Test', { parks: 0 }), current, NOTHING_SAFE).body).toBe(
-      'Sleeping Beauty’s cues, programmer and effects stop, and every channel goes dark: TCH Test parks none.',
+      'Sleeping Beauty’s cues, programmer and FX stop, and every channel goes dark: TCH Test parks none.',
     )
     // A desk older than the count says the rule without it.
     expect(switchConfirmOf(show(26, 'TCH Test'), current, NOTHING_SAFE).body).toMatch(/except those TCH Test parks\.$/)

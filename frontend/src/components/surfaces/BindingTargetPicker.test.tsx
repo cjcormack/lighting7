@@ -180,7 +180,7 @@ describe('BindingTargetPicker record targets', () => {
   it.each([
     ['Busk window — focus', 'Window', { type: 'buskFocusSet', windowName: 'Screen 2', focus: 'pads' } as BindingTarget],
     ['Busk window — sheet', 'Window', { type: 'buskSheetToggle', windowName: 'Screen 2' } as BindingTarget],
-    ['Selection — cells', 'Mode', { type: 'selectionCells', mode: 'ODD' } as BindingTarget],
+    ['Selection — elements', 'Mode', { type: 'selectionCells', mode: 'ODD' } as BindingTarget],
   ])('offers %s and renders its body (busk-further plan D14)', (kindLabel, fieldLabel, value) => {
     renderPicker(false, value)
     expect(screen.getByText(kindLabel)).toBeInTheDocument()
@@ -208,9 +208,9 @@ describe('BindingTargetPicker record targets', () => {
     expect(screen.getByText(/wrapping at the ends/)).toBeInTheDocument()
   })
 
-  it("offers a stack's FX size on a fader, and a change of stack lets the old stack's uuid go", () => {
+  it("offers a stack's FX amount on a fader, and a change of stack lets the old stack's uuid go", () => {
     const onChange = renderPicker(true, { type: 'stackEffectSize', stackId: 4, stackUuid: 'uuid-act-1' })
-    expect(screen.getByText('Cue stack — FX size')).toBeInTheDocument()
+    expect(screen.getByText('Cue stack — FX amount')).toBeInTheDocument()
     expect(screen.getByText('Act 1')).toBeInTheDocument()
     fireEvent.click(screen.getAllByRole('combobox')[1]!)
     fireEvent.click(screen.getByRole('option', { name: 'Act 2' }))

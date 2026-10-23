@@ -355,8 +355,8 @@ export const navItems: NavItem[] = [
   {
     // `id` and path stay `fx-library`; the row says what the page lists.
     id: "fx-library",
-    label: "Effects",
-    keywords: ["fx library"],
+    label: "FX",
+    keywords: ["fx library", "effects"],
     icon: Sparkles,
     path: (p) => `/projects/${p}/fx-library`,
     pathMatch: "/fx-library",

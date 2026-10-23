@@ -132,7 +132,7 @@ describe('the Colour column over warm/cold white pairs', () => {
       />,
     )
     expect(await screen.findByRole('button', { name: /save as palette/i })).toBeEnabled()
-    fireEvent.click(screen.getByRole('button', { name: /spread/i }))
+    fireEvent.click(screen.getByRole('button', { name: /fan/i }))
     expect(onSpread).toHaveBeenCalledWith({ r: colour[0], g: colour[1], b: colour[2] })
   })
 

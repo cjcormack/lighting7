@@ -211,7 +211,7 @@ describe('ColourCell', () => {
     const onOpenChange = vi.fn()
     draw({ onSpread, resolutions: [RGBW], value: { kind: 'colour', isUniform: true, r: 10, g: 20, b: 30, w: 200, combinedCss: 'rgb(10, 20, 30)' } })
     expect(document.querySelector('[data-cell-editor-surface]')).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fan to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 10, g: 20, b: 30 })
     // The seed is RGB alone: the busk `SpreadSeed` shape, since a colour intent has no emitter component.
     expect(Object.keys(onSpread.mock.calls[0][0]).sort()).toEqual(['b', 'g', 'r'])
@@ -219,7 +219,7 @@ describe('ColourCell', () => {
     expect(onOpenChange).not.toHaveBeenCalled()
     cleanup()
     draw()
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
     cleanup()
     draw({ projectId: undefined })
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()

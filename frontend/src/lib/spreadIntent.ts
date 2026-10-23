@@ -10,7 +10,7 @@ import {
 } from './templateIntent'
 
 /**
- * The Spread tab's endpoints — **serialise only** (busk-further plan D9).
+ * The Fan tab's endpoints — **serialise only** (busk-further plan D9).
  *
  * A spread is two intents of one property's shape, a curve, an order, parts and an over-switch,
  * sent to `POST /programmer/spread`; the desk interpolates in the intent's own space and resolves
@@ -129,12 +129,12 @@ export const SPREAD_CURVES: readonly { id: SpreadCurve; label: string; hint: str
   { id: 'LINE', label: 'Line', hint: 'From at the first head, To at the last' },
   { id: 'MIRROR', label: 'Mirror', hint: 'From at the centre, To at both ends' },
   { id: 'ARROW', label: 'Arrow', hint: 'From at both ends, To at the centre' },
-  { id: 'WINGS', label: 'Wings', hint: 'Two fans meeting at the centre — To at each outer end, From in the middle' },
+  { id: 'WINGS', label: 'Mirror out', hint: 'Two fans meeting at the centre — To at each outer end, From in the middle' },
 ]
 
 /**
  * The orders the tab offers, each a `DistributionStrategy` name the desk resolves, worded as the
- * effect editor's Order (`lib/orderLabels.ts`) — and the one
+ * FX editor's Order (`lib/orderLabels.ts`) — and the one
  * the design draws that the desk has no order for. `Stage L→R` would be `POSITIONAL`, but
  * `SpreadPlan` feeds that strategy a head's *index* as its position, so it is rig order under
  * another name; the tab says so in a footnote under the row rather than offering it as something
@@ -145,12 +145,12 @@ export const SPREAD_ORDERS: readonly {
   label: string
   hint: string
 }[] = [
-  { id: 'LINEAR', label: orderLabel('LINEAR'), hint: 'Rig order: the rig’s rows and tiles, a group in member order, cells in element order' },
+  { id: 'LINEAR', label: orderLabel('LINEAR'), hint: 'Rig order: the rig’s rows and tiles, a group in member order, elements in element order' },
   { id: 'REVERSE', label: orderLabel('REVERSE'), hint: 'Rig order, the other way' },
   { id: 'CENTER_OUT', label: orderLabel('CENTER_OUT'), hint: 'From the centre outward: the two ends share a step' },
   { id: 'RANDOM', label: orderLabel('RANDOM'), hint: 'A shuffle of the rig order; press again for another' },
-  { id: null, label: 'Stage L→R', hint: 'The desk has no stage order yet — its POSITIONAL strategy reads rig index, which is Rig again' },
+  { id: null, label: 'Stage L→R', hint: 'The desk has no stage order yet — its POSITIONAL strategy reads rig index, which is Normal again' },
 ]
 
-/** The parts presets; `N…` beyond them is a typed number. */
+/** The Runs presets; `N…` beyond them is a typed number. */
 export const SPREAD_PARTS_PRESETS: readonly number[] = [1, 2, 3, 4]

@@ -106,7 +106,7 @@ describe('the library palette', () => {
     draw()
     await screen.findByText('Storm Wash')
     expect(screen.getByText('10 fixtures · 3 values · bound')).toBeTruthy()
-    expect(screen.getByText('8 fixtures · 2 effects')).toBeTruthy()
+    expect(screen.getByText('8 fixtures · 2 FX')).toBeTruthy()
   })
 
   it('filters by kind', async () => {

@@ -103,7 +103,7 @@ const KIND_SWATCH: Record<TimelineKind, string> = {
   effect: 'bg-violet-300',
   scenery: 'bg-amber-300',
 }
-const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', effect: 'Effects', scenery: 'Scenery' }
+const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', effect: 'FX', scenery: 'Scenery' }
 /** The tracked state's line down a scenery column. */
 const TRACK_LINE_CLASS = 'pointer-events-none absolute inset-y-[-1px] left-1/2 -ml-px w-0.5 bg-amber-300/40'
 
@@ -1137,7 +1137,7 @@ function TimelineLegend({ cues, markers, columns }: { cues: number; markers: num
       {(['look', 'palette', 'effect'] as const).map((kind) => (
         <span key={kind} className="inline-flex items-center gap-1.5">
           <LegendSwatch className={cn('relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-0.5', RUN_CLASS[kind])} />
-          {kind === 'effect' ? 'Effect run' : kind === 'look' ? 'Look' : 'Palette'}
+          {kind === 'effect' ? 'FX run' : kind === 'look' ? 'Look' : 'Palette'}
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">

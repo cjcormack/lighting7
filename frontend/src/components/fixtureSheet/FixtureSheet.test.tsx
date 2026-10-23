@@ -259,8 +259,8 @@ describe('FixtureSheet — clearing', () => {
       fireEvent.click(release)
     })
     expect(clearTarget).toHaveBeenCalledWith('fixture', 'spot-3', 1500)
-    expect(toast.success).toHaveBeenCalledWith('Released 2 values and 1 effect on Spot 3')
-    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('1 effect left running — it drives heads outside this fixture'))
+    expect(toast.success).toHaveBeenCalledWith('Released 2 values and 1 FX on Spot 3')
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringContaining('1 FX left running — it drives heads outside this fixture'))
   })
 })
 
@@ -349,7 +349,7 @@ describe('FixtureSheet — the shape', () => {
     const confirm = vi.fn(() => false)
     vi.stubGlobal('confirm', confirm)
     render(<FixtureSheet fixture={fixture} host="popup" />)
-    fireEvent.click(screen.getByRole('button', { name: 'Open the effects' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the FX' }))
     expect(screen.getByText(/via Front wash/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Stop Pulse' }))
     expect(confirm).toHaveBeenCalledWith('Stop Pulse on every fixture in Front wash?')
@@ -362,7 +362,7 @@ describe('FixtureSheet — the shape', () => {
   it('opens + Effect as the picker in the tray, on the family of the row open on the sheet', () => {
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     fireEvent.click(screen.getByRole('button', { name: 'Open the position editor' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
     expect(within(tray).getByTestId('fx-picker')).toBeTruthy()
     expect(picker.props).toMatchObject({ target: { type: 'fixture', fixture: SPOT }, initialFamily: 'POSITION', preferredProperty: 'position' })
@@ -388,7 +388,7 @@ describe('FixtureSheet — the shape', () => {
     expect(screen.getByTitle('Circle on position — held · Blind — edit').hasAttribute('data-held-blind')).toBe(true)
     expect(screen.getByTitle('Pulse on dimmer — the cue’s').hasAttribute('data-held-blind')).toBe(false)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Open the effects' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Open the FX' }))
     const circle = document.querySelector('[data-effect-row="5"]') as HTMLElement
     const pulse = document.querySelector('[data-effect-row="9"]') as HTMLElement
     expect(within(circle).getByText('held · Blind')).toBeTruthy()
@@ -479,7 +479,7 @@ describe('FixtureSheet — the phone host', () => {
     expect(field.className).toContain('text-base')
     expect(within(row('dimmer')).getByRole('button', { name: 'Clear your dimmer' }).className).toContain('size-8')
     expect(screen.getByRole('button', { name: /^Circle/ }).className).toContain('h-8')
-    expect(screen.getByRole('button', { name: 'Effect' }).className).toContain('h-8')
+    expect(screen.getByRole('button', { name: 'FX' }).className).toContain('h-8')
     unmount()
 
     render(<FixtureSheet fixture={SPOT} host="stage" />)

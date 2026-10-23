@@ -100,7 +100,7 @@ export function describeTarget(target: BindingTarget): string {
     case "grandMasterFader":
       return "Grand Master fader"
     case "stackEffectSize":
-      return `FX size · stack ${target.stackId}`
+      return `FX amount · stack ${target.stackId}`
     case "setBank":
       return `Bank ${target.bank} (${target.deviceTypeKey})`
     // The uuid is not resolved to a name here: this is a pure function with no access to the
@@ -168,7 +168,7 @@ export function describeTarget(target: BindingTarget): string {
     case "selectionPrev":
       return "Selection · prev"
     case "selectionCells":
-      return `Cells · ${SUBSELECT_MODE_LABELS[target.mode]}`
+      return `Elements · ${SUBSELECT_MODE_LABELS[target.mode]}`
     // A row this build cannot decode, kept by the tolerant decode so it can be rebound rather than
     // silently dropped. Naming the discriminator is the only useful thing to say about it.
     case "unknown":

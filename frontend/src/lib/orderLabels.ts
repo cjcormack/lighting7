@@ -1,19 +1,21 @@
 /**
  * The Order's words — the distribution strategy, renamed in the UI only (effects plan §3.1). One
- * vocabulary for every surface that names a strategy: the effect editor's Spread section, a Look's
- * or cue's effect summary (`getDistributionLabel`), a group's *Runs as* picker
- * (`DISTRIBUTION_STRATEGY_OPTIONS`) and the value Spread's order row (`SPREAD_ORDERS`). The stored
- * names are unchanged.
+ * vocabulary for every surface that names a strategy: the FX editor's Order, a Look's or cue's FX
+ * summary (`getDistributionLabel`), a group's *Runs as* picker (`DISTRIBUTION_STRATEGY_OPTIONS`)
+ * and the Fan's order row (`SPREAD_ORDERS`). The stored names are unchanged.
+ *
+ * `EDGES_IN` and `SPLIT` run the same offsets: Edges in reads *Centre in*, and Split keeps its own
+ * word until the two fold into one Order, so no two options share a label.
  *
  * It imports nothing, on purpose: `lib/spreadIntent.ts` reads it and must reach no client walk
  * (`spreadIntent.test.ts`), and `lib/spreadShape.ts` re-exports it.
  */
 
 export const ORDER_LABELS: Record<string, string> = {
-  LINEAR: 'Rig',
+  LINEAR: 'Normal',
   REVERSE: 'Reverse',
   CENTER_OUT: 'Centre out',
-  EDGES_IN: 'Edges in',
+  EDGES_IN: 'Centre in',
   SPLIT: 'Split',
   RANDOM: 'Random',
   PING_PONG: 'Ping-pong',

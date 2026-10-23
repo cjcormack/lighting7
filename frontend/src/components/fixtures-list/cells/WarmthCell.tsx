@@ -177,14 +177,14 @@ export const WarmthCell = memo(function WarmthCell({
                 size="sm"
                 className="h-7 text-xs"
                 disabled={onSpread == null}
-                aria-label="Spread to a second colour…"
-                title={onSpread == null ? 'No Spread panel to open from here' : 'Open Spread with this colour as From'}
+                aria-label="Fan to a second colour…"
+                title={onSpread == null ? 'No Fan panel to open from here' : 'Open Fan with this colour as From'}
                 onClick={() => {
                   setOpen(false)
                   onSpread?.({ r: value.r, g: value.g, b: value.b })
                 }}
               >
-                <Waves className="size-3.5" /> Spread…
+                <Waves className="size-3.5" /> Fan…
               </Button>
             </EditorFooter>
           )}

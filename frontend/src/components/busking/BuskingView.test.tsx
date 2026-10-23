@@ -516,12 +516,12 @@ describe('the busk view', () => {
       expect(padRow).not.toBeNull()
       expect(padRow.querySelector('[aria-label="Focus"]')).not.toBeNull()
       expect(within(padRow).getByRole('button', { name: 'Edit layout' })).toBeInTheDocument()
-      expect(within(padRow).getByRole('button', { name: 'Spread…' })).toBeInTheDocument()
+      expect(within(padRow).getByRole('button', { name: 'Fan…' })).toBeInTheDocument()
       expect(within(padRow).getByRole('button', { name: 'Locate' })).toBeInTheDocument()
       expect(within(padRow).getByRole('button', { name: 'Highlight' })).toBeInTheDocument()
       expect(padRow.querySelector('[data-pad-summary]')).toHaveTextContent('nothing selected')
       // No Cells menu, no steps, no Clear: those act on tiles, which are on the rig screen.
-      expect(within(padRow).queryByRole('button', { name: /^Cells:/ })).toBeNull()
+      expect(within(padRow).queryByRole('button', { name: /^Elements:/ })).toBeNull()
       expect(within(padRow).queryByRole('button', { name: 'Clear' })).toBeNull()
       // Back in Split the band carries the Focus control and the pad row is tabs only.
       act(() => setBuskFocus('split'))
@@ -529,7 +529,7 @@ describe('the busk view', () => {
       expect(screen.getByTestId('target-band')).toHaveAttribute('data-verbs', 'true')
       const splitRow = document.querySelector('[data-pad-row="split"]') as HTMLElement
       expect(splitRow.querySelector('[aria-label="Focus"]')).toBeNull()
-      expect(within(splitRow).queryByRole('button', { name: 'Spread…' })).toBeNull()
+      expect(within(splitRow).queryByRole('button', { name: 'Fan…' })).toBeNull()
       expect(splitRow.querySelector('[data-pad-summary]')).toBeNull()
     })
 

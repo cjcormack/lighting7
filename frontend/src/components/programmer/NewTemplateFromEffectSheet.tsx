@@ -170,14 +170,14 @@ export function NewTemplateFromEffectSheet({
           )}
 
           <p className="text-[11px] text-muted-foreground">
-            Keeps this effect&rsquo;s settings under a name, so a busk pad or a layer can run it on
-            whatever is selected. The effect running now is left exactly where it is — this is a
+            Keeps this FX&rsquo;s settings under a name, so a busk pad or a layer can run it on
+            whatever is selected. The FX running now is left exactly where it is — this is a
             copy into the library, so retuning the palette later will not move it.
           </p>
 
           {effect != null && (
             <div className="space-y-1.5">
-              <Label>Effect</Label>
+              <Label>FX</Label>
               <div className="flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-2 text-xs">
                 <span className="font-medium">{effect.effectType}</span>
                 {family != null && (
@@ -214,11 +214,11 @@ export function NewTemplateFromEffectSheet({
               menu item means the second case should be unreachable — said here anyway, because a
               disabled Create with no reason is the thing that teaches nobody. */}
           {effect != null && library == null && (
-            <p className="text-[11px] text-muted-foreground">Reading the effect library…</p>
+            <p className="text-[11px] text-muted-foreground">Reading the FX library…</p>
           )}
           {effect != null && library != null && entry == null && (
             <p className="text-[11px] text-destructive">
-              &ldquo;{effect.effectType}&rdquo; is not in this desk&rsquo;s effect library, so its
+              &ldquo;{effect.effectType}&rdquo; is not in this desk&rsquo;s FX library, so its
               category — and so the palette&rsquo;s family — cannot be read.
             </p>
           )}
@@ -229,7 +229,7 @@ export function NewTemplateFromEffectSheet({
           {step?.reason != null && <p className="text-[11px] text-muted-foreground">{step.reason}</p>}
           {entry != null && step == null && family == null && (
             <p className="text-[11px] text-destructive">
-              A “{category}” effect cannot be a palette — an effect palette is banked by family,
+              A “{category}” FX cannot be a palette — an FX palette is banked by family,
               and that category has none. It can live in a recorded look instead.
             </p>
           )}

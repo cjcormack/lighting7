@@ -230,18 +230,18 @@ export function FxTray({
           <>
             <button
               type="button"
-              aria-label="Back to the effects"
+              aria-label="Back to the FX"
               onClick={() => setAdding(false)}
               className="-ml-1.5 grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             >
               <ChevronLeft className="size-4" />
             </button>
-            <EditorLabel>Add an effect</EditorLabel>
+            <EditorLabel>Add an FX</EditorLabel>
             <span className="flex-1" />
           </>
         ) : (
           <>
-            <EditorLabel>Effects</EditorLabel>
+            <EditorLabel>FX</EditorLabel>
             <span className="font-mono text-[11px] text-muted-foreground">{effects.length > 0 ? effects.length : 'none'}</span>
           </>
         )}
@@ -297,14 +297,14 @@ export function FxTray({
               onClick={startAdding}
             >
               <Plus className="size-3" />
-              Effect
+              FX
             </Button>
           </>
         )}
         <button
           type="button"
           aria-expanded={open}
-          aria-label={open ? 'Fold the effects' : 'Open the effects'}
+          aria-label={open ? 'Fold the FX' : 'Open the FX'}
           onClick={() => setOpen((o) => !o)}
           className={cn(
             'grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground',
@@ -342,7 +342,7 @@ export function FxTray({
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-fx-tray-list>
           {effects.length === 0 && (
             <p className="px-2 py-3 text-xs text-muted-foreground">
-              {pick != null ? `No effects reach ${pick.noun}.` : `No effects on this ${target.type === 'group' ? 'group' : 'fixture'}.`}
+              {pick != null ? `No FX reach ${pick.noun}.` : `No FX on this ${target.type === 'group' ? 'group' : 'fixture'}.`}
             </p>
           )}
           {effects.map((e) => {
@@ -370,7 +370,7 @@ export function FxTray({
                   <div className="flex items-center gap-1.5 text-[12.5px] font-medium">
                     <span className={cn('size-[7px] shrink-0 rounded-full', e.isRunning ? 'bg-violet-500' : 'bg-muted-foreground')} />
                     {cue ? (
-                      <span className="min-w-0 truncate" data-read-only title="The cue’s effect — edit it in the cue">
+                      <span className="min-w-0 truncate" data-read-only title="The cue’s FX — edit it in the cue">
                         {e.effectType}
                       </span>
                     ) : (
@@ -427,7 +427,7 @@ export function FxTray({
                           // phone host a finger's height of hit area, as inline padding so the line
                           // itself does not grow.
                           className={cn('underline decoration-dotted underline-offset-2 hover:text-foreground hover:decoration-solid', finger && 'py-2.5')}
-                          title={`The cue’s effect — open ${cueName} to change it`}
+                          title={`The cue’s FX — open ${cueName} to change it`}
                           onClick={() => openCue(cueId)}
                         >
                           {home}

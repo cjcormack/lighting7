@@ -9,8 +9,8 @@ import {
 import { ORDER_LABELS } from '@/lib/orderLabels'
 
 /**
- * Holds the frontend's label tables to `docs/glossary.md` (terminology plan D17): every `done`
- * row's frontend locators must give the row's word. The `fx:`, `category:` and `usage:` locators
+ * Holds the frontend's label tables to `docs/glossary.md` (terminology plan D17): every `done` or
+ * `screen` row's frontend locators must give the row's word. The `fx:`, `category:` and `usage:` locators
  * are `GlossaryVocabularyTest`'s; the glossary's header says what each prefix reads.
  */
 
@@ -21,6 +21,10 @@ interface Row {
   status: string
   keys: string[]
 }
+
+/** `screen`: the screen says the word, the code still says *Was*. Both name keys. */
+const KEYED_STATUSES = new Set(['done', 'screen'])
+const STATUSES = [...KEYED_STATUSES, 'planned']
 
 const BACKEND_PREFIXES = new Set(['fx', 'category', 'usage'])
 const FRONTEND_PREFIXES = new Set(['src', 'ORDER_LABELS', 'EFFECT_CATEGORY_INFO', 'BLEND_MODE_OPTIONS', 'ELEMENT_MODE_OPTIONS'])
@@ -100,9 +104,19 @@ function sourceLabels(path: string, source: string): Set<string> {
   return labels
 }
 
+/**
+ * The words a `src:` locator must find for [word]: the word itself, or a segment's label and each of
+ * its options — `Timing: Per cycle | Per head` is *Timing*, *Per cycle* and *Per head*.
+ */
+function sourceWords(word: string): string[] {
+  if (!word.includes(' | ')) return [word]
+  const colon = word.indexOf(': ')
+  const label = colon >= 0 ? [word.slice(0, colon)] : []
+  return [...label, ...word.slice(colon >= 0 ? colon + 2 : 0).split(' | ')]
+}
+
 /** Whether [source] carries [word], or its plural in *s*, as a whole string literal or JSX text. */
-function sourceCarries(path: string, source: string, word: string): boolean {
-  const labels = sourceLabels(path, source)
+function sourceCarries(labels: ReadonlySet<string>, word: string): boolean {
   return labels.has(word) || labels.has(`${word}s`)
 }
 
@@ -111,7 +125,9 @@ async function problemAt(key: string, word: string): Promise<string | null> {
   if (key.startsWith('src:')) {
     const load = SOURCES[`/src/${key.slice(4)}`]
     if (load == null) return `${key} names no file, expected one carrying '${word}'`
-    return sourceCarries(key, await load(), word) ? null : `${key} has no string or JSX text '${word}'`
+    const labels = sourceLabels(key, await load())
+    const missing = sourceWords(word).filter((w) => !sourceCarries(labels, w))
+    return missing.length === 0 ? null : `${key} has no string or JSX text ${missing.map((w) => `'${w}'`).join(', ')}`
   }
   const label = labelAt(key)
   if (label === undefined) return `${key} names nothing, expected '${word}'`
@@ -136,11 +152,11 @@ function labelAt(key: string): string | undefined {
 const rows = parseGlossary(glossary)
 
 describe('docs/glossary.md', () => {
-  it('parses into rows with a known status, and a key exactly when done', () => {
+  it('parses into rows with a known status, and a key exactly when done or on screen', () => {
     expect(rows.length, 'too few glossary rows; has the table layout changed?').toBeGreaterThan(50)
     for (const row of rows) {
-      expect(['done', 'planned'], `${describeRow(row)}: status '${row.status}'`).toContain(row.status)
-      if (row.status === 'done') expect(row.keys.length, `${describeRow(row)} is done but names no key`).toBeGreaterThan(0)
+      expect(STATUSES, `${describeRow(row)}: status '${row.status}'`).toContain(row.status)
+      if (KEYED_STATUSES.has(row.status)) expect(row.keys.length, `${describeRow(row)} is ${row.status} but names no key`).toBeGreaterThan(0)
       else expect(row.keys, `${describeRow(row)} is planned but has keys`).toEqual([])
       for (const key of row.keys) {
         const prefix = prefixOf(key)
@@ -152,9 +168,9 @@ describe('docs/glossary.md', () => {
     }
   })
 
-  it("gives every done row's word at each of its frontend keys", async () => {
+  it("gives every done or screen row's word at each of its frontend keys", async () => {
     const problems: string[] = []
-    for (const row of rows.filter((r) => r.status === 'done')) {
+    for (const row of rows.filter((r) => KEYED_STATUSES.has(r.status))) {
       for (const key of row.keys.filter((k) => FRONTEND_PREFIXES.has(prefixOf(k)))) {
         const problem = await problemAt(key, row.word)
         if (problem != null) problems.push(`${describeRow(row)}: ${problem}`)

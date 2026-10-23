@@ -223,7 +223,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
             ? { target: { type: 'fixture', fixture }, elementFilter: filter }
             : {
                 reason:
-                  'An effect starts on all the heads, one head, or the odd, even or a half of them — pick one of those, or a head at a time',
+                  'An FX starts on all the elements, one element, or the odd, even or a half of them — pick one of those, or an element at a time',
               },
       nameOf: (key) => heads.find((h) => h.key === key)?.name,
       noun: one != null ? one.name : `these ${picked.length} heads`,
@@ -350,7 +350,7 @@ function FixtureValues({
           <PickFamilyGroups groups={headGroups} write={write} />
         </section>
       )}
-      {empty && <p className="px-3 py-3 text-sm text-muted-foreground">No properties available</p>}
+      {empty && <p className="px-3 py-3 text-sm text-muted-foreground">No attributes available</p>}
     </div>
   )
 }
@@ -392,7 +392,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
           ? { target: { type: 'group', group } }
           : one != null
             ? { target: { type: 'fixture', fixture: one.elementIndex == null ? one.fixture : headAsFixture(one.fixture, one) } }
-            : { reason: `An effect starts on the whole group, with its distribution, or on one member — pick All or one of them` },
+            : { reason: `An FX starts on the whole group, with its Order, or on one member — pick All or one of them` },
       nameOf: (key) => members.find((m) => m.key === key)?.name ?? members.find((m) => fixtureHeadKeys(m.fixture).has(key))?.fixture.name,
       noun: pick == null ? group.name : one != null ? one.name : `these ${picked.length} members`,
     }
@@ -425,7 +425,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
       ) : members.length === 0 ? (
         <p className="px-3 py-3 text-sm text-muted-foreground">No members</p>
       ) : rowGroups.length === 0 ? (
-        <p className="px-3 py-3 text-sm text-muted-foreground">The {pick == null ? 'members' : 'picked members'} share no property</p>
+        <p className="px-3 py-3 text-sm text-muted-foreground">The {pick == null ? 'members' : 'picked members'} share no attribute</p>
       ) : (
         <PickFamilyGroups groups={rowGroups} write={write} />
       )}

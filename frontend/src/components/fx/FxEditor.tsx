@@ -267,8 +267,8 @@ export function FxEditor({
       {entry == null ? (
         <EditorReadout>
           {library == null
-            ? 'Reading the effect library…'
-            : `“${effect.effectType}” is not in this desk's effect library, so its settings cannot be drawn.`}
+            ? 'Reading the FX library…'
+            : `“${effect.effectType}” is not in this desk's FX library, so its settings cannot be drawn.`}
         </EditorReadout>
       ) : (
         <FxEffectFields

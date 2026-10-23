@@ -74,7 +74,7 @@ class BootProgress {
             if (current.ready || percent <= current.percent) {
                 current
             } else {
-                BootStatus(BootPhase.FX_COMPILE, "Compiling effects ($done/$total)…", percent, ready = false)
+                BootStatus(BootPhase.FX_COMPILE, "Compiling FX ($done/$total)…", percent, ready = false)
             }
         }
     }

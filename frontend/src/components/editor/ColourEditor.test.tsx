@@ -171,7 +171,7 @@ describe('the pieces, and which host draws which', () => {
     expect(band()).not.toBeNull()
     expect(band()!.compareDocumentPosition(field('R')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const verbs = [...footer()!.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent?.trim())
-    expect(verbs).toEqual(['Save as palette…', 'Pick', 'Spread to a second colour…'])
+    expect(verbs).toEqual(['Save as palette…', 'Pick', 'Fan to a second colour…'])
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeEnabled()
   })
 
@@ -369,13 +369,13 @@ describe('the footer', () => {
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
     expect(screen.queryByRole('switch')).toBeNull()
     fireEvent.change(field('B'), { target: { value: '7' } })
-    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fan to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 10, g: 20, b: 7, w: 0, a: 0, uv: 0 })
     unmount()
     const onSave = vi.fn()
     draw({ targets: [], onSave })
     expect(screen.getByRole('button', { name: /Save as palette/ })).toBeDisabled()
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
   })
 
   it('the band draws the colour palettes that fit, recent first then by name, and a chip is a press', () => {
@@ -421,7 +421,7 @@ describe('read-only — the programmer rail’s tab in Output or on a palette la
     expect(inertRegion!.contains(pick)).toBe(false)
     expect(pick).toBeEnabled()
     // Spread… hands a value on to be written, so read-only disables it here, not in each host.
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
     // The docked frame draws the host's label line, above the controls.
     expect(screen.getByText('Output · read-only')).toBeInTheDocument()
   })

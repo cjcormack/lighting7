@@ -58,7 +58,7 @@ export const LENS_REASON_WORDS: Readonly<Record<LensHeldReason, string>> = {
   BLIND: 'held · Blind',
 }
 
-/** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX size. */
+/** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX amount. */
 export interface LensDesk {
   blind: boolean
   holds: (headKey: string, propertyName: string) => boolean
@@ -81,7 +81,7 @@ const liveDesk = (): LensDesk => ({
  * cannot see directly, so it is read off provenance: the desk names no effect on a key whose every
  * painter it skipped, so a running, weighted effect under a key provenance gives to a cue is one a
  * layer above has stomped. The weight's other factors are checked first, so an effect at no size,
- * an envelope at nothing, a leaving or spent one, or a stack at FX size 0 is never called stomped.
+ * an envelope at nothing, a leaving or spent one, or a stack at FX amount 0 is never called stomped.
  */
 export function lensHeldReason(effect: ActiveEffect, heads: readonly string[], desk: LensDesk): { reason: LensHeldReason; on: number } | null {
   if (isHeldByBlind(effect, desk.blind)) return { reason: 'BLIND', on: heads.length }

@@ -204,11 +204,11 @@ export function EffectsSheet({
   return (
     <div data-effects-sheet className="flex min-h-0 flex-col border-l bg-card/40">
       <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-3">
-        <EditorLabel>Effects</EditorLabel>
+        <EditorLabel>FX</EditorLabel>
         <span className="min-w-0 truncate text-[11px] text-muted-foreground">
           {selected.length === 0
             ? 'nothing selected'
-            : `Running on ${heads} ${heads === 1 ? 'head' : 'heads'} · ${effects.length} ${effects.length === 1 ? 'effect' : 'effects'}`}
+            : `Running on ${heads} ${heads === 1 ? 'head' : 'heads'} · ${effects.length} FX`}
         </span>
         <Button
           ref={addRef}
@@ -218,22 +218,22 @@ export function EffectsSheet({
           className="ml-auto h-6 shrink-0 gap-1 px-1.5 text-[11px]"
           aria-expanded={pickerOpen}
           disabled={selected.length === 0}
-          title="A library effect on the selection — Local, taking these heads off the effects of its family they run"
+          title="A library FX on the selection — Local, taking these heads off the FX of its family they run"
           onClick={() => {
             setPickerMounted(true)
             setPickerOpen((wasOpen) => !wasOpen)
           }}
         >
           <Plus className="size-3" />
-          Effect…
+          FX…
         </Button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-1.5" data-effects-list>
         {selected.length === 0 ? (
-          <p className="px-2 py-3 text-xs text-muted-foreground">Select heads on the rig to see the effects running on them.</p>
+          <p className="px-2 py-3 text-xs text-muted-foreground">Select heads on the rig to see the FX running on them.</p>
         ) : effects.length === 0 ? (
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            Nothing runs on the selection — press an effect pad, or start one with + Effect.
+            Nothing runs on the selection — press an FX pad, or start one with + FX.
           </p>
         ) : null}
         {effects.map((e) => {

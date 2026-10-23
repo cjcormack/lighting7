@@ -206,7 +206,7 @@ export function BeamSheet({ projectId, selectedTargets, families }: FamilyTabPro
   const label = templatePropertyFor(property)?.label ?? property
   const row =
     properties.length > 1 ? (
-      <div role="radiogroup" aria-label="Beam property" className="flex flex-wrap items-center gap-1">
+      <div role="radiogroup" aria-label="Beam attribute" className="flex flex-wrap items-center gap-1">
         {properties.map((name) => (
           <button
             key={name}

@@ -54,14 +54,14 @@ export function useProgrammerAddEffect(): AddEffectOffer {
 
   const reason =
     scope == null || scope.kind === 'output'
-      ? 'Output is a read of everything composed together, so it owns nothing. Switch to Local for an effect on this cue, or focus a layer to put one in its look.'
+      ? 'Output is a read of everything composed together, so it owns nothing. Switch to Local for an FX on this cue, or focus a layer to put one in its look.'
       : templateFocused
-        ? 'A palette holds one thing — a value, or one effect chosen when it was made. Edit it in the palette library, switch to Local for an effect on this cue, or focus a look layer to put one in its look.'
+        ? 'A palette holds one thing — a value, or one FX chosen when it was made. Edit it in the palette library, switch to Local for an FX on this cue, or focus a look layer to put one in its look.'
         : pair.targets.length === 0
-          ? 'Select the heads the effect should drive first.'
+          ? 'Select the heads the FX should drive first.'
           : scope.kind === 'layer'
-            ? `Add an effect to ${store?.lookName ?? 'this look'} — every layer using it will run it`
-            : 'Add an effect to the programmer. Record writes it onto the cue.'
+            ? `Add an FX to ${store?.lookName ?? 'this look'} — every layer using it will run it`
+            : 'Add an FX to the programmer. Record writes it onto the cue.'
   const disabled = scope == null || scope.kind === 'output' || templateFocused || pair.targets.length === 0
 
   return { disabled, reason, pair }

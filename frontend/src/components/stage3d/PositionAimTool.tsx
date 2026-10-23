@@ -48,7 +48,7 @@ export function PositionAimTool({ projectId, targets }: { projectId: number; tar
       disabled={refusal != null}
       title={refusal ?? 'Aim these heads at a point on the stage'}
     >
-      {/* Its word on the name alone: at the popup's 288px the footer folds Aim… and Spread… to
+      {/* Its word on the name alone: at the popup's 288px the footer folds Aim… and Fan… to
           their icons and keeps Save as palette…'s, the colour footer's rule (venue-visit plan S12). */}
       <Crosshair className="size-3.5" />
       <span className="sr-only">Aim…</span>

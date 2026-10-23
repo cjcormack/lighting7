@@ -212,7 +212,7 @@ export function ProjectFxLibrary() {
   return (
     <SheetPage>
       <SheetPage.Header>
-        <Breadcrumbs projectName={project.name} currentPage="Effects" />
+        <Breadcrumbs projectName={project.name} currentPage="FX" />
       </SheetPage.Header>
       <LibraryRow
         filter={filter}
@@ -236,7 +236,7 @@ export function ProjectFxLibrary() {
           isCurrentProject ? (
             <Button size="sm" className="shrink-0 gap-1.5" onClick={() => setSheetMode({ type: 'new' })}>
               <Plus className="size-3.5" />
-              <span className="hidden sm:inline">New effect</span>
+              <span className="hidden sm:inline">New FX</span>
             </Button>
           ) : undefined
         }
@@ -244,9 +244,9 @@ export function ProjectFxLibrary() {
       {libraryLoading || definitionsLoading ? (
         <SheetPage.Empty loading />
       ) : library.length === 0 ? (
-        <SheetPage.Empty>No effects available.</SheetPage.Empty>
+        <SheetPage.Empty>No FX available.</SheetPage.Empty>
       ) : memberCount === 0 ? (
-        <SheetPage.Empty>No effects match.</SheetPage.Empty>
+        <SheetPage.Empty>No FX match.</SheetPage.Empty>
       ) : (
         <FxLibrarySheet
           rows={sheetRows}
@@ -259,13 +259,13 @@ export function ProjectFxLibrary() {
       )}
       <SheetPage.Footer>
         <span className="tabular-nums">
-          {library.length} effect{library.length === 1 ? '' : 's'} · {yours} yours
+          {library.length} FX · {yours} yours
           {category === 'ALL' && filter.trim() === '' ? '' : ` · showing ${memberCount}`}
         </span>
         <span className="ml-auto">
           {isCurrentProject
             ? 'Built-ins are read-only — Fork one to change it'
-            : 'Not the running project · the running show’s effects, read-only'}
+            : 'Not the running project · the running show’s FX, read-only'}
         </span>
       </SheetPage.Footer>
 

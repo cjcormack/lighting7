@@ -208,8 +208,8 @@ export interface RigBandProps {
  *
  * 1. **The verbs' words**, first ([VERB_WORD_CLASS]) — and *Edit layout*'s with them
  *    ([EDIT_WORD_CLASS], which `BuskingView` hands the toggle).
- * 2. **The *Cells:* prefix and the Focus control's words** ([CELLS_PREFIX_CLASS],
- *    [FOCUS_WORD_CLASS]). The Cells control keeps its **mode word** — All · Odd · Even · 1st · 2nd
+ * 2. **The *Elements:* prefix and the Focus control's words** ([CELLS_PREFIX_CLASS],
+ *    [FOCUS_WORD_CLASS]). The Elements control keeps its **mode word** — All · Odd · Even · 1st · 2nd
  *    · Invert · Masters — and is never a bare glyph: *All* is the state an operator most needs to
  *    be sure of, and *Odd* or *Masters* on a 28px button is what the menu was for. The desk chip's
  *    subject goes at this rung too ([CHIP_SUBJECT_CLASS]): the chip is drawn only while the window
@@ -225,7 +225,7 @@ export interface RigBandProps {
  *    within its own line (`FIRST_ROW_CLASS`), the last resort for a band narrower than the icons.
  * 5. **The words come back under the floor** (D19). Each row then has its whole line, so what the
  *    ladder took is drawn again while the line holds it and folds again below a second, measured
- *    rung — the *Cells:* prefix on the first line, *Edit layout*'s word and then the Focus words
+ *    rung — the *Elements:* prefix on the first line, *Edit layout*'s word and then the Focus words
  *    and the chip's subject on the second. The verbs' own words do not come back since *Release n*
  *    joined them (fixture-fx-sheets plan D18): their worded line is wider than the floor. Every re-expansion is a
  *    **stacked** `@min-[…]:@max-[floor]:` variant, a closed range that overlaps no rung above the
@@ -242,20 +242,21 @@ export interface RigBandProps {
  * break, never instead of it: above the floor the row is `flex-nowrap`.
  *
  * **The numbers are the app's, measured in the browser on 2026-09-21 (evening), re-measured on
- * 2026-09-23 for the link badge** (desk-follow plan D8) **and on 2026-10-08 for *Release n***
- * (fixture-fx-sheets plan D18), at the desk's control sizes, with a one-family pill drawn (~60; the
+ * 2026-09-23 for the link badge** (desk-follow plan D8), **on 2026-10-08 for *Release n***
+ * (fixture-fx-sheets plan D18) **and on 2026-10-23 for *Elements:* and *Fan…***, at the desk's control sizes, with a one-family pill drawn (~60; the
  * row has to hold when a mask is set — unmasked, the mask's picker reads *All*, narrower) and **the badge drawn** (21, plus a gap: a following window
  * always shows it, and Pads and Rig always follow). Unlinked, the chip takes the badge's place and
  * folds and truncates on its own; its floor is 35, which the 15px of slack at the floor covers.
- * Worded, the row is 1078px — the verbs group 679 (`RIG` 17, Cells 107, the steps 58, the five
- * verbs 94 · 81 · 93 · 100 · 73 — Release with a one-digit count — seven 8px gaps), the state
- * group 391 (pill 60, badge 21, Focus 183, *Edit layout* 103, four gaps round the spacer), 8
- * between — so the verbs' words and *Edit layout*'s go at **1100**; iconic (36 each, the Cells
- * control 71), the row is 748, so the *Cells:* prefix (36) and the Focus words (85) go at **780**;
- * with those gone it is 627, the label (17 + a gap) goes at **660**, and with it gone the row is
- * 600, so the floor is **615**. Under it the verbs line has no label and its words cannot return:
- * worded with the prefix folded it is 618, wider than the floor, so they stay icons there (before
- * Release they returned from 520); the prefix on the iconic line (393) returns from **395** up to
+ * Worded, the row is 1092px — the verbs group 685 (`RIG` 19, Elements 132, the steps 58, the five
+ * verbs 73 · 81 · 94 · 100 · 72 — Release with a one-digit count — seven 8px gaps), the state
+ * group with a 60px pill, 8 between — so the verbs' words and *Edit layout*'s go at **1100**;
+ * iconic (36 each, the Elements control 71), the row is 784, so the *Elements:* prefix (61) and the
+ * Focus words (85) go at **790**;
+ * with those gone it is 638, the label (19 + a gap) goes at **660**, and with it gone the row is
+ * 611, so the floor is **615**. Under it the verbs line has no label and its words cannot return:
+ * worded with the prefix folded it is 624, wider than the floor, so they stay icons there (before
+ * Release they returned from 520); the prefix on the iconic line (413 with *Elements:*, re-measured
+ * 2026-10-23) returns from **420** up to
  * the floor. The state line is 399 worded, so *Edit layout*'s word returns from **400**, and 332
  * with it iconic, so the Focus words and the chip's subject return from **340**. Checked in the
  * browser with the band forced to each rung and one below it, and a 60px stand-in for the mask
@@ -270,8 +271,8 @@ export interface RigBandProps {
  * rung of its own above every other (`BLIND_WORD_CLASS`, 1150, and 470 on the state line under the
  * floor), and the pill is `min-w-0 shrink` — the one thing on the row besides the chip that may
  * give. With a mask pill *and* blind, the iconic pill's 34 exceeds the slack at four rungs — 1100
- * (22 spare), 780 (32), 660 (33) and 615 (15) — so in the bands 1100–1112, 780–782, 660–661 and
- * 615–634 the pill squashes to an amber sliver rather than pushing the Focus control under the
+ * (8 spare), 790 (6), 660 (22) and 615 (3) — so in the bands 1100–1126, 790–818, 660–672 and
+ * 615–646 the pill squashes to an amber sliver rather than pushing the Focus control under the
  * sheet. Measured 2026-09-21: the pill on the desk row at 738 of band is 62.5 worded and 26 iconic,
  * and the row's `scrollWidth` equalled its `clientWidth` at 738, 616, 540 and 496 with no mask.
  */
@@ -297,18 +298,18 @@ export const VERB_WORD_CLASS = 'hidden @[1100px]:inline'
 export const EDIT_WORD_CLASS = 'hidden @[1100px]:inline @min-[400px]:@max-[615px]:inline'
 
 /**
- * The *Cells:* prefix, which goes a step after the verbs' words; the mode word beside it never
- * does. Under the floor it is drawn on the iconic line from 395 up to the floor — the verbs' words
+ * The *Elements:* prefix, which goes a step after the verbs' words; the mode word beside it never
+ * does. Under the floor it is drawn on the iconic line from 420 up to the floor — the verbs' words
  * no longer return there, so it shares the line with nothing that would.
  */
-const CELLS_PREFIX_CLASS = 'hidden @[780px]:inline @min-[395px]:@max-[615px]:inline'
+const CELLS_PREFIX_CLASS = 'hidden @[790px]:inline @min-[420px]:@max-[615px]:inline'
 /** The mode word's *short* form, drawn while the prefix is folded — `1st`, not `1st half`. */
-const CELLS_SHORT_CLASS = 'inline @[780px]:hidden @min-[395px]:@max-[615px]:hidden'
+const CELLS_SHORT_CLASS = 'inline @[790px]:hidden @min-[420px]:@max-[615px]:hidden'
 /** The mode word's full form, drawn beside the prefix. */
 const CELLS_FULL_CLASS = CELLS_PREFIX_CLASS
 
 /** The Focus control's labels, by the same measure as the Cells prefix; under the floor from 340. */
-export const FOCUS_WORD_CLASS = 'hidden @[780px]:inline @min-[340px]:@max-[615px]:inline'
+export const FOCUS_WORD_CLASS = 'hidden @[790px]:inline @min-[340px]:@max-[615px]:inline'
 /**
  * The blind pill's word (`BlindMarks.tsx`): worded only where the fully-worded row has room for
  * its 71 (63 + a gap) — from **1150**, above every other rung — and, under the floor, on the state
@@ -317,7 +318,7 @@ export const FOCUS_WORD_CLASS = 'hidden @[780px]:inline @min-[340px]:@max-[615px
  */
 export const BLIND_WORD_CLASS = 'hidden @[1150px]:inline @min-[470px]:@max-[615px]:inline'
 /** The desk chip's *Targets:* subject — the chip's second part to go (D19), at the prefix's rung. */
-export const CHIP_SUBJECT_CLASS = 'hidden @[780px]:inline @min-[340px]:@max-[615px]:inline'
+export const CHIP_SUBJECT_CLASS = 'hidden @[790px]:inline @min-[340px]:@max-[615px]:inline'
 
 /** The `RIG` label: folded to nothing below 660, the rung before the floor (D20). */
 export const RIG_LABEL_CLASS = 'hidden @[660px]:block'
@@ -872,21 +873,21 @@ function CellsMenu({ onSubselect }: { onSubselect: (mode: SubselectMode) => void
           variant="outline"
           size="sm"
           data-cells-chip
-          aria-label={`Cells: ${SUBSELECT_MODE_LABELS[last]}`}
+          aria-label={`Elements: ${SUBSELECT_MODE_LABELS[last]}`}
           title={`Sub-selection over rig order — ${SUBSELECT_FILTER_MODES.map((mode) => SUBSELECT_MODE_LABELS[mode]).join(' · ')}`}
           className={cn(VERB_CLASS, 'gap-1')}
         >
           <Grid2x2 className="size-3.5" />
           {/* Never a bare glyph: the prefix folds, the mode word stays — in its short form once
               the prefix has gone (`1st`, `Masters`), its full form beside it (`1st half`). */}
-          <span className={CELLS_PREFIX_CLASS}>Cells: </span>
+          <span className={CELLS_PREFIX_CLASS}>Elements: </span>
           <span className={CELLS_FULL_CLASS}>{SUBSELECT_MODE_LABELS[last]}</span>
           <span data-cells-mode className={CELLS_SHORT_CLASS}>{CELLS_SHORT_LABELS[last]}</span>
           <ChevronDown className="size-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
-        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+        <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={last} onValueChange={(mode) => press(mode as SubselectMode)}>
           {SUBSELECT_FILTER_MODES.map((mode) => (
             <DropdownMenuRadioItem key={mode} value={mode} title={CELLS_MODE_TITLES[mode]}>
@@ -927,14 +928,14 @@ function StepButtons({ onSubselect }: { onSubselect: (mode: SubselectMode) => vo
 }
 
 const CELLS_MODE_TITLES: Partial<Record<SubselectMode, string>> = {
-  ALL: 'Every selected cell widened to its whole fixture',
-  ODD: 'Every other unit in rig order, from the first — cells where a selected head has them',
+  ALL: 'Every selected element widened to its whole fixture',
+  ODD: 'Every other unit in rig order, from the first — elements where a selected head has them',
   EVEN: 'Every other unit in rig order, from the second',
   FIRST_HALF: 'The first half of the selection in rig order',
   SECOND_HALF: 'The second half of the selection in rig order',
   INVERT: 'Every unit of the selected heads that is not selected',
-  MASTERS: 'The masters only: a multi-head fixture’s own channels, no cell',
-  NEXT: 'The whole selection one step along rig order; one cell when only cells are selected',
+  MASTERS: 'The masters only: a multi-head fixture’s own channels, no element',
+  NEXT: 'The whole selection one step along rig order; one element when only elements are selected',
   PREV: 'The whole selection one step back along rig order',
 }
 
@@ -968,7 +969,7 @@ function CompactVerbs({
             <DropdownMenuContent align="end">
               {/* Below `md` the menu's filters and the two steps sit here: the compact row has no
                   room for a second control. */}
-              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+              <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
               {SUBSELECT_FILTER_MODES.map((mode) => (
                 <DropdownMenuItem key={mode} onSelect={() => onSubselect(mode)}>
                   {SUBSELECT_MODE_LABELS[mode]}
@@ -981,8 +982,8 @@ function CompactVerbs({
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={verbs.spread} title="Spread a value across the selection">
-                Spread…
+              <DropdownMenuItem onSelect={verbs.spread} title="Fan a value across the selection">
+                Fan…
               </DropdownMenuItem>
               <DropdownMenuItem disabled={!verbs.locate.enabled} onSelect={verbs.locate.press}>
                 {verbs.locate.label}
@@ -991,7 +992,7 @@ function CompactVerbs({
               <DropdownMenuItem
                 disabled={releaseTargets.length === 0}
                 onSelect={() => void release()}
-                title="Every value and local effect the selection holds in the programmer; pads stay lit"
+                title="Every value and local FX the selection holds in the programmer; pads stay lit"
               >
                 Release {releaseTargets.length}
               </DropdownMenuItem>

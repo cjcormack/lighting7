@@ -177,7 +177,7 @@ function SplitEditor({
           data-fx-split
           className="flex flex-wrap items-center gap-1.5 rounded-md border border-violet-500/40 bg-violet-500/[0.06] px-2 py-1.5 text-[11px]"
         >
-          <span className="min-w-0 flex-1 truncate" title={`The selection holds ${split.coveredLabel} of the ${split.heads.length} heads this effect runs on`}>
+          <span className="min-w-0 flex-1 truncate" title={`The selection holds ${split.coveredLabel} of the ${split.heads.length} heads this FX runs on`}>
             <span className="font-medium">{split.coveredLabel}</span>
             <span className="text-muted-foreground"> of {split.totalLabel}</span>
           </span>

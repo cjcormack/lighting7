@@ -95,11 +95,9 @@ internal fun Route.routeApiRestGroups(state: State) {
                     val expanded = engine.isMultiElementExpanded(instance)
                     GroupEffectDto(
                         id = instance.id,
-                        // The display name is kept as the fallback so a built-in still reports the
-                        // spaced form this endpoint has always sent (the registry normalises it
-                        // back on the way in); a user-defined effect's name resolves to nothing,
-                        // so it has to report its registration id.
-                        effectType = instance.registrationId ?: instance.effect.name,
+                        // The display name is the last fallback, for an effect a script constructed
+                        // itself; a display name need not resolve, so an id comes first.
+                        effectType = instance.registrationId ?: instance.effect.registrationId ?: instance.effect.name,
                         propertyName = instance.target.propertyName,
                         beatDivision = instance.timing.beatDivision,
                         blendMode = instance.blendMode.name,

@@ -41,7 +41,7 @@ export function recordNote(result: RecordResponse): WriteNote {
   const preserved = result.preserved
   const notes: string[] = []
   if (result.groupRowsEmitted > 0) notes.push(plural(result.groupRowsEmitted, 'group row'))
-  if (result.fxWritten > 0) notes.push(plural(result.fxWritten, 'effect'))
+  if (result.fxWritten > 0) notes.push(`${result.fxWritten} FX`)
   notes.push(...describeSceneryWrite(result.sceneryWritten, result.sceneryRemoved, result.sceneryAlreadyTracked))
   const triggersKept = preserved.triggers ?? 0
   // One sentence for both kinds of timed child: what the operator needs to know is that a timed
@@ -50,7 +50,7 @@ export function recordNote(result: RecordResponse): WriteNote {
   const outOfMaskKept = preserved.outOfMaskAssignments ?? 0
   const outOfScopeKept = preserved.outOfScopeAssignments ?? 0
   if (triggersKept > 0) notes.push(`${triggersKept} trigger(s) kept`)
-  if (timedKept > 0) notes.push(`${timedKept} timed effect(s) kept`)
+  if (timedKept > 0) notes.push(`${timedKept} timed FX kept`)
   if (outOfMaskKept > 0) notes.push(`${outOfMaskKept} out-of-mask row(s) kept`)
   if (outOfScopeKept > 0) notes.push(`${outOfScopeKept} out-of-selection row(s) kept`)
   if (result.republishedLive) notes.push('the live cue was republished')
@@ -84,7 +84,7 @@ export function recordLookNote(result: RecordLookResponse): WriteNote {
       `${result.created ? 'Created' : 'Updated'} “${result.look.name}” — ` +
       `${plural(result.rowsWritten, 'row')} written` +
       (result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : '') +
-      (result.effectsWritten ? `, ${plural(result.effectsWritten, 'effect')} moved in` : '') +
+      (result.effectsWritten ? `, ${result.effectsWritten} FX moved in` : '') +
       '.',
     description: joined([joined(notes, ' · '), skipNote], ' — '),
     warn: skipNote != null,
@@ -102,13 +102,13 @@ export function includeNote(result: IncludeResponse): WriteNote {
   return {
     title:
       `Included “${result.name}” — ${plural(result.entriesWritten, 'value')}` +
-      (result.fxSpawned > 0 ? `, ${result.fxSpawned} effect(s)` : '') +
+      (result.fxSpawned > 0 ? `, ${result.fxSpawned} FX` : '') +
       (scenery > 0 ? `, ${plural(scenery, 'scenery change')}` : '') +
       '.',
     description: joined(
       [
-        result.fxAlreadyRunning > 0 ? `${result.fxAlreadyRunning} effect(s) were already running on stage.` : null,
-        timedSkipped > 0 ? `${timedSkipped} timed effect(s) not included.` : null,
+        result.fxAlreadyRunning > 0 ? `${result.fxAlreadyRunning} FX already running on stage.` : null,
+        timedSkipped > 0 ? `${timedSkipped} timed FX not included.` : null,
         skipNote,
       ],
       ' ',
@@ -146,7 +146,7 @@ export function updateNote(result: UpdateResponse): WriteNote {
     lines.push(
       `Updated “${look.lookName}” — ${plural(look.rowsWritten, 'row')} written` +
         (look.rowsRemoved ? `, ${look.rowsRemoved} removed` : '') +
-        (look.effectsWritten ? `, ${plural(look.effectsWritten, 'effect')}` : '') +
+        (look.effectsWritten ? `, ${look.effectsWritten} FX` : '') +
         (look.sceneryWritten ? `, ${plural(look.sceneryWritten, 'scenery change')}` : '') +
         (look.cuesRepublished.length > 0 ? `, ${look.cuesRepublished.length} live cue(s) moved with it` : '') +
         '.',

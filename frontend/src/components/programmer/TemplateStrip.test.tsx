@@ -537,7 +537,7 @@ describe('TemplateStrip', () => {
       targets: [{ type: 'fixture', key: 'hex-1' }],
     })
     expect(toggleTemplate).not.toHaveBeenCalled()
-    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('2 effects started'))
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('2 FX started'))
   })
 
   it('does not read a value apply’s empty effectIds as a failed effect press', async () => {
@@ -562,7 +562,7 @@ describe('TemplateStrip', () => {
     fireEvent.click(screen.getByText('Amber Breathe'), { altKey: true })
     await vi.waitFor(() =>
       expect(toastWarning).toHaveBeenCalledWith(
-        'Nothing started — no selected head could take this effect',
+        'Nothing started — no selected head could take this FX',
       ),
     )
   })

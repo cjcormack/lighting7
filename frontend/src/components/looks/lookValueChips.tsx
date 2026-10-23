@@ -145,7 +145,7 @@ export function LookPreviewStrip({
   const effectNames = (effectTypes ?? []).map(effectTypeLabel)
   const effectsTitle =
     effectCount > 0
-      ? `${effectCount} effect${effectCount === 1 ? '' : 's'}${effectNames.length > 0 ? `: ${effectNames.join(', ')}` : ''}`
+      ? `${effectCount} FX${effectNames.length > 0 ? `: ${effectNames.join(', ')}` : ''}`
       : ''
 
   useLayoutEffect(() => {
@@ -176,7 +176,7 @@ export function LookPreviewStrip({
     if (effectCount === 0) return null
     return (
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={effectsTitle}>
-        <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label="Effects only" />
+        <AudioWaveform className="size-3.5 shrink-0 text-violet-400" aria-label="FX only" />
         <span className="truncate">{effectNames.length > 0 ? effectNames.join(', ') : effectsTitle}</span>
       </span>
     )

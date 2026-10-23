@@ -93,7 +93,7 @@ export function EffectSummary({
           {effect.stepTiming && (
             <>
               <Dot />
-              <span>step</span>
+              <span>per head</span>
             </>
           )}
           {effect.phaseOffset != null && effect.phaseOffset !== 0 && (

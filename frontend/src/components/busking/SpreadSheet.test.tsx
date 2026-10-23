@@ -259,19 +259,19 @@ describe('the desk’s answer', () => {
 })
 
 describe('Over', () => {
-  it('offers Cells with the count where a selected fixture has cells, and keeps it chosen where none does', () => {
+  it('offers Elements with the count where a selected fixture has cells, and keeps it chosen where none does', () => {
     const { rerender } = draw([group, barTarget])
-    const cells = radio('Over', /^Cells/)
+    const cells = radio('Over', /^Elements/)
     expect(cells).toBeEnabled()
-    expect(cells).toHaveTextContent('Cells2')
+    expect(cells).toHaveTextContent('Elements2')
     fireEvent.click(cells)
     // A selection with no cells keeps the choice (the desk spreads it as Heads), and it is still
     // there when the bar comes back.
     rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group)} families={null} />)
-    expect(radio('Over', /^Cells/)).toBeEnabled()
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toBeEnabled()
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     rerender(<SpreadSheet projectId={6} selectedTargets={selectionOf(group, barTarget)} families={null} />)
-    expect(radio('Over', /^Cells/)).toHaveAttribute('aria-checked', 'true')
+    expect(radio('Over', /^Elements/)).toHaveAttribute('aria-checked', 'true')
     // The count is the Cells chip's own expansion (`lib/cellsSubSelection.ts`), so Over: Cells and
     // the chip count cells one way; this is the same three answers the tab's own counter gave.
     const count = (...targets: BuskingTarget[]) =>

@@ -103,8 +103,8 @@ export function paramLabel(name: string): string {
 
 
 /**
- * The editor's fields over one draft — speed, the two questions, the parameters in their roles,
- * Shape and Advanced — with no write of their own: [set] and [setParam] are the host's. `FxEditor`
+ * The editor's fields over one draft — Cycle, Amount, Direction and Order, the two questions, the
+ * parameters in their roles, Spread, Shape and Advanced — with no write of their own: [set] and [setParam] are the host's. `FxEditor`
  * writes them live into a running effect; `TemplateEditor` (fixture-fx-sheets plan D16) keeps them
  * as the template's draft until Save, so a movement template asks the same *Centre* question
  * through the same rules (`fxEditorModel.ts`) and there is no second copy of either. It replaced
@@ -186,7 +186,7 @@ export function FxEffectFields({
         set={set}
       />
 
-      <SizeSection draft={draft} readOnly={readOnly} set={set} />
+      <SizeSection draft={draft} ordered={scope.heads} readOnly={readOnly} set={set} />
 
       {centred && (
         <Question
@@ -247,7 +247,7 @@ export function FxEffectFields({
           `phase ${Math.round(draft.phaseOffset * 360)}°`,
           draft.blendMode.toLowerCase(),
           ...(draft.nShot != null ? [runsWord(draft.nShot)] : []),
-          ...(stepTiming ? [`step timing ${draft.stepTiming ? 'on' : 'off'}`] : []),
+          ...(stepTiming ? [`timing per ${draft.stepTiming ? 'head' : 'cycle'}`] : []),
         ]}
       >
         <SliderRow
@@ -272,17 +272,25 @@ export function FxEffectFields({
           onChange={(blendMode) => set({ blendMode })}
         />
         {stepTiming && (
-          <label className="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              checked={draft.stepTiming}
+          <div className="flex items-center gap-2">
+            <EditorLabel>Timing</EditorLabel>
+            <span className="flex-1" />
+            <ToggleGroup
+              type="single"
+              size="sm"
+              value={draft.stepTiming ? 'head' : 'cycle'}
               disabled={readOnly}
-              onChange={(e) => set({ stepTiming: e.target.checked })}
-              className="rounded border-input"
-            />
-            <span>Step timing</span>
-            <span className="text-muted-foreground">the speed steps from head to head</span>
-          </label>
+              onValueChange={(v) => v && set({ stepTiming: v === 'head' })}
+              aria-label="Timing"
+            >
+              <ToggleGroupItem value="cycle" className="px-2 text-xs">
+                Per cycle
+              </ToggleGroupItem>
+              <ToggleGroupItem value="head" className="px-2 text-xs">
+                Per head
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
         )}
         {scope.elementMode && (
           <SelectRow
@@ -307,7 +315,7 @@ export function FxEffectFields({
   )
 }
 
-// ─── Size and direction ───────────────────────────────────────────────────────────────────────
+// ─── Amount, direction and order ──────────────────────────────────────────────────────────────
 
 /** The three directions, in the segment's order, each its glyph and its word (on the hover). */
 const DIRECTIONS: readonly { value: EffectDirection; label: string; Icon: typeof ArrowRight }[] = [
@@ -317,25 +325,32 @@ const DIRECTIONS: readonly { value: EffectDirection; label: string; Icon: typeof
 ]
 
 /**
- * Size and Direction, beside Speed (effects plan D11, §4.1). Size is a percent of the effect that
- * reaches the stage over what is underneath — a Replace at 50 % sits halfway between the level
- * underneath and the effect, an Around movement's radius halves about the position underneath —
- * and Direction is how each head runs its cycle. Both are the desk's to apply (P2): this only
- * writes the two fields, and edits them in place, so the phase is kept.
+ * Amount, Direction and Order, under Cycle (effects plan D11, §4.1; terminology plan D3). Amount is
+ * a percent of the FX that reaches the stage over what is underneath — a Replace at 50 % sits
+ * halfway between the level underneath and the FX, an Around movement's radius halves about the
+ * position underneath — Direction is how each head runs its cycle, and Order the order the heads'
+ * offsets run in, drawn only where there are heads to order ([ordered]). All three are the desk's to
+ * apply (P2): this only writes the fields, and edits them in place, so the phase is kept.
  */
 function SizeSection({
   draft,
+  ordered,
   readOnly,
   set,
 }: {
   draft: FxDraft
+  ordered: boolean
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
 }) {
+  const order = draft.distributionStrategy
+  const options = ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value) }))
+  // An Order this editor does not offer (a script's, a newer desk's) is still drawn, as itself.
+  if (!ORDER_OPTIONS.includes(order)) options.push({ value: order, label: orderLabel(order) })
   return (
     <div className="flex flex-col gap-2.5">
       <SliderRow
-        label="Size"
+        label="Amount"
         unit="%"
         value={draft.size}
         min={0}
@@ -348,23 +363,35 @@ function SizeSection({
         readOnly={readOnly}
         onChange={(size, release) => set({ size }, release)}
       />
-      <div className="flex items-center gap-2">
-        <EditorLabel>Direction</EditorLabel>
-        <span className="flex-1" />
-        <ToggleGroup
-          type="single"
-          size="sm"
-          value={draft.direction}
-          disabled={readOnly}
-          onValueChange={(v) => v && set({ direction: v as EffectDirection })}
-          aria-label="Direction"
-        >
-          {DIRECTIONS.map(({ value, label, Icon }) => (
-            <ToggleGroupItem key={value} value={value} aria-label={label} title={label} className="px-2">
-              <Icon className="size-3.5" />
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+      <div className="flex items-end gap-2">
+        <div className="flex shrink-0 flex-col gap-1">
+          <EditorLabel>Direction</EditorLabel>
+          <ToggleGroup
+            type="single"
+            size="sm"
+            value={draft.direction}
+            disabled={readOnly}
+            onValueChange={(v) => v && set({ direction: v as EffectDirection })}
+            aria-label="Direction"
+          >
+            {DIRECTIONS.map(({ value, label, Icon }) => (
+              <ToggleGroupItem key={value} value={value} aria-label={label} title={label} className="px-2">
+                <Icon className="size-3.5" />
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+        {ordered && (
+          <div className="min-w-0 flex-1">
+            <SelectRow
+              label="Order"
+              value={order}
+              readOnly={readOnly}
+              options={options}
+              onChange={(next) => set(orderPatch(draft, next))}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
@@ -380,14 +407,13 @@ const NOTIONAL_HEADS = 8
 
 /**
  * The Spread section (effects plan D11, §4.1), on a group, a selection or a fixture with heads, and
- * always on an effect palette: *Order* (the distribution, renamed in the UI only — it moved here from
- * Advanced), *Spread* %, *Wings*, *Blocks* and *Groups*, and a row of phase dials previewing them.
- * Its summary line says the non-defaults: *Rig · 50 % · 2 wings*.
+ * always on an FX palette: *Spread* %, *Wings*, *Segments* and *Parts*, and a row of phase dials
+ * previewing them under the Order chosen above. Its summary line says the non-defaults:
+ * *50 % · 2 wings*.
  *
- * The desk shapes the heads (P2): this writes the five fields and draws the dials from
+ * The desk shapes the heads (P2): this writes the four fields and draws the dials from
  * `lib/spreadShape.ts`, the one client copy of the rule, pinned to the desk's by a shared vector.
- * Wings are hidden under a mirrored Order (Centre out, Edges in, Split — two wings already), and
- * choosing one puts any wings back to 1 in the same write, which the desk would otherwise refuse.
+ * Wings are hidden under a mirrored Order (Centre out, Centre in, Split — two wings already).
  */
 function SpreadSection({
   draft,
@@ -404,18 +430,8 @@ function SpreadSection({
   const shape: SpreadShape = { spread: draft.spread, wings: draft.wings, blocks: draft.blocks, groups: draft.groups }
   const mirrored = isMirroredOrder(order)
   const unison = order === 'UNIFIED'
-  const options = ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value) }))
-  // An Order this editor does not offer (a script's, a newer desk's) is still drawn, as itself.
-  if (!ORDER_OPTIONS.includes(order)) options.push({ value: order, label: orderLabel(order) })
   return (
     <Disclosure label="Spread" summary={spreadSummary(order, shape)}>
-      <SelectRow
-        label="Order"
-        value={order}
-        readOnly={readOnly}
-        options={options}
-        onChange={(next) => set(orderPatch(draft, next))}
-      />
       {unison ? (
         <EditorReadout>Every head runs in step, so there is no spread to shape.</EditorReadout>
       ) : (
@@ -445,11 +461,11 @@ function SpreadSection({
             ) : (
               <CountRow label="Wings" value={draft.wings} min={1} readOnly={readOnly} onChange={(wings) => set({ wings })} />
             )}
-            <CountRow label="Blocks" value={draft.blocks} min={1} readOnly={readOnly} onChange={(blocks) => set({ blocks })} />
-            <CountRow label="Groups" value={draft.groups} min={0} readOnly={readOnly} onChange={(groups) => set({ groups })} />
+            <CountRow label="Segments" value={draft.blocks} min={1} readOnly={readOnly} onChange={(blocks) => set({ blocks })} />
+            <CountRow label="Parts" value={draft.groups} min={0} readOnly={readOnly} onChange={(groups) => set({ groups })} />
           </div>
           <EditorReadout>
-            {mirrored ? '' : 'Wings mirror alternate runs · '}Blocks move neighbours as one · Groups repeat the spread (0 is off)
+            {mirrored ? '' : 'Wings mirror alternate runs · '}Segments move neighbours as one · Parts repeat the spread (0 is off)
           </EditorReadout>
         </>
       )}
@@ -458,7 +474,7 @@ function SpreadSection({
   )
 }
 
-/** A whole-number field under its label, committing on Enter — Wings, Blocks, Groups. */
+/** A whole-number field under its label, committing on Enter — Wings, Segments, Parts. */
 function CountRow({
   label,
   value,
@@ -493,8 +509,8 @@ function CountRow({
 }
 
 /**
- * The row of phase dials (effects plan §4.1): one per head — eight notional heads on an effect
- * palette, the effect's own heads live, up to sixteen and then *+n* — each hand at the head's offset
+ * The row of phase dials (effects plan §4.1): one per head — eight notional heads on an FX
+ * palette, the FX's own heads live, up to sixteen and then *+n* — each hand at the head's offset
  * through the cycle, as the desk will run it. A preview: nothing here is sent.
  */
 function SpreadDials({ order, shape, headCount }: { order: string; shape: SpreadShape; headCount: number | undefined }) {
@@ -589,13 +605,13 @@ function RunsRow({
   )
 }
 
-// ─── Speed ────────────────────────────────────────────────────────────────────────────────────
+// ─── Cycle ────────────────────────────────────────────────────────────────────────────────────
 
 /** The chip menu's value for *Seconds*. Never on the wire — the wire says `seconds`. */
 const SECONDS_VALUE = '__seconds__'
 
 /**
- * Speed is a segment with the timing as a chip (Fx board; venue-visit plan D7). The chip is one
+ * Cycle is a segment with the timing as a chip (Fx board; venue-visit plan D7). The chip is one
  * question for every effect — *Seconds*, or a master — and the body follows it:
  *
  * - **A master**: a beat effect's segment is beats a cycle ([SPEED_STEPS], the one spelling the
@@ -603,7 +619,7 @@ const SECONDS_VALUE = '__seconds__'
  *   rate master, which scales the seconds it types by `bpm / 120`.
  * - **Seconds**: the cycle in seconds, typed, with no master.
  *
- * Moving a beat effect between the two keeps its speed: the division is converted at the master's
+ * Moving a beat effect between the two keeps its cycle: the division is converted at the master's
  * live tempo (4 beats at 120 BPM is 2 s), so the light does not jump. A wall-clock effect's number
  * is seconds either way and is left alone. The chip names a concrete master — a pick of M1 sends
  * master 1's uuid, which the desk treats as the default (`SpeedMasterSelect`'s rule).
@@ -644,7 +660,7 @@ function SpeedSection({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center gap-2">
-        <EditorLabel>Speed</EditorLabel>
+        <EditorLabel>Cycle</EditorLabel>
         <span className="flex-1" />
         {chip}
       </div>
@@ -672,7 +688,7 @@ function SpeedSection({
             value={pressed ? String(pressed.value) : ''}
             disabled={readOnly}
             onValueChange={(v) => v && set({ beatDivision: Number(v) })}
-            aria-label="Speed"
+            aria-label="Cycle"
             // Two rows of four: `h-auto` lifts the group's one-row `h-8`, which the second row overran.
             className="grid h-auto w-full grid-cols-4 gap-px"
           >

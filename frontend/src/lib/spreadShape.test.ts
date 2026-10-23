@@ -60,17 +60,16 @@ describe('spreadOffsets', () => {
 })
 
 describe('spreadSummary', () => {
-  it('says the order and every non-default field', () => {
-    expect(spreadSummary('LINEAR', DEFAULT_SPREAD_SHAPE)).toEqual(['Rig'])
-    expect(spreadSummary('LINEAR', { spread: 0.5, wings: 2, blocks: 1, groups: 0 })).toEqual(['Rig', '50 %', '2 wings'])
+  it('says every non-default field, the order apart', () => {
+    expect(spreadSummary('LINEAR', DEFAULT_SPREAD_SHAPE)).toEqual([])
+    expect(spreadSummary('LINEAR', { spread: 0.5, wings: 2, blocks: 1, groups: 0 })).toEqual(['50 %', '2 wings'])
     expect(spreadSummary('REVERSE', { spread: 1, wings: 1, blocks: 3, groups: 2 })).toEqual([
-      'Reverse',
-      'blocks of 3',
-      'groups of 2',
+      'segments of 3',
+      'parts of 2',
     ])
   })
 
   it('leaves wings under a mirrored order unsaid', () => {
-    expect(spreadSummary('CENTER_OUT', { spread: 1, wings: 2, blocks: 1, groups: 0 })).toEqual(['Centre out'])
+    expect(spreadSummary('CENTER_OUT', { spread: 1, wings: 2, blocks: 1, groups: 0 })).toEqual([])
   })
 })

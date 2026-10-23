@@ -16,7 +16,7 @@ import type { RailTab } from './railTab'
 /** The dock's two tabs, in strip order. The glyphs are the busk sheet's. */
 export const RAIL_TABS: readonly { id: RailTab; label: string }[] = [
   { id: 'colour', label: 'Colour' },
-  { id: 'spread', label: 'Spread' },
+  { id: 'spread', label: 'Fan' },
 ]
 
 const GLYPHS: Readonly<Record<RailTab, ReactNode>> = {
@@ -70,7 +70,7 @@ export function ProgrammerRail({ projectId }: { projectId: number }) {
               default header's 48 (`PD-SHEET-CLOSE-ALIGN`). */}
           <SheetContent side="bottom" className="h-[80%] gap-0 p-0 [&>[data-slot=sheet-close-x]]:top-2">
             <SheetHeader className="shrink-0 border-b px-3 py-1 pr-12">
-              <SheetTitle className="sr-only">Colour and spread</SheetTitle>
+              <SheetTitle className="sr-only">Colour and fan</SheetTitle>
               <DockTabs />
             </SheetHeader>
             {panel}
@@ -101,7 +101,7 @@ export function ProgrammerRail({ projectId }: { projectId: number }) {
 function DockPanel({ projectId, tab }: { projectId: number; tab: RailTab }) {
   return (
     <ScopedEditorContextProvider>
-      <div role="tabpanel" aria-label={tab === 'colour' ? 'Colour' : 'Spread'} className="flex min-h-0 flex-1 flex-col">
+      <div role="tabpanel" aria-label={tab === 'colour' ? 'Colour' : 'Fan'} className="flex min-h-0 flex-1 flex-col">
         {tab === 'colour' ? <RailColourTab projectId={projectId} /> : <RailSpreadTab projectId={projectId} />}
       </div>
     </ScopedEditorContextProvider>
@@ -148,7 +148,7 @@ function HeaderChevron({ label, title, onClick, className }: { label: string; ti
   )
 }
 
-/** **Colour · Spread**, each with its word: two tabs fit the dock's 260px floor whole. */
+/** **Colour · Fan**, each with its word: two tabs fit the dock's 260px floor whole. */
 function DockTabs() {
   const { railTab, setRailTab } = useRailArm()
   return (
@@ -269,9 +269,9 @@ function DockHandle() {
         variant="ghost"
         size="icon"
         className="size-8 shrink-0 text-muted-foreground"
-        aria-label="Open Colour and Spread"
+        aria-label="Open Colour and Fan"
         aria-expanded={arm.sheetOpen}
-        title="Open Colour and Spread"
+        title="Open Colour and Fan"
         onClick={arm.openSheet}
       >
         <ChevronUp className="size-4" />

@@ -6,7 +6,7 @@ describe('updateStageLines', () => {
   it('names the values and the effects, leaving out a count of 0', () => {
     expect(updateStageLines({ rows: 3, effects: { edited: 1, stopped: 2, started: 0 }, fadeMs: 2000, curve: 'LINEAR' })).toEqual([
       '3 values change, over its 2.0s fade',
-      '1 effect edited in place · 2 stopped',
+      '1 FX edited in place · 2 stopped',
     ])
     expect(updateStageLines({ rows: 0, effects: { edited: 0, stopped: 0, started: 1 }, fadeMs: 2000, curve: 'LINEAR' })).toEqual(['1 started'])
   })

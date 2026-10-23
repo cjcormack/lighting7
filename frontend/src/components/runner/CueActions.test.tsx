@@ -326,7 +326,7 @@ describe('CueActions', () => {
       const dialog = await screen.findByRole('dialog')
       expect(within(dialog).getByText('Update stage to Q1 Opener?')).toBeTruthy()
       await waitFor(() => expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('3 values change, over its 2.0s fade'))
-      expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('1 effect edited in place · 1 stopped')
+      expect(dialog.querySelector('[data-update-stage-counts]')?.textContent).toContain('1 FX edited in place · 1 stopped')
       expect(updateStage.mock.calls.map(([arg]) => arg)).toEqual([{ projectId: 1, cueId: 1, dryRun: true }])
 
       fireEvent.click(within(dialog).getByRole('button', { name: 'Update stage' }))

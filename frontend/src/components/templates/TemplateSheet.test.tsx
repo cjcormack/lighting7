@@ -207,7 +207,7 @@ describe('TemplateSheet — the columns', () => {
     // An effect template holds no rows at all on the wire — its Value is the effect and its speed.
     expect(row(3)).toHaveTextContent('Dimmer Pulse · ')
     expect(row(5)).toHaveTextContent('Rainbow Cycle · 4 s')
-    expect(row(3)).toHaveTextContent('Effect')
+    expect(row(3)).toHaveTextContent('FX')
     expect(row(1)).toHaveTextContent('Value')
   })
 
@@ -229,7 +229,7 @@ describe('TemplateSheet — Fade', () => {
     draw()
     drag('fade', 1, 3)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
-    expect(await screen.findByText('Pulse runs an effect — no fade to time · skipped')).toBeInTheDocument()
+    expect(await screen.findByText('Pulse runs an FX — no fade to time · skipped')).toBeInTheDocument()
     const field = screen.getByLabelText('Fade')
     fireEvent.change(field, { target: { value: '1.5' } })
     fireEvent.keyDown(field, { key: 'Enter' })
@@ -256,10 +256,10 @@ describe('TemplateSheet — Fade', () => {
     expect(saveTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 2, fadeDurationMs: null, fadeDurationMsPresent: true })
   })
 
-  it('offers Spread as the kit’s duration plan over the fades', () => {
+  it('offers Fan as the kit’s duration plan over the fades', () => {
     draw()
     drag('fade', 1, 2)
-    expect(screen.getByRole('button', { name: /Spread/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Fan/ })).toBeEnabled()
   })
 })
 
@@ -422,7 +422,7 @@ describe('TemplateSheet — Value (session 3)', () => {
     const editor = (await screen.findByText('The intent — the desk resolves it per head')).closest(
       '[data-template-value-editor]',
     ) as HTMLElement
-    expect(within(editor).getByText('Pulse runs an effect — open to change · skipped')).toBeInTheDocument()
+    expect(within(editor).getByText('Pulse runs an FX — open to change · skipped')).toBeInTheDocument()
     expect(within(editor).getByText('Amber is Colour · skipped')).toBeInTheDocument()
     // The label line counts what the commit reaches, not what the marquee covers.
     expect(within(editor).getByText('2 palettes')).toBeInTheDocument()
@@ -492,13 +492,13 @@ describe('TemplateSheet — Value (session 3)', () => {
     expect(row(4).querySelector('[data-cell="value"] button')).not.toBeNull()
   })
 
-  it('refuses Clear — a palette holds a value — and offers no Spread', () => {
+  it('refuses Clear — a palette holds a value — and offers no Fan', () => {
     draw()
     drag('value', 1, 2)
     const clear = screen.getByRole('button', { name: 'Clear cells' })
     expect(clear).toBeDisabled()
     expect(clear).toHaveAttribute('title', 'A palette holds a value — set another one instead')
-    expect(screen.getByRole('button', { name: /Spread/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan/ })).toBeDisabled()
   })
 
   it('is inert in another project’s library — palette PUTs are the running project’s', () => {
@@ -562,7 +562,7 @@ describe('TemplateSheet — the row verbs', () => {
     ])
     expect(within(dialog).getByText('Half was deleted.', { exact: false })).toBeInTheDocument()
     expect(dialog).toHaveTextContent(
-      '1 cue layer — Q4 · named by 2 effect parameters, which would run as white · 1 programmer layer applying it now, stopped at once',
+      '1 cue layer — Q4 · named by 2 FX parameters, which would run as white · 1 programmer layer applying it now, stopped at once',
     )
     expect(dialog).toHaveTextContent('on 2 busk pages')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete anyway' }))
@@ -598,7 +598,7 @@ describe('TemplateSheet — a padded palette that is also in use', () => {
     expect(deleteTemplate.mock.calls[0][0]).toEqual({ projectId: 1, templateId: 4, force: false })
     dialog = await screen.findByRole('alertdialog')
     await waitFor(() =>
-      expect(dialog).toHaveTextContent('named by 1 effect parameter, which would run as white · on 1 busk page'),
+      expect(dialog).toHaveTextContent('named by 1 FX parameter, which would run as white · on 1 busk page'),
     )
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete anyway' }))
     await waitFor(() => expect(deleteTemplate).toHaveBeenCalledTimes(2))

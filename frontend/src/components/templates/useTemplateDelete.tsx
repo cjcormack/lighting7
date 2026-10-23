@@ -34,7 +34,7 @@ export function describeTemplateInUse(summary: TemplateInUse): string {
       )
     }
     const fx = body.fxReferenceCount ?? 0
-    if (fx > 0) parts.push(`named by ${fx} effect parameter${fx === 1 ? '' : 's'}, which would run as white`)
+    if (fx > 0) parts.push(`named by ${fx} FX parameter${fx === 1 ? '' : 's'}, which would run as white`)
     const running = body.runningCount ?? 0
     if (running > 0) parts.push(`${running} programmer layer${running === 1 ? '' : 's'} applying it now, stopped at once`)
   }
@@ -103,7 +103,7 @@ export function useTemplateDelete({
       noun="palette"
       name={templateName}
       describe={(_template, summary) => describeTemplateInUse(summary)}
-      consequence="deleting them anyway removes what uses them — a layer applying one goes, the programmer stops it, an effect naming it points at nothing (repoint that first), a pad leaves its busk page:"
+      consequence="deleting them anyway removes what uses them — a layer applying one goes, the programmer stops it, an FX naming it points at nothing (repoint that first), a pad leaves its busk page:"
       busy={batch.busy}
       onForce={batch.force}
       onKeep={batch.keep}

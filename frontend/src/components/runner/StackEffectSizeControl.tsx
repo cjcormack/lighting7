@@ -20,8 +20,8 @@ const FULL_PCT = 100
 const keep = (e: SyntheticEvent) => e.stopPropagation()
 
 /**
- * A cue stack's **FX size** (lighting7 effects plan D10, §4.3): a slider over the desk's runtime
- * weight on that stack's effects, 0–100 %, reading the desk's value. It writes as it moves
+ * A cue stack's **FX amount** (lighting7 effects plan D10, §4.3): a slider over the desk's runtime
+ * weight on that stack's FX, 0–100 %, reading the desk's value. It writes as it moves
  * (`useLiveFader`), and a MIDI `stackEffectSize` fader or another window may move it too. A runtime
  * gesture, so it works while the show is locked, as GO does; it greys only offline. Amber below
  * full, as the grand master's chip is, so a stack left at 60 % does not read as a quiet chase.
@@ -45,12 +45,12 @@ export function StackEffectSizeControl({
   return (
     <div
       className={cn('flex items-center gap-2', className)}
-      title={connected ? `FX size — how much of ${stackName}'s effects reach the stage` : DESK_OFFLINE_LABEL}
+      title={connected ? `FX amount — how much of ${stackName}'s FX reach the stage` : DESK_OFFLINE_LABEL}
       onClick={keep}
       onPointerDown={keep}
       data-stack-effect-size={stackId}
     >
-      <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">FX size</span>
+      <span className="shrink-0 text-[9px] font-bold uppercase tracking-wider text-muted-foreground">FX amount</span>
       <Slider
         className={sliderClassName}
         min={0}
@@ -60,7 +60,7 @@ export function StackEffectSizeControl({
         disabled={!connected}
         onValueChange={fader.onValueChange}
         onValueCommit={fader.onValueCommit}
-        aria-label={`FX size, ${stackName}`}
+        aria-label={`FX amount, ${stackName}`}
       />
       <span
         className={cn(
@@ -75,7 +75,7 @@ export function StackEffectSizeControl({
 }
 
 /**
- * The phone runner's FX size row (§4.3): drawn while the stack is below full, and at full only
+ * The phone runner's FX amount row (§4.3): drawn while the stack is below full, and at full only
  * while one of its effects is running — a stack of plain cues has nothing for it to move, and the
  * phone has no room to spare. An effect is the stack's when its cue's highest hold is this stack's
  * (`cueHolds.state`'s `stackId`, the stack that weighs it — Q21); the effect list and the holds are

@@ -196,7 +196,7 @@ class RigBriefing(private val state: State) {
         if (activeEffects.isNotEmpty()) {
             sb.appendLine("Active effects: ${activeEffects.size}")
             for (effect in activeEffects.take(20)) {
-                sb.appendLine("  - ${effect.effect.name} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
+                sb.appendLine("  - ${effect.effectTypeId} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
                         // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
                         (if (effect.onSeconds) " (seconds=" else " (beat=") +
                         "${effect.timing.beatDivision}, blend=${effect.blendMode}" +

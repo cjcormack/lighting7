@@ -467,7 +467,7 @@ describe('the FX tab', () => {
     data.cue = cueOf()
     data.selection = [{ type: 'fixture', key: 'orbit-sr' }]
     render(<Editor tab="fx" />)
-    fireEvent.click(screen.getByRole('button', { name: /Effect/ }))
+    fireEvent.click(screen.getByRole('button', { name: /FX/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     const first = (await patched(1)).adHocEffects as CueAdHocEffect[]
     expect(first).toEqual([
@@ -491,7 +491,7 @@ describe('the FX tab', () => {
     data.cue = cueOf()
     data.selection = [{ type: 'fixture', key: 'orbit-sr' }, { type: 'fixture', key: 'orbit-sl' }]
     render(<Editor tab="fx" />)
-    fireEvent.click(screen.getByRole('button', { name: /Effect/ }))
+    fireEvent.click(screen.getByRole('button', { name: /FX/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     const [stored] = (await patched(1)).adHocEffects as CueAdHocEffect[]
     expect(stored.targetType).toBe('selection')
@@ -560,7 +560,7 @@ describe('the FX tab', () => {
     data.cue = cueOf({ adHocEffects: [pulse()] })
     render(<Editor tab="fx" />)
     fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
-    expect(screen.getByText('Reading the effect library…')).toBeTruthy()
+    expect(screen.getByText('Reading the FX library…')).toBeTruthy()
     expect(document.querySelector('[data-cue-effect-editor]')).toBeNull()
   })
 
@@ -678,7 +678,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
   const high = screen.getByRole('spinbutton', { name: /^High/ })
   fireEvent.change(high, { target: { value: '40' } })
   fireEvent.keyDown(high, { key: 'Enter' })
-  fireEvent.click(screen.getByRole('button', { name: /^Effect$|Effect/ }))
+  fireEvent.click(screen.getByRole('button', { name: 'FX' }))
   fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
   act(() => stack.handlers!.onRemove(0))
   fireEvent.click(screen.getByRole('button', { name: 'Look' }))

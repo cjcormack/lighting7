@@ -107,6 +107,6 @@ export function cellActionCopy(
   }
   return {
     setTitle: `Set the ${cells} in Local — this is what Record will take (Enter)`,
-    clearTitle: `Take the ${cells} out of Local, including any effect busked on them (Backspace)`,
+    clearTitle: `Take the ${cells} out of Local, including any FX busked on them (Backspace)`,
   }
 }

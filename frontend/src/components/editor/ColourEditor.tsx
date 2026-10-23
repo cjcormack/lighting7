@@ -728,7 +728,7 @@ export function ColourEditor({
       >
         <Pipette className="size-3.5" /> <span className={wordClass}>Pick</span>
       </Button>
-      {/* A plain button, not a switch: it opens the Spread panel and holds no state of its own, so a
+      {/* A plain button, not a switch: it opens the Fan panel and holds no state of its own, so a
           `role="switch"` that never read checked promised a toggle it could not be. */}
       <Button
         type="button"
@@ -736,11 +736,11 @@ export function ColourEditor({
         size="sm"
         className="h-7 text-xs"
         disabled={onSpread == null || readOnly}
-        aria-label="Spread to a second colour…"
-        title={onSpread == null ? 'No Spread panel to open from here' : readOnly ? 'This scope takes no value to spread' : 'Open Spread with this colour as From'}
+        aria-label="Fan to a second colour…"
+        title={onSpread == null ? 'No Fan panel to open from here' : readOnly ? 'This scope takes no value to fan' : 'Open Fan with this colour as From'}
         onClick={() => onSpread?.(toChannels(currentChannels()))}
       >
-        <Waves className="size-3.5" /> <span className={wordClass}>Spread…</span>
+        <Waves className="size-3.5" /> <span className={wordClass}>Fan…</span>
       </Button>
     </EditorFooter>
   ) : null

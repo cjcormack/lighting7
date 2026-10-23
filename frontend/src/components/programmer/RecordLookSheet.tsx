@@ -68,7 +68,7 @@ const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
   {
     value: 'STAGE_SNAPSHOT',
     label: 'Whole stage',
-    hint: 'Everything on stage, including values from other cues and running effects.',
+    hint: 'Everything on stage, including values from other cues and running FX.',
   },
 ]
 
@@ -408,7 +408,7 @@ function RecordableEffects({
   return (
     <div className="space-y-1">
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">Effects</span>
+        <span className="text-sm font-medium">FX</span>
         <Badge variant="secondary" className="px-1.5 text-[10px] tabular-nums">
           {candidates.length}
         </Badge>
@@ -435,7 +435,7 @@ function RecordableEffects({
         </label>
       ))}
       <p className="text-xs text-muted-foreground">
-        An effect you leave out keeps running in the programmer — leaving it out is not stopping it.
+        An FX you leave out keeps running in the programmer — leaving it out is not stopping it.
       </p>
     </div>
   )

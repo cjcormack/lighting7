@@ -20,7 +20,7 @@ export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalPr
   return (
     <Sheet open={fixtureKey !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
-        <SheetDescription className="sr-only">The fixture&apos;s values, its channels and its effects</SheetDescription>
+        <SheetDescription className="sr-only">The fixture&apos;s values, its channels and its FX</SheetDescription>
         {fixture ? (
           // Keyed by fixture so the open row and the view reset when the sheet moves to another.
           <FixtureSheet key={fixture.key} fixture={fixture} host="popup" titleComponent={SheetTitle} />

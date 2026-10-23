@@ -343,8 +343,8 @@ function ChecklistRow({
         </span>
         {cue.viaEffectKeyCount > 0 && (
           <span className="block text-xs text-amber-600 dark:text-amber-500">
-            {cue.viaEffectKeyCount} of these are driven by an effect in this cue — a stored value
-            will be masked by that effect on the next GO.
+            {cue.viaEffectKeyCount} of these are driven by an FX in this cue — a stored value
+            will be masked by that FX on the next GO.
           </span>
         )}
       </span>

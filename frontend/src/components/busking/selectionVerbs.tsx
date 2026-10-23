@@ -135,11 +135,11 @@ export function SelectionVerbButtons({ verbs, wordClass }: { verbs: SelectionVer
         size="sm"
         className={VERB_CLASS}
         onClick={verbs.spread}
-        aria-label="Spread…"
-        title="Spread a value across the selection"
+        aria-label="Fan…"
+        title="Fan a value across the selection"
       >
         <Waves className="size-3.5" />
-        <span className={wordClass}>Spread…</span>
+        <span className={wordClass}>Fan…</span>
       </Button>
       <Button
         variant={verbs.locate.active ? 'default' : 'outline'}

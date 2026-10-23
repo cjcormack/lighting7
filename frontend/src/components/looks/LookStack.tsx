@@ -460,7 +460,7 @@ export function LayerRow({
                 <Badge
                   variant="outline"
                   className="shrink-0 px-1.5 py-0 text-[10px]"
-                  title="Switches off the effects of every layer below this one"
+                  title="Switches off the FX of every layer below this one"
                 >
                   STOMP
                 </Badge>
@@ -634,7 +634,7 @@ export function LayerSettingsPopover({
             variant="outline"
             size="sm"
             className="h-7 w-full"
-            title="Turn this layer into your own values and effects, with nothing on stage moving"
+            title="Turn this layer into your own values and FX, with nothing on stage moving"
             onClick={() => handlers.onDetach?.(index)}
           >
             <Unlink className="size-3.5" />
@@ -721,8 +721,8 @@ function StompButton({
         index === 0
           ? 'Stomp lower layers — no layer is below this one, so it suppresses nothing until this layer is moved up the stack'
           : stomp
-            ? 'Stomping: the effects of every layer below this one are switched off on the properties it sets'
-            : 'Stomp lower layers — switches off their effects on the properties this layer sets. Use it when an effect below is fighting a value here.'
+            ? 'Stomping: the FX of every layer below this one are switched off on the attributes it sets'
+            : 'Stomp lower layers — switches off their FX on the attributes this layer sets. Use it when an FX below is fighting a value here.'
       }
       onClick={onToggle}
     >

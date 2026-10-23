@@ -47,13 +47,13 @@ describe('LookPreviewStrip', () => {
     render(<LookPreviewStrip preview={VALUES} effectTypes={['Pulse']} effectCount={1} />)
     const drawn = drawnLine()
     expect(drawn.slice(0, 3).map((el) => el.textContent)).toEqual(['10', '20', '+3'])
-    expect(screen.getByLabelText('1 effect: Pulse')).toBeInTheDocument()
+    expect(screen.getByLabelText('1 FX: Pulse')).toBeInTheDocument()
   })
 
   it('names the effects of a Look that holds nothing else', () => {
     render(<LookPreviewStrip preview={[]} effectTypes={['ColourCycle', 'Pulse']} effectCount={2} />)
     expect(screen.getByText('Colour Cycle, Pulse')).toBeInTheDocument()
-    expect(screen.getByLabelText('Effects only')).toBeInTheDocument()
+    expect(screen.getByLabelText('FX only')).toBeInTheDocument()
   })
 
   it('draws nothing for a Look with no values and no effects', () => {

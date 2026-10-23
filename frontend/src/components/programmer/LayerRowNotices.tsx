@@ -51,7 +51,7 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
         </Badge>
         <span className="text-muted-foreground">
           {focusedTemplate?.kind === 'effect'
-            ? `“${layer.source.name}” runs one effect for the whole family — the grid shows the live value under it, and the wave marks the cells it drives.`
+            ? `“${layer.source.name}” runs one FX for the whole family — the grid shows the live value under it, and the wave marks the cells it drives.`
             : `“${layer.source.name}” holds one value for the whole family, resolved per head — so there is nothing to show per fixture.`}
         </span>
         {/* `projectId` from the host, not from the row store: the store does not engage for a

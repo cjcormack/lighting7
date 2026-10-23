@@ -235,7 +235,7 @@ export function ProgrammerActionBar({ projectId }: { projectId: number }) {
           !deskConnected
             ? `Stage — Blind: ${DESK_OFFLINE_LABEL}, so it cannot be changed`
             : blind
-              ? 'Stage — Blind is on: programmer values and effects are held out of the stage output'
+              ? 'Stage — Blind is on: programmer values and FX are held out of the stage output'
               : 'Stage — Blind: edit without the rig showing it'
         }
         onClick={() => programmerSetBlind(!blind, fade)}

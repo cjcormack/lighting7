@@ -171,7 +171,7 @@ export function HeadStrip({
             <button
               type="button"
               data-pick-cells
-              aria-label={`Cells: ${shown == null ? 'a pick of your own' : PICK_FILTER_LABELS[shown]}`}
+              aria-label={`Elements: ${shown == null ? 'a pick of your own' : PICK_FILTER_LABELS[shown]}`}
               title={`Pick by pattern — ${PICK_FILTERS.map((f) => PICK_FILTER_LABELS[f]).join(' · ')}`}
               className="inline-flex h-7 items-center gap-1 rounded-[7px] border px-1.5 text-[11.5px] text-muted-foreground hover:text-foreground"
             >
@@ -181,7 +181,7 @@ export function HeadStrip({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Cells</DropdownMenuLabel>
+            <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">Elements</DropdownMenuLabel>
             {PICK_FILTERS.map((filter) => (
               <DropdownMenuItem
                 key={filter}

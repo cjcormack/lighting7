@@ -116,11 +116,11 @@ describe('FxEffectFields', () => {
   it('gives a wall-clock effect with no rate master Seconds, and a beat effect beats and its speed master', () => {
     fields(FLICKER, draft())
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ }).closest('div')).toBeTruthy()
-    expect(screen.queryByRole('radiogroup', { name: 'Speed' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
     cleanup()
     fields(PULSE, draft())
-    expect(screen.getByRole('radiogroup', { name: 'Speed' })).toBeTruthy()
+    expect(screen.getByRole('radiogroup', { name: 'Cycle' })).toBeTruthy()
     expect(screen.queryByRole('spinbutton', { name: /Cycle seconds/ })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: M1 · 120' })).toBeTruthy()
   })
@@ -128,7 +128,7 @@ describe('FxEffectFields', () => {
   it('types a beat effect on Seconds in seconds, with no master named', () => {
     fields(PULSE, draft({ seconds: true, beatDivision: 10 }))
     expect(screen.getByRole('spinbutton', { name: /Cycle seconds/ })).toBeTruthy()
-    expect(screen.queryByRole('radiogroup', { name: 'Speed' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Cycle' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
     expect(screen.getByText('seconds a cycle · follows no master')).toBeTruthy()
   })
@@ -140,7 +140,7 @@ describe('FxEffectFields', () => {
 
   it('speaks the segment in the one spelling the chips use — beats a cycle, bars from four', () => {
     fields(PULSE, draft({ beatDivision: 4 }))
-    const segment = screen.getByRole('radiogroup', { name: 'Speed' })
+    const segment = screen.getByRole('radiogroup', { name: 'Cycle' })
     const labels = Array.from(segment.querySelectorAll('button')).map((b) => b.textContent)
     expect(labels).toEqual(['⅛ beat', '¼ beat', '½ beat', '1 beat', '2 beats', '1 bar', '2 bars', '4 bars'])
     expect(screen.getByRole('radio', { name: '1 bar a cycle' }).getAttribute('aria-checked')).toBe('true')
@@ -156,9 +156,9 @@ describe('FxEffectFields', () => {
     expect(setParam).toHaveBeenLastCalledWith('flickerDurationMs', '400', true)
   })
 
-  it('puts Size in percent and Direction as three glyphs beside Speed (effects plan D11)', () => {
+  it('puts Amount in percent and Direction as three glyphs beside Cycle (effects plan D11)', () => {
     const { set } = fields(PULSE, draft({ size: 0.6, direction: 'BACKWARD' }))
-    const size = screen.getByRole('spinbutton', { name: /Size/ }) as HTMLInputElement
+    const size = screen.getByRole('spinbutton', { name: /Amount/ }) as HTMLInputElement
     expect(size.value).toBe('60')
     fireEvent.change(size, { target: { value: '40' } })
     fireEvent.keyDown(size, { key: 'Enter' })
@@ -204,22 +204,22 @@ describe('FxEffectFields', () => {
 
   const HEADS: FxScope = { heads: true, elementMode: false, elementFilter: false }
 
-  it('draws Spread only where there are heads, and moves the Order out of Advanced into it', () => {
+  it('draws Spread and Order only where there are heads, with the Order always visible beside Direction', () => {
     fields(PULSE, draft())
     expect(screen.queryByRole('button', { name: /^Spread/ })).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Order' })).toBeNull()
     cleanup()
     fields(PULSE, draft({ distributionStrategy: 'LINEAR', spread: 0.5, wings: 2 }), HEADS)
     // Folded, the summary says the non-defaults. The label and the summary are two spans with only
     // a CSS gap between them, so the accessible name has no space after "Spread".
-    expect(screen.getByRole('button', { name: /^Spread\s*· Rig · 50 % · 2 wings$/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /^Spread\s*· 50 % · 2 wings$/ })).toBeTruthy()
+    expect(screen.getByRole('combobox', { name: 'Order' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
     expect(screen.queryByRole('combobox', { name: 'Distribution' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
-    expect(screen.getByRole('combobox', { name: 'Order' })).toBeTruthy()
   })
 
   it('writes Spread in percent and the three counts on Enter, refusing a count out of range', () => {
-    // Groups starts at 2 so that typing 0 is a change: a field already showing 0 fires no onChange.
+    // Parts start at 2 so that typing 0 is a change: a field already showing 0 fires no onChange.
     const { set } = fields(PULSE, draft({ groups: 2 }), HEADS)
     fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
     const spread = screen.getByRole('spinbutton', { name: /Spread percent/ }) as HTMLInputElement
@@ -233,15 +233,15 @@ describe('FxEffectFields', () => {
     fireEvent.keyDown(wings, { key: 'Enter' })
     expect(set).toHaveBeenLastCalledWith({ wings: 2 })
 
-    const groups = screen.getByRole('spinbutton', { name: 'Groups' })
-    fireEvent.change(groups, { target: { value: '0' } })
-    fireEvent.keyDown(groups, { key: 'Enter' })
+    const parts = screen.getByRole('spinbutton', { name: 'Parts' })
+    fireEvent.change(parts, { target: { value: '0' } })
+    fireEvent.keyDown(parts, { key: 'Enter' })
     expect(set).toHaveBeenLastCalledWith({ groups: 0 })
 
     set.mockClear()
-    const blocks = screen.getByRole('spinbutton', { name: 'Blocks' })
-    fireEvent.change(blocks, { target: { value: '0' } })
-    fireEvent.keyDown(blocks, { key: 'Enter' })
+    const segments = screen.getByRole('spinbutton', { name: 'Segments' })
+    fireEvent.change(segments, { target: { value: '0' } })
+    fireEvent.keyDown(segments, { key: 'Enter' })
     expect(set).not.toHaveBeenCalled()
   })
 
@@ -250,7 +250,7 @@ describe('FxEffectFields', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Spread/ }))
     expect(screen.queryByRole('spinbutton', { name: 'Wings' })).toBeNull()
     expect(screen.getByText('two already')).toBeTruthy()
-    expect(screen.getByRole('spinbutton', { name: 'Blocks' })).toBeTruthy()
+    expect(screen.getByRole('spinbutton', { name: 'Segments' })).toBeTruthy()
   })
 
   it('previews an effect palette over eight notional heads, and a live effect over its own up to sixteen', () => {

@@ -152,7 +152,7 @@ export function AppliedFxTable({
   const columnsFor = useCallback((band: AppliedBand) => fxColumns(band), [])
   const firstColumnFor = useCallback(
     (band: AppliedBand) => ({
-      label: 'Effect',
+      label: 'FX',
       width: band === 0 ? '210px' : '190px',
       openLabel: (row: FxSheetRow) => `Edit ${row.effect.effectType}`,
       render: (row: FxSheetRow) => (
@@ -191,7 +191,7 @@ export function AppliedFxTable({
         firstSortKey="name"
         view={view}
         onViewChange={onViewChange}
-        filterLabel="Filter by effect, property, target or home"
+        filterLabel="Filter by FX, attribute, target or home"
         chips={
           <PartitionChips<FxHome>
             label="Where it lives"
@@ -207,7 +207,7 @@ export function AppliedFxTable({
         rule={<EffectsBelowRule />}
         onSelectionChange={onSelectionChange}
         initialSelection={initialSelection}
-        noun="effect"
+        noun="FX"
         rowName={(row) => row.effect.effectType}
         onOpenRow={openEditor}
         verbs={(selected) => (
@@ -220,10 +220,10 @@ export function AppliedFxTable({
             controls={controls}
           />
         )}
-        emptyNote="Nothing running. Effects arrive from a busking pad, a Look, or the cue on stage."
+        emptyNote="Nothing running. FX arrive from a busking pad, a Look, or the cue on stage."
         footer={
           <span className="tabular-nums">
-            {all.length} effect{all.length === 1 ? '' : 's'} running
+            {all.length} FX running
             {held > 0 ? ` · ${held} held by Blind` : ''}
             {spent > 0 ? ` · ${spent} spent` : ''}
           </span>
@@ -326,7 +326,7 @@ function cellText(text: string, title?: string, mono = false) {
 function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColumnKey>[]; minWidth: number } {
   const property: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'property',
-    label: 'Property',
+    label: 'Attribute',
     width: band === 0 ? '96px' : '84px',
     value: () => undefined,
     display: (row) => cellText(row.effect.propertyName, undefined, true),
@@ -347,7 +347,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   }
   const speed: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'speed',
-    label: 'Speed',
+    label: 'Cycle',
     width: '80px',
     value: () => undefined,
     display: (row) => cellText(speedLabel(row.effect), undefined, true),
@@ -361,8 +361,8 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   }
   const size: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'size',
-    label: 'Size',
-    width: '64px',
+    label: 'Amount',
+    width: '76px',
     value: () => undefined,
     display: (row) => cellText(sizeLabel(row.effect), undefined, true),
   }
@@ -379,7 +379,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   const runs: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'runs',
     label: 'Runs',
-    width: '96px',
+    width: '92px',
     value: () => undefined,
     display: (row) => cellText(runsLabel(row.effect), row.effect.nShot == null ? 'Runs forever' : undefined, true),
   }
@@ -391,7 +391,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
     display: (row) => {
       const d = row.effect.direction ?? 'FORWARD'
       const text = [sizeLabel(row.effect), DIRECTION_GLYPH[d], runsLabel(row.effect)].join(' · ')
-      return cellText(text, `Size ${sizeLabel(row.effect)} · ${DIRECTION_WORD[d]} · runs ${runsLabel(row.effect)}`, true)
+      return cellText(text, `Amount ${sizeLabel(row.effect)} · ${DIRECTION_WORD[d]} · runs ${runsLabel(row.effect)}`, true)
     },
   }
   const home: SheetColumn<FxSheetRow, FxColumnKey> = {
@@ -421,7 +421,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   // Each set's floor — the name column and the tracks' minimums — fits its band: 0 within 1100, 1 within the iPad's 940.
   switch (band) {
     case 0:
-      return { columns: [property, target, timing, speed, size, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 64 + 52 + 96 + 140 + 100 }
+      return { columns: [property, target, timing, speed, size, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 76 + 52 + 92 + 140 + 100 }
     case 1:
       return { columns: [property, target, timingSpeed, dynamics, home, state], minWidth: 190 + 84 + 140 + 140 + 120 + 140 + 100 }
     default:
@@ -597,29 +597,29 @@ function FxVerbs({
       <LibraryVerb
         icon={Pencil}
         label="Edit…"
-        title={`Edit ${first?.effect.effectType ?? 'this effect'} live`}
-        disabledReason={oneRecordReason('Edit', 'effect', count)}
+        title={`Edit ${first?.effect.effectType ?? 'this FX'} live`}
+        disabledReason={oneRecordReason('Edit', 'FX', count)}
         onClick={() => onEdit(first)}
       />
       <LibraryVerb
         icon={Plus}
         label="Save as palette…"
-        title="Save this effect as a palette"
-        disabledReason={oneRecordReason('Save as palette', 'effect', count) ?? (offer?.enabled === false ? (offer.reason ?? 'Cannot be a palette') : null)}
+        title="Save this FX as a palette"
+        disabledReason={oneRecordReason('Save as palette', 'FX', count) ?? (offer?.enabled === false ? (offer.reason ?? 'Cannot be a palette') : null)}
         onClick={() => onSave(first)}
       />
       {paused.length === count ? (
         <LibraryVerb
           icon={Play}
           label="Resume"
-          title={`Resume ${count} effect${count === 1 ? '' : 's'}`}
+          title={`Resume ${count} FX`}
           onClick={() => paused.forEach((row) => controls.togglePause(row.effect))}
         />
       ) : (
         <LibraryVerb
           icon={Pause}
           label="Pause"
-          title={`Pause ${running.length} running effect${running.length === 1 ? '' : 's'}`}
+          title={`Pause ${running.length} running FX`}
           onClick={() => running.forEach((row) => controls.togglePause(row.effect))}
         />
       )}
@@ -627,7 +627,7 @@ function FxVerbs({
         icon={Square}
         label="Stop"
         destructive
-        title={`Stop ${count} effect${count === 1 ? '' : 's'}`}
+        title={`Stop ${count} FX`}
         onClick={() => selected.forEach((row) => controls.stop(row.effect))}
       />
     </>
@@ -645,9 +645,9 @@ function AddEffectVerb({ projectId }: { projectId: number }) {
     <>
       {/* The title is on a span: a disabled button takes no hover, and the title says why it is shut. */}
       <span className="flex shrink-0" title={offer.reason}>
-        <Button variant="outline" size="sm" aria-label="Add an effect" disabled={offer.disabled} onClick={() => setOpen(true)}>
+        <Button variant="outline" size="sm" aria-label="Add an FX" disabled={offer.disabled} onClick={() => setOpen(true)}>
           <Plus className="size-3.5" />
-          <span className="hidden @[560px]:inline">Effect</span>
+          <span className="hidden @[560px]:inline">FX</span>
         </Button>
       </span>
       <ProgrammerAddEffectSheet projectId={projectId} open={open} offer={offer} onClose={() => setOpen(false)} />

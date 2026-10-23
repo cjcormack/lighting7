@@ -413,7 +413,7 @@ export function FxPicker({
         type="single"
         size="sm"
         value={family}
-        aria-label="Effect family"
+        aria-label="FX family"
         onValueChange={(v) => v && setChosenFamily(v as PickerFamily)}
         className="flex w-full"
       >
@@ -430,11 +430,11 @@ export function FxPicker({
       </ToggleGroup>
 
       {library == null ? (
-        <EditorReadout>Reading the effect library…</EditorReadout>
+        <EditorReadout>Reading the FX library…</EditorReadout>
       ) : effects.length === 0 ? (
         <EditorReadout>Nothing in the library fits this {target.type}.</EditorReadout>
       ) : (
-        <ul className="flex flex-col gap-0.5" aria-label={`${PICKER_FAMILY_LABELS[family]} effects`}>
+        <ul className="flex flex-col gap-0.5" aria-label={`${PICKER_FAMILY_LABELS[family]} FX`}>
           {effects.map((entry) => {
             const isCurrent = currentEntry != null && currentEntry.name === entry.name
             return (
@@ -476,7 +476,7 @@ export function FxPicker({
               void start(currentEntry, pick)
             }}
           >
-            <SelectTrigger aria-label="Property" className="h-7 text-xs">
+            <SelectTrigger aria-label="Attribute" className="h-7 text-xs">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

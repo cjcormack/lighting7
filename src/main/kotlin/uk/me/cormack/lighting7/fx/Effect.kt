@@ -102,6 +102,13 @@ interface Effect {
     val outputType: FxOutputType
 
     /**
+     * The registry id this effect was made under, where the registry made it, which [name] need not
+     * match. Null for an effect a script constructs itself.
+     */
+    val registrationId: String?
+        get() = null
+
+    /**
      * Returns the current parameters of this effect as a serializable map.
      * Keys are parameter names, values are string representations.
      * This allows running effects to report their configuration for UI display/editing.

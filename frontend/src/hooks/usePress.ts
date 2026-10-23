@@ -235,7 +235,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             }).unwrap()
             const effectIds = started.effectIds ?? []
             if (effectIds.length === 0) {
-              toast.warning('Nothing started — no selected head could take this effect')
+              toast.warning('Nothing started — no selected head could take this FX')
               return null
             }
             try {
@@ -320,8 +320,8 @@ function reportApplied(template: TemplateSummary, written: number, skipped: numb
   }
   if (template.kind === 'effect' && effectIds != null) {
     const count = effectIds.length
-    if (count === 0) toast.warning('Nothing started — no selected head could take this effect')
-    else toast.success(`${count} effect${count === 1 ? '' : 's'} started`)
+    if (count === 0) toast.warning('Nothing started — no selected head could take this FX')
+    else toast.success(`${count} FX started`)
   }
 }
 

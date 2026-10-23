@@ -45,7 +45,7 @@ describe('StackEffectSizeControl', () => {
   it("reads the desk's size as a percent, amber below full, and writes 0–1 for its stack", () => {
     state.sizes = { 4: 0.6 }
     render(<StackEffectSizeControl stackId={4} stackName="Act 1" />)
-    const slider = screen.getByRole('slider', { name: 'FX size, Act 1' })
+    const slider = screen.getByRole('slider', { name: 'FX amount, Act 1' })
     expect(slider.getAttribute('aria-valuenow')).toBe('60')
     expect(screen.getByText('60%').className).toMatch(/amber/)
 
@@ -61,15 +61,15 @@ describe('StackEffectSizeControl', () => {
       </div>,
     )
     // On the label, not the thumb: Radix's thumb asks for pointer capture, which jsdom lacks.
-    fireEvent.pointerDown(screen.getByText('FX size'))
-    fireEvent.click(screen.getByText('FX size'))
+    fireEvent.pointerDown(screen.getByText('FX amount'))
+    fireEvent.click(screen.getByText('FX amount'))
     expect(onRow).not.toHaveBeenCalled()
   })
 
   it('greys out while the desk is offline', () => {
     state.connected = false
     render(<StackEffectSizeControl stackId={4} stackName="Act 1" />)
-    expect(screen.getByRole('slider', { name: 'FX size, Act 1' }).getAttribute('data-disabled')).not.toBeNull()
+    expect(screen.getByRole('slider', { name: 'FX amount, Act 1' }).getAttribute('data-disabled')).not.toBeNull()
   })
 })
 
@@ -85,7 +85,7 @@ describe('the phone runner row', () => {
     state.holds = [{ cueId: 21, topStackId: 4 }]
     state.effects = [{ cueId: 21 }]
     render(<MobileStackEffectSize projectId={1} stackId={4} stackName="Act 1" />)
-    expect(screen.getByRole('slider', { name: 'FX size, Act 1' })).toBeTruthy()
+    expect(screen.getByRole('slider', { name: 'FX amount, Act 1' })).toBeTruthy()
   })
 
   it('is hidden for a cue it holds but another stack weighs, or a press holds loose', () => {
@@ -101,6 +101,6 @@ describe('the phone runner row', () => {
   it('is drawn below full whatever runs, so a size left down is never out of reach', () => {
     state.sizes = { 4: 0.3 }
     render(<MobileStackEffectSize projectId={1} stackId={4} stackName="Act 1" />)
-    expect(screen.getByRole('slider', { name: 'FX size, Act 1' }).getAttribute('aria-valuenow')).toBe('30')
+    expect(screen.getByRole('slider', { name: 'FX amount, Act 1' }).getAttribute('aria-valuenow')).toBe('30')
   })
 })

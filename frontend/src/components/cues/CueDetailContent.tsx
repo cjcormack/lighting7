@@ -166,7 +166,7 @@ export const CueDetailContent = memo(function CueDetailContent({
 
       {/* ── Ad-hoc Effects ── */}
       <div className="space-y-1.5">
-        <SectionHeader icon={AudioWaveform} label="Effects" count={adHocEffects.length} />
+        <SectionHeader icon={AudioWaveform} label="FX" count={adHocEffects.length} />
         <CueEffectsReadout cue={cue} enabled={enabled} />
       </div>
 

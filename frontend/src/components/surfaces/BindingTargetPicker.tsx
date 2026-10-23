@@ -117,9 +117,9 @@ const BUTTON_KINDS: TargetKind[] = [
 ]
 
 const KIND_LABELS: Record<TargetKind, string> = {
-  fixtureProperty: "Fixture property",
-  groupProperty: "Group property",
-  selectionProperty: "Selection — property",
+  fixtureProperty: "Fixture attribute",
+  groupProperty: "Group attribute",
+  selectionProperty: "Selection — attribute",
   selectionFan: "Selection — fan",
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
@@ -134,7 +134,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
   grandMasterFader: "Grand Master — fader",
-  stackEffectSize: "Cue stack — FX size",
+  stackEffectSize: "Cue stack — FX amount",
   setBank: "Set bank",
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
@@ -151,7 +151,7 @@ const KIND_LABELS: Record<TargetKind, string> = {
   buskSheetToggle: "Busk window — sheet",
   selectionNext: "Selection — next",
   selectionPrev: "Selection — previous",
-  selectionCells: "Selection — cells",
+  selectionCells: "Selection — elements",
 }
 
 export function BindingTargetPicker({
@@ -390,7 +390,7 @@ function PropertyField({
 }) {
   return (
     <div className="space-y-1.5">
-      <Label className="text-xs">Property</Label>
+      <Label className="text-xs">Attribute</Label>
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
         <SelectContent>
@@ -442,7 +442,7 @@ function TargetBody({
           />
         )}
         <p className="text-xs text-muted-foreground">
-          Writes this property on every selected target. With nothing selected the move is dropped.
+          Writes this attribute on every selected target. With nothing selected the move is dropped.
         </p>
       </div>
     )
@@ -487,7 +487,7 @@ function TargetBody({
         )}
         <p className="text-xs text-muted-foreground">
           Switches what every strip encoder on this device drives. Its LED lights while this
-          property — and, for a colour, this axis — is the active bank.
+          attribute — and, for a colour, this axis — is the active bank.
         </p>
       </div>
     )
@@ -539,7 +539,7 @@ function TargetBody({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Property</Label>
+          <Label className="text-xs">Attribute</Label>
           <Input
             value={value.propertyName}
             onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
@@ -573,7 +573,7 @@ function TargetBody({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">Property</Label>
+          <Label className="text-xs">Attribute</Label>
           <Input
             value={value.propertyName}
             onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
@@ -745,7 +745,7 @@ function TargetBody({
         />
         <p className="text-xs text-muted-foreground">
           Presses the Look onto <em>its own fixtures</em>, the same every press — never onto the
-          selection. A Look with a deferred effect has none of its own, and is refused.
+          selection. A Look with a deferred FX has none of its own, and is refused.
         </p>
       </div>
     )
@@ -873,7 +873,7 @@ function TargetBody({
   if (kind === "selectionNext" || kind === "selectionPrev") {
     return (
       <p className="text-xs text-muted-foreground">
-        Steps the whole desk selection one place along rig order, wrapping — one cell when only cells
+        Steps the whole desk selection one place along rig order, wrapping — one element when only elements
         are selected. The rig band&rsquo;s {kind === "selectionNext" ? "Next" : "Prev"} step button, on a
         surface button.
       </p>
@@ -894,7 +894,7 @@ function TargetBody({
           </Select>
         </div>
         <p className="text-xs text-muted-foreground">
-          Rewrites the desk selection&rsquo;s targets over rig order — the rig band&rsquo;s Cells menu on a button.
+          Rewrites the desk selection&rsquo;s targets over rig order — the rig band&rsquo;s Elements menu on a button.
           Not a state the desk keeps, so there is no LED.
         </p>
       </div>

@@ -122,7 +122,7 @@ describe('RailSpreadTab scope arms', () => {
   it('Output: refused with the popover’s words, read-only on the label line', () => {
     scopeState.scope = { kind: 'output' }
     draw(snapshot({ permission: { entry: false, clear: false } }))
-    expect(panel.props!.disabledReason).toBe('Output is a read of the cook — switch to Local to spread values onto these heads')
+    expect(panel.props!.disabledReason).toBe('Output is a read of the cook — switch to Local to fan values onto these heads')
     expect(screen.getByText('Output · read-only')).toBeInTheDocument()
   })
 
@@ -130,7 +130,7 @@ describe('RailSpreadTab scope arms', () => {
     scopeState.scope = { kind: 'layer', layerId: 4 }
     scopeState.template = { id: 4 }
     draw(snapshot({ permission: { entry: false, clear: false } }))
-    expect(panel.props!.disabledReason).toBe('This layer applies a palette — switch to Local to spread values onto these heads')
+    expect(panel.props!.disabledReason).toBe('This layer applies a palette — switch to Local to fan values onto these heads')
   })
 })
 
