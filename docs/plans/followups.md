@@ -38,6 +38,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FX-WIDTH-SOFTNESS`](#fu-fx-width-softness) | Trigger | FX | an operator looks for one Width or Softness across effects |
 | [`FU-FX-AMPLITUDE`](#fu-fx-amplitude) | Trigger | FX | an operator wants an FX bigger than it was written (absorbs `FU-FX-SIZE-OVER-100`) |
 | [`FU-FX-PER-STEP-TIMING`](#fu-fx-per-step-timing) | Trigger | FX | an operator expects a longer list to run slower |
+| [`FU-FX-PREVIEW-SHARED-CHANNELS`](#fu-fx-preview-shared-channels) | Trigger | FX | an FX graph disagrees with the rig where two attributes share a channel |
 | [`FU-FX-STEP-WIDTH`](#fu-fx-step-width) | Trigger | FX | an operator asks for an uneven step |
 | [`FU-FX-LIBRARY-GAPS`](#fu-fx-library-gaps) | Trigger | FX | an operator reaches for a square, diamond or TiltDim |
 | [`FU-FX-FLICKER-REPEATS`](#fu-fx-flicker-repeats) | Trigger | FX | someone sees a flicker repeat on a long cycle |
@@ -477,6 +478,25 @@ an enum), read by the step FX as a multiplier of their entry count, and a third 
 segment.
 
 **Trigger**: an operator expects a longer list to run slower and finds each step shorter instead.
+
+---
+
+### `FU-FX-PREVIEW-SHARED-CHANNELS`
+
+**The FX sampler folds each attribute alone** · Trigger · FX editor plan session 1a, 2026-10-23
+
+`fx/FxSampler.kt` folds a head's FX per attribute name. Some attributes share channels: a colour FX
+writes a head's bundled W, A and UV, which a `white`, `amber` or `uv` FX also writes, and a `pan` or
+`tilt` FX writes a channel of `position`. The compose pass resets both keys and applies every FX in
+one apply order, so on stage the later FX decides the shared channel; the sampler shows each
+attribute as if the other did not exist. No built-in pairing does this by default, and
+`FxSamplerParityTest` covers no such case.
+
+The shape: fold the attributes that share a channel together — a colour row's W, A and UV planes
+with the slider rows of those emitters, `position` with `pan` and `tilt` — in one apply order, and
+add a parity case for each pairing.
+
+**Trigger**: an FX graph disagrees with the rig where two attributes share a channel.
 
 ---
 
