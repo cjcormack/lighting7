@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23, not started.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 1 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -227,7 +227,7 @@ match MagicQ; blend-mode names and the *Around / Absolute / Replace it / Within 
 
 Each session is one PR. Sessions run in order; session 2 can land at any point after session 1.
 
-### Session 1: the glossary and its test (docs + backend + frontend tests)
+### Session 1: the glossary and its test (docs + backend + frontend tests) — done, `cfd406d8`
 
 - `docs/glossary.md`: one row per idea with the agreed word, its old names, MagicQ's word, where it
   shows, and a status column (`planned` / `done`). Linked from `CLAUDE.md` beside the prose rules, with
