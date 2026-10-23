@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23, not started.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; session 2 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -404,7 +404,7 @@ Why each gate is where it is:
   the caps truncate and say so.
 - **Docs**: `fx-engineering.md` §"Previewing an FX", the route.
 
-### Session 2: one compose pass (backend)
+### Session 2: one compose pass (backend) — done, `fb8c3421`
 
 **Gate: none.** Best landed before terminology session 5.
 
