@@ -453,8 +453,8 @@ class FxEnginePipelineTest {
         }
         rig.engine.addEffect(effect)
 
-        // A beat-tick should be a no-op for a WALL_CLOCK-tagged effect — the beat snapshot
-        // list skips it, so the controller stays untouched.
+        // A beat-woken pass with no beat effect running is skipped, so the controller stays
+        // untouched. (Beside a running beat effect it would paint this one too: FxComposePassTest.)
         rig.engine.processBeatTick(tick(0))
         assertNull(
             rig.controller.currentValues[1],

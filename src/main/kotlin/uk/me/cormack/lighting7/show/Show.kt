@@ -364,9 +364,9 @@ class Show(
 
         // Start the FX engine after fixtures are loaded.
         //
-        // GlobalScope is accepted here for now, deliberately: the engine's two loops live as
-        // long as the show does, [fxEngine.stop] cancels them by hand, and it catches per pass
-        // so neither loop can die on its own. The cost of the shortcut is that a Show which is
+        // GlobalScope is accepted here for now, deliberately: the engine's loops live as long as
+        // the show does, [fxEngine.stop] cancels them by hand, and the pass loop catches per pass
+        // so it cannot die on its own. The cost of the shortcut is that a Show which is
         // dropped without close() leaks its loops, and there is no parent to cancel the tree in
         // one move — the same bargain the other long-lived subsystems here have struck
         // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real

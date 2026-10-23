@@ -342,7 +342,7 @@ The `getValue()` method returns the pending value (what will be after `apply()`)
 
 `DmxController` exposes two commit entry points:
 
-- `suspend fun setValuesSuspend(values)` — hot writer paths (FX beat + wall-clock tick loops,
+- `suspend fun setValuesSuspend(values)` — hot writer paths (the FX compose pass,
   MIDI surface input, script coroutines) should call this. Each per-channel update is sent
   and awaited as a child of `coroutineScope`, so the calling coroutine parks on a continuation
   rather than a thread. `ControllerTransaction.applySuspend()` fans commits across universes
@@ -356,13 +356,8 @@ same channel returns the committed value — because each channel's conflated co
 update before the commit returns. The suspend path just doesn't pin a carrier thread on
 `runBlocking` while it waits.
 
-The frame-transaction unification that would share a single `ControllerTransaction` between
-the beat and wall-clock FX loops is not in scope for Phase 8. Continuous streaming has
-since made the *packet-rate* half of that concern structurally impossible — a universe emits
-exactly one frame per tick regardless of how many transactions committed — and the
-coordination cost (shared `AtomicReference` + mutex around the open-close edge) isn't a clear
-win for what remains. Tracked as a future consideration in
-[fx-engineering.md §Future Considerations](fx-engineering.md#future-considerations).
+The FX engine commits one `ControllerTransaction` per compose pass, beat and wall-clock effects
+together — [fx-engineering.md §"Architecture: one compose pass"](fx-engineering.md#architecture-one-compose-pass).
 
 ### Benchmarking
 

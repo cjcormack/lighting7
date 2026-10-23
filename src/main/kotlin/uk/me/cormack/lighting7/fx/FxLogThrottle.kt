@@ -28,12 +28,11 @@ internal class FxLogThrottle(private val logger: Logger) {
     /**
      * Log a fault at most once per [LOG_THROTTLE_NANOS] per [key].
      *
-     * The beat pass runs at up to 120 Hz and the wall-clock pass at 50 Hz, so a fault that
-     * recurs every tick — a script effect that throws on every `calculate`, an effect
-     * pointing at a fixture that has gone away — would otherwise write thousands of lines a
-     * minute and bury everything else. Suppressed repeats are counted and reported on the
-     * next line that does get through, so the log still says "this is happening constantly"
-     * rather than looking like an isolated blip.
+     * The compose pass runs at up to 200 Hz, so a fault that recurs every pass — a script effect
+     * that throws on every `calculate`, an effect pointing at a fixture that has gone away — would
+     * otherwise write thousands of lines a minute and bury everything else. Suppressed repeats are
+     * counted and reported on the next line that does get through, so the log still says "this is
+     * happening constantly" rather than looking like an isolated blip.
      *
      * [message] is only evaluated when the line is actually emitted. Faults whose real report
      * comes from somewhere else pass [debug] and cost nothing at all when debug is off.
@@ -51,7 +50,7 @@ internal class FxLogThrottle(private val logger: Logger) {
         // `now - last` negative and silence this key until real time caught up again.
         val now = System.nanoTime()
         val last = throttle.lastLogNanos.get()
-        // The CAS also resolves the two tick loops racing on one key: the loser suppresses.
+        // The CAS also resolves the pass and a publish path racing on one key: the loser suppresses.
         if ((last != 0L && now - last < LOG_THROTTLE_NANOS) ||
             !throttle.lastLogNanos.compareAndSet(last, now)
         ) {

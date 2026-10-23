@@ -552,7 +552,7 @@ class ProgrammerStore {
      * its first slot or losing its last. The per-tick effect-suppression snapshot
      * (`FxEngine.programmerSuppression`) caches [activePropertiesByFixture] on this rather
      * than on [epoch]: coverage is all that map reports, and keying on [epoch] made every
-     * busk-time fader write rebuild it in both 50 Hz loops for a byte-identical result.
+     * busk-time fader write rebuild it on every compose pass for a byte-identical result.
      *
      * Always bumped **after** the map mutation it reports, never before. The bump is a
      * volatile write, so a reader that observes the new count also observes the mutation.

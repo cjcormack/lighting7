@@ -517,9 +517,9 @@ is read (`intensityMultiplier` is its level now). So the effects need no loop of
 sets the ramps as the holds move — `bringOn` spawns an arriving cue's effects on `0 → 1` before they
 are added, `takeOff` sets a leaving cue's on `now → 0` — and every change of fade is one
 compare-and-set on the instance. An instance on its way out is **leaving**: it belongs to no cue,
-layer or Release any more, and the engine's 50 Hz wall-clock pass removes it once it reaches 0
-(`FxEngine.retireFinishedLeaving`, which runs whatever is running, so a paused or beat-loop effect
-ends on time too).
+layer or Release any more, and the engine's 50 Hz ticker-woken passes remove it once it reaches 0
+(`FxEngine.retireFinishedLeaving`, which runs whatever is running, so a paused or beat effect ends
+on time too).
 
 ### The envelope is a weight, not a scale
 
@@ -529,8 +529,8 @@ factor of the weight applied after the blend — `out = before + (blended − be
 than driving an `OVERRIDE` to 0. See `docs/fx-engineering.md` §"Size, direction and N-shot".
 
 Applied in the target, after the blend: `calculateEffectOutput` returns the raw output, and each of
-the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxEngine.weightOf`, which is `FxInstance.weight` with the stack's size). Both the beat and wall-clock passes share those three, differing only in
-the `PhaseSource` they hand them:
+the three effect output sites hands `FxTarget.applyValue` the pass's weight (`FxEngine.weightOf`, which is `FxInstance.weight` with the stack's size). Beat and wall-clock effects share those three, differing only in
+the `PhaseSource` the compose pass hands them:
 1. `processFixtureEffect` — direct fixture
 2. `processGroupEffect` — group member direct
 3. `processElementKeys` — per-element distribution, serving both the multi-element fixture
