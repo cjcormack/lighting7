@@ -6,10 +6,30 @@ colour and intensity change on each head and element; and anything else that wou
 programming simpler while keeping its power. It is to be built after the terminology plan
 ([`../terminology-plan.md`](../terminology-plan.md)), so every word here is that plan's.
 
-**Status: draft for review, 2026-10-23.** Nothing is agreed. The proposals are D1–D15 in
-[`../fx-editor-plan.md`](../fx-editor-plan.md), and its §11 asks fifteen questions, each with a
-recommendation. Where the plan and the page disagree, the plan wins on behaviour and the page on
+**Status: approved 2026-10-23.** Chris answered the fifteen questions in one round, every one as
+recommended; the decisions are D1–D15 and the answers §11 of the plan,
+[`../fx-editor-plan.md`](../fx-editor-plan.md). Where the plan and the page disagree, the plan wins on behaviour and the page on
 layout and copy.
+
+## Asked and answered
+
+| Question | Answer |
+| --- | --- |
+| Where does the editor live? | **The FX tab's *Selection* view.** A rail tab and a route of its own were declined. |
+| Beat and wall-clock FX on one key? | **One compose pass.** Warning only and refusing mixed stacks were declined. |
+| A second FX of a family on the same heads? | **Ask *Replace · Stack*.** Always stacking and a modifier key were declined. |
+| The blend a stacked FX starts on? | **The family table.** The FX's own start and the last choice were declined. |
+| Apply order editable and kept? | **Yes, Look FX gaining an order.** Live-only and fixed order were declined. |
+| Local FX above layers' FX? | **Yes.** Today's ranks and press-time order were declined. |
+| The graph's data? | **The desk's sampler.** A client copy and a recording of the output were declined. |
+| What is underneath? | **What the attribute holds now.** Zero and a chosen level were declined. |
+| Row order? | **The picked FX's Order, *Rig order* to hold.** Rig order first was declined. |
+| Handles? | **All four.** Cycle only and none were declined. |
+| Shapes? | **The fixed nine.** Saved shapes and none were declined. |
+| Match? | **Copy once.** A stored link and none were declined. |
+| Solo? | **The graph's only.** A stage mute and none were declined. |
+| Other hosts? | **Palette editor, cue FX tab, busk Effects tab, the tray's ⤢.** Fewer were declined. |
+| Names? | **FX editor, list, graph, inspector, Shapes, offset ladder, Match.** *Scope* and *Phaser* were declined. |
 
 ## What was found in the code
 

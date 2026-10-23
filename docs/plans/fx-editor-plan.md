@@ -1,7 +1,7 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: DRAFT 2026-10-23, for review. Nothing agreed; the calls are §11's, each with a
-> recommendation.** Implementation starts after the terminology plan
+> **Document status: AGREED 2026-10-23, not started.** The fifteen questions and their answers are
+> in §11, every one answered as recommended. Implementation starts after the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) has landed, and every word here is that plan's (§4
 > there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
 > *Intensity*, *Runs*, *Timing: Per cycle | Per head*. The design record is
@@ -69,9 +69,9 @@ rename them.
 
 ## 2. Decisions
 
-Proposed, for Chris to agree or change (§11):
+Agreed with Chris on 2026-10-23 (§11):
 
-| # | Proposal |
+| # | Decision |
 |---|---|
 | D1 | **The programmer's FX tab becomes the FX editor**, with two views: *Selection*, the new editor, and *All*, today's table. A row in *All* selects its FX's heads and opens it in *Selection*. |
 | D2 | **Selection is three columns: list · graph · inspector.** The list holds every FX reaching the selected heads, by family; the graph draws each element's output over time; the inspector is today's live editor for the FX picked in the list. |
@@ -206,7 +206,9 @@ bookkeeping keep their per-loop meaning by recording which clock woke the pass.
 
 - **The band.** Programmer layers' FX stay at `BASE + layer index`. Local FX move to
   `BASE + LOCAL_OFFSET + localRank`, `LOCAL_OFFSET = 200_000`, above the rank clamp, so every Local FX
-  sits above every layer's FX. `isProgrammerFxPriority` is unchanged.
+  sits above every layer's FX. `isProgrammerFxPriority` is unchanged. This is a behaviour change: a
+  pressed FX palette that used to win over a Local FX on the same key now sits under it.
+  `fx-engineering.md` says so where it describes the band.
 - **The rank.** A new Local FX takes the top of its key's lane (`localRank` one above the highest
   Local FX sharing an attribute with it). `programmer.moveFx {effectId, above: effectId | null}`
   re-ranks it below `above`'s FX (null: the bottom), answered by `fxChanged(UPDATED)` for each FX whose
@@ -439,33 +441,43 @@ At the desk on Sleeping Beauty:
 
 ## 11. Questions
 
-Each with the recommended answer first.
+Answered by Chris, 2026-10-23, one round of fifteen, each as recommended:
 
-1. **Where does the editor live?** The FX tab's *Selection* view (D1). Alternatives: a fourth rail
-   tab beside Colour and Spread (too narrow for a graph); a route of its own (loses the programmer's
-   row C and selection).
-2. **Mixed beat and wall-clock FX on one key?** Fix the engine (D10, session 2). Alternative: keep
-   the two loops, warn in the list and draw the graph as the stage behaves.
-3. **A second FX of a family on the same heads?** Ask *Replace · Stack* (D6). Alternatives: always
-   stack and let × take the old one off; a modifier key on the press.
-4. **The stacking blend?** The family table in §3.6. Alternative: the FX's own starting blend, which
-   puts a second Intensity FX on *Replace* over the first.
-5. **Apply order editable and kept?** Yes (D4), with Look FX gaining `sort_order`. Alternative:
-   creation order, drawn but not changeable.
-6. **Local FX above layers' FX?** Yes (D5). Alternative: keep today's ranks and draw them.
-7. **Where does the graph's data come from?** The desk's sampler (D7). Alternative: a client copy of
-   the waveforms, which misses user FX and Steps and doubles every rule.
-8. **What is underneath in the graph?** What the attribute holds now (§3.2 step 5). Alternatives: a
-   flat zero; a chosen level.
-9. **Rows in which order?** The picked FX's Order, with *Rig order* to hold them (§4.4). Alternative:
-   always rig order.
-10. **Handles on the graph in the first version?** Yes, the four in §4.4. Alternative: the inspector
-    only, handles later.
-11. **Shapes?** Yes, the nine in D11. Alternatives: none; a user-saved list.
-12. **Match?** Copy once (D13). Alternative: a stored link (`FU-FX-LINKED-TIMING`).
-13. **Solo?** The graph's only (D14). Alternative: a stage mute, which needs a stored or runtime
-    flag beside Amount.
+1. **Where does the editor live?** The FX tab's *Selection* view, beside *All* (D1). A fourth rail
+   tab (too narrow for a graph) and a route of its own (losing row C, the selection and Record) were
+   declined.
+2. **Beat and wall-clock FX on one key?** Fix the engine with one compose pass (D10, session 2),
+   accepting a session on the tick path and wall-clock FX evaluated on beat wakes, coalesced. Warning
+   only, and refusing mixed stacks, were declined.
+3. **A second FX of a family on the same heads?** Ask *Replace · Stack*, starting on *Replace* (D6).
+   Always stacking (which reverses the apply-model plan's D5 rule and piles up auditioned FX) and a
+   modifier key (invisible, and awkward on touch) were declined.
+4. **The blend a stacked FX starts on?** The family table in §3.6. The FX's own starting blend
+   (which makes *Stack* look like *Replace*) and remembering the last choice per window were
+   declined.
+5. **Apply order editable and kept?** Yes (D4): `programmer.moveFx`, and Record keeps the order, Look
+   FX gaining `sort_order` at `formatVersion` 39. Editable but not recorded, and creation order drawn
+   but fixed, were declined.
+6. **Local FX above layers' FX?** Yes (D5), accepting the behaviour change in §3.5. Keeping today's
+   ranks, and interleaving Local and layer FX by press time, were declined.
+7. **Where does the graph's data come from?** The desk's sampler (D7). A client copy of the
+   waveforms (no user FX, no per-head Steps, every rule twice) and a recording of the live output
+   (no drafts, no preview before a change) were declined.
+8. **What is underneath in the graph?** What the attribute holds now (§3.2 step 5). A flat zero
+   (which misdraws *Within* and *Around*) and a level the operator picks were declined.
+9. **Rows in which order?** The picked FX's Order, with *Rig order* to hold them (§4.4). Always rig
+   order, and rig order by default with an Order toggle, were declined.
+10. **Handles on the graph in the first version?** Yes, all four in §4.4: Cycle, Spread, Phase, and
+    min and max. The cycle handle alone, and none, were declined.
+11. **Shapes?** The fixed nine (D11). A user-saved list (a new portable table for five numbers) and
+    no Shapes were declined.
+12. **Match?** Copy once (D13); the stored link is `FU-FX-LINKED-TIMING`. A stored link now, and no
+    Match, were declined.
+13. **Solo?** The graph's only (D14). A stage mute (new runtime state, a frame and a held-back
+    reason) and no Solo were declined.
 14. **The editor's other hosts?** The palette editor, the cue FX tab and the busk Effects tab get the
-    strip; the tray links to the editor (D15). Alternative: the programmer only.
-15. **Names?** *FX editor*, *list*, *graph*, *inspector*, *Shapes*, *offset ladder*, *Match*.
-    *Timeline* is the stack view's, so the graph is not called that.
+    strip, and the tray links to the editor (D15). The programmer only, and the programmer plus the
+    palette editor, were declined.
+15. **Names?** *FX editor*; *list*, *graph*, *inspector*; *Shapes*; *offset ladder*; *Match*, all
+    entering `docs/glossary.md`. *Scope* (taken by the programmer's scope) and *Phaser* (grandMA3's
+    word) were declined; *Timeline* is the stack view's.

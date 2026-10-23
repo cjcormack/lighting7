@@ -221,14 +221,14 @@ a { color: var(--accent); }
 <div class="wrap">
 
 <header class="head read" style="gap:14px">
-  <div class="eyebrow">lighting7 · design record · 2026-10-23 · draft for review</div>
+  <div class="eyebrow">lighting7 · design record · 2026-10-23 · approved</div>
   <h1>FX editor</h1>
   <p class="lede">The FX on a selection, <b>seen together and seen over time</b>. The programmer's FX tab becomes a list of every FX on the selected heads, by family and in the order they apply; a graph of what each head and element will do; and the live editor beside them.</p>
   <div class="stats">
     <span class="pill fx">After the terminology plan</span>
-    <span class="pill">15 proposals</span>
+    <span class="pill">15 decisions</span>
     <span class="pill">7 sessions</span>
-    <span class="pill ask">15 questions to answer</span>
+    <span class="pill ask">15 questions answered</span>
   </div>
   <p class="muted" style="font-size:14px">Every word on this page is the terminology plan's: <b>FX</b>, <b>Cycle</b>, <b>Amount</b>, <b>Order</b> (<i>Normal</i>, <i>Centre in</i>…), <b>Segments</b>, <b>Parts</b>, <b>element</b>, <b>attribute</b>, <b>family</b> (<i>Intensity</i> first), <b>Runs</b>, <b>Timing: Per cycle | Per head</b>. The plan is <code>docs/plans/fx-editor-plan.md</code>.</p>
 </header>
@@ -420,25 +420,25 @@ a { color: var(--accent); }
 <section>
   <div class="head read">
     <div class="eyebrow">Questions</div>
-    <h2>Fifteen calls, each with a recommendation</h2>
-    <p class="muted">Answer by number; the recommended answer is first.</p>
+    <h2>Fifteen calls, all answered as recommended</h2>
+    <p class="muted">Answered by Chris on 2026-10-23 in one round. Each answer is in bold; the options declined are under it.</p>
   </div>
   <div class="calls">
-    <div class="call"><span class="id">Q1</span><div><h3>Where does the editor live?</h3><p><b>The FX tab's <i>Selection</i> view.</b></p><p class="alt">Or a fourth rail tab (too narrow for a graph); or a route of its own (loses row C and the selection).</p></div></div>
-    <div class="call"><span class="id">Q2</span><div><h3>Beat and wall-clock FX on one key?</h3><p><b>Fix the engine: one compose pass.</b></p><p class="alt">Or keep two loops, warn in the list and draw the graph as the stage behaves.</p></div></div>
-    <div class="call"><span class="id">Q3</span><div><h3>A second FX of a family on the same heads?</h3><p><b>Ask Replace · Stack, starting on Replace.</b></p><p class="alt">Or always stack and let × take the old one off; or a modifier key on the press.</p></div></div>
-    <div class="call"><span class="id">Q4</span><div><h3>The blend a stacked FX starts on?</h3><p><b>Intensity Within, Position Around, Colour and Beam Replace at 50 %.</b></p><p class="alt">Or the FX's own starting blend, which puts a second Intensity FX on Replace.</p></div></div>
-    <div class="call"><span class="id">Q5</span><div><h3>Apply order editable and kept?</h3><p><b>Yes; Look FX gain an order, v39.</b></p><p class="alt">Or creation order, drawn but fixed.</p></div></div>
-    <div class="call"><span class="id">Q6</span><div><h3>Local FX above layers' FX?</h3><p><b>Yes, as Local values are.</b></p><p class="alt">Or keep today's ranks and draw them.</p></div></div>
-    <div class="call"><span class="id">Q7</span><div><h3>Where does the graph's data come from?</h3><p><b>The desk's sampler.</b></p><p class="alt">Or a client copy of the waveforms, which misses user FX and Steps and doubles every rule.</p></div></div>
-    <div class="call"><span class="id">Q8</span><div><h3>What is underneath in the graph?</h3><p><b>What the attribute holds now.</b></p><p class="alt">Or a flat zero; or a level the operator picks.</p></div></div>
-    <div class="call"><span class="id">Q9</span><div><h3>Rows in which order?</h3><p><b>The picked FX's Order, with <i>Rig</i> to hold them.</b></p><p class="alt">Or always rig order.</p></div></div>
-    <div class="call"><span class="id">Q10</span><div><h3>Handles in the first version?</h3><p><b>Yes: Cycle, Spread, Phase, min and max.</b></p><p class="alt">Or the inspector only, handles later.</p></div></div>
-    <div class="call"><span class="id">Q11</span><div><h3>Shapes?</h3><p><b>Yes, the nine.</b></p><p class="alt">Or none; or a list the operator saves.</p></div></div>
-    <div class="call"><span class="id">Q12</span><div><h3>Match?</h3><p><b>Copy once.</b></p><p class="alt">Or a stored link that follows later edits.</p></div></div>
-    <div class="call"><span class="id">Q13</span><div><h3>Solo?</h3><p><b>The graph's only.</b></p><p class="alt">Or a stage mute, which needs a flag beside Amount.</p></div></div>
-    <div class="call"><span class="id">Q14</span><div><h3>Other hosts?</h3><p><b>Palette editor, cue FX tab and busk Effects tab get the strip; the tray links in.</b></p><p class="alt">Or the programmer only.</p></div></div>
-    <div class="call"><span class="id">Q15</span><div><h3>Names?</h3><p><b>FX editor; list, graph, inspector; Shapes; offset ladder; Match.</b></p><p class="alt"><i>Timeline</i> is the stack view's mode, so the graph is not called that.</p></div></div>
+    <div class="call"><span class="id">Q1</span><div><h3>Where does the editor live?</h3><p><b>The FX tab's <i>Selection</i> view.</b></p><p class="alt">Declined: a fourth rail tab (too narrow for a graph); a route of its own (loses row C and the selection).</p></div></div>
+    <div class="call"><span class="id">Q2</span><div><h3>Beat and wall-clock FX on one key?</h3><p><b>Fix the engine: one compose pass.</b></p><p class="alt">Declined: keep two loops, warn in the list and draw the graph as the stage behaves.</p></div></div>
+    <div class="call"><span class="id">Q3</span><div><h3>A second FX of a family on the same heads?</h3><p><b>Ask Replace · Stack, starting on Replace.</b></p><p class="alt">Declined: always stack and let × take the old one off; a modifier key on the press.</p></div></div>
+    <div class="call"><span class="id">Q4</span><div><h3>The blend a stacked FX starts on?</h3><p><b>Intensity Within, Position Around, Colour and Beam Replace at 50 %.</b></p><p class="alt">Declined: the FX's own starting blend, which puts a second Intensity FX on Replace.</p></div></div>
+    <div class="call"><span class="id">Q5</span><div><h3>Apply order editable and kept?</h3><p><b>Yes; Look FX gain an order, v39.</b></p><p class="alt">Declined: creation order, drawn but fixed.</p></div></div>
+    <div class="call"><span class="id">Q6</span><div><h3>Local FX above layers' FX?</h3><p><b>Yes, as Local values are.</b></p><p class="alt">Declined: keep today's ranks and draw them.</p></div></div>
+    <div class="call"><span class="id">Q7</span><div><h3>Where does the graph's data come from?</h3><p><b>The desk's sampler.</b></p><p class="alt">Declined: a client copy of the waveforms, which misses user FX and Steps and doubles every rule.</p></div></div>
+    <div class="call"><span class="id">Q8</span><div><h3>What is underneath in the graph?</h3><p><b>What the attribute holds now.</b></p><p class="alt">Declined: a flat zero; a level the operator picks.</p></div></div>
+    <div class="call"><span class="id">Q9</span><div><h3>Rows in which order?</h3><p><b>The picked FX's Order, with <i>Rig</i> to hold them.</b></p><p class="alt">Declined: always rig order.</p></div></div>
+    <div class="call"><span class="id">Q10</span><div><h3>Handles in the first version?</h3><p><b>Yes: Cycle, Spread, Phase, min and max.</b></p><p class="alt">Declined: the inspector only, handles later.</p></div></div>
+    <div class="call"><span class="id">Q11</span><div><h3>Shapes?</h3><p><b>Yes, the nine.</b></p><p class="alt">Declined: none; a list the operator saves.</p></div></div>
+    <div class="call"><span class="id">Q12</span><div><h3>Match?</h3><p><b>Copy once.</b></p><p class="alt">Declined: a stored link that follows later edits.</p></div></div>
+    <div class="call"><span class="id">Q13</span><div><h3>Solo?</h3><p><b>The graph's only.</b></p><p class="alt">Declined: a stage mute, which needs a flag beside Amount.</p></div></div>
+    <div class="call"><span class="id">Q14</span><div><h3>Other hosts?</h3><p><b>Palette editor, cue FX tab and busk Effects tab get the strip; the tray links in.</b></p><p class="alt">Declined: the programmer only.</p></div></div>
+    <div class="call"><span class="id">Q15</span><div><h3>Names?</h3><p><b>FX editor; list, graph, inspector; Shapes; offset ladder; Match.</b></p><p class="alt">Declined: <i>Scope</i> (taken by the programmer's scope) and <i>Phaser</i> (grandMA3's word). <i>Timeline</i> is the stack view's mode.</p></div></div>
   </div>
 </section>
 
