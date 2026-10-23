@@ -464,7 +464,7 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
         display: (row) => (
           <span
             className="mx-1.5 font-mono text-xs tabular-nums text-muted-foreground"
-            title="Saved references — look effects, cue effects, per-layer overrides and followers"
+            title="Saved references — look FX, cue FX, per-layer overrides and followers"
           >
             {row.master.referenceCount > 0 ? row.master.referenceCount : '—'}
           </span>
@@ -547,7 +547,7 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
           onClick={() => void runDelete(selectedMasters)}
           title={
             deletable.length === 0
-              ? 'Master 1 is the global tempo — every unassigned effect resolves to it'
+              ? 'Master 1 is the global tempo — every unassigned FX resolves to it'
               : `Delete ${deletable.length} master${deletable.length === 1 ? '' : 's'}${deletable.length < selectedMasters.length ? ' (master 1 is skipped)' : ''}`
           }
         >

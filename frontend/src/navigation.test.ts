@@ -149,9 +149,9 @@ describe("sections", () => {
     for (const id of ["stage", "rigging"]) expect(navItems.find((i) => i.id === id)?.parent).toBeUndefined()
   })
 
-  it("orders Library, with the FX Library called Effects", () => {
+  it("orders Library, with the FX Library called FX", () => {
     expect(idsIn("library")).toEqual(["looks", "cues", "templates", "fx-library", "speed-masters", "scripts"])
-    expect(navItems.find((i) => i.id === "fx-library")?.label).toBe("Effects")
+    expect(navItems.find((i) => i.id === "fx-library")?.label).toBe("FX")
   })
 
   it("orders Project and Desk, with Projects first on the Desk", () => {

@@ -164,7 +164,7 @@ export function LookDetailSheet({
           <SheetTitle>{look.name}</SheetTitle>
           <SheetDescription>
             {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
-            {effectCount > 0 ? ` · ${effectCount} effect${effectCount === 1 ? '' : 's'}` : ''} · used by{' '}
+            {effectCount > 0 ? ` · ${effectCount} FX` : ''} · used by{' '}
             {layerCount} cue layer{layerCount === 1 ? '' : 's'}
           </SheetDescription>
         </SheetHeader>
@@ -210,8 +210,8 @@ export function LookDetailSheet({
 
           <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
             To change what this look holds, <strong>Include</strong> it into the programmer, edit
-            its values and effects on stage, then <strong>Update</strong> — only what you changed is
-            written back, and every cue layering it moves with it. An effect marked{' '}
+            its values and FX on stage, then <strong>Update</strong> — only what you changed is
+            written back, and every cue layering it moves with it. An FX marked{' '}
             <em>on the layer&apos;s targets</em> runs on the desk selection while included.
           </div>
 
@@ -272,12 +272,12 @@ export function LookDetailSheet({
           <div className="space-y-2">
             <Label className="flex items-center gap-1.5">
               <AudioWaveform className="size-3.5" />
-              Effects
+              FX
             </Label>
             {isFetching && !detail ? (
               <p className="text-sm text-muted-foreground">Loading…</p>
             ) : effects.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No effects.</p>
+              <p className="text-sm text-muted-foreground">No FX.</p>
             ) : (
               <div className="space-y-1.5">
                 {effects.map((effect, index) => (

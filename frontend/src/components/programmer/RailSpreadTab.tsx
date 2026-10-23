@@ -56,7 +56,7 @@ export const RailSpreadTab = memo(function RailSpreadTab({ projectId }: { projec
         docked
         subject={`${scope?.kind === 'output' ? 'Output' : 'Palette layer'} · read-only`}
         title={disabledReason}
-        column="Spread"
+        column="Fan"
       />
     )
 
@@ -70,11 +70,11 @@ export const RailSpreadTab = memo(function RailSpreadTab({ projectId }: { projec
     <div ref={wrapperRef} data-rail-tab="spread" className="flex min-h-0 flex-1 flex-col *:border-l-0">
       {empty ? (
         <RailTabEmpty
-          column="Spread"
+          column="Fan"
           hint={
             (marquee?.columns.length ?? 0) > 0
-              ? 'The marquee holds no column Spread can drive — dimmer, colour, position, zoom, focus, iris, strobe or speed.'
-              : 'Drag over cells in a column Spread can drive, or select rows. The tab spreads over what row C names, and follows it as it changes.'
+              ? 'The marquee holds no column Fan can drive — dimmer, colour, position, zoom, focus, iris, strobe or speed.'
+              : 'Drag over cells in a column Fan can drive, or select rows. The tab fans over what row C names, and follows it as it changes.'
           }
         />
       ) : (

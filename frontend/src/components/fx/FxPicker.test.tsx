@@ -276,7 +276,7 @@ describe('the Beam family (effects plan §4.4)', () => {
 
   it('offers each beam effect only on a head with its property', () => {
     render(<BeamHarness />)
-    const list = screen.getByRole('list', { name: 'Beam effects' })
+    const list = screen.getByRole('list', { name: 'Beam FX' })
     expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
       'Zoom Breathe',
       'Iris Pulse',
@@ -408,13 +408,13 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
 
   it('offers Palette Steps in a family with two generic value palettes, and not in one with fewer', () => {
     render(<StepHarness initialFamily="POSITION" />)
-    const list = screen.getByRole('list', { name: 'Position effects' })
+    const list = screen.getByRole('list', { name: 'Position FX' })
     expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
       'Circle',
       'PaletteSteps',
     ])
     fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
-    const intensity = screen.getByRole('list', { name: 'Intensity effects' })
+    const intensity = screen.getByRole('list', { name: 'Intensity FX' })
     expect(intensity.querySelector('[data-effect-pick="PaletteSteps"]')).toBeNull()
   })
 

@@ -756,7 +756,7 @@ effects plan's P2); the editor only writes the three fields.
   takes the effect's value from half weight up and holds what is underneath below (`weighDiscrete`).
   At weight 0 nothing is written. A size outside 0–1 is refused at every write boundary
   (`EffectSpecCoercion.Strict.sizeProblem`); a stored one is clamped with a warn. Size stops at
-  100 % (`FU-FX-SIZE-OVER-100`).
+  100 % (`FU-FX-AMPLITUDE`).
 - **The envelope** is the runtime factor of the weight a fade moves (effects plan §3.5, session 4);
   a stack's effect size (below) multiplies in beside it. It **does not scale the effect's raw output**:
   `FxOutput.scaled()` is gone, and with it the scaling that dropped an `OVERRIDE` effect to 0. It is

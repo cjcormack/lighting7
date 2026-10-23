@@ -1,5 +1,4 @@
 import { javaRandom } from '@/components/editor/spreadPlans'
-import { orderLabel } from './orderLabels'
 
 /**
  * The spread's shape (effects plan D4, §3.3) — the editor's copy, for the Spread section's **dial
@@ -165,14 +164,15 @@ export function spreadOffsets(order: string, n: number, shape: SpreadShape): { o
 }
 
 /**
- * The Spread section's summary line: the Order, then each non-default field — *Rig · 50 % · 2 wings*.
- * Wings under a mirrored Order are left unsaid, as the desk leaves them unrun.
+ * The Spread section's summary line, each non-default field — *50 % · 2 wings*. The Order sits above
+ * the section, so it is not repeated. Wings under a mirrored Order are left unsaid, as the desk
+ * leaves them unrun.
  */
 export function spreadSummary(order: string, shape: SpreadShape): string[] {
-  const parts = [orderLabel(order)]
+  const parts: string[] = []
   if (shape.spread !== 1) parts.push(`${Math.round(shape.spread * 100)} %`)
   if (shape.wings > 1 && !isMirroredOrder(order)) parts.push(`${shape.wings} wings`)
-  if (shape.blocks > 1) parts.push(`blocks of ${shape.blocks}`)
-  if (shape.groups > 0) parts.push(`groups of ${shape.groups}`)
+  if (shape.blocks > 1) parts.push(`segments of ${shape.blocks}`)
+  if (shape.groups > 0) parts.push(`parts of ${shape.groups}`)
   return parts
 }

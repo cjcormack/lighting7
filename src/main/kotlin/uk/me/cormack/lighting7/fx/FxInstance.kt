@@ -548,15 +548,15 @@ class FxInstance internal constructor(
 
     /**
      * The effect type to *persist or report* for this instance: [registrationId] when there is
-     * one, and the display-name approximation only as a last resort for a script-constructed
-     * effect that never went through the registry.
+     * one, else the id the registry made [effect] under (a script's `effect(id)`), and the
+     * display-name approximation only as a last resort for an effect a script constructed itself.
      *
      * Everything that writes an `effectType` — a recorded Look or cue child, an API DTO the
      * client hands back on Update — must go through this. Writing `effect.name.replace(" ", "")`
      * directly stores a string the registry cannot resolve for any user-defined FX definition,
      * and the failure only surfaces later, when the row is applied.
      */
-    val effectTypeId: String get() = registrationId ?: effect.name.replace(" ", "")
+    val effectTypeId: String get() = registrationId ?: effect.registrationId ?: effect.name.replace(" ", "")
 
     /**
      * The library record whose layer spawned this effect — a Look **or a template** — or null for

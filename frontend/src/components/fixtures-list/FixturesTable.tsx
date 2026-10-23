@@ -1037,7 +1037,7 @@ const RowView = React.memo(function RowView({
               cellsInert && state?.editable !== false
                 ? DESK_OFFLINE_LABEL
                 : heldBack
-                  ? `${ownershipTitle(owned) ?? 'Programmer'} · holds an effect back — open the cell for its stack`
+                  ? `${ownershipTitle(owned) ?? 'Programmer'} · holds an FX back — open the cell for its stack`
                   : (cueSourceTitle(state?.source) ?? ownershipTitle(owned))
             }
           >

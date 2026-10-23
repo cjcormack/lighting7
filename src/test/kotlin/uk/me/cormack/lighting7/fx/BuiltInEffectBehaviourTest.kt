@@ -196,6 +196,18 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
+    fun `a built-in a script makes reports its registry id, not its display name`() {
+        // A script's `effect(id)` builds through the registry but never sets the instance's own
+        // registrationId, so what a Record stores comes from the effect itself.
+        for (id in listOf("Triangle", "Strobe", "ColourPulse", "ZoomBreathe", "SineWave")) {
+            val effect = registry.createEffect(id)
+            assertEquals(id, effect.registrationId, "$id's effect should carry its registry id")
+            val instance = FxInstance(effect, SliderTarget("hex-a", "dimmer"), FxTiming(beatDivision = 1.0))
+            assertEquals(id, instance.effectTypeId, "$id (named '${effect.name}') should be stored by its id")
+        }
+    }
+
+    @Test
     fun `Triangle rises then falls`() {
         val effect = fx("Triangle", "min" to "0", "max" to "255", "curve" to "LINEAR")
         assertEquals(0.toUByte(), effect.calculate(0.0).slider())

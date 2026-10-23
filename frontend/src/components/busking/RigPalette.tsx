@@ -102,10 +102,10 @@ function GripRow({
           type="button"
           onClick={expand.onToggle}
           aria-expanded={expand.open}
-          aria-label={`${expand.open ? 'Hide' : 'Show'} the cells of ${name}`}
+          aria-label={`${expand.open ? 'Hide' : 'Show'} the elements of ${name}`}
           className="inline-flex h-4 shrink-0 items-center gap-0.5 rounded-full border px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
         >
-          {expand.count} cells
+          {expand.count} elements
           {expand.open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
         </button>
       )}
@@ -185,7 +185,7 @@ export function RigPalette({
         record,
         name: patch.displayName,
         detail: [
-          elements.length > 0 ? `${elements.length} cells` : patch.key,
+          elements.length > 0 ? `${elements.length} elements` : patch.key,
           patch.stageHidden ? 'hidden · stageHidden' : null,
         ]
           .filter(Boolean)
@@ -301,7 +301,7 @@ export function RigPalette({
         )}
       </div>
       <div className="shrink-0 border-t px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
-        {notOnRig} not on the rig · a cell drags out as its own tile.
+        {notOnRig} not on the rig · an element drags out as its own tile.
       </div>
     </>
   )

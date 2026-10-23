@@ -404,12 +404,12 @@ export function TemplateEditor({
                 onClick={() => setHolds('effect')}
               >
                 <AudioWaveform className="size-3.5" />
-                Effect
+                FX
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              A value is resolved per head; an effect runs on every head the layer names. For a value
-              and an effect together, record a Look.
+              A value is resolved per head; an FX runs on every head the layer names. For a value
+              and an FX together, record a Look.
             </p>
             {template != null && (
               <p className="text-[11px] text-muted-foreground">
@@ -605,7 +605,7 @@ function EffectControls({
   return (
     <div className="space-y-3">
       <div className="space-y-1.5">
-        <Label>Effect</Label>
+        <Label>FX</Label>
         <Select
           // The **entry's** name, not the draft's: the two can differ in spelling for a template
           // captured from a running effect, and every `SelectItem` is keyed by the library's own
@@ -618,7 +618,7 @@ function EffectControls({
           }}
         >
           <SelectTrigger>
-            <SelectValue placeholder="Choose an effect" />
+            <SelectValue placeholder="Choose an FX" />
           </SelectTrigger>
           <SelectContent>
             {offered.map((option) => (
@@ -629,8 +629,7 @@ function EffectControls({
           </SelectContent>
         </Select>
         <p className="text-[11px] text-muted-foreground">
-          {offered.length} {FAMILY_LABELS[family].singular.toLowerCase()} effect
-          {offered.length === 1 ? '' : 's'} — the family is the filter.
+          {offered.length} {FAMILY_LABELS[family].singular.toLowerCase()} FX — the family is the filter.
         </p>
       </div>
 
@@ -685,7 +684,7 @@ function EffectControls({
           />
           {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
           <EditorReadout>
-            A new effect is one bar on the master whose usage matches this family, stored on the
+            A new FX is one bar on the master whose usage matches this family, stored on the
             palette — every layer applying it follows the same tempo. On Seconds it follows none.
           </EditorReadout>
         </div>

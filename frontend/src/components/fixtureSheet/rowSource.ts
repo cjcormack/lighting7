@@ -103,7 +103,7 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
     }
     case 'effect': {
       effect = provenance?.effectId != null ? effects.find((e) => e.id === provenance.effectId) : undefined
-      label = effect ? [effect.effectType, effectDetail(effect)].filter(Boolean).join(' · ') : 'Effect'
+      label = effect ? [effect.effectType, effectDetail(effect)].filter(Boolean).join(' · ') : 'FX'
       break
     }
     case 'cue': {

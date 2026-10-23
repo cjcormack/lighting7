@@ -42,19 +42,19 @@ export function saveAsTemplateOffer(
       reason:
         effect.sourceName != null
           ? `Already named — this is “${effect.sourceName}” running. Edit that instead.`
-          : 'Only an effect the programmer owns can become a palette. This one belongs to a cue or the show.',
+          : 'Only an FX the programmer owns can become a palette. This one belongs to a cue or the show.',
     }
   }
   // Two different absences, and telling them apart is the point: a library that has not arrived is
   // a wait, while a miss against a loaded one is an effect type this desk's registry does not know
   // — an import from a desk with script-registered effects. Reporting the second as the first
   // leaves the item disabled forever under a message that promises it is about to work.
-  if (library == null) return { enabled: false, reason: 'Reading the effect library…' }
+  if (library == null) return { enabled: false, reason: 'Reading the FX library…' }
   const entry = findEffectEntry(library, effect.effectType)
   if (entry == null) {
     return {
       enabled: false,
-      reason: `“${effect.effectType}” is not in this desk's effect library, so its category — and so the palette's family — cannot be read.`,
+      reason: `“${effect.effectType}” is not in this desk's FX library, so its category — and so the palette's family — cannot be read.`,
     }
   }
   // A step effect is banked by its palettes' family or as Beam on its setting, never by its library
@@ -65,7 +65,7 @@ export function saveAsTemplateOffer(
   if (family == null) {
     return {
       enabled: false,
-      reason: `A “${entry.category}” effect is not banked by family, so it cannot be a palette. It can live in a recorded look.`,
+      reason: `A “${entry.category}” FX is not banked by family, so it cannot be a palette. It can live in a recorded look.`,
     }
   }
   return { enabled: true }

@@ -56,7 +56,7 @@ export function BuskFixtureSheet({ target, onClose }: { target: BuskSheetTarget 
   const fixture = fixtureKey != null ? fixtureByKey.get(fixtureKey) : undefined
   const group = member == null && shown?.type === 'group' ? groups?.find((g) => g.name === shown.name) : undefined
   const host = form === 'popover' ? 'popup' : 'phone'
-  const description = 'The values, effects and layers of what this rig tile holds'
+  const description = 'The values, FX and layers of what this rig tile holds'
 
   const body =
     fixture != null ? (

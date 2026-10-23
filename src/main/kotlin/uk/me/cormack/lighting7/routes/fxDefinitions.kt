@@ -414,6 +414,7 @@ internal fun registerUserEffect(state: State, definition: DaoFxDefinition): Regi
         effectName = snap.name,
         outputType = snap.outputType,
         defaultStepTiming = snap.defaultStepTiming,
+        registrationId = snap.effectId,
     )
 
     state.show.fxRegistry.register(EffectRegistration(

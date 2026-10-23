@@ -205,6 +205,7 @@ class FxFileLoader(
                     effectName = p.metadata.name,
                     outputType = p.outputType,
                     defaultStepTiming = p.metadata.defaultStepTiming,
+                    registrationId = p.metadata.id,
                 )
 
                 val timingSource = try {

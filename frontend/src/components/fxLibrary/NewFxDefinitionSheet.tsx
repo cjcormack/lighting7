@@ -165,7 +165,7 @@ export function NewFxDefinitionSheet({
           <Label htmlFor="new-fx-name">Name</Label>
           <Input
             id="new-fx-name"
-            placeholder="My Custom Effect"
+            placeholder="My Custom FX"
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus

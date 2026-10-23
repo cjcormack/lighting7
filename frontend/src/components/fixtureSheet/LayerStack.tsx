@@ -52,7 +52,7 @@ interface LayerLine {
 
 /** One stack entry in the Layers board's words. Pure, so the six kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
-  const effectName = layer.effectName ?? layer.effectType ?? 'Effect'
+  const effectName = layer.effectName ?? layer.effectType ?? 'FX'
   // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
   const inSeconds = layer.seconds === true || layer.timingSource === 'WALL_CLOCK'
   const division =
@@ -62,13 +62,13 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
     case 'PARK':
       return {
         title: 'Parked',
-        detail: 'the rig ignores every layer here',
+        detail: 'the rig ignores everything below it',
         value: layer.parkedChannels?.map((c) => String(c.value)).join(', ') ?? null,
       }
     case 'PROGRAMMER_EFFECT':
       return {
         title: effectName,
-        detail: ['programmer effect', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
+        detail: ['programmer FX', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
         value: null,
       }
     case 'PROGRAMMER': {
@@ -91,7 +91,7 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
     }
     case 'EFFECT': {
       const cue = layer.cueId != null ? cueLabel(layer.cueId) : undefined
-      const home = cue ? `${cue}'s effect` : layer.layerSource?.name ? `${layer.layerSource.name}'s effect` : 'effect'
+      const home = cue ? `${cue}'s FX` : layer.layerSource?.name ? `${layer.layerSource.name}'s FX` : 'FX'
       return {
         title: effectName,
         detail: [

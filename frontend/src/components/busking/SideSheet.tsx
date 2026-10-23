@@ -110,8 +110,8 @@ export const SIDE_SHEET_TABS: readonly TabSpec[] = [
   { id: 'colour', label: 'Colour', icon: Palette },
   { id: 'position', label: 'Position', icon: Move },
   { id: 'beam', label: 'Beam', icon: Aperture },
-  { id: 'spread', label: 'Spread', icon: Waves },
-  { id: 'effects', label: 'Effects', icon: AudioWaveform },
+  { id: 'spread', label: 'Fan', icon: Waves },
+  { id: 'effects', label: 'FX', icon: AudioWaveform },
   { id: 'speed', label: 'Speed', icon: Gauge },
   { id: 'show', label: 'Show', icon: Play },
 ]

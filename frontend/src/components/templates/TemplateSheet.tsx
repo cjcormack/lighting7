@@ -223,7 +223,7 @@ export function TemplateSheet({
         display: (row) =>
           row.template ? (
             <span className={row.template.kind === 'effect' ? 'mx-1.5 text-xs text-violet-400' : 'mx-1.5 text-xs text-muted-foreground'}>
-              {row.template.kind === 'effect' ? 'Effect' : 'Value'}
+              {row.template.kind === 'effect' ? 'FX' : 'Value'}
             </span>
           ) : null,
       },
@@ -327,11 +327,11 @@ export function TemplateSheet({
           const effect = (row: TemplateSheetRow) => row.template?.kind === 'effect'
           const perHead = (row: TemplateSheetRow) => row.template?.kind === 'value' && !row.template.isGeneric
           const reason = skipped.every(effect)
-            ? one ? 'runs an effect' : 'run effects'
+            ? one ? 'runs an FX' : 'run FX'
             : skipped.every(perHead)
               ? one ? 'holds a value per head' : 'hold values per head'
               : skipped.every((row) => effect(row) || perHead(row))
-                ? 'hold effects or per-head values'
+                ? 'hold FX or per-head values'
                 : 'cannot be set here'
           return `${listNames(skipped.map(templateRowName), 'palette')} ${reason} — open to change · skipped`
         },
@@ -381,7 +381,7 @@ export function TemplateSheet({
           }
         },
         skipNote: (skipped) =>
-          `${listNames(skipped.map(templateRowName), 'palette')} ${skipped.length === 1 ? 'runs an effect' : 'run effects'} — no fade to time · skipped`,
+          `${listNames(skipped.map(templateRowName), 'palette')} ${skipped.length === 1 ? 'runs an FX' : 'run FX'} — no fade to time · skipped`,
         spread: (batch): SpreadPlan | null =>
           batch.length === 0
             ? null
@@ -448,7 +448,7 @@ export function TemplateSheet({
           }
           if (refused.length > 0) {
             toast.info(
-              `${listNames(refused, 'palette')} skipped — the master is not this project's, or the effect is unknown here`,
+              `${listNames(refused, 'palette')} skipped — the master is not this project's, or the FX is unknown here`,
               { id: 'sheet-write:templates:master-skip' },
             )
           }
@@ -465,7 +465,7 @@ export function TemplateSheet({
         },
         cellTitle: (row) =>
           row.template?.effect != null
-            ? 'Changing the master recreates the effect — a running instance restarts'
+            ? 'Changing the master recreates the FX — a running instance restarts'
             : undefined,
         skipNote: (skipped) => {
           const values = skipped.filter((row) => row.template?.kind === 'value')
@@ -773,7 +773,7 @@ function valueLanding(family: AttributeFamily, batch: readonly TemplateSheetRow[
       : `${listNames(other.map(templateRowName), 'palette')} ${other.length === 1 ? 'is' : 'are'} ${formatFamilyList(families, ' and ')}`,
     effects.length === 0
       ? null
-      : `${listNames(effects.map(templateRowName), 'palette')} ${effects.length === 1 ? 'runs an effect' : 'run effects'}`,
+      : `${listNames(effects.map(templateRowName), 'palette')} ${effects.length === 1 ? 'runs an FX' : 'run FX'}`,
   ].filter(Boolean)
   return {
     count: batch.length - other.length - effects.length,

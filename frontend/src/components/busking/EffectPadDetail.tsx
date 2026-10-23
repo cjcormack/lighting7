@@ -20,7 +20,7 @@ export function EffectPadDetail({ template }: { template: TemplateSummary }) {
   const master = useSpeedMasterDisplay(
     isWallClock ? template.effect?.rateSpeedMasterUuid : template.effect?.speedMasterUuid,
   )
-  if (template.effect == null) return 'Effect'
+  if (template.effect == null) return 'FX'
   const seconds = isOnSeconds(template.effect, template.effect.timingSource)
   const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource, seconds)
   // A null `timingSource` means the stored `effectType` no longer resolves in this desk's registry.

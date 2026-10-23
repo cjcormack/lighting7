@@ -5,7 +5,7 @@ import { SelectionBar } from '@/components/sheet/SelectionBar'
 import { SheetPage } from '@/components/sheet/SheetPage'
 import { SheetTable, type SheetSort, type SheetTableProps } from '@/components/sheet/SheetTable'
 import { LibraryRow } from '@/components/sheet/LibraryRow'
-import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
+import { nounPlural, type SheetColumn, type SheetRow } from '@/components/sheet/sheetModel'
 import type { RowId } from '@/components/sheet/cellSelectionModel'
 import type { CellActionCopy, CellKeyboardPermission } from '@/components/sheet/cellEntry'
 import { CellSelectionActions } from '@/components/sheet/CellSelectionActions'
@@ -62,7 +62,7 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   /** `SheetTable`'s row drag, where the table's order is one the operator can change. */
   rowDrag?: SheetTableProps<Row, C>['rowDrag']
   rowClass?: SheetTableProps<Row, C>['rowClass']
-  /** What a row is called — `effect`, `look`, `palette`. */
+  /** What a row is called — `FX`, `look`, `palette`. */
   noun: string
   rowName: (row: Row) => string
   /** ⏎ over one row, and the name's double click. */
@@ -190,7 +190,7 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   const setFilter = useCallback((q: string) => onViewChange({ ...view, q }), [onViewChange, view])
 
   const count = selectedRows.length
-  const plural = count === 1 ? noun : `${noun}s`
+  const plural = count === 1 ? noun : nounPlural(noun)
   return (
     <>
       {/* The row's own `@container`: the tabs and the create verb fold their words by its width. */}
@@ -242,7 +242,7 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
         ) : total === 0 ? (
           <SheetPage.Empty>{emptyNote}</SheetPage.Empty>
         ) : rows.length === 0 ? (
-          <SheetPage.Empty>No {noun}s match the filter.</SheetPage.Empty>
+          <SheetPage.Empty>No {nounPlural(noun)} match the filter.</SheetPage.Empty>
         ) : (
           <SheetTable<Row, C>
             {...sheet.tableProps}

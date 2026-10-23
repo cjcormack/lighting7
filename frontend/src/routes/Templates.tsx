@@ -241,7 +241,7 @@ export function ProjectTemplates() {
       ) : library.length === 0 ? (
         <SheetPage.Empty>
           {isCurrentProject
-            ? 'No palettes yet. Create one here, or record what you have selected from the programmer’s palette strip — or save a running effect as one.'
+            ? 'No palettes yet. Create one here, or record what you have selected from the programmer’s palette strip — or save a running FX as one.'
             : 'No palettes in this project.'}
         </SheetPage.Empty>
       ) : memberCount === 0 ? (

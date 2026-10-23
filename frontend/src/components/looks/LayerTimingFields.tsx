@@ -48,7 +48,7 @@ export function LayerTimingFields({ layer, onChange }: { layer: LayerTiming; onC
             onClick={() => onChange({ speedMasterUuid: null })}
             className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
-            Remove override — each effect follows its own master
+            Remove override — each FX follows its own master
           </button>
         </div>
       )}
@@ -69,14 +69,14 @@ export function LayerTimingFields({ layer, onChange }: { layer: LayerTiming; onC
             value={layer.rateSpeedMasterUuid}
             onChange={(uuid) => onChange({ rateSpeedMasterUuid: uuid })}
             label="Rate master"
-            description="Only wall-clock effects in this look are affected."
+            description="Only wall-clock FX in this look are affected."
           />
           <button
             type="button"
             onClick={() => onChange({ rateSpeedMasterUuid: null })}
             className="text-xs text-muted-foreground transition-colors hover:text-foreground"
           >
-            Remove override — each effect follows its own rate master
+            Remove override — each FX follows its own rate master
           </button>
         </div>
       )}

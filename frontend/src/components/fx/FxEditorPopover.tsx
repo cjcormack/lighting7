@@ -46,7 +46,7 @@ export function FxEditorPopover({
     <EditorSurface
       open={effect != null}
       onOpenChange={(next) => !next && close()}
-      title={effect ? `Edit ${effect.effectType}` : 'Edit effect'}
+      title={effect ? `Edit ${effect.effectType}` : 'Edit FX'}
       anchorRef={anchor}
       // Bounded by the room Radix measured beside the anchor and scrolled inside it: an Absolute
       // Circle is ~530px of controls, and a popover taller than its room renders above the viewport

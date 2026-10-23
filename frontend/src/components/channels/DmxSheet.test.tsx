@@ -521,7 +521,7 @@ describe('DmxSheet', () => {
     // The marquee still arms — its press sits on the rows wrapper — and the verbs then say why.
     dragRow0(6, 7)
     expect(screen.getByText('2 channels')).toBeInTheDocument()
-    for (const name of ['Set', 'Clear cells', 'Spread']) {
+    for (const name of ['Set', 'Clear cells', 'Fan']) {
       const button = selectionBar().getByRole('button', { name })
       expect(button).toBeDisabled()
       expect(button).toHaveAttribute('title', expect.stringMatching(/desk|connect/i))

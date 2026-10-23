@@ -817,7 +817,7 @@ describe('FixturesTable scopes', () => {
     // Absolutely placed in the corner, so the value's own box is untouched.
     expect(dot.className).toContain('absolute')
     expect(dot.className).toContain('top-1 right-1')
-    expect(dot.closest('[data-cell]')?.getAttribute('title')).toMatch(/holds an effect back/)
+    expect(dot.closest('[data-cell]')?.getAttribute('title')).toMatch(/holds an FX back/)
   })
 
   it('draws no dot where nothing is held back — no entry, no reach, or blind', () => {

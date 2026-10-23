@@ -734,9 +734,9 @@ export function CueRowStoreProvider({
   )
 }
 
-/** What a save or its Undo changed, in the toast's words: `values`, `looks and effects`. */
+/** What a save or its Undo changed, in the toast's words: `values`, `looks and FX`. */
 function wordsFor(step: UndoStep): string {
-  const words = [step.rows && 'values', step.layers && 'looks', step.adHocEffects && 'effects'].filter((w): w is string => !!w)
+  const words = [step.rows && 'values', step.layers && 'looks', step.adHocEffects && 'FX'].filter((w): w is string => !!w)
   return words.length <= 1 ? (words[0] ?? 'values') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
 }
 

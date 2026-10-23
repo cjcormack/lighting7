@@ -28,7 +28,7 @@ export const FIXTURE_COLOUR_LABELS: Record<FixtureColour, string> = {
 export const RESERVED_HUES: readonly { key: string; means: string }[] = [
   { key: 'blue', means: 'your values' },
   { key: 'amber', means: 'a park' },
-  { key: 'violet', means: 'an effect' },
+  { key: 'violet', means: 'an FX' },
   { key: 'sky', means: 'a cue' },
   { key: 'teal', means: 'a Look and the venue' },
 ]

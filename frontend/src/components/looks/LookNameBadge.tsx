@@ -55,8 +55,8 @@ export function LookNameBadge({
   className,
 }: LookNameBadgeProps) {
   const effectTemplate = isTemplate === true && isEffect === true
-  const noun = effectTemplate ? 'effect palette' : isTemplate === true ? 'palette' : 'look'
-  const Noun = effectTemplate ? 'Effect palette' : isTemplate === true ? 'Palette' : 'Look'
+  const noun = effectTemplate ? 'FX palette' : isTemplate === true ? 'palette' : 'look'
+  const Noun = effectTemplate ? 'FX palette' : isTemplate === true ? 'Palette' : 'Look'
   const Glyph = isTemplate === true ? Palette : Layers
   // `missing` alone, not `name == null`: a caller can legitimately know a layer names a Look while
   // not yet knowing which one (the list is still loading). Painting that destructive-red would

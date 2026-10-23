@@ -121,7 +121,7 @@ describe('handRefusalReason', () => {
   it('names the actual reason for each refusal, not one generic line', () => {
     expect(handRefusalReason({ kind: 'TEMPLATE' }, 'slot')).toMatch(/selection/)
     expect(handRefusalReason({ kind: 'LOOK', hasDeferredEffects: true }, 'slot')).toMatch(
-      /deferred effect/,
+      /deferred FX/,
     )
     expect(handRefusalReason({ kind: 'CUE' }, 'layer-stack')).toMatch(/never a cue/)
   })

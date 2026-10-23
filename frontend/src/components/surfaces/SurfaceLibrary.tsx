@@ -520,7 +520,7 @@ export function SurfaceLibrary({
           actionChip("go", "Go", { type: "cueStackGo", stackId: stack.id }),
           actionChip("back", "Back", { type: "cueStackBack", stackId: stack.id }),
           actionChip("pause", "Pause", { type: "cueStackPause", stackId: stack.id }),
-          actionChip("fx-size", "FX size", { type: "stackEffectSize", stackId: stack.id }),
+          actionChip("fx-size", "FX amount", { type: "stackEffectSize", stackId: stack.id }),
         ],
       })
       for (const cue of stack.cues) {

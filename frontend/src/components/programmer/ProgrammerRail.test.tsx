@@ -51,9 +51,9 @@ const tab = (name: string) => within(screen.getByRole('tablist', { name: 'Dock' 
 const claim = () => screen.getByTestId('claim').textContent
 
 describe('the dock', () => {
-  it('is Colour and Spread, resting on Colour, and lists nothing', () => {
+  it('is Colour and Fan, resting on Colour, and lists nothing', () => {
     draw()
-    expect(RAIL_TABS.map((t) => t.label)).toEqual(['Colour', 'Spread'])
+    expect(RAIL_TABS.map((t) => t.label)).toEqual(['Colour', 'Fan'])
     expect(tab('Colour')).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('colour-tab')).toBeInTheDocument()
     // No counts, no doors onto the stack: those are row B's tables now.
@@ -65,7 +65,7 @@ describe('the dock', () => {
   it('swaps its panel on a tab press, the claim following the drawn tab', () => {
     draw()
     expect(claim()).toBe('colour')
-    fireEvent.click(tab('Spread'))
+    fireEvent.click(tab('Fan'))
     expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
     expect(screen.queryByTestId('colour-tab')).toBeNull()
     expect(claim()).toBe('spread')
@@ -73,7 +73,7 @@ describe('the dock', () => {
 
   it('is not persisted: every arrival rests on Colour', () => {
     const first = draw()
-    fireEvent.click(tab('Spread'))
+    fireEvent.click(tab('Fan'))
     first.unmount()
     draw()
     expect(tab('Colour')).toHaveAttribute('aria-selected', 'true')
@@ -81,7 +81,7 @@ describe('the dock', () => {
 
   it('keeps its tab across a collapse, claiming nothing while collapsed', () => {
     draw()
-    fireEvent.click(tab('Spread'))
+    fireEvent.click(tab('Fan'))
     fireEvent.click(screen.getByRole('button', { name: 'Collapse the dock' }))
     expect(screen.queryByTestId('spread-tab')).toBeNull()
     expect(claim()).toBe('none')
@@ -94,7 +94,7 @@ describe('the dock', () => {
   it('expands a collapsed dock onto a tab from the strip’s docked door, writing the stored preference', () => {
     window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(true))
     draw()
-    const door = screen.getByRole('button', { name: 'Expand the dock on Spread' })
+    const door = screen.getByRole('button', { name: 'Expand the dock on Fan' })
     expect(door.className).toContain('@max-[1200px]:hidden')
     fireEvent.click(door)
     expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
@@ -104,7 +104,7 @@ describe('the dock', () => {
   it('opens the overlay on a tab from the strip’s narrow door, leaving the preference alone', () => {
     window.localStorage.setItem(COLLAPSED_KEY, JSON.stringify(true))
     draw()
-    const door = screen.getByRole('button', { name: 'Open the dock on Spread' })
+    const door = screen.getByRole('button', { name: 'Open the dock on Fan' })
     expect(door.className).toContain('@min-[1200px]:hidden')
     fireEvent.click(door)
     expect(screen.getByTestId('spread-tab')).toBeInTheDocument()
@@ -113,11 +113,11 @@ describe('the dock', () => {
 
   it('opens the phone’s sheet on a tab from the handle, the panel in one place', () => {
     draw()
-    fireEvent.click(screen.getByRole('button', { name: 'Show Spread' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Show Fan' }))
     expect(screen.getAllByTestId('spread-tab')).toHaveLength(1)
-    expect(screen.queryByRole('complementary', { name: 'Colour and spread' })).toBeNull()
+    expect(screen.queryByRole('complementary', { name: 'Colour and fan' })).toBeNull()
     expect(within(screen.getByRole('dialog')).getByRole('tablist', { name: 'Dock' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open Colour and Spread', hidden: true })).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: 'Open Colour and Fan', hidden: true })).toHaveAttribute('aria-expanded', 'true')
   })
 
   it('draws its tabs in overlay mode too, one chevron and one door per tab', () => {
@@ -125,8 +125,8 @@ describe('the dock', () => {
     draw()
     expect(screen.getAllByRole('button', { name: 'Open the dock on Colour' })).toHaveLength(1)
     expect(screen.queryByRole('button', { name: 'Expand the dock on Colour' })).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Spread' }))
-    expect(tab('Spread')).toHaveAttribute('aria-selected', 'true')
+    fireEvent.click(screen.getByRole('button', { name: 'Open the dock on Fan' }))
+    expect(tab('Fan')).toHaveAttribute('aria-selected', 'true')
     // Overlay mode floats the panel over the grid, which shuts on a press there: it claims nothing.
     expect(claim()).toBe('none')
   })

@@ -169,14 +169,14 @@ function EffectsBody({
     <div className="space-y-2" data-cue-effects-tab>
       {unlock}
       <div className="flex items-center gap-2">
-        <EditorLabel>Effects · {effects.length}</EditorLabel>
+        <EditorLabel>FX · {effects.length}</EditorLabel>
         <span className="flex-1" />
         <Button
           variant="ghost"
           size="sm"
           className="h-6 gap-1 px-1.5 text-xs"
           disabled={addRefusal != null}
-          title={addRefusal ?? `Add an effect on the Values selection — stored in the cue, nothing runs`}
+          title={addRefusal ?? `Add an FX on the Values selection — stored in the cue, nothing runs`}
           aria-expanded={adding}
           onClick={() => {
             setAdding((a) => !a)
@@ -184,7 +184,7 @@ function EffectsBody({
           }}
         >
           <Plus className="size-3" />
-          Effect
+          FX
         </Button>
       </div>
 
@@ -217,7 +217,7 @@ function EffectsBody({
       )}
 
       {effects.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">No effects of its own.{readOnly ? '' : ' + Effect adds one.'}</p>
+        <p className="text-[11px] text-muted-foreground">No FX of its own.{readOnly ? '' : ' + FX adds one.'}</p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <SortableContext items={ids} strategy={verticalListSortingStrategy}>
@@ -233,7 +233,7 @@ function EffectsBody({
                   onToggle={() => setOpen((o) => (o === index ? null : index))}
                   onRemove={() => remove(index)}
                 >
-                  {open === index && library == null && <EditorReadout className="border-t p-2.5">Reading the effect library…</EditorReadout>}
+                  {open === index && library == null && <EditorReadout className="border-t p-2.5">Reading the FX library…</EditorReadout>}
                   {open === index && library != null && (
                     <CueEffectEditor
                       // Keyed by every Undo too: what it put back is the draft to start from.
@@ -304,7 +304,7 @@ function EffectRow({
         {!readOnly && (
           // The sortable's attributes on the grip, never the row: on the row they make it a
           // focusable `role="button"`, which every key guard stands aside for.
-          <button type="button" className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground" {...attributes} {...listeners} aria-label="Reorder effect">
+          <button type="button" className="shrink-0 cursor-grab text-muted-foreground hover:text-foreground" {...attributes} {...listeners} aria-label="Reorder FX">
             <GripVertical className="size-3.5" />
           </button>
         )}
@@ -397,7 +397,7 @@ function CueEffectEditor({
     <div className="flex flex-col gap-3 border-t p-2.5" data-cue-effect-editor>
       {entry == null ? (
         <EditorReadout>
-          {libraryLoaded ? `“${effect.effectType}” is not in this desk's effect library, so its settings cannot be drawn.` : 'Reading the effect library…'}
+          {libraryLoaded ? `“${effect.effectType}” is not in this desk's FX library, so its settings cannot be drawn.` : 'Reading the FX library…'}
         </EditorReadout>
       ) : (
         <FxEffectFields

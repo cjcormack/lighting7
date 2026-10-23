@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 1 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 2 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -237,7 +237,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
   `ELEMENT_MODE_OPTIONS`, the FX registry's names and families, and `SpeedMasterUsageVocabularyTest`'s
   vocabulary, which it absorbs. Each later session flips its rows to `done`.
 
-### Session 2: on-screen words (frontend + FX frontmatter names)
+### Session 2: on-screen words (frontend + FX frontmatter names) — done, `b2e04b61`
 
 - D1, D2, D3, D6, D7, D8, D9's screen words, D18's label, D19's screen words, D22's segment over
   the existing `stepTiming`, D25's *Intensity*, D26's *Attribute*, §6's layout.

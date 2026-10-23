@@ -82,7 +82,7 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
         <DialogHeader>
           <DialogTitle>Install lighting7 {version} and restart?</DialogTitle>
           <DialogDescription>
-            This stops the lighting desk. DMX output stops, any running effects stop, and every
+            This stops the lighting desk. DMX output stops, any running FX stop, and every
             connected phone or tablet disconnects. It usually takes one to three minutes, and
             lighting7 reopens by itself when it&apos;s done.
           </DialogDescription>
@@ -95,7 +95,7 @@ export function ApplyUpdateDialog({ open, onOpenChange, status }: ApplyUpdateDia
               <AlertDescription>
                 {effectCount > 0 && (
                   <span className="font-medium">
-                    {effectCount} {effectCount === 1 ? 'effect is' : 'effects are'} running right now.
+                    {effectCount} FX {effectCount === 1 ? 'is' : 'are'} running right now.
                   </span>
                 )}
                 {activeStack && (

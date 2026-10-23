@@ -163,9 +163,9 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
     editorContext.kind === 'cue' && cueStoreRaw?.readOnly
       ? 'This cue is read-only here — unlock the show to edit its values'
       : scope?.kind === 'output'
-      ? 'Output is a read of the cook — switch to Local to spread values onto these heads'
+      ? 'Output is a read of the cook — switch to Local to fan values onto these heads'
       : focusedTemplate != null
-        ? 'This layer applies a palette — switch to Local to spread values onto these heads'
+        ? 'This layer applies a palette — switch to Local to fan values onto these heads'
         : null
 
   const intentColumns = useMemo(
@@ -185,7 +185,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
       if (intent != null) {
-        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a cue`, { id: INTENT_TOAST })
+        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to fan into a cue`, { id: INTENT_TOAST })
         return
       }
       for (const write of written) cueStore.setValue('fixture', write.target.key, write.propertyName, write.value)
@@ -199,7 +199,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
       if (intent != null) {
-        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to spread into a Look layer`, { id: INTENT_TOAST })
+        toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to fan into a Look layer`, { id: INTENT_TOAST })
         return
       }
       landValuesInLook(layerStore, written)
@@ -239,7 +239,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         cellCount: spreadCellCount(heads),
         families: targetFamilies(heads),
         offered: marqueeFamilies,
-        familyRefusal: 'Not in the selection — select cells in that column to spread it',
+        familyRefusal: 'Not in the selection — select cells in that column to fan it',
         propertiesFor: (family: AttributeFamily) => spreadPropertiesOffered(heads, family),
         initial: { family: columnFamily(first.col), property: spreadPropertyForColumn(first.col) ?? undefined },
         mask,

@@ -1,6 +1,6 @@
 /*---
 id: ZoomBreathe
-name: Zoom Breathe
+name: Zoom Wave
 category: beam
 outputType: SLIDER
 effectMode: STANDARD

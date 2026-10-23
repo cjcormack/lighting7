@@ -1,6 +1,6 @@
 /*---
 id: Strobe
-name: Strobe
+name: Dimmer Strobe
 category: dimmer
 outputType: SLIDER
 effectMode: STANDARD

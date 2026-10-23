@@ -95,10 +95,10 @@ describe('effectsToStop', () => {
 
 describe('partialSweepMessage', () => {
   it('reads as one sentence in both numbers', () => {
-    expect(partialSweepMessage([effect({})])).toContain('1 effect left running')
+    expect(partialSweepMessage([effect({})])).toContain('1 FX left running')
     expect(partialSweepMessage([effect({})])).toContain('it covers')
     expect(partialSweepMessage([effect({ id: 1 }), effect({ id: 2 })])).toContain(
-      '2 effects left running',
+      '2 FX left running',
     )
     expect(partialSweepMessage([effect({ id: 1 }), effect({ id: 2 })])).toContain('they cover')
   })

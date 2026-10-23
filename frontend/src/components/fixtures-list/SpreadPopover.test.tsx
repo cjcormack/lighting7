@@ -86,7 +86,7 @@ function column(col: SpreadColumn['col'], rowIds: string[], rows = rowsOf()): Sp
 
 const draw = (columns: SpreadColumn[], props: Partial<React.ComponentProps<typeof SpreadPopover>> = {}) =>
   render(<SpreadPopover columns={columns} projectId={6} desk {...props} />)
-const open = () => fireEvent.click(screen.getByRole('button', { name: 'Spread' }))
+const open = () => fireEvent.click(screen.getByRole('button', { name: 'Fan' }))
 const apply = () => fireEvent.click(screen.getByRole('button', { name: 'Apply' }))
 const lastRequest = () => spread.mock.calls.at(-1)![0]
 const radio = (group: string, name: string | RegExp) => within(screen.getByRole('radiogroup', { name: group })).getByRole('radio', { name })
@@ -204,12 +204,12 @@ describe('the targets (D4)', () => {
     expect(lastRequest()).toMatchObject({ families: ['INTENSITY'] })
   })
 
-  it('offers the Property row from what the heads can take: Level · Strobe over a Dimmer marquee whose heads include a strobe', () => {
+  it('offers the Attribute row from what the heads can take: Level · Strobe over a Dimmer marquee whose heads include a strobe', () => {
     draw([column('dimmer', ['group:Front wash'])])
     open()
-    const properties = within(screen.getByRole('radiogroup', { name: 'Property' })).getAllByRole('radio')
+    const properties = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
     expect(properties.map((r) => r.textContent)).toEqual(['Level', 'Strobe'])
-    fireEvent.click(radio('Property', 'Strobe'))
+    fireEvent.click(radio('Attribute', 'Strobe'))
     apply()
     expect(lastRequest()).toMatchObject({ property: 'strobe' })
   })
@@ -221,25 +221,25 @@ describe('the targets (D4)', () => {
     expect(radio('Family', 'Colour')).toBeEnabled()
     fireEvent.click(radio('Family', 'Colour'))
     // The Colour family over an RGB and an RGBW head: Colour · White.
-    expect(within(screen.getByRole('radiogroup', { name: 'Property' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Colour', 'White'])
+    expect(within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Colour', 'White'])
     apply()
     expect(lastRequest()).toMatchObject({ property: 'rgbColour', families: ['POSITION'] })
   })
 
-  it('Over defaults to Heads, and offers Cells with the count where a selected fixture has cells', () => {
+  it('Over defaults to Heads, and offers Elements with the count where a selected fixture has cells', () => {
     const { unmount } = draw([column('dimmer', ['group:Front wash'])])
     open()
     expect(radio('Over', 'Heads')).toHaveAttribute('aria-checked', 'true')
     // Pressable with nothing to split: the desk spreads it as Heads.
-    expect(radio('Over', /^Cells/)).toBeEnabled()
-    expect(radio('Over', /^Cells/)).toHaveTextContent(/^Cells$/)
+    expect(radio('Over', /^Elements/)).toBeEnabled()
+    expect(radio('Over', /^Elements/)).toHaveTextContent(/^Elements$/)
     unmount()
     draw([column('dimmer', ['group:Front wash', 'fixture:bar'])])
     open()
-    const cells = radio('Over', /^Cells/)
+    const cells = radio('Over', /^Elements/)
     expect(cells).toBeEnabled()
     // The bar's two cells, and each par as one.
-    expect(cells).toHaveTextContent('Cells4')
+    expect(cells).toHaveTextContent('Elements4')
     fireEvent.click(cells)
     apply()
     expect(lastRequest()).toMatchObject({ over: 'CELLS' })
@@ -284,7 +284,7 @@ describe('the scope arm (D6)', () => {
     }
     draw([{ col: 'position', targets: expandSelectionToTargets(rows, new Set(['fixture:spot-1', 'fixture:spot-2'])) }], { scopeLabel: 'Warm Wash' })
     open()
-    fireEvent.click(radio('Spread mode', 'Fan'))
+    fireEvent.click(radio('Fan mode', 'About each position'))
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Pan amount' }), { target: { value: '10' } })
     apply()
     expect(lastRequest()).toMatchObject({
@@ -333,7 +333,7 @@ describe('the scope arm (D6)', () => {
   it('refuses in Output scope — a read of the cook — with the reason Set and Clear give', () => {
     scopeState.current = { kind: 'output' }
     draw([column('dimmer', ['group:Front wash'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('read of the cook'))
   })
@@ -341,7 +341,7 @@ describe('the scope arm (D6)', () => {
   it('refuses onto a focused palette layer, and says why', () => {
     focusedTemplate.current = { layerId: 7, templateId: 4, kind: 'effect' }
     draw([column('dimmer', ['group:Front wash'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('switch to Local'))
   })
@@ -363,7 +363,7 @@ describe('the plan kinds', () => {
 
   it('Gobo and Prism build no plan, and the button says which columns can', () => {
     draw([column('gobo', ['fixture:mover'])])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('in a column it can drive'))
     expect(button).not.toHaveAttribute('title', expect.stringContaining('Select cells'))
@@ -371,7 +371,7 @@ describe('the plan kinds', () => {
 
   it('is disabled with nothing selected, and says so', () => {
     draw([])
-    const button = screen.getByRole('button', { name: 'Spread' })
+    const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()
     expect(button).toHaveAttribute('title', expect.stringContaining('Select cells'))
   })
@@ -384,7 +384,7 @@ describe('the plan kinds', () => {
   it('a Dimmer + Speed marquee draws a chooser between the desk-resolved plan and the raw one', () => {
     draw([column('dimmer', ['fixture:mover']), column('speed', ['fixture:mover', 'fixture:bar'])])
     open()
-    expect(screen.getByRole('combobox', { name: 'Column to spread' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Column to fan' })).toBeInTheDocument()
   })
 })
 

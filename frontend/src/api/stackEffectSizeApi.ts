@@ -12,7 +12,7 @@ import { sendGesture } from './wsGesture'
  * - `stackEffectSize.state` `{projectId, stacks: [{stackId, size}]}` — every stack below full; a
  *   stack absent is at 100 %. A `StateFlow`, so the subscription is the connect snapshot and every
  *   change is a whole frame.
- * - `stackEffectSize.set` `{stackId, size}` — the *FX size* slider, at frame rate.
+ * - `stackEffectSize.set` `{stackId, size}` — the *FX amount* slider, at frame rate.
  *
  * REST reads and sets the same value (`GET/PUT projects/{id}/cue-stacks/{sid}/effect-size`), and a
  * MIDI `stackEffectSize` binding moves it too, so this frame is what keeps every slider honest.

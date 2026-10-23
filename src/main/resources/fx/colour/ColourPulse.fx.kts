@@ -1,6 +1,6 @@
 /*---
 id: ColourPulse
-name: Colour Pulse
+name: Colour Wave
 category: colour
 outputType: COLOUR
 effectMode: STANDARD

@@ -2,9 +2,9 @@ import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type Luci
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 
 /**
- * An effect's speed, in **beats a cycle** — the one spelling every surface uses
- * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's speed segment draws
- * these labels and every chip reads them through [getBeatDivisionLabel], so a speed is never *1*
+ * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
+ * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle segment draws
+ * these labels and every chip reads them through [getBeatDivisionLabel], so a cycle is never *1*
  * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
  * long cycles say bars.
  *
@@ -46,10 +46,10 @@ export const EFFECT_CATEGORY_INFO: Record<
   string,
   { label: string; icon: LucideIcon; description: string }
 > = {
-  dimmer: { label: 'Dimmer', icon: Sun, description: 'Intensity and brightness effects' },
-  colour: { label: 'Colour', icon: Palette, description: 'RGB colour cycling and effects' },
+  dimmer: { label: 'Intensity', icon: Sun, description: 'Intensity and brightness FX' },
+  colour: { label: 'Colour', icon: Palette, description: 'RGB colour cycling and FX' },
   position: { label: 'Position', icon: Move, description: 'Pan/tilt movement patterns' },
-  beam: { label: 'Beam', icon: Aperture, description: 'Zoom, iris, frost and focus effects, and slot steps' },
+  beam: { label: 'Beam', icon: Aperture, description: 'Zoom, iris, frost and focus FX, and slot steps' },
   palette: { label: 'Palette steps', icon: ListOrdered, description: 'Steps through palettes of one family' },
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
@@ -57,8 +57,8 @@ export const EFFECT_CATEGORY_INFO: Record<
 const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
   LINEAR: 'Chase across heads in order',
   REVERSE: 'Chase in reverse order',
-  CENTER_OUT: 'Expand from center to edges',
-  EDGES_IN: 'Converge from edges to center',
+  CENTER_OUT: 'Expand from centre to edges',
+  EDGES_IN: 'Converge from edges to centre',
   SPLIT: 'Split into two halves',
   RANDOM: 'Random offset per head',
   PING_PONG: 'Bounce back and forth',
@@ -67,15 +67,15 @@ const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
 }
 
 /**
- * Every distribution strategy, worded and ordered as the effect editor's Order (`lib/orderLabels.ts`,
- * effects plan §3.1) — one vocabulary, so a Look's summary and a group's *Runs as* picker say *Rig*
+ * Every distribution strategy, worded and ordered as the FX editor's Order (`lib/orderLabels.ts`,
+ * effects plan §3.1) — one vocabulary, so a Look's summary and a group's *Runs as* picker say *Normal*
  * where the editor does. The stored value is the strategy's name.
  */
 export const DISTRIBUTION_STRATEGY_OPTIONS: readonly { value: string; label: string; description: string }[] =
   ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value), description: DISTRIBUTION_DESCRIPTIONS[value] ?? '' }))
 
 export const ELEMENT_MODE_OPTIONS = [
-  { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'Effect runs independently on each fixture' },
+  { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'FX runs independently on each fixture' },
   { value: 'FLAT', label: 'Flat', description: 'All heads treated as one continuous strip' },
 ] as const
 

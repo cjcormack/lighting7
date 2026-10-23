@@ -167,7 +167,7 @@ describe('FX Library sheet', () => {
 
   it('groups the rows under category dividers under All, and a chip narrows them', () => {
     draw()
-    expect(divider('dimmer')).toHaveTextContent('Dimmer · 3')
+    expect(divider('dimmer')).toHaveTextContent('Intensity · 3')
     expect(divider('colour')).toHaveTextContent('Colour · 2')
     fireEvent.click(within(screen.getByRole('navigation', { name: 'Category' })).getByRole('button', { name: /Colour/ }))
     expect(divider('colour')).toBeNull()
@@ -197,7 +197,7 @@ describe('FX Library sheet', () => {
   it('renames a custom row with its name alone, and offers no rename on a built-in or a script’s effect', () => {
     draw()
     fireEvent.doubleClick(within(row('RandomFlicker')).getByText('Random Flicker'))
-    const field = screen.getByLabelText('Effect name') as HTMLInputElement
+    const field = screen.getByLabelText('FX name') as HTMLInputElement
     fireEvent.change(field, { target: { value: 'Candle' } })
     fireEvent.keyDown(field, { key: 'Enter' })
     expect(updateDefinition).toHaveBeenCalledWith({ id: 7, name: 'Candle' })
@@ -228,11 +228,11 @@ describe('FX Library sheet', () => {
     draw()
     selectRows('Pulse', 'ColourChase')
     expect(screen.getByRole('button', { name: 'Fork' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', 'Fork takes one effect — select just one')
+    expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', 'Fork takes one FX — select just one')
     selectRows('RandomFlicker')
     expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute(
       'title',
-      'Only a built-in forks — edit this custom effect directly',
+      'Only a built-in forks — edit this custom FX directly',
     )
   })
 
@@ -245,7 +245,7 @@ describe('FX Library sheet', () => {
     expect(deleteDefinition.mock.calls.map(([id]) => id)).toEqual([3, 7])
     expect(toastInfo).toHaveBeenCalledTimes(1)
     const skipped = String(toastInfo.mock.calls[0][0])
-    expect(skipped).toContain('Pulse: built-in effects cannot be deleted')
+    expect(skipped).toContain('Pulse: built-in FX cannot be deleted')
     expect(skipped).toContain('Warm Flicker: a script registers it')
   })
 
@@ -259,12 +259,12 @@ describe('FX Library sheet', () => {
     isCurrent = false
     draw()
     selectRows('RandomFlicker')
-    const reason = 'Not the running project — Effects shows and edits the running show’s effects'
+    const reason = 'Not the running project — FX shows and edits the running show’s FX'
     expect(screen.getByRole('button', { name: 'Fork' })).toHaveAttribute('title', reason)
     expect(screen.getByRole('button', { name: 'Fork' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
     expect(within(row('RandomFlicker')).queryByTitle('Double-click to rename')).toBeNull()
-    expect(screen.queryByRole('button', { name: 'New effect' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'New FX' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Open Random Flicker' }))
     expect(screen.getByTestId('detail')).toHaveTextContent('RandomFlicker:custom')
   })

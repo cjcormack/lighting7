@@ -401,7 +401,7 @@ export function RailBodyFrame({ children, enter }: { children: ReactNode; enter:
   return (
     <div
       role="complementary"
-      aria-label="Colour and spread"
+      aria-label="Colour and fan"
       data-rail-mode={overlay ? 'overlay' : 'push'}
       style={style}
       className={cn(

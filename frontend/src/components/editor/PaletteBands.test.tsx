@@ -386,7 +386,7 @@ describe('the Effects band', () => {
   it('offers a zoom cell Zoom Breathe — the Beam effect palettes that drive zoom — and opens the picker on zoom', () => {
     slider(ZOOM)
     expect(effectChips()).toEqual(['Slow zoom'])
-    fireEvent.click(screen.getByRole('button', { name: 'Effect…' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
     expect(screen.getByTestId('picker-effects')).toBeInTheDocument()
     expect(picker).toHaveBeenLastCalledWith(
       expect.objectContaining({

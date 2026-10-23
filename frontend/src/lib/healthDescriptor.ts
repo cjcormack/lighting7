@@ -16,7 +16,7 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     case "missingGroup":
       return `Group '${health.groupName}' no longer exists`
     case "missingProperty":
-      return `Property '${health.propertyName}' is not defined on '${health.targetKey}'`
+      return `Attribute '${health.propertyName}' is not defined on '${health.targetKey}'`
     // Three reference cases stood here — `missingPalette`, `missingPaletteEntry`, and before them
     // `paletteTypeMismatch`. All retired with the `ref:` value grammar (session 4): a row cannot
     // hold a reference, so a reference that resolves to nothing is not a state to describe. Note
@@ -34,7 +34,7 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     case "unknownProperty":
       // A selection or encoder-bank property, so there is no target to name — what makes it dead
       // is that nothing in the patch has the property at all.
-      return `No fixture in this patch has a '${health.propertyName}' property`
+      return `No fixture in this patch has a '${health.propertyName}' attribute`
     // The record variants. Each names its uuid rather than a resolved name, because this function
     // is pure and has no library to look one up in — the same line `describeTarget` draws.
     case "missingLook":
@@ -58,7 +58,7 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     case "lookNeedsSelection":
       // Not missing — still there, and the fix is different: give the effect its targets, or bind
       // the button to something a press can land on by itself.
-      return "This Look has a deferred effect, so it needs a selection — a button has none to give"
+      return "This Look has a deferred FX, so it needs a selection — a button has none to give"
     case "unknownTarget":
       // The row the backend's tolerant decode kept rather than failing the whole project on. It
       // is dead here and rebindable; on the build that wrote it, it works.

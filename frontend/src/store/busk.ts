@@ -600,7 +600,7 @@ export function rigWriteFailureMessage(err: unknown): string {
     case 'BUSK_RIG_IDENTITY':
       return `The rig was refused — it names a row or tile the desk does not have: ${message}`
     case 'BUSK_RIG_REF':
-      return `The rig was refused — a group, fixture or cell on it is gone: ${message}`
+      return `The rig was refused — a group, fixture or element on it is gone: ${message}`
     default:
       return message
   }

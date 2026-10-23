@@ -58,8 +58,8 @@ describe('describeTarget — the busk-further plan’s five (D14)', () => {
     expect(describeTarget({ type: 'buskSheetToggle', windowName: 'Screen 2' })).toBe('Busk sheet · Screen 2')
     expect(describeTarget({ type: 'selectionNext' })).toBe('Selection · next')
     expect(describeTarget({ type: 'selectionPrev' })).toBe('Selection · prev')
-    expect(describeTarget({ type: 'selectionCells', mode: 'MASTERS' })).toBe('Cells · Masters only')
-    expect(describeTarget({ type: 'selectionCells', mode: 'FIRST_HALF' })).toBe('Cells · 1st half')
+    expect(describeTarget({ type: 'selectionCells', mode: 'MASTERS' })).toBe('Elements · Masters only')
+    expect(describeTarget({ type: 'selectionCells', mode: 'FIRST_HALF' })).toBe('Elements · 1st half')
   })
 })
 

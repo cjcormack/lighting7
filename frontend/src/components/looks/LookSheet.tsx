@@ -394,8 +394,8 @@ export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.targetCount > 0) parts.push(`${look.targetCount} fixture${look.targetCount === 1 ? '' : 's'}`)
   if (look.rowCount > 0) parts.push(`${look.rowCount} row${look.rowCount === 1 ? '' : 's'}`)
-  if (look.effectCount > 0) parts.push(`${look.effectCount} fx`)
-  if (look.hasDeferredEffects) parts.push('effects follow the layer')
+  if (look.effectCount > 0) parts.push(`${look.effectCount} FX`)
+  if (look.hasDeferredEffects) parts.push('FX follow the layer')
   return parts.join(' · ')
 }
 

@@ -407,7 +407,7 @@ function TileMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
-          {multiHead ? `${tile.patch?.name} · ${cellCount} cells` : name}
+          {multiHead ? `${tile.patch?.name} · ${cellCount} elements` : name}
         </DropdownMenuLabel>
         {multiHead && (
           <>
@@ -418,9 +418,9 @@ function TileMenu({
                 else onSetMode(mode as BuskRigCellMode)
               }}
             >
-              <DropdownMenuRadioItem value="PIPS">Whole fixture, cells on the tile</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="PIPS">Whole fixture, elements on the tile</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="WHOLE">Whole fixture only</DropdownMenuRadioItem>
-              <DropdownMenuRadioItem value="PER_CELL">One tile per cell · {cellCount} tiles</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="PER_CELL">One tile per element · {cellCount} tiles</DropdownMenuRadioItem>
               <DropdownMenuRadioItem value="HALVES">Split into…</DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <div className="flex flex-wrap gap-0.5 px-1 pb-1">
@@ -612,7 +612,7 @@ function Pips({
       ref={rowRef}
       data-rig-pips
       role="group"
-      aria-label={`${tileName} cells`}
+      aria-label={`${tileName} elements`}
       className={cn(
         'absolute right-3.5 bottom-[5px] left-3.5 flex items-end gap-0.5',
         inert ? 'pointer-events-none' : 'touch-manipulation',

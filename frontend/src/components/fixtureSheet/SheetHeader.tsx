@@ -80,7 +80,7 @@ export function SheetHeader({
   const releaseTitle =
     held === 0
       ? `${name} holds nothing in the programmer`
-      : `Release ${held} — every value and local effect ${name} holds in the programmer`
+      : `Release ${held} — every value and local FX ${name} holds in the programmer`
   return (
     <div className="flex flex-none flex-col">
       <div className="min-w-0 px-3 pt-3 pr-10 pb-1.5">

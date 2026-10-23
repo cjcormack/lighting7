@@ -74,7 +74,7 @@ describe('useClearCellEffects', () => {
     const { result } = renderHook(() => useClearCellEffects(true))
     result.current(cells(['hex-1', 'dimmer']))
     expect(mocks.removeGroupFx).not.toHaveBeenCalled()
-    expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining('1 effect left running'))
+    expect(mocks.warn).toHaveBeenCalledWith(expect.stringContaining('1 FX left running'))
   })
 
   /**

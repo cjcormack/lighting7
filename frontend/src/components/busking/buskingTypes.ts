@@ -70,7 +70,7 @@ export function summariseSelection(selected: readonly BuskingTarget[]): string {
   const names = entries.map((entry) => {
     if (!('parentKey' in entry)) return entry.name
     if (entry.total > 0) return `${entry.name} · ${entry.count} of ${entry.total}`
-    return `${entry.name} · ${entry.count} ${entry.count === 1 ? 'cell' : 'cells'}`
+    return `${entry.name} · ${entry.count} ${entry.count === 1 ? 'element' : 'elements'}`
   })
   const heads = selectedHeadCount(selected)
   return `${names.join(', ')} · ${heads} ${heads === 1 ? 'head' : 'heads'}`

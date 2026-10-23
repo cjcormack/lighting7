@@ -318,7 +318,7 @@ describe('the footer’s verbs reach the editor', () => {
     expect(scroller.contains(footer)).toBe(false)
     const names = [...footer.querySelectorAll('button')].map((b) => b.getAttribute('aria-label') ?? b.textContent)
     expect(names[0]).toMatch(/Save as palette/)
-    expect(names).toContain('Spread to a second colour…')
+    expect(names).toContain('Fan to a second colour…')
     // The two bands sit at the foot of the scroller, under the picker: Palettes, then Effects.
     const palettes = scroller.querySelector('[data-palette-band="COLOUR"]')!
     const effects = scroller.querySelector('[data-effects-band="COLOUR"]')!
@@ -339,13 +339,13 @@ describe('the footer’s verbs reach the editor', () => {
   it('hands Spread to a second colour… the current colour once wired, and draws it inert on a host with no Spread tab', () => {
     const { unmount } = draw([reds])
     expect(screen.queryByRole('switch')).toBeNull()
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeDisabled()
     unmount()
     const onSpread = vi.fn()
     draw([reds], { onSpread })
-    expect(screen.getByRole('button', { name: /Spread to a second colour/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Fan to a second colour/ })).toBeEnabled()
     fireEvent.change(field('B'), { target: { value: '7' } })
-    fireEvent.click(screen.getByRole('button', { name: /Spread to a second colour/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Fan to a second colour/ }))
     expect(onSpread).toHaveBeenCalledWith({ r: 255, g: 0, b: 7, w: 0, a: 0, uv: 0 })
   })
 })

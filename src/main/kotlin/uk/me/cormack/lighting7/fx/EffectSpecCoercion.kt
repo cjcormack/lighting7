@@ -173,7 +173,7 @@ object EffectSpecCoercion {
             else -> order.javaClass.simpleName
         }
 
-        /** Why [size] is not a Size (effects plan D2: 0.0–1.0 — `FU-FX-SIZE-OVER-100`), or null. */
+        /** Why [size] is not a Size (effects plan D2: 0.0–1.0 — `FU-FX-AMPLITUDE`), or null. */
         fun sizeProblem(size: Double): String? =
             if (size.isNaN() || size < 0.0 || size > 1.0) "size must be between 0 and 1 (0–100 %), got $size" else null
 

@@ -30,7 +30,7 @@ export function GroupDetailModal({ groupName, onClose }: GroupDetailModalProps) 
   return (
     <Sheet open={groupName !== null} onOpenChange={(open) => !open && onClose()}>
       <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
-        <SheetDescription className="sr-only">The group&apos;s values, its members and its effects</SheetDescription>
+        <SheetDescription className="sr-only">The group&apos;s values, its members and its FX</SheetDescription>
         {group ? (
           // Keyed by group so the view and the open row reset when the sheet moves to another.
           <FixtureSheet key={group.name} group={group} host="popup" titleComponent={SheetTitle} onOpenMember={setSelectedFixture} />

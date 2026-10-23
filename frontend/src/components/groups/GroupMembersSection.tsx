@@ -224,7 +224,7 @@ function OrderedMembers({
       <p className="text-xs text-muted-foreground">
         {reorder.kind === 'readOnly'
           ? reorder.reason
-          : `Effects and a spread over ${groupName} run in this order${editable ? '. Drag to reorder.' : '.'}`}
+          : `FX and a fan over ${groupName} run in this order${editable ? '. Drag to reorder.' : '.'}`}
         {steps != null && ` Step is when each member comes round under ${strategyLabel}.`}
       </p>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>

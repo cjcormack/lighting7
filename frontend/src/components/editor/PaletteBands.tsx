@@ -478,7 +478,7 @@ export function EffectsBand({
   return (
     <div data-effects-band={family} className={cn('space-y-1.5', className)}>
       <div className="flex min-w-0 items-center gap-1.5">
-        <EditorLabel className="shrink-0">Effects</EditorLabel>
+        <EditorLabel className="shrink-0">FX</EditorLabel>
         {into.kind === 'look' && (
           <span className="min-w-0 truncate text-[10px] text-teal-700 dark:text-teal-300">into {into.lookName}</span>
         )}
@@ -495,8 +495,8 @@ export function EffectsBand({
           disabled={targets.length === 0}
           title={
             cue != null
-              ? `A library effect on these heads — stored in ${cue.cueLabel}, nothing runs`
-              : `A library effect on these heads — Local, taking them off the ${label.toLowerCase()} effects they run`
+              ? `A library FX on these heads — stored in ${cue.cueLabel}, nothing runs`
+              : `A library FX on these heads — Local, taking them off the ${label.toLowerCase()} FX they run`
           }
           onClick={() => {
             setPickerMounted(true)
@@ -504,7 +504,7 @@ export function EffectsBand({
           }}
         >
           <Plus className="size-3" />
-          Effect…
+          FX…
         </Button>
       </div>
       {running.length > 0 && (
@@ -590,7 +590,7 @@ export function EffectsBand({
       )}
       {running.length === 0 && stored.length === 0 && offered.length === 0 && (
         <p className="text-[10px] text-muted-foreground">
-          {cue != null ? `${cue.cueLabel} runs no effect on these heads` : 'Nothing running on these heads'}
+          {cue != null ? `${cue.cueLabel} runs no FX on these heads` : 'Nothing running on these heads'}
         </p>
       )}
       {editing != null && (

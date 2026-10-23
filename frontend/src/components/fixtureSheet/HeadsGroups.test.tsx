@@ -252,25 +252,25 @@ describe('the head strip', () => {
     expect(checked()).toEqual(['Head 1', 'Head 3'])
   })
 
-  it('picks by pattern from the Cells menu, steps with Prev and Next, and a tap clears the pattern', () => {
+  it('picks by pattern from the Elements menu, steps with Prev and Next, and a tap clears the pattern', () => {
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
-    const cells = () => screen.getByRole('button', { name: /^Cells:/ })
+    const cells = () => screen.getByRole('button', { name: /^Elements:/ })
     // Radix opens on Enter at the trigger, with no pointer needed.
     const choose = (name: string) => {
       fireEvent.keyDown(cells(), { key: 'Enter' })
       fireEvent.click(screen.getByRole('menuitem', { name }))
     }
-    expect(cells().getAttribute('aria-label')).toBe('Cells: All')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: All')
     choose('Odd')
     expect(checked()).toEqual(['Head 1', 'Head 3', 'Head 5', 'Head 7', 'Head 9', 'Head 11'])
-    expect(cells().getAttribute('aria-label')).toBe('Cells: Odd')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: Odd')
     choose('Invert')
     expect(checked()).toEqual(['Head 2', 'Head 4', 'Head 6', 'Head 8', 'Head 10', 'Head 12'])
     choose('2nd half')
     expect(checked()).toEqual(['Head 7', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
     fireEvent.click(screen.getByRole('button', { name: 'Next head' }))
     expect(checked()).toEqual(['Head 1', 'Head 8', 'Head 9', 'Head 10', 'Head 11', 'Head 12'])
-    expect(cells().getAttribute('aria-label')).toBe('Cells: a pick of your own')
+    expect(cells().getAttribute('aria-label')).toBe('Elements: a pick of your own')
     fireEvent.click(pip('Head 4'))
     expect(checked()).toEqual(['Head 4'])
     fireEvent.click(screen.getByRole('button', { name: 'Previous head' }))
@@ -367,7 +367,7 @@ describe('rows over a pick of heads', () => {
     // Head 1 sees the fixture's Rainbow (painted onto every head) and not head 3's Pulse.
     expect(within(tray).getByText('Rainbow')).toBeTruthy()
     expect(within(tray).queryByText('Pulse')).toBeNull()
-    fireEvent.click(within(tray).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray).getByRole('button', { name: 'FX' }))
     expect((picker.props?.target as { fixture: Fixture }).fixture.key).toBe('bar-a.pixel-0')
   })
 
@@ -376,15 +376,15 @@ describe('rows over a pick of heads', () => {
     fireEvent.click(pip('Head 1'))
     for (const n of [2, 3, 4, 5, 6]) addPip(`Head ${n}`)
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
-    fireEvent.click(within(tray).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray).getByRole('button', { name: 'FX' }))
     expect((picker.props?.target as { fixture: Fixture }).fixture.key).toBe('bar-a')
     expect(picker.props?.elementFilter).toBe('FIRST_HALF')
     // Five heads: no filter names them, so the picker says why rather than starting on the wrong ones.
     addPip('Head 6')
     expect(within(tray).queryByTestId('fx-picker')).toBeNull()
     expect(within(tray).getByText(/pick one of those/)).toBeTruthy()
-    fireEvent.click(within(tray).getByRole('button', { name: 'Back to the effects' }))
-    expect((within(tray).getByRole('button', { name: 'Effect' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(within(tray).getByRole('button', { name: 'Back to the FX' }))
+    expect((within(tray).getByRole('button', { name: 'FX' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
@@ -494,7 +494,7 @@ describe('the group sheet', () => {
     render(<FixtureSheet group={FRONT} host="popup" onOpenMember={() => {}} />)
     expect(screen.getAllByRole('tab').map((t) => t.textContent)).toEqual(['Values', 'Members'])
     const tray = () => document.querySelector('[data-fx-tray]') as HTMLElement
-    fireEvent.click(within(tray()).getByRole('button', { name: 'Effect' }))
+    fireEvent.click(within(tray()).getByRole('button', { name: 'FX' }))
     expect(picker.props?.target).toMatchObject({ type: 'group', group: { name: 'front' } })
     // The picker follows the pick while it is open.
     fireEvent.click(pip('Wash 2'))

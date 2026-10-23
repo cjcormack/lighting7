@@ -478,7 +478,7 @@ function stackColumns(band: AppliedBand, onMakeLayer: () => void): { columns: Sh
   }
   const effectsColumn: SheetColumn<StackSheetRow, StackColumnKey> = {
     key: 'effects',
-    label: 'Effects',
+    label: 'FX',
     width: band === 0 ? 'minmax(100px, 140px)' : '90px',
     value: () => undefined,
     display: (row) => <EffectsCell row={row} />,
@@ -590,7 +590,7 @@ function SpentBadge() {
     <Badge
       variant="outline"
       className="border-dashed px-1 py-0 text-[10px] text-muted-foreground"
-      title="Its effect has run its count and paints nothing until the layer goes"
+      title="Its FX has run its count and paints nothing until the layer goes"
       data-spent
     >
       spent
@@ -811,7 +811,7 @@ function StackVerbs({
           <LibraryVerb
             icon={Unlink}
             label="Detach"
-            title={`Turn ${count === 1 ? 'this layer' : `${count} layers`} into your own values and effects, with nothing on stage moving`}
+            title={`Turn ${count === 1 ? 'this layer' : `${count} layers`} into your own values and FX, with nothing on stage moving`}
             onClick={() => layers.forEach((row) => programmerDetachLayer(row.entry.layer.layerId))}
           />
           <LibraryVerb
@@ -840,10 +840,10 @@ function EffectsElsewhere({ count, onShow }: { count: number; onShow: () => void
     <span className="min-w-0 truncate text-[11px] text-amber-200/80">
       ·{' '}
       {count === 0 ? (
-        'no effects running'
+        'no FX running'
       ) : (
         <>
-          {count} effect{count === 1 ? '' : 's'} run under this stack,{' '}
+          {count} FX {count === 1 ? 'runs' : 'run'} under this stack,{' '}
           <button type="button" className="underline-offset-2 hover:underline" onClick={onShow}>
             on the FX tab
           </button>

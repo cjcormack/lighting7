@@ -56,7 +56,7 @@ describe('the sidebar sections', () => {
     expect(rows.indexOf('Programmer')).toBeLessThan(rows.indexOf('Patch List'))
     expect(rows.indexOf('Stage')).toBeLessThan(rows.indexOf('Patch List'))
     expect(rows.indexOf('Regions')).toBeLessThan(rows.indexOf('Channels'))
-    expect(rows).toContain('Effects')
+    expect(rows).toContain('FX')
   })
 
   it('drops the Library heading in a venue', () => {

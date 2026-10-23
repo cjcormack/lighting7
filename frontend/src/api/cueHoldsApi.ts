@@ -22,7 +22,7 @@ export interface LiveCueHolds {
   priority: number
   holds: CueHold[]
   /**
-   * Its highest hold's stack, null when that hold is a press: the stack whose FX size weighs its
+   * Its highest hold's stack, null when that hold is a press: the stack whose FX amount weighs its
    * effects. Absent from a desk before effects plan session 5.
    */
   topStackId?: number | null

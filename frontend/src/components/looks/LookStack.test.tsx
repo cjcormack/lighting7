@@ -294,7 +294,7 @@ describe('LookStack', () => {
     renderStack([layer({ delayMs: 500, speedMasterUuid: 'm2' })], { handlers: { ...handlers(), onSetTiming } })
     fireEvent.click(screen.getByTitle(/This layer’s settings/))
     expect(((await screen.findByLabelText('Delay (ms)')) as HTMLInputElement).value).toBe('500')
-    fireEvent.click(screen.getByRole('button', { name: /Remove override — each effect follows its own master/ }))
+    fireEvent.click(screen.getByRole('button', { name: /Remove override — each FX follows its own master/ }))
     expect(onSetTiming).toHaveBeenCalledWith(0, { speedMasterUuid: null })
   })
 

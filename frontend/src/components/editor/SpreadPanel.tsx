@@ -43,7 +43,7 @@ import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre } from '@/lib/positio
 import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type PositionPadMode } from '@/lib/positionPadMode'
 
 /**
- * **Spread** — one panel, four plan kinds, every host (editor-kit plan D2–D7; `Spread.dc.html` is
+ * **Fan** — one panel, four plan kinds, every host (editor-kit plan D2–D7; `Spread.dc.html` is
  * the authority on layout; the shipped busk tab on any measurement they disagree on).
  *
  * It is the busk view's Spread tab's body and the old fan popover's surface, chooser and keyboard, made
@@ -86,7 +86,8 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * families writes nothing and answers `skippedFamilies` — a 200, the Look press's shape — toasted
  * in `skippedRowsMessage`'s vocabulary, keyed so a Live drag under a mask replaces one toast.
  *
- * **Fan** (venue-visit plan S12) is the intent arm's second mode on Position, *Ends · Fan*: one
+ * **About each position** (venue-visit plan S12) is the intent arm's second mode on Position, beside
+ * *Between two values*: one
  * amount per axis (*Pan · Tilt · Both*, the outer heads' offset in centre steps) about **each
  * head's own position**, symmetric about the middle of the order, under the same Curve · Order ·
  * Parts · Over. The desk does the arithmetic (`mode: FAN` on the same route) and reads where each
@@ -111,10 +112,10 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * write as it is edited (until Live is on), so there is a press to stand in for.
  */
 
-/** A hand-over into the panel: the Colour editor's colour as *From*, or the position cell's *Spread…* opening Fan. */
+/** A hand-over into the panel: the Colour editor's colour as *From*, or the position cell's *Fan…* opening About each position. */
 export type SpreadSeed = ColourSpreadSeed | FanSpreadSeed
 
-/** The Colour editor's *Spread…*: its colour as *From*. */
+/** The Colour editor's *Fan…*: its colour as *From*. */
 export interface ColourSpreadSeed {
   /**
    * The colour, handed over as *From* — its **RGB** only. A colour intent has no emitter component
@@ -127,7 +128,7 @@ export interface ColourSpreadSeed {
   key: number
 }
 
-/** The position cell's *Spread…*: the panel on Position, in Fan, at no fan, over where the heads are. */
+/** The position cell's *Fan…*: the panel on Position, About each position, at no fan, over where the heads are. */
 export interface FanSpreadSeed {
   fan: true
   key: number
@@ -262,7 +263,7 @@ interface SpreadPanelProps {
   footerNote?: ReactNode
   /** The footer's save slot — the busk tab's *Save as Look…*. The programmer passes none (D11). */
   save?: ReactNode
-  /** A *From* handed over by a colour editor's *Spread…*; applied once, on change, and it opens the popover host. */
+  /** A *From* handed over by a colour editor's *Fan…*; applied once, on change, and it opens the popover host. */
   seed?: SpreadSeed | null
   /** Called once a seed has been applied, so the host can drop it. */
   onSeedConsumed?: () => void
@@ -1000,10 +1001,10 @@ export function SpreadPanel({
   const title =
     disabledReason ??
     ((noSelection ?? plans.length === 0)
-      ? 'Select cells to spread a value across'
+      ? 'Select cells to fan a value across'
       : !canSpread
-        ? `Spread needs two or more cells in a column it can drive — ${drivableHint}`
-        : 'Spread first→last across the selected cells')
+        ? `Fan needs two or more cells in a column it can drive — ${drivableHint}`
+        : 'Fan first→last across the selected cells')
 
   // ── The controls ────────────────────────────────────────────────────────────────────────────
   const editorKind = spreadEditorKind(form.property)
@@ -1085,16 +1086,16 @@ export function SpreadPanel({
         ))}
       </div>
 
-      {/* Parts beside Over is ~280px of row; under the compact width Over wraps beneath rather than
+      {/* Runs beside Over is ~280px of row; under the compact width Over wraps beneath rather than
           running past the scroller's edge. */}
       <div className={cn('flex items-end gap-3', COMPACT_WRAP_CLASS)}>
         <div className="min-w-0 flex-1">
-          <EditorLabel>Parts</EditorLabel>
+          <EditorLabel>Runs</EditorLabel>
           <div className="mt-1 flex items-center gap-1">
             <ToggleGroup
               type="single"
               size="sm"
-              aria-label="Parts"
+              aria-label="Runs"
               value={SPREAD_PARTS_PRESETS.includes(form.parts) ? String(form.parts) : ''}
               onValueChange={(next) => next && commit({ parts: Number(next) })}
             >
@@ -1104,7 +1105,7 @@ export function SpreadPanel({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <EditorField label="Parts, N" value={form.parts} min={1} onCommit={(n) => commit({ parts: Math.max(1, Math.round(n)) })} className="w-14" />
+            <EditorField label="Runs, N" value={form.parts} min={1} onCommit={(n) => commit({ parts: Math.max(1, Math.round(n)) })} className="w-14" />
           </div>
         </div>
         <div>
@@ -1126,13 +1127,13 @@ export function SpreadPanel({
               disabled={stageFan}
               title={
                 stageFan
-                  ? 'A stage fan aims whole fixtures — a cell has no placement of its own'
+                  ? 'A stage fan aims whole fixtures — an element has no placement of its own'
                   : cellCount === 0
-                    ? 'Each cell is one step — no selected fixture has cells, so each fixture is one'
-                    : `Each cell is one step — ${cellCount} cells`
+                    ? 'Each element is one step — no selected fixture has elements, so each fixture is one'
+                    : `Each element is one step — ${cellCount} elements`
               }
             >
-              Cells{cellCount > 0 && <span className="ml-1 text-muted-foreground tabular-nums">{cellCount}</span>}
+              Elements{cellCount > 0 && <span className="ml-1 text-muted-foreground tabular-nums">{cellCount}</span>}
             </ToggleGroupItem>
           </ToggleGroup>
         </div>
@@ -1147,7 +1148,7 @@ export function SpreadPanel({
           said which column, and a select with one option is a control that cannot be used. */}
       {spreadable.length > 1 && (
         <Select value={activePlan?.col ?? ''} onValueChange={(v) => setColumn(v)}>
-          <SelectTrigger size="sm" className="w-32" aria-label="Column to spread">
+          <SelectTrigger size="sm" className="w-32" aria-label="Column to fan">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -1191,7 +1192,7 @@ export function SpreadPanel({
             <ToggleGroup
               type="single"
               size="sm"
-              aria-label="Property"
+              aria-label="Attribute"
               value={form.property.propertyName}
               onValueChange={(next) => {
                 const property = properties.find((p) => p.propertyName === next)
@@ -1209,49 +1210,47 @@ export function SpreadPanel({
             </ToggleGroup>
           )}
 
-          {/* Position's two modes: Ends is From → To, Fan an amount about each head's own position. */}
+          {/* Position's two modes: From → To, or an amount about each head's own position. */}
           {editorKind === 'position' && (
-            <div className={cn('flex items-center gap-2', COMPACT_WRAP_CLASS)}>
-              <ToggleGroup
-                type="single"
-                size="sm"
-                aria-label="Spread mode"
-                value={form.mode}
-                onValueChange={(next) => {
-                  if (!next || next === formRef.current.mode) return
-                  resetFan()
-                  commit({ mode: next as SpreadMode })
-                }}
-                className="w-28 shrink-0"
-              >
-                <ToggleGroupItem value="ENDS" className="flex-1 text-xs" title="From one position to another across the heads">
-                  Ends
-                </ToggleGroupItem>
-                <ToggleGroupItem value="FAN" className="flex-1 text-xs" title="An amount around each head’s own position — fan out, fan in">
-                  Fan
-                </ToggleGroupItem>
-              </ToggleGroup>
-              {fanForm && (
-                <ToggleGroup
-                  type="single"
-                  size="sm"
-                  aria-label="Fan axes"
-                  value={form.axes}
-                  onValueChange={(next) => next && commit({ axes: next as FanAxes })}
-                  className="min-w-0 flex-1"
-                >
-                  <ToggleGroupItem value="PAN" className="flex-1 text-xs" title={stageFan ? 'SR ↔ SL' : undefined}>
-                    {stageFan ? 'Across' : 'Pan'}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="TILT" className="flex-1 text-xs" title={stageFan ? 'Downstage ↔ upstage' : undefined}>
-                    {stageFan ? 'Depth' : 'Tilt'}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="BOTH" className="flex-1 text-xs">
-                    Both
-                  </ToggleGroupItem>
-                </ToggleGroup>
-              )}
-            </div>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-label="Fan mode"
+              value={form.mode}
+              onValueChange={(next) => {
+                if (!next || next === formRef.current.mode) return
+                resetFan()
+                commit({ mode: next as SpreadMode })
+              }}
+              className="h-auto w-full"
+            >
+              <ToggleGroupItem value="ENDS" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="From one position to another across the heads">
+                Between two values
+              </ToggleGroupItem>
+              <ToggleGroupItem value="FAN" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="An amount around each head’s own position — fan out, fan in">
+                About each position
+              </ToggleGroupItem>
+            </ToggleGroup>
+          )}
+          {fanForm && (
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-label="Fan axes"
+              value={form.axes}
+              onValueChange={(next) => next && commit({ axes: next as FanAxes })}
+              className="w-full"
+            >
+              <ToggleGroupItem value="PAN" className="flex-1 text-xs" title={stageFan ? 'SR ↔ SL' : undefined}>
+                {stageFan ? 'Across' : 'Pan'}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="TILT" className="flex-1 text-xs" title={stageFan ? 'Downstage ↔ upstage' : undefined}>
+                {stageFan ? 'Depth' : 'Tilt'}
+              </ToggleGroupItem>
+              <ToggleGroupItem value="BOTH" className="flex-1 text-xs">
+                Both
+              </ToggleGroupItem>
+            </ToggleGroup>
           )}
           {fanForm && (
             <ToggleGroup
@@ -1466,7 +1465,7 @@ export function SpreadPanel({
             resetFan()
           }
         }}
-        title={live && showsLive ? 'Live is on — every adjustment is sent as it is made; press to send the spread again as it stands' : 'Send the spread to the desk'}
+        title={live && showsLive ? 'Live is on — every adjustment is sent as it is made; press to send the fan again as it stands' : 'Send the fan to the desk'}
       >
         {live && showsLive ? 'Send again' : 'Apply'}
       </Button>
@@ -1514,7 +1513,7 @@ export function SpreadPanel({
         setIsOpen(open)
         if (!open) resetFan()
       }}
-      title="Spread"
+      title="Fan"
       contentClassName="w-[336px]"
       align="end"
       onOpenAutoFocus={onOpenAutoFocus}
@@ -1537,12 +1536,12 @@ export function SpreadPanel({
                   }
                 : undefined
           }
-          title={onClaimed != null ? 'Spread is open in the rail — press to go to it' : title}
-          aria-label="Spread"
+          title={onClaimed != null ? 'Fan is open in the rail — press to go to it' : title}
+          aria-label="Fan"
         >
           <Waves className="size-3.5" />
           {/* The same fold as Set and Clear beside it — one rule for the three verbs. */}
-          <span className={WORD_CLASS}>Spread</span>
+          <span className={WORD_CLASS}>Fan</span>
         </Button>
       }
     >

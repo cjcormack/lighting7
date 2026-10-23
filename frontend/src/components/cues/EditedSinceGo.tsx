@@ -67,7 +67,7 @@ export function UpdateStageButton({
       size="sm"
       className="h-7 shrink-0 gap-1 border-amber-500/55 text-xs text-amber-600 hover:text-amber-700 dark:border-amber-700/60 dark:text-amber-300 dark:hover:text-amber-200"
       disabled={reason != null}
-      title={reason ?? 'Send this cue’s stored values and effects to the stage, over its own fade'}
+      title={reason ?? 'Send this cue’s stored values and FX to the stage, over its own fade'}
       onClick={press}
       data-update-stage={cueId}
     >

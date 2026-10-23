@@ -79,7 +79,7 @@ const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
   {
     value: 'STAGE_SNAPSHOT',
     label: 'Whole stage',
-    hint: 'Everything on stage, including values from other cues and running effects.',
+    hint: 'Everything on stage, including values from other cues and running FX.',
   },
 ]
 
@@ -89,7 +89,7 @@ const MODES: { value: RecordMode; label: string; hint: string }[] = [
   {
     value: 'UPDATE_EXISTING',
     label: 'Replace',
-    hint: 'Replace the cue’s values. Triggers and timed effects are kept.',
+    hint: 'Replace the cue’s values. Triggers and timed FX are kept.',
   },
   { value: 'REMOVE', label: 'Remove', hint: 'Delete the cue rows these fixtures name.' },
 ]
@@ -398,7 +398,7 @@ export function RecordSheet({
               onChange={(e) => setIncludeFx(e.target.checked)}
               className="size-4"
             />
-            Record effects too
+            Record FX too
           </label>
 
           <RecordSceneryRow

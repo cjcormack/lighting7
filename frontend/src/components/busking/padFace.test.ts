@@ -12,7 +12,7 @@ function look(over: Partial<LookSummary>): LookSummary {
 
 describe('describeLookContents (pad face)', () => {
   it('counts effects and values, and says empty when there are none', () => {
-    expect(describeLookContents(look({ effectCount: 2, rowCount: 3 }))).toBe('2 effects · 3 values')
+    expect(describeLookContents(look({ effectCount: 2, rowCount: 3 }))).toBe('2 FX · 3 values')
     expect(describeLookContents(look({}))).toBe('empty')
   })
 

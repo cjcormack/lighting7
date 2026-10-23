@@ -8,9 +8,9 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * Holds the backend's words to `docs/glossary.md` (terminology plan D17): every `done` row's
- * `fx:`, `category:` and `usage:` locators must give the row's word, and every built-in FX must
- * have a row. The frontend's locators are `glossary.test.ts`'s.
+ * Holds the backend's words to `docs/glossary.md` (terminology plan D17): every `done` or `screen`
+ * row's `fx:`, `category:` and `usage:` locators must give the row's word, and every built-in FX
+ * must have a row. The frontend's locators are `glossary.test.ts`'s.
  *
  * It also pins the speed-master usage vocabulary (busking-view plan D7): a master's `usage` is one
  * of the FX library's `category` strings, so apply-time routing (`usage == effect.category`)
@@ -41,12 +41,12 @@ class GlossaryVocabularyTest {
     private val rows: List<Row> by lazy { parseGlossary(File("docs/glossary.md").readText()) }
 
     @Test
-    fun `every row has a known status, and a key exactly when it is done`() {
+    fun `every row has a known status, and a key exactly when it is done or on screen`() {
         assertTrue(rows.size > 50, "parsed only ${rows.size} glossary rows; has the table layout changed?")
         for (row in rows) {
-            assertTrue(row.status in setOf("done", "planned"), "$row: status '${row.status}' is neither done nor planned")
-            if (row.status == "done") {
-                assertTrue(row.keys.isNotEmpty(), "$row is done but names no key")
+            assertTrue(row.status in STATUSES, "$row: status '${row.status}' is none of $STATUSES")
+            if (row.status in KEYED_STATUSES) {
+                assertTrue(row.keys.isNotEmpty(), "$row is ${row.status} but names no key")
             } else {
                 assertTrue(row.keys.isEmpty(), "$row is planned but has keys ${row.keys}")
             }
@@ -61,10 +61,10 @@ class GlossaryVocabularyTest {
     }
 
     @Test
-    fun `every done row's backend keys give its word`() {
+    fun `every done or screen row's backend keys give its word`() {
         val names = builtIns.associate { it.id to it.name }
         val categories = builtInCategories()
-        for (row in rows.filter { it.status == "done" }) {
+        for (row in rows.filter { it.status in KEYED_STATUSES }) {
             for (key in row.keys) {
                 val target = key.substringAfter(':')
                 when (locatorPrefix(key)) {
@@ -135,6 +135,10 @@ class GlossaryVocabularyTest {
 
     private companion object {
         val GLOSSARY_COLUMNS = listOf("Idea", "Word", "Status", "Key")
+
+        /** `screen`: the screen says the word, the code still says *Was*. Both name keys. */
+        val KEYED_STATUSES = setOf("done", "screen")
+        val STATUSES = KEYED_STATUSES + "planned"
 
         val BACKEND_PREFIXES = setOf("fx", "category", "usage")
 

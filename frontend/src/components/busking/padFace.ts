@@ -54,7 +54,7 @@ export function templateSwatch(template: TemplateSummary): string | null {
 export function describeLookContents(look: LookSummary): string {
   const parts: string[] = []
   if (look.effectCount > 0) {
-    parts.push(`${look.effectCount} ${look.effectCount === 1 ? 'effect' : 'effects'}`)
+    parts.push(`${look.effectCount} FX`)
   }
   if (look.rowCount > 0) {
     parts.push(`${look.rowCount} ${look.rowCount === 1 ? 'value' : 'values'}`)
@@ -66,7 +66,7 @@ export function describeLookContents(look: LookSummary): string {
 
 export function describeTemplate(template: TemplateSummary): string {
   if (template.kind === 'effect') {
-    if (template.effect == null) return 'Effect'
+    if (template.effect == null) return 'FX'
     // No master label: that reads a live bank through a hook, and this string has to be renderable
     // by the overlay ghost. The pad draws `EffectPadDetail` over it and gains the `· M2`.
     const speed = effectSpeedLabel(template.effect.beatDivision, template.effect.timingSource, template.effect.seconds)

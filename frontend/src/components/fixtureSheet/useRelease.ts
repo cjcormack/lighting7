@@ -76,11 +76,11 @@ export function heldOnTarget(target: SheetTarget, effects: readonly ActiveEffect
   return { values, effects: local }
 }
 
-/** The held line, `3 values · 2 effects held`, or null when the fixture holds nothing. */
+/** The held line, `3 values · 2 FX held`, or null when the fixture holds nothing. */
 export function heldLine({ values, effects }: HeldOnFixture): string | null {
   const parts = [
     values > 0 ? `${values} value${values === 1 ? '' : 's'}` : null,
-    effects > 0 ? `${effects} effect${effects === 1 ? '' : 's'}` : null,
+    effects > 0 ? `${effects} FX` : null,
   ].filter(Boolean)
   return parts.length === 0 ? null : `${parts.join(' · ')} held`
 }
@@ -99,7 +99,7 @@ export function releaseMessage(name: string, cleared: TargetCleared): string {
   if (cleared.values === 0 && cleared.effects === 0) return `${name} held nothing to release`
   const parts = [
     cleared.values > 0 ? `${cleared.values} value${cleared.values === 1 ? '' : 's'}` : null,
-    cleared.effects > 0 ? `${cleared.effects} effect${cleared.effects === 1 ? '' : 's'}` : null,
+    cleared.effects > 0 ? `${cleared.effects} FX` : null,
   ].filter(Boolean)
   return `Released ${parts.join(' and ')} on ${name}`
 }

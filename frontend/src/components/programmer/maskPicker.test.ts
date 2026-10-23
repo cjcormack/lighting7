@@ -25,10 +25,10 @@ describe('describeSkips', () => {
   })
 
   it('names the unrecordable raw-channel case', () => {
-    // The one skip an operator can't fix by re-recording: a channel with no backing property
+    // The one skip an operator can't fix by re-recording: a channel with no backing attribute
     // has no (target, property) a cue assignment could name.
     expect(describeSkips([{ universe: 0, channel: 100, reason: 'NO_BACKING_PROPERTY' }])).toContain(
-      'raw channels with no backing property',
+      'raw channels with no backing attribute',
     )
   })
 })

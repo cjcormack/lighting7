@@ -117,9 +117,9 @@ export function cueSourceTitle(source: CueCellStateSource | undefined): string |
  * the legend glosses them for an operator meeting the colours for the first time.
  */
 export const OWNERSHIP_LABELS: Record<CellOwnershipSource, string> = {
-  parked: 'Parked — the rig ignores every layer here',
+  parked: 'Parked — the rig ignores everything below it',
   programmer: 'Programmer',
-  effect: 'Effect',
+  effect: 'FX',
   cue: 'Cue',
   baseline: 'Baseline — nothing asserts this',
 }

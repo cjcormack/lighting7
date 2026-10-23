@@ -138,7 +138,7 @@ describe('BuskSpeedRail — the three arms', () => {
     expect(screen.getByLabelText('Tap tempo for master 1')).toBeInTheDocument()
     // M1 is where every unmatched category lands by definition, so a badge naming one would
     // understate it. No routable usage label may appear on its card.
-    expect(screen.queryByText(/^(Dimmer|Colour|Movement|Position)$/)).toBeNull()
+    expect(screen.queryByText(/^(Intensity|Colour|Movement|Position)$/)).toBeNull()
   })
 
   it('gives a manual master its own TAP and its usage badge', () => {
@@ -147,7 +147,7 @@ describe('BuskSpeedRail — the three arms', () => {
     render(<BuskSpeedRail />)
 
     expect(screen.getByLabelText('Tap tempo for master 4')).toBeInTheDocument()
-    expect(screen.getByText('Dimmer')).toBeInTheDocument()
+    expect(screen.getByText('Intensity')).toBeInTheDocument()
     expect(screen.getByText('manual')).toBeInTheDocument()
   })
 

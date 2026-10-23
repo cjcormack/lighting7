@@ -17,7 +17,7 @@ export interface FxDeleteItem {
  * editing or deleting that script, which is the Scripts page's.
  */
 export function fxDeleteSkipReason(item: FxDeleteItem): string | null {
-  if (item.source === 'builtIn') return 'built-in effects cannot be deleted'
+  if (item.source === 'builtIn') return 'built-in FX cannot be deleted'
   if (item.source === 'script') return 'a script registers it — edit or delete the script'
   if (item.definition == null) return 'its definition is not loaded yet'
   return null
@@ -56,7 +56,7 @@ export function useFxDefinitionDelete({
     remove,
     name: fxItemName,
     skip: fxDeleteSkipReason,
-    noun: 'effect',
+    noun: 'FX',
     onDeleted,
     toastKey: 'fx-library',
   })

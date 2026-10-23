@@ -14,7 +14,7 @@ export function TemplateValue({ template }: { template: TemplateSummary }) {
     const effect = template.effect
     const speed = effect == null ? null : effectSpeedLabel(effect.beatDivision, effect.timingSource, effect.seconds)
     const around = effect != null && isAroundSpelling(effect) ? 'around' : null
-    const text = effect == null ? 'Effect' : [effect.effectType, speed, around].filter((p) => p != null && p !== '').join(' · ')
+    const text = effect == null ? 'FX' : [effect.effectType, speed, around].filter((p) => p != null && p !== '').join(' · ')
     return (
       <span className="mx-1.5 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={text}>
         <AudioWaveform className="size-3.5 shrink-0 text-violet-400" />

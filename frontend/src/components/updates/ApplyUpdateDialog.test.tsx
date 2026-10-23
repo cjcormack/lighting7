@@ -77,7 +77,7 @@ describe('ApplyUpdateDialog', () => {
       <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 3 })} />,
     )
 
-    expect(screen.getByText(/3 effects are running right now/i)).toBeTruthy()
+    expect(screen.getByText(/3 FX are running right now/i)).toBeTruthy()
     expect(confirmButton().hasAttribute('disabled')).toBe(true)
 
     fireEvent.change(screen.getByLabelText(/to confirm/i), { target: { value: 'Front of House' } })
@@ -157,6 +157,6 @@ describe('ApplyUpdateDialog', () => {
     render(
       <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 1 })} />,
     )
-    expect(screen.getByText(/1 effect is running right now/i)).toBeTruthy()
+    expect(screen.getByText(/1 FX is running right now/i)).toBeTruthy()
   })
 })

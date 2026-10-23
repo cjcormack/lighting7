@@ -255,8 +255,8 @@ function heldSentence(counts: Partial<Record<PropertyMaskGroup, number>>): strin
 const SKIP_REASONS: Record<ProgrammerSkip['reason'], string> = {
   ELEMENT_TARGET: 'element-level entries (this destination addresses whole fixtures)',
   MISSING_FIXTURE: 'fixtures no longer in the patch',
-  MISSING_PROPERTY: 'properties that no longer resolve',
-  NO_BACKING_PROPERTY: 'raw channels with no backing property',
+  MISSING_PROPERTY: 'attributes that no longer resolve',
+  NO_BACKING_PROPERTY: 'raw channels with no backing attribute',
   MASKED_OUT: 'entries outside the attribute mask',
   OUT_OF_SCOPE: 'entries outside the selection',
 }

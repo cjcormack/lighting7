@@ -158,7 +158,7 @@ export function switchConfirmOf(
       : parks === 0
         ? `every channel goes dark: ${name} parks none.`
         : `every channel goes dark except those ${name} parks (${parks}).`
-  const body = current ? `${current.name}’s cues, programmer and effects stop, and ${dark}` : capitalise(dark)
+  const body = current ? `${current.name}’s cues, programmer and FX stop, and ${dark}` : capitalise(dark)
 
   const lines: SwitchConfirm['lines'] = []
   const venue = incoming.venue

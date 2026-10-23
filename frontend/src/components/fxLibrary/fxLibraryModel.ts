@@ -51,7 +51,7 @@ export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'palet
 export type FxCategory = (typeof FX_CATEGORY_ORDER)[number]
 
 export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
-  dimmer: 'Dimmer',
+  dimmer: 'Intensity',
   colour: 'Colour',
   position: 'Position',
   beam: 'Beam',

@@ -21,6 +21,7 @@ object ScriptEffectAdapter {
         effectName: String,
         outputType: FxOutputType,
         defaultStepTiming: Boolean = false,
+        registrationId: String? = null,
     ): EffectFactory {
         return { params, resolveColourSource, colourSourceVersion ->
             val typedParams = TypedParams(params, schema, resolveColourSource, colourSourceVersion)
@@ -29,17 +30,17 @@ object ScriptEffectAdapter {
                 EffectMode.STANDARD -> {
                     val fn = compiled.standardFn
                         ?: throw IllegalStateException("No standard lambda in compiled script for '$effectName'")
-                    StandardScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming)
+                    StandardScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
                 }
                 EffectMode.STATEFUL -> {
                     val fn = compiled.statefulFn
                         ?: throw IllegalStateException("No stateful lambda in compiled script for '$effectName'")
-                    StatefulScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming)
+                    StatefulScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
                 }
                 EffectMode.COMPOSITE -> {
                     val fn = compiled.compositeFn
                         ?: throw IllegalStateException("No composite lambda in compiled script for '$effectName'")
-                    CompositeScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming)
+                    CompositeScriptEffect(fn, typedParams, effectName, outputType, params, defaultStepTiming, registrationId)
                 }
             }
         }
@@ -56,6 +57,7 @@ private class StandardScriptEffect(
     private val effectOutputType: FxOutputType,
     private val rawParams: Map<String, String>,
     private val effectDefaultStepTiming: Boolean,
+    override val registrationId: String?,
 ) : Effect {
     override val name: String get() = effectName
     override val outputType: FxOutputType get() = effectOutputType
@@ -77,6 +79,7 @@ private class StatefulScriptEffect(
     private val effectOutputType: FxOutputType,
     private val rawParams: Map<String, String>,
     private val effectDefaultStepTiming: Boolean,
+    override val registrationId: String?,
 ) : StatefulEffect {
     override val name: String get() = effectName
     override val outputType: FxOutputType get() = effectOutputType
@@ -109,6 +112,7 @@ private class CompositeScriptEffect(
     private val effectOutputType: FxOutputType,
     private val rawParams: Map<String, String>,
     private val effectDefaultStepTiming: Boolean,
+    override val registrationId: String?,
 ) : CompositeEffect {
     override val name: String get() = effectName
     override val outputType: FxOutputType get() = effectOutputType

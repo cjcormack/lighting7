@@ -50,7 +50,7 @@ export function PositionSpreadTool({ heads, onOpened }: { heads: number; onOpene
       }}
     >
       <Waves className="size-3.5" />
-      <span className="sr-only">Spread…</span>
+      <span className="sr-only">Fan…</span>
     </Button>
   )
 }

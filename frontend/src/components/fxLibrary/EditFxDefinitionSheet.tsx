@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import {
   SheetBody,
   SheetClose,
@@ -163,18 +164,26 @@ export function EditFxDefinitionSheet({
 
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <input
-              id="edit-fx-step-timing"
-              type="checkbox"
-              checked={currentStepTiming}
-              onChange={(e) => setEdits({ ...edits, defaultStepTiming: e.target.checked })}
-            />
-            <Label htmlFor="edit-fx-step-timing">Step timing by default</Label>
+            <Label id="edit-fx-timing">Timing by default</Label>
+            <ToggleGroup
+              type="single"
+              size="sm"
+              aria-labelledby="edit-fx-timing"
+              value={currentStepTiming ? 'head' : 'cycle'}
+              onValueChange={(v) => v && setEdits({ ...edits, defaultStepTiming: v === 'head' })}
+            >
+              <ToggleGroupItem value="cycle" className="px-2 text-xs">
+                Per cycle
+              </ToggleGroupItem>
+              <ToggleGroupItem value="head" className="px-2 text-xs">
+                Per head
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
           <p className="text-xs text-muted-foreground" data-testid="fork-step-timing-note">
             {forkedFrom
-              ? `Forked from ${forkedFrom}. A fork starts with step timing off — the library does not publish the built-in’s own default, so check it matches before you use this.`
-              : 'New instances of this effect start with step timing on or off as set here.'}
+              ? `Forked from ${forkedFrom}. A fork starts per cycle — the library does not publish the built-in’s own default, so check it matches before you use this.`
+              : 'New instances of this FX start per cycle or per head as set here.'}
           </p>
         </div>
 

@@ -167,7 +167,7 @@ function renderEditor(over: { template?: TemplateSummary | null; onSave?: (i: Te
 
 /** Radix's `Select` needs a real pointer API that jsdom does not ship. */
 function chooseEffect(name: string) {
-  fireEvent.click(screen.getByRole('combobox'))
+  fireEvent.click(screen.getAllByRole('combobox')[0])
   fireEvent.click(screen.getByRole('option', { name }))
 }
 
@@ -308,7 +308,7 @@ describe('the Holds choice', () => {
   it('starts on Value and offers Effect', () => {
     renderEditor()
     expect(screen.getByRole('button', { name: 'Value' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Effect' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'FX' })).toBeEnabled()
   })
 
   it('is locked once the palette exists, as the family is', () => {
@@ -316,14 +316,14 @@ describe('the Holds choice', () => {
     // reason reads as breakage rather than as an identity.
     renderEditor({ template: template() })
     expect(screen.getByRole('button', { name: 'Value' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Effect' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'FX' })).toBeDisabled()
     expect(screen.getByText(/cannot change afterwards/i)).toBeTruthy()
   })
 
   it('offers Effect under Beam, with the beam built-ins', () => {
     renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.click(screen.getByRole('combobox'))
     expect(screen.getByRole('option', { name: 'Zoom Breathe' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'Colour Pulse' })).toBeNull()
@@ -333,7 +333,7 @@ describe('the Holds choice', () => {
     // The effect was chosen from the old family's category, so carrying it across would leave the
     // draft claiming a family its effect derives a different one from — which the server refuses.
     renderEditor()
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     chooseEffect('Colour Pulse')
     expect(screen.getByText(/pulses between two colours/i)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Intensity' }))
@@ -345,7 +345,7 @@ describe('the effect branch', () => {
   it('offers only the family’s own category', () => {
     // The family is the filter, which is why there is no category step to repeat.
     renderEditor()
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.click(screen.getByRole('combobox'))
     expect(screen.getByRole('option', { name: 'Colour Pulse' })).toBeTruthy()
     expect(screen.getByRole('option', { name: 'Rainbow Cycle' })).toBeTruthy()
@@ -355,7 +355,7 @@ describe('the effect branch', () => {
   it('hides Fade, which an effect has no arrival to time', () => {
     renderEditor()
     expect(screen.getByLabelText(/fade/i)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(screen.queryByLabelText(/fade/i)).toBeNull()
   })
 })
@@ -363,7 +363,7 @@ describe('the effect branch', () => {
 describe('validity and the save body', () => {
   it('needs a name and one of the two halves', () => {
     renderEditor()
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     const create = screen.getByRole('button', { name: /create palette/i })
     // A name with no effect is not enough, and an effect with no name is not either.
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Amber Breathe' } })
@@ -379,7 +379,7 @@ describe('validity and the save body', () => {
     // is stamped at authoring time — nothing resolves usage later, so an unstamped effect would
     // silently run on master 1 forever.
     const { onSave } = renderEditor()
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Amber Breathe' } })
     chooseEffect('Colour Pulse')
     fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
@@ -402,7 +402,7 @@ describe('validity and the save body', () => {
   it('saves a beam effect palette on the Beam master', async () => {
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zoom Breathe' } })
     chooseEffect('Zoom Breathe')
     fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
@@ -435,7 +435,7 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     // pressed after a position pad circled 128/128. A new one starts Around.
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Position' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Big circle' } })
     chooseEffect('Circle')
 
@@ -541,7 +541,7 @@ describe('the step effects (effects plan session 7)', () => {
     wire.templates = [position('Centre', 'pos:0,0'), position('Downstage', 'pos:-64,32')]
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Position' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Walk' } })
     chooseEffect('PaletteSteps')
     expect(screen.getByRole('list', { name: 'Palettes' })).toBeTruthy()
@@ -561,7 +561,7 @@ describe('the step effects (effects plan session 7)', () => {
     wire.templates = [position('Centre', 'pos:0,0')]
     renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Position' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.click(screen.getByRole('combobox'))
     expect(screen.getByRole('option', { name: 'Circle' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'PaletteSteps' })).toBeNull()
@@ -588,7 +588,7 @@ describe('the step effects (effects plan session 7)', () => {
     ]
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Gobos' } })
     chooseEffect('SlotSteps')
     expect(screen.getByRole('combobox', { name: 'Setting' })).toBeTruthy()

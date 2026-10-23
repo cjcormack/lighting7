@@ -21,7 +21,7 @@ describe('describeStackLayer', () => {
     })
     expect(
       describeStackLayer(layer({ kind: 'EFFECT', effectType: 'Pulse', cueId: 12, beatDivision: 0.25, heldBack: true }), cueLabel).detail,
-    ).toContain("Q12's effect")
+    ).toContain("Q12's FX")
     expect(describeStackLayer(layer({ kind: 'CUE', cueId: 12, value: '153', layerSource: { kind: 'LOOK', id: 1, name: 'Warm' } as never }), cueLabel)).toEqual({
       title: 'Q12',
       detail: 'the Look layer Warm',
@@ -33,14 +33,14 @@ describe('describeStackLayer', () => {
   it('says why an effect is held back, by the desk’s reason — Blind, a stomp, your value (D7)', () => {
     const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', ...over })
     expect(describeStackLayer(layer({ heldBack: true, heldBackReason: 'BLIND' }), cueLabel).detail).toBe(
-      'programmer effect · Blind holds it; it is still running and paints in phase when Blind goes off',
+      'programmer FX · Blind holds it; it is still running and paints in phase when Blind goes off',
     )
     expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
       'a layer above stomps it',
     )
     // An older desk sends no reason: what it held back, your value held back.
     expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
-    expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer effect')
+    expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer FX')
   })
 
   it('says a slot age in words', () => {

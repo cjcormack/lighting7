@@ -31,7 +31,7 @@ describe('Release over a selection (effects plan D3)', () => {
     await result.current()
     expect(removeFx).toHaveBeenCalledTimes(1)
     expect(removeFx).toHaveBeenCalledWith({ id: 9, fixtureKey: selectionKey })
-    expect(toast.success.mock.calls[0][0]).toMatch(/1 effect/)
+    expect(toast.success.mock.calls[0][0]).toMatch(/1 FX/)
     expect(toast.warning).not.toHaveBeenCalled()
   })
 

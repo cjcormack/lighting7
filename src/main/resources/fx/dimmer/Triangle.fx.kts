@@ -1,6 +1,6 @@
 /*---
 id: Triangle
-name: Triangle
+name: Ramp
 category: dimmer
 outputType: SLIDER
 effectMode: STANDARD

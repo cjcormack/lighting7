@@ -12,7 +12,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 export function updateStageLines(counts: UpdateStageResponse): string[] {
   const { rows, effects, fadeMs } = counts
   const effectParts = [
-    effects.edited > 0 ? `${plural(effects.edited, 'effect')} edited in place` : null,
+    effects.edited > 0 ? `${effects.edited} FX edited in place` : null,
     effects.stopped > 0 ? `${effects.stopped} stopped` : null,
     effects.started > 0 ? `${effects.started} started` : null,
   ].filter((p): p is string => p != null)

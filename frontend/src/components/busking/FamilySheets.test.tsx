@@ -11,7 +11,7 @@ import type { BuskingTarget } from './buskingTypes'
  * over the busk selection pair. What is pinned is that each tab's band presses the busk pair — its
  * targets as the busk view addresses them (a group as one, a cell by its key) and its mask — into
  * Local whatever the grid is pointed at, that the editors write Local (the Position tab's XY pad
- * one `setPosition` per head), and that the Beam tab acts on the Beam property the operator picks.
+ * one `setPosition` per head), and that the Beam tab acts on the Beam attribute the operator picks.
  */
 
 let templates: TemplateSummary[] = []
@@ -175,9 +175,9 @@ describe('each family tab presses over the busk pair, into Local', () => {
       )
     })
 
-    it(`${name}: + Effect… opens the effects arm on the busk pair, writing Local`, () => {
+    it(`${name}: + FX… opens the effects arm on the busk pair, writing Local`, () => {
       render(<Tab projectId={1} selectedTargets={selection} families={null} />)
-      fireEvent.click(screen.getByRole('button', { name: 'Effect…' }))
+      fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
       expect(picker).toHaveBeenLastCalledWith(
         expect.objectContaining({ library: 'effects', family, scope: 'programmer', pair: { targets: BUSK_PAIR_TARGETS, families: null } }),
       )
@@ -262,14 +262,14 @@ describe('the editors write Local', () => {
   })
 })
 
-describe('the Beam tab acts on one Beam property', () => {
+describe('the Beam tab acts on one Beam attribute', () => {
   it('offers the Beam properties the selection carries, and its band and level follow the one picked', () => {
     const both = new Map<string, BuskingTarget>([
       ['group:Spots', spots],
       ['fixture:spot-1', { type: 'fixture', key: 'spot-1', fixture: SPOT_1 }],
     ])
     render(<BeamSheet projectId={1} selectedTargets={both} families={null} />)
-    const row = screen.getByRole('radiogroup', { name: 'Beam property' })
+    const row = screen.getByRole('radiogroup', { name: 'Beam attribute' })
     expect(within(row).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Zoom', 'Iris'])
     expect(within(row).getByRole('radio', { name: 'Zoom' })).toHaveAttribute('aria-checked', 'true')
     expect(chips()).toEqual(['Wide'])
@@ -286,7 +286,7 @@ describe('the Beam tab acts on one Beam property', () => {
 
   it('draws no property row over a selection with one Beam level', () => {
     render(<BeamSheet projectId={1} selectedTargets={new Map([['fixture:spot-2', { type: 'fixture', key: 'spot-2', fixture: SPOT_2 }]])} families={null} />)
-    expect(screen.queryByRole('radiogroup', { name: 'Beam property' })).toBeNull()
+    expect(screen.queryByRole('radiogroup', { name: 'Beam attribute' })).toBeNull()
     expect(screen.getByLabelText('Zoom percent')).toBeInTheDocument()
   })
 })

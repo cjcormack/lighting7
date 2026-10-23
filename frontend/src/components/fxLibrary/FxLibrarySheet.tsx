@@ -167,7 +167,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
     columns,
     permission: scope.permission,
     copy: scope.copy,
-    noun: 'effect',
+    noun: 'FX',
     rowName: (row) => row.name ?? row.id,
     onOpenRow: openRow,
   })
@@ -190,15 +190,15 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
   )
 
   const count = selected.length
-  const noun = count === 1 ? 'effect' : 'effects'
+  const noun = 'FX'
   const one = selected[0]
   const forkReason =
     scope.reason ??
     (forking
       ? 'Forking…'
-      : (oneRecordReason('Fork', 'effect', count) ??
+      : (oneRecordReason('Fork', 'FX', count) ??
         (one.source !== 'builtIn'
-          ? `Only a built-in forks — ${one.source === 'custom' ? 'edit this custom effect directly' : 'edit the script that registers this effect'}`
+          ? `Only a built-in forks — ${one.source === 'custom' ? 'edit this custom FX directly' : 'edit the script that registers this FX'}`
           : (forkRefusal(one.entry) ??
             (one.entry.script ? null : `${one.name} publishes no script to fork`)))))
   const deletable = selected.some((row) => row.source === 'custom')
@@ -208,7 +208,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
       ? 'Deleting…'
       : deletable
         ? null
-        : 'Only a custom effect deletes here — built-ins are the desk’s, and a script’s effects are its script’s')
+        : 'Only a custom FX deletes here — built-ins are the desk’s, and a script’s FX are its script’s')
 
   const verbs =
     count > 0 ? (
@@ -216,7 +216,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         <LibraryVerb
           icon={GitFork}
           label="Fork"
-          title={`Make a custom copy of ${one?.name ?? 'this effect'} you can edit`}
+          title={`Make a custom copy of ${one?.name ?? 'this FX'} you can edit`}
           disabledReason={forkReason}
           onClick={() => onFork(one.entry)}
         />
@@ -224,7 +224,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
           icon={Trash2}
           label="Delete"
           destructive
-          title={`Delete ${count} ${noun} — only custom effects are sent`}
+          title={`Delete ${count} ${noun} — only custom FX are sent`}
           disabledReason={deleteReason}
           onClick={() => void runDelete(selected.map(toDeleteItem))}
         />
@@ -238,9 +238,9 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
   const firstColumn = useMemo(
     () =>
       libraryNameColumn<FxSheetRow>({
-        label: 'Effect',
+        label: 'FX',
         width: `${NAME_WIDTH}px`,
-        noun: 'effect',
+        noun: 'FX',
         name: (row) => row.name ?? '',
         rename,
         renameDisabled: (row) => scope.readOnly || row.source !== 'custom',
@@ -278,7 +278,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
 }
 
 /** Why nothing is live off the running project — the library and its writes are the running show's. */
-export const FX_READ_ONLY_REASON = 'Effects shows and edits the running show’s effects'
+export const FX_READ_ONLY_REASON = 'FX shows and edits the running show’s FX'
 
 /**
  * The name column's track. With the other tracks' floors (100 + 96 + 86 + 70 + 150 + 110 = 612)

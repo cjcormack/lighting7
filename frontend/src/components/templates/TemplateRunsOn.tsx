@@ -143,8 +143,8 @@ export function TemplateRunsOn({
       </div>
       <div className="rounded-md border p-3 space-y-2">
         <p className="text-[11px]">
-          {beamProperty != null ? `Any fixture with ${beamProperty}.` : DESCRIPTION[family]} The same effect on every
-          head, its phase spread by the distribution.
+          {beamProperty != null ? `Any fixture with ${beamProperty}.` : DESCRIPTION[family]} The same FX on every
+          head, its phase spread by its Order.
         </p>
 
         <div>
@@ -173,7 +173,7 @@ export function TemplateRunsOn({
         </div>
 
         <p className="text-[10px] text-muted-foreground">
-          A preview of the shape and the speed, not of the output — what each head actually shows
+          A preview of the shape and the cycle, not of the output — what each head actually shows
           depends on the emitters it has.
         </p>
       </div>

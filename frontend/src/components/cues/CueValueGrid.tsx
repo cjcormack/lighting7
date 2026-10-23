@@ -117,7 +117,7 @@ export function CueValueGrid({
   if (model.resolved.length === 0 || model.columns.length === 0) {
     return (
       <p className="px-1 py-2 text-xs text-muted-foreground">
-        This cue asserts no values of its own. Anything on stage from it is coming from its effects.
+        This cue asserts no values of its own. Anything on stage from it is coming from its FX.
       </p>
     )
   }

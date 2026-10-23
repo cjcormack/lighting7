@@ -17,7 +17,7 @@ export type BootPhase =
 
 export interface BootStatus {
   phase: BootPhase
-  message: string // human-readable, e.g. "Compiling effects (12/28)…"
+  message: string // human-readable, e.g. "Compiling FX (12/28)…"
   percent: number // 0..100, monotonically increasing
   ready: boolean // true only once the show is fully started
   error: string | null // set when phase === 'FAILED'

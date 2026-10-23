@@ -126,7 +126,7 @@ export function IncludeSheet({ open, onOpenChange, projectId }: IncludeSheetProp
         <SheetHeader>
           <SheetTitle>Include</SheetTitle>
           <SheetDescription>
-            Load a cue’s values and effects, or a look’s contents, into the programmer — then
+            Load a cue’s values and FX, or a look’s contents, into the programmer — then
             edit them on stage and press Update.
           </SheetDescription>
         </SheetHeader>

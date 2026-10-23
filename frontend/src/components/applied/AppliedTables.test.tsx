@@ -88,7 +88,7 @@ vi.mock('@/components/programmer/ProgrammerAddEffect', async () => {
   const { useEffect, useState } = await import('react')
   const { registerAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
   return {
-    useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an effect to the programmer.', pair: { targets: [], families: null } }),
+    useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an FX to the programmer.', pair: { targets: [], families: null } }),
     ProgrammerAddEffectSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
     ProgrammerAddEffectDoor: () => {
       const [asked, setAsked] = useState(false)
@@ -418,11 +418,11 @@ describe('the FX table', () => {
 describe('the Stack table', () => {
   // Each row's name badge, by its title — `Look “Storm”`, `Palette “Amber”`.
   const badges = (root: ParentNode) =>
-    [...root.querySelectorAll('[title^="Look “"], [title^="Palette “"], [title^="Effect palette “"]')].map((el) => el.getAttribute('title'))
+    [...root.querySelectorAll('[title^="Look “"], [title^="Palette “"], [title^="FX palette “"]')].map((el) => el.getAttribute('title'))
 
   it('lists every layer top wins, Looks and palettes in one order, under your values pinned on top', () => {
     drawRoute('?table=stack')
-    expect(tableRows().flatMap((r) => badges(r))).toEqual(['Look “Thunder”', 'Effect palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
+    expect(tableRows().flatMap((r) => badges(r))).toEqual(['Look “Thunder”', 'FX palette “Flash 3x”', 'Palette “Amber”', 'Look “Storm”'])
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['local', 'layer:13', 'layer:12', 'layer:11', 'layer:10'])
     expect(rowOf('local')).toHaveTextContent('Your values')
   })
@@ -444,8 +444,8 @@ describe('the Stack table', () => {
   it('draws the values-beat-effects rule with the effects under the stack, a press from the FX tab', () => {
     drawRoute('?table=stack')
     const rule = document.querySelector('[data-effects-rule]')!
-    expect(rule).toHaveTextContent('Values above beat effects below')
-    expect(rule).toHaveTextContent('4 effects run under this stack')
+    expect(rule).toHaveTextContent('Values above beat FX below')
+    expect(rule).toHaveTextContent('4 FX run under this stack')
     fireEvent.click(within(rule as HTMLElement).getByRole('button', { name: 'on the FX tab' }))
     expect(where()).toBe('/projects/1/programmer?table=fx')
   })
@@ -677,9 +677,9 @@ describe('the Scenery table', () => {
 describe('the FX table’s create verb and rule', () => {
   it('draws + Effect on the library row and the values-beat-effects rule over the sheet', () => {
     drawRoute('?table=fx')
-    fireEvent.click(screen.getByRole('button', { name: 'Add an effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Add an FX' }))
     expect(screen.getByTestId('add-effect')).toBeInTheDocument()
-    expect(document.querySelector('[data-effects-rule]')).toHaveTextContent('Values above beat effects below')
+    expect(document.querySelector('[data-effects-rule]')).toHaveTextContent('Values above beat FX below')
   })
 })
 
@@ -714,10 +714,10 @@ describe('the query string', () => {
   it('narrows by the chip, and writes a header press and a chip back with replace', () => {
     drawRoute('?table=fx&home=yours')
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['fx:1', 'fx:2'])
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&home=yours')
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['fx:2', 'fx:1'])
-    fireEvent.click(screen.getByRole('button', { name: 'Effect' }))
+    fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc&home=yours')
     fireEvent.click(screen.getByRole('button', { name: /^All/ }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc')
