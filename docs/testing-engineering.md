@@ -231,7 +231,7 @@ registry all persist per rig — sharing one would make the numbers order-depend
 | Scenario | Rig | Exists for |
 |---|---|---|
 | `[beat]` / `[wall]` | 4 universes × `HexFixture`, one beat + one wall-clock `SliderTarget` each (168 fixtures, 336 effects) | the original Phase 5 harness — **frozen**, it is what the 2026-04-22 baseline was measured on |
-| `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both tick loops | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
+| `[chase-beat]` / `[chase-wall]` | 40 × `LedLightbar12PixelFixture.Mode48Ch` in two groups (480 `RgbwPixel` elements), 4 group colour effects across two speed masters — FLAT and PER_FIXTURE on both clocks | sweep C1 (per-tick target re-expansion), C2 (reflective property access on the colour write path), C6 (allocation bundle) |
 | `[crossfade]` | 168 `HexFixture`s, two cues × dimmer+colour rows (672 rows), 169 effects; drives `cueLayer.updateFadeWeights` at 62 fps | sweep C3 |
 | `[colour-beat]` | 168 `HexFixture`s with colour effects and a half-covered programmer band | sweep C2 — scenario 2 was claimed to cover it and does not |
 | `[spawn-each]` / `[spawn-batch]` | scenario 1's fixtures, a **fresh** engine per sample, 168 dimmer effects put up as one cue GO would | sweep C7 — the only scenario that measures *adding* effects rather than ticking them |
@@ -281,6 +281,11 @@ lock contention on the Layer 4 publish lock (now `CascadePublisher`'s) with conc
 shape of measurement and is deliberately not in this harness.
 
 ### Recorded baselines
+
+Since the FX editor plan's session 2 a pass folds every running effect whichever clock woke it
+(`docs/fx-engineering.md` §"Architecture: one compose pass"), so `[beat]` and `[wall]` each time
+all 336 effects and `[chase-beat]` / `[chase-wall]` all four. Numbers recorded before it are not
+comparable with numbers after it.
 
 Track-only — nothing asserts against these. `FU-TEST-FX-BENCH-CI-GATE` holds the ±20 %
 fail-on-regression gate, deferred pending a variance study on real CI hardware.

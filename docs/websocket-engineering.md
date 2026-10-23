@@ -314,6 +314,7 @@ See `docs/fixtures-engineering.md` §"Venue parks".
 | `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `clearFx` | — | Replies `fxChanged(CLEARED)` |
+| `programmer.moveFx` | `effectId: Long`, `above: Long?` | Replies `fxChanged(UPDATED, id)` per FX whose priority moved \| `fxError` |
 | `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master; `size?`, `direction?`, `nShot?` and `runForever` — effects plan session 1, edited with the phase kept; `spread?`, `wings?`, `blocks?`, `groups?` — session 2, the spread's shape, `groups: 0` off, wings refused under a mirrored order; `targets?` — apply-model plan session 2, the heads the edit is for, naming some of them splits them off) | Replies `fxChanged(UPDATED, id)` \| on a split `fxChanged(REMOVED, id)` then `fxChanged(ADDED, copy)` per copy, the edited first \| `fxError` |
 
 Adding effects is REST (`POST /api/rest/fx/add`), not WS. **Updating one is both**: `updateFx` is
@@ -333,6 +334,15 @@ a cue's or a manual one — and a shape change sent with some heads is `FX_UPDAT
 It is gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
 `FU-AUTH-WS-PER-MESSAGE`'s trigger (an *admin-only* operation gaining a socket command) does not
 fire.
+
+`programmer.moveFx` (FX editor plan §3.5) is the FX family's frame despite its `programmer.` name: it
+re-ranks a **Local** FX among the Local FX in the programmer band — directly below `above`'s FX, or at
+the bottom for a null `above` — and so answers in the FX family's frames, `fxChanged(UPDATED)` for
+each FX whose priority moved (none when nothing moved) or `fxError` keyed by the moved FX:
+`FX_MOVE_NOT_LOCAL` when it or `above` is not Local, `FX_NOT_FOUND` when either is not running. It
+changes priorities only; nothing restarts and nothing is stored. An operator gesture, gated as
+`updateFx` is, so `FU-AUTH-WS-PER-MESSAGE` does not fire either; `GESTURE` in
+`TraceSampling.WS_MESSAGES`. See `fx-engineering.md` §"Programmer suppression and the priority band".
 
 ### Project — `ProjectSocket.kt`
 
@@ -771,8 +781,8 @@ read it (`useCueEdited`). Its first hold and *Update stage* clear it; a Record o
 | Message | Payload | When |
 |---|---|---|
 | `fxState` | `activeEffects: [EffectDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
-| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the five FX writes |
-| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED\|FX_SPLIT_LAYER_EFFECT\|FX_SPLIT_NOT_LOCAL`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame |
+| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the six FX writes |
+| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED\|FX_SPLIT_LAYER_EFFECT\|FX_SPLIT_NOT_LOCAL\|FX_MOVE_NOT_LOCAL`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame — or of a `programmer.moveFx`, keyed by the FX it moved |
 
 `fxState` is purely an effect frame. It carried `bpm` / `isClockRunning` before the speed-master
 bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `EffectDto` is defined in
@@ -1354,7 +1364,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/BroadcastSocket.kt` | `FixturesChangeListener` wiring and the 15 broadcast frames |
 | `plugins/ChannelSocket.kt` | DMX channel state, mapping, `updateChannel` programmer shim |
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
-| `plugins/FxSocket.kt` | Active-effect state, the five FX writes and their `fxError` refusal |
+| `plugins/FxSocket.kt` | Active-effect state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
 | `plugins/StackEffectSizeSocket.kt` | Each stack's effect size: `stackEffectSize.state` and `stackEffectSize.set` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |

@@ -1,7 +1,9 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.sync.withLock
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
@@ -15,13 +17,14 @@ import uk.me.cormack.lighting7.perf.DeskMetrics
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 private val logger = LoggerFactory.getLogger("FxEngine")
 
 /**
- * Central effect processing engine: the tick loops and the active-effect set.
+ * Central effect processing engine: the compose pass and the active-effect set.
  *
  * FxEngine manages active effects and processes them on each Master Clock tick,
  * applying calculated values to fixture properties through the DMX system. The rest of
@@ -85,28 +88,57 @@ class FxEngine(
 
     /**
      * Bank membership version the effects' runtime slots were last bound against; when the
-     * bank's [SpeedMasterBank.version] moves past this, the next beat pass re-binds every
+     * bank's [SpeedMasterBank.version] moves past this, the next pass re-binds every
      * active instance ([rebindSpeedMasters]).
      */
     @Volatile private var boundBankVersion: Long = -1L
 
-    // Read lock-free by the hot tick loops; rebuilt under [effectSnapshotLock] on mutation.
+    // Read lock-free by the compose pass; rebuilt under [effectSnapshotLock] on mutation.
     private val effectSnapshotLock = Any()
-    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
-    @Volatile private var sortedBeatEffects: List<FxInstance> = emptyList()
-    @Volatile private var sortedWallClockEffects: List<FxInstance> = emptyList()
 
-    @Volatile private var lastTickMs: Long = 0L
-    @Volatile private var lastWallClockTickMs: Long = 0L
+    /**
+     * Held while a Local FX's rank is read or written, or copied to an instance that replaces it: an
+     * insert, a swap, a Detach and a move.
+     */
+    private val localRankLock = Any()
+    private val sortedEffectsComparator = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+
+    /** Every effect, beat and wall-clock alike, in apply order — what one compose pass folds. */
+    @Volatile private var sortedEffects: List<FxInstance> = emptyList()
+
+    /**
+     * One compose pass at a time ([composePass]). The production driver is a single coroutine,
+     * so this is uncontended there; it is what keeps a test's direct pass off a running one.
+     */
+    private val passLock = kotlinx.coroutines.sync.Mutex()
+
+    // The fields below are owned by [composePass], under [passLock].
+
+    /** The frame of the last pass a beat woke: where a pass the ticker woke paints beat effects. */
+    private var lastFrame: SpeedMasterBank.Frame? = null
+
+    /** The last beat-woken pass's frame time: stateful beat effects' deltaMs. */
+    private var lastTickMs: Long = 0L
+
+    /** The last ticker-woken pass's time: stateful wall-clock effects' deltaMs. */
+    private var lastWallClockTickMs: Long = 0L
+
+    /** The last pass's time, whatever woke it: how far wall-clock accumulators advance. */
+    private var lastPassMs: Long = 0L
 
     /**
      * Productive-pass counter handed to stateful wall-clock effects as `tick.tickNumber`.
      *
-     * Owned solely by [processWallClockTickSuspend], which is a single coroutine, so it needs
-     * no synchronisation. Counts only passes that reach the apply stage: burning numbers while
-     * nothing is running would hand a re-armed effect an arbitrary jump.
+     * Counts only ticker-woken passes that reach the apply stage: burning numbers while nothing is
+     * running would hand a re-armed effect an arbitrary jump, and counting beat wakes would make a
+     * Candle Flicker flicker faster the faster a master runs.
      */
     private var wallClockPassNumber: Long = 0L
+
+    /** The tick stateful wall-clock effects saw on the last ticker-woken pass. */
+    private var wallClockTick = MasterClock.ClockTick(
+        tickNumber = 0, beatNumber = 0, tickInBeat = 0, phase = 0.0, timestampMs = 0L,
+    )
 
     // Shared with [CascadePublisher] so one fault keeps one suppression history wherever
     // it is reported from — see [FxLogThrottle].
@@ -132,22 +164,23 @@ class FxEngine(
      * itself (a fixture missing for the length of a reload) gets more real time to clear on the
      * slow paths, and a genuinely broken effect on a fast one stops in about a second.
      *
-     * The counter is owned by the tick loops (an instance is on the beat path or the wall-clock
-     * path, never both), and an `updateEffect` swap resets it — which is right, since changed
-     * parameters deserve a fresh verdict.
+     * Only passes the effect's own clock woke count, so the grace period follows that clock alone; a
+     * failure on another pass is logged and not counted. The counter is owned by [composePass], and
+     * an `updateEffect` swap resets it — which is right, since changed parameters deserve a fresh
+     * verdict.
      */
     private fun noteTickFailure(
         effect: FxInstance,
         e: Throwable,
         what: String,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
+        counts: Boolean,
     ) {
-        val failures = ++effect.consecutiveTickFailures
-
         val describe = "$what ${effect.id} ('${effect.effect.name}' on " +
             "${effect.target.targetKey}.${effect.target.propertyName})"
 
-        if (failures >= MAX_CONSECUTIVE_TICK_FAILURES) {
+        if (counts && ++effect.consecutiveTickFailures >= MAX_CONSECUTIVE_TICK_FAILURES) {
+            val failures = effect.consecutiveTickFailures
             effect.consecutiveTickFailures = 0
             effect.pause()
             // isRunning is part of effect coverage; see [rebuildSortedSnapshots].
@@ -182,7 +215,7 @@ class FxEngine(
     /**
      * The suppression map and the coverage epoch it was built from, published as ONE
      * volatile reference — the same single-reference publication [SpeedMasterBank] uses for
-     * its internal slot bindings. As two fields, racing tick loops could pair an older map
+     * its internal slot bindings. As two fields, racing readers (the pass, provenance) could pair an older map
      * with a newer epoch and serve stale suppression until the next programmer mutation.
      */
     private class SuppressionSnapshot(
@@ -191,10 +224,10 @@ class FxEngine(
     )
 
     // Per-tick programmer suppression snapshot, cached on the store's coverage epoch so the
-    // 50 Hz loops rebuild it only when the set of covered keys changes — a busk rewriting
+    // compose pass rebuilds it only when the set of covered keys changes — a busk rewriting
     // already-held keys bumps [ProgrammerStore.epoch] per write but never this. The coverage
     // epoch is bumped *after* the mutation it reports, so a rebuild that observed the new
-    // epoch also observes the write. Both tick loops may still race the rebuild; each
+    // epoch also observes the write. The pass and provenance may still race the rebuild; each
     // publishes a self-consistent (map, epoch) pair, and a pair that lost the race carries
     // the older epoch with it, so the next tick detects the mismatch and rebuilds — one
     // stale tick at worst, never a latch.
@@ -210,7 +243,7 @@ class FxEngine(
     internal fun programmerSuppression(): Map<String, Set<String>> = programmerSuppression(programmerStore.blind)
 
     /**
-     * [programmerSuppression] against one read of blind the caller has already taken — the tick loops,
+     * [programmerSuppression] against one read of blind the caller has already taken — the compose pass,
      * which ask [BlindHold] of the same read, so a pass cannot pair an empty (blind) suppression map
      * with a band that is not held, or the reverse, across a Blind toggle landing mid-pass.
      */
@@ -300,23 +333,15 @@ class FxEngine(
         // non-swap path don't come through here and bump [effectListEpoch] themselves.
         effectListEpoch.incrementAndGet()
         synchronized(effectSnapshotLock) {
-            val beat = ArrayList<FxInstance>(activeEffects.size)
-            val wall = ArrayList<FxInstance>()
-            for (effect in activeEffects.values) {
-                when (effect.timingSource) {
-                    TimingSource.BEAT -> beat.add(effect)
-                    TimingSource.WALL_CLOCK -> wall.add(effect)
-                }
-            }
-            beat.sortWith(sortedEffectsComparator)
-            wall.sortWith(sortedEffectsComparator)
-            sortedBeatEffects = beat
-            sortedWallClockEffects = wall
+            val all = ArrayList<FxInstance>(activeEffects.values)
+            all.sortWith(sortedEffectsComparator)
+            sortedEffects = all
         }
     }
 
-    private var processingJob: Job? = null
-    private var wallClockJob: Job? = null
+    private var beatWakeJob: Job? = null
+    private var tickerJob: Job? = null
+    private var passJob: Job? = null
 
     /**
      * When set, newly added effects without a cueId are automatically tagged
@@ -332,13 +357,17 @@ class FxEngine(
         /** Wall-clock tick interval in milliseconds (50Hz) */
         const val WALL_CLOCK_INTERVAL_MS = 20L
 
+        /** The shortest gap between two compose passes: wakes inside it wait and coalesce. */
+        const val MIN_PASS_INTERVAL_MS = 5L
+
         /**
          * How many consecutive passes an effect may throw out of before the engine pauses it.
          *
-         * In passes rather than seconds, so the grace period varies with how fast the desk is
-         * ticking: ~2.4s on the 50 Hz wall-clock loop, 5s for a lone master at 60 BPM (24
-         * ticks/beat), 1s for one at 300 BPM, and less again with several out-of-phase masters
-         * driving the pass. See [noteTickFailure] for why that direction is the safe one.
+         * In passes its own clock woke rather than seconds, so the grace period varies with how
+         * fast the desk is ticking: ~2.4s for a wall-clock effect on the 50 Hz ticker, 5s for a
+         * beat effect under a lone master at 60 BPM (24 ticks/beat), 1s for one at 300 BPM, and
+         * less again with several out-of-phase masters waking the pass. See [noteTickFailure] for
+         * why that direction is the safe one.
          */
         const val MAX_CONSECUTIVE_TICK_FAILURES = 120
 
@@ -360,8 +389,23 @@ class FxEngine(
          */
         const val PROGRAMMER_FX_RANK_CLAMP = 100_000
 
+        /**
+         * Where Local FX start within the band (FX editor plan D5, §3.5): `BASE + LOCAL_OFFSET + localRank`,
+         * above every programmer layer's `BASE + layer index`, as Local values sit above every layer.
+         * Above [PROGRAMMER_FX_RANK_CLAMP], so no layer rank reaches it.
+         */
+        const val LOCAL_OFFSET = 200_000
+
         /** True when [priority] sits in the programmer-owned effect band. */
         fun isProgrammerFxPriority(priority: Int): Boolean = priority >= PROGRAMMER_FX_PRIORITY_BASE
+
+        /** The priority of a Local FX at [localRank]. */
+        fun localFxPriority(localRank: Int): Int =
+            PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank.coerceIn(0, PROGRAMMER_FX_RANK_CLAMP)
+
+        /** A Local FX's rank in the band, or -1 for a priority below the Local FX's part of it. */
+        fun localRankOf(priority: Int): Int =
+            (priority - (PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET)).coerceAtLeast(-1)
     }
 
     /**
@@ -380,7 +424,7 @@ class FxEngine(
     // --- E1 split components ---
     //
     // Four components extracted from what used to be a ~3,400-line engine (sweep item E1):
-    // the engine keeps the tick loops and the effect set; these own the rest. Constructed in
+    // the engine keeps the compose pass and the effect set; these own the rest. Constructed in
     // dependency order — the lambdas defer the two cyclic edges (cueLayer → provenance,
     // provenance → the engine's effect set) until first call, which is safely after
     // construction.
@@ -400,7 +444,7 @@ class FxEngine(
     }
 
     /**
-     * [cueLayer]'s stomp check as one function value, built once: the tick loops ask
+     * [cueLayer]'s stomp check as one function value, built once: the compose pass asks
      * [EffectSuppression.isSuppressed] per effect per member per pass, and a bound reference
      * written at the call site would allocate on every one of those.
      */
@@ -455,7 +499,7 @@ class FxEngine(
         if (priorities.isEmpty()) return 0
         var changed = 0
 
-        // Layer 3 — mutate in place, then re-sort the snapshots the tick loop reads.
+        // Layer 3 — mutate in place, then re-sort the snapshot the compose pass reads.
         val staleEffects = activeEffects.values.filter { effect ->
             val target = priorities[effect.cueId ?: return@filter false] ?: return@filter false
             effect.priority != target
@@ -579,7 +623,7 @@ class FxEngine(
 
     /**
      * Rewrite live [effects]' ownership — cue, stack, priority, layer — with [retag], as one mutation:
-     * one re-sort for the tick loops, one broadcast. A cue's GO adopting the outgoing cue's continuing
+     * one re-sort for the compose pass, one broadcast. A cue's GO adopting the outgoing cue's continuing
      * effects (effects plan P4), and a cue taking its fading ones back.
      */
     fun retagEffects(effects: Collection<FxInstance>, retag: (FxInstance) -> Unit) {
@@ -649,8 +693,8 @@ class FxEngine(
     }
 
     /**
-     * Remove every leaving instance whose fade has run to 0. Swept by the wall-clock loop at 50 Hz,
-     * whether or not any effect is running, so a fade-out ends on time even when every effect is
+     * Remove every leaving instance whose fade has run to 0. Swept by every ticker-woken pass, at
+     * 50 Hz whether or not any effect is running, so a fade-out ends on time even when every effect is
      * paused. `internal` so tests can sweep at a chosen instant.
      */
     internal fun retireFinishedLeaving(nowMs: Long = System.currentTimeMillis()): Int {
@@ -686,13 +730,13 @@ class FxEngine(
         return removed.size
     }
 
-    /** Remove every effect matching [predicate], rebuilding the tick loops' snapshots once. */
+    /** Remove every effect matching [predicate], rebuilding the compose pass's snapshot once. */
     private fun removeWhere(predicate: (FxInstance) -> Boolean): Int {
         val toRemove = activeEffects.values.filter(predicate)
         toRemove.forEach { activeEffects.remove(it.id) }
         if (toRemove.isNotEmpty()) {
-            // Sorted snapshots are read lock-free by [processBeatTick] / [processWallClockTick].
-            // Without rebuilding, the tick loops keep firing the orphaned [FxInstance] refs
+            // The sorted snapshot is read lock-free by [composePass].
+            // Without rebuilding, the compose pass keeps firing the orphaned [FxInstance] refs
             // against their old targets — one of the reasons a cue's effects would "refuse to
             // die" after a cue transition.
             rebuildSortedSnapshots()
@@ -721,13 +765,14 @@ class FxEngine(
         speedMasters.start(scope)
         provenance.start(scope)
 
-        // Beat processing loop: one pass per wake-up, over one coherent frame of every
-        // master's current tick. The wake channel is CONFLATED, so ticks from N masters
-        // landing while a pass is in flight collapse into a single follow-up pass — the
-        // pass rate is bounded by the fastest master, and one pass means one
-        // ControllerTransaction however many masters are ticking.
+        // Two wake sources and one pass. Any master's tick (the bank's wake channel, CONFLATED,
+        // so ticks from N masters landing while a pass is in flight collapse into one) and the
+        // 50 Hz ticker each raise their flag and wake [passJob], which runs one [composePass]
+        // over every running effect, at most every [MIN_PASS_INTERVAL_MS]: a wake inside that
+        // gap waits for it, and every wake that lands meanwhile joins the same pass. The flags
+        // tell the pass which clocks woke it — see [composePass] for what that decides.
         //
-        // Both loops swallow a failed pass rather than letting it out: anything escaping here
+        // The pass loop swallows a failed pass rather than letting it out: anything escaping here
         // cancels the job for the rest of the process, and the desk's effects would stop for
         // good with one line on whatever the uncaught-exception handler is. The per-effect
         // catches inside a pass cover the common case; this covers the pass-level work around
@@ -736,33 +781,47 @@ class FxEngine(
         // Error — with cancellation rethrown so [stop] still stops the loop.
         val beatPasses = DeskMetrics.global.fxTick(DeskMetrics.FxLoop.BEAT)
         val wallClockPasses = DeskMetrics.global.fxTick(DeskMetrics.FxLoop.WALL_CLOCK)
-        processingJob = scope.launch(Dispatchers.Default) {
+        val beatWoke = AtomicBoolean(false)
+        val tickerWoke = AtomicBoolean(false)
+        val passWake = Channel<Unit>(Channel.CONFLATED)
+
+        beatWakeJob = scope.launch(Dispatchers.Default) {
             for (wake in speedMasters.wake) {
-                val passStart = System.nanoTime()
-                try {
-                    processBeatTickSuspend(speedMasters.snapshotFrame())
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (t: Throwable) {
-                    throttle.log("beat-pass", t) { "FX engine: beat pass failed" }
-                }
-                beatPasses.record(System.nanoTime() - passStart)
+                beatWoke.set(true)
+                passWake.trySend(Unit)
             }
         }
 
-        // Wall-clock processing loop (50Hz, independent of BPM)
-        wallClockJob = scope.launch(Dispatchers.Default) {
+        // Wall-clock ticker (50Hz, independent of BPM)
+        tickerJob = scope.launch(Dispatchers.Default) {
             while (isActive) {
                 delay(WALL_CLOCK_INTERVAL_MS)
+                tickerWoke.set(true)
+                passWake.trySend(Unit)
+            }
+        }
+
+        passJob = scope.launch(Dispatchers.Default) {
+            var lastPassStartNs = System.nanoTime() - MIN_PASS_INTERVAL_MS * 1_000_000
+            for (wake in passWake) {
+                val waitNs = lastPassStartNs + MIN_PASS_INTERVAL_MS * 1_000_000 - System.nanoTime()
+                if (waitNs > 0) delay((waitNs + 999_999) / 1_000_000)
+                val beat = beatWoke.getAndSet(false)
+                val ticker = tickerWoke.getAndSet(false)
+                if (!beat && !ticker) continue
                 val passStart = System.nanoTime()
                 try {
-                    processWallClockTickSuspend()
+                    // A skipped pass opens no gap: the next wake is not held for it.
+                    if (composePass(beat = beat, ticker = ticker, frame = null, nowMs = System.currentTimeMillis())) {
+                        lastPassStartNs = passStart
+                    }
                 } catch (e: CancellationException) {
                     throw e
                 } catch (t: Throwable) {
-                    throttle.log("wall-clock-pass", t) { "FX engine: wall-clock pass failed" }
+                    lastPassStartNs = passStart
+                    throttle.log("compose-pass", t) { "FX engine: compose pass failed" }
                 }
-                wallClockPasses.record(System.nanoTime() - passStart)
+                (if (beat) beatPasses else wallClockPasses).record(System.nanoTime() - passStart)
             }
         }
     }
@@ -772,10 +831,12 @@ class FxEngine(
      */
     fun stop() {
         provenance.stop()
-        processingJob?.cancel()
-        processingJob = null
-        wallClockJob?.cancel()
-        wallClockJob = null
+        beatWakeJob?.cancel()
+        beatWakeJob = null
+        tickerJob?.cancel()
+        tickerJob = null
+        passJob?.cancel()
+        passJob = null
         speedMasters.stop()
         val allEffects = activeEffects.values.toList()
         activeEffects.clear()
@@ -857,7 +918,15 @@ class FxEngine(
         effect.speedMasterSlot = speedMasters.slotFor(effect.speedMasterUuid)
         effect.rateMasterSlot = rateSlotFor(effect.rateSpeedMasterUuid)
 
-        activeEffects[id] = effect
+        if (!carried && effect.isLocalEffect) {
+            // Ranked and published under the one lock, so a move or another insert sees it.
+            synchronized(localRankLock) {
+                effect.priority = localFxPriority(topLocalRankFor(effect))
+                activeEffects[id] = effect
+            }
+        } else {
+            activeEffects[id] = effect
+        }
         return id
     }
 
@@ -906,16 +975,20 @@ class FxEngine(
         replace: Map<FxInstance, List<FxInstance>>,
         fresh: List<FxInstance> = emptyList(),
     ): Set<Long> {
-        // By identity, so a copy is only ever added for a parent this call took out. The tick loops
-        // keep painting the parent from the sorted snapshot until the one rebuild below.
-        val removed = replace.keys.filter { activeEffects.remove(it.id, it) }
-        for (parent in removed) {
-            for (copy in replace.getValue(parent)) {
-                copy.takeRunningStateFrom(parent)
-                insert(copy, carried = true)
+        // By identity, so a copy is only ever added for a parent this call took out. The compose
+        // pass keeps painting the parent from the sorted snapshot until the one rebuild below.
+        // Under the rank lock, so a move between building the copies and this swap reaches them.
+        val removed = synchronized(localRankLock) {
+            val removed = replace.keys.filter { activeEffects.remove(it.id, it) }
+            for (parent in removed) {
+                for (copy in replace.getValue(parent)) {
+                    copy.takeRunningStateFrom(parent)
+                    insert(copy, carried = true)
+                }
             }
+            fresh.forEach { insert(it) }
+            removed
         }
-        fresh.forEach { insert(it) }
         if (removed.isEmpty() && fresh.isEmpty()) return emptySet()
         rebuildSortedSnapshots()
         resetUncoveredProperties(removed)
@@ -1008,6 +1081,7 @@ class FxEngine(
 
     /** What a copy takes from its parent each time it is built or swapped in ([headCopies]). */
     private fun FxInstance.takeRunningStateFrom(parent: FxInstance) {
+        priority = parent.priority
         dynamicsRef.set(parent.dynamics.copy(elementFilter = ElementFilter.ALL))
         carryEnvelope(parent.envelope)
         lastPhase = parent.lastPhase
@@ -1341,8 +1415,13 @@ class FxEngine(
             }
 
             if (needsSwap) {
-                // By identity: a plain put would bring back an instance a split has just replaced.
-                if (!activeEffects.replace(effectId, existing, updated)) continue
+                // By identity: a plain put would bring back an instance a split has just replaced. The
+                // priority is taken again under the rank lock, so a move made since the copy holds.
+                val swapped = synchronized(localRankLock) {
+                    updated.priority = existing.priority
+                    activeEffects.replace(effectId, existing, updated)
+                }
+                if (!swapped) continue
                 rebuildSortedSnapshots()
             } else {
                 // A non-swap update can still move coverage (elementFilter changes the expansion);
@@ -1446,19 +1525,117 @@ class FxEngine(
     /**
      * A programmer layer's *Detach*, effect half: every instance [layerId] spawned loses its layer
      * key and its [FxInstance.source], so it is a Local effect ([FxInstance.isLocalEffect]) that
-     * keeps its id, phase and band priority and that no recook will retract. A spent N-shot is
-     * removed instead, since only a layer keeps one. Returns how many keep running.
+     * keeps its id and phase and that no recook will retract. It moves into the Local FX's part of
+     * the band at their bottom, in the order it had, so it stays under every Local FX it shares a
+     * key with — as Detach puts a layer's values beneath the Local values already held. A spent
+     * N-shot is removed instead, since only a layer keeps one. Returns how many keep running.
      */
     fun detachProgrammerLayerEffects(layerId: Int): Int {
         val spawned = activeEffects.values.filter { it.programmerLayerEffectKey?.layerId == layerId && !it.leaving }
         if (spawned.isEmpty()) return 0
         val (spent, running) = spawned.partition { it.spent }
-        for (effect in running) {
-            effect.programmerLayerEffectKey = null
-            effect.source = null
+        synchronized(localRankLock) {
+            val detached = running.sortedWith(sortedEffectsComparator)
+            val others = activeEffects.values.filter { it.isLocalEffect }.sortedWith(sortedEffectsComparator)
+            for (effect in detached) {
+                effect.programmerLayerEffectKey = null
+                effect.source = null
+            }
+            rerankLocal(detached + others, placed = detached.toSet())
         }
+        if (running.isNotEmpty()) rebuildSortedSnapshots()
         if (spent.isNotEmpty()) removeEffects(spent.map { it.id }) else emitStateUpdate()
         return running.size
+    }
+
+    /** What [moveLocalEffect] did. */
+    sealed interface LocalMoveOutcome {
+        /** The FX whose priority moved, the moved one included when it did. */
+        data class Moved(val changed: List<Long>) : LocalMoveOutcome
+
+        /** [effectId] is not running. */
+        data class NotFound(val effectId: Long) : LocalMoveOutcome
+
+        /** [effectId] is running but is not a Local FX, so it has no place among them. */
+        data class NotLocal(val effectId: Long) : LocalMoveOutcome
+    }
+
+    /**
+     * Re-rank Local FX [effectId] to sit directly below [aboveId]'s, or at the bottom of the Local FX
+     * when [aboveId] is null (`programmer.moveFx`, FX editor plan §3.5): every Local FX in one list in
+     * apply order, the moved one taken out and put back, then [rerankLocal]. Nothing restarts: only
+     * priorities change.
+     */
+    fun moveLocalEffect(effectId: Long, aboveId: Long?): LocalMoveOutcome {
+        val changed = ArrayList<Long>()
+        synchronized(localRankLock) {
+            val moved = activeEffects[effectId] ?: return LocalMoveOutcome.NotFound(effectId)
+            if (!moved.isLocalEffect) return LocalMoveOutcome.NotLocal(effectId)
+            val above = aboveId?.let { id ->
+                val found = activeEffects[id] ?: return LocalMoveOutcome.NotFound(id)
+                if (!found.isLocalEffect) return LocalMoveOutcome.NotLocal(id)
+                found
+            }
+            if (above === moved) return LocalMoveOutcome.Moved(emptyList())
+            val order = activeEffects.values.filter { it.isLocalEffect && it !== moved }
+                .sortedWith(sortedEffectsComparator).toMutableList()
+            val at = if (above == null) 0 else order.indexOf(above)
+            // [above] stopped being Local (a release let it go) since it was read.
+            if (at < 0) return LocalMoveOutcome.NotFound(aboveId!!)
+            order.add(at, moved)
+            changed += rerankLocal(order, placed = setOf(moved))
+        }
+        if (changed.isNotEmpty()) {
+            rebuildSortedSnapshots()
+            emitStateUpdate()
+        }
+        return LocalMoveOutcome.Moved(changed)
+    }
+
+    /**
+     * Give Local FX [order], bottom first, the ranks that apply them in that order, answering the ids
+     * whose priority moved. From the bottom, each keeps its rank if that still applies it after the one
+     * below it, else takes the lowest rank that does; [placed] always take that lowest rank, so moving
+     * one back where it was restores the order. Under [localRankLock].
+     */
+    private fun rerankLocal(order: List<FxInstance>, placed: Set<FxInstance>): List<Long> {
+        val changed = ArrayList<Long>()
+        var below: FxInstance? = null
+        var belowRank = -1
+        for (effect in order) {
+            val rank = localRankOf(effect.priority)
+            val lowest = when {
+                below == null -> 0
+                compareValuesBy(effect, below, { it.composeOrder }, { it.id }) > 0 -> belowRank
+                else -> belowRank + 1
+            }
+            val next = if (effect !in placed && rank >= lowest) rank else lowest
+            if (next != rank) {
+                effect.priority = localFxPriority(next)
+                changed += effect.id
+            }
+            below = effect
+            belowRank = next
+        }
+        return changed
+    }
+
+    /**
+     * The rank that puts Local FX [effect] at the top of its lanes: one above the highest FX in the
+     * Local part of the band sharing a key with it — a head it covers and its attribute — else 0. One
+     * still fading out counts, so a new FX never starts under it. Under [localRankLock].
+     */
+    private fun topLocalRankFor(effect: FxInstance): Int {
+        val propertyName = effect.target.propertyName
+        val keys = resolveEffectFixtureKeys(effect).toHashSet()
+        var highest = -1
+        for (other in activeEffects.values) {
+            if (other === effect || other.target.propertyName != propertyName) continue
+            val rank = localRankOf(other.priority)
+            if (rank <= highest) continue
+            if (resolveEffectFixtureKeys(other).any { it in keys }) highest = rank
+        }
+        return highest + 1
     }
 
     /**
@@ -1561,41 +1738,158 @@ class FxEngine(
         processBeatTickSuspend(SpeedMasterBank.Frame.uniform(tick))
 
     /**
-     * Process all BEAT-timed effects over one frame of every master's current tick.
-     *
-     * `internal` so that `FxEnginePipelineTest` can drive synthetic ticks without waiting on the
-     * real-time tick loop — through the `processBeatTick` shim in `FxEngineTickShims.kt` (test
-     * source), which is where the `runBlocking` wrapper lives. Production never blocks a thread
-     * on a pass: the loops in [start] call these suspend forms directly.
+     * A pass a beat woke, over [frame]. `internal` so that tests can drive synthetic ticks without
+     * waiting on the real-time loops — through the `processBeatTick` shim in `FxEngineTickShims.kt`
+     * (test source), which is where the `runBlocking` wrapper lives. Production never blocks a
+     * thread on a pass: the driver in [start] calls [composePass] directly.
      */
-    internal suspend fun processBeatTickSuspend(frame: SpeedMasterBank.Frame) {
+    internal suspend fun processBeatTickSuspend(
+        frame: SpeedMasterBank.Frame,
+        nowMs: Long = System.currentTimeMillis(),
+    ) = composePass(beat = true, ticker = false, frame = frame, nowMs = nowMs)
+
+    /** A pass the ticker woke, at [nowMs]; the `processWallClockTick` shim's form. */
+    internal suspend fun processWallClockTickSuspend(nowMs: Long = System.currentTimeMillis()) =
+        composePass(beat = false, ticker = true, frame = null, nowMs = nowMs)
+
+    /**
+     * One compose pass: reset every key a running effect covers to the layer below, once, then fold
+     * every running effect, beat and wall-clock alike, in apply order ([sortedEffectsComparator]),
+     * into one transaction, so a wall-clock effect and a beat effect on the same key blend.
+     *
+     * [beat] and [ticker] say which clocks woke it (both, when their wakes coalesced). Phases are
+     * read on every pass: a beat effect's from its master's tick in the pass's frame — [frame] when
+     * given (the test shims), else the bank's, taken after any re-bind; on a pass no beat woke, the
+     * last beat-woken pass's frame, so it is painted where the last tick left it — and a wall-clock
+     * effect's from its accumulator, advanced by the real time since the last pass, so the extra
+     * passes leave its cycle length alone. What counts passes stays with the effect's own clock:
+     * - a [StatefulEffect] steps only on a pass its clock woke, and repaints its last output
+     *   otherwise ([calculateEffectOutput]); a Candle Flicker would otherwise flicker faster under
+     *   a faster master;
+     * - the tick-failure count ([noteTickFailure]) and an N-shot's end ([finishNShots]) count only
+     *   passes its clock woke;
+     * - [wallClockPassNumber] counts ticker-woken passes, and the leaving sweep runs on them.
+     *
+     * A pass with nothing running on a clock that woke it is skipped: with only beat effects
+     * running, a ticker-woken pass would repaint them at the tick they are already on.
+     *
+     * Mutually exclusive under [passLock]. `nowMs` is a parameter so tests can step wall-clock time.
+     * Answers whether the pass ran, false when it was skipped.
+     */
+    internal suspend fun composePass(
+        beat: Boolean,
+        ticker: Boolean,
+        frame: SpeedMasterBank.Frame?,
+        nowMs: Long,
+    ): Boolean = passLock.withLock {
         // Membership changes re-bind lazily, at pass start: slots only matter during a
         // pass, and Frame clamps an out-of-range slot to master 1 in the window between
-        // a deletion and this re-bind.
+        // a deletion and this re-bind. A held frame predates the change, so it goes too.
         val bankVersion = speedMasters.version
         if (bankVersion != boundBankVersion) {
             rebindSpeedMasters()
             boundBankVersion = bankVersion
+            lastFrame = null
+        }
+        if (beat) lastFrame = frame ?: speedMasters.snapshotFrame()
+
+        val wallClockDeltaMs = if (ticker) {
+            val delta = if (lastWallClockTickMs > 0) nowMs - lastWallClockTickMs else 0L
+            lastWallClockTickMs = nowMs
+            delta
+        } else 0L
+
+        // Fade-outs that have reached 0 end here, before the early returns below: the ticker wakes
+        // a pass at 50 Hz whatever is running, so a leaving instance is removed on time even when
+        // it, and every other effect, is paused.
+        if (ticker && sweepsLeaving) retireFinishedLeaving(nowMs)
+
+        // Snapshot read is lock-free (volatile).
+        val effects = sortedEffects
+        var beatRunning = false
+        var wallClockRunning = false
+        var rateMasterAssigned = false
+        for (effect in effects) {
+            if (effect.timingSource == TimingSource.WALL_CLOCK) {
+                if (effect.rateMasterSlot != FxInstance.NO_RATE_MASTER) rateMasterAssigned = true
+                if (!wallClockRunning && effect.isRunning) wallClockRunning = true
+            } else if (!beatRunning && effect.isRunning) {
+                beatRunning = true
+            }
         }
 
-        // Snapshot read is lock-free (volatile). If empty, nothing to do.
-        val beatEffects = sortedBeatEffects
-        if (beatEffects.isEmpty()) return
-        if (beatEffects.none { it.isRunning }) return
+        // With no wall-clock effect running, no accumulator is owed the time since the last pass, so
+        // the stamp moves on. Leaving it stale meant the first pass afterwards handed the whole idle
+        // period to every wall-clock effect — including one just created with an accumulator of 0,
+        // which would then render its first frame at an arbitrary point in its cycle.
+        if (!wallClockRunning) lastPassMs = nowMs
 
-        // deltaMs comes from the pass timestamp, not any one master's tick timestamp — a
-        // slow master's tick time only moves when *it* ticks, which would hand stateful
-        // effects a garbage delta on passes woken by a faster master.
-        val deltaMs = if (lastTickMs > 0) frame.timestampMs - lastTickMs else 0L
-        lastTickMs = frame.timestampMs
+        // A pass with nothing running on a clock that woke it would repaint the last frame: skipped,
+        // and the time it covers is advanced by the next pass instead.
+        if (!(beat && beatRunning) && !(ticker && wallClockRunning)) return@withLock false
+
+        // A clock stepped backwards advances nothing.
+        val advanceMs = if (lastPassMs > 0) (nowMs - lastPassMs).coerceAtLeast(0L) else 0L
+        lastPassMs = nowMs
+
+        // A beat effect's tick: this pass's frame, else the last beat-woken pass's, else (none yet,
+        // or the bank moved since) the bank's current one.
+        val beatFrame = if (beatRunning) lastFrame ?: speedMasters.snapshotFrame().also { lastFrame = it } else null
+
+        // deltaMs comes from the frame timestamp, not any one master's tick timestamp — a slow
+        // master's tick time only moves when *it* ticks, which would hand stateful effects a
+        // garbage delta on passes woken by a faster master.
+        val beatDeltaMs = if (beat && beatFrame != null) {
+            val delta = if (lastTickMs > 0) beatFrame.timestampMs - lastTickMs else 0L
+            lastTickMs = beatFrame.timestampMs
+            delta
+        } else 0L
+
+        if (wallClockRunning) {
+            // One coherent rate sample per pass, and only when a rate master is actually assigned
+            // to something — the common case is none, and then every effect advances unscaled.
+            val rateScales = if (rateMasterAssigned) speedMasters.rateScales() else null
+
+            // Advance every wall-clock effect's scaled clock once, before anything reads a phase,
+            // so all the phase calls in this pass see one coherent value. Paused effects advance
+            // too, as long as some wall-clock effect is running: a wall-clock effect has always
+            // kept its place in real time while paused.
+            for (effect in effects) {
+                if (effect.timingSource != TimingSource.WALL_CLOCK) continue
+                val slot = effect.rateMasterSlot
+                val scale =
+                    if (slot == FxInstance.NO_RATE_MASTER || rateScales == null) 1.0
+                    else rateScales.getOrElse(slot) { 1.0 }
+                effect.advanceWallClock(advanceMs, scale)
+            }
+
+            // The tick stateful wall-clock effects receive. The beat-position fields stay 0 — a
+            // wall-clock pass has no beat position, by definition — but `tickNumber` is a real
+            // monotonically-increasing count of passes.
+            //
+            // It used to be pinned at 0, and that was not the harmless placeholder it looked like:
+            // `CandleFlicker` (STATEFUL + WALL_CLOCK, so this is the *only* tick it ever sees)
+            // re-picks its target from `sin(tickNumber * 127.0) * cos(tickNumber * 311.0)`. With
+            // tickNumber constant that noise term was always exactly 0 and a candle on the rig held
+            // dead-steady. `FxEnginePipelineTest` pins the engine end of that contract.
+            if (ticker) {
+                wallClockTick = MasterClock.ClockTick(
+                    tickNumber = wallClockPassNumber++,
+                    beatNumber = 0,
+                    tickInBeat = 0,
+                    phase = 0.0,
+                    timestampMs = nowMs,
+                )
+            }
+        }
 
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
 
-        // Reset properties controlled by BEAT effects to the layer below (Layer 2 → Layer 4 →
-        // Layer 5 baseline) before applying. This prevents accumulative blend modes from
-        // ratcheting across ticks and keeps direct writes + cue state visible under effects.
-        resetActiveProperties(fixturesWithTx, beatEffects, beatResetSeen)
+        // Reset every key a running effect covers to the layer below (Layer 2 → Layer 4 → Layer 5
+        // baseline), once, before applying. This prevents accumulative blend modes from ratcheting
+        // across passes and keeps direct writes + cue state visible under effects.
+        resetActiveProperties(fixturesWithTx, effects, resetSeen)
 
         // Programmer suppression: any non-band effect skips its apply on (fixture,
         // property) pairs the programmer holds — the reset pass has already painted the
@@ -1608,37 +1902,56 @@ class FxEngine(
         // N-shots that run out on this pass, ended after the pass's frame is out ([finishNShots]).
         val spentThisPass = ArrayList<FxInstance>(0)
 
-        // Iterate in priority-ascending order. Under non-OVERRIDE blend modes, higher-priority
-        // effects compose on top and dominate. Each effect computes phase from *its own*
-        // master's tick; effects on the same master stay locked, effects on different
-        // masters drift apart, which is the point.
-        for (effect in beatEffects) {
+        // Apply order: under non-OVERRIDE blend modes, later effects compose on top of earlier
+        // ones. Each beat effect computes phase from *its own* master's tick; effects on the same
+        // master stay locked, effects on different masters drift apart, which is the point.
+        for (effect in effects) {
             // This effect's one dynamics read for the pass — everything below works from
             // this snapshot, so a concurrent edit lands wholly on this pass or the next.
             val dyn = effect.dynamics
             if (!dyn.isRunning) continue
 
-            val tick = frame.tick(effect.speedMasterSlot)
+            val onBeat = effect.timingSource == TimingSource.BEAT
+            val ownClock = if (onBeat) beat else ticker
+            val tick: MasterClock.ClockTick
+            val deltaMs: Long
+            val phases: PhaseSource
+            if (onBeat) {
+                tick = (beatFrame ?: continue).tick(effect.speedMasterSlot)
+                deltaMs = beatDeltaMs
+                phases = PhaseSource.Beat
+            } else {
+                tick = wallClockTick
+                deltaMs = wallClockDeltaMs
+                phases = PhaseSource.WallClock
+            }
             try {
                 beginNShotPass(effect)
                 if (effect.spreadsOverMembers) {
-                    processGroupEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
+                    processGroupEffect(
+                        tick, effect, dyn, fixturesWithTx, deltaMs, ownClock, suppression, blind, phases,
+                    )
                 } else {
-                    processFixtureEffect(tick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.Beat)
+                    processFixtureEffect(
+                        tick, effect, dyn, fixturesWithTx, deltaMs, ownClock, suppression, blind, phases,
+                    )
                 }
-                if (nShotRanOut(effect, dyn)) spentThisPass += effect
-                noteTickSuccess(effect)
+                if (ownClock) {
+                    if (nShotRanOut(effect, dyn)) spentThisPass += effect
+                    noteTickSuccess(effect)
+                }
             } catch (t: Throwable) {
                 // Throwable, not Exception: every built-in effect is a compiled script, so a
                 // recursive helper in one (StackOverflowError) or a script class that fails to
                 // link (NoClassDefFoundError) is an Error, and letting one past here would kill
                 // the pass loop for the life of the process.
-                noteTickFailure(effect, t, "effect", fixturesWithTx)
+                noteTickFailure(effect, t, if (onBeat) "effect" else "wall-clock effect", fixturesWithTx, ownClock)
             }
         }
 
         transaction.applySuspend()
         finishNShots(spentThisPass)
+        true
     }
 
     /**
@@ -1651,127 +1964,6 @@ class FxEngine(
             effect.speedMasterSlot = speedMasters.slotFor(effect.speedMasterUuid)
             effect.rateMasterSlot = rateSlotFor(effect.rateSpeedMasterUuid)
         }
-    }
-
-    /**
-     * Process all WALL_CLOCK-timed effects on the fixed-interval timer.
-     *
-     * Wall-clock effects use elapsed real time for phase calculation instead of beat
-     * position, making them independent of BPM. That is the only difference in how *phase* is
-     * derived, so both passes share [processFixtureEffect] / [processGroupEffect] and differ
-     * by the [PhaseSource] they hand them.
-     *
-     * `internal` so that `FxEnginePipelineTest` can drive the wall-clock path synchronously,
-     * through the `processWallClockTick` shim in `FxEngineTickShims.kt` (test source).
-     */
-    internal suspend fun processWallClockTickSuspend() {
-        // Same lazy rebind as the beat pass — rate-master slots must follow membership
-        // changes even when no beat effect is running.
-        val bankVersion = speedMasters.version
-        if (bankVersion != boundBankVersion) {
-            rebindSpeedMasters()
-            boundBankVersion = bankVersion
-        }
-
-        // Stamp the pass time *before* the early returns. Leaving it stale while nothing was
-        // running meant the first pass afterwards saw a deltaMs covering the whole idle
-        // period and handed it to every wall-clock effect — including one just created with
-        // an accumulator of 0, which would then render its first frame at an arbitrary point
-        // in its cycle instead of the start.
-        val now = System.currentTimeMillis()
-        val deltaMs = if (lastWallClockTickMs > 0) now - lastWallClockTickMs else 0L
-        lastWallClockTickMs = now
-
-        // Fade-outs that have reached 0 end here, before the early returns below: this loop runs
-        // at 50 Hz whatever is running, so a leaving instance is removed on time even when it, and
-        // every other effect, is paused or on the beat loop.
-        if (sweepsLeaving) retireFinishedLeaving(now)
-
-        val wallClockEffects = sortedWallClockEffects
-        if (wallClockEffects.isEmpty()) return
-        if (wallClockEffects.none { it.isRunning }) return
-
-        // One coherent rate sample per pass, and only when a rate master is actually assigned
-        // to something — the common case is none, and then every effect advances unscaled.
-        // Deliberately NOT snapshotFrame() even so: this path never reads ticks, and a full
-        // frame would allocate a per-master tick array 50 times a second purely to discard it.
-        val rateScales =
-            if (wallClockEffects.any { it.rateMasterSlot != FxInstance.NO_RATE_MASTER })
-                speedMasters.rateScales()
-            else null
-
-        // Advance every wall-clock effect's scaled clock once, before anything reads a
-        // phase, so all the phase calls in this pass see one coherent value. Paused effects
-        // advance too, as long as *something* is running: a wall-clock effect has always
-        // kept its place in real time while paused, and this preserves that — only the
-        // rate-change discontinuity is fixed.
-        for (effect in wallClockEffects) {
-            val slot = effect.rateMasterSlot
-            val scale =
-                if (slot == FxInstance.NO_RATE_MASTER || rateScales == null) 1.0
-                else rateScales.getOrElse(slot) { 1.0 }
-            effect.advanceWallClock(deltaMs, scale)
-        }
-
-        // The synthetic ClockTick stateful effects receive. The beat-position fields stay 0 —
-        // a wall-clock pass has no beat position, by definition — but `tickNumber` is a real
-        // monotonically-increasing count of passes.
-        //
-        // It used to be pinned at 0, and that was not the harmless placeholder it looked like:
-        // a StatefulEffect reads the tick, and `CandleFlicker` (STATEFUL + WALL_CLOCK, so this
-        // is the *only* tick it ever sees) re-picks its target from
-        // `sin(tickNumber * 127.0) * cos(tickNumber * 311.0)`. With tickNumber constant that
-        // noise term was always exactly 0, the target was always `baseLevel`, and a candle on
-        // the rig held dead-steady. `BuiltInEffectBehaviourTest` missed it because it drives
-        // `calculateStateful` with its own advancing tick — a sequence the engine never
-        // produced. `FxEnginePipelineTest` now pins the engine end of that contract.
-        val syntheticTick = MasterClock.ClockTick(
-            tickNumber = wallClockPassNumber++,
-            beatNumber = 0,
-            tickInBeat = 0,
-            phase = 0.0,
-            timestampMs = now,
-        )
-
-        val transaction = ControllerTransaction(fixtures.controllers)
-        val fixturesWithTx = fixtures.withTransaction(transaction)
-
-        // Reset properties controlled by WALL_CLOCK effects to the layer below.
-        resetActiveProperties(fixturesWithTx, wallClockEffects, wallClockResetSeen)
-
-        // The beat pass's two reads, for the same reasons. A held wall-clock effect has already
-        // advanced its clock above, with every other, so it keeps its place in real time — which is
-        // what lands a beat effect on Seconds mid-phase when Blind goes off, as it does a beat one.
-        val blind = programmerStore.blind
-        val suppression = programmerSuppression(blind)
-
-        val spentThisPass = ArrayList<FxInstance>(0)
-        for (effect in wallClockEffects) {
-            // Same one-snapshot-per-pass rule as the beat loop.
-            val dyn = effect.dynamics
-            if (!dyn.isRunning) continue
-
-            try {
-                beginNShotPass(effect)
-                if (effect.spreadsOverMembers) {
-                    processGroupEffect(
-                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
-                    )
-                } else {
-                    processFixtureEffect(
-                        syntheticTick, effect, dyn, fixturesWithTx, deltaMs, suppression, blind, PhaseSource.WallClock,
-                    )
-                }
-                if (nShotRanOut(effect, dyn)) spentThisPass += effect
-                noteTickSuccess(effect)
-            } catch (t: Throwable) {
-                // See the beat loop's catch for why this is Throwable.
-                noteTickFailure(effect, t, "wall-clock effect", fixturesWithTx)
-            }
-        }
-
-        transaction.applySuspend()
-        finishNShots(spentThisPass)
     }
 
     /** Clear [effect]'s per-pass N-shot flags before its pass; see [FxInstance.nShotPending]. */
@@ -1806,22 +1998,29 @@ class FxEngine(
     }
 
     /**
-     * Calculate the output for an effect, handling stateless and stateful effects.
+     * Calculate the output for an effect on [key], handling stateless and stateful effects.
+     *
+     * A [StatefulEffect] steps only when [step] (a pass its own clock woke); on any other pass it
+     * repaints what it last answered on [key], so the extra passes leave its pace alone. A key it
+     * has never answered for steps whatever woke the pass, so an effect just added or edited paints
+     * on its first pass.
      */
     private fun calculateEffectOutput(
         effect: FxInstance,
+        key: String,
         tick: MasterClock.ClockTick,
         deltaMs: Long,
+        step: Boolean,
         phase: Double,
         context: EffectContext,
     ): FxOutput {
         // The raw output, unscaled: size and the envelope weigh it after the blend, in the target
         // (effects plan P3, [FxInstance.weight]) — scaling it here is what dropped an OVERRIDE to 0.
-        return if (effect.effect is StatefulEffect) {
-            effect.effect.calculateStateful(tick, deltaMs, context)
-        } else {
-            effect.effect.calculate(phase, context)
-        }
+        val fx = effect.effect
+        if (fx !is StatefulEffect) return fx.calculate(phase, context)
+        val last = checkNotNull(effect.statefulOutputs)
+        if (!step) last[key]?.let { return it }
+        return fx.calculateStateful(tick, deltaMs, context).also { last[key] = it }
     }
 
     /**
@@ -1858,8 +2057,8 @@ class FxEngine(
     }
 
     /**
-     * The (fixture, property) dedupe scratch for one tick loop's [resetActiveProperties] pass,
-     * reused across passes rather than rebuilt per tick.
+     * The (fixture, property) dedupe scratch for [resetActiveProperties], reused across passes
+     * rather than rebuilt per pass.
      *
      * Two-level rather than a compound key so there is no key object per tuple — on a
      * 168-fixture × 2-property rig that is 336 avoided allocations per tick, and reusing the
@@ -1868,8 +2067,7 @@ class FxEngine(
      * one. The whole map is dropped when the register generation moves, so keys for fixtures
      * that no longer exist can't accumulate.
      *
-     * **One instance per tick loop, never shared.** The beat and wall-clock loops run on
-     * separate coroutines and each owns its own; a shared one would be mutated concurrently.
+     * Owned by [composePass], under [passLock].
      */
     private class ResetSeen {
         private val byKey = HashMap<String, HashSet<String>>()
@@ -1889,11 +2087,8 @@ class FxEngine(
             byKey.getOrPut(key) { HashSet() }.add(property)
     }
 
-    /** [resetActiveProperties] scratch owned by the beat tick loop. */
-    private val beatResetSeen = ResetSeen()
-
-    /** [resetActiveProperties] scratch owned by the wall-clock tick loop. */
-    private val wallClockResetSeen = ResetSeen()
+    /** [resetActiveProperties] scratch owned by [composePass]. */
+    private val resetSeen = ResetSeen()
 
     private fun resetOne(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
@@ -1922,18 +2117,15 @@ class FxEngine(
      * Where an effect's phase comes from on a pass: its master's beat position, or its own
      * scaled wall-clock accumulator.
      *
-     * The two passes are otherwise identical over a given effect — same expansion, same
+     * Beat and wall-clock effects are otherwise handled identically — same expansion, same
      * distribution plan, same suppression, same apply — so this is the only thing the shared
-     * `process*` functions below are parameterised on. Before this they were two hand-kept
-     * copies, and every fix *inside the per-effect apply* had to land twice; the two outer
-     * pass functions above still own their own tick sourcing and reset/suppression setup, so
-     * a change to pass mechanics still lands twice one level up.
+     * `process*` functions below are parameterised on.
      *
      * Objects rather than lambdas: two instances for the life of the process, nothing allocated
      * per tick. [WallClock] ignores `tick` for *phase* — that is a function of
      * `accumulatedScaledMs` — but the tick itself is not inert on that path: it still reaches
-     * stateful effects through [calculateEffectOutput], carrying the pass timestamp and the
-     * pass counter (see [processWallClockTickSuspend]).
+     * stateful effects through [calculateEffectOutput], carrying the ticker pass's timestamp and
+     * counter (see [composePass]).
      */
     private sealed interface PhaseSource {
         /** Phase for an effect applied to one fixture or one whole target. */
@@ -1988,6 +2180,7 @@ class FxEngine(
         dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
+        step: Boolean,
         suppression: Map<String, Set<String>>,
         blind: Boolean,
         phases: PhaseSource,
@@ -2001,7 +2194,7 @@ class FxEngine(
                 if (FxInstance.isHolding(effectPhase)) return
                 // A copy split off a spread effect is the member it was (apply-model plan §3.4).
                 val context = effect.splitMember?.context ?: EffectContext.SINGLE
-                val output = calculateEffectOutput(effect, tick, deltaMs, effectPhase, context)
+                val output = calculateEffectOutput(effect, fixtureKey, tick, deltaMs, step, effectPhase, context)
                 if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weightOf(effect, dyn))
                 }
@@ -2009,7 +2202,7 @@ class FxEngine(
 
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> processElementKeys(
                 tick, effect, dyn, fixturesWithTx, expansion.flat,
-                plansFor(effect, expansion, dyn).flat, deltaMs, suppression, blind, phases,
+                plansFor(effect, expansion, dyn).flat, deltaMs, step, suppression, blind, phases,
             )
 
             // Neither parent nor elements have the property, or the fixture is gone:
@@ -2035,6 +2228,7 @@ class FxEngine(
         elementKeys: List<String>,
         plan: DistributionPlan,
         deltaMs: Long,
+        step: Boolean,
         suppression: Map<String, Set<String>>,
         blind: Boolean,
         phases: PhaseSource,
@@ -2054,7 +2248,9 @@ class FxEngine(
             if (FxInstance.isHolding(memberPhase)) continue
             lastMemberPhase = memberPhase
 
-            val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[distributionIdx])
+            val output = calculateEffectOutput(
+                effect, elementKey, tick, deltaMs, step, memberPhase, plan.contexts[distributionIdx],
+            )
             if (!isSuppressed(suppression, blind, elementKey, effect.target.propertyName, effect)) {
                 effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, weight)
             }
@@ -2081,6 +2277,7 @@ class FxEngine(
         dyn: FxDynamics,
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         deltaMs: Long,
+        step: Boolean,
         suppression: Map<String, Set<String>>,
         blind: Boolean,
         phases: PhaseSource,
@@ -2099,7 +2296,9 @@ class FxEngine(
                     // A member of an N-shot outside its own runs holds what is underneath (D9).
                     if (FxInstance.isHolding(memberPhase)) continue
                     lastMemberPhase = memberPhase
-                    val output = calculateEffectOutput(effect, tick, deltaMs, memberPhase, plan.contexts[memberIdx])
+                    val output = calculateEffectOutput(
+                        effect, member.key, tick, deltaMs, step, memberPhase, plan.contexts[memberIdx],
+                    )
                     if (!isSuppressed(suppression, blind, member.key, effect.target.propertyName, effect)) {
                         effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, weight)
                     }
@@ -2116,13 +2315,13 @@ class FxEngine(
                         for ((memberIdx, memberKeys) in expansion.perFixture.withIndex()) {
                             processElementKeys(
                                 tick, effect, dyn, fixturesWithTx, memberKeys,
-                                plans.perFixture[memberIdx], deltaMs, suppression, blind, phases,
+                                plans.perFixture[memberIdx], deltaMs, step, suppression, blind, phases,
                             )
                         }
                     // All elements across all fixtures as one list.
                     ElementMode.FLAT -> processElementKeys(
                         tick, effect, dyn, fixturesWithTx, expansion.flat, plans.flat,
-                        deltaMs, suppression, blind, phases,
+                        deltaMs, step, suppression, blind, phases,
                     )
                 }
             }
@@ -2281,7 +2480,7 @@ class FxEngine(
     }
 
     /**
-     * Walk the register once and resolve everything the tick loops need for [effect]: which
+     * Walk the register once and resolve everything the compose pass needs for [effect]: which
      * branch applies, the unfiltered coverage keys, and the filtered keys the apply loop walks.
      *
      * The "not found" diagnostics live here rather than in the `process*` functions, which is

@@ -237,7 +237,7 @@ class EffectSplitTest {
             assertEquals(master, copy.speedMasterUuid)
             assertEquals(0.25, copy.intensityMultiplier)
             assertEquals(parent.startedAtMs, copy.startedAtMs)
-            assertEquals(FxEngine.PROGRAMMER_FX_PRIORITY_BASE, copy.priority)
+            assertEquals(parent.priority, copy.priority, "its place among the Local FX too")
             assertEquals("PhaseSlider", copy.registrationId)
             assertTrue(copy.isLocalEffect)
         }

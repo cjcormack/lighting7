@@ -770,8 +770,8 @@ effects plan's P2); the editor only writes the three fields.
     holds it at once).
 
   An instance let go on a fade is **leaving** (`FxInstance.leaving`): no cue, layer, Release, Record,
-  Include or reload carry counts it any more, and the 50 Hz wall-clock pass removes it once its ramp
-  reaches 0 (`FxEngine.retireFinishedLeaving`, run before that pass's early returns, so a paused
+  Include or reload carry counts it any more, and the 50 Hz ticker-woken passes remove it once its ramp
+  reaches 0 (`FxEngine.retireFinishedLeaving`, run before the pass's early returns, so a paused
   effect ends on time). A fade of 0 removes it at once. A leaving instance a cue takes back mid-fade
   (`FxEngine.reclaimEffects`) is held where it stood and faded on from there; one the engine has
   already retired (`EffectEnvelope.RETIRED`) cannot be taken back, which is what keeps the two from
@@ -926,7 +926,7 @@ Consequences:
 
 **Blind holds the band** (show-cue-editing plan D7, §3.6). While the programmer is blind, every
 instance in the band — a busk, Include's children, a programmer layer's — is held: `fx/BlindHold.kt`,
-`blind && isProgrammerFxPriority(priority)`, asked by both tick loops beside `EffectSuppression`
+`blind && isProgrammerFxPriority(priority)`, asked by the compose pass beside `EffectSuppression`
 (whose rule is unchanged) against **one read of blind per pass**, the same read that empties the
 suppression map, so a Blind toggle landing mid-pass cannot pair an empty map with an unheld band. A
 held instance keeps its phase and skips only its apply: a beat effect's phase is its master's tick,
@@ -938,9 +938,37 @@ press — or at full at once over a value the programmer holds (effects plan §3
 at full first). Provenance leaves a held effect out of its winners and the property stack lists it `heldBack`
 with reason `BLIND`.
 
+**Local FX sit above every layer's FX** (FX editor plan D5, §3.5). Within the band, a programmer
+layer's FX sit at `BASE + layer index` (`ProgrammerLayerStack.priorityFor`, clamped at
+`PROGRAMMER_FX_RANK_CLAMP`) and Local FX (`FxInstance.isLocalEffect`) at
+`BASE + LOCAL_OFFSET + localRank`, `LOCAL_OFFSET = 200_000`, above the clamp — so every Local FX
+applies above every layer's FX, as Local values sit above every layer.
+`isProgrammerFxPriority` is unchanged, so suppression's exemption, Blind's hold, Clear and Release
+read the whole band as before. **This changed what wins:** a pressed FX palette that used to apply
+over a Local FX on the same key (any layer above the bottom one did) now applies under it.
+
+- **The rank.** `FxEngine.insert` ranks every new Local FX, whichever door made it (the bare press,
+  `/fx/add` with `programmerOwned`, *Apply as values*, Include's children): `localRank` is one above the
+  highest Local FX sharing a key with it — a head it covers and its attribute — else 0, so a new FX
+  takes the top of its lane. A head copy (a split, a narrowing) and an edit's swap keep their
+  parent's priority, taken again under the rank lock at the swap, so a move made meanwhile holds. A
+  layer's FX that **Detach** makes Local moves to the bottom of the Local FX, in the order it had,
+  so it stays under the Local FX it was already under, as Detach writes a layer's values beneath the
+  Local values already held. It also moves above every layer's FX, so where a higher layer's FX beat
+  it on a key, it now wins there (agreed with Chris in session 3a). A reload (`Show.resume`) adds
+  the carried FX back in apply order, so each lane's order survives it.
+- **`programmer.moveFx {effectId, above}`** (`FxEngine.moveLocalEffect`) re-ranks a Local FX directly
+  below `above`'s FX, or at the bottom of the Local FX for a null `above`. Every Local FX is put in one
+  list in apply order, the moved one taken out and put back below `above`, and from the bottom each
+  keeps its rank if it still applies after the one below it, else takes the lowest rank that does; the
+  moved FX always takes that lowest rank, so moving the other one back restores the order. Only
+  priorities change: nothing restarts. Answered `fxChanged(UPDATED)` per FX whose priority moved, or
+  `fxError` — `FX_MOVE_NOT_LOCAL` when either FX is not Local, `FX_NOT_FOUND` when either is not running.
+  Nothing is stored: Record's FX order is session 3b's.
+
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
-(fixture, property) and the effect — and the tick loops, provenance (`ProvenanceService.compute`)
+(fixture, property) and the effect — and the compose pass, provenance (`ProvenanceService.compute`)
 and the property-stack read behind `programmer.keyStack` (`ProvenanceService.keyStack`) all ask it,
 against the engine's own snapshot (`FxEngine.programmerSuppression`, empty while blind). That is
 what lets the fixture sheet mark an effect *held back*: the mark is the tick's answer, not a second
@@ -1026,24 +1054,29 @@ Covered by `routes/LocateParkInteractionTest.kt`.
 
 ### Effect iteration order
 
-Effects are iterated in sorted order (`priority` ascending, `id` ascending as a stable
-tie-break) rather than from a `ConcurrentHashMap`. Multi-effect composition on the same
-property is therefore **deterministic** — previously the effective "last-wins" ordering was
-undefined.
+Effects are folded in **apply order** — `priority` ascending, then `composeOrder`, then `id` —
+rather than from a `ConcurrentHashMap`, beat and wall-clock alike (§"Architecture: one compose pass"). An
+effect's `composeOrder` is its own id, except that a cue re-stamps the instances it carries over
+into its layer order (`restampComposeOrder`) and a copy split off an effect keeps its parent's, so
+same-priority effects compose in the order they were placed rather than the order they were
+created; `id` breaks only what is left. Multi-effect composition on the same property is
+therefore **deterministic** — previously the effective "last-wins" ordering was undefined.
 
 Priority assignment:
 
 - Manual effects: `priority = 0`
 - Cue-owned effects: `priority = stackId * 1_000_000 + sortOrder * 1_000 + 1`
   (leaves gaps for future fine-tuning without renumbering)
+- A programmer layer's effects: `PROGRAMMER_FX_PRIORITY_BASE + layer index`
+- Local effects: `PROGRAMMER_FX_PRIORITY_BASE + LOCAL_OFFSET + localRank`, above every layer's
+  (§"Programmer suppression and the priority band")
 
-Sorted snapshots are cached in `@Volatile` fields (`sortedBeatEffects`, `sortedWallClockEffects`)
-and rebuilt under a `synchronized` block on every mutation. The tick readers are therefore
-lock-free.
+The sorted snapshot is cached in one `@Volatile` field (`sortedEffects`) and rebuilt under a
+`synchronized` block on every mutation. The compose pass reads it lock-free.
 
 ### Instance dynamics
 
-The per-instance parameters that request threads may change while the tick loops read them —
+The per-instance parameters that request threads may change while the compose pass reads them —
 `isRunning`, `phaseOffset`, `stepTiming`, `distributionStrategy`, `elementMode`,
 `elementFilter`, and since the effects plan's session 1 `size`, `direction` and `nShot` — live in one immutable `FxDynamics` value behind a single atomic reference
 (`FxInstance.dynamics`), not in individual fields. A tick pass reads the snapshot once per
@@ -1227,7 +1260,7 @@ pressed. Before this a Local effect over loose fixtures ran them in unison, one 
   every unit its heads is `GROUP_ELEMENTS`, exactly as a group of multi-head fixtures, `elementMode`
   choosing per fixture or flat; a mix is `GROUP_ELEMENTS` too, a member being a unit of one head, so
   per fixture each multi-head fixture runs across its own heads beside the members. The members go through
-  `DistributionPlan.of` like a group's, so the spread's shape applies unchanged. The tick loops send a
+  `DistributionPlan.of` like a group's, so the spread's shape applies unchanged. The compose pass sends a
   selection down `processGroupEffect`.
 - **Coverage and reach.** `fixtureKeysCoveredBy` answers the heads in order;
   `isPropertyCoveredByAny` also answers the units (the parents of heads it paints), as it does for a
@@ -1283,6 +1316,19 @@ effect). The route fixes only where it runs and whose it is:
   the new effect are one engine mutation (`FxEngine.replaceEffects`), so no head drops to the layer
   below between the old effect and the new; an effect another request swapped meanwhile is taken
   off its current instance. Answers `{effectId, stopped, narrowed: [{effectId, into}]}`.
+- **Stacking** (FX editor plan D6, §3.6). `stack: true` skips the replacement: the FX is added over
+  the selection and no other Local FX is stopped or narrowed, answered `{effectId, stopped: [],
+  narrowed: []}`. A blend or Amount (`size`) the request leaves out takes its family's stacking
+  start from `fx/FxStacking.kt`: Intensity `MULTIPLY` (*Within it*) at 100 %, Position `ADDITIVE`
+  (*Around current position*) at 100 % with `panCenter` and `tiltCenter` at 128 where the press
+  names neither the blend nor that centre — only for an FX that declares both centres; any other
+  Position FX (Palette Steps) outputs where to go, not an offset, and starts on `OVERRIDE` at 100 % —
+  and Colour and Beam `OVERRIDE` (*Replace it*) at 50 %. A blend or Amount the press names wins over the table. Without `stack` the
+  press is unchanged: `OVERRIDE` at 100 % when absent. MCP has no bare press, so no tool takes
+  `stack`.
+
+A new Local FX takes the top of its lane either way (§"Programmer suppression and the priority
+band"), so a stacked one applies above the Local FX it shares heads with.
 
 **The split** is `PUT /fx/{id}` or `updateFx` with `targets` (fixtures, cells and groups, as a press
 names them), decided by `planSplit` against the heads the effect **paints** (`FxEngine.paintedHeads`:
@@ -1864,12 +1910,12 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/FxInstance.kt` | Running effect state, distributionStrategy, ElementMode, speed-master refs |
 | `fx/FxTarget.kt` | Fixture/group property targeting, FxTargetRef |
 | `fx/FxTargetable.kt` | Common interface for Fixture and FixtureGroup |
-| `fx/FxEngine.kt` | Tick loops, active-effect set, group expansion (post-E1 split) |
+| `fx/FxEngine.kt` | The compose pass and its wake sources, active-effect set, group expansion (post-E1 split) |
 | `fx/CascadePublisher.kt` | Layer-4/cascade → controller transmit, the Layer 4 publish lock, channel-covering-key lookup |
 | `fx/CueAssignmentLayer.kt` | Per-cue Layer 4 assignment bookkeeping, within-cue stomp registry |
 | `fx/ProvenanceService.kt` | "Who owns this value" computation + broadcast, `underlyingSources` |
 | `fx/ProgrammerWriter.kt` | PROGRAMMER-layer write delegation (write/clear/blind/republish) |
-| `fx/FxLogThrottle.kt` | Per-cause throttled logging shared by the tick loops and publish paths |
+| `fx/FxLogThrottle.kt` | Per-cause throttled logging shared by the compose pass and publish paths |
 | `fx/FxExtensions.kt` | Script DSL helpers |
 | `fx/group/DistributionStrategy.kt` | Phase distribution strategies |
 | `fx/group/GroupFxExtensions.kt` | Group effect extension functions |
@@ -1899,7 +1945,8 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | Component | Thread | Notes |
 |-----------|--------|-------|
 | MasterClock (one per speed master) | `Dispatchers.Default` | Tick generation; each tick nudges the bank's conflated wake channel |
-| FxEngine processing | `Dispatchers.Default` | One pass per wake-up over a per-master tick frame |
+| FxEngine wake sources | `Dispatchers.Default` | Two coroutines: one forwards the bank's wake, one is the 20 ms ticker; each sets its flag and wakes the pass |
+| FxEngine compose pass | `Dispatchers.Default` | One coroutine running one `composePass` per wake, at most every 5 ms, under `passLock` |
 | DMX output | Per-universe coroutine | ArtNet transmission |
 | REST handlers | Ktor I/O | Request handling |
 | WebSocket handlers | Ktor WebSocket | Message handling |
@@ -1908,8 +1955,8 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 
 Everything on this page about how a target expands — group members, `MultiElementFixture`
 elements, the `PER_FIXTURE`/`FLAT` split, `ElementFilter` — is resolved **once per effect per
-register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The tick loops read
-it; they do not walk the group.
+register generation**, into an `FxTargetExpansion` held on the `FxInstance`. The compose pass reads
+it; it does not walk the group.
 
 They used to walk it twice per tick per effect: once in `resolveEffectFixtureKeys` for the reset
 pass, and again in the `process*` pass, with every `untypedGroup` / `untypedFixture` lookup taking
@@ -1948,7 +1995,7 @@ ever sweeps the map.
 
 Three levels of containment, outermost first:
 
-1. **The pass loops** (`start`) catch around each pass. Anything escaping there would cancel the
+1. **The pass loop** (`start`) catches around each pass. Anything escaping there would cancel the
    loop's job for the rest of the process — the desk's effects would stop for good, with one line
    on the uncaught-exception handler. `CancellationException` is rethrown so `stop()` still works.
 2. **Each effect's pass** is caught individually, so one bad effect doesn't cost the others their
@@ -1960,7 +2007,10 @@ Three levels of containment, outermost first:
    and shows up in the UI through the `isRunning` that `fxState` already streams. The threshold is
    a pass count, not a duration, so it trips faster the faster the desk is ticking — the safe
    direction, since a fault that clears itself (a fixture missing for the length of a patch
-   reload) gets more real time to clear on the slower paths. One good pass clears the run.
+   reload) gets more real time to clear on the slower paths. Only passes the effect's **own**
+   clock woke count, failing or good (a beat effect's: any master's tick; a wall-clock effect's: the
+   ticker), so a beat effect's grace period does not shrink because the ticker also wakes the
+   pass; a failure on another pass is logged, not counted. One good pass clears the run.
 
 Levels 2 and 3 catch `Throwable`, not `Exception`: every built-in effect is a compiled script, so a
 recursive helper in one (`StackOverflowError`) or a script class that fails to link
@@ -2121,52 +2171,82 @@ Use wall-clock timing for effects that should feel natural and not tied to music
 - Ambient atmospheric changes (slow drifts)
 - Any effect where beat-sync would feel unnatural
 
-### Architecture
+### Architecture: one compose pass
 
-The FxEngine runs **two independent processing loops**:
+The FxEngine has two **wake sources** and one **compose pass** (`FxEngine.composePass`):
 
 ```
 FxEngine
-├── processBeatTickSuspend(frame)  ← SpeedMasterBank.wake (CONFLATED; any master's tick)
-│   └── One pass over one Frame of per-master ticks; each BEAT effect
-│       computes phase from frame.tick(effect.speedMasterSlot)
-│
-└── processWallClockTick()         ← 50Hz fixed-interval coroutine
-    └── Processes effects where timingSource == WALL_CLOCK, with
-        frame.rateScale(effect.rateMasterSlot) scaling the cycle
+├── SpeedMasterBank.wake (CONFLATED; any master's tick) ─┐
+├── 20 ms ticker ────────────────────────────────────────┤ each sets its flag
+│                                                        ▼
+└── composePass(beat, ticker, frame, now)   ← at most one per 5 ms, under passLock
+    ├── reset every key a running effect covers to the layer below, once
+    └── fold every running effect, beat and wall-clock, in apply order, into one transaction
+        ├── BEAT: phase from frame.tick(effect.speedMasterSlot)
+        └── WALL_CLOCK: phase from its accumulator, scaled by its rate master
 ```
 
-Each loop resets only the properties controlled by its own effects, preventing the two timing sources from interfering with each other.
+A wake landing within 5 ms (`MIN_PASS_INTERVAL_MS`) of the last pass's start waits out the gap,
+and every wake that lands meanwhile joins the same pass, which then knows **both** clocks woke
+it. The pass is mutually exclusive (`passLock`): the production driver is one coroutine, and the
+lock is what keeps a test's direct pass (`FxEngineTickShims`) off a running one.
 
-The loops are independent, but the per-effect apply below them is **one code path**:
-both call `processFixtureEffect` / `processGroupEffect` / `processElementKeys`, differing
-only in the `PhaseSource` they pass (`Beat` reads the master's tick, `WallClock` reads the
-effect's own scaled accumulator). Expansion, distribution plans, programmer suppression and
-blending are therefore identical by construction rather than by hand-keeping two copies.
+Every pass paints every running effect, whichever clock woke it:
+
+- **A beat effect** reads its master's tick from the pass's frame, which a beat-woken pass takes
+  from the bank after any re-bind. A pass the ticker woke has no new frame and reuses the last
+  beat-woken pass's (`lastFrame`): a master's tick is a pure function of its clock, so the effect
+  is painted where the last tick left it. A bank membership change drops the held frame, and the
+  next pass takes a fresh one.
+- **A wall-clock effect** advances its accumulator by the real time since the last pass, whatever
+  woke it. The deltas telescope, so the cycle is exactly as long however many passes there are;
+  only its resolution improves.
+
+A pass with nothing running on a clock that woke it is **skipped**: with only beat effects running,
+a ticker-woken pass would repaint them at the tick they are already on, and with only wall-clock
+effects running a beat wake adds nothing but cost. So a show running one kind of effect makes the
+passes it made before; the time a skipped pass covers is advanced by the next one, and a skipped
+pass does not hold the next wake back for the 5 ms gap.
+
+What **counts** passes stays with the effect's own clock. The pass records which clocks woke it,
+and:
+
+- a **stateful** effect (`StatefulEffect`: Candle Flicker, Fluorescent Flicker, a user script)
+  steps only on a pass its own clock woke, handed that clock's `deltaMs` and, on the wall clock,
+  the ticker's pass number (`wallClockPassNumber`). On any other pass it repaints what it last
+  answered on each key (`FxInstance.statefulOutputs`), so a Candle Flicker does not flicker faster
+  under a faster master. A key it has never answered for steps whatever woke the pass, so an
+  effect just added paints at once;
+- the tick-failure count (§"Tick-path failures") counts only passes its own clock woke;
+- an N-shot ends (`finishNShots`) only on a pass its own clock woke — on any other pass a member
+  outside its runs simply holds what is underneath, as it does anyway. Its count starts on the
+  first pass that paints it, whichever clock woke it: a beat N-shot's `nShotStartTick` is the
+  master tick it was painted at, so a count given to a running beat effect starts from the tick the
+  master is on rather than leaving the effect unpainted until the next one;
+- the leaving sweep (`retireFinishedLeaving`) runs on ticker-woken passes, at 50 Hz whether or not
+  anything is running.
+
+The per-effect apply is **one code path**: `processFixtureEffect` / `processGroupEffect` /
+`processElementKeys`, differing per effect only in the `PhaseSource` (`Beat` reads the master's
+tick, `WallClock` the effect's own scaled accumulator). Expansion, distribution plans, programmer
+suppression, Blind's hold (one read of Blind per pass) and parking are therefore one rule for both.
 
 ### Beat ↔ Wall-Clock interaction
 
-Because each loop owns its own sorted-snapshot of effects and its own reset pass, effects
-on **different** properties don't interact across timing sources. Two interesting cases
-on the **same** property:
+A beat effect and a wall-clock effect on the **same** key **compose**, whatever the blend: one pass
+resets the key once and folds both, in apply order, so a Candle Flicker *Within* (MULTIPLY) a Sine
+Wave flickers inside the wave on every frame, and Add, Max and Min compose the same way.
+`FxComposePassTest` pins it against committed DMX over a schedule of beat-woken, ticker-woken and
+coalesced passes.
 
-1. **Beat and wall-clock effects on the same property** — both loops reset to the
-   layer below (via `LayerResolver`) before applying their effects. Each loop sees the
-   other loop's effect output as Layer 3 accumulator state *within its own tick*, but
-   because reset always goes back to L3/L4/L5, the two loops don't compound indefinitely.
-   The effective behaviour is that the last-run loop for a given frame wins for OVERRIDE,
-   and ADDITIVE/MAX compose naturally.
-2. **Frame alignment** — the beat loop fires on the bank's conflated wake channel (any
-   master's tick), the wall-clock loop fires on a 20 ms ticker. There is no explicit
-   synchronisation. Both loops write into
-   the same `ControllerTransaction` instance? **No** — each loop creates its own
-   transaction and applies independently. They do *not* produce two network packets,
-   though: ArtNet output is a continuous stream that samples `currentValues` once per
-   `refreshIntervalMs`, so any number of transactions within a frame collapse to exactly
-   one packet. What survives is that the last writer before the tick wins.
+One pass is what makes this true. With a loop per clock, each reset the keys its own effects covered
+and applied them in its own transaction, so on a shared key the loop that committed last won
+whatever the blend: the head showed the Sine Wave or the Candle Flicker, alternating, never both.
 
-**Rule of thumb**: mixing BEAT and WALL_CLOCK effects on the same property is supported
-but not recommended — use one timing source per property to keep the result predictable.
+One transaction per pass also means one write per frame per key: ArtNet output samples
+`currentValues` once per `refreshIntervalMs`, and with one pass there is no second, half-composed
+transaction for it to sample.
 
 ### Wall-Clock Phase Calculation
 
@@ -2175,7 +2255,7 @@ For wall-clock effects, `beatDivision` is reinterpreted as cycle duration in sec
 is consumed, at `master.bpm / 120`:
 
 ```kotlin
-// once per 50 Hz pass, per effect, before any phase is read
+// once per compose pass, per effect, before any phase is read
 accumulatedScaledMs += deltaMs * rateScale
 // then, wherever a phase is needed
 val cycleDurationMs = beatDivision * 1000.0
@@ -2197,7 +2277,7 @@ is master 1, so binding a null `rateSpeedMasterUuid` through it made every unass
 effect follow master 1's tempo — exactly 1.0 at the default 120 BPM, and a rig-wide speed change
 the moment anything tapped it. `FxInstance.rateMasterSlot` therefore defaults to
 `FxInstance.NO_RATE_MASTER` (-1) and the engine binds it through `rateSlotFor`, not `slotFor`
-(sweep item C6). The wall-clock pass skips sampling `rateScales()` altogether when no effect
+(sweep item C6). The compose pass skips sampling `rateScales()` altogether when no wall-clock effect
 holds a real slot, which is the usual case.
 
 `rateSpeedMasterUuid` is settable everywhere `speedMasterUuid` is — REST add/update, look
@@ -2231,7 +2311,7 @@ Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`
 - **A wall-clock effect's** division is seconds already. Its Seconds is having **no rate master**,
   and a master is its rate master, which scales the cycle by `bpm / 120` as above. So the instance's
   flag stays false for it — `FxInstance.registrationTimingSource` can then tell the two kinds apart on
-  the wall-clock loop — and `FxInstance.onSeconds` is the reading for either kind. A stored row may
+  the wall clock — and `FxInstance.onSeconds` is the reading for either kind. A stored row may
   carry the flag for a wall-clock effect (a client's or the AI's Seconds), which spawns it with no rate
   master; a stored wall-clock row with no rate master and no flag — every row before S15 — is on
   Seconds too.
@@ -2258,7 +2338,7 @@ Look's effects (`look_effects`) and a cue's ad-hoc effects (`cue_ad_hoc_effects`
   effect until S15 — `programmerCapture` recorded none, and `CueAdHocEffectDto.toEffectSpec`
   (Include's adapter) passed none on — so a recorded busk fell back to master 1.
 - **Blind holds it like any programmer effect** (show-cue-editing plan D7): a busk on Seconds runs on
-  the wall-clock loop, whose clocks advance before the pass applies anything, so a held one keeps its
+  the wall clock, whose accumulators advance before the pass applies anything, so a held one keeps its
   place in real time and lands in step when Blind goes off — §"Programmer suppression and the
   priority band".
 
@@ -2318,13 +2398,3 @@ and a tap has no "on" state to hold.
 2. **Beat Detection**: Auto-detect BPM from audio input
 3. **Effect Modulation**: Effects that modulate other effects' parameters
 4. **Custom Distribution Functions**: User-defined distribution curves via scripts
-5. **Unified single-transaction per frame**: beat + wall-clock loops currently each create
-   their own `ControllerTransaction`. A shared frame-scoped transaction would reduce
-   duplicate transmissions when both loops target the same universe in the same ~20 ms
-   window. Control-surface plan Phase 8 (2026-04-23) landed the non-blocking commit half of
-   that ticket — both tick loops now call `transaction.applySuspend()` instead of blocking
-   per-channel acks — but intentionally deferred the two-loop coordination. Continuous
-   ArtNet streaming has since made the duplicate-*transmission* motivation moot (one packet
-   per universe per frame, always), leaving only last-writer-wins ordering; the shared-state
-   machinery (`AtomicReference<FrameTransaction?>` + short mutex around open/close) isn't a
-   clear win for that alone.

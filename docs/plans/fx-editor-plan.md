@@ -1,9 +1,9 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23, not started.** The fifteen questions and their answers are
-> in §11, every one answered as recommended. Implementation starts after the terminology plan
-> ([`terminology-plan.md`](terminology-plan.md)) has landed, and every word here is that plan's (§4
-> there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
+> **Document status: AGREED 2026-10-23; sessions 2 and 3a of 9 done.** The fifteen questions and their answers are
+> in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
+> ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
+> that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
 > *Intensity*, *Runs*, *Timing: Per cycle | Per head*. The design record is
 > [`fx-editor-design/`](fx-editor-design/INDEX.md); its one page,
 > [`fx-editor-design/fx-editor.html`](fx-editor-design/fx-editor.html), draws the views and runs a
@@ -91,8 +91,8 @@ Agreed with Chris on 2026-10-23 (§11):
 
 The plan adds its own:
 
-- **P1. One PR per session**, in §6's order, each crossing the wire with its client (CLAUDE.md
-  §"Git workflow"). Each session runs the packages it touches; sessions 2 and 3 run the full suites,
+- **P1. One PR per session**, started only once its §6 gate and needs are met, each crossing the wire with its client (CLAUDE.md
+  §"Git workflow"). Each session runs the packages it touches; sessions 2 and 3b run the full suites,
   for the engine change and the `formatVersion` bump. Each writes its engineering-doc paragraphs and
   puts its change commit's SHA in its heading when it lands.
 - **P2. The desk owns every rule.** The client draws samples and never computes an FX's output. The
@@ -228,7 +228,9 @@ The bare FX press gains `stack: true`: the FX is added over the selection, no ot
 stopped or narrowed, and an absent blend or Amount takes the family's stacking start
 (`fx/FxStacking.kt`, one table: Intensity `MULTIPLY` at 100 %, Position `ADDITIVE` with both centres
 at 128 at 100 %, Colour and Beam `OVERRIDE` at 50 %). The answer is `{effectId, stopped: 0,
-narrowed: 0}`. MCP's FX tools take the same `stack` field.
+narrowed: 0}`. No MCP tool presses a bare FX (`apply_palette`, `clear_effects` and the stored FX on
+`create_look` and `create_cue` are the FX tools), so none takes `stack`; agreed with Chris during
+session 3a.
 
 ## 4. UX
 
@@ -336,42 +338,109 @@ one FX. Cue FX are read-only outside the cue. No per-element overrides inside an
 drawing, no Amount over 100 % (`FU-FX-AMPLITUDE`), no live links between FX. The Stage view draws
 only what the desk sends.
 
-## 6. Implementation: seven sessions
+## 6. Implementation: nine sessions, gated on the terminology plan
 
-After the terminology plan's seven. Sessions 1–3 can land in any order; 4 needs 1 and 3; 5 needs 4;
-6 needs 5; 7 needs 5.
+The work runs beside the terminology plan rather than after it. Each session names a **gate**: the
+terminology sessions that must be on `main` before it starts. A gate is met when that plan's session
+heading reads *done* with its commit SHA, and that commit is an ancestor of `origin/main`; a session
+in review or in progress does not count. Check the gate before cutting the branch. If it is not met,
+the session waits; nothing here is started early and rebased later.
 
-### Session 1: the sampler and the preview route (backend)
+The gates follow one rule: **a session that adds nothing the terminology plan renames can start now;
+anything else waits until the names it would use are final.** Engine-internal work renames nothing.
+A wire field, a stored column or a client identifier written before its rename is something the
+terminology plan then has to rename again, or a conflict with the session that does.
 
-- `phaseAt`, `FxBlend`, `FxSampler`, `POST /fx/preview`, its DTOs and Swagger.
+| Session | Gate: terminology sessions on `main` | Also needs | Best landed before |
+|---|---|---|---|
+| 1a: the sampler | 3 | — | terminology 5 |
+| 1b: the preview route | 5 | 1a | — |
+| 2: one compose pass | none | — | terminology 5 |
+| 3a: the band and Stack | none | — | terminology 5 |
+| 3b: apply order kept | 4 | 3a | — |
+| 4: the editor's shell | 5, and 6 done or not started | 1b, 3a | — |
+| 5: the graph | as 4 | 4 | — |
+| 6: Shapes, ladder, handles, Match | as 4 | 5 | — |
+| 7: the other hosts | as 4 | 5 | — |
+
+Why each gate is where it is:
+
+- **None (2, 3a).** Both are engine-internal or add a name that is already final
+  (`programmer.moveFx`, the `stack` field). Landing them **before terminology session 5** matters:
+  that session and session 6 rename identifiers across the whole engine, and a rework of the tick
+  loops merges badly with a rename. Their tests use FX that terminology session 3 does not touch
+  (Sine Wave, Candle Flicker, Pulse, Circle), never Triangle, Strobe, Breathe, Colour Pulse or Zoom
+  Breathe.
+- **Terminology 3 (1a).** The sampler runs the FX library as that session leaves it: no composite
+  mode, no `pingPong`, the new default Direction, one Centre in.
+- **Terminology 4 (3b).** It renames `look_effects` and takes `formatVersion` 38; Look FX order is
+  a column on the renamed table, at 39.
+- **Terminology 5 (1b, and the frontend).** The route takes the FX request's fields and the client
+  speaks the wire; before that session they are `beatDivision`, `size`, `nShot`, `EffectDto`.
+- **Terminology 6 done or not started (4–7).** Session 6 renames every client identifier that says
+  property. The frontend sessions may run before it or after it, never while it is in review: two
+  large diffs over the same TypeScript at once is the conflict the gates exist to avoid. After it is
+  preferred, since it is mechanical and quick.
+
+### Session 1a: the sampler (backend)
+
+**Gate: terminology session 3.**
+
+- §3.2: `phaseAt`, `FxBlend` split out of `FxTarget`, `FxSampler`. No route, no DTO.
 - **Tests**: `FxSamplerParityTest` drives the engine through `FxEngineTickShims` and asserts the
   sampler's *Result* equals the committed DMX at every sampled tick, for: Sine Wave on a group under
   every Order with Segments, Wings, Parts and Spread set; Runs 2 with Direction Bounce; Timing Per head;
   two Intensity FX (Replace under Within); a Circle *Around* a programmer position; Colour Cycle under
   Amount 50 %; Palette Steps over two palettes; a Seconds FX; a multi-element fixture under each element
-  mode and filter; a held-back FX. A preview leaves every instance's fields and the transaction as they
-  were (P4). A draft the write boundary refuses is 400 with every problem.
-- **Docs**: `fx-engineering.md` §"Previewing an FX".
+  mode and filter; a held-back FX. Sampling leaves every instance's fields and the transaction as they
+  were (P4).
+- **Docs**: `fx-engineering.md` §"Previewing an FX", the sampler half.
 
-### Session 2: one compose pass (backend)
+### Session 1b: the preview route (backend)
+
+**Gate: terminology session 5.** Needs 1a.
+
+- §3.3: `POST /fx/preview`, its DTOs in the wire's final names, Swagger.
+- **Tests**: a running FX, a draft and a running FX with a draft move each answer the sampler's
+  samples; a draft the write boundary refuses is 400 with every problem; off the current project 409;
+  the caps truncate and say so.
+- **Docs**: `fx-engineering.md` §"Previewing an FX", the route.
+
+### Session 2: one compose pass (backend) — done, `fb8c3421`
+
+**Gate: none.** Best landed before terminology session 5.
 
 - §3.4. Full suites.
 - **Tests**: a beat Sine Wave with a wall-clock Candle Flicker *Within* it on one dimmer composes on
   every pass; a wall-clock FX's cycle length is unchanged by the extra wakes; tick-failure counting and
-  N-shot ends behave per clock as before; the parity test gains a mixed pair.
+  N-shot ends behave per clock as before; once 1a has landed, the parity test gains a mixed pair.
 - **Docs**: the corrected §"Beat ↔ Wall-Clock interaction"; `FU-PERF-FRAME-TXN-UNIFY` to Completed.
 
-### Session 3: apply order and Stack (backend + frontend types)
+### Session 3a: the band and Stack (backend) — done, `4e01c253`
 
-- §3.5 and §3.6: the band, `localRank`, `programmer.moveFx`, `stack: true`, `look_effects.sort_order`,
-  Record's order, `formatVersion` 39. The client's types and the store's mutation; no UI.
+**Gate: none.** Best landed before terminology session 5.
+
+- §3.5's band, `localRank` and `programmer.moveFx`; §3.6's `stack: true` and `fx/FxStacking.kt`.
+  Nothing stored. The client's types and the store's mutation for the frame and the field; no UI.
 - **Tests**: a Local FX sits above a layer FX on the same key; a move re-ranks and a second move
-  undoes it; Record writes both homes' order and a Look spawns in it; the v38 archive imports in file
-  order; `stack: true` stops nothing and starts on the family table; MCP schemas.
-- **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", §"Effect iteration
-  order" (which still says `id` breaks ties; it is `composeOrder`), `sync-engineering.md` §"Version 39".
+  undoes it; a non-Local FX's move is `FX_MOVE_NOT_LOCAL`; `stack: true` stops nothing and starts on
+  the family table. No MCP schema: no tool presses a bare FX (§3.6).
+- **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", with the behaviour
+  change, and §"Effect iteration order" (which still says `id` breaks ties; it is `composeOrder`).
+
+### Session 3b: apply order kept (backend)
+
+**Gate: terminology session 4.** Needs 3a.
+
+- §3.5's stored half: the Look FX table's `sort_order`, Record's order into both homes, the spawners'
+  order, `formatVersion` 39. Full suites.
+- **Tests**: Record writes both homes' order and a Look spawns in it; the v38 archive imports in file
+  order; `RichProjectFixture` carries a non-default order through the round trip and the clone.
+- **Docs**: `sync-engineering.md` §"Version 39".
 
 ### Session 4: the editor's shell (frontend)
+
+**Gate: terminology session 5, and session 6 done or not started.** Needs 1b and 3a.
 
 - §4.1–4.3 and §4.5 without the graph: *Selection · All*, the list with lanes, cards, drag, *Underneath*
   (from `programmer.keyStack`'s top value per lane), *+ FX* with *Replace · Stack*, Solo as a mark, the
@@ -382,6 +451,8 @@ After the terminology plan's seven. Sessions 1–3 can land in any order; 4 need
 
 ### Session 5: the graph (frontend)
 
+**Gate: as session 4.** Needs 4.
+
 - §4.4: one canvas per lane, drawn from the answer; rows, marks, hover, *Result · This FX*, *Colour as
   seen*, the window, the playhead and its resync, the path panel, heat-map rows, refetching per §3.3.
 - **Tests**: a fixture answer draws the expected pixels at three sample points per lane; a request is
@@ -390,11 +461,15 @@ After the terminology plan's seven. Sessions 1–3 can land in any order; 4 need
 
 ### Session 6: Shapes, the ladder, handles and Match (frontend)
 
+**Gate: as session 4.** Needs 5.
+
 - §4.5's Shapes, ladder, Match and hover lights; §4.4's handles.
 - **Tests**: each Shape writes its fields in one `updateFx` and lights from them; a handle's drag
   writes through the floor and its release lands; Match copies once.
 
 ### Session 7: the other hosts (frontend)
+
+**Gate: as session 4.** Needs 5.
 
 - §4.6, and the phone arm of §4.2.
 - **Tests**: the palette editor's strip asks with a draft and redraws on a field change; the tray's ⤢
@@ -427,12 +502,13 @@ order. Archives below v39 read FX in file order.
 
 At the desk on Sleeping Beauty:
 
-- **Session 1.** In Swagger, preview a Sine Wave over a group with Spread 50 % and Segments 2; the
+- **Session 1a.** Nothing at the desk changes; `FxSamplerParityTest` is the check.
+- **Session 1b.** In Swagger, preview a Sine Wave over a group with Spread 50 % and Segments 2; the
   answer's start offsets pair neighbours; the stage does not move.
 - **Session 2.** Sine Wave and Candle Flicker *Within* it on one head: the head flickers inside the
   wave, steadily, never one or the other.
-- **Session 3.** Press a palette with an FX, then a Local Pulse on the same heads: the Pulse wins.
-  Record a Look; press it; the order holds.
+- **Session 3a.** Press a palette with an FX, then a Local Pulse on the same heads: the Pulse wins.
+- **Session 3b.** Stack two Local FX, reorder them, Record a Look; press it; the order holds.
 - **Session 4.** Select Hex 1–8 with a Sine Wave and a Strobe stacked *Within*; the list shows both,
   top first; drag the Sine Wave above; the stage changes.
 - **Session 5.** The graph's playhead crosses Hex 1's peak as Hex 1 peaks on the rig.

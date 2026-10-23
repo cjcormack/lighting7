@@ -607,19 +607,20 @@ two disagree on — the keys it wins, and those a higher layer blends over it �
 `WEB` value already holds, or a raw channel slot overrides, is left alone (the write never absorbs
 the sideband). A Look's scenery passes into the programmer's own scenery, under what that already
 holds and where no higher Look layer sets it (`ProgrammerScenery.holdUnder`). Its effects lose their
-layer key and source and run on, phase and band priority kept, as Local effects
+layer key and source and run on, phase kept, as Local effects at the bottom of the Local FX
 (`FxEngine.detachProgrammerLayerEffects`; a spent N-shot is removed, since only a layer keeps one),
 in the same step as the layer comes off, so no concurrent recook retracts them. The recook that
 follows moves nothing the `WEB` slots hold, and nothing is republished for them: each already
-showed its value. One thing does move: a stomping layer's suppression of
-the effects under it ends with it.
+showed its value. Two things do move: a stomping layer's suppression of the effects under it ends
+with it, and a detached effect now applies above every layer's (FX editor plan D5, agreed with Chris
+in session 3a), so one a higher layer's effect beat on a key now wins there.
 
 **Apply as values** is the same end with no layer ever on the stack. For a palette it is
 `POST /palettes/{id}/apply`, described above. For a Look it is `POST /looks/{id}/apply`
 `{targets, families?, fadeMs?}` (`ProgrammerLayerStack.applyAsValues`): the Look cooked whole on top
 of the stack as the layer a press would add — the request's targets and mask read and ignored
 (absolute-looks plan P6) — the keys it wins written as `WEB` values at their own fades (or `fadeMs`),
-its effects started as Local effects at the rank that layer would have had, its scenery handed to the
+its effects started as Local effects on top of their lanes (FX editor plan §3.5), its scenery handed to the
 programmer's own. Not a toggle. Both Detach and Apply as values write each value under the group its
 row names (`sourceGroup`), else the group a palette layer names it through.
 

@@ -283,7 +283,7 @@ Every flush reads and resets what it reports, and sends nothing for a window tha
 |---|---|---|---|
 | `artnet.frame.lateness` | histogram | `ArtNetController`'s loop, at the top of each frame: how far past its deadline it started | `universe` (`subnet:universe`) |
 | `artnet.frame.overrun` | count | the same loop, each time it fell more than a whole interval behind and re-based its deadline | `universe` |
-| `fx.tick.duration` | histogram | `FxEngine`'s two loops, around each pass (an idle pass included) | `loop` (`beat`, `wall_clock`) |
+| `fx.tick.duration` | histogram | `FxEngine`'s compose pass, around each pass (an idle pass included) | `loop`: `beat` when a master's tick woke it (alone or with the ticker), else `wall_clock` |
 | `fx.active_effects` | gauge | the live show's `FxEngine.activeEffectCount` | — |
 | `ws.clients` | gauge | sockets past the warm-up gate | — |
 | `ws.outbound.dropped` | count | frames a socket never sent, see below | `type` (the frame's `@SerialName`), `reason` (`conflated`, `closed`) |
@@ -312,7 +312,7 @@ beans emit nothing, and the metric would be silent on every packaged install.
 
 The org is on the free plan, so what each window sends is worth knowing. On an idle desk the steady
 state per window is 3 gauges, plus 3 samples for each histogram that recorded anything:
-`3 × universes` for ArtNet, 6 for the two FX loops (both tick idle), usually 3 for the database and
+`3 × universes` for ArtNet, 6 for `fx.tick.duration`'s two `loop` labels (both record idle passes), usually 3 for the database and
 3 for GC. With two universes that is about 21 samples a window, or about 60,000 a day.
 An auto-sync run is one more count in the window it lands in: about 1,440 a day at one a minute.
 Counts and events cost nothing in a window without them.

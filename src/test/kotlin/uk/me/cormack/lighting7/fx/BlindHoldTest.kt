@@ -129,8 +129,8 @@ class BlindHoldTest {
 
     @Test
     fun `a held wall-clock effect keeps its place in real time`() {
-        // The wall-clock loop: a wall-clock effect, and a beat effect on Seconds (venue-visit plan
-        // S15), which runs on this loop too. Its clock advances on every pass, painted or held.
+        // A wall-clock effect, and a beat effect on Seconds (venue-visit plan S15), which runs on the
+        // wall clock too. Its clock advances on every pass, painted or held.
         val rig = newRig()
         val held = dimmerEffect("hex-a", FxEngine.PROGRAMMER_FX_PRIORITY_BASE).apply { timingSource = TimingSource.WALL_CLOCK }
         val twin = dimmerEffect("hex-b", 1_000_001, cueId = 42).apply { timingSource = TimingSource.WALL_CLOCK }

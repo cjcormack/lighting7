@@ -396,7 +396,7 @@ data class SplitMember(
  * [FxInstance.dynamicsRef]), which is what makes a concurrent [FxInstance.pause] unlosable.
  */
 data class FxDynamics(
-    /** Whether the effect is painting. Gates the whole per-effect pass on both tick loops. */
+    /** Whether the effect is painting. Gates the whole per-effect work of a compose pass. */
     val isRunning: Boolean = true,
 
     /** Phase offset for syncing multiple effects (e.g., for chase effects). */
@@ -807,9 +807,9 @@ class FxInstance internal constructor(
 
     /**
      * Where an N-shot's count began ([FxDynamics.nShot], D9): the master tick of a beat effect's first
-     * pass with a count, or [UNANCHORED]. Owned by the tick loop the instance runs on, so plain
-     * fields; set again from the next pass whenever the count is cleared, so a count given to a
-     * running effect runs from then. Carried across `FxEngine.updateEffect`'s swap.
+     * pass with a count, or [UNANCHORED]. Owned by the engine's compose pass, so plain fields; set
+     * again from the next pass whenever the count is cleared, so a count given to a running effect
+     * runs from then. Carried across `FxEngine.updateEffect`'s swap.
      */
     var nShotStartTick: Long = UNANCHORED
 
@@ -818,13 +818,13 @@ class FxInstance internal constructor(
 
     /**
      * Set by the phase functions on a pass when some member of an N-shot is still to finish its runs
-     * (running, or waiting for its offset to come round). The tick loop clears it and [nShotEvaluated]
+     * (running, or waiting for its offset to come round). The compose pass clears it and [nShotEvaluated]
      * before the effect's pass and reads them after: evaluated but nothing pending means the clock
-     * has run N cycles past the largest member offset, and the effect is spent. Tick-loop owned.
+     * has run N cycles past the largest member offset, and the effect is spent. Owned by the compose pass.
      */
     var nShotPending: Boolean = false
 
-    /** Set when a phase was computed for an N-shot on this pass; see [nShotPending]. Tick-loop owned. */
+    /** Set when a phase was computed for an N-shot on this pass; see [nShotPending]. Owned by the compose pass. */
     var nShotEvaluated: Boolean = false
 
     /**
@@ -837,7 +837,7 @@ class FxInstance internal constructor(
 
     /**
      * Most recently calculated phase, for state reporting — the reverse direction from
-     * [dynamics]: the tick loops write it, request threads read it. Written once per effect
+     * [dynamics]: the compose pass writes it, request threads read it. Written once per effect
      * per pass — the single-target calculators store it themselves, and for member
      * expansions `FxEngine` stores the last member's phase after its loop — so the
      * `@Volatile` store stays off the per-member path.
@@ -846,12 +846,19 @@ class FxInstance internal constructor(
     var lastPhase: Double = 0.0
 
     /**
-     * Length of the current run of consecutive tick passes this effect threw out of. Owned by
-     * the tick loops — an instance is on the beat path or the wall-clock path, never both — so
-     * it needs no volatile publication, and nothing else reads it.
+     * Length of the current run of consecutive passes, woken by this effect's own clock, that it
+     * threw out of. Owned by the engine's compose pass, which runs one at a time, so it needs no
+     * volatile publication, and nothing else reads it.
      * `FxEngine.noteTickFailure` auto-pauses the effect once the run is long enough.
      */
     var consecutiveTickFailures: Int = 0
+
+    /**
+     * A [StatefulEffect]'s last output per painted key, which a pass its own clock did not wake
+     * repaints instead of stepping it (`FxEngine.calculateEffectOutput`). Pass-owned; null for any
+     * other effect.
+     */
+    internal val statefulOutputs: HashMap<String, FxOutput>? = if (effect is StatefulEffect) HashMap() else null
 
     /** Timestamp when the effect started (for timing calculations) */
     var startedAtMs: Long = System.currentTimeMillis()
@@ -861,7 +868,7 @@ class FxInstance internal constructor(
 
     /**
      * What this effect resolves to against the fixture register — the group/element expansion
-     * and its key lists, cached so the tick loops stop re-deriving them per effect per tick.
+     * and its key lists, cached so the compose pass stops re-deriving them per effect per tick.
      *
      * Owned by `FxEngine.expansionFor`, which is also the only thing that should read it: the
      * validity check — against [FxTargetExpansion.structureVersion] and [elementFilter], and
@@ -878,7 +885,7 @@ class FxInstance internal constructor(
 
     /**
      * The per-member phase offsets and [EffectContext]s derived from [expansion] under the
-     * current [FxDynamics.distributionStrategy], cached so the tick loops stop rebuilding a
+     * current [FxDynamics.distributionStrategy], cached so the compose pass stops rebuilding a
      * synthetic member and a context per element per tick.
      *
      * Owned by `FxEngine.plansFor`, which is also the only thing that should read it. It
@@ -892,23 +899,21 @@ class FxInstance internal constructor(
     /**
      * Timing source for this effect.
      *
-     * BEAT effects are processed on the Master Clock's BPM-synced tick loop.
-     * WALL_CLOCK effects are processed on a separate fixed-interval loop (50Hz),
-     * independent of BPM. Suitable for ambient/atmospheric effects that should
-     * not be tied to the musical beat grid.
+     * A BEAT effect's phase comes from its speed master's ticks; a WALL_CLOCK effect's from real
+     * time, independent of BPM — for ambient/atmospheric effects that should not be tied to the
+     * musical beat grid. Both are painted by the same compose pass.
      *
      * Deliberately a plain `var`, not part of [dynamics]: every writer runs before the
      * instance reaches `FxEngine`'s active map (the add paths, and `updateEffect`'s
-     * not-yet-published swap instance), and the map insert safely publishes it. Which loop
-     * processes the effect is decided by `rebuildSortedSnapshots`' partition, not by
-     * per-tick reads — so don't add a post-publication write here: it would do nothing
-     * until an unrelated rebuild.
+     * not-yet-published swap instance), and the map insert safely publishes it. The compose pass
+     * reads it on every pass, so a post-publication write would race the pass on an unpublished
+     * field — don't add one; swap the instance instead.
      */
     var timingSource: TimingSource = TimingSource.BEAT
 
     /**
      * A **beat** effect on *Seconds* (venue-visit plan D7): its own cycle, [FxTiming.beatDivision]
-     * read as seconds, with no master. Such an instance runs on the wall-clock loop
+     * read as seconds, with no master. Such an instance runs on the wall clock
      * ([timingSource] is `WALL_CLOCK`) with both masters null, which is exactly an unscaled
      * wall-clock effect — the engine has nothing new to do for it.
      *
@@ -1144,7 +1149,7 @@ class FxInstance internal constructor(
      * Phase derives from *this* rather than from `now - startedAtMs` so that changing a rate
      * master mid-cycle is continuous: the cycle length stays fixed and only the rate of
      * accumulation moves, where dividing a fixed elapsed time by a changing cycle length
-     * made the phase jump. Advanced once per wall-clock pass by [advanceWallClock].
+     * made the phase jump. Advanced once per compose pass by [advanceWallClock].
      */
     @Volatile
     var accumulatedScaledMs: Double = 0.0
@@ -1153,7 +1158,7 @@ class FxInstance internal constructor(
      * Advance [accumulatedScaledMs] by one pass of [deltaMs] at [rateScale]
      * (`master.bpm / 120`, 1.0 when no rate master is assigned).
      *
-     * Called once per effect per wall-clock pass, before any phase is read, so every phase
+     * Called once per effect per compose pass, before any phase is read, so every phase
      * call within a pass sees one coherent value.
      */
     fun advanceWallClock(deltaMs: Long, rateScale: Double = 1.0) {

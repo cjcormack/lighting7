@@ -364,9 +364,9 @@ class Show(
 
         // Start the FX engine after fixtures are loaded.
         //
-        // GlobalScope is accepted here for now, deliberately: the engine's two loops live as
-        // long as the show does, [fxEngine.stop] cancels them by hand, and it catches per pass
-        // so neither loop can die on its own. The cost of the shortcut is that a Show which is
+        // GlobalScope is accepted here for now, deliberately: the engine's loops live as long as
+        // the show does, [fxEngine.stop] cancels them by hand, and the pass loop catches per pass
+        // so it cannot die on its own. The cost of the shortcut is that a Show which is
         // dropped without close() leaks its loops, and there is no parent to cancel the tree in
         // one move — the same bargain the other long-lived subsystems here have struck
         // (ArtNetController's transmit loop, the MIDI registry). If any of them grows a real
@@ -418,7 +418,9 @@ class Show(
                 if (effects.size < carry.effects.size) {
                     logger.info("Reload dropped {} effect(s) whose target is no longer patched", carry.effects.size - effects.size)
                 }
-                if (effects.isNotEmpty()) fxEngine.addEffects(effects)
+                // In apply order, so each Local FX re-ranked on the way in lands where it stood in its lane.
+                val applyOrder = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+                if (effects.isNotEmpty()) fxEngine.addEffects(effects.sortedWith(applyOrder))
             }
 
             // Before the GOs, so the effects they bring back arrive at their stack's size. A stack the

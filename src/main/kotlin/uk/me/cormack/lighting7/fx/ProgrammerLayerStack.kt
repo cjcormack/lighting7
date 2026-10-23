@@ -587,11 +587,12 @@ class ProgrammerLayerStack(
      * that owner, for when it lets go; a key the operator's own `WEB` value already holds, or a raw
      * channel slot overrides, is left as it is. A Look's scenery passes to the programmer's own
      * scenery ([ProgrammerScenery.holdUnder]) where no higher Look layer holds it. Its effects lose
-     * their layer and keep running, phase kept, as Local effects (a spent N-shot is removed), and
-     * the layer comes off; the recook moves nothing the `WEB` slots now hold.
+     * their layer and keep running, phase kept, as Local effects at the bottom of the Local FX (a
+     * spent N-shot is removed), and the layer comes off; the recook moves nothing the `WEB` slots now hold.
      *
-     * One thing still moves: a stomping layer's suppression of the effects under it ends with it.
-     * Returns null when no such layer is on the stack.
+     * Two things still move: a stomping layer's suppression of the effects under it ends with it, and
+     * a detached effect now applies above every layer's (FX editor plan D5), so one a higher layer's
+     * effect beat on a key now wins there. Returns null when no such layer is on the stack.
      */
     fun detach(layerId: Int): DetachOutcome? {
         val layers = store.layers
@@ -664,7 +665,7 @@ class ProgrammerLayerStack(
      * with no layer ever on the stack. The Look is cooked on top of the stack as the layer a press
      * would add; the keys it wins are written as `WEB` values (at [fadeMs] when given, else each
      * row's own fade, as a press's arrival is) under the group each row names, its effects start as
-     * Local effects at the rank that layer would have had, and its scenery passes to the
+     * Local effects on top of their lanes (FX editor plan §3.5), and its scenery passes to the
      * programmer's own. A Look's [targets] are none (D1).
      */
     fun applyAsValues(
@@ -696,10 +697,11 @@ class ProgrammerLayerStack(
         }
         val eng = engine()
         for ((fade, writes) in byFade) eng.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fade)
-        val priority = priorityFor(cooked.ranks[layer.layerId] ?: 0)
         val instances = cooked.effects.mapNotNull { (cookLayer, effect, target) ->
             if (cookLayer.layerId != layer.layerId) return@mapNotNull null
-            spawn(cookLayer, effect, target, beatDivisionOverride)?.also { it.priority = priority }
+            spawn(cookLayer, effect, target, beatDivisionOverride)?.also {
+                it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
+            }
         }
         val effectIds = eng.addEffects(instances)
         if (source.kind == LayerSourceKind.LOOK) {

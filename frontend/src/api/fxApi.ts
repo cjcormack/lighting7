@@ -141,11 +141,12 @@ export interface UpdateFxRequest {
  * A refused `updateFx`, unicast to the socket that sent it (fixture-fx-sheets plan W3).
  * `FX_NOT_FOUND` for an effect that is not running, `FX_UPDATE_REFUSED` for a field the desk's
  * strict policy refuses — `PUT /fx/{id}`'s 404 and 400. Keyed by the effect, so a live drag that
- * keeps being refused can replace one toast rather than stack one per frame.
+ * keeps being refused can replace one toast rather than stack one per frame. A refused
+ * `programmer.moveFx` is `FX_NOT_FOUND` or `FX_MOVE_NOT_LOCAL`, keyed by the FX it moved.
  */
 export interface FxError {
   effectId: number
-  code: 'FX_NOT_FOUND' | 'FX_UPDATE_REFUSED' | string
+  code: 'FX_NOT_FOUND' | 'FX_UPDATE_REFUSED' | 'FX_MOVE_NOT_LOCAL' | string
   message: string
 }
 
@@ -167,6 +168,13 @@ export interface FxApi {
    * toasts and answers false.
    */
   updateFx(effectId: number, update: UpdateFxRequest): boolean
+  /**
+   * `programmer.moveFx` (FX editor plan §3.5): re-rank Local FX [effectId] directly below [above]'s,
+   * or at the bottom of the Local FX for null. Answered `fxChanged` UPDATED for each FX whose
+   * priority moved, or an `fxError` (`FX_MOVE_NOT_LOCAL` for an FX that is not Local). An operator
+   * gesture, as [updateFx] is.
+   */
+  moveFx(effectId: number, above: number | null): boolean
   /** Every `fxError` this socket is sent — `store/fixtureFx.ts` toasts each, keyed per effect. */
   subscribeToErrors(fn: (error: FxError) => void): Subscription
 }
@@ -218,6 +226,10 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
 
     updateFx(effectId: number, update: UpdateFxRequest): boolean {
       return sendGesture(conn, { type: 'updateFx', effectId, ...update })
+    },
+
+    moveFx(effectId: number, above: number | null): boolean {
+      return sendGesture(conn, { type: 'programmer.moveFx', effectId, above })
     },
 
     subscribeToErrors(fn: (error: FxError) => void): Subscription {
