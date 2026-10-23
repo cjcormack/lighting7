@@ -3,7 +3,9 @@ package uk.me.cormack.lighting7.plugins
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.EffectDto
+import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.models.CueTargetDto
+import uk.me.cormack.lighting7.routes.CODE_FX_MOVE_NOT_LOCAL
 import uk.me.cormack.lighting7.routes.CODE_FX_NOT_FOUND
 import uk.me.cormack.lighting7.routes.CODE_FX_UPDATE_REFUSED
 import uk.me.cormack.lighting7.routes.EffectUpdateOutcome
@@ -102,6 +104,19 @@ data class UpdateFxInMessage(
     )
 }
 
+/**
+ * Re-rank a Local FX in apply order (FX editor plan §3.5): directly below [above]'s FX, or at the
+ * bottom of the Local FX when [above] is null. Answered `fxChanged(UPDATED)` for each FX whose
+ * priority moved, or `fxError` — `FX_MOVE_NOT_LOCAL` when either FX is not Local, `FX_NOT_FOUND` when
+ * either is not running. An operator gesture, so `FU-AUTH-WS-PER-MESSAGE` does not fire.
+ */
+@Serializable
+@SerialName("programmer.moveFx")
+data class ProgrammerMoveFxInMessage(
+    val effectId: Long,
+    val above: Long? = null,
+) : FxInMessage()
+
 // ─── Outbound ───────────────────────────────────────────────────────────
 
 @Serializable
@@ -139,7 +154,8 @@ data class FxChangedOutMessage(
  * not running, `FX_UPDATE_REFUSED` for a field the strict policy refuses (an unknown blend, an
  * unknown effect type, a malformed master uuid), `FX_SPLIT_LAYER_EFFECT` / `FX_SPLIT_NOT_LOCAL` for a
  * split of an effect that is not Local — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect
- * so a client can replace one toast per effect rather than stack one per drag frame.
+ * so a client can replace one toast per effect rather than stack one per drag frame. A refused
+ * `programmer.moveFx` is keyed by the FX it moved: `FX_NOT_FOUND` or `FX_MOVE_NOT_LOCAL`.
  */
 @Serializable
 @SerialName("fxError")
@@ -183,6 +199,19 @@ suspend fun handleFx(scope: SocketScope, message: FxInMessage) {
             )
             is EffectUpdateOutcome.Refused -> scope.send(
                 FxErrorOutMessage(message.effectId, CODE_FX_UPDATE_REFUSED, outcome.message),
+            )
+        }
+        is ProgrammerMoveFxInMessage -> when (val outcome = engine.moveLocalEffect(message.effectId, message.above)) {
+            is FxEngine.LocalMoveOutcome.Moved ->
+                for (id in outcome.changed) scope.send(FxChangedOutMessage(FxChangeType.UPDATED, id))
+            is FxEngine.LocalMoveOutcome.NotFound -> scope.send(
+                FxErrorOutMessage(message.effectId, CODE_FX_NOT_FOUND, "Effect ${outcome.effectId} is not running"),
+            )
+            is FxEngine.LocalMoveOutcome.NotLocal -> scope.send(
+                FxErrorOutMessage(
+                    message.effectId, CODE_FX_MOVE_NOT_LOCAL,
+                    "Effect ${outcome.effectId} is not a Local FX — only Local FX are re-ranked",
+                ),
             )
         }
     }

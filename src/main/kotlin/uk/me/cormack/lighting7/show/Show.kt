@@ -418,7 +418,9 @@ class Show(
                 if (effects.size < carry.effects.size) {
                     logger.info("Reload dropped {} effect(s) whose target is no longer patched", carry.effects.size - effects.size)
                 }
-                if (effects.isNotEmpty()) fxEngine.addEffects(effects)
+                // In apply order, so each Local FX re-ranked on the way in lands where it stood in its lane.
+                val applyOrder = compareBy<FxInstance>({ it.priority }, { it.composeOrder }, { it.id })
+                if (effects.isNotEmpty()) fxEngine.addEffects(effects.sortedWith(applyOrder))
             }
 
             // Before the GOs, so the effects they bring back arrive at their stack's size. A stack the

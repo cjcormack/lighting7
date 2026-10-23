@@ -339,6 +339,9 @@ internal const val CODE_FX_SPLIT_LAYER_EFFECT = "FX_SPLIT_LAYER_EFFECT"
 /** A strict-subset edit named a cue's effect, or a manual one outside the programmer band: only a Local effect splits (409). */
 internal const val CODE_FX_SPLIT_NOT_LOCAL = "FX_SPLIT_NOT_LOCAL"
 
+/** `programmer.moveFx` named an FX that is not Local, as the moved FX or as `above` (FX editor plan §3.5). */
+internal const val CODE_FX_MOVE_NOT_LOCAL = "FX_MOVE_NOT_LOCAL"
+
 /** What [applyEffectUpdate] did. */
 internal sealed interface EffectUpdateOutcome {
     data class Updated(val instance: FxInstance) : EffectUpdateOutcome

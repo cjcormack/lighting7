@@ -34,6 +34,15 @@ export function toastFxError(error: FxError) {
 // nothing. Module scope, beside the subscription above (form 1).
 lightingApi.fx.subscribeToErrors(toastFxError)
 
+/**
+ * Re-rank a Local FX in apply order (`programmer.moveFx`, FX editor plan §3.5): directly below
+ * [above]'s FX, or at the bottom of the Local FX for null. The answer is the ordinary `fxChanged`,
+ * which refetches the list above, or an `fxError` toasted by [toastFxError]; the verdict is the send's.
+ */
+export function moveLocalFx(effectId: number, above: number | null): boolean {
+  return lightingApi.fx.moveFx(effectId, above)
+}
+
 // …and `fxDefinitionListChanged` for the effect *library* — the vocabulary an effect is chosen
 // from, which changes for entirely unrelated reasons to the running set above.
 //
@@ -180,7 +189,10 @@ export interface AddFixtureFxRequest {
  * the programmer's, so neither `fixtureKey` nor `programmerOwned` is sent.
  */
 export interface ProgrammerEffectRequest
-  extends Omit<AddFixtureFxRequest, 'fixtureKey' | 'targets' | 'programmerOwned' | 'beatDivision' | 'startOnBeat'> {
+  extends Omit<
+    AddFixtureFxRequest,
+    'fixtureKey' | 'targets' | 'programmerOwned' | 'beatDivision' | 'startOnBeat' | 'blendMode'
+  > {
   projectId: number
   /** The selection, in the order the effect spreads over it. */
   targets: CueTarget[]
@@ -190,11 +202,20 @@ export interface ProgrammerEffectRequest
   beatDivision?: number
   startOnBeat?: boolean
   elementMode?: string
+  /** Override when absent, or the family's stacking start under [stack]. */
+  blendMode?: BlendMode
+  /**
+   * Add the effect on top of the Local effects on the selection, stopping and narrowing none
+   * (FX editor plan D6). An absent blend or `size` starts on the family's row: Intensity *Within*,
+   * Position *Around*, Colour and Beam *Replace* at 50 %.
+   */
+  stack?: boolean
 }
 
 /**
  * The press's answer: the new effect, the Local effects of its family it stopped (every head they
  * painted was selected), and those it narrowed — gone, their unselected heads now run by `into`.
+ * Both empty for a `stack` press.
  */
 export interface ProgrammerEffectResponse {
   effectId: number

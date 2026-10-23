@@ -228,7 +228,9 @@ The bare FX press gains `stack: true`: the FX is added over the selection, no ot
 stopped or narrowed, and an absent blend or Amount takes the family's stacking start
 (`fx/FxStacking.kt`, one table: Intensity `MULTIPLY` at 100 %, Position `ADDITIVE` with both centres
 at 128 at 100 %, Colour and Beam `OVERRIDE` at 50 %). The answer is `{effectId, stopped: 0,
-narrowed: 0}`. MCP's FX tools take the same `stack` field.
+narrowed: 0}`. No MCP tool presses a bare FX (`apply_palette`, `clear_effects` and the stored FX on
+`create_look` and `create_cue` are the FX tools), so none takes `stack`; agreed with Chris during
+session 3a.
 
 ## 4. UX
 
@@ -422,7 +424,7 @@ Why each gate is where it is:
   Nothing stored. The client's types and the store's mutation for the frame and the field; no UI.
 - **Tests**: a Local FX sits above a layer FX on the same key; a move re-ranks and a second move
   undoes it; a non-Local FX's move is `FX_MOVE_NOT_LOCAL`; `stack: true` stops nothing and starts on
-  the family table; MCP schemas.
+  the family table. No MCP schema: no tool presses a bare FX (§3.6).
 - **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", with the behaviour
   change, and §"Effect iteration order" (which still says `id` breaks ties; it is `composeOrder`).
 
