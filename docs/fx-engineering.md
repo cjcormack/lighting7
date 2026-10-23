@@ -87,7 +87,7 @@ Two nullable per-master settings, added for the busk view (see
 `docs/plans/completed/busking-view-plan.md` §2, decisions D1–D7):
 
 - **`usage`** (`dimmer` / `colour` / `position` / `beam` — the effect library's own `category`
-  vocabulary, pinned by `SpeedMasterUsageVocabularyTest`) names the master an *apply-time
+  vocabulary, pinned by `GlossaryVocabularyTest`) names the master an *apply-time
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
   meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
@@ -364,7 +364,7 @@ palette's write boundary (`validateTemplateEffect`) holds both: Palette Steps ne
 palettes or more, all readable, and its category must be their family's; Slot Steps needs a
 `propertyName` and two slots or more. Its master is stamped by that family's usage (the picker, the
 palette editor and the MCP tools' `usageMasterFor`), so `palette` is no usage
-(`SpeedMasterUsageVocabularyTest`). Record files a running step effect by `recordedEffectCategory`:
+(`GlossaryVocabularyTest`). Record files a running step effect by `recordedEffectCategory`:
 Slot Steps as `beam`, Palette Steps as its palettes' family read off the property it drives (a strobe
 in an Intensity palette is `dimmer`, not `controls`).
 

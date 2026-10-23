@@ -4,6 +4,8 @@ A professional stage/event lighting control system built in Kotlin using Ktor. C
 
 @docs/claude/working-rules.md
 
+Agent sessions use the words in [docs/glossary.md](docs/glossary.md). A `planned` row's old name stays in code until the session that renames it.
+
 ## Tech Stack
 
 - **Kotlin 2.4.10** on JVM toolchain 24 (runs on the LTS JDK 25)
@@ -982,6 +984,7 @@ Add routes in `routes/` package using Ktor Resources for type-safe routing.
 
 For deeper technical details, see the docs in `docs/`:
 
+- [Glossary](docs/glossary.md) - One word per idea, its old names and MagicQ's word; `GlossaryVocabularyTest` and `glossary.test.ts` hold the label tables to its `done` rows
 - [API Conventions](docs/api-conventions.md) - Kebab-case paths, plural collections with the list GET on the collection, one spelling for vocabulary enumerations, `?force=true` as the guard-override, and why unbounded lists are deliberate at desk scale
 - [Testing](docs/testing-engineering.md) - What makes the suite ~1 min rather than ~14 (the four changes, each load-bearing), the warm/cold script-cache regimes, why `build/test-data` is pinned, the tests that assert real elapsed time, and the order-dependence detector
 - [DMX Subsystem](docs/dmx-engineering.md) - Low-level DMX control architecture, ArtNet implementation, fading, transactions

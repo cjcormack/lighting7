@@ -156,7 +156,7 @@ const val DEFAULT_SPEED_MASTER_COUNT = 4
  * has no tempo), and so is `composite` (spans families); effects in either category route to
  * master 1 via a null `speedMasterUuid`. So is `palette`, Palette Steps' own, which names no family:
  * a Palette Steps is stamped by its palettes' family's usage instead (effects plan §3.6). Pinned
- * against the shipped `.fx.kts` files by `SpeedMasterUsageVocabularyTest`.
+ * against the shipped `.fx.kts` files by `GlossaryVocabularyTest`.
  */
 val SPEED_MASTER_USAGES: Set<String> = setOf("dimmer", "colour", "position", "beam")
 

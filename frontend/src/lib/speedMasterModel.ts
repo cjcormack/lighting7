@@ -25,7 +25,7 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
  * master is *the* default for it) and `palette` (Palette Steps' own, which names no family — it is
  * stamped by its palettes' family's usage instead). Effects in the first two land on master 1, which
  * is what an unmatched category is defined to do. `speedMasterModel.test.ts` pins this against
- * `EFFECT_CATEGORY_INFO`, and lighting7's `SpeedMasterUsageVocabularyTest` pins the server's
+ * `EFFECT_CATEGORY_INFO`, and lighting7's `GlossaryVocabularyTest` pins the server's
  * copy against the shipped `.fx.kts` files — the two ends of one list.
  */
 export const SPEED_MASTER_USAGES = ['dimmer', 'colour', 'position', 'beam'] as const
