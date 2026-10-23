@@ -225,9 +225,9 @@ a { color: var(--accent); }
   <h1>FX editor</h1>
   <p class="lede">The FX on a selection, <b>seen together and seen over time</b>. The programmer's FX tab becomes a list of every FX on the selected heads, by family and in the order they apply; a graph of what each head and element will do; and the live editor beside them.</p>
   <div class="stats">
-    <span class="pill fx">After the terminology plan</span>
+    <span class="pill fx">Gated on the terminology plan</span>
     <span class="pill">15 decisions</span>
-    <span class="pill">7 sessions</span>
+    <span class="pill">9 sessions, gated</span>
     <span class="pill ask">15 questions answered</span>
   </div>
   <p class="muted" style="font-size:14px">Every word on this page is the terminology plan's: <b>FX</b>, <b>Cycle</b>, <b>Amount</b>, <b>Order</b> (<i>Normal</i>, <i>Centre in</i>…), <b>Segments</b>, <b>Parts</b>, <b>element</b>, <b>attribute</b>, <b>family</b> (<i>Intensity</i> first), <b>Runs</b>, <b>Timing: Per cycle | Per head</b>. The plan is <code>docs/plans/fx-editor-plan.md</code>.</p>
@@ -401,18 +401,21 @@ a { color: var(--accent); }
 <section>
   <div class="head read">
     <div class="eyebrow">Implementation</div>
-    <h2>Seven sessions, after the terminology plan's seven</h2>
+    <h2>Nine sessions, each gated on the terminology plan</h2>
+    <p class="muted">A session starts only when the terminology sessions in its gate are done and on <code>main</code>. Work that adds nothing the terminology plan renames can start now; anything else waits until the names it would use are final.</p>
   </div>
   <div class="scroll"><table>
-    <thead><tr><th>#</th><th>Session</th><th>Side</th><th>Lands</th></tr></thead>
+    <thead><tr><th>#</th><th>Session</th><th>Side</th><th>Gate: terminology on main</th><th>Lands</th></tr></thead>
     <tbody>
-      <tr><td>1</td><td><b>The sampler and the preview route</b></td><td>backend</td><td>Pure phase and blend functions shared with the tick, <code>FxSampler</code>, the route, a parity test.</td></tr>
-      <tr><td>2</td><td><b>One compose pass</b></td><td>backend</td><td>Beat and wall-clock FX fold together; the doc corrected.</td></tr>
-      <tr><td>3</td><td><b>Apply order and Stack</b></td><td>backend + types</td><td>The band, <code>localRank</code>, <code>programmer.moveFx</code>, <code>stack: true</code>, Look FX order, v39.</td></tr>
-      <tr><td>4</td><td><b>The editor's shell</b></td><td>frontend</td><td>Selection · All, the list, + FX with Replace · Stack, the inspector, the widths.</td></tr>
-      <tr><td>5</td><td><b>The graph</b></td><td>frontend</td><td>Lanes, rows, marks, playhead, path panel, refetching.</td></tr>
-      <tr><td>6</td><td><b>Shapes, ladder, handles, Match</b></td><td>frontend</td><td>The simplifiers.</td></tr>
-      <tr><td>7</td><td><b>Other hosts</b></td><td>frontend</td><td>Palette editor, cue FX tab, busk Effects tab, the tray's ⤢, the phone.</td></tr>
+      <tr><td>1a</td><td><b>The sampler</b></td><td>backend</td><td>3</td><td>Pure phase and blend functions shared with the tick, <code>FxSampler</code>, a parity test.</td></tr>
+      <tr><td>1b</td><td><b>The preview route</b></td><td>backend</td><td>5</td><td><code>POST /fx/preview</code> in the wire's final names.</td></tr>
+      <tr><td>2</td><td><b>One compose pass</b></td><td>backend</td><td>none; best before 5</td><td>Beat and wall-clock FX fold together; the doc corrected.</td></tr>
+      <tr><td>3a</td><td><b>The band and Stack</b></td><td>backend</td><td>none; best before 5</td><td>Local FX above layers, <code>localRank</code>, <code>programmer.moveFx</code>, <code>stack: true</code>.</td></tr>
+      <tr><td>3b</td><td><b>Apply order kept</b></td><td>backend</td><td>4</td><td>Look FX order, Record keeps it, v39.</td></tr>
+      <tr><td>4</td><td><b>The editor's shell</b></td><td>frontend</td><td>5, and 6 done or not started</td><td>Selection · All, the list, + FX with Replace · Stack, the inspector.</td></tr>
+      <tr><td>5</td><td><b>The graph</b></td><td>frontend</td><td>as 4</td><td>Lanes, rows, marks, playhead, path panel.</td></tr>
+      <tr><td>6</td><td><b>Shapes, ladder, handles, Match</b></td><td>frontend</td><td>as 4</td><td>The simplifiers.</td></tr>
+      <tr><td>7</td><td><b>Other hosts</b></td><td>frontend</td><td>as 4</td><td>Palette editor, cue FX tab, busk Effects tab, the tray's ⤢, the phone.</td></tr>
     </tbody>
   </table></div>
 </section>
