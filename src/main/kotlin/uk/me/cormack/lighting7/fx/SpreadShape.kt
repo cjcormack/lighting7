@@ -15,7 +15,7 @@ import kotlin.math.min
  *
  * @property spread How much of the cycle the members cover, 0.0–2.0 (0–200 %); 1.0 is today's.
  * @property wings The members split into this many wings, alternate wings mirrored; 1 is none. Only
- *   under an asymmetric Order: Centre out, Edges in and Split are two wings already, so wings under
+ *   under an asymmetric Order: Centre out and Centre in are two wings already, so wings under
  *   them are refused at the write boundary ([EffectSpecCoercion.Strict.spreadProblem]) and ignored if
  *   a stored row holds one anyway.
  * @property blocks This many neighbouring members share one phase; 1 is none.

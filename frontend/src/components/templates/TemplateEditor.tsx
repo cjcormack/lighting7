@@ -37,6 +37,7 @@ import {
 } from '@/store/fixtures'
 import { useTemplateListQuery } from '@/store/templates'
 import {
+  drivenCategoryOf,
   categoryForFamily,
   isPaletteSteps,
   isSlotSteps,
@@ -54,7 +55,7 @@ import {
 import { formatError } from '@/lib/formatError'
 import { FxEffectFields } from '@/components/fx/FxEffectFields'
 import { startingSpec, templateDraftOf, withTemplateDraft, type FxDraft, type FxScope } from '@/components/fx/fxEditorModel'
-import { NEW_EFFECT_DIVISION } from '@/lib/effectTiming'
+import { swappedTiming } from '@/lib/effectTiming'
 import { EditorReadout } from '@/components/editor/EditorReadout'
 import { findEffectEntry } from '@/components/busking/buskingTypes'
 import { useEffectLibraryQuery, type EffectLibraryEntry } from '@/store/fixtureFx'
@@ -229,8 +230,9 @@ export function TemplateEditor({
    * Parameters reset to the new effect's declared defaults rather than carrying over: they are named
    * per effect, so keeping a `colourA` from the last one would be luck rather than intent. The
    * timing fields *do* carry over — a division and a distribution mean the same thing whichever
-   * effect is running, as do size, direction and runs — and the speed master is re-stamped, because it is the family's default
-   * (D8) and the family has not moved.
+   * effect is running, as do size, direction and runs — but for a division or Direction still at the
+   * old effect's own default, which takes the new one's ([swappedTiming]); and the speed master is
+   * re-stamped, because it is the family's default (D8) and the family has not moved.
    */
   const chooseEffect = useCallback(
     (entry: EffectLibraryEntry, extra?: EffectStart) => {
@@ -240,6 +242,9 @@ export function TemplateEditor({
         // would silently become ten beats — the same units trap `effectSpeedLabel` exists for.
         const previousEntry = prev == null ? undefined : findEffectEntry(library, prev.effectType)
         const sameTiming = (previousEntry?.timingSource ?? 'BEAT') === (entry.timingSource ?? 'BEAT')
+        // A new effect is its type's own cycle and Direction (venue-visit plan D16, terminology plan
+        // D24) — four seconds for a wall-clock one.
+        const timing = swappedTiming(prev ?? {}, previousEntry, entry, sameTiming && prev != null)
         // The blend and the parameters are the effect's own **starting spec** — the picker's rule
         // (fixture-fx-sheets plan D16): a movement effect starts *Around* (`ADDITIVE`, its centre
         // pinned at 128), so a Circle pad pressed after a position pad orbits it; anything else
@@ -250,13 +255,12 @@ export function TemplateEditor({
         const seconds = sameTiming && prev?.seconds === true
         // A step effect's start is the controls' (`EffectStart`): Palette Steps is filed under this
         // family with its palettes, Slot Steps names a setting and its first slots.
-        const category = extra?.category ?? entry.category
+        const category = extra?.category ?? drivenCategoryOf(entry)
         return {
           effectType: entry.name,
           category,
           propertyName: extra?.propertyName ?? null,
-          // A new effect is one bar (venue-visit plan D16) — four seconds for a wall-clock one.
-          beatDivision: sameTiming ? (prev?.beatDivision ?? NEW_EFFECT_DIVISION) : NEW_EFFECT_DIVISION,
+          beatDivision: timing.beatDivision,
           blendMode: spec.blendMode,
           distribution: prev?.distribution ?? 'LINEAR',
           phaseOffset: prev?.phaseOffset ?? 0,
@@ -269,10 +273,10 @@ export function TemplateEditor({
           speedMasterUuid: seconds ? null : masterForCategory(category),
           rateSpeedMasterUuid: seconds || !sameTiming ? null : (prev?.rateSpeedMasterUuid ?? null),
           seconds,
-          // Size, direction and runs carry over like the phase: each means the same thing whichever
-          // effect is running (effects plan D2, D5, D9), and the live editor's swap keeps them too.
+          // Size and runs carry over like the phase: each means the same thing whichever effect is
+          // running (effects plan D2, D9), and the live editor's swap keeps them too.
           ...(prev?.size != null ? { size: prev.size } : {}),
-          ...(prev?.direction != null ? { direction: prev.direction } : {}),
+          direction: timing.direction,
           ...(prev?.nShot != null ? { nShot: prev.nShot } : {}),
           // So does the spread's shape (D4): it shapes the heads, whichever effect runs over them.
           ...(prev?.spread != null ? { spread: prev.spread } : {}),
@@ -580,7 +584,7 @@ function EffectControls({
   const offered = useMemo(
     () =>
       (library ?? []).filter((e) =>
-        isPaletteSteps(e.name) ? stepOffer != null : familyForEffectCategory(e.category) === family,
+        isPaletteSteps(e.name) ? stepOffer != null : familyForEffectCategory(drivenCategoryOf(e)) === family,
       ),
     [library, family, stepOffer],
   )

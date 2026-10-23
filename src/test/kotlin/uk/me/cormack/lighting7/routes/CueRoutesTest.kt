@@ -350,7 +350,7 @@ class CueRoutesTest {
                 CueAdHocEffectDto(
                     targetType = "fixture",
                     targetKey = "strobe-1",
-                    effectType = "Strobe",
+                    effectType = "DimmerStrobe",
                     category = "dimmer",
                     propertyName = "dimmer",
                     beatDivision = 0.25,

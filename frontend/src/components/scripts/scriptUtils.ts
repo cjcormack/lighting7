@@ -4,7 +4,6 @@ import {
   AudioWaveform,
   Calculator,
   Database,
-  Layers,
   type LucideIcon,
 } from 'lucide-react'
 import type { ScriptType } from '@/store/scripts'
@@ -15,7 +14,6 @@ export const SCRIPT_TYPE_LABELS: Record<ScriptType, string> = {
   FX_APPLICATION: 'FX Application',
   FX_CALC: 'FX Calc',
   FX_CALC_STATEFUL: 'FX Calc Stateful',
-  FX_CALC_COMPOSITE: 'FX Calc Composite',
 }
 
 export const SCRIPT_TYPE_DESCRIPTIONS: Record<ScriptType, string> = {
@@ -24,7 +22,6 @@ export const SCRIPT_TYPE_DESCRIPTIONS: Record<ScriptType, string> = {
   FX_APPLICATION: 'Applies FX to fixtures. Used by cue triggers to set up and run FX instances on the FX engine.',
   FX_CALC: 'Stateless FX calculation. Receives a phase value (0-1) and parameters, returns output values. Runs every tick.',
   FX_CALC_STATEFUL: 'Stateful FX calculation with a persistent state map. Receives clock ticks and delta time for time-based FX.',
-  FX_CALC_COMPOSITE: 'Composite FX calculation that can combine or layer multiple sub-FX. Receives phase and parameters.',
 }
 
 export const ALL_SCRIPT_TYPES: ScriptType[] = [
@@ -33,7 +30,6 @@ export const ALL_SCRIPT_TYPES: ScriptType[] = [
   'FX_APPLICATION',
   'FX_CALC',
   'FX_CALC_STATEFUL',
-  'FX_CALC_COMPOSITE',
 ]
 
 export const SCRIPT_TYPE_ICONS: Record<ScriptType, LucideIcon> = {
@@ -42,7 +38,6 @@ export const SCRIPT_TYPE_ICONS: Record<ScriptType, LucideIcon> = {
   FX_APPLICATION: AudioWaveform,
   FX_CALC: Calculator,
   FX_CALC_STATEFUL: Database,
-  FX_CALC_COMPOSITE: Layers,
 }
 
 export const SCRIPT_TYPE_TEMPLATES: Record<ScriptType, string> = {
@@ -108,20 +103,6 @@ state["pos"] = pos % 1.0
 
 // Set output
 context.setIntensity(pos.toFloat())
-
-`,
-  FX_CALC_COMPOSITE: `// Composite FX calculation — combine or layer sub-FX
-// Available: phase, context, params
-
-// Layer multiple wave shapes together
-val sine = sin(phase * 2 * PI)
-val triangle = 1 - 4 * abs(phase - 0.5)
-
-// Mix the two shapes using a parameter
-val mix = params.getFloat("mix")
-val combined = sine * (1 - mix) + triangle * mix
-
-context.setIntensity(((combined + 1) / 2).toFloat())
 
 `,
 }

@@ -1,9 +1,9 @@
 // Script types - endpoints are now in projects.ts
 
-export type ScriptType = 'GENERAL' | 'FX_DEFINITION' | 'FX_APPLICATION' | 'FX_CALC' | 'FX_CALC_STATEFUL' | 'FX_CALC_COMPOSITE'
+export type ScriptType = 'GENERAL' | 'FX_DEFINITION' | 'FX_APPLICATION' | 'FX_CALC' | 'FX_CALC_STATEFUL'
 
 /** Editor wrapper types for FX calc scripts (used by FX Library, not regular scripts) */
-export type FxCalcEditorType = 'FX_CALC' | 'FX_CALC_STATEFUL' | 'FX_CALC_COMPOSITE'
+export type FxCalcEditorType = 'FX_CALC' | 'FX_CALC_STATEFUL'
 
 /** All editor types that ScriptEditor supports */
 export type EditorScriptType = ScriptType

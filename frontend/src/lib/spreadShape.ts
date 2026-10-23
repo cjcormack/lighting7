@@ -51,11 +51,11 @@ export function isDefaultShape(shape: SpreadShape): boolean {
 }
 
 /**
- * The Orders that are two mirrored wings already — Centre out, Edges in and Split — under which Wings
+ * The Orders that are two mirrored wings already — Centre out and Centre in — under which Wings
  * has nothing to add: the desk refuses it, and the editor hides the field (§3.3 step 3).
  */
 export function isMirroredOrder(order: string): boolean {
-  return order === 'CENTER_OUT' || order === 'EDGES_IN' || order === 'SPLIT'
+  return order === 'CENTER_OUT' || order === 'EDGES_IN'
 }
 
 /** The Order's words (§3.1: the strategy, renamed in the UI only) — `lib/orderLabels.ts`'s, one vocabulary. */
@@ -74,11 +74,9 @@ export function orderRanks(order: string, n: number): { ranks: number[]; count: 
     case 'UNIFIED':
       return { ranks: Array.from({ length: n }, () => 0), count: 1 }
     case 'CENTER_OUT':
-    case 'EDGES_IN':
-    case 'SPLIT': {
+    case 'EDGES_IN': {
       const slots = Math.floor((n + 1) / 2)
       if (n <= 1) return { ranks: Array.from({ length: n }, () => 0), count: slots }
-      if (order === 'SPLIT') return { ranks: Array.from({ length: n }, (_, i) => Math.min(i, n - 1 - i)), count: slots }
       const centre = (n - 1) / 2
       const centreOut = (i: number) => {
         const d = Math.abs(i - centre)

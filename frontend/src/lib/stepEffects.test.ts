@@ -4,6 +4,7 @@ import type { SettingPropertyDescriptor } from '@/store/fixtures'
 import {
   categoryForFamily,
   isPaletteSteps,
+  drivenCategoryOf,
   isSlotSteps,
   normaliseSlotName,
   paletteStepsOffers,
@@ -50,7 +51,13 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
     expect(isPaletteSteps('PaletteSteps')).toBe(true)
     expect(isPaletteSteps('Palette Steps')).toBe(true)
     expect(isSlotSteps('slot_steps')).toBe(true)
-    expect(isSlotSteps('ZoomBreathe')).toBe(false)
+    expect(isSlotSteps('ZoomWave')).toBe(false)
+  })
+
+  it('files Slot Steps under the Beam it drives, though the library files it under Steps', () => {
+    expect(drivenCategoryOf({ name: 'SlotSteps', category: 'palette' })).toBe('beam')
+    expect(drivenCategoryOf({ name: 'ZoomWave', category: 'beam' })).toBe('beam')
+    expect(drivenCategoryOf({ name: 'PaletteSteps', category: 'palette' })).toBe('palette')
   })
 
   it('files Palette Steps under its palettes’ family’s category, the desk’s spelling', () => {

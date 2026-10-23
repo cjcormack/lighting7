@@ -518,6 +518,7 @@ internal fun validateCueChildren(
     adHocEffects: List<CueAdHocEffectDto>,
     layers: List<CueLayerDto>,
     propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
+    registry: FxRegistry,
 ): String? {
     // A selection is an effect's target only (effects plan D3): a value row and a layer name a
     // fixture or a group.
@@ -548,6 +549,7 @@ internal fun validateCueChildren(
             blocks = effect.blocks,
             groups = effect.groups,
         )?.let { return it }
+        registry.fxWriteProblem(effect.effectType, effect.parameters)?.let { return it }
     }
     return null
 }
@@ -667,10 +669,11 @@ internal fun writeCueChildren(
     layers: List<CueLayerDto>? = null,
     created: Boolean = false,
     restore: Boolean = false,
+    registry: FxRegistry,
 ) {
     val newEffects = adHocEffects.orEmpty()
     val newRows = propertyAssignments.orEmpty()
-    validateCueChildren(newEffects, layers.orEmpty(), newRows)?.let { throw IllegalArgumentException(it) }
+    validateCueChildren(newEffects, layers.orEmpty(), newRows, registry)?.let { throw IllegalArgumentException(it) }
     // No cue row and no effect may name a one-shot trigger (stage-view plan session 9, D15) — every
     // problem at once, before anything is written, so the caller's transaction rolls back whole.
     // The index is queries; build it only when some name could be refused at all.

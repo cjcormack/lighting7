@@ -8,7 +8,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
+import uk.me.cormack.lighting7.fx.EffectMode
 import uk.me.cormack.lighting7.fx.ParameterInfo
+import uk.me.cormack.lighting7.fx.normalizeEffectType
+import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.CueSpeedMasterDto
@@ -459,7 +462,7 @@ class ProjectImporter(private val state: State) {
                 detachedFromVersion = origin?.second
             }
 
-            val clashes = populateProject(sourceDir, project, format.formatVersion)
+            val clashes = populateProject(sourceDir, project, format.formatVersion, projectJson.fxLibrary)
             inTransaction(project)
 
             Result(
@@ -608,7 +611,7 @@ class ProjectImporter(private val state: State) {
             project.detachedFromVenueUuid = origin?.first
             project.detachedFromVersion = origin?.second
 
-            val clashes = populateProject(sourceDir, project, format.formatVersion)
+            val clashes = populateProject(sourceDir, project, format.formatVersion, projectJson.fxLibrary)
 
             Result(
                 projectId = project.id.value,
@@ -699,7 +702,7 @@ class ProjectImporter(private val state: State) {
      * path; the topological order matters because parent rows must exist before children
      * dereference them through the maps returned by each step.
      */
-    private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int): List<CueNumberClash> {
+    private fun populateProject(sourceDir: Path, project: DaoProject, formatVersion: Int, fxLibrary: Int): List<CueNumberClash> {
         // v24: a show on a venue links into the pinned snapshot's rows, which its archive does not
         // carry. Every map starts from them, and the archive's own rows are laid over the top — so a
         // link resolves to the show's own row where it has one (a Preset seating it copied keeps the
@@ -713,9 +716,9 @@ class ProjectImporter(private val state: State) {
         // names nothing that needs importing before it (a platform's region is a uuid in its params).
         val elementMap = venue.elements + importStageElements(sourceDir, project)
         val scriptMap = importScripts(sourceDir, project)
-        importFxDefinitions(sourceDir, project)
-        val lookMap = importLooks(sourceDir, project, elementMap)
-        val templateMap = importTemplates(sourceDir, project)
+        val legacy = legacyContext(sourceDir, importFxDefinitions(sourceDir, project).values, fxLibrary)
+        val lookMap = importLooks(sourceDir, project, elementMap, legacy)
+        val templateMap = importTemplates(sourceDir, project, legacy)
         importSpeedMasters(sourceDir, project)
         val universeMap = venue.universes + importUniverseConfigs(sourceDir, project)
         val riggingMap = venue.riggings + importRiggings(sourceDir, project)
@@ -732,7 +735,7 @@ class ProjectImporter(private val state: State) {
         val (entryMap, numberClashes) = importCueStackEntries(sourceDir, cueStackMap, cueMap, legacyPlaces)
         importCuePropertyAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, templateMap)
-        importCueAdHocEffects(sourceDir, cueMap)
+        importCueAdHocEffects(sourceDir, cueMap, legacy)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
@@ -905,7 +908,7 @@ class ProjectImporter(private val state: State) {
                     name = meta.name
                     script = body
                     this.project = project
-                    scriptType = meta.scriptType
+                    scriptType = ScriptType.valueOf(LegacyNames.scriptType(meta.scriptType))
                     this.uuid = uuid
                 }
                 map[uuid] = dao
@@ -917,13 +920,16 @@ class ProjectImporter(private val state: State) {
     private fun importFxDefinitions(dir: Path, project: DaoProject): Map<UUID, DaoFxDefinition> =
         readDir(dir.resolve("fxDefinitions")) { json ->
             val d = canonicalDecode(FxDefinitionJson.serializer(), json)
+            if (LegacyNames.effectMode(d.effectMode) != d.effectMode) {
+                logger.warn("Import: FX definition '{}': the composite mode is gone, so its script must now return one output", d.effectId)
+            }
             val uuid = UUID.fromString(d.uuid)
             val dao = DaoFxDefinition.new {
                 effectId = d.effectId
                 name = d.name
-                category = d.category
+                category = LegacyNames.category(d.category, d.outputType.name)
                 outputType = d.outputType
-                effectMode = d.effectMode
+                effectMode = EffectMode.valueOf(LegacyNames.effectMode(d.effectMode))
                 parameters = d.parameters?.let {
                     canonicalJson.decodeFromJsonElement(ListSerializer(ParameterInfo.serializer()), it)
                 } ?: emptyList()
@@ -942,7 +948,12 @@ class ProjectImporter(private val state: State) {
      * its Look through a real FK — unlike a named palette, which was only ever named by a `ref:{uuid}`
      * string inside an opaque `value` column and so needed no map.
      */
-    private fun importLooks(dir: Path, project: DaoProject, elementMap: Map<UUID, DaoStageElement>): Map<UUID, DaoLook> =
+    private fun importLooks(
+        dir: Path,
+        project: DaoProject,
+        elementMap: Map<UUID, DaoStageElement>,
+        legacy: LegacyNames.Context,
+    ): Map<UUID, DaoLook> =
         readDir(dir.resolve("looks")) { json ->
             val l = canonicalDecode(LookJson.serializer(), json)
             val uuid = UUID.fromString(l.uuid)
@@ -972,11 +983,12 @@ class ProjectImporter(private val state: State) {
             //
             // A deferred effect is dropped: a Look effect names its own target (absolute-looks plan
             // D2), and one an older desk wrote ran on whatever applied the Look.
-            l.effects.forEach { e ->
-                if (e.targetType == DEFERRED_TARGET_TYPE) {
-                    logger.warn("Import: Look '{}' ({}): effect {} ({}) names no target of its own; dropping it", l.name, l.uuid, e.uuid, e.effectType)
+            l.effects.forEach { stored ->
+                if (stored.targetType == DEFERRED_TARGET_TYPE) {
+                    logger.warn("Import: Look '{}' ({}): effect {} ({}) names no target of its own; dropping it", l.name, l.uuid, stored.uuid, stored.effectType)
                     return@forEach
                 }
+                val e = legacyFx("Look '${l.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
                 DaoLookEffect.new {
                     look = dao
                     targetType = e.targetType
@@ -1592,6 +1604,7 @@ class ProjectImporter(private val state: State) {
     private fun importTemplates(
         dir: Path,
         project: DaoProject,
+        legacy: LegacyNames.Context,
     ): Map<UUID, DaoTemplate> =
         readDir(dir.resolve("templates")) { json ->
             val t = canonicalDecode(TemplateJson.serializer(), json)
@@ -1618,7 +1631,8 @@ class ProjectImporter(private val state: State) {
             // boundary's rules don't run on import, so a snapshot from a *newer* build whose
             // category or blend mode this one does not recognise still lands rather than aborting
             // the pull. `EffectSpecCoercion.Lenient` warns if it eventually fails to spawn.
-            t.effect?.let { e ->
+            t.effect?.let { stored ->
+                val e = legacyFx("Palette '${t.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
                 DaoTemplateEffect.new {
                     template = dao
                     effectType = e.effectType
@@ -1720,12 +1734,13 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importCueAdHocEffects(dir: Path, cueMap: Map<UUID, DaoCue>) {
+    private fun importCueAdHocEffects(dir: Path, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
         readDir(dir.resolve("cueAdHocEffects")) { json ->
-            val e = canonicalDecode(CueAdHocEffectJson.serializer(), json)
-            val cueUuid = UUID.fromString(e.cueUuid)
+            val stored = canonicalDecode(CueAdHocEffectJson.serializer(), json)
+            val cueUuid = UUID.fromString(stored.cueUuid)
             val cue = cueMap[cueUuid]
-                ?: throw ImportError.invalidArchive("Ad-hoc effect ${e.uuid} references unknown cue $cueUuid")
+                ?: throw ImportError.invalidArchive("Ad-hoc effect ${stored.uuid} references unknown cue $cueUuid")
+            val e = legacyFx("Cue '${cue.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
             val uuid = UUID.fromString(e.uuid)
             DaoCueAdHocEffect.new {
                 this.cue = cue
@@ -2173,6 +2188,49 @@ class ProjectImporter(private val state: State) {
             }
             uuid to dao
         }
+    }
+
+    /**
+     * What [LegacyNames.rewriteFx] reads beside an archive's FX: its palettes, read only if an FX
+     * names one; its script FX definitions; and whether an FX naming no `pingPong` predates it —
+     * an archive written before [LegacyNames.FX_LIBRARY] was stamped on `project.json`.
+     */
+    private fun legacyContext(dir: Path, definitions: Collection<DaoFxDefinition>, fxLibrary: Int): LegacyNames.Context {
+        val palettes by lazy {
+            readDir(dir.resolve("templates")) { json ->
+                val t = canonicalDecode(TemplateJson.serializer(), json)
+                UUID.fromString(t.uuid) to LegacyNames.Palette(
+                    name = t.name,
+                    rows = t.rows.sortedBy { it.sortOrder }.map {
+                        LegacyNames.PaletteRow(it.propertyName, it.value, it.targetType == DEFERRED_TARGET_TYPE)
+                    },
+                    holdsFx = t.effect != null,
+                )
+            }
+        }
+        val byId = definitions.associate { d ->
+            normalizeEffectType(d.effectId) to
+                LegacyNames.Definition(d.outputType.name, d.parameters.filter { it.type == "colourList" }.mapTo(HashSet()) { it.name })
+        }
+        return LegacyNames.Context(
+            palettes = { palettes[it] },
+            definitions = { byId[normalizeEffectType(it)] },
+            absentPingPongIsOn = fxLibrary < LegacyNames.FX_LIBRARY,
+        )
+    }
+
+    /** [fx] on today's FX library, or null when it holds no old name, logged by [what]. */
+    private fun legacyFx(what: String, fx: LegacyNames.StoredFx, legacy: LegacyNames.Context): LegacyNames.StoredFx? {
+        val rewrite = LegacyNames.rewriteFx(fx, legacy) ?: return null
+        if (rewrite.notes.isEmpty()) {
+            logger.info("Import: {}: {} — {}", what, fx.effectType, rewrite.changes.joinToString("; "))
+        } else {
+            logger.warn(
+                "Import: {}: {} — {}; output moves: {}",
+                what, fx.effectType, rewrite.changes.joinToString("; "), rewrite.notes.joinToString("; "),
+            )
+        }
+        return rewrite.fx
     }
 
     /**

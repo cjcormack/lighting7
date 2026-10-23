@@ -317,7 +317,7 @@ beforeEach(() => {
     effect(1, { effectType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
     effect(2, { effectType: 'Circle', propertyName: 'position', size: 0.6, direction: 'BOUNCE' }),
     effect(3, { effectType: 'Lightning', programmerOwned: false, programmerLayerId: 12, nShot: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', beatDivision: 4 }),
-    effect(4, { effectType: 'Breathe', programmerOwned: false, cueId: 9, isRunning: false }),
+    effect(4, { effectType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
   ]
   mocks.layers = [
     layer(10, 'LOOK', 1, 'Storm'),
@@ -335,7 +335,7 @@ describe('the FX table', () => {
   it('lists every running effect, one row per instance in the desk’s order', () => {
     drawRoute('?table=fx')
     const table = tableRows().map((r) => within(r).getByRole('button', { name: /^Actions for / }).getAttribute('aria-label'))
-    expect(table).toEqual(['Actions for Pulse', 'Actions for Circle', 'Actions for Lightning', 'Actions for Breathe'])
+    expect(table).toEqual(['Actions for Pulse', 'Actions for Circle', 'Actions for Lightning', 'Actions for CandleFlicker'])
   })
 
   it('reads the desk’s timing, size, direction, runs and spent, and marks held · Blind', () => {
@@ -393,7 +393,7 @@ describe('the FX table', () => {
     openMenu(within(rowOf('fx:2')).getByRole('button', { name: 'Actions for Circle' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Pause' }))
     expect(mocks.pauseFx).toHaveBeenCalledWith({ id: 2, fixtureKey: 'par-2' })
-    openMenu(within(rowOf('fx:4')).getByRole('button', { name: 'Actions for Breathe' }))
+    openMenu(within(rowOf('fx:4')).getByRole('button', { name: 'Actions for CandleFlicker' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Resume' }))
     expect(mocks.resumeFx).toHaveBeenCalledWith({ id: 4, fixtureKey: 'par-4' })
   })

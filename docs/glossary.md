@@ -40,7 +40,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | A lighting7 FX, anywhere (D19) | FX | the `Fx` prefix: `FxRegistration`, `FxSpawner`, `FxEnvelope`, `FxSpecCoercion`, `FxDto`, `fxType`, `fxMode`; columns `fx_type`, `fx_id`, `allow_fx`; tables `look_fx`, `cue_ad_hoc_fx`, `palette_fx`; MCP `clear_fx`, `active_fx`; REST `/fx/*` already | effect; `EffectRegistration`, `EffectSpawner`, `EffectEnvelope`, `EffectSpecCoercion`, `EffectDto`, `effectType`, `effectMode`, `effect_type`, `effect_id`, `allow_effects`, tables `look_effects`, `cue_ad_hoc_effects`, `template_effects`, MCP `clear_effects`, `active_effects` | | screen, wire, code, storage, MCP | screen | `src:components/applied/AppliedFxTable.tsx` |
 | A palette that holds one FX (D19) | FX palette | | Effect palette | FX palette | screen | screen | `src:components/looks/LookNameBadge.tsx` |
-| Length of one cycle (D1) | Cycle | `cycle`, `CycleLength` (constants in beats and bars; `WHOLE` dropped as a duplicate of `ONE_BAR`); column `cycle` | Speed; `beatDivision`, `BeatDivision`, `beat_division` | Speed is a rate | screen, wire, code, storage, archive | screen | `src:components/fx/FxEffectFields.tsx` |
+| Length of one cycle (D1) | Cycle | `cycle`, `CycleLength` (constants in beats and bars; `WHOLE` dropped as a duplicate of `ONE_BAR`); column `cycle`; frontmatter and library `defaultCycle` | Speed; `beatDivision`, `BeatDivision`, `beat_division`, `defaultBeatDivision` | Speed is a rate | screen, wire, code, storage, archive | screen | `src:components/fx/FxEffectFields.tsx` |
 | A speed master's rate (D1) | Speed | `bpm` | | | screen, wire | done | `src:components/busking/SideSheet.tsx` |
 | Mix of an FX over what is underneath (D2) | Amount | `amount`; column `amount` | Size; `size` | not Size | screen, wire, code, storage, archive | screen | `src:components/fx/FxEffectFields.tsx` |
 | A cue stack's weight on its FX (D2) | FX amount | `/fx-amount`, `stackFxAmount.*`, MIDI `stackFxAmount` | FX size; `/cue-stacks/{id}/effect-size`, `stackEffectSize.*`, MIDI `stackEffectSize` | Fader Controls FX Size | screen, REST, WebSocket, MIDI | screen | `src:components/runner/StackEffectSizeControl.tsx` `src:components/surfaces/SurfaceLibrary.tsx` |
@@ -48,7 +48,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Direction: forwards | Forward | `FORWARD` | | | screen, wire | done | `src:components/fx/FxEffectFields.tsx` |
 | Direction: backwards | Backward | `BACKWARD` | | | screen, wire | done | `src:components/fx/FxEffectFields.tsx` |
 | Direction: there and back | Bounce | `BOUNCE` | | | screen, wire | done | `src:components/fx/FxEffectFields.tsx` |
-| The bounce of Colour Fade, Focus Pull and the sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | planned | |
+| The bounce of Colour Fade, Focus Pull and the sweeps, by Direction rather than a parameter (D24) | Bounce | Direction `BOUNCE`; frontmatter and library `defaultDirection` | `pingPong` | | FX parameters, FX frontmatter | done | `src:components/fx/FxEffectFields.tsx` |
 | Cycles to run before handing back (D28) | Runs | `runs`, `runsStartTick`…; column `runs` | `nShot`, `nShotStartTick`, `n_shot` | One Shot | screen, wire, code, storage | screen | `src:components/fx/FxEffectFields.tsx` |
 | Runs with no count | Forever | `runForever` | | | screen | done | `src:components/fx/FxEffectFields.tsx` |
 | Cycle per head or for the whole FX (D22) | Timing: Per cycle \| Per head | `timing` `CYCLE` / `HEAD`, `defaultTiming`; columns `timing`, `default_timing` | Step timing; `stepTiming`, `defaultStepTiming`, `step_timing`, `default_step_timing` | Per Step \| Per Head | screen, wire, code, storage, FX frontmatter | screen | `src:components/fx/FxEffectFields.tsx` |
@@ -103,9 +103,9 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Family: colour | Colour | `colour` | | Colour | screen, wire, storage | done | `category:colour` `usage:colour` `EFFECT_CATEGORY_INFO.colour` |
 | Family: position | Position | `position` | | Position | screen, wire, storage | done | `category:position` `usage:position` `EFFECT_CATEGORY_INFO.position` |
 | Family: beam | Beam | `beam` | | Beam | screen, wire, storage | done | `category:beam` `usage:beam` `EFFECT_CATEGORY_INFO.beam` |
-| Family: FX that step through a list (D23) | Steps | `steps` | Palette steps; `palette`, and Slot Steps under `beam` | | screen, wire | planned | |
+| Family: FX that step through a list (D23) | Steps | `steps` | Palette steps; `palette`, and Slot Steps under `beam` | | screen, wire | screen | `EFFECT_CATEGORY_INFO.palette` |
 | Family: FX on settings and sliders | Controls | `controls` | | | screen | done | `EFFECT_CATEGORY_INFO.controls` |
-| Composite FX, removed (D27) | none: Lightning Strike is an Intensity FX | Lightning Strike `STANDARD`, family `intensity` | Composite; `composite`, `effectMode: COMPOSITE` | | FX library | planned | |
+| Lightning Strike's family, the composite mode removed (D27) | Intensity | Lightning Strike `STANDARD`, family `intensity` (`dimmer` until the Intensity row moves) | Composite; `composite`, `effectMode: COMPOSITE`, `CompositeEffect`, `FX_CALC_COMPOSITE` | | FX library | done | `EFFECT_CATEGORY_INFO.dimmer` |
 | A controllable part of a fixture (D26) | Attribute | `@FixtureAttribute`, `attribute`, `attributes`, `fixture/attribute/`; columns `attribute`, `attribute_mask`; table `cue_attribute_assignments` | Property; `@FixtureProperty`, `propertyName`, `properties`, `fixture/property/`, `property_name`, `property_mask`, `cue_property_assignments` | Attribute | screen, wire, code, storage | screen | `src:components/applied/AppliedFxTable.tsx` |
 
 ## The FX library
@@ -115,19 +115,19 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Intensity | Sine Wave | `SineWave` | | | FX library | done | `fx:SineWave` |
 | Intensity | Ramp Up | `RampUp` | | Ramp Up | FX library | done | `fx:RampUp` |
 | Intensity | Ramp Down | `RampDown` | | Ramp Down | FX library | done | `fx:RampDown` |
-| Intensity, up and down (D10) | Ramp | `Ramp` | Triangle; `Triangle` | Ramp | FX library | screen | `fx:Triangle` |
+| Intensity, up and down (D10) | Ramp | `Ramp` | Triangle; `Triangle` | Ramp | FX library | done | `fx:Ramp` |
 | Intensity | Pulse | `Pulse` | | | FX library | done | `fx:Pulse` |
 | Intensity | Square Wave | `SquareWave` | | | FX library | done | `fx:SquareWave` |
-| Intensity, on the dimmer (D12) | Dimmer Strobe | `DimmerStrobe` | Strobe; `Strobe` | | FX library | screen | `fx:Strobe` |
+| Intensity, on the dimmer (D12) | Dimmer Strobe | `DimmerStrobe` | Strobe; `Strobe` | | FX library | done | `fx:DimmerStrobe` |
 | Intensity | Flicker | `Flicker` | | | FX library | done | `fx:Flicker` |
-| Intensity, removed (D13) | none: Sine Wave a quarter-cycle on | `SineWave`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | planned | |
+| Intensity, what Breathe was (D13): a Sine Wave a quarter-cycle on | Sine Wave | `SineWave`, phase offset + 0.75 | Breathe; `Breathe` | | FX library | done | `fx:SineWave` |
 | Intensity | Candle Flicker | `CandleFlicker` | | | FX library | done | `fx:CandleFlicker` |
 | Intensity | Fluorescent Flicker | `FluorescentFlicker` | | | FX library | done | `fx:FluorescentFlicker` |
-| Composite, Intensity once D27 lands | Lightning Strike | `LightningStrike` | | | FX library | done | `fx:LightningStrike` |
+| Intensity (D27) | Lightning Strike | `LightningStrike` | | | FX library | done | `fx:LightningStrike` |
 | Colour | Colour Cycle | `ColourCycle` | | | FX library | done | `fx:ColourCycle` |
 | Colour | Rainbow Cycle | `RainbowCycle` | | | FX library | done | `fx:RainbowCycle` |
 | Colour | Colour Strobe | `ColourStrobe` | | | FX library | done | `fx:ColourStrobe` |
-| Colour (D11) | Colour Wave | `ColourWave` | Colour Pulse; `ColourPulse` | | FX library | screen | `fx:ColourPulse` |
+| Colour (D11) | Colour Wave | `ColourWave` | Colour Pulse; `ColourPulse` | | FX library | done | `fx:ColourWave` |
 | Colour | Colour Fade | `ColourFade` | | | FX library | done | `fx:ColourFade` |
 | Colour | Colour Flicker | `ColourFlicker` | | | FX library | done | `fx:ColourFlicker` |
 | Position | Circle | `Circle` | | | FX library | done | `fx:Circle` |
@@ -136,7 +136,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Position | Pan Sweep | `PanSweep` | | | FX library | done | `fx:PanSweep` |
 | Position | Tilt Sweep | `TiltSweep` | | | FX library | done | `fx:TiltSweep` |
 | Position | Random Position | `RandomPosition` | | | FX library | done | `fx:RandomPosition` |
-| Beam (D13) | Zoom Wave | `ZoomWave` | Zoom Breathe; `ZoomBreathe` | | FX library | screen | `fx:ZoomBreathe` |
+| Beam (D13) | Zoom Wave | `ZoomWave` | Zoom Breathe; `ZoomBreathe` | | FX library | done | `fx:ZoomWave` |
 | Beam | Iris Pulse | `IrisPulse` | | | FX library | done | `fx:IrisPulse` |
 | Beam | Frost Pulse | `FrostPulse` | | | FX library | done | `fx:FrostPulse` |
 | Beam | Focus Pull | `FocusPull` | | | FX library | done | `fx:FocusPull` |
@@ -168,9 +168,9 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 - **Palette references in colour FX (D30).** A colour parameter may name a generic colour palette,
   `tmpl:{uuid}` (`pal:{uuid}` once renamed). It resolves to one colour when the FX starts, the same
-  for every head. Colour Fade, Colour Wave, Colour Strobe and Colour Flicker keep these references;
-  Colour Cycle takes literal colours only once D14 lands; Palette Steps is the FX that lands each
-  palette on each head for itself.
+  for every head. Colour Fade, Colour Wave, Colour Strobe and Colour Flicker keep these references.
+  Colour Cycle takes literal colours only (D14), and every write boundary refuses a palette in its
+  list; Palette Steps is the FX that lands each palette on each head for itself.
 - **Layer is always qualified (D9):** a cue layer or a programmer layer, never one of the five tiers.
 - **Element keys stay (D29).** `.head-N`, `.pixel-N`, `.cell-N` and the rest name the physical part;
   *Element* is what the screen calls it.

@@ -101,8 +101,8 @@ describe('TemplateRunsOn', () => {
   })
 
   it('counts the heads with a beam effect’s one property', () => {
-    const zoomBreathe: EffectLibraryEntry = { ...beatEntry, name: 'Zoom Breathe', category: 'beam', outputType: 'SLIDER', compatibleProperties: ['zoom'] }
-    render(<TemplateRunsOn family="BEAM" effect={effect({ effectType: 'Zoom Breathe', category: 'beam' })} entry={zoomBreathe} />)
+    const zoomWave: EffectLibraryEntry = { ...beatEntry, name: 'Zoom Wave', category: 'beam', outputType: 'SLIDER', compatibleProperties: ['zoom'] }
+    render(<TemplateRunsOn family="BEAM" effect={effect({ effectType: 'Zoom Wave', category: 'beam' })} entry={zoomWave} />)
     expect(screen.getByText('1 head')).toBeTruthy()
     expect(screen.getByText(/Any fixture with zoom\./)).toBeTruthy()
   })

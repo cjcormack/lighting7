@@ -347,6 +347,13 @@ data class ProjectJson(
      */
     val detachedFromVenueUuid: String? = null,
     val detachedFromVersion: Int? = null,
+    /**
+     * Which FX library the archive's FX were written against ([LegacyNames.FX_LIBRARY]); absent is 1,
+     * every archive written before the terminology plan's session 3. It is what tells the importer
+     * an FX that names no `pingPong` from before the parameter went, which ran with it on, from one
+     * written since. No version of its own: an older reader ignores it.
+     */
+    val fxLibrary: Int = 1,
 )
 
 /**
@@ -421,7 +428,8 @@ data class VenueVersionJson(
 data class ScriptMetaJson(
     val uuid: String,
     val name: String,
-    val scriptType: ScriptType = ScriptType.GENERAL,
+    /** A [ScriptType] by name, read through [uk.me.cormack.lighting7.sync.LegacyNames.scriptType]. */
+    val scriptType: String = ScriptType.GENERAL.name,
 )
 
 @Serializable
@@ -431,7 +439,8 @@ data class FxDefinitionJson(
     val name: String,
     val category: String,
     val outputType: FxOutputType,
-    val effectMode: EffectMode = EffectMode.STANDARD,
+    /** An [EffectMode] by name, read through [uk.me.cormack.lighting7.sync.LegacyNames.effectMode]. */
+    val effectMode: String = EffectMode.STANDARD.name,
     val parameters: JsonElement? = null,
     val compatibleProperties: List<String> = emptyList(),
     val script: String,
@@ -452,6 +461,22 @@ data class LookRowJson(
     val sortOrder: Int = 0,
 )
 
+/**
+ * The fields every archive home of a stored FX shares — a Look's, a palette's and a cue's — which
+ * `sync/LegacyNames.kt`'s rewrites read.
+ */
+interface StoredFxFields {
+    val effectType: String
+    val category: String
+    val beatDivision: Double
+    val distribution: String
+    val phaseOffset: Double
+    val parameters: Map<String, String>
+    val direction: String
+    val nShot: Int?
+    val spread: Double
+}
+
 @Serializable
 data class LookEffectJson(
     val uuid: String,
@@ -461,17 +486,17 @@ data class LookEffectJson(
      */
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
+    override val effectType: String,
+    override val category: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    override val beatDivision: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val distribution: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    override val parameters: Map<String, String> = emptyMap(),
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
@@ -480,19 +505,19 @@ data class LookEffectJson(
     /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val size: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val nShot: Int? = null,
     /**
      * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
     val sortOrder: Int = 0,
-)
+) : StoredFxFields
 
 /**
  * A Look — portable show content, rows and effects embedded inline.
@@ -551,17 +576,17 @@ data class TemplateRowJson(
 @Serializable
 data class TemplateEffectJson(
     val uuid: String,
-    val effectType: String,
-    val category: String,
+    override val effectType: String,
+    override val category: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    override val beatDivision: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val distribution: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    override val parameters: Map<String, String> = emptyMap(),
     /** Speed master uuid, remapped by ExportUuidRemapper like any uuid. */
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
@@ -570,18 +595,18 @@ data class TemplateEffectJson(
     /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val size: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val nShot: Int? = null,
     /**
      * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
-)
+) : StoredFxFields
 
 /**
  * A template — portable show content, rows *or* one effect embedded inline.
@@ -938,17 +963,17 @@ data class CueAdHocEffectJson(
     /** `fixture`, `group`, or since v34 `selection` (its key the ordered list's canonical JSON). */
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
+    override val effectType: String,
+    override val category: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    override val beatDivision: Double,
     val blendMode: String,
-    val distribution: String,
-    val phaseOffset: Double = 0.0,
+    override val distribution: String,
+    override val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
     val stepTiming: Boolean? = null,
-    val parameters: Map<String, String> = emptyMap(),
+    override val parameters: Map<String, String> = emptyMap(),
     val delayMs: Long? = null,
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
@@ -962,14 +987,14 @@ data class CueAdHocEffectJson(
     /** Size (effects plan D2), 0–1 (formatVersion 30). Omitted at 1. */
     val size: Double = 1.0,
     /** Direction (D5) by name (formatVersion 30). Omitted when `FORWARD`. */
-    val direction: String = "FORWARD",
+    override val direction: String = "FORWARD",
     /** Runs (D9), the cycles an N-shot runs (formatVersion 30). Omitted when forever. */
-    val nShot: Int? = null,
+    override val nShot: Int? = null,
     /**
      * The spread's shape (effects plan D4, formatVersion 33): Spread 0–2, Wings, Blocks, Groups (0
      * off). Each omitted at its default, so a show that shapes no spread exports as before.
      */
-    val spread: Double = 1.0,
+    override val spread: Double = 1.0,
     val wings: Int = 1,
     val blocks: Int = 1,
     val groups: Int = 0,
@@ -978,7 +1003,7 @@ data class CueAdHocEffectJson(
      * are one run. Omitted when null. Not an identity, so a clone's remap leaves it as it is.
      */
     val runUuid: String? = null,
-)
+) : StoredFxFields
 
 @Serializable
 data class CueTriggerJson(

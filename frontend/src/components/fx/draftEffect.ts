@@ -19,6 +19,7 @@ export function storedEffectOf(pick: DraftEffectPick, target: FxTarget): CueAdHo
     category: pick.category,
     propertyName: pick.propertyName,
     beatDivision: pick.beatDivision,
+    direction: pick.direction,
     blendMode: pick.blendMode,
     phaseOffset: 0,
     elementMode: null,

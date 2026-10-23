@@ -111,8 +111,8 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
         put(
             "description",
             "Split the heads into this many wings, alternate wings mirrored (2 = a ripple from both ends meeting in the " +
-                "middle). Only with LINEAR, REVERSE, RANDOM, PING_PONG or POSITIONAL: CENTER_OUT, EDGES_IN and SPLIT are " +
-                "two wings already and refuse it. Omit for 1.",
+                "middle). Only with LINEAR, REVERSE, RANDOM, PING_PONG or POSITIONAL: CENTER_OUT and EDGES_IN are two " +
+                "wings already and refuse it. Omit for 1.",
         )
     })
     put("blocks", buildJsonObject {
@@ -176,7 +176,7 @@ private val lookEffectSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
                 add("LINEAR"); add("UNIFIED"); add("CENTER_OUT"); add("EDGES_IN")
-                add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("SPLIT"); add("POSITIONAL")
+                add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("POSITIONAL")
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number"); put("description", "0.0-1.0") })
@@ -580,7 +580,7 @@ private val adHocEffectSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
                 add("LINEAR"); add("UNIFIED"); add("CENTER_OUT"); add("EDGES_IN")
-                add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("SPLIT"); add("POSITIONAL")
+                add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("POSITIONAL")
             })
         })
         put("phaseOffset", buildJsonObject { put("type", "number") })
@@ -1034,9 +1034,8 @@ private val templateEffectSchema = buildJsonObject {
         adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
             if (key !in setOf("targetType", "targetKey", "targets", "category")) put(key, value)
         }
-        // Narrowed from the ad-hoc enum: `controls` and `composite` belong to no attribute family,
-        // so the write boundary refuses both (D4). Offering them here only buys a rejected call
-        // and a retry.
+        // Narrowed from the ad-hoc enum: `controls` belongs to no attribute family, so the write
+        // boundary refuses it (D4). Offering it here only buys a rejected call and a retry.
         put("category", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam") })
@@ -1054,7 +1053,7 @@ internal val createTemplateTool = ToolDef(
             "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
             "generic one that can be aimed at any fixture) or 'effect' for an effect palette, which always " +
             "runs on whatever the applying layer or selection names. An effect palette's category must be " +
-            "dimmer, colour, position or beam: 'controls' and 'composite' belong to no attribute family.",
+            "dimmer, colour, position or beam: 'controls' belongs to no attribute family.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

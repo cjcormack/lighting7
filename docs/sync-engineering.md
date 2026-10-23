@@ -302,6 +302,67 @@ nothing on it (no effect in its library is `beam`), its write boundary re-valida
 a PUT changes it, and its exporter writes the column back as it found it. Nothing degrades, so a v34
 writer is still v34.
 
+**The FX library's changes (terminology plan session 3) took no bump either, because the old names
+are read rather than written.** Four FX ids were renamed (`Triangle`, `ColourPulse`, `Strobe` and
+`ZoomBreathe` are `Ramp`, `ColourWave`, `DimmerStrobe` and `ZoomWave`), Breathe went, the `pingPong`
+parameter became Direction Bounce, Colour Cycle took literal colours only, `SPLIT` folded into
+`EDGES_IN` and the composite mode and category went. Every archive's FX goes through
+`sync/LegacyNames.kt` on import (§"Old names"), whatever its `formatVersion`, so an older archive
+imports onto today's names. An older desk reading a newer archive meets an id or Order it lacks and
+runs nothing for that FX until it is updated, and plays a bouncing FX it knows wrong (§"Old names"):
+the cases session 4's `formatVersion` 38 closes.
+
+### Old names
+
+`sync/LegacyNames.kt` is the one place an old name lives (terminology plan P3, P5): the registry, the
+REST layer and the client know only today's. It maps by **field**, never by version, because an old
+name never returns with a new meaning in the same field — so it applies to every archive, and
+`ProjectImporter` runs every FX through it:
+
+| Field | Old | Today |
+|---|---|---|
+| `effectType` | `Triangle`, `ColourPulse`, `Strobe`, `ZoomBreathe` | `Ramp`, `ColourWave`, `DimmerStrobe`, `ZoomWave` |
+| `distribution` | `SPLIT` | `EDGES_IN` |
+| an FX's `category` | `composite` | the family of its output: `dimmer` for Lightning Strike and any slider, else `colour` or `position` |
+| an FX definition's `effectMode` | `COMPOSITE` | `STANDARD` (its script must then return one output; logged) |
+| a script's `scriptType` | `FX_CALC_COMPOSITE` | `FX_CALC` (likewise) |
+
+`LegacyNames.rewriteFx` is §4.2's rewrite of one stored FX, shared with database step 4
+(`state/FxLibraryMigration.kt`, `PRAGMA user_version` 4), which ran it once over every Look, cue and
+palette FX this database held, each named in the log:
+
+- Breathe becomes Sine Wave a quarter-cycle on (phase offset + 0.75, Direction Forward), the same curve.
+- A `pingPong` on Colour Fade, Focus Pull or a sweep becomes Direction Bounce at half the cycle, its
+  phase offset (kept modulo 2, Bounce's parity), spread and runs doubled, which plays the same
+  (`LegacyFxOutputTest`). A spread above 1 stops at 2 and the Ping-pong Order sweeps the halved cycle;
+  both are logged, as their output moves. `pingPong: false` is dropped.
+- A Colour Cycle over palettes alone becomes Palette Steps over them, keeping `fadeRatio` — each
+  palette now lands on each head for itself, the one deliberate change of output (D14). A mixed one
+  takes each palette's colour now.
+- A script FX's `colourList` takes each palette's colour now; a list left with none is black, as it
+  played. A script FX's own id and parameters are never renamed.
+- Lightning Strike drops the colour parameters it computed and never applied.
+
+What keeps the maps by field is that nothing written today holds an old name: every boundary that
+writes or starts an FX refuses a retired id and a `pingPong` on the five FX that bounce
+(`LegacyNames.writeProblem`, through `routes/storedFxRules.kt`), and no FX definition may take a
+retired id (`fxDefinitions.kt`, `registerEffect`).
+
+**An absent `pingPong` is the one rewrite not by name.** Before session 3 a bouncing FX naming none
+ran with it on, its default; since, one naming none means what its Direction says. Step 4 ran once,
+before this database could hold the second kind, so it read an absent one as on. An archive can hold
+either, so the exporter stamps `project.json` with `fxLibrary: 2` (`LegacyNames.FX_LIBRARY`), an
+optional field an older reader ignores: an archive without it reads an absent `pingPong` as on, one
+with it as today's. A merge with a remote that lacks it says this desk's marker, after writing an
+explicit `pingPong: "true"` into each bouncing FX that names none in the records the remote supplies
+(`RemoteSyncEngine.stampFxLibrary`).
+
+Two mixed-version cases stay open until session 4's `formatVersion` 38 refuses the older reader. An
+older desk plays a bouncing FX written since as `pingPong` on over Direction Bounce, twice as fast
+and folded; and it writes `project.json` back without `fxLibrary`, so what it pushes reads as written
+before session 3 — a new FX it carried through unchanged is read as `pingPong` on, by the merge as
+by a fast-forward pull.
+
 **v5 is the worked example of a truly breaking change.** FX presets and named palettes collapsed
 into `looks/`, and `cuePresetApplications/` became `cueLayers/`. `CuePresetApplicationJson.presetUuid`
 — a *required* field — disappeared, so both numbers moved. A v4 repo's preset applications name a

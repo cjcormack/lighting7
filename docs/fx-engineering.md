@@ -90,9 +90,9 @@ Two nullable per-master settings, added for the busk view (see
   vocabulary, pinned by `GlossaryVocabularyTest`) names the master an *apply-time
   caller* should stamp into an effect created with no explicit master. This is D1: routing is
   visible stamping at apply time, never engine resolution — a null `speedMasterUuid` keeps
-  meaning master 1, everywhere, forever. `composite` and `controls` are deliberately not
-  routable; effects in those categories land on master 1. Nor is `palette`: a Palette Steps is
-  stamped by its palettes' family's usage instead. One master per usage per project,
+  meaning master 1, everywhere, forever. `controls` is deliberately not routable; its effects
+  land on master 1. Nor is `palette`, the Steps family's: a Steps FX is stamped by the family it
+  steps instead (`stepsFxCategory`) — Slot Steps by Beam's, Palette Steps by its palettes'. One master per usage per project,
   enforced by `validateSpeedMasterSettings` (a friendly 409, not a DB index).
 - **`follow_num` / `follow_den` / `follow_target_uuid`** make the master a *follower* of
   another master (null target = master 1). Following is **phase lock, not just tempo**: a
@@ -172,8 +172,8 @@ Effects reference a master by **uuid** (`FxInstance.speedMasterUuid`, null → m
 the engine binds that to a runtime slot index at add/update time, re-binding when the
 bank's membership changes; a deleted master's effects degrade to master 1, never stop.
 Because an FX instance targets specific properties, per-instance assignment already gives
-"different speeds for different properties" — including for composites, which apply only
-their primary output and so cover exactly one property per instance.
+"different speeds for different properties". One FX driving several attributes is
+`FU-SPEED-PER-ATTRIBUTE`.
 
 ### One processing pass, N timebases
 
@@ -231,7 +231,12 @@ once used (`1/4` for one beat) are gone (`FU-FE-FX-SPEED-SPELLING`, settled by S
 
 ## Effect Types
 
-### Dimmer Effects (`FxOutput.Slider`)
+Since the terminology plan's session 3 each id is its name without the spaces (D10–D13): `Ramp`,
+`DimmerStrobe`, `ColourWave` and `ZoomWave` were `Triangle`, `Strobe`, `ColourPulse` and `ZoomBreathe`,
+and `Breathe` is gone, a stored one now Sine Wave a quarter-cycle on. `sync/LegacyNames.kt` reads the
+old names (§"Old names" in `sync-engineering.md`).
+
+### Intensity Effects (`FxOutput.Slider`)
 
 Effects that produce single 0-255 values for dimmer/slider properties.
 
@@ -240,12 +245,12 @@ Effects that produce single 0-255 values for dimmer/slider properties.
 | `SineWave` | Smooth oscillation | `min`, `max` |
 | `RampUp` | Sawtooth up | `min`, `max`, `curve` |
 | `RampDown` | Sawtooth down | `min`, `max`, `curve` |
-| `Triangle` | Up then down | `min`, `max`, `curve` |
+| `Ramp` | Up then down | `min`, `max`, `curve` |
 | `Pulse` | Attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio` |
 | `SquareWave` | On/off alternation | `min`, `max`, `dutyCycle` |
-| `Strobe` | Quick flash | `offValue`, `onValue`, `onRatio` |
+| `DimmerStrobe` | Quick flash on the dimmer | `offValue`, `onValue`, `onRatio` |
 | `Flicker` | Random variation | `min`, `max` |
-| `Breathe` | Smooth breathing | `min`, `max` |
+| `LightningStrike` | A flash that decays | `maxBrightness`, `minBrightness` |
 
 ### Colour Effects (`FxOutput.Colour`)
 
@@ -253,12 +258,19 @@ Effects that produce RGB color values.
 
 | Effect | Description | Parameters |
 |--------|-------------|------------|
-| `ColourCycle` | Step through a list of colours | `colours`, `fadeRatio` |
+| `ColourCycle` | Step through a list of literal colours | `colours`, `fadeRatio` |
 | `RainbowCycle` | Hue rotation | `saturation`, `brightness` |
 | `ColourStrobe` | Flash colour | `onColor`, `offColor`, `onRatio` |
-| `ColourPulse` | Pulse between two | `colorA`, `colorB` |
-| `ColourFade` | Linear fade | `fromColor`, `toColor`, `pingPong` |
+| `ColourWave` | Sine between two | `colorA`, `colorB` |
+| `ColourFade` | Linear fade, bouncing by default | `fromColor`, `toColor` |
 | `ColourFlicker` | Random variation | `baseColor`, `variation` |
+
+Colour Cycle takes **literal colours only** (terminology plan D14): a `colourList` parameter — its
+`colours` — refuses a palette reference at every write boundary (`colourListPaletteProblem`: the add
+routes, `PUT /fx/{id}` and its frame, a Look's, a cue's and a palette's effects, the MCP tools), and
+`TypedParams.colourList` drops one that reaches it anyway. Palette Steps is the FX that steps through
+palettes, each landing on each head for itself. The other colour FX keep a palette reference in their
+`colour` parameters, one colour for every head (D30).
 
 ### Position Effects (`FxOutput.Position`)
 
@@ -268,7 +280,7 @@ Effects that produce pan/tilt values for moving heads.
 |--------|-------------|------------|
 | `Circle` | Circular movement | `panCenter`, `tiltCenter`, `panRadius`, `tiltRadius` |
 | `Figure8` | Figure-8 pattern | `panCenter`, `tiltCenter`, `panRadius`, `tiltRadius` |
-| `Sweep` | Linear movement | `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` |
+| `Sweep` | Linear movement, bouncing by default | `startPan`, `startTilt`, `endPan`, `endTilt`, `curve` |
 | `PanSweep` | Horizontal sweep | `startPan`, `endPan`, `tilt` |
 | `TiltSweep` | Vertical sweep | `startTilt`, `endTilt`, `pan` |
 | `RandomPosition` | Random movement | `panCenter`, `tiltCenter`, `panRange`, `tiltRange` |
@@ -281,13 +293,13 @@ in `compatibleProperties`, so the picker offers it only on a head that has that 
 
 | Effect | Property | Description | Parameters |
 |--------|----------|-------------|------------|
-| `ZoomBreathe` | `zoom` | Sine between two zooms | `min`, `max` |
+| `ZoomWave` | `zoom` | Sine between two zooms | `min`, `max` |
 | `IrisPulse` | `iris` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
 | `FrostPulse` | `frost` | Pulse's attack-hold-release | `min`, `max`, `attackRatio`, `holdRatio`, `curve` |
-| `FocusPull` | `focus` | Sweep between two focus levels | `start`, `end`, `curve`, `pingPong` |
+| `FocusPull` | `focus` | Sweep between two focus levels, bouncing by default | `start`, `end`, `curve` |
 
 The values are raw DMX, as every level effect's are. A stepped zoom (the Robe's) is a setting, so
-Zoom Breathe on it writes the byte and lands on whichever step that is. To step one by name, use
+Zoom Wave on it writes the byte and lands on whichever step that is. To step one by name, use
 Slot Steps on it (`ZOOM_18, ZOOM_26`), or Palette Steps over Beam palettes whose zoom is a percent,
 which snaps to the step nearest that share of its angles, as a palette does (below).
 
@@ -314,6 +326,10 @@ declare `outputType: STEPS`, which every target accepts (`FxTarget.accepts`; the
 |--------|----------|---------------|------------|
 | `PaletteSteps` | its palettes' family | generic value palettes, `tmpl:{uuid}` each | `palettes` (`paletteList`), `fadeRatio` |
 | `SlotSteps` | `beam` | one setting's option names | `slots` (`slotList`) |
+
+The two are one family in the library, *Steps* (terminology plan D23): both register under `palette`
+(`STEPS_CATEGORY`), which names no attribute family, and are offered and stored in the family of what
+they step — the Category column — through `stepsFxCategory` and, on the client, `drivenCategoryOf`.
 
 `stepsAt(phase, steps, fadeRatio)` is the timing, Colour Cycle's: equal segments, each step held for
 `1 − fadeRatio` of its own and crossing to the next over the rest, the last crossing back to the
@@ -404,42 +420,20 @@ Stateful effects implement the `StatefulEffect` interface:
 The FxEngine detects `StatefulEffect` instances and routes to `calculateStateful()`
 automatically in all 4 processing paths (fixture, multi-element, group, flat element).
 
-### Composite Effects (`CompositeEffect`)
+### One FX, one attribute
 
-**Composite effects are primary-output-only.** A composite *computes* a map of outputs for
-several property types from one phase, but the engine applies exactly one of them: the entry
-matching the effect's declared `outputType`. The rest are discarded.
+An `FxInstance` drives one `FxTarget`, so an FX drives one attribute. The composite mode, which
+computed several outputs from one phase and applied the one its `outputType` named, is gone
+(terminology plan D27): its one built-in, `LightningStrike`, computed a colour it never applied, and
+is now a standard Intensity FX with the same output. One FX driving several attributes is
+`FU-SPEED-PER-ATTRIBUTE`.
 
-| Effect | Description | Computes | Applies | Parameters |
-|--------|-------------|----------|---------|------------|
-| `LightningStrike` | Flash, with a matching colour shift on offer | SLIDER + COLOUR | SLIDER | `maxBrightness`, `minBrightness`, `flashColour`, `decayColour`, `ambientColour` |
-
-Composite effects implement the `CompositeEffect` interface:
-- `calculateComposite(phase, context)` — returns `Map<FxOutputType, FxOutput>`
-- `calculate(phase, context)` — the interface default, and the engine's only entry point:
-  picks the `outputType` entry out of that map
-
-The interface earns its place for effects most naturally *written* as a coordinated set
-(`LightningStrike` derives brightness and the white→blue shift from one phase), and because
-`.fx.kts` definitions can declare `effectMode: COMPOSITE`. It does **not** get you two
-properties from one instance: an `FxInstance` drives one `FxTarget`. Coordinating two
-properties means two instances on the same speed master.
-
-There was once an `FxInstance.compositeTargets` map and an engine branch that fanned
-secondary outputs out to it. Nothing ever populated the map, so the branch was unreachable
-and `LightningStrike`'s COLOUR output had always been dropped; both were deleted rather than
-finished (sweep item A4). Reviving the ambition needs secondary targets on `FxInstance` *and*
-an authoring surface that can name a constituent — see `FU-SPEED-PER-ATTRIBUTE` in
-`docs/plans/followups.md`.
-
-One consequence worth remembering when writing an effect: a mismatched `FxOutput` is
-**silently dropped** by `FxTarget` (`if (output !is FxOutput.Slider) return` and friends), so a
-composite's `compatibleProperties` must list only properties of its primary output type.
-`LightningStrike` advertising `rgbColour` meant picking it produced no light and no error.
+A mismatched `FxOutput` is **silently dropped** by `FxTarget` (`if (output !is FxOutput.Slider)
+return` and friends), so an FX's `compatibleProperties` must list only properties of its output type.
 
 ## `compatibleProperties` must match the output type
 
-That silent drop is not a composite problem — it is the general rule, and it bit every effect in
+That silent drop is the general rule, and it bit every effect in
 the `position` category (sweep item A11). All seven declared `compatibleProperties: [pan, tilt]`
 against `outputType: POSITION`; `pan` and `tilt` are real `@FixtureProperty` sliders, so every
 frontend picker chose one, posted `propertyName: "pan"`, and got a `SliderTarget` that discarded
@@ -512,9 +506,11 @@ Each registered effect provides:
 - `id` — canonical name (e.g., "SineWave")
 - `aliases` — alternative names for lookup (e.g., "sine_wave", "sine")
 - `name` — human-readable display name
-- `category` — UI category ("dimmer", "colour", "position", "beam", "palette", "composite", "controls"; `palette` is Palette Steps' alone)
+- `category` — UI category ("dimmer", "colour", "position", "beam", "palette", "controls"; `palette` is the Steps family's, Palette Steps' and Slot Steps')
 - `outputType` — primary output type
-- `effectMode` — `STANDARD`, `STATEFUL`, or `COMPOSITE`
+- `effectMode` — `STANDARD` or `STATEFUL`
+- `defaultDirection`, `defaultBeatDivision` — what a new instance runs at when its author names
+  neither (below)
 - `parameters` — schema for the API/UI
 - `compatibleProperties` — which fixture properties this can target
 - `source` — `BUILT_IN` or `USER`
@@ -542,10 +538,10 @@ table always requires a `project_id` since every user effect belongs to a projec
 fx_definitions table (user effects only):
 ├── effect_id         — canonical ID (e.g., "MyCustomPulse")
 ├── name              — display name (e.g., "My Custom Pulse")
-├── category          — "dimmer", "colour", "position", "composite", "controls" ("beam" and
-│                       "palette" are the built-ins' own; the New effect sheet offers neither)
+├── category          — "dimmer", "colour", "position", "controls" ("beam" and "palette" are
+│                       the built-ins' own; the New effect sheet offers neither)
 ├── output_type       — SLIDER, COLOUR, or POSITION (never STEPS — refused, see Step Effects)
-├── effect_mode       — STANDARD, STATEFUL, or COMPOSITE
+├── effect_mode       — STANDARD or STATEFUL
 ├── parameters        — JSON schema [{name, type, defaultValue, description}]
 ├── compatible_properties — JSON array of property names
 ├── script            — the calculate() body only
@@ -556,8 +552,8 @@ fx_definitions table (user effects only):
 
 ### Script Model
 
-Scripts contain **only the calculation logic** — the body of `calculate()`,
-`calculateStateful()`, or `calculateComposite()`. All metadata (name, category,
+Scripts contain **only the calculation logic** — the body of `calculate()` or
+`calculateStateful()`. All metadata (name, category,
 parameters, etc.) is stored in the database/registration and managed via the UI.
 
 **Parameter access** uses a typed accessor object (`TypedParams`) that pre-parses
@@ -568,9 +564,9 @@ string parameters according to the schema:
 params.ubyte("min")          → UByte (default from schema)
 params.int("count")          → Int
 params.double("fadeRatio")   → Double
-params.boolean("pingPong")   → Boolean
+params.boolean("enabled")    → Boolean
 params.colour("baseColor")   → ExtendedColour (resolves a template reference, "tmpl:{uuid}")
-params.colourList("colours") → List<ExtendedColour>
+params.colourList("colours") → List<ExtendedColour> (literal colours only; a palette is dropped)
 params.easingCurve("curve")  → EasingCurve
 params.string("name")        → String
 ```
@@ -595,10 +591,11 @@ src/main/resources/fx/
 │   ├── Circle.fx.kts
 │   └── ...
 ├── beam/
-│   ├── ZoomBreathe.fx.kts
+│   ├── ZoomWave.fx.kts
 │   └── ...
-└── composite/
-    └── LightningStrike.fx.kts  (COMPOSITE)
+└── steps/
+    ├── PaletteSteps.fx.kts
+    └── SlotSteps.fx.kts
 ```
 
 Each file uses YAML frontmatter in a block comment, followed by the script body:
@@ -634,6 +631,16 @@ FxOutput.Slider(value)
 At startup, `FxFileLoader` scans the resource directory, parses each file's
 frontmatter into metadata and script body, compiles the script, and registers
 the effect in the FxRegistry with `source = BUILT_IN`.
+
+Two optional frontmatter keys say what a **new** instance runs at, read as `defaultStepTiming` is:
+`defaultDirection` (`FORWARD`, `BACKWARD` or `BOUNCE`; `FxInstance` starts its dynamics on it) and
+`defaultBeatDivision` (beats a cycle, one bar when absent). Colour Fade, Focus Pull and the sweeps
+declare `BOUNCE` at `2.0` (terminology plan D24): they once bounced by a `pingPong` parameter over a
+one-bar cycle, so a new one looks as it did. The library answers both (`EffectTypeInfo`), and every
+door that makes an FX without naming them takes them: the add routes, the programmer's bare press,
+the MCP tools, the picker and the palette editor. A swap to another type in the picker or the
+palette editor takes the new type's where the FX still stood at the old type's
+(`swappedTiming`). A user FX definition has neither, so runs Forward at one bar.
 
 ### Three Script Base Classes
 
@@ -682,34 +689,15 @@ state["level"] = newLevel
 FxOutput.Slider(newLevel.toInt().coerceIn(0, 255).toUByte())
 ```
 
-#### FxCompositeCalcScript (COMPOSITE)
-
-For effects whose outputs are most naturally derived together from one phase. Only the entry
-matching the definition's declared `outputType` is applied — see §"Composite Effects":
-
-```kotlin
-// Provided: phase (Double), context (EffectContext), params (TypedParams)
-// Return: Map<FxOutputType, FxOutput> (last expression)
-
-val intensity = if (phase < 0.1) 255 else ((1.0 - phase) * 255).toInt()
-mapOf(
-    FxOutputType.SLIDER to FxOutput.Slider(intensity.coerceIn(0, 255).toUByte()),
-    FxOutputType.COLOUR to FxOutput.Colour(
-        blendExtendedColours(params.colour("flashColour"), params.colour("decayColour"), phase)
-    ),
-)
-```
-
 ### ScriptEffectAdapter
 
-`ScriptEffectAdapter` bridges compiled scripts to the `Effect`/`StatefulEffect`/
-`CompositeEffect` interfaces. It:
+`ScriptEffectAdapter` bridges compiled scripts to the `Effect`/`StatefulEffect`
+interfaces. It:
 
 1. Compiles the script body using the appropriate base class
 2. Caches compiled results by content hash
 3. On `calculate()`: creates `TypedParams` from raw params + schema, evaluates script
 4. For stateful: maintains a `MutableMap<String, Any>` per instance
-5. For composite: evaluates the output map, of which only the primary entry is applied
 
 ### FX Definitions REST API
 
@@ -815,8 +803,10 @@ effects plan's P2); the editor only writes the three fields.
   effect indexing a list by `floor(phase × n)` never reads one past its end; Bounce is Forward on
   even cycles and Backward on odd ones, counted on the member's own clock (its offset taken off). It
   reaches every phase an effect reads; a **stateful** effect (`calculateStateful`) reads no phase,
-  so direction does nothing to it. The built-ins keep their shapes (P6): Ramp Down and the sweeps'
-  `pingPong` stay, and no stored effect changes meaning.
+  so direction does nothing to it. The built-ins keep their shapes (P6): Ramp Down stays. The
+  sweeps', Colour Fade's and Focus Pull's `pingPong` went to Bounce in the terminology plan (D24), a
+  stored one rewritten at half the cycle with its phase offset, spread and runs doubled, which plays
+  the same (`LegacyFxOutputTest`).
 - **N-shot** (D9): `nShot`, at least 1, null for forever. The count runs on the effect's clock from
   its first pass with a count — a master's tick (`FxInstance.nShotStartTick`) for a beat effect, the
   scaled accumulator (`nShotStartScaledMs`) for a wall-clock one — so a count given to a running
@@ -1202,7 +1192,7 @@ effectiveDivision = beatDivision × dynamics.distinctSlots(groupSize)
 ```
 
 This uses `distinctSlots` rather than `groupSize` so that symmetric distributions
-(CENTER_OUT, SPLIT) scale correctly — symmetric pairs share a slot — and it is the count **after the
+(CENTER_OUT, EDGES_IN) scale correctly — symmetric pairs share a slot — and it is the count **after the
 spread's shape** (§"The spread's shape"), so Blocks and Groups leave no empty steps either.
 
 **Default values**: Each effect type declares `defaultStepTiming` which is used when
@@ -1448,8 +1438,7 @@ Two script types provide focused API surfaces for different tasks:
 | `FX_APPLICATION` | `FxApplicationScript` | Apply effects to fixtures/groups (implicit engine) |
 
 FX effect definitions are **not** a script type — they are managed as `fx_definitions`
-with dedicated calculate-only script base classes (`FxCalcScript`, `FxStatefulCalcScript`,
-`FxCompositeCalcScript`). See [FX Definitions](#fx-definitions) above.
+with dedicated calculate-only script base classes (`FxCalcScript`, `FxStatefulCalcScript`). See [FX Definitions](#fx-definitions) above.
 
 ### FX_APPLICATION Scripts
 
@@ -1554,19 +1543,18 @@ at the element level. It has no effect when members directly have the target pro
 | `CENTER_OUT` | Rank-based: center fires first, radiates outward | ⌈N/2⌉ |
 | `EDGES_IN` | Rank-based: edges fire first, converges to center | ⌈N/2⌉ |
 | `REVERSE` | Evenly spaced phases, element N → 0 | N |
-| `SPLIT` | Mirrored halves: both ends fire simultaneously, converging | ⌈N/2⌉ |
 | `PING_PONG` | LINEAR offsets + triangle phase remap for bounce | N |
 | `RANDOM(seed)` | Deterministic Fisher-Yates shuffle of evenly-spaced offsets | N |
 | `POSITIONAL` | Based on normalized position | N |
 
-**Symmetric strategies** (CENTER_OUT, EDGES_IN, SPLIT) have fewer distinct offset slots
+**Symmetric strategies** (CENTER_OUT, EDGES_IN) have fewer distinct offset slots
 than group members because symmetric pairs share the same offset. A windowed step chase uses
 `numDistinctSlots` for window width to ensure gap-free chases.
 
-**`SPLIT` and `EDGES_IN` give the same offsets.** Split's rank is `min(i, N−1−i)` and Edges in's is
-Centre out's inverted, which is the same distance from the nearer end — so the two strategies are one
-Order under two names, at every group size. Both are kept, since a stored effect names either
-(effects plan P6); `FU-FX-SPLIT-DUPLICATE` records folding them.
+**`EDGES_IN` is the one Order from the edges in**, *Centre in* on screen (terminology plan D18).
+`SPLIT` ranked a member `min(i, N−1−i)`, the same distance from the nearer end as Centre out's rank
+inverted, so it gave Edges in's offsets at every group size and was folded into it: the parse no longer
+knows it, and database step 4 and `sync/LegacyNames.kt` rewrite a stored one.
 
 ### The spread's shape (effects plan session 2)
 
@@ -1593,7 +1581,7 @@ synced from `formatVersion` 33 (`docs/sync-engineering.md` §"Version 33").
    Order, whose rank count is the member count): `B` neighbours **in the Order** share one phase —
    on the rig under Rig, Reverse and Position, and under Random heads beside each other in the
    shuffle, so a Random in blocks of 2 is random pairs.
-3. **Wings** `W`, only under an asymmetric Order — Centre out, Edges in and Split are two mirrored
+3. **Wings** `W`, only under an asymmetric Order — Centre out and Centre in are two mirrored
    wings already (`DistributionStrategy.isMirrored`): the ranks split into `W` runs of
    `m = ceil(R / W)`; an odd run is mirrored **within its own length** (`r ← len − 1 − r`, `len` being
    `m` for every run but a short last one, so the outermost member of each wing pair shares a rank —
@@ -1651,7 +1639,7 @@ to the same offsets, Random's shuffle included.
 | `usesTrianglePhase` | Whether the base clock should be triangle-remapped (true for PING_PONG) |
 | `distinctSlots(groupSize)` | Number of unique offset positions for a given group size |
 | `ranks(members, groupSize)` | Each member's rank over `distinctSlots` ranks — what the spread's shape works on |
-| `isMirrored` | Two mirrored wings already (CENTER_OUT, EDGES_IN, SPLIT) — Wings is refused under it |
+| `isMirrored` | Two mirrored wings already (CENTER_OUT, EDGES_IN) — Wings is refused under it |
 
 ## Multi-Element Fixture Expansion
 
@@ -1912,7 +1900,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `routes/projectSpeedMasters.kt` | Speed-master CRUD API endpoints + delete guards |
 | `plugins/SpeedMasterSocket.kt` | `speedMasters.*` WS family (live tempo control/streaming, keyed beat frames) |
 | `fx/BeatDivision.kt` | Timing constants |
-| `fx/Effect.kt` | Effect, StatefulEffect, CompositeEffect interfaces, FxOutput types |
+| `fx/Effect.kt` | Effect, StatefulEffect interfaces, FxOutput types |
 | `fx/FxRegistry.kt` | Unified effect registry, EffectRegistration, ParameterInfo, EffectTypeInfo |
 | `fx/FxFileLoader.kt` | Loads and parses .fx.kts files from resources |
 | `fx/TypedParams.kt` | Typed parameter accessor for FX scripts |
@@ -1944,7 +1932,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fixture/group/GroupExtensions.kt` | Group property extensions |
 | `scripts/ScriptType.kt` | Script type enum (GENERAL, FX_APPLICATION) |
 | `scripts/scriptDef.kt` | LightingScript base class (GENERAL scripts) |
-| `scripts/fxCalcScriptDef.kt` | FxCalcScript, FxStatefulCalcScript, FxCompositeCalcScript base classes |
+| `scripts/fxCalcScriptDef.kt` | FxCalcScript, FxStatefulCalcScript base classes |
 | `scripts/fxApplicationScriptDef.kt` | FxApplicationScript base class (effect application) |
 | `models/fxDefinitions.kt` | Exposed DAO for fx_definitions table |
 | `routes/lightFx.kt` | FX REST API endpoints |

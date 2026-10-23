@@ -106,11 +106,11 @@ describe('familyForEffectCategory', () => {
 
   it('answers null for a category that names no family, rather than a catch-all', () => {
     // The load-bearing difference from `familyForCategory`, which is total and files anything it
-    // does not know under BEAM. Here `controls` has no tempo and `composite` spans families, so
-    // neither *has* a family — and answering BEAM would be a wrong answer rather than a default,
-    // one the write boundary would then refuse under a family the operator never chose.
+    // does not know under BEAM. Here `controls` has no tempo and `palette` (the Steps FX) steps
+    // another family, so neither *has* a family — and answering BEAM would be a wrong answer rather
+    // than a default, one the write boundary would then refuse under a family the operator never chose.
     expect(familyForEffectCategory('controls')).toBeNull()
-    expect(familyForEffectCategory('composite')).toBeNull()
+    expect(familyForEffectCategory('palette')).toBeNull()
     expect(familyForEffectCategory('some_future_category')).toBeNull()
   })
 
@@ -119,7 +119,7 @@ describe('familyForEffectCategory', () => {
     // POSITION through `pan`/`tilt`, which are not effect categories at all. The two maps share
     // `dimmer` and `colour` and nothing else, which is why neither can absorb the other.
     expect(familyForEffectCategory('pan')).toBeNull()
-    expect(familyForCategory('composite')).toBe('BEAM')
+    expect(familyForCategory('controls')).toBe('BEAM')
   })
 })
 
@@ -130,7 +130,7 @@ describe('which families can hold an effect', () => {
   })
 
   it('covers exactly the categories a speed master may be the default for', () => {
-    // A usage excludes `controls` and `composite` for want of a tempo, and a template the same two
+    // A usage excludes `controls` and `palette` for want of a tempo, and a template the same two
     // for want of a family.
     const usageFamilies = SPEED_MASTER_USAGES.map(familyForEffectCategory)
     expect([...usageFamilies].sort()).toEqual([...TEMPLATE_EFFECT_FAMILIES].sort())

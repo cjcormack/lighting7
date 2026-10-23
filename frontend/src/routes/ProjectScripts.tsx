@@ -41,7 +41,6 @@ const SCRIPT_TYPE_SHORT_LABELS: Record<ScriptType, string> = {
   FX_APPLICATION: 'FX app',
   FX_CALC: 'FX calc',
   FX_CALC_STATEFUL: 'Stateful',
-  FX_CALC_COMPOSITE: 'Composite',
 }
 
 /** `?type=fx-definition` ↔ `FX_DEFINITION`. */

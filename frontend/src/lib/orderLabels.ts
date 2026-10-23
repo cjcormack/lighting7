@@ -4,9 +4,6 @@
  * summary (`getDistributionLabel`), a group's *Runs as* picker (`DISTRIBUTION_STRATEGY_OPTIONS`)
  * and the Fan's order row (`SPREAD_ORDERS`). The stored names are unchanged.
  *
- * `EDGES_IN` and `SPLIT` run the same offsets: Edges in reads *Centre in*, and Split keeps its own
- * word until the two fold into one Order, so no two options share a label.
- *
  * It imports nothing, on purpose: `lib/spreadIntent.ts` reads it and must reach no client walk
  * (`spreadIntent.test.ts`), and `lib/spreadShape.ts` re-exports it.
  */
@@ -16,7 +13,6 @@ export const ORDER_LABELS: Record<string, string> = {
   REVERSE: 'Reverse',
   CENTER_OUT: 'Centre out',
   EDGES_IN: 'Centre in',
-  SPLIT: 'Split',
   RANDOM: 'Random',
   PING_PONG: 'Ping-pong',
   POSITIONAL: 'Position',
@@ -29,7 +25,6 @@ export const ORDER_OPTIONS: readonly string[] = [
   'REVERSE',
   'CENTER_OUT',
   'EDGES_IN',
-  'SPLIT',
   'RANDOM',
   'PING_PONG',
   'POSITIONAL',

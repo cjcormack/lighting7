@@ -324,7 +324,7 @@ class ProgrammerLayerStack(
      * - **The family replacement** (apply-model plan D2, D6), resolved here so every palette door gets
      *   it: a palette press takes its heads off every other palette on the stack of the **same family
      *   and kind** — a value palette off value palettes, an effect palette off effect palettes, so
-     *   Amber Breathe runs over Red. A Look replaces nothing and is replaced by nothing (D6).
+     *   Amber Wave runs over Red. A Look replaces nothing and is replaced by nothing (D6).
      * - Neither drops a layer that also holds other heads: it is narrowed to them, so Amber on the
      *   front wash and Blue on the back wash are two layers on two rigs.
      *

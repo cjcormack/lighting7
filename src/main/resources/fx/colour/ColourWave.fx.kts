@@ -1,5 +1,5 @@
 /*---
-id: ColourPulse
+id: ColourWave
 name: Colour Wave
 category: colour
 outputType: COLOUR

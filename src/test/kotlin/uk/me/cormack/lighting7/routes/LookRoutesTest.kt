@@ -503,7 +503,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     effects = listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "ColourPulse", category = "colour", propertyName = "rgbColour",
+                            effectType = "ColourWave", category = "colour", propertyName = "rgbColour",
                             beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
                         ),
                     ),

@@ -164,16 +164,21 @@ class TemplateColourSourceTest {
     }
 
     @Test
-    fun `colourList mixes literals and references, and drops a reference it cannot resolve`() {
-        // The one place the list differs from a single colour: a list is allowed to come back
-        // shorter, because a white entry in the middle of a cycle reads as a deliberate flash.
+    fun `colourList takes literals only, and drops a palette reference`() {
+        // Colour Cycle takes literal colours (terminology plan D14): a reference resolves to nothing
+        // in a list, even one that names a real colour palette, and the list comes back shorter.
         val registry = registryOf(template(colourRow()))
         val p = params(mapOf("colours" to "#ff0000,tmpl:$templateUuid,tmpl:oops,#0000ff"), registry)
         val colours = p.colourList("colours")
-        assertEquals(3, colours.size, "the unresolvable reference is dropped, not substituted")
-        assertEquals(Color.RED, colours[0].color)
-        assertEquals(74u.toUByte(), colours[1].white)
-        assertEquals(Color.BLUE, colours[2].color)
+        assertEquals(listOf(Color.RED, Color.BLUE), colours.map { it.color })
+    }
+
+    @Test
+    fun `a palette reference in a colourList is refused at the write boundary`() {
+        val schema = listOf(ParameterInfo("colours", "colourList", "#ff0000"), ParameterInfo("colour", "colour", "#ffffff"))
+        assertEquals(null, colourListPaletteProblem(schema, mapOf("colours" to "#ff0000,#0000ff", "colour" to "tmpl:$templateUuid")))
+        val problem = colourListPaletteProblem(schema, mapOf("colours" to "#ff0000, tmpl:$templateUuid"))
+        assertTrue(problem != null && "'colours'" in problem, "$problem")
     }
 
     @Test

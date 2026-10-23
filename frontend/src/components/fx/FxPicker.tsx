@@ -30,10 +30,11 @@ import {
 import { useApplyGroupFxMutation, useRemoveGroupFxMutation } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
 import { useSpeedMasterForCategory } from '@/store/speedMasters'
-import { NEW_EFFECT_DIVISION, isOnSeconds } from '@/lib/effectTiming'
+import { isOnSeconds, newEffectDirection, newEffectDivision, swappedTiming } from '@/lib/effectTiming'
 import { useTemplateListQuery } from '@/store/templates'
 import {
   categoryForFamily,
+  drivenCategoryOf,
   isPaletteSteps,
   isSlotSteps,
   paletteStepsOffers,
@@ -42,6 +43,7 @@ import {
   type PaletteStepsOffer,
 } from '@/lib/stepEffects'
 import type { BlendMode } from '@/api/groupsApi'
+import type { EffectDirection } from '@/api/fxApi'
 import type { Fixture } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { CueTarget } from '@/api/cuesApi'
@@ -77,6 +79,8 @@ export interface DraftEffectPick {
   category: string
   propertyName: string
   beatDivision: number
+  /** Its type's own Direction — Bounce for the FX that bounce (terminology plan D24). */
+  direction: EffectDirection
   /** The master tagged for the family's usage (D16); absent on a wall-clock effect, which starts on its own Seconds. */
   speedMasterUuid?: string | null
   blendMode: string
@@ -197,7 +201,7 @@ export function FxPicker({
   const byFamily = useMemo(() => {
     const grouped = new Map<PickerFamily, EffectLibraryEntry[]>()
     for (const entry of compatible) {
-      const family = pickerFamilyOf(entry.category)
+      const family = pickerFamilyOf(drivenCategoryOf(entry))
       grouped.set(family, [...(grouped.get(family) ?? []), entry])
     }
     if (paletteStepsEntry != null) {
@@ -285,10 +289,10 @@ export function FxPicker({
     return spec
   }
 
-  /** The category a master is stamped by: Palette Steps' is its palettes' family's. */
+  /** The category a master is stamped by, and a draft stored under: a Steps FX's is what it steps. */
   const categoryOf = (entry: EffectLibraryEntry) => {
     const offer = isPaletteSteps(entry.name) ? stepOffers.get(family) : undefined
-    return offer != null ? categoryForFamily(offer.family) : entry.category
+    return offer != null ? categoryForFamily(offer.family) : drivenCategoryOf(entry)
   }
 
   const start = async (entry: EffectLibraryEntry, pick = chosen) => {
@@ -307,10 +311,12 @@ export function FxPicker({
       }
       draft.onPick({
         effectType: entry.name,
-        category: entry.category,
+        category: categoryOf(entry),
         propertyName,
-        // A new effect is one bar on the master tagged for its family's usage (D16), as below.
-        beatDivision: NEW_EFFECT_DIVISION,
+        // A new effect runs at its type's own cycle and Direction on the master tagged for its
+        // family's usage (D16), as below.
+        beatDivision: newEffectDivision(entry),
+        direction: newEffectDirection(entry),
         ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
         blendMode: spec.blendMode,
         parameters: spec.parameters,
@@ -322,15 +328,19 @@ export function FxPicker({
     if (running != null && running.propertyName === propertyName) {
       if (normalizeEffectName(running.effectType) === normalizeEffectName(entry.name)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
-      // them — 16 beats becoming 16 seconds — so it lands on a new effect's one bar; a swap within
-      // one unit keeps the operator's speed. The desk keeps the swapped effect's timing choice
-      // (D7), so a beat effect on Seconds stays in seconds whichever type it becomes, and the
-      // running effect's loop already reads `WALL_CLOCK` for one.
+      // them — 16 beats becoming 16 seconds — so it lands on the new type's own cycle; a swap within
+      // one unit keeps the operator's speed and Direction, but for one still at the old type's
+      // default ([swappedTiming]). The desk keeps the swapped effect's timing choice (D7), so a beat
+      // effect on Seconds stays in seconds whichever type it becomes, and the running effect's loop
+      // already reads `WALL_CLOCK` for one.
       const runningOnSeconds = runningEffect != null && isOnSeconds(runningEffect, runningEffect.timingSource)
       const fromUnit = (runningEffect?.timingSource ?? 'BEAT') === 'WALL_CLOCK' ? 'seconds' : 'beats'
       const toUnit = entry.timingSource === 'WALL_CLOCK' || runningOnSeconds ? 'seconds' : 'beats'
-      const speed = fromUnit === toUnit ? {} : { beatDivision: NEW_EFFECT_DIVISION }
-      if (lightingApi.fx.updateFx(running.effectId, { effectType: entry.name, ...spec, ...speed })) {
+      const fromEntry = library?.find((e) => normalizeEffectName(e.name) === normalizeEffectName(running.effectType))
+      const timing = swappedTiming(runningEffect ?? {}, fromEntry, entry, fromUnit === toUnit)
+      const speed = timing.beatDivision === runningEffect?.beatDivision ? {} : { beatDivision: timing.beatDivision }
+      const direction = timing.direction === (runningEffect?.direction ?? 'FORWARD') ? {} : { direction: timing.direction }
+      if (lightingApi.fx.updateFx(running.effectId, { effectType: entry.name, ...spec, ...speed, ...direction })) {
         onCurrent?.({ ...running, effectType: entry.name })
       }
       return
@@ -351,10 +361,12 @@ export function FxPicker({
       const request = {
         effectType: entry.name,
         propertyName,
-        // A new effect is one bar on the master tagged for its family's usage, else master 1
-        // (venue-visit plan D16) — stamped here, as the palette editor stamps one, so a null
-        // still means master 1 everywhere. A wall-clock effect starts on its own Seconds.
-        beatDivision: NEW_EFFECT_DIVISION,
+        // A new effect runs at its type's own cycle (one bar but for the FX that bounce) on the
+        // master tagged for its family's usage, else master 1 (venue-visit plan D16) — stamped
+        // here, as the palette editor stamps one, so a null still means master 1 everywhere. A
+        // wall-clock effect starts on its own Seconds.
+        beatDivision: newEffectDivision(entry),
+        direction: newEffectDirection(entry),
         ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
         blendMode: spec.blendMode as BlendMode,
         phaseOffset: 0,

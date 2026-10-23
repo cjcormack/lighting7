@@ -138,7 +138,7 @@ class ScriptRunner(
 1. Launch coroutine on `runnerPool`
 2. Evaluate with `show`, `scriptName`, `scriptId`
 
-**FX_CALC / FX_CALC_STATEFUL / FX_CALC_COMPOSITE:**
+**FX_CALC / FX_CALC_STATEFUL:**
 1. Launch coroutine on `runnerPool`
 2. Evaluate with type-specific parameters (phase, context, params, etc.)
 
@@ -153,7 +153,6 @@ Scripts have a `ScriptType` enum stored in the database:
 | `FX_DEFINITION` | `FxDefinitionScript` | Register custom effect types |
 | `FX_CALC` | `FxCalcScript` | Pure phase-based effect calculation |
 | `FX_CALC_STATEFUL` | `FxStatefulCalcScript` | Tick-based effect with internal state |
-| `FX_CALC_COMPOSITE` | `FxCompositeCalcScript` | Multi-output effect calculation |
 
 ### Script Wrapping
 

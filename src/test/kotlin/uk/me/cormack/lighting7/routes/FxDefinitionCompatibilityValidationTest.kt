@@ -73,6 +73,13 @@ class FxDefinitionCompatibilityValidationTest {
         kotlin.test.assertTrue("tilt" in message, "message should name the bad entry: $message")
     }
 
+    @Test
+    fun `a retired built-in id may not name a definition`() {
+        // An archive's old FX use it in the same field, and the importer renames it (terminology plan P3).
+        for (id in listOf("Triangle", "Strobe", "Colour Pulse", "zoom_breathe", "Breathe")) assertNotNull(retiredIdProblem(id), id)
+        assertNull(retiredIdProblem("MyStrobe"))
+    }
+
     // ─── Normalisation ──────────────────────────────────────────────────────
 
     @Test

@@ -155,8 +155,8 @@ data class AddEffectRequest(
      * effect spreads across them, as a group's members are. One item is that fixture or group alone.
      */
     val targets: List<CueTargetDto>? = null,
-    /** One bar when omitted — venue-visit plan D16's default for a new effect. */
-    val beatDivision: Double = BeatDivision.ONE_BAR,
+    /** The FX's own default cycle when omitted — one bar but where its frontmatter says otherwise (D16). */
+    val beatDivision: Double? = null,
     val blendMode: String = "OVERRIDE",
     val startOnBeat: Boolean = true,
     val phaseOffset: Double = 0.0,
@@ -179,13 +179,13 @@ data class AddEffectRequest(
     val seconds: Boolean = false,
     /** Size (effects plan D2), 0–1; refused outside it. */
     val size: Double = 1.0,
-    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`. */
-    val direction: String = "FORWARD",
+    /** Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`; the FX's own default when omitted. */
+    val direction: String? = null,
     /** Runs (D9): stop after this many cycles, at least 1; absent runs forever. */
     val nShot: Int? = null,
     /**
      * The spread's shape (effects plan D4): Spread 0–2, Wings and Blocks at least 1, Groups 0 (off) or
-     * more. Refused out of range, and Wings above 1 under a mirrored order (Centre out, Edges in, Split).
+     * more. Refused out of range, and Wings above 1 under a mirrored order (Centre out, Centre in).
      */
     val spread: Double = 1.0,
     val wings: Int = 1,
@@ -382,6 +382,8 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
             // of and the whole update 400s.
             val effectType = request.effectType ?: existing.effectTypeId
             val params = request.parameters ?: existing.effect.parameters
+            state.show.fxRegistry.fxWriteProblem(effectType, params)
+                ?.let { throw IllegalArgumentException(it) }
             state.show.fxRegistry.createEffectWithTemplates(
                 state.show.templateRegistry, effectType, params,
             )
@@ -506,13 +508,13 @@ internal fun applyEffectUpdate(state: State, effectId: Long, request: UpdateEffe
 
 /**
  * A new effect's Size, Direction, Runs and spread shape (effects plan D2, D5, D9, D4) from a request,
- * strictly: a size outside 0–1, an unknown direction, a count below one or a shape out of range (or
+ * the FX's own direction where it names none, strictly: a size outside 0–1, an unknown direction, a count below one or a shape out of range (or
  * wings under a mirrored order — read from the instance, so its Order is set first) throws for the
  * add route's 400. Shared by the fixture and group add routes, as [markProgrammerOwned] is.
  */
-internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String, nShot: Int?, shape: SpreadShape) {
+internal fun FxInstance.applyRequestedDynamics(size: Double, direction: String?, nShot: Int?, shape: SpreadShape) {
     val checkedSize = EffectSpecCoercion.Strict.size(size)
-    val checkedDirection = EffectSpecCoercion.Strict.direction(direction)
+    val checkedDirection = direction?.let { EffectSpecCoercion.Strict.direction(it) } ?: effect.defaultDirection
     val checkedNShot = EffectSpecCoercion.Strict.nShot(nShot)
     val checkedShape = EffectSpecCoercion.Strict.spreadShape(shape, distributionStrategy)
     updateDynamics {
@@ -588,8 +590,9 @@ internal fun buildEffectInstance(state: State, request: AddEffectRequest): FxIns
     // `pan`/`tilt` property name means the position pair (sweep item A11).
     val target = createTargetFromRequest(request, state, effect.outputType)
     requireOutputTypeMatch(effect, target)
+    val registration = state.show.fxRegistry.getRegistration(request.effectType)
     val timing = FxTiming(
-        beatDivision = request.beatDivision,
+        beatDivision = request.beatDivision ?: registration?.defaultBeatDivision ?: BeatDivision.ONE_BAR,
         startOnBeat = request.startOnBeat
     )
     val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
@@ -614,7 +617,6 @@ internal fun buildEffectInstance(state: State, request: AddEffectRequest): FxIns
     )
 
     // Propagate timing source and identity from the effect's registration
-    val registration = state.show.fxRegistry.getRegistration(request.effectType)
     registration?.timingSource?.let { instance.timingSource = it }
     instance.registrationId = registration?.id
 
@@ -693,12 +695,15 @@ private fun createTargetFromList(
     return fxTarget
 }
 
-private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect =
-    state.show.fxRegistry.createEffectWithTemplates(
+private fun createEffectFromRequest(request: AddEffectRequest, state: State): Effect {
+    state.show.fxRegistry.fxWriteProblem(request.effectType, request.parameters)
+        ?.let { throw IllegalArgumentException(it) }
+    return state.show.fxRegistry.createEffectWithTemplates(
         state.show.templateRegistry,
         request.effectType,
         request.parameters,
     )
+}
 
 // Effect creation, parse helpers, and the effect library have moved to the fx package:
 // - fx/EffectParamUtils.kt (parseExtendedColour, parseColor, toUByteParam, toEasingCurveParam)

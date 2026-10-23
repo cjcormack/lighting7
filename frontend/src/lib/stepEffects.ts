@@ -16,10 +16,19 @@ export const PALETTE_STEPS = 'PaletteSteps'
 export const SLOT_STEPS = 'SlotSteps'
 
 /**
- * The category Palette Steps registers under, which names no family: it is offered, and stored, in
- * the family of the palettes it is given.
+ * The category the Steps FX, Palette Steps and Slot Steps, register under (terminology plan D23),
+ * which names no attribute family: each is offered, and stored, in the family of what it steps.
  */
-export const PALETTE_STEPS_CATEGORY = 'palette'
+export const STEPS_CATEGORY = 'palette'
+
+/**
+ * The category an FX is offered and stored under for the family it drives: Slot Steps' is Beam, a
+ * setting's; every other FX's is its own. Palette Steps' is its palettes' family, which only the
+ * caller knows ([categoryForFamily]).
+ */
+export function drivenCategoryOf(entry: { name: string; category: string }): string {
+  return isSlotSteps(entry.name) ? 'beam' : entry.category
+}
 
 export function isPaletteSteps(effectType: string | null | undefined): boolean {
   return effectType != null && effectType.replace(/[\s_]/g, '').toLowerCase() === PALETTE_STEPS.toLowerCase()

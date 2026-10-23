@@ -2004,11 +2004,6 @@ class FxEngine(
      * repaints what it last answered on [key], so the extra passes leave its pace alone. A key it
      * has never answered for steps whatever woke the pass, so an effect just added or edited paints
      * on its first pass.
-     *
-     * A [CompositeEffect] needs no arm of its own: one [FxInstance] drives one
-     * [FxTarget], so its `calculate` default picks the entry matching the effect's
-     * primary [Effect.outputType] out of the composite map and the rest are ignored.
-     * See `docs/fx-engineering.md` §"Composite Effects".
      */
     private fun calculateEffectOutput(
         effect: FxInstance,

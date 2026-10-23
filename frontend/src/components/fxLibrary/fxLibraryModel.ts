@@ -47,7 +47,7 @@ export function effectsRegisteredBy(
   return library.filter((e) => e.sourceDefinitionId === scriptId && fxSourceOf(e, byEffectId) === 'script')
 }
 
-export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'palette', 'controls', 'composite'] as const
+export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'palette', 'controls'] as const
 export type FxCategory = (typeof FX_CATEGORY_ORDER)[number]
 
 export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
@@ -55,10 +55,9 @@ export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
   colour: 'Colour',
   position: 'Position',
   beam: 'Beam',
-  // Palette Steps' own: it is offered in the family of its palettes (effects plan §4.4).
-  palette: 'Palette',
+  // The Steps FX's own: each is offered in the family of what it steps (effects plan §4.4).
+  palette: 'Steps',
   controls: 'Controls',
-  composite: 'Composite',
 }
 
 export function isFxCategory(value: string): value is FxCategory {
@@ -75,15 +74,12 @@ export const OUTPUT_TYPE_LABELS: Record<string, string> = {
 export const EFFECT_MODE_LABELS: Record<string, string> = {
   STANDARD: 'Standard',
   STATEFUL: 'Stateful',
-  COMPOSITE: 'Composite',
 }
 
 export function effectModeToEditorType(effectMode?: string): FxCalcEditorType {
   switch (effectMode) {
     case 'STATEFUL':
       return 'FX_CALC_STATEFUL'
-    case 'COMPOSITE':
-      return 'FX_CALC_COMPOSITE'
     default:
       return 'FX_CALC'
   }

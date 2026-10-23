@@ -216,6 +216,20 @@ describe('FxPicker', () => {
     expect(updateFx.mock.calls[1][1]).toMatchObject({ effectType: 'CandleFlicker', beatDivision: 4 })
   })
 
+  it('starts an FX that bounces at its own half bar, Bounce, and a swap at the old default takes the new one', async () => {
+    const fade: EffectLibraryEntry = { ...PULSE, name: 'Fade', defaultBeatDivision: 2, defaultDirection: 'BOUNCE' }
+    wire.library = [PULSE, fade]
+    const { rerender } = render(<Harness initialFamily="INTENSITY" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Fade' }))
+    await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ effectType: 'Fade', beatDivision: 2, direction: 'BOUNCE' })
+
+    wire.active = [makeActiveEffect({ id: 77, effectType: 'Fade', targetKey: 'spot-3', propertyName: 'dimmer', beatDivision: 2, direction: 'BOUNCE' })]
+    rerender(<Harness initialFamily="INTENSITY" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    expect(updateFx.mock.calls[0][1]).toMatchObject({ effectType: 'Pulse', beatDivision: 4, direction: 'FORWARD' })
+  })
+
   it('swaps a second tap made before the effect list has caught up, rather than starting a second effect', async () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
@@ -267,7 +281,7 @@ describe('the Beam family (effects plan §4.4)', () => {
   beforeEach(() => {
     wire.library = [
       PULSE,
-      beam('Zoom Breathe', 'zoom'),
+      beam('Zoom Wave', 'zoom'),
       beam('Iris Pulse', 'iris'),
       beam('Frost Pulse', 'frost'),
       beam('Focus Pull', 'focus'),
@@ -278,7 +292,7 @@ describe('the Beam family (effects plan §4.4)', () => {
     render(<BeamHarness />)
     const list = screen.getByRole('list', { name: 'Beam FX' })
     expect(Array.from(list.querySelectorAll('[data-effect-pick]')).map((b) => b.getAttribute('data-effect-pick'))).toEqual([
-      'Zoom Breathe',
+      'Zoom Wave',
       'Iris Pulse',
     ])
   })
@@ -324,7 +338,8 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
   }
   const SLOT_STEPS: EffectLibraryEntry = {
     name: 'SlotSteps',
-    category: 'beam',
+    // The Steps family's, as the desk files it (terminology plan D23); it is still offered in Beam.
+    category: 'palette',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -500,15 +515,15 @@ describe('FxPicker on the bare effect press', () => {
 
   it('auditions the pressed effect: a second tap swaps it in place rather than pressing again', async () => {
     const { rerender } = render(<Pressing />)
-    wire.library = [PULSE, { ...PULSE, name: 'Breathe' }]
+    wire.library = [PULSE, { ...PULSE, name: 'Ramp' }]
     rerender(<Pressing />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(pressEffect).toHaveBeenCalledTimes(1))
     wire.active = [makeActiveEffect({ id: 99, effectType: 'Pulse', targetKey: '[]', propertyName: 'dimmer' })]
     rerender(<Pressing />)
-    fireEvent.click(screen.getByRole('button', { name: 'Breathe' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
     expect(pressEffect).toHaveBeenCalledTimes(1)
-    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ effectType: 'Breathe' }))
+    expect(updateFx).toHaveBeenCalledWith(99, expect.objectContaining({ effectType: 'Ramp' }))
   })
 
   it('names a group as itself, so its effect is one group effect with its distribution', () => {

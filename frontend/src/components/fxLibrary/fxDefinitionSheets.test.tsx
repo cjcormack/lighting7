@@ -70,7 +70,7 @@ describe('NewFxDefinitionSheet', () => {
   it('offers every category the library draws but Beam, Controls included', () => {
     inSheet(<NewFxDefinitionSheet takenIds={[]} onCreated={() => {}} />)
     fireEvent.click(screen.getAllByRole('combobox')[0])
-    for (const label of ['Intensity', 'Colour', 'Position', 'Controls', 'Composite']) {
+    for (const label of ['Intensity', 'Colour', 'Position', 'Controls']) {
       expect(screen.getByRole('option', { name: label })).toBeInTheDocument()
     }
     // A beam effect drives one named property, which this form cannot name.

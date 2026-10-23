@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.ai
 
+import uk.me.cormack.lighting7.fx.BeatDivision
 import uk.me.cormack.lighting7.fx.EffectDirection
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
@@ -177,7 +178,9 @@ class RigBriefing(private val state: State) {
         sb.appendLine("## Effect Library (for create_look)")
         for (effect in state.show.fxRegistry.getLibrary()) {
             val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
-            sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}) params: $params")
+            val defaults = (if (effect.defaultBeatDivision != BeatDivision.ONE_BAR) ", beatDivision=${effect.defaultBeatDivision}" else "") +
+                (if (effect.defaultDirection != EffectDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
+            sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}$defaults) params: $params")
         }
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.
@@ -185,7 +188,9 @@ class RigBriefing(private val state: State) {
             "PaletteSteps steps through generic value palettes of one family (`palettes`: two or more " +
                 "`tmpl:{uuid}`, comma-separated) — store it with that family's category (dimmer, colour, " +
                 "position or beam). SlotSteps steps one setting's options by name (`slots`, e.g. " +
-                "`Gobo 3,Gobo 5`) — name the setting as its propertyName.",
+                "`Gobo 3,Gobo 5`) — name the setting as its propertyName, and store it as beam. Where an " +
+                "effect's line names a beatDivision or direction, that is what a new one runs at unless asked " +
+                "otherwise.",
         )
         sb.appendLine()
 
@@ -362,14 +367,14 @@ class RigBriefing(private val state: State) {
         val sb = StringBuilder()
         // Key concepts
         sb.appendLine("## Key Concepts")
-        sb.appendLine("- Beat divisions are beats a cycle: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new effect is one bar unless asked otherwise.")
+        sb.appendLine("- Beat divisions are beats a cycle: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new effect is one bar unless asked otherwise, or unless the library names its own default.")
         sb.appendLine("- **Size, direction and runs**: every effect takes `size` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement effect's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `nShot` (stop after that many cycles — a flash on cue is 1; omit for forever).")
-        sb.appendLine("- **The spread's shape**: an effect over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the distribution order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTER_OUT, EDGES_IN or SPLIT, which are two wings already), `blocks` (neighbouring heads moving as one) and `groups` (the spread repeating every N heads; 0 is off). These shape a spreading `distribution` only — send one, since an omitted distribution is UNIFIED and every head runs in step.")
+        sb.appendLine("- **The spread's shape**: an effect over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the distribution order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTER_OUT or EDGES_IN, which are two wings already), `blocks` (neighbouring heads moving as one) and `groups` (the spread repeating every N heads; 0 is off). These shape a spreading `distribution` only — send one, since an omitted distribution is UNIFIED and every head runs in step.")
         sb.appendLine("- **Seconds**: an effect may run on its own cycle instead of following a master — `seconds: true`, with `beatDivision` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
-        sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN, PING_PONG, REVERSE, SPLIT, RANDOM")
+        sb.appendLine("- Distributions: LINEAR (sequential chase), UNIFIED (all same), CENTER_OUT, EDGES_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or a palette reference 'tmpl:{uuid}'.")
-        sb.appendLine("- **Palette references**: a colour parameter may name a colour palette by uuid — 'tmpl:2f1c…' — instead of stating a colour. Retuning that palette moves every running effect that references it, which is the point: it is how a show keeps one set of colours in one place. Only the **generic** colour palettes listed above can be referenced; a per-fixture palette holds no single colour, and an effect palette holds no colour at all. Use them in a colourList too: 'colours' takes a comma-separated mix, e.g. 'tmpl:<warm>,tmpl:<cold>,#ff0000'. Make one with create_palette.")
+        sb.appendLine("- **Palette references**: a colour parameter may name a colour palette by uuid — 'tmpl:2f1c…' — instead of stating a colour. Retuning that palette moves every running effect that references it, which is the point: it is how a show keeps one set of colours in one place. Only the **generic** colour palettes listed above can be referenced; a per-fixture palette holds no single colour, and an effect palette holds no colour at all. Colour Cycle's 'colours' takes literal colours only; to step through palettes, each landing on every head for itself, use PaletteSteps with 'palettes': 'tmpl:<warm>,tmpl:<cold>'. Make a palette with create_palette.")
         sb.appendLine("- A palette reference is legal **only in an effect parameter**. Cue values, look rows and programmer values are always literals; a cue that should follow a palette gets a *layer* applying it (see create_cue / cue layers).")
         sb.appendLine("- For group effects, use distribution=LINEAR for chases, UNIFIED for all-together")
         sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Each effect type sets its own default: every built-in is continuous and defaults to false; a user effect that steps (a chase) may default to true. You can override this per effect with the `stepTiming` parameter.")

@@ -749,8 +749,10 @@ Release folds to its glyph and the scope line drops the fade.
   patched head's options of the setting it names, `rigSettingUnion`, with typed names besides). **A tap is the start**: the effect runs at once with its
   defaults, on that row's property where the effect can take it, as a **programmer effect**
   (`programmerOwned`, so it plays over the programmer's values, Clear sweeps it and Record captures
-  it), a movement effect starting *Around*, every effect starting on **one bar** on the master tagged
-  for its family's usage (venue-visit plan D16; a wall-clock effect on four seconds). **Another tap swaps it** through `updateFx` — the new
+  it), a movement effect starting *Around*, every effect starting on its type's own cycle and Direction
+  — **one bar**, Forward, but half a bar and Bounce for Colour Fade, Focus Pull and the sweeps
+  (`newEffectDivision`, `newEffectDirection`) — on the master tagged for its family's usage
+  (venue-visit plan D16; a wall-clock effect on four seconds). **Another tap swaps it** through `updateFx` — the new
   type with its own defaults and starting blend, id and phase kept — so the operator auditions by
   tapping down the list; a tap that lands on another *property* cannot be a swap (an instance keeps
   its target), so it stops the auditioned effect and starts afresh. An effect offered through a
@@ -800,7 +802,7 @@ Release folds to its glyph and the scope line drops the fade.
   heads — *Timing: Per cycle | Per head* (over `stepTiming`), Element mode and the head filter. **The
   spread's shape is the *Spread* section's** (effects plan D11, §4.1; `SpreadSection`), a disclosure above Shape on a group or a
   fixture with heads, and always on an FX palette: *Spread* %,
-  *Wings* (hidden under a mirrored Order — Centre out, Centre in, Split — and set back to 1 in the same
+  *Wings* (hidden under a mirrored Order — Centre out, Centre in — and set back to 1 in the same
   write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
   (0 off), and a row of **phase dials** — eight notional heads on a palette, the effect's own live
   (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
@@ -1002,10 +1004,10 @@ two it holds is `kind`, and it is fixed at creation the way the family is; three
 effect half narrow, and each removes a way for it to complicate the cook: **a value or an effect**,
 **one effect** (several together is what a Look with deferred effects already is), and **always
 generic** (an effect fans over whatever the layer names, so `isGeneric` is true for every one).
-Every family may hold an effect — a **Beam** one a beam built-in (Zoom Breathe, Iris Pulse, Frost
+Every family may hold an effect — a **Beam** one a beam built-in (Zoom Wave, Iris Pulse, Frost
 Pulse, Focus Pull; effects plan D6) or Slot Steps naming its setting, and any family Palette Steps
 over that family's palettes (session 7, `lib/stepEffects.ts`'s `stepEffectPaletteShape`) — and the
-backend refuses `controls` and `composite` **by name**, since neither names a family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
+backend refuses `controls` **by name**, since it names no family. Backend contract in `../docs/lighting-composition-model.md` §"Looks and layers"
 and `models/templates.kt`; the completed records are
 `../docs/plans/completed/looks-and-layers-plan.md` and
 `desk-simplification-plan.md` §Session 3.
@@ -4256,7 +4258,7 @@ each was:
   press reads it (a Pulse on a uv cell is Colour). `paletteFits` narrows a Beam cell's effect
   palettes by the property the effect drives — a beam built-in's library property, Slot Steps' named
   setting, Palette Steps' palettes' rows (`effectPaletteDrives`, given the library and palette list
-  through its `EffectFitContext`) — so a zoom cell is offered the Zoom Breathe palettes and a gobo cell
+  through its `EffectFitContext`) — so a zoom cell is offered the Zoom Wave palettes and a gobo cell
   the Slot Steps of its gobo. **In the cue editor** (apply-model plan session 8) the bands carry the
   cue arm without a prop: `usePress` reads `PressCue` (`components/press/pressCue.ts`), which
   `CueRowStoreProvider` provides, so a band press there is the cue's layer press and the line reads
@@ -5419,8 +5421,8 @@ sheet's Usage, Follows and Ratio columns (§Library sheets):
   the busk view's ad-hoc effect pads were the original one, and they went when that view was brought
   back onto its design — and was kept for exactly this. Every other half of the rule stands: a master
   declares a usage, the detail sheet sets it, `BuskSpeedRail` badges it.
-  Usage is unique per project (the server 409s `SPEED_MASTER_USAGE_TAKEN`), and `controls` and
-  `composite` are deliberately not routable — those land on master 1, which is what an unmatched
+  Usage is unique per project (the server 409s `SPEED_MASTER_USAGE_TAKEN`), and `controls` is
+  deliberately not routable — its FX land on master 1, which is what an unmatched
   category is defined to do. `speedMasterModel.test.ts` pins the vocabulary against
   `EFFECT_CATEGORY_INFO` the way `maskPicker.test.ts` pins the family lists.
 - **Follow** (`followNum` / `followDen`, both null = manual, plus `followTargetUuid`) makes a
@@ -5503,8 +5505,8 @@ beside the Speed label rather than as a select under it. *Seconds* is an effect'
 master (`seconds` on the wire; a wall-clock effect's Seconds is no rate master). It lists the live
 bank and always sends a concrete uuid — choosing M1 sends master 1's uuid, `SpeedMasterSelect`'s rule,
 because `updateFx`'s absent field means "keep" — and it reads the live BPM, never the stored one.
-**A new effect is one bar on the master tagged for its family's usage, else master 1** (venue-visit
-plan D16): `FxPicker` and `TemplateEditor` stamp it through `useSpeedMasterForCategory` at creation,
+**A new effect is its type's own cycle (one bar but where the library says otherwise) on the master
+tagged for its family's usage, else master 1** (venue-visit plan D16): `FxPicker` and `TemplateEditor` stamp it through `useSpeedMasterForCategory` at creation,
 so `null` still means master 1 everywhere; a wall-clock effect starts on its own Seconds (4 s).
 
 `BeatIndicator` pulses from the keyed `speedMasters.beat` stream, always — the unkeyed

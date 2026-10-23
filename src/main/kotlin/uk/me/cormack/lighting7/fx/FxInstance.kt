@@ -108,7 +108,8 @@ data class FxTiming(
 /**
  * Which way each head runs its own cycle (effects plan D5, §3.3 step 6): applied to the member's
  * phase after the spread, so it is a field of every running effect rather than a parameter of the
- * few effects that once wrote one (Ramp Down, the sweeps' `pingPong` — P6 keeps both).
+ * few effects that once wrote one. Colour Fade, Focus Pull and the sweeps bounce by it, by default
+ * ([Effect.defaultDirection]).
  */
 enum class EffectDirection {
     /** The phase as the clock gives it. */
@@ -498,7 +499,7 @@ class FxInstance internal constructor(
         blendMode: BlendMode = BlendMode.OVERRIDE,
     ) : this(
         effect, target, timing, blendMode,
-        AtomicReference(FxDynamics(stepTiming = effect.defaultStepTiming)),
+        AtomicReference(FxDynamics(stepTiming = effect.defaultStepTiming, direction = effect.defaultDirection)),
     )
 
     /** [envelopeRef], for the swap that shares it. */
@@ -569,7 +570,7 @@ class FxInstance internal constructor(
      * — of which [uk.me.cormack.lighting7.routes.captureCurrentState] is the one that would corrupt
      * a Record. Collapsing to the kind-carrying value makes every reader visit once.
      *
-     * [name] is what earns the third field: `FX running` says *in Amber Breathe* without a second
+     * [name] is what earns the third field: `FX running` says *in Amber Wave* without a second
      * lookup, the way provenance already does for a layer.
      */
     var source: LayerSource? = null

@@ -1680,7 +1680,7 @@ class SetupTools(
             }
             val layers = try {
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
-                    validateCueChildren(emptyList(), parsed)?.let { rowProblems += it }
+                    validateCueChildren(emptyList(), parsed, registry = state.show.fxRegistry)?.let { rowProblems += it }
                     rowProblems += aiTools.layerSourceProblems(project, parsed)
                     rowProblems += aiTools.untargetedEffectLayerProblems(parsed)
                 }
@@ -1756,7 +1756,7 @@ class SetupTools(
                     fadeCurve = spec.fadeCurve
                     speedMasters = spec.speedMasters
                 }.also { cue ->
-                    writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true)
+                    writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true, registry = state.show.fxRegistry)
                     replaceCueScenery(cue, spec.scenery)
                     replaceCueEvents(cue, spec.events)
                 }

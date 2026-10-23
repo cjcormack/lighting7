@@ -128,6 +128,10 @@ export interface EffectLibraryEntry {
    * *seconds* and never consults a speed master at all.
    */
   timingSource?: string
+  /** The division a new one runs at, in beats (seconds for a wall-clock FX); absent from an older desk. */
+  defaultBeatDivision?: number
+  /** The Direction a new one runs in — `BOUNCE` for the FX that bounce; absent from an older desk. */
+  defaultDirection?: string
   description?: string
   parameters: EffectParameterDef[]
   compatibleProperties: string[]

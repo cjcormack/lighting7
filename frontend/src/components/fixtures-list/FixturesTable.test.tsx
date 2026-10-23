@@ -1365,7 +1365,7 @@ describe('FixturesTable — the FX lens', () => {
   })
 
   it('offers each effect from a menu where several paint the cell', () => {
-    lensFx.effects = [cue(), cue({ id: 6, effectType: 'Strobe', beatDivision: 4 })]
+    lensFx.effects = [cue(), cue({ id: 6, effectType: 'DimmerStrobe', beatDivision: 4 })]
     render(<Harness rows={LENS_ROWS} fxSelection={createFxSelectionStore()} />)
     expect(chips()[0]).toHaveTextContent('½+1')
     fireEvent.pointerDown(chips()[0], { button: 0, ctrlKey: false })

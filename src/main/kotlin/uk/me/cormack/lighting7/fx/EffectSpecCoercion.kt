@@ -132,7 +132,7 @@ object EffectSpecCoercion {
         /**
          * Why the spread's shape (effects plan D4) is not one — Spread outside 0–2 (0–200 %), Wings or
          * Blocks below 1, Groups below 0 (off), any count above [SpreadShape.MAX_COUNT], or Wings above
-         * 1 under a mirrored Order ([DistributionStrategy.isMirrored]: Centre out, Edges in and Split
+         * 1 under a mirrored Order ([DistributionStrategy.isMirrored]: Centre out and Centre in
          * are two wings already) — or null. A null field is absent and takes no part, except that
          * [order] is checked against [wings] only when wings are given.
          */
@@ -168,8 +168,7 @@ object EffectSpecCoercion {
 
         private fun orderName(order: DistributionStrategy): String = when (order) {
             DistributionStrategy.CENTER_OUT -> "Centre out"
-            DistributionStrategy.EDGES_IN -> "Edges in"
-            DistributionStrategy.SPLIT -> "Split"
+            DistributionStrategy.EDGES_IN -> "Centre in"
             else -> order.javaClass.simpleName
         }
 

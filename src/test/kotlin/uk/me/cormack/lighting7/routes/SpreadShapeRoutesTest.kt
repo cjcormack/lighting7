@@ -86,7 +86,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         for (request in listOf(
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "CENTER_OUT", wings = 2),
-            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "SPLIT", wings = 2),
+            AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", distribution = "EDGES_IN", wings = 2),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", spread = 2.5),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", blocks = 0),
             AddGroupFxRequest(effectType = "Pulse", propertyName = "dimmer", groups = -1),

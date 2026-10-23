@@ -1106,8 +1106,8 @@ Three rules keep the reversal narrow, and each removes a way for it to complicat
 
 The family is then **derived from the effect's library `category`**, through the same
 `familyForEffectCategory` map a Look's derived families use (`dimmer` → Intensity, `colour` →
-Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `composite` spans
-families, so both answer null and are refused by name. A Beam effect palette holds one of the beam
+Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `palette` (the Steps FX)
+steps another family, so both answer null and are refused by name. A Beam effect palette holds one of the beam
 built-ins (effects plan D6, `fx-engineering.md` §"Beam Effects"); its stored effect names no
 property, and a press lands it on the one property the effect declares, skipping a head without it —
 but for Slot Steps, which names the setting it steps as its `propertyName`. Palette Steps is the one

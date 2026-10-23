@@ -95,11 +95,11 @@ class GlossaryVocabularyTest {
     @Test
     fun `the shipped effect library's categories are exactly the known set`() {
         assertEquals(
-            setOf("dimmer", "colour", "position", "beam", "composite", PALETTE_STEPS_CATEGORY),
+            setOf("dimmer", "colour", "position", "beam", STEPS_CATEGORY),
             builtInCategories(),
             "the built-in category vocabulary moved. If you added a category, decide whether it " +
                 "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +
-                "set) or lands on master 1 like composite/controls (add it to this set only) — " +
+                "set) or lands on master 1 like controls (add it to this set only) — " +
                 "see D7 in docs/plans/completed/busking-view-plan.md",
         )
     }
@@ -115,22 +115,20 @@ class GlossaryVocabularyTest {
     }
 
     @Test
-    fun `composite and controls are not routable usages`() {
-        // `composite` spans families (LightningStrike computes both a dimmer and a colour half),
-        // so no single usage master is *the* default for it; `controls` is the synthetic
-        // category for from-state settings effects (EffectSpawner, categoryFromPropertyName),
-        // and a settings slider has no tempo. Both route to master 1 via a null
-        // `speedMasterUuid`, which is what an unmatched category is defined to do.
-        assertTrue("composite" !in SPEED_MASTER_USAGES)
+    fun `controls is not a routable usage`() {
+        // `controls` is the synthetic category for from-state settings effects (EffectSpawner,
+        // categoryFromPropertyName), and a settings slider has no tempo. It routes to master 1 via
+        // a null `speedMasterUuid`, which is what an unmatched category is defined to do.
         assertTrue("controls" !in SPEED_MASTER_USAGES)
     }
 
     @Test
-    fun `Palette Steps routes by its palettes' family, so its registry category is no usage`() {
-        // Palette Steps registers under `palette`, which names no family: a stored one carries the
-        // family of the palettes it steps (effects plan §3.6), and that category — a usage — is
-        // what the picker and the MCP tools route its master by.
-        assertTrue(PALETTE_STEPS_CATEGORY !in SPEED_MASTER_USAGES)
+    fun `the Steps FX route by what they step, so their registry category is no usage`() {
+        // Palette Steps and Slot Steps register under the Steps family, which names no attribute
+        // family: a stored one carries the family it steps (effects plan §3.6) — Slot Steps' Beam,
+        // Palette Steps' its palettes' — and that category, a usage, is what the picker and the
+        // MCP tools route its master by.
+        assertTrue(STEPS_CATEGORY !in SPEED_MASTER_USAGES)
     }
 
     private companion object {

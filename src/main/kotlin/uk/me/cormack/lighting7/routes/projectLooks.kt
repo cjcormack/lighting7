@@ -28,6 +28,7 @@ import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.familyForEffectCategory
+import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.toMaskNames
@@ -133,7 +134,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
-            validateLookEffects(request.effects)?.let { problem ->
+            validateLookEffects(request.effects, state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -192,7 +193,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 val effects = if (hasEffects) {
                     lookJson.decodeFromJsonElement<List<LookEffectDto>>(body["effects"]!!)
                 } else null
-                effects?.let { validateLookEffects(it) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
+                effects?.let { validateLookEffects(it, state.show.fxRegistry) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
 
                 if (hasRows || hasEffects) writeLookChildren(look, rows, effects)
 
@@ -855,7 +856,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
  * operator sees and the value the desk plays then disagree permanently, which is what
  * [EffectSpecCoercion.Lenient] exists to *survive*, not what it should have to cover.
  */
-internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
+internal fun validateLookEffects(effects: List<LookEffectDto>, registry: FxRegistry): String? {
     val problems = effects.flatMapIndexed { index, effect ->
         listOfNotNull(
             when {
@@ -881,6 +882,7 @@ internal fun validateLookEffects(effects: List<LookEffectDto>): String? {
                 blocks = effect.blocks,
                 groups = effect.groups,
             ),
+            registry.fxWriteProblem(effect.effectType, effect.parameters),
         ).map { "effects[$index]: $it" }
     }
     return problems.takeIf { it.isNotEmpty() }?.joinToString("; ")

@@ -10,6 +10,8 @@
  *   by `bpm / 120`.
  */
 
+import type { EffectDirection } from '@/api/fxApi'
+
 /** The fields a stored or running effect carries its timing in. */
 export interface EffectTimingFields {
   seconds?: boolean | null
@@ -57,3 +59,44 @@ function round3(n: number): number {
  * seconds, which is where its own Seconds starts.
  */
 export const NEW_EFFECT_DIVISION = 4
+
+/** What an FX type says a new one of it runs at: the library entry's two defaults. */
+export interface EffectDefaults {
+  defaultBeatDivision?: number
+  defaultDirection?: string
+}
+
+/**
+ * A new FX's division: its type's own default (half a bar for the FX that bounce, terminology plan
+ * D24), else [NEW_EFFECT_DIVISION].
+ */
+export function newEffectDivision(entry: EffectDefaults | null | undefined): number {
+  return entry?.defaultBeatDivision ?? NEW_EFFECT_DIVISION
+}
+
+/** A new FX's Direction: its type's own default, Bounce for the FX that bounce, else Forward. */
+export function newEffectDirection(entry: EffectDefaults | null | undefined): EffectDirection {
+  const named = entry?.defaultDirection
+  return named === 'BACKWARD' || named === 'BOUNCE' ? named : 'FORWARD'
+}
+
+/**
+ * The division and Direction an FX swapped for another type keeps: each carries over, unless it
+ * still stands at the old type's own default, when it takes the new type's — so a Sine Wave swapped
+ * for a Sweep bounces at half a bar, as a new Sweep does, and a division or Direction the operator
+ * chose stays theirs. [sameUnit] false (a beat FX for a wall-clock one) starts the division afresh.
+ */
+export function swappedTiming(
+  prev: { beatDivision?: number | null; direction?: EffectDirection | null },
+  from: EffectDefaults | null | undefined,
+  to: EffectDefaults | null | undefined,
+  sameUnit: boolean,
+): { beatDivision: number; direction: EffectDirection } {
+  const division = prev.beatDivision
+  const direction = prev.direction ?? 'FORWARD'
+  return {
+    beatDivision:
+      !sameUnit || division == null || division === newEffectDivision(from) ? newEffectDivision(to) : division,
+    direction: direction === newEffectDirection(from) ? newEffectDirection(to) : direction,
+  }
+}

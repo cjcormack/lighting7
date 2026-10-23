@@ -13,7 +13,7 @@ import { chan, makeActiveEffect, settingProp, sliderProp } from '@/test/fixtureF
  * under the cell's own family, the focused Look's teal line with no rings, *Save as palette…* with
  * the family, and that a cell with no press door (no `projectId`, no cue editor) draws its editor
  * bare — the cue editor's cells draw the bands through `PressCue`, pinned below. Then the
- * Effects band below the editor (session 6): a zoom cell offered Zoom Breathe, a gobo cell its Effects
+ * Effects band below the editor (session 6): a zoom cell offered Zoom Wave, a gobo cell its Effects
  * band and no Palettes band, the running effects lit and opened over the cell batch.
  */
 
@@ -163,7 +163,7 @@ const beamEffect = (effectType: string, propertyName: string | null = null) => (
   distribution: 'LINEAR',
   parameters: {},
 })
-const BREATHE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('ZoomBreathe') })
+const WAVE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('ZoomWave') })
 const PULSE_IRIS = template({ id: 9, uuid: 'u9', name: 'Iris throb', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('IrisPulse') })
 const GOBO_STEPS = template({ id: 10, uuid: 'u10', name: 'Gobo walk', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('SlotSteps', 'gobo') })
 const libraryEntry = (name: string, property: string) => ({
@@ -174,7 +174,7 @@ const libraryEntry = (name: string, property: string) => ({
   compatibleProperties: [property],
   parameters: [],
 })
-const ZOOM_BREATHE = libraryEntry('ZoomBreathe', 'zoom')
+const ZOOM_WAVE = libraryEntry('ZoomWave', 'zoom')
 const IRIS_PULSE = libraryEntry('IrisPulse', 'iris')
 
 const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
@@ -220,8 +220,8 @@ beforeEach(() => {
       unobserve() {}
     },
   )
-  templates = [FULL, HALF, RED, WIDE, SOFT, HOME, PULSE, BREATHE_ZOOM, PULSE_IRIS, GOBO_STEPS]
-  fx.library = [ZOOM_BREATHE, IRIS_PULSE]
+  templates = [FULL, HALF, RED, WIDE, SOFT, HOME, PULSE, WAVE_ZOOM, PULSE_IRIS, GOBO_STEPS]
+  fx.library = [ZOOM_WAVE, IRIS_PULSE]
   fx.active = []
   picker.mockClear()
   applied.current = []
@@ -383,7 +383,7 @@ describe('the Effects band', () => {
     expect(screen.getByRole('slider').compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('offers a zoom cell Zoom Breathe — the Beam effect palettes that drive zoom — and opens the picker on zoom', () => {
+  it('offers a zoom cell Zoom Wave — the Beam effect palettes that drive zoom — and opens the picker on zoom', () => {
     slider(ZOOM)
     expect(effectChips()).toEqual(['Slow zoom'])
     fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
@@ -425,7 +425,7 @@ describe('the Effects band', () => {
     fx.active = [
       makeActiveEffect({ id: 41, effectType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' }),
       makeActiveEffect({ id: 42, effectType: 'Pulse', targetKey: 'hex-9', propertyName: 'dimmer' }),
-      makeActiveEffect({ id: 43, effectType: 'ZoomBreathe', targetKey: 'hex-1', propertyName: 'zoom' }),
+      makeActiveEffect({ id: 43, effectType: 'ZoomWave', targetKey: 'hex-1', propertyName: 'zoom' }),
     ]
     slider(DIMMER)
     const lit = [...document.querySelectorAll('[data-band-effect]')].map((chip) => chip.getAttribute('data-band-effect'))
@@ -450,7 +450,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   const storedPulse = (targetKey: string, propertyName = 'dimmer') => ({
     targetType: 'fixture' as const,
     targetKey,
-    effectType: propertyName === 'zoom' ? 'ZoomBreathe' : 'Pulse',
+    effectType: propertyName === 'zoom' ? 'ZoomWave' : 'Pulse',
     category: 'dimmer',
     propertyName,
     beatDivision: 4,

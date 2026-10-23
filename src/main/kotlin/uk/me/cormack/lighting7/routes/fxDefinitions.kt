@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
 import io.ktor.resources.*
@@ -65,6 +66,10 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
+        retiredIdProblem(request.effectId)?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@post
+        }
 
         val requestOutputType = FxOutputType.valueOf(request.outputType)
         val requestCompatible = normaliseCompatibleProperties(requestOutputType, request.compatibleProperties)
@@ -148,6 +153,10 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             mergedOutputType, request.compatibleProperties ?: stored.second,
         )
         validateCompatibleProperties(mergedOutputType, mergedCompatible)?.let {
+            call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
+            return@put
+        }
+        request.effectId?.let { retiredIdProblem(it) }?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -514,3 +523,15 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     defaultStepTiming = this.defaultStepTiming,
     timingSource = this.timingSource.name,
 )
+
+/**
+ * Why [effectId] may not name a script FX definition, or null: a retired built-in id would return
+ * with a new meaning in the field an archive's old FX use it in (terminology plan P3), and the
+ * importer renames it to today's built-in.
+ */
+internal fun retiredIdProblem(effectId: String): String? =
+    if (LegacyNames.isRetiredFxId(effectId)) {
+        "'$effectId' was a built-in FX's id and is retired; give the FX another id"
+    } else {
+        null
+    }

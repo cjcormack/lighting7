@@ -52,7 +52,7 @@ const library: EffectLibraryEntry[] = [
     compatibleProperties: ['position'],
   },
   {
-    name: 'Zoom Breathe',
+    name: 'Zoom Wave',
     category: 'beam',
     outputType: 'SLIDER',
     effectMode: 'STANDARD',
@@ -83,7 +83,8 @@ const library: EffectLibraryEntry[] = [
   },
   {
     name: 'SlotSteps',
-    category: 'beam',
+    // The Steps family's, as the desk files it (terminology plan D23); a palette stores it as Beam.
+    category: 'palette',
     outputType: 'STEPS',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -325,7 +326,7 @@ describe('the Holds choice', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
     fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     fireEvent.click(screen.getByRole('combobox'))
-    expect(screen.getByRole('option', { name: 'Zoom Breathe' })).toBeTruthy()
+    expect(screen.getByRole('option', { name: 'Zoom Wave' })).toBeTruthy()
     expect(screen.queryByRole('option', { name: 'Colour Pulse' })).toBeNull()
   })
 
@@ -403,14 +404,14 @@ describe('validity and the save body', () => {
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'Beam' }))
     fireEvent.click(screen.getByRole('button', { name: 'FX' }))
-    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zoom Breathe' } })
-    chooseEffect('Zoom Breathe')
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Zoom Wave' } })
+    chooseEffect('Zoom Wave')
     fireEvent.click(screen.getByRole('button', { name: /create palette/i }))
 
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as TemplateInput
     expect(body.effect).toMatchObject({
-      effectType: 'Zoom Breathe',
+      effectType: 'Zoom Wave',
       category: 'beam',
       propertyName: null,
       speedMasterUuid: 'master-3-uuid',

@@ -51,6 +51,7 @@ import uk.me.cormack.lighting7.fx.familyForEffectCategory
 import uk.me.cormack.lighting7.fx.parseTemplateIntent
 import uk.me.cormack.lighting7.fx.serializeTemplateColourRef
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
+import uk.me.cormack.lighting7.fx.stepsFxCategory
 import uk.me.cormack.lighting7.fx.templateFamily
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -1221,8 +1222,8 @@ private fun validateTemplateEffect(
     templates: TemplateRegistry?,
 ): String? {
     // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
-    // derived families use. `controls` has no tempo and `composite` spans families, so neither
-    // names one; a beam effect (effects plan D6) is a Beam palette.
+    // derived families use. `controls` has no tempo, so names none; a beam effect (effects plan
+    // D6) is a Beam palette.
     val family = familyForEffectCategory(effect.category)
         ?: return "A palette cannot hold a '${effect.category}' effect — an effect palette is " +
             "banked by family, and that category has none. Effect palettes are: " +
@@ -1238,7 +1239,7 @@ private fun validateTemplateEffect(
     val category = if (registration.id == PALETTE_STEPS_ID) {
         validatePaletteSteps(effect.parameters["palettes"], templates).getOrElse { return it.message }.category
     } else {
-        registration.category
+        stepsFxCategory(registration.id, null) ?: registration.category
     }
     if (!category.equals(effect.category, ignoreCase = true)) {
         return "'${effect.effectType}' is a $category effect, not ${effect.category}"
@@ -1283,6 +1284,8 @@ private fun validateTemplateEffect(
         blocks = effect.blocks,
         groups = effect.groups,
     )?.let { return it }
+
+    registry.fxWriteProblem(effect.effectType, effect.parameters)?.let { return it }
 
     // Rule 5 (D12): a template naming itself would recurse in `createEffectWithTemplates`. The
     // other direction — an effect template's colour parameter naming a *value* colour template —

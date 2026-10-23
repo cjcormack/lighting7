@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.routes
 import java.time.Duration
 
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
@@ -116,6 +117,7 @@ internal fun createCueFromRecording(
     cueNumber: String?,
     sortOrder: Int?,
     cueType: CueType,
+    registry: FxRegistry,
 ): CueWriteOutcome {
     check(cueType == CueType.STANDARD) { "A marker is not a cue — `performProgrammerRecord` refuses one first" }
     val cue = DaoCue.new {
@@ -126,6 +128,7 @@ internal fun createCueFromRecording(
         cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
         created = true,
+        registry = registry,
     )
     // Its place is a new entry: at `sortOrder` (a position in the list), else appended; an
     // unnumbered cue takes its number from where it landed.

@@ -89,13 +89,13 @@ class BuiltInEffectBehaviourTest {
      * This is not hypothetical. While the parser was dropping defaults, `GET /fx/library` served
      * `defaultValue: ""`, the Add FX sheet seeded its form from that, and the empty map was
      * persisted. The desk's `cue_ad_hoc_effects` table holds exactly this today —
-     * `Breathe {"min":"","max":""}` and `Circle {"panCenter":"", …}` — so without this rule the
+     * `SineWave {"min":"","max":""}` and `Circle {"panCenter":"", …}` — so without this rule the
      * parser fix would heal newly-added effects and leave those rows dead.
      */
     @Test
     fun `a blank stored parameter falls back to the declared default`() {
-        val stored = registry.createEffect("Breathe", mapOf("min" to "", "max" to ""))
-        val fresh = fx("Breathe")
+        val stored = registry.createEffect("SineWave", mapOf("min" to "", "max" to ""))
+        val fresh = fx("SineWave")
         for (i in 0..20) {
             val phase = i / 20.0
             assertEquals(
@@ -106,7 +106,7 @@ class BuiltInEffectBehaviourTest {
         // And it is not merely equal-but-dead: the effect actually moves.
         assertTrue(
             (0..20).map { stored.calculate(it / 20.0).slider() }.distinct().size > 1,
-            "a Breathe rehydrated from blank params should still breathe",
+            "a Sine Wave rehydrated from blank params should still move",
         )
 
         val circle = registry.createEffect(
@@ -199,7 +199,7 @@ class BuiltInEffectBehaviourTest {
     fun `a built-in a script makes reports its registry id, not its display name`() {
         // A script's `effect(id)` builds through the registry but never sets the instance's own
         // registrationId, so what a Record stores comes from the effect itself.
-        for (id in listOf("Triangle", "Strobe", "ColourPulse", "ZoomBreathe", "SineWave")) {
+        for (id in listOf("Ramp", "DimmerStrobe", "ColourWave", "ZoomWave", "SineWave")) {
             val effect = registry.createEffect(id)
             assertEquals(id, effect.registrationId, "$id's effect should carry its registry id")
             val instance = FxInstance(effect, SliderTarget("hex-a", "dimmer"), FxTiming(beatDivision = 1.0))
@@ -208,8 +208,8 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `Triangle rises then falls`() {
-        val effect = fx("Triangle", "min" to "0", "max" to "255", "curve" to "LINEAR")
+    fun `Ramp rises then falls`() {
+        val effect = fx("Ramp", "min" to "0", "max" to "255", "curve" to "LINEAR")
         assertEquals(0.toUByte(), effect.calculate(0.0).slider())
         assertEquals(255.toUByte(), effect.calculate(0.5).slider())
         assertEquals(0.toUByte(), effect.calculate(1.0).slider())
@@ -243,8 +243,8 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `Strobe flashes on briefly`() {
-        val effect = fx("Strobe", "offValue" to "0", "onValue" to "255", "onRatio" to "0.1")
+    fun `DimmerStrobe flashes on briefly`() {
+        val effect = fx("DimmerStrobe", "offValue" to "0", "onValue" to "255", "onRatio" to "0.1")
         assertEquals(255.toUByte(), effect.calculate(0.0).slider())
         assertEquals(255.toUByte(), effect.calculate(0.05).slider())
         assertEquals(0.toUByte(), effect.calculate(0.1).slider())
@@ -253,11 +253,22 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `Breathe stays within bounds`() {
-        val effect = fx("Breathe", "min" to "0", "max" to "255")
+    fun `the retired ids are gone from the library`() {
+        for (id in listOf("Triangle", "Strobe", "ColourPulse", "ZoomBreathe", "Breathe")) {
+            assertEquals(null, registry.getRegistration(id), "$id should no longer be registered")
+        }
+    }
+
+    /** Breathe's stored rows become Sine Wave a quarter-cycle on: `sin²(πφ)` is `SineWave(φ + ¾)`. */
+    @Test
+    fun `SineWave a quarter-cycle on is the curve Breathe drew`() {
+        val effect = fx("SineWave", "min" to "10", "max" to "250")
         for (i in 0..100) {
-            val value = effect.calculate(i / 100.0).slider()
-            assertTrue(value <= 255u, "Breathe value $value should be <= 255")
+            val phase = i / 100.0
+            val s = kotlin.math.sin(phase * kotlin.math.PI)
+            val breathe = (10 + 240 * s * s).toInt()
+            val sine = effect.calculate((phase + 0.75) % 1.0).slider().toInt()
+            assertTrue(kotlin.math.abs(breathe - sine) <= 1, "phase $phase: Breathe $breathe, Sine Wave $sine")
         }
     }
 
@@ -331,8 +342,8 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `ColourPulse oscillates using a sine wave`() {
-        val effect = fx("ColourPulse", "colourA" to "#ff0000", "colourB" to "#0000ff")
+    fun `ColourWave oscillates using a sine wave`() {
+        val effect = fx("ColourWave", "colourA" to "#ff0000", "colourB" to "#0000ff")
 
         // sin(0) = 0 → ratio 0.5, so phase 0 is midway between the two colours
         val atStart = effect.calculate(0.0).colour()
@@ -352,7 +363,7 @@ class BuiltInEffectBehaviourTest {
     fun `ColourFade produces linear transition`() {
         val effect = fx(
             "ColourFade",
-            "fromColour" to "#000000", "toColour" to "#ffffff", "pingPong" to "false",
+            "fromColour" to "#000000", "toColour" to "#ffffff",
         )
 
         val atStart = effect.calculate(0.0).colour()
@@ -370,16 +381,17 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `ColourFade with pingPong returns to start`() {
-        val effect = fx(
-            "ColourFade",
-            "fromColour" to "#000000", "toColour" to "#ffffff", "pingPong" to "true",
-        )
-        val atStart = effect.calculate(0.0).colour()
-        val atEnd = effect.calculate(1.0).colour()
-        assertEquals(atStart.red, atEnd.red)
-        assertEquals(atStart.green, atEnd.green)
-        assertEquals(atStart.blue, atEnd.blue)
+    fun `the FX that bounced by pingPong bounce by Direction at half the cycle`() {
+        for (id in listOf("ColourFade", "FocusPull", "Sweep", "PanSweep", "TiltSweep")) {
+            val registration = registry.getRegistration(id)!!
+            assertTrue(registration.parameters.none { it.name == "pingPong" }, "$id should take no pingPong")
+            assertEquals(EffectDirection.BOUNCE, registration.defaultDirection, id)
+            assertEquals(BeatDivision.HALF, registration.defaultBeatDivision, id)
+            assertEquals(EffectDirection.BOUNCE, registry.createEffect(id).defaultDirection, id)
+        }
+        val forward = registry.getRegistration("SineWave")!!
+        assertEquals(EffectDirection.FORWARD, forward.defaultDirection)
+        assertEquals(BeatDivision.ONE_BAR, forward.defaultBeatDivision)
     }
 
     @Test
@@ -388,7 +400,6 @@ class BuiltInEffectBehaviourTest {
             "ColourFade",
             "fromColour" to "red;w0;a100;uv200",
             "toColour" to "blue;w255;a0;uv0",
-            "pingPong" to "false",
         )
         val mid = effect.calculate(0.5).extColour()
         assertTrue(mid.white.toInt() in 120..135, "White should be ~128, was ${mid.white}")
@@ -454,11 +465,11 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `Sweep moves from start to end without pingPong`() {
+    fun `Sweep moves from start to end over one cycle`() {
         val effect = fx(
             "Sweep",
             "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
-            "curve" to EasingCurve.LINEAR.name, "pingPong" to "false",
+            "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(0.toUByte() to 0.toUByte(), effect.calculate(0.0).position())
         assertEquals(127.toUByte() to 127.toUByte(), effect.calculate(0.5).position())
@@ -466,22 +477,11 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `Sweep with pingPong returns to start`() {
-        val effect = fx(
-            "Sweep",
-            "startPan" to "0", "startTilt" to "0", "endPan" to "255", "endTilt" to "255",
-            "curve" to EasingCurve.LINEAR.name, "pingPong" to "true",
-        )
-        assertEquals(effect.calculate(0.0).position(), effect.calculate(1.0).position())
-        assertEquals(255.toUByte() to 255.toUByte(), effect.calculate(0.5).position())
-    }
-
-    @Test
     fun `PanSweep only changes pan`() {
         val effect = fx(
             "PanSweep",
             "startPan" to "50", "endPan" to "200", "tilt" to "100",
-            "curve" to EasingCurve.LINEAR.name, "pingPong" to "false",
+            "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(50.toUByte() to 100.toUByte(), effect.calculate(0.0).position())
         assertEquals(200.toUByte() to 100.toUByte(), effect.calculate(1.0).position())
@@ -492,7 +492,7 @@ class BuiltInEffectBehaviourTest {
         val effect = fx(
             "TiltSweep",
             "startTilt" to "50", "endTilt" to "200", "pan" to "100",
-            "curve" to EasingCurve.LINEAR.name, "pingPong" to "false",
+            "curve" to EasingCurve.LINEAR.name,
         )
         assertEquals(100.toUByte() to 50.toUByte(), effect.calculate(0.0).position())
         assertEquals(100.toUByte() to 200.toUByte(), effect.calculate(1.0).position())
@@ -514,8 +514,8 @@ class BuiltInEffectBehaviourTest {
     // --- Beam ---
 
     @Test
-    fun `ZoomBreathe is a sine between its two zooms`() {
-        val effect = fx("ZoomBreathe", "min" to "40", "max" to "200")
+    fun `ZoomWave is a sine between its two zooms`() {
+        val effect = fx("ZoomWave", "min" to "40", "max" to "200")
         assertEquals(120.toUByte(), effect.calculate(0.0).slider())
         assertEquals(200.toUByte(), effect.calculate(0.25).slider())
         assertEquals(40.toUByte(), effect.calculate(0.75).slider())
@@ -536,25 +536,24 @@ class BuiltInEffectBehaviourTest {
     }
 
     @Test
-    fun `FocusPull sweeps from start to end and back`() {
+    fun `FocusPull pulls from start to end over one cycle`() {
         val effect = fx("FocusPull", "start" to "20", "end" to "220", "curve" to "LINEAR")
         assertEquals(20.toUByte(), effect.calculate(0.0).slider())
-        assertEquals(220.toUByte(), effect.calculate(0.5).slider())
-        assertEquals(20.toUByte(), effect.calculate(1.0).slider())
-
-        val oneWay = fx("FocusPull", "start" to "20", "end" to "220", "curve" to "LINEAR", "pingPong" to "false")
-        assertEquals(120.toUByte(), oneWay.calculate(0.5).slider())
+        assertEquals(120.toUByte(), effect.calculate(0.5).slider())
+        assertEquals(220.toUByte(), effect.calculate(1.0).slider())
     }
 
     @Test
     fun `each beam built-in declares exactly its own property`() {
-        val expected = mapOf("ZoomBreathe" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
-        // Slot Steps is a Beam effect too (effects plan §3.6), but steps a setting its row names —
-        // it declares only the `setting` sentinel, and emits steps.
-        val beam = registry.allRegistrations.filter { it.category == "beam" && it.id != SLOT_STEPS_ID }
+        val expected = mapOf("ZoomWave" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
+        // Slot Steps drives Beam too (effects plan §3.6), but is filed in the Steps family and steps
+        // a setting its row names — it declares only the `setting` sentinel, and emits steps.
+        val beam = registry.allRegistrations.filter { it.category == "beam" }
         assertEquals(expected.keys, beam.map { it.id }.toSet())
         val slotSteps = registry.getRegistration(SLOT_STEPS_ID)!!
-        assertEquals("beam", slotSteps.category)
+        assertEquals(STEPS_CATEGORY, slotSteps.category)
+        assertEquals(STEPS_CATEGORY, registry.getRegistration(PALETTE_STEPS_ID)!!.category)
+        assertEquals("beam", stepsFxCategory(SLOT_STEPS_ID, null))
         assertEquals(listOf("setting"), slotSteps.compatibleProperties)
         assertEquals(FxOutputType.STEPS, slotSteps.outputType)
         for (reg in beam) {
@@ -563,67 +562,38 @@ class BuiltInEffectBehaviourTest {
         }
     }
 
-    // --- Composite ---
+    // --- Lightning Strike, an Intensity FX since the composite mode went ---
 
     @Test
-    fun `LightningStrike computes both SLIDER and COLOUR entries`() {
-        val effect = fx("LightningStrike") as CompositeEffect
-        val outputs = effect.calculateComposite(0.0)
-        assertNotNull(outputs[FxOutputType.SLIDER], "Should produce SLIDER output")
-        assertNotNull(outputs[FxOutputType.COLOUR], "Should produce COLOUR output")
+    fun `LightningStrike is a standard intensity FX`() {
+        val registration = registry.getRegistration("LightningStrike")!!
+        assertEquals(EffectMode.STANDARD, registration.effectMode)
+        assertEquals("dimmer", registration.category)
+        assertEquals(listOf("dimmer"), registration.compatibleProperties)
     }
 
     @Test
     fun `LightningStrike flashes then decays then goes dark`() {
         val effect = fx("LightningStrike", "maxBrightness" to "255", "minBrightness" to "10")
-            as CompositeEffect
 
-        val flash = effect.calculateComposite(0.02)[FxOutputType.SLIDER]!!.slider()
-        val decay = effect.calculateComposite(0.15)[FxOutputType.SLIDER]!!.slider()
-        val dark = effect.calculateComposite(0.5)[FxOutputType.SLIDER]!!.slider()
+        val flash = effect.calculate(0.02).slider()
+        val decay = effect.calculate(0.15).slider()
+        val dark = effect.calculate(0.5).slider()
 
         assertEquals(255.toUByte(), flash, "Flash phase should reach maxBrightness")
         assertTrue(decay < flash, "Decay brightness $decay should be below flash $flash")
         assertEquals(10.toUByte(), dark, "Dark phase should sit at minBrightness")
     }
 
-    /**
-     * Guard for the primary-output-only contract (sweep item A4). The engine's only entry point
-     * into an effect is [Effect.calculate]; one [FxInstance] drives one [FxTarget], so a
-     * composite's non-primary entries are computed and discarded. If a future change wants the
-     * COLOUR half of a lightning strike to reach a fixture, it needs secondary targets on
-     * `FxInstance` *and* an authoring surface that can name them — not a quietly reinstated
-     * branch in the engine.
-     */
+    /** The decay curve the composite computed, `min + range × (1 − t)²` over 0.05–0.3, unchanged. */
     @Test
-    fun `composite calculate yields only the primary output`() {
-        val effect = fx("LightningStrike")
-        assertEquals(FxOutputType.SLIDER, effect.outputType)
-
-        val output = effect.calculate(0.02)
-        assertTrue(output is FxOutput.Slider, "calculate() must yield the primary SLIDER entry")
-        assertEquals(255.toUByte(), output.slider())
-
-        // The colour half is still computed — it just has nowhere to go.
-        assertNotNull((effect as CompositeEffect).calculateComposite(0.02)[FxOutputType.COLOUR])
-    }
-
-    @Test
-    fun `LightningStrike colour cools from flash to decay`() {
-        val effect = fx("LightningStrike") as CompositeEffect
-        val flash = effect.calculateComposite(0.02)[FxOutputType.COLOUR]!!.colour()
-        val decay = effect.calculateComposite(0.25)[FxOutputType.COLOUR]!!.colour()
-        assertTrue(
-            flash.red > decay.red,
-            "Flash red ${flash.red} should exceed the bluer decay red ${decay.red}",
-        )
-    }
-
-    @Test
-    fun `LightningStrike respects a custom flash colour`() {
-        val effect = fx("LightningStrike", "flashColour" to "#ff0000") as CompositeEffect
-        val colour = effect.calculateComposite(0.02)[FxOutputType.COLOUR]!!.colour()
-        assertEquals(Color.RED, colour)
+    fun `LightningStrike decays on the curve it always had`() {
+        val effect = fx("LightningStrike", "maxBrightness" to "200", "minBrightness" to "20")
+        for (phase in listOf(0.05, 0.1, 0.175, 0.25, 0.299)) {
+            val t = (phase - 0.05) / 0.25
+            val expected = (20 + 180 * (1.0 - t) * (1.0 - t)).toInt().toUByte()
+            assertEquals(expected, effect.calculate(phase).slider(), "phase $phase")
+        }
     }
 
     // --- Stateful ---

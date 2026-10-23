@@ -10,6 +10,7 @@ import type {
   EffectParameterDef,
 } from '@/store/fixtureFx'
 import type { GroupActiveEffect } from '@/api/groupsApi'
+import { drivenCategoryOf } from '@/lib/stepEffects'
 
 /** Normalised effect data consumed by EffectSummary. */
 export interface EffectSummaryData {
@@ -52,8 +53,8 @@ export interface EffectSummaryData {
 const EFFECT_CATEGORY_MAP: Record<string, string> = {}
 
 // Build the map from known effect names
-const DIMMER_EFFECTS = ['sinewave', 'rampup', 'rampdown', 'triangle', 'pulse', 'squarewave', 'strobe', 'flicker', 'breathe']
-const COLOUR_EFFECTS = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourpulse', 'colourfade', 'colourflicker']
+const DIMMER_EFFECTS = ['sinewave', 'rampup', 'rampdown', 'ramp', 'pulse', 'squarewave', 'dimmerstrobe', 'flicker']
+const COLOUR_EFFECTS = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourwave', 'colourfade', 'colourflicker']
 const POSITION_EFFECTS = ['circle', 'figure8', 'sweep', 'pansweep', 'tiltsweep', 'randomposition']
 
 for (const name of DIMMER_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'dimmer'
@@ -67,7 +68,7 @@ export function lookupCategory(
 ): string {
   if (library) {
     const entry = library.find((e) => e.name === effectType)
-    if (entry) return entry.category
+    if (entry) return drivenCategoryOf(entry)
   }
   return EFFECT_CATEGORY_MAP[effectType.toLowerCase()] ?? 'dimmer'
 }

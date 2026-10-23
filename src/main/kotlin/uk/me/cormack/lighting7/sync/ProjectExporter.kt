@@ -208,6 +208,7 @@ class ProjectExporter(private val state: State) {
                     // the same bytes whatever it has attached; a show made here, with none, names the
                     // venue's own attached repo when this desk has one.
                     kind = project.kind,
+                    fxLibrary = LegacyNames.FX_LIBRARY,
                     venueUuid = project.venueUuid?.takeIf { project.isVenueBound }?.toString(),
                     venueVersion = project.venueVersion?.takeIf { project.isVenueBound },
                     venueRepo = project.venueUuid?.takeIf { project.isVenueBound }?.let { venueUuid ->
@@ -675,7 +676,7 @@ class ProjectExporter(private val state: State) {
                     name = d.name,
                     category = d.category,
                     outputType = d.outputType,
-                    effectMode = d.effectMode,
+                    effectMode = d.effectMode.name,
                     parameters = parametersJson,
                     compatibleProperties = d.compatibleProperties,
                     script = d.script,
@@ -955,7 +956,7 @@ class ProjectExporter(private val state: State) {
             writeJson(
                 sub.resolve("${s.uuid}.meta.json"),
                 ScriptMetaJson.serializer(),
-                ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType),
+                ScriptMetaJson(s.uuid.toString(), s.name, s.scriptType.name),
             )
             liveKeys.add(RecordKey("scripts", s.uuid))
         }

@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 2 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 3 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -244,7 +244,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 - FX display names for D10–D12 and Zoom Wave (frontmatter `name:` only; ids move in session 3).
 - No wire or storage change.
 
-### Session 3: the FX library (backend + frontend)
+### Session 3: the FX library (backend + frontend) — done, `82a176ef`
 
 - §4.2: id renames, Breathe's removal, `pingPong`'s removal with `defaultDirection`, Colour Cycle
   literal-only (a `tmpl:` entry refused at the write boundary), the composite mode and category removed,

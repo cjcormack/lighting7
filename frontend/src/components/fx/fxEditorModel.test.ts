@@ -172,7 +172,7 @@ describe('fxEditorModel', () => {
 
   it('takes wings back to 1 when the order moves onto a mirrored one', () => {
     expect(orderPatch({ wings: 2 }, 'CENTER_OUT')).toEqual({ distributionStrategy: 'CENTER_OUT', wings: 1 })
-    expect(orderPatch({ wings: 2 }, 'SPLIT')).toEqual({ distributionStrategy: 'SPLIT', wings: 1 })
+    expect(orderPatch({ wings: 2 }, 'EDGES_IN')).toEqual({ distributionStrategy: 'EDGES_IN', wings: 1 })
     expect(orderPatch({ wings: 1 }, 'EDGES_IN')).toEqual({ distributionStrategy: 'EDGES_IN' })
     expect(orderPatch({ wings: 3 }, 'REVERSE')).toEqual({ distributionStrategy: 'REVERSE' })
   })
@@ -297,8 +297,8 @@ describe('fxEditorModel', () => {
     expect(paramAxis('panorama')).toBeNull()
   })
 
-  it('files a composite under Intensity and an unknown category under Controls', () => {
-    expect(pickerFamilyOf('composite')).toBe('INTENSITY')
+  it('files an unknown category under Controls', () => {
+    expect(pickerFamilyOf('dimmer')).toBe('INTENSITY')
     expect(pickerFamilyOf('scripted')).toBe('CONTROLS')
   })
 

@@ -220,8 +220,8 @@ data class GroupDetailDto(
 data class AddGroupFxRequest(
     val effectType: String,
     val propertyName: String,  // "dimmer", "colour", "position", "uv"
-    /** One bar when omitted — venue-visit plan D16's default for a new effect. */
-    val beatDivision: Double = BeatDivision.ONE_BAR,
+    /** The FX's own default cycle when omitted — see [AddEffectRequest.beatDivision]. */
+    val beatDivision: Double? = null,
     val blendMode: String = "OVERRIDE",
     val distribution: String = "LINEAR",
     val phaseOffset: Double = 0.0,
@@ -238,7 +238,7 @@ data class AddGroupFxRequest(
     /** Size (effects plan D2), 0–1 — see [AddEffectRequest.size]. */
     val size: Double = 1.0,
     /** Direction (D5) — see [AddEffectRequest.direction]. */
-    val direction: String = "FORWARD",
+    val direction: String? = null,
     /** Runs (D9) — see [AddEffectRequest.nShot]. */
     val nShot: Int? = null,
     /** The spread's shape (D4) — see [AddEffectRequest.spread]. */
@@ -366,12 +366,15 @@ private fun applyGroupEffect(
     request: AddGroupFxRequest
 ): Long {
     val engine = state.show.fxEngine
+    state.show.fxRegistry.fxWriteProblem(request.effectType, request.parameters)
+        ?.let { throw IllegalArgumentException(it) }
     val effect = state.show.fxRegistry.createEffectWithTemplates(
         state.show.templateRegistry,
         request.effectType,
         request.parameters,
     )
-    val timing = FxTiming(request.beatDivision)
+    val registration = state.show.fxRegistry.getRegistration(request.effectType)
+    val timing = FxTiming(request.beatDivision ?: registration?.defaultBeatDivision ?: BeatDivision.ONE_BAR)
     val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
     val distribution = EffectSpecCoercion.Strict.distribution(request.distribution)
     val elementMode = EffectSpecCoercion.Strict.elementMode(request.elementMode)
@@ -404,7 +407,6 @@ private fun applyGroupEffect(
     // Create SINGLE FxInstance for the entire group
     secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
         ?.let { throw IllegalArgumentException(it) }
-    val registration = state.show.fxRegistry.getRegistration(request.effectType)
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         registrationId = registration?.id
         phaseOffset = request.phaseOffset

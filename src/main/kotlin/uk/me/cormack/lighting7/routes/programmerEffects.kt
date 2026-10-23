@@ -7,7 +7,6 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.BeatDivision
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxStacking
@@ -94,7 +93,7 @@ internal data class ProgrammerEffectRequest(
     /** The selection's attribute mask; absent is every attribute. */
     val families: List<String>? = null,
     val parameters: Map<String, String> = emptyMap(),
-    /** One bar when absent (venue-visit plan D16). */
+    /** The FX's own default cycle when absent (venue-visit plan D16). */
     val beatDivision: Double? = null,
     /** `OVERRIDE` when absent, or the family's stacking start under [stack]. */
     val blendMode: String? = null,
@@ -110,7 +109,7 @@ internal data class ProgrammerEffectRequest(
     val seconds: Boolean = false,
     /** 1.0 when absent, or the family's stacking start under [stack]. */
     val size: Double? = null,
-    val direction: String = "FORWARD",
+    val direction: String? = null,
     val nShot: Int? = null,
     val spread: Double = 1.0,
     val wings: Int = 1,
@@ -161,7 +160,7 @@ internal fun pressBareEffect(
             effectType = request.effectType,
             propertyName = request.propertyName,
             targets = request.targets,
-            beatDivision = request.beatDivision ?: BeatDivision.ONE_BAR,
+            beatDivision = request.beatDivision,
             blendMode = request.blendMode ?: start?.blendMode?.name ?: "OVERRIDE",
             startOnBeat = request.startOnBeat,
             phaseOffset = request.phaseOffset,

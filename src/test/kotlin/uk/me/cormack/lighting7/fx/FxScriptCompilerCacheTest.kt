@@ -49,12 +49,12 @@ class FxScriptCompilerCacheTest {
         val compiler = FxScriptCompiler()
 
         val standard = compiler.compile(script, EffectMode.STANDARD)
-        val composite = compiler.compile(script, EffectMode.COMPOSITE)
+        val stateful = compiler.compile(script, EffectMode.STATEFUL)
 
         // Same source text, different wrapper and lambda signature: these must not collide.
         assertTrue(standard.isSuccess, "STANDARD should compile: ${standard.diagnostics}")
         assertSame(EffectMode.STANDARD, standard.effectMode)
-        assertSame(EffectMode.COMPOSITE, composite.effectMode)
+        assertSame(EffectMode.STATEFUL, stateful.effectMode)
     }
 
     @Test

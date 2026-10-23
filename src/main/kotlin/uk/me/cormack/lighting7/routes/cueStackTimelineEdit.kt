@@ -19,6 +19,7 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.longOrNull
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
@@ -115,7 +116,7 @@ internal fun editTimeline(state: State, project: DaoProject, stackId: Int, reque
     return transaction(state.database) {
         val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
             ?: return@transaction TimelineEditOutcome.NotFound
-        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld)
+        val batch = TimelineBatch(project, stack, rules, coverage, isHeld = holds::isHeld, registry = state.show.fxRegistry)
         request.ops.forEachIndexed { index, raw -> batch.run(index, raw) }
         val outcome = if (batch.problems.isNotEmpty()) TimelineEditOutcome.Invalid(batch.problems) else TimelineEditOutcome.Edited(batch.answer())
         if (outcome !is TimelineEditOutcome.Edited || request.dryRun) TransactionManager.current().rollback()
@@ -130,6 +131,7 @@ private class TimelineBatch(
     private val rules: LayerPressRules,
     private val coverage: TargetCoverage,
     private val isHeld: (Int) -> Boolean,
+    private val registry: FxRegistry,
 ) {
     val problems = mutableListOf<TimelineEditProblem>()
     private val cueIds: Set<Int> = entriesOf(stack).mapNotNullTo(LinkedHashSet()) { it.cueId }
@@ -319,6 +321,7 @@ private class TimelineBatch(
             adHocEffects = inOrder(op.adHocEffects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
             layers = inOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
             restore = true,
+            registry = registry,
         )
         // A `before` change carries its element's name and kind beside it, which a list does not take.
         val items = op.scenery.map { item -> JsonObject(item.filterKeys { it in RESTORED_SCENERY_KEYS }) }
@@ -413,7 +416,7 @@ private class TimelineBatch(
 
     private fun write(cue: DaoCue, layers: List<CueLayerDto>) {
         touch(cue)
-        writeCueChildren(cue, layers = layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) })
+        writeCueChildren(cue, layers = layers.mapIndexed { index, layer -> layer.copy(sortOrder = index) }, registry = registry)
     }
 
     private fun writeScenery(cue: DaoCue, index: Int, items: List<JsonElement>, uuids: List<UUID?>, problem: (String) -> Unit) {

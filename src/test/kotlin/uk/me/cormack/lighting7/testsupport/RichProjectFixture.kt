@@ -691,7 +691,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoTemplateEffect.new {
         template = effectTemplate
-        effectType = "ColourPulse"; category = "colour"; propertyName = "rgbColour"
+        effectType = "ColourWave"; category = "colour"; propertyName = "rgbColour"
         beatDivision = 2.0; blendMode = "MAX"; distribution = "REVERSE"
         phaseOffset = 0.125
         elementMode = "FLAT"

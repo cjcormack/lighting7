@@ -1,5 +1,5 @@
 /*---
-id: ZoomBreathe
+id: ZoomWave
 name: Zoom Wave
 category: beam
 outputType: SLIDER

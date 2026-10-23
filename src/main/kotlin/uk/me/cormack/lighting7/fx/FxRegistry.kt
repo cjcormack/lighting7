@@ -45,7 +45,7 @@ data class EffectRegistration(
     val category: String,
     /** Output type this effect produces */
     val outputType: FxOutputType,
-    /** How this effect is evaluated (STANDARD, STATEFUL, COMPOSITE) */
+    /** How this effect is evaluated (STANDARD, STATEFUL) */
     val effectMode: EffectMode = EffectMode.STANDARD,
     /** Parameter schema for UI and API */
     val parameters: List<ParameterInfo> = emptyList(),
@@ -59,6 +59,10 @@ data class EffectRegistration(
     val script: String? = null,
     /** Default step-timing mode for new instances */
     val defaultStepTiming: Boolean = false,
+    /** Direction a new instance runs in when its author names none */
+    val defaultDirection: EffectDirection = EffectDirection.FORWARD,
+    /** Cycle, in beats, a new instance runs at when its author names none */
+    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
     /** Timing source for this effect (BEAT or WALL_CLOCK) */
     val timingSource: TimingSource = TimingSource.BEAT,
     /** Factory to create an Effect instance from string parameters */
@@ -80,6 +84,10 @@ data class EffectTypeInfo(
     val sourceDefinitionId: Int? = null,
     val script: String? = null,
     val timingSource: String = "BEAT",
+    /** What a new instance's `direction` is when its author names none. */
+    val defaultDirection: String = EffectDirection.FORWARD.name,
+    /** What a new instance's `beatDivision` is when its author names none. */
+    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
 )
 
 /**
@@ -184,6 +192,8 @@ class FxRegistry {
                     sourceDefinitionId = reg.sourceDefinitionId,
                     script = reg.script,
                     timingSource = reg.timingSource.name,
+                    defaultDirection = reg.defaultDirection.name,
+                    defaultBeatDivision = reg.defaultBeatDivision,
                 )
             }
     }
@@ -200,6 +210,9 @@ class FxRegistry {
     val size: Int
         get() = registrations.size
 
-    private fun normalize(name: String): String =
-        name.lowercase().replace(" ", "").replace("_", "")
+    private fun normalize(name: String): String = normalizeEffectType(name)
 }
+
+/** An effect type as [FxRegistry] matches one: case, spaces and underscores ignored. */
+fun normalizeEffectType(name: String): String =
+    name.lowercase().replace(" ", "").replace("_", "")
