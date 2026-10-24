@@ -1115,6 +1115,33 @@ class FxEngine(
      */
     fun getActiveFx(): List<FxInstance> = activeFx.values.toList()
 
+    /**
+     * [effects] in the order a home stores them (FX editor plan §3.5): two that share a key — an
+     * attribute on a head both cover — in apply order, so a home spawning them in this order folds
+     * them as the programmer did; any others in the order they were made in, which for FX Include
+     * brought back is the order their home stored them in, so an Update that moved nothing moves
+     * nothing. Each FX's keys and place are read once, so an FX re-ranked meanwhile cannot make the
+     * order contradict itself.
+     */
+    fun inStoredApplyOrder(effects: Collection<FxInstance>): List<FxInstance> {
+        class Placed(val effect: FxInstance, val place: Triple<Int, Long, Long>, val keys: Set<String>)
+        val apply = compareBy<Placed>({ it.place.first }, { it.place.second }, { it.place.third })
+        val left = effects.map { Placed(it, Triple(it.priority, it.composeOrder, it.id), resolveFxFixtureKeys(it).toHashSet()) }
+            .sortedWith(compareBy({ it.place.second }, { it.place.third }))
+            .toMutableList()
+        fun shareKey(a: Placed, b: Placed) =
+            a.effect.target.propertyName == b.effect.target.propertyName && a.keys.any { it in b.keys }
+        val ordered = ArrayList<FxInstance>(left.size)
+        while (left.isNotEmpty()) {
+            val next = left.first { candidate ->
+                left.none { it !== candidate && shareKey(it, candidate) && apply.compare(it, candidate) < 0 }
+            }
+            left.remove(next)
+            ordered += next.effect
+        }
+        return ordered
+    }
+
     val activeFxCount: Int get() = activeFx.size
 
     /**
@@ -1964,8 +1991,22 @@ class FxEngine(
         }
 
         transaction.applySuspend()
+        resetRemovedSince(effects)
         finishRuns(spentThisPass)
         true
+    }
+
+    /**
+     * After the pass's commit, reset what the FX in its list [painted] that a removal or an edit
+     * has since taken out of [activeFx] leave uncovered. The removal reset it already, but this
+     * pass may have committed their output over that reset, and with nothing left running no later
+     * pass would paint it out. A removal takes an FX out of the map, then rebuilds [sortedFx],
+     * then resets: an unchanged list means any reset still to come lands after this commit.
+     */
+    private suspend fun resetRemovedSince(painted: List<FxInstance>) {
+        if (sortedFx === painted) return
+        val gone = painted.filter { activeFx[it.id] !== it }
+        uncoveredResetTransaction(gone)?.applySuspend()
     }
 
     /**
@@ -2372,7 +2413,12 @@ class FxEngine(
      * value for uncovered properties.
      */
     private fun resetUncoveredProperties(removedFx: List<FxInstance>) {
-        if (removedFx.isEmpty()) return
+        uncoveredResetTransaction(removedFx)?.apply()
+    }
+
+    /** [resetUncoveredProperties]'s writes, staged and not yet applied; null when there are none. */
+    private fun uncoveredResetTransaction(removedFx: List<FxInstance>): ControllerTransaction? {
+        if (removedFx.isEmpty()) return null
 
         data class AffectedProperty(val fixtureKey: String, val target: FxTarget)
 
@@ -2388,7 +2434,7 @@ class FxEngine(
             !isPropertyCoveredByAny(affected.fixtureKey, affected.target.propertyName, remainingFx)
         }
 
-        if (uncovered.isEmpty()) return
+        if (uncovered.isEmpty()) return null
 
         val transaction = ControllerTransaction(fixtures.controllers)
         val fixturesWithTx = fixtures.withTransaction(transaction)
@@ -2407,7 +2453,7 @@ class FxEngine(
             }
         }
 
-        transaction.apply()
+        return transaction
     }
 
     /**

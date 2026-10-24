@@ -124,7 +124,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 moveInDark = assignment.moveInDark
             }
         }
-        for (effect in cue.adHocFx) {
+        for (effect in cue.adHocFxInOrder()) {
             checkTarget(effect.targetType, effect.targetKey, by)
             DaoCueAdHocFxEntity.new {
                 this.cue = copy
@@ -228,7 +228,7 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 sortOrder = row.sortOrder
             }
         }
-        for (effect in look.effects.sortedBy { it.sortOrder }) {
+        for (effect in look.fxInOrder()) {
             checkTarget(effect.targetType, effect.targetKey, by)
             DaoLookFxEntity.new {
                 this.look = copy

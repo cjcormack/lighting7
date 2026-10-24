@@ -1,7 +1,9 @@
 package uk.me.cormack.lighting7.routes
 
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
+import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
+import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.buildCueApplyData
@@ -171,6 +173,7 @@ internal fun performProgrammerRecord(
         }
     }
     state.show.programmerStore.rebaseLayers(recordedLayerIds) { rowOfLayer[it.layerId] }
+    stampWrittenFxOrigins(state, written.outcome, recording)
     state.show.programmerStore.lastIncludedTarget =
         IncludedTarget.cue(written.outcome.cueId, written.entry?.id?.value)
     stampRecordedValues(state)
@@ -197,6 +200,24 @@ internal fun performProgrammerRecord(
         republishedLive = republished,
         skipped = recording.skipped,
     )
+}
+
+/**
+ * Point each live FX [outcome] wrote at the child it became, as Include would have, so a later
+ * Include sees it already runs and Update writes it back onto that child. An origin naming another
+ * cue is replaced: the write made [outcome]'s cue the one the programmer edits.
+ */
+private fun stampWrittenFxOrigins(
+    state: State,
+    outcome: CueWriteOutcome,
+    recording: ProgrammerRecording,
+    stamps: (FxInstance) -> Boolean = { true },
+) {
+    for ((effectId, childUuid) in recording.adHocSourceIds.zip(outcome.fxChildren)) {
+        if (effectId == null || childUuid == null) continue
+        val effect = state.show.fxEngine.getFx(effectId)?.takeIf(stamps) ?: continue
+        effect.programmerOrigin = ProgrammerFxOrigin(outcome.cueId, ProgrammerFxOrigin.Kind.AD_HOC, childUuid)
+    }
 }
 
 /** [this] with [scenery]'s write folded in, its warnings beside the lighting ones. */
@@ -420,7 +441,7 @@ internal fun performProgrammerUpdate(
             // The stack it reports is the included entry's, in Mode A; a checklist names no entry.
             val entry = includedEntryId?.takeIf { modeLabel == "A" }?.let { DaoCueStackEntry.findById(it) }
                 ?.takeIf { it.cueId == cue.id.value }
-            cue.adHocFx.filter { it.sortOrder in retired }.forEach { it.delete() }
+            cue.adHocFx.filter { it.uuid.toString() in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
                 .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures))
@@ -450,7 +471,16 @@ internal fun performProgrammerUpdate(
         // Their child is gone, and each copy now matches the child it was written as.
         for (effect in state.show.fxEngine.getActiveFx()) {
             val origin = effect.programmerOrigin ?: continue
-            if (origin.cueId == cueId && origin.childSortOrder in retired) effect.programmerOrigin = null
+            if (origin.cueId == cueId && origin.childUuid in retired) effect.programmerOrigin = null
+        }
+        // Mode B makes no cue the one the programmer edits: into one cue it fills only an origin
+        // naming no other cue, and into several it gives none, since an FX has one origin to give.
+        if (modeLabel == "A") {
+            stampWrittenFxOrigins(state, written, recording)
+        } else if (cueIds.size == 1) {
+            stampWrittenFxOrigins(state, written, recording) { effect ->
+                effect.programmerOrigin.let { it == null || it.cueId == cueId }
+            }
         }
         results += ProgrammerUpdateResult(
             cueId = cueId,

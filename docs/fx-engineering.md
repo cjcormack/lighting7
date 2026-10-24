@@ -962,7 +962,31 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
   moved FX always takes that lowest rank, so moving the other one back restores the order. Only
   priorities change: nothing restarts. Answered `fxChanged(UPDATED)` per FX whose priority moved, or
   `fxError` — `FX_MOVE_NOT_LOCAL` when either FX is not Local, `FX_NOT_FOUND` when either is not running.
-  Nothing is stored: Record's FX order is session 3b's.
+- **Record keeps the order** (FX editor plan D4, session 3b). Every write of a home's FX from the
+  programmer numbers them bottom first in `FxEngine.inStoredApplyOrder`: two FX sharing a key (an
+  attribute on a head both cover) in apply order, any others in the order they were made in — which
+  for FX Include brought back is their stored order, so an Update that moved nothing writes nothing.
+  That covers Record into a cue (`fxInstancesToCueChildren`) and into a Look (`writeLookFx`,
+  absorb-effects too), a stage snapshot, and Update's write-back into either. A write that keeps some
+  of a home's FX (Record's Merge and Replace into a cue, Update) gives the FX it writes, new ones
+  included, the places of the stored ones it wrote over, in that order, and puts any extra on top
+  (`renumberInApplyOrder`): an FX it did not write keeps its place in the list, though a written one
+  may move past it. A write that moves no FX renumbers nothing, gaps and ties included. Merge and
+  Update into a cue write an FX Include brought back onto the child it came from (its origin's
+  uuid, whatever its type is now), and any other FX onto the first child of its target, type and
+  attribute that no other FX took, and Remove deletes the child that same pairing names; Replace
+  pairs by that key alone, in order. Either way two stacked
+  FX of one type on one head stay two children, and a second Include does not run a child twice. A writer that takes an explicit list — the
+  cue and Look bodies, MCP's `create_look` and `create_cue` — stores it in the list's order
+  (`inListOrder`). The spawners give the order back: a cue's GO and loose holds, a Look press,
+  Include, copy and duplicate all read a home's FX by `sortOrder`, then id, and add them in that
+  order, so their compose orders follow it, and FX that Include brings into the programmer take their
+  Local ranks in it. Include's origin names a cue's FX by uuid, since Update may renumber them.
+  Record and Update give the same origin to each FX they write into a cue, naming the child it
+  became (`stampWrittenFxOrigins`), so a later Include does not run that child twice and Update
+  writes back onto it. Record and a Mode A Update replace an origin naming another cue, since the
+  write makes theirs the cue the programmer edits; a Mode B Update into one cue only fills an
+  origin naming no other cue, and one into several gives none.
 
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/FxSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
@@ -1058,7 +1082,10 @@ effect's `composeOrder` is its own id, except that a cue re-stamps the instances
 into its layer order (`restampComposeOrder`) and a copy split off an effect keeps its parent's, so
 same-priority effects compose in the order they were placed rather than the order they were
 created; `id` breaks only what is left. Multi-effect composition on the same property is
-therefore **deterministic** — previously the effective "last-wins" ordering was undefined.
+therefore **deterministic** — previously the effective "last-wins" ordering was undefined. A home
+spawns its FX in their stored `sortOrder`, which Record writes in this order, so the order an
+operator built in the programmer is the one a cue or Look plays back
+(§"Programmer suppression and the priority band").
 
 Priority assignment:
 
@@ -1446,8 +1473,9 @@ element filter `ALL`.
   recorded copy keeps its phase, though not its set's step cycle or sweep.
 - **Update.** A copy keeps a cue Include's origin (`programmerOrigin`). A cue Update writes each
   copy as a child of its own, one per head, so it retires the child they stand for once nothing but
-  copies carries it (`splitIncludedChildren`), and the copies drop the origin; otherwise the cue
-  would play the effect twice. A Look Include's (`includedLookFx`) is not kept: a Look's effect
+  copies carries it (`splitIncludedChildren`), and each copy's origin then names its own child;
+  otherwise the cue would play the effect twice. A child already on its copy's own head is never
+  retired, so a second Update keeps the copies' children. A Look Include's (`includedLookFx`) is not kept: a Look's effect
   is written back whole, and a copy is the operator's busk of part of it.
 - **Order.** Copies take new ids but keep the parent's `composeOrder`, which the engine sorts by
   between priority and id, so a split moves nothing in the composition order.
@@ -2285,6 +2313,16 @@ a ticker-woken pass would repaint them at the tick they are already on, and with
 effects running a beat wake adds nothing but cost. So a show running one kind of effect makes the
 passes it made before; the time a skipped pass covers is advanced by the next one, and a skipped
 pass does not hold the next wake back for the 5 ms gap.
+
+A removal does not take `passLock`: some removals run inside a pass (an N-shot's end, the leaving
+sweep), and the lock is not reentrant. So a removal on another thread can land while a pass that has
+already read the old list is running, and that pass commits the removed FX's output over the
+removal's reset of what it uncovered. With nothing left running every later pass is skipped and the
+stale frame would stay. So after its commit the pass resets, as the removal did, what the FX in its
+list that are no longer in the engine (removed, or swapped by an edit or a split) leave uncovered
+(`resetRemovedSince`). A removal takes the FX out of the map, then rebuilds `sortedFx`, then
+resets, so a pass that finds its list still current knows any reset to come lands after its commit,
+and one that does not finds the FX gone. `FxRemovalRaceTest` forces the interleavings.
 
 What **counts** passes stays with the effect's own clock. The pass records which clocks woke it,
 and:

@@ -174,16 +174,17 @@ enum class BlendMode {
  * @param blendMode How to blend effect output with fixture value
  */
 /**
- * Which cue FX child an Include-spawned programmer-band instance came from, so Update can
- * write the operator's edits back over that child rather than beside it.
+ * Which cue FX child a programmer-band instance stands for — the one Include spawned it from, or
+ * the one a Record or Update wrote it as — so Update can write the operator's edits back over that
+ * child rather than beside it, and Include does not run the child a second time.
  *
- * [childSortOrder] is the child's `sortOrder` in the cue, which is what identifies it once
- * the DTO has been turned into a live instance.
+ * [childUuid] is the child's uuid, which is what identifies it once the DTO has been turned into a
+ * live instance: its `sortOrder` is not, since Update writes the children in apply order.
  */
 data class ProgrammerFxOrigin(
     val cueId: Int,
     val kind: Kind,
-    val childSortOrder: Int,
+    val childUuid: String?,
 ) {
     enum class Kind {
         AD_HOC,
@@ -649,9 +650,9 @@ class FxInstance internal constructor(
     var cueStackId: Int? = null
 
     /**
-     * Set when Include spawned this instance into the programmer band from a cue's FX child,
-     * naming the child it came from so Update can replace that child in place instead of
-     * appending a duplicate.
+     * Set when Include spawned this instance into the programmer band from a cue's FX child, or a
+     * Record or Update wrote it into a cue as one, naming that child so Update can replace it in
+     * place instead of appending a duplicate.
      *
      * Distinct from [cueId]/[cueStackId], which stay null on included instances on purpose:
      * a band effect must not be swept by `removeCueFx` when the cue it was included

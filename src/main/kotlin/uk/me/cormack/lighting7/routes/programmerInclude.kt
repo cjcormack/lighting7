@@ -243,7 +243,8 @@ private data class IncludedFxOutcome(
  * 1. **Already-running children are skipped.** If the cue is live, its own instance is already
  *    producing exactly that output. There is no FX-vs-FX suppression in the engine
  *    (suppression keys off programmer *values*), so a band duplicate would compose on top and
- *    visibly double the effect under any non-`OVERRIDE` blend mode.
+ *    visibly double the effect under any non-`OVERRIDE` blend mode. So is a child the programmer
+ *    already runs by its origin — an earlier Include's, or the Record or Update that wrote it.
  * 2. **`cueId`/`cueStackId` stay null** on spawned instances. Tagging them would let
  *    `removeCueFx` sweep the operator's programmer contents out from under them when
  *    the cue stops. `programmerOrigin` carries the provenance Update needs instead, and it is
@@ -268,6 +269,8 @@ private fun spawnIncludedFx(
     val timedSkipped = cueData.adHocFx.count { it.delayMs != null || it.intervalMs != null }
 
     val running = engine.getActiveFx().filter { it.cueId == cueData.cueId && !it.leaving }
+    // The children an earlier Include already runs in the programmer, which a second one must not double.
+    val included = engine.getActiveFx().filter { !it.leaving }.mapNotNullTo(HashSet()) { it.programmerOrigin }
 
     fun spawn(
         fxSpec: LookFxSpec,
@@ -301,7 +304,7 @@ private fun spawnIncludedFx(
         // fx-templates D5, and `lookId` is null for those, so the old test read a template layer's
         // effect as a loose child and let Include mask a genuine one behind it.
         val registrationId = state.show.fxRegistry.getRegistration(fxSpec.fxType)?.id
-        val duplicate = running.any {
+        val duplicate = (origin.childUuid != null && origin in included) || running.any {
             it.target.targetKey == target.key &&
                 it.target.propertyName == fxSpec.propertyName &&
                 it.registrationId == registrationId &&
@@ -338,7 +341,7 @@ private fun spawnIncludedFx(
     for (adHoc in cueData.adHocFx.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
             adHoc.toFxSpec(), adHoc.target,
-            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.sortOrder),
+            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.uuid),
         )
     }
 

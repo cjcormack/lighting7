@@ -294,7 +294,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         sortOrder = row.sortOrder
                     }
                 }
-                for (effect in source.effects.sortedBy { it.sortOrder }) {
+                for (effect in source.fxInOrder()) {
                     DaoLookFxEntity.new {
                         look = copy
                         targetType = effect.targetType
@@ -1001,7 +1001,8 @@ internal fun writeLookChildren(
         }
     }
     if (effects != null) {
-        val pairing = pairByKey(if (created) emptyList() else look.fxInOrder(), effects.map { it.canonicalTarget() }, { it.fxKey }, { it.fxKey })
+        val incoming = inListOrder(effects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }.map { it.canonicalTarget() }
+        val pairing = pairByKey(if (created) emptyList() else look.fxInOrder(), incoming, { it.fxKey }, { it.fxKey })
         pairing.unmatched.forEach { it.delete() }
         for ((effect, stored) in pairing.pairs) {
             if (stored != null) {
@@ -1174,8 +1175,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     sortOrder = it.sortOrder,
                 )
             },
-        fx = effects
-            .sortedBy { it.sortOrder }
+        fx = fxInOrder()
             .map {
                 LookFxDto(
                     targetType = it.targetType,

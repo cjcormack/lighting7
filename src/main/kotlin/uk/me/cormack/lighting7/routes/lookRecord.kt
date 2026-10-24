@@ -522,7 +522,8 @@ internal fun performProgrammerRecordLook(
 }
 
 /**
- * The programmer-band effects the operator ticked, in the order they were asked for.
+ * The programmer-band effects the operator ticked, in [FxEngine.inStoredApplyOrder] whatever order
+ * they were asked for in.
  *
  * Filtered to the **programmer band** rather than trusting the ids outright: a client holding a
  * stale effect list could otherwise name a cue's effect and quietly tear it out of a running cue.
@@ -536,12 +537,14 @@ internal fun performProgrammerRecordLook(
 internal fun programmerBandFxById(state: State, ids: List<Long>): List<FxInstance> {
     if (ids.isEmpty()) return emptyList()
     val byId = state.show.fxEngine.getActiveFx().associateBy { it.id }
-    return ids.mapNotNull { id ->
-        val effect = byId[id] ?: return@mapNotNull null
-        if (!FxEngine.isProgrammerFxPriority(effect.priority)) return@mapNotNull null
-        if (effect.programmerLayerId != null || effect.leaving) return@mapNotNull null
-        effect
-    }
+    return state.show.fxEngine.inStoredApplyOrder(
+        ids.mapNotNull { id ->
+            val effect = byId[id] ?: return@mapNotNull null
+            if (!FxEngine.isProgrammerFxPriority(effect.priority)) return@mapNotNull null
+            if (effect.programmerLayerId != null || effect.leaving) return@mapNotNull null
+            effect
+        },
+    )
 }
 
 /**
@@ -559,6 +562,9 @@ internal fun programmerBandFxById(state: State, ids: List<Long>): List<FxInstanc
  * A group-targeted instance stays group-targeted, and one over a selection keeps its selection.
  * That keeps the Look reusable in the way the operator built it: a chase over "SL Wash" is about
  * the group, not about four heads that happened to be in it.
+ *
+ * The effects are written bottom first in the order given, which [programmerBandFxById] makes
+ * their stored apply order, so a press spawns them in the order they applied (FX editor plan §3.5).
  */
 internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordMode) {
     fun targetTypeOf(effect: FxInstance) = effect.target.targetRef.discriminator
@@ -678,8 +684,10 @@ private fun DaoLookFxEntity.takeChanges(baseline: LookFxSettings, edited: LookFx
  * Must be called inside a transaction.
  */
 internal fun writeIncludedFxBack(look: DaoLook, instances: List<FxInstance>): Int {
-    val stored = look.effects.associateBy { it.id.value }
-    var written = 0
+    if (instances.isEmpty()) return 0
+    val inOrder = look.fxInOrder()
+    val stored = inOrder.associateBy { it.id.value }
+    val changedRows = HashSet<DaoLookFxEntity>()
     for ((lookFxId, realising) in instances.groupBy { it.includedLookFx!!.lookFxId }) {
         val row = stored[lookFxId] ?: continue
         val changed = realising.firstNotNullOfOrNull { instance ->
@@ -687,9 +695,13 @@ internal fun writeIncludedFxBack(look: DaoLook, instances: List<FxInstance>): In
             instance.lookFxSettings().takeIf { it != baseline }?.let { baseline to it }
         } ?: continue
         row.takeChanges(changed.first, changed.second)
-        written++
+        changedRows += row
     }
-    return written
+    // The included effects keep the order they run in now (`instances` is in stored apply order),
+    // among the places they hold.
+    val realised = instances.mapNotNull { stored[it.includedLookFx!!.lookFxId] }
+    val moved = renumberInApplyOrder(inOrder, realised, DaoLookFxEntity::sortOrder)
+    return changedRows.size + moved.count { it !in changedRows && it in realised }
 }
 
 /**
@@ -722,15 +734,17 @@ private fun resolveLookTarget(
  * family of the property each drives, as Include masked it.
  */
 private fun includedLookFxOf(state: State, lookId: Int, mask: Set<PropertyMaskGroup>?): List<FxInstance> =
-    state.show.fxEngine.getActiveFx().filter { effect ->
-        if (effect.includedLookFx?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority) || effect.leaving) {
-            return@filter false
-        }
-        if (mask == null) return@filter true
-        val reference = state.show.fxEngine.fixtureKeysCoveredBy(effect).firstOrNull()
-            ?.let { runCatching { state.show.fixtures.untypedGroupableFixture(it) }.getOrNull() }
-        maskAllows(mask, reference?.let { maskGroupForProperty(it, effect.target.propertyName) })
-    }
+    state.show.fxEngine.inStoredApplyOrder(
+        state.show.fxEngine.getActiveFx().filter { effect ->
+            if (effect.includedLookFx?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority) || effect.leaving) {
+                return@filter false
+            }
+            if (mask == null) return@filter true
+            val reference = state.show.fxEngine.fixtureKeysCoveredBy(effect).firstOrNull()
+                ?.let { runCatching { state.show.fixtures.untypedGroupableFixture(it) }.getOrNull() }
+            maskAllows(mask, reference?.let { maskGroupForProperty(it, effect.target.propertyName) })
+        },
+    )
 
 // ─── Mode A Update, where the include target is a Look ──────────────────
 

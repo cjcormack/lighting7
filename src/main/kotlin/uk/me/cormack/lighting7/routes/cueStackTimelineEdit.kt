@@ -318,8 +318,8 @@ private class TimelineBatch(
         touch(cue)
         writeCueChildren(
             cue,
-            adHocFx = inOrder(op.adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
-            layers = inOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
+            adHocFx = inListOrder(op.adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
+            layers = inListOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
             restore = true,
             registry = registry,
         )
@@ -507,14 +507,6 @@ private fun snapshotOf(cue: DaoCue) = TimelineCueSnapshotDto(
     adHocFx = cue.adHocFxInOrder().map { it.toDto() },
     scenery = cueSceneryOf(cue.id).map { it.toDto() },
 )
-
-/**
- * [items] with their stored orders kept where those say the order on their own, else renumbered by
- * place: a row put back gets a new row id, so two that shared an order would no longer tie-break
- * the way they did.
- */
-private fun <T> inOrder(items: List<T>, order: (T) -> Int, renumbered: (T, Int) -> T): List<T> =
-    if (items.zipWithNext().all { (a, b) -> order(a) < order(b) }) items else items.mapIndexed { i, item -> renumbered(item, i) }
 
 /** A stored change back in a scenery list's item shape, its uuid beside it. */
 private fun sceneryItemOf(change: SceneryChangeDto): JsonObject = JsonObject(

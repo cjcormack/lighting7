@@ -415,6 +415,17 @@ imports such a row back would hold nothing worse than it held before; on this de
 guard sends it as idle until the next import strips it. `remote_access_settings.allow_commands` is a
 column on a machine-local table, so `SyncCoverageTest`'s dispositions are unchanged.
 
+**FX editor session 3b is the worked example of an order that needed no version.** A Look's FX
+already carried `sortOrder` (`LookFxJson.sortOrder`, omitted at 0), the exporter wrote them by
+`(sortOrder, uuid)` and the importer read the field; what changed is that Record now writes it in
+apply order and a press spawns by it, ties in id order (`docs/fx-engineering.md` §"Programmer
+suppression and the priority band"). An archive whose Look FX all say 0, as every Look did before
+Record numbered them, imports them in file order, since the importer inserts them as listed. Record
+and an explicit list now write distinct orders (one whose orders do not rise is renumbered by
+position); a tie survives only in a home written before, and in its copies and imports. A desk plays
+such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
+play it the other way round.
+
 ### Version 38 — the glossary's words
 
 Terminology plan session 4 (§4.4, the storage half of §4.3): the archive says what the screen says.

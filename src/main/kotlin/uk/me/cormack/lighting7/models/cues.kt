@@ -199,10 +199,12 @@ data class CueAdHocFxDto(
     val parts: Int = 0,
     /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
-     * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored on
-     * write, like [CueLayerDto.id] — an effect is matched by its target, property and type, and a
-     * body that echoed a uuid back must not be trusted as identity. Null where no stored effect
-     * stands behind the DTO (a capture, an AI tool's input).
+     * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored by a
+     * body's write (the REST and MCP cue writers), like [CueLayerDto.id] — an effect is matched by
+     * its target, property and type, and a body that echoed a uuid back must not be trusted as
+     * identity. Null where no stored effect stands behind the DTO (an AI tool's input, a capture of
+     * a fresh FX); the desk's own capture of an FX Include brought back carries its cue child's,
+     * which Record's Merge and Update write it onto.
      */
     val uuid: String? = null,
     /**

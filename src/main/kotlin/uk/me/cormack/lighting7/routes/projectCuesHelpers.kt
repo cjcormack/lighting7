@@ -24,7 +24,10 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.UUID
+import kotlin.reflect.KMutableProperty1
 import uk.me.cormack.lighting7.models.asDuration
 
 
@@ -43,6 +46,8 @@ internal data class CapturedState(
     val layers: List<CueLayerDto>,
     val adHocFx: List<CueAdHocFxDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto>,
+    /** The id of the Local effect each of [adHocFx] was captured from; null for any other FX. */
+    val adHocSourceIds: List<Long?> = emptyList(),
 )
 
 /**
@@ -51,7 +56,8 @@ internal data class CapturedState(
  * single composed value — see [captureCueAssignments] for the shape-preservation rules.
  */
 internal fun captureCurrentState(state: State): CapturedState {
-    val activeFx = state.show.fxEngine.getActiveFx()
+    // In stored apply order, so the ad-hoc FX are numbered in the order they fold on stage.
+    val activeFx = state.show.fxEngine.let { it.inStoredApplyOrder(it.getActiveFx()) }
 
     // Keyed by the **source record**, Look or palette: an effect names where it came from and
     // nothing else, so one palette applied twice to different targets collapses into one layer
@@ -71,6 +77,7 @@ internal fun captureCurrentState(state: State): CapturedState {
     // still up, which is exactly the collapse this map exists to do.
     val layerTargets = mutableMapOf<Pair<LayerSourceKind, Int>, MutableList<CueTargetDto>>()
     val adHocFx = mutableListOf<CueAdHocFxDto>()
+    val adHocSourceIds = mutableListOf<Long?>()
 
     for (effect in activeFx) {
         // A leaving instance is on its way off the stage: whatever held it has let it go.
@@ -104,6 +111,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 timing = if (dyn.timing != effect.effect.defaultTiming) dyn.timing else null,
                 parameters = effect.effect.parameters,
+                sortOrder = adHocFx.size,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                 seconds = effect.seconds,
@@ -115,6 +123,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 segments = dyn.segments,
                 parts = dyn.parts,
             ))
+            adHocSourceIds += effect.id.takeIf { effect.isLocalFx }
         }
     }
 
@@ -136,6 +145,7 @@ internal fun captureCurrentState(state: State): CapturedState {
         layers = layerDtos,
         adHocFx = adHocFx,
         propertyAssignments = propertyAssignments,
+        adHocSourceIds = adHocSourceIds,
     )
 }
 
@@ -374,7 +384,7 @@ internal fun DaoCue.toCueDetails(
         id = this.id.value,
         name = this.name,
         layers = this.layers.sortedBy { it.sortOrder }.mapNotNull { it.toDto() },
-        adHocFx = this.adHocFx.sortedBy { it.sortOrder }.map { it.toDto() },
+        adHocFx = adHocFxInOrder().map { it.toDto() },
         propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
         cueStackId = stack?.id?.value,
@@ -611,6 +621,37 @@ internal fun DaoCue.layersInOrder(): List<DaoCueLayer> = layers.sortedWith(compa
 
 internal fun DaoCue.adHocFxInOrder(): List<DaoCueAdHocFxEntity> = adHocFx.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
+/**
+ * A home's FX after a write from the programmer, bottom first (FX editor plan §3.5): [stored] in its
+ * stored order, the rows the write wrote ([written], in apply order) taking the places of the stored
+ * ones among them, and the rest of them after everything. A row the write did not touch keeps its
+ * place. Each row's [sortOrder] becomes its index, unless the order is the stored one and nothing was
+ * added, when the stored numbers stand; answers the rows whose place moved.
+ */
+internal fun <T : Any> renumberInApplyOrder(
+    stored: List<T>,
+    written: List<T>,
+    sortOrder: KMutableProperty1<T, Int>,
+): Set<T> {
+    val writtenRows = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    // A row written twice (two of the write's FX matched it) takes the place of its first.
+    val queue = ArrayDeque(written.filter { writtenRows.add(it) })
+    val ordered = stored.map { if (it in writtenRows) queue.removeFirst() else it } + queue
+    val moved = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    for ((index, row) in ordered.withIndex()) if (stored.getOrNull(index) !== row) moved += row
+    if (moved.isEmpty()) return moved
+    for ((index, row) in ordered.withIndex()) if (sortOrder.get(row) != index) sortOrder.set(row, index)
+    return moved
+}
+
+/**
+ * [items] in their list's order: as they are when their sort orders already rise along the list,
+ * else renumbered by position — so an explicit list, whatever sort orders it sends, is stored in the
+ * order it was written.
+ */
+internal fun <T> inListOrder(items: List<T>, order: (T) -> Int, renumbered: (T, Int) -> T): List<T> =
+    if (items.zipWithNext().all { (a, b) -> order(a) < order(b) }) items else items.mapIndexed { i, item -> renumbered(item, i) }
+
 internal fun DaoCue.propertyAssignmentsInOrder(): List<DaoCuePropertyAssignment> =
     propertyAssignments.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
@@ -659,6 +700,8 @@ private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
  * `uuid` instead of their key, a new one takes the uuid it names, and an effect takes its run key —
  * so a cue is put back exactly as an edit found it.
  *
+ * Answers the ad-hoc rows written, one per [adHocFx] item and in its order.
+ *
  * Must be called inside a transaction.
  */
 internal fun writeCueChildren(
@@ -670,7 +713,7 @@ internal fun writeCueChildren(
     created: Boolean = false,
     restore: Boolean = false,
     registry: FxRegistry,
-) {
+): List<DaoCueAdHocFxEntity> {
     val newFx = adHocFx.orEmpty()
     val newRows = propertyAssignments.orEmpty()
     validateCueChildren(newFx, layers.orEmpty(), newRows, registry)?.let { throw IllegalArgumentException(it) }
@@ -719,9 +762,11 @@ internal fun writeCueChildren(
             }
         }
     }
+    val writtenFx = ArrayList<DaoCueAdHocFxEntity>()
     if (adHocFx != null) {
         val existing = if (created) emptyList() else cue.adHocFxInOrder()
-        val incoming = adHocFx.map { it.canonicalTarget() }
+        val incoming = inListOrder(adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }
+            .map { it.canonicalTarget() }
         val pairing = if (restore) {
             pairByKey(existing, incoming, { it.uuid to it.fxKey }, { restoredUuid(it.uuid) to it.fxKey })
         } else {
@@ -737,6 +782,7 @@ internal fun writeCueChildren(
                 if (restore) effect.uuid?.let { uuid = UUID.fromString(it) }
             }
             if (restore) row.runUuid = effect.runUuid?.let(UUID::fromString)
+            writtenFx += row
         }
     }
     if (propertyAssignments != null) {
@@ -775,6 +821,7 @@ internal fun writeCueChildren(
             }
         }
     }
+    return writtenFx
 }
 
 /** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */

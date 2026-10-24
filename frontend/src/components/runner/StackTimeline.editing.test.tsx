@@ -122,6 +122,15 @@ function cell(entryId: number, col: string): HTMLElement {
   return document.querySelector(`[data-row-id="entry:${entryId}"] [data-cell="${col}"]`)!.firstElementChild as HTMLElement
 }
 
+/**
+ * One press sent and its answer settled. ⌘Z reaches only an Undo step the answer has recorded, and
+ * the press's toast is called once it has, so waiting on `edit` alone lets ⌘Z land too early.
+ */
+async function pressAnswered() {
+  await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+}
+
 beforeEach(() => {
   requests.length = 0
   edit.mockClear()
@@ -200,7 +209,7 @@ describe('one cell', () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
     expect(requests[1].ops.map((op) => op.op)).toEqual(['restore'])
@@ -210,7 +219,7 @@ describe('one cell', () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     edit.mockImplementationOnce((arg: { ops: TimelineEditOp[] }) => {
       requests.push(arg)
       return { unwrap: () => Promise.reject({ status: 400 }) }
@@ -226,7 +235,7 @@ describe('one cell', () => {
     mount()
     fireEvent.click(cell(102, PALETTE))
     fireEvent.click(cell(102, PALETTE))
-    await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
+    await pressAnswered()
     fireEvent.keyDown(window, { key: 'z', metaKey: true })
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Put back', expect.objectContaining({ action: undefined })))
     const [, options] = toast.mock.calls.at(-1) as [string, object]

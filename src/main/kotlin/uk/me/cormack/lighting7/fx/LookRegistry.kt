@@ -317,7 +317,8 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                     )
                 },
             effects = look.effects
-                .orderBy(DaoLookFx.sortOrder to SortOrder.ASC)
+                // The order a press spawns them, so the order they apply.
+                .orderBy(DaoLookFx.sortOrder to SortOrder.ASC, DaoLookFx.id to SortOrder.ASC)
                 .mapNotNull { effect ->
                     if (effect.targetType == DEFERRED_TARGET_TYPE) {
                         snapshotLogger.warn(
