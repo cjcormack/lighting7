@@ -243,8 +243,8 @@ private data class IncludedFxOutcome(
  * 1. **Already-running children are skipped.** If the cue is live, its own instance is already
  *    producing exactly that output. There is no FX-vs-FX suppression in the engine
  *    (suppression keys off programmer *values*), so a band duplicate would compose on top and
- *    visibly double the effect under any non-`OVERRIDE` blend mode. So is a child an earlier
- *    Include already runs in the programmer, by its origin.
+ *    visibly double the effect under any non-`OVERRIDE` blend mode. So is a child the programmer
+ *    already runs by its origin — an earlier Include's, or the Record or Update that wrote it.
  * 2. **`cueId`/`cueStackId` stay null** on spawned instances. Tagging them would let
  *    `removeCueEffects` sweep the operator's programmer contents out from under them when
  *    the cue stops. `programmerOrigin` carries the provenance Update needs instead, and it is

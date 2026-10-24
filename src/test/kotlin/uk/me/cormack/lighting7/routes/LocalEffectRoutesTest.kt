@@ -407,7 +407,7 @@ class LocalEffectRoutesTest : RouteIntegrationTest() {
         assertEquals(2.0, written.single { it.targetKey == "hex-0" }.beatDivision)
 
         update()
-        assertEquals(hexes, children().map { it.targetKey }.sorted(), "a second Update retires nothing more")
+        assertEquals(written.map { it.uuid }, children().map { it.uuid }, "a second Update retires nothing more")
     }
 
     // ── The band and Stack (FX editor plan §3.5, §3.6) ─────────────────────────
