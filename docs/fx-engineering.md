@@ -984,6 +984,11 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
   Include, copy and duplicate all read a home's FX by `sortOrder`, then id, and add them in that
   order, so their compose orders follow it, and FX that Include brings into the programmer take their
   Local ranks in it. Include's origin names a cue's FX by uuid, since Update may renumber them.
+  Record and Update give the same origin to each FX they write into a cue, naming the child it
+  became (`stampWrittenFxOrigins`), so a later Include does not run that child twice and Update
+  writes back onto it. Record and a Mode A Update replace an origin naming another cue, since the
+  write makes theirs the cue the programmer edits; a Mode B Update into one cue only fills an
+  origin naming no other cue, and one into several gives none.
 
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
@@ -1470,8 +1475,9 @@ element filter `ALL`.
   recorded copy keeps its phase, though not its set's step cycle or sweep.
 - **Update.** A copy keeps a cue Include's origin (`programmerOrigin`). A cue Update writes each
   copy as a child of its own, one per head, so it retires the child they stand for once nothing but
-  copies carries it (`splitIncludedChildren`), and the copies drop the origin; otherwise the cue
-  would play the effect twice. A Look Include's (`includedLookEffect`) is not kept: a Look's effect
+  copies carries it (`splitIncludedChildren`), and each copy's origin then names its own child;
+  otherwise the cue would play the effect twice. A child already on its copy's own head is never
+  retired, so a second Update keeps the copies' children. A Look Include's (`includedLookEffect`) is not kept: a Look's effect
   is written back whole, and a copy is the operator's busk of part of it.
 - **Order.** Copies take new ids but keep the parent's `composeOrder`, which the engine sorts by
   between priority and id, so a split moves nothing in the composition order.

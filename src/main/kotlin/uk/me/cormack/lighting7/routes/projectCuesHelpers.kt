@@ -47,6 +47,8 @@ internal data class CapturedState(
     val layers: List<CueLayerDto>,
     val adHocEffects: List<CueAdHocEffectDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto>,
+    /** The id of the Local effect each of [adHocEffects] was captured from; null for any other FX. */
+    val adHocSourceIds: List<Long?> = emptyList(),
 )
 
 /**
@@ -76,6 +78,7 @@ internal fun captureCurrentState(state: State): CapturedState {
     // still up, which is exactly the collapse this map exists to do.
     val layerTargets = mutableMapOf<Pair<LayerSourceKind, Int>, MutableList<CueTargetDto>>()
     val adHocEffects = mutableListOf<CueAdHocEffectDto>()
+    val adHocSourceIds = mutableListOf<Long?>()
 
     for (effect in activeEffects) {
         // A leaving instance is on its way off the stage: whatever held it has let it go.
@@ -121,6 +124,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 blocks = dyn.blocks,
                 groups = dyn.groups,
             ))
+            adHocSourceIds += effect.id.takeIf { effect.isLocalEffect }
         }
     }
 
@@ -142,6 +146,7 @@ internal fun captureCurrentState(state: State): CapturedState {
         layers = layerDtos,
         adHocEffects = adHocEffects,
         propertyAssignments = propertyAssignments,
+        adHocSourceIds = adHocSourceIds,
     )
 }
 
@@ -696,6 +701,8 @@ private fun normalisedTriggerType(raw: String): TriggerType = when (raw) {
  * `uuid` instead of their key, a new one takes the uuid it names, and an effect takes its run key —
  * so a cue is put back exactly as an edit found it.
  *
+ * Answers the ad-hoc rows written, one per [adHocEffects] item and in its order.
+ *
  * Must be called inside a transaction.
  */
 internal fun writeCueChildren(
@@ -707,7 +714,7 @@ internal fun writeCueChildren(
     created: Boolean = false,
     restore: Boolean = false,
     registry: FxRegistry,
-) {
+): List<DaoCueAdHocEffect> {
     val newEffects = adHocEffects.orEmpty()
     val newRows = propertyAssignments.orEmpty()
     validateCueChildren(newEffects, layers.orEmpty(), newRows, registry)?.let { throw IllegalArgumentException(it) }
@@ -756,6 +763,7 @@ internal fun writeCueChildren(
             }
         }
     }
+    val writtenEffects = ArrayList<DaoCueAdHocEffect>()
     if (adHocEffects != null) {
         val existing = if (created) emptyList() else cue.adHocEffectsInOrder()
         val incoming = inListOrder(adHocEffects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }
@@ -775,6 +783,7 @@ internal fun writeCueChildren(
                 if (restore) effect.uuid?.let { uuid = UUID.fromString(it) }
             }
             if (restore) row.runUuid = effect.runUuid?.let(UUID::fromString)
+            writtenEffects += row
         }
     }
     if (propertyAssignments != null) {
@@ -813,6 +822,7 @@ internal fun writeCueChildren(
             }
         }
     }
+    return writtenEffects
 }
 
 /** A restored child's uuid, or a fresh one — which no stored row holds — for a child that names none. */

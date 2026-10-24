@@ -18,6 +18,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.EffectTargetRef
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.layerTargets
@@ -469,30 +470,42 @@ internal fun recordingForUpdate(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask = null, state.show.fixtures)
+    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask = null, state.show.fixtures)
     return ProgrammerRecording(
         rows = collapsed.rows,
         // Update never writes the layer stack through this path: the *structural* half of Mode A is
         // a diff against the layers Include staged, applied directly to the cue's rows. Handing a
         // layer list to the MERGE writer as well would append the whole stack on every Update.
         layers = emptyList(),
-        adHocEffects = adHoc,
+        adHocEffects = captured.map { it.second },
         groupRowsEmitted = collapsed.groupRows,
         skipped = collapsed.skipped,
+        adHocSourceIds = captured.map { it.first.id },
     )
 }
 
 /**
  * The uuids of [cueId]'s ad-hoc effects whose Included instance now runs only as split
  * copies (apply-model plan §3.4). Update writes the copies as children of their own, one per head,
- * so the child they stand for is retired, or the cue would play the effect twice.
+ * so the child they stand for is retired, or the cue would play the effect twice. A child a copy
+ * was already written as is on that copy's own head, and is kept.
  */
-internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> =
-    state.show.fxEngine.getActiveEffects()
+internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> {
+    val copies = state.show.fxEngine.getActiveEffects()
         .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
         .groupBy { it.programmerOrigin!!.childUuid }
         .filterValues { instances -> instances.all { it.splitMember != null } }
-        .keys.filterNotNullTo(HashSet())
+        .filterKeys { it != null }
+    if (copies.isEmpty()) return emptySet()
+    val targets = transaction(state.database) {
+        DaoCue.findById(cueId)?.adHocEffects?.associate {
+            it.uuid.toString() to EffectTargetRef.canonical(it.targetType, it.targetKey)
+        }.orEmpty()
+    }
+    return copies.filter { (uuid, instances) ->
+        instances.none { EffectTargetRef.canonical(it.target.targetRef.discriminator, it.target.targetKey) == targets[uuid] }
+    }.keys.filterNotNullTo(HashSet())
+}
 
 private fun DaoCueLayer.cueFields() =
     CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)

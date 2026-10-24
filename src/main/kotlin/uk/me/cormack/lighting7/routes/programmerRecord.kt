@@ -92,6 +92,11 @@ data class CueWriteOutcome(
     val warnings: List<String>,
     /** The programmer's held scenery written into the cue (scenery-programmer plan D7). */
     val scenery: SceneryRecordOutcome = SceneryRecordOutcome(),
+    /**
+     * The uuid of the child each of the recording's ad-hoc FX was written onto, by index; null for
+     * one left out. Empty when the write wrote no ad-hoc FX.
+     */
+    val fxChildren: List<String?> = emptyList(),
 )
 
 /** A child with timing belongs to `CueTriggerManager`, not to Record. */
@@ -127,7 +132,7 @@ internal fun createCueFromRecording(
         this.name = name
         this.project = project
     }
-    writeCueChildren(
+    val children = writeCueChildren(
         cue, recording.adHocEffects, recording.rows,
         layers = recording.layers,
         created = true,
@@ -146,6 +151,7 @@ internal fun createCueFromRecording(
         fxWritten = recording.adHocEffects.size,
         preserved = ProgrammerPreservedCounts(),
         warnings = emptyList(),
+        fxChildren = children.map { it.uuid.toString() },
     )
 }
 
@@ -182,7 +188,7 @@ internal fun writeRecordingIntoCue(
     var removed = 0
     var outOfMask = 0
     var outOfScope = 0
-    var fxReplaced = 0
+    var fxReplaced = FxChildrenWrite(0, emptyList())
 
     when (mode) {
         RecordMode.CREATE -> error("unreachable")
@@ -293,10 +299,10 @@ internal fun writeRecordingIntoCue(
         }
     }
 
-    val fxWritten = when (mode) {
+    val fxWrite = when (mode) {
         RecordMode.MERGE -> appendFxChildren(cue, recording, state.show.fxRegistry)
         RecordMode.UPDATE_EXISTING -> fxReplaced
-        else -> 0
+        else -> FxChildrenWrite(0, emptyList())
     }
 
     return CueWriteOutcome(
@@ -305,7 +311,7 @@ internal fun writeRecordingIntoCue(
         assignmentsWritten = written,
         assignmentsRemoved = removed,
         groupRowsEmitted = recording.rows.count { it.targetType == TargetRef.Group.TYPE },
-        fxWritten = fxWritten,
+        fxWritten = fxWrite.written,
         preserved = ProgrammerPreservedCounts(
             triggers = triggerCount,
             timedLayers = timedLayerCount,
@@ -314,8 +320,12 @@ internal fun writeRecordingIntoCue(
             outOfScopeAssignments = outOfScope,
         ),
         warnings = warnings,
+        fxChildren = fxWrite.children,
     )
 }
+
+/** How many layers and FX a write wrote, and [CueWriteOutcome.fxChildren]. */
+private data class FxChildrenWrite(val written: Int, val children: List<String?>)
 
 /**
  * Append the recording's FX children, skipping ones the cue already asserts identically.
@@ -324,7 +334,7 @@ internal fun writeRecordingIntoCue(
  * should not leave the cue with the effect applied twice, which under a non-OVERRIDE blend
  * mode would visibly double it.
  */
-private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, registry: FxRegistry): Int {
+private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, registry: FxRegistry): FxChildrenWrite {
     var count = 0
 
     // Layers first, upserted on `(source, targets)` — a Look's on its source, since it lands whole
@@ -389,7 +399,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, regist
     if (recorded.isNotEmpty()) {
         count += renumberInApplyOrder(existingAdHoc, recorded, DaoCueAdHocEffect::sortOrder).count { it in unchanged }
     }
-    return count
+    return FxChildrenWrite(count, recorded.map { it.uuid.toString() })
 }
 
 /**
@@ -508,7 +518,7 @@ private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording
  * Replace the cue's in-mask *immediate* FX children with the recording's. Timed children are
  * left in place regardless of mask — they are not the programmer's to replace.
  *
- * Returns how many layers and effects it wrote.
+ * Returns how many layers and effects it wrote, and which child each recorded FX became.
  */
 private fun replaceImmediateFxChildren(
     cue: DaoCue,
@@ -517,7 +527,7 @@ private fun replaceImmediateFxChildren(
     state: State,
     scope: Set<String>? = null,
     warnings: MutableList<String> = ArrayList(),
-): Int {
+): FxChildrenWrite {
     var written = 0
     // What the recording replaces. A replaced child the recording names again is written over,
     // keeping its uuid (show-cue-editing plan P3); the rest are deleted once the recording is in.
@@ -584,6 +594,7 @@ private fun replaceImmediateFxChildren(
     // Replaced effects not yet written over: gone as far as the shadow check is concerned, exactly
     // as if they had been deleted before the recording went in.
     val pending = replacedEffects.mapTo(HashSet()) { it.id.value }
+    val children = ArrayList<String?>(recording.adHocEffects.size)
     for (effect in recording.adHocEffects) {
         // Same hazard, same rule — an ad-hoc child is identified by (effectType, property).
         val shadowed = shadowingCoverage(
@@ -600,6 +611,7 @@ private fun replaceImmediateFxChildren(
             warnings += "${effect.effectType} already covers ${shadowed.joinToString()} via a " +
                 "group row the selection only partly covers — narrow the selection to the whole " +
                 "group, or remove that row"
+            children += null
             continue
         }
         val stored = queues[effect.effectKey]?.removeFirstOrNull()
@@ -613,13 +625,14 @@ private fun replaceImmediateFxChildren(
         } else {
             recorded += newAdHocChild(cue, effect)
         }
+        children += recorded.last().uuid.toString()
         written++
     }
     replacedEffects.filter { it.id.value in pending }.forEach { it.delete() }
     if (recorded.isNotEmpty()) {
         renumberInApplyOrder(storedEffects.filter { it.id.value !in pending }, recorded, DaoCueAdHocEffect::sortOrder)
     }
-    return written
+    return FxChildrenWrite(written, children)
 }
 
 /**

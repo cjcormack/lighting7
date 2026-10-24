@@ -100,10 +100,15 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         awaitDimmer(replace * within / 255, "the Within on top")
     }
 
-    private suspend fun HttpClient.record(mode: String, cueId: Int? = null): ProgrammerRecordResponse {
+    private suspend fun HttpClient.record(mode: String, cueId: Int? = null, source: String = "TOUCHED"): ProgrammerRecordResponse {
         val response = post("/api/rest/programmer/record") {
             contentType(ContentType.Application.Json)
-            setBody(ProgrammerRecordRequest(projectId = projectId.toString(), mode = mode, cueId = cueId, name = "Stacked".takeIf { cueId == null }))
+            setBody(
+                ProgrammerRecordRequest(
+                    projectId = projectId.toString(), mode = mode, source = source, cueId = cueId,
+                    name = "Stacked".takeIf { cueId == null },
+                ),
+            )
         }
         assertEquals(if (mode == "CREATE") HttpStatusCode.Created else HttpStatusCode.OK, response.status, response.bodyAsText())
         return response.body()
@@ -117,10 +122,10 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
     }
 
-    private suspend fun HttpClient.update(): ProgrammerUpdateResult {
+    private suspend fun HttpClient.update(targets: List<Int>? = null): ProgrammerUpdateResult {
         val response = post("/api/rest/programmer/update") {
             contentType(ContentType.Application.Json)
-            setBody(ProgrammerUpdateRequest(projectId = projectId.toString()))
+            setBody(ProgrammerUpdateRequest(projectId = projectId.toString(), targets = targets))
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         return response.body<ProgrammerUpdateResponse>().results.single()
@@ -282,6 +287,101 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         assertEquals(0, client.update().fxWritten)
         assertEquals(stored, children(cueId))
+    }
+
+    private fun localFxCount() = fx.getActiveEffects().count { it.isLocalEffect }
+
+    @Test
+    fun `Include of a cue just recorded runs its child once, and Update writes nothing`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        client.pressSine(200, "OVERRIDE", stack = false)
+        awaitDimmer(200, "the busked FX")
+        val cueId = client.record("CREATE").cue.id
+        val stored = children(cueId)
+        assertEquals(1, stored.size)
+
+        client.include(cueId)
+        assertEquals(1, localFxCount(), "the recorded FX not run a second time")
+
+        assertEquals(0, client.update().fxWritten)
+        assertEquals(stored, children(cueId), "no second child")
+    }
+
+    @Test
+    fun `an FX Update wrote as a new child is not doubled by a second Include`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val (cueId, stored) = client.includedPair()
+        client.pressSine(150, "MULTIPLY", stack = true)
+
+        assertEquals(1, client.update().fxWritten)
+        val after = children(cueId)
+        assertEquals(3, after.size)
+        assertEquals(stored, after.take(2))
+
+        client.include(cueId)
+        assertEquals(3, localFxCount(), "no child run twice")
+
+        assertEquals(0, client.update().fxWritten)
+        assertEquals(after, children(cueId))
+    }
+
+    @Test
+    fun `Include of a cue recorded from the whole stage runs its child once`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        client.pressSine(200, "OVERRIDE", stack = false)
+        awaitDimmer(200, "the busked FX")
+        val cueId = client.record("CREATE", source = "STAGE_SNAPSHOT").cue.id
+        val stored = children(cueId)
+        assertEquals(1, stored.size)
+
+        client.include(cueId)
+        assertEquals(1, localFxCount(), "the recorded FX not run a second time")
+
+        assertEquals(0, client.update().fxWritten)
+        assertEquals(stored, children(cueId))
+    }
+
+    @Test
+    fun `Include of the one cue an Update named runs the child it wrote once`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val cueId = ProgrammerRouteTestSupport.createCue(client, projectId, "empty")
+        client.pressSine(200, "OVERRIDE", stack = false)
+        awaitDimmer(200, "the busked FX")
+
+        assertEquals(1, client.update(targets = listOf(cueId)).fxWritten)
+        val stored = children(cueId)
+        assertEquals(1, stored.size)
+
+        client.include(cueId)
+        assertEquals(1, localFxCount(), "the written FX not run a second time")
+
+        assertEquals(0, client.update(targets = listOf(cueId)).fxWritten)
+        assertEquals(stored, children(cueId))
+    }
+
+    @Test
+    fun `Record of an Included cue into a new cue makes the new cue the one its FX came from`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        client.includedPair()
+        val copyId = client.record("CREATE").cue.id
+        val copied = children(copyId)
+        assertEquals(2, copied.size)
+
+        client.include(copyId)
+        assertEquals(2, localFxCount(), "the copy's children already run")
+
+        assertEquals(0, client.update().fxWritten)
+        assertEquals(copied, children(copyId))
     }
 
     @Test

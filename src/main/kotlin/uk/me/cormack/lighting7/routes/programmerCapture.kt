@@ -145,6 +145,12 @@ data class ProgrammerRecording(
     val adHocEffects: List<CueAdHocEffectDto>,
     val groupRowsEmitted: Int,
     val skipped: List<RecordSkip>,
+    /**
+     * The live instance each of [adHocEffects] was captured from, by [FxInstance.id] and index, so
+     * a write can point it at the child it became; null for a stage snapshot's FX no Local effect
+     * stands for.
+     */
+    val adHocSourceIds: List<Long?> = emptyList(),
 )
 
 /**
@@ -446,14 +452,16 @@ internal fun collectProgrammerRecording(
             }
             rows += row
         }
+        val adHoc = if (includeFx) {
+            captured.adHocEffects.zip(captured.adHocSourceIds).filter { (effect, _) ->
+                maskAllows(mask, maskGroupForAdHoc(fixtures, effect)) &&
+                    effectTargetInScope(fixtures, effect.target, scope)
+            }
+        } else emptyList()
         return ProgrammerRecording(
             rows = renumber(rows),
-            adHocEffects = if (includeFx) {
-                captured.adHocEffects.filter {
-                    maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
-                        effectTargetInScope(fixtures, it.target, scope)
-                }
-            } else emptyList(),
+            adHocEffects = adHoc.map { it.first },
+            adHocSourceIds = adHoc.map { it.second },
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
             skipped = skipped,
             // A stage snapshot describes what is *on stage*, which is not the same as what the
@@ -473,7 +481,7 @@ internal fun collectProgrammerRecording(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask, fixtures, scope)
+    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask, fixtures, scope)
 
     // **`ALL` means flatten; `TOUCHED` means save the structure.** The distinction is not a
     // convenience — emitting layers *and* the rows they cook to would put both representations of
@@ -494,9 +502,10 @@ internal fun collectProgrammerRecording(
     return ProgrammerRecording(
         rows = collapsed.rows,
         layers = layers,
-        adHocEffects = adHoc,
+        adHocEffects = captured.map { it.second },
         groupRowsEmitted = collapsed.groupRows,
         skipped = entrySkips + collapsed.skipped,
+        adHocSourceIds = captured.map { it.first.id },
     )
 }
 
@@ -532,7 +541,7 @@ private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): Pr
  *
  * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child, its place
  * in [instances] as its `sortOrder`: callers pass them in [FxEngine.inStoredApplyOrder], so the cue
- * spawns them back in the order they applied.
+ * spawns them back in the order they applied. Each child is answered beside the instance it came from.
  */
 internal fun fxInstancesToCueChildren(
     instances: List<FxInstance>,
@@ -544,9 +553,9 @@ internal fun fxInstancesToCueChildren(
      * chase into the cue would be a worse surprise than dropping the chase and saying so.
      */
     scope: Set<String>? = null,
-): List<CueAdHocEffectDto> {
+): List<Pair<FxInstance, CueAdHocEffectDto>> {
     if (instances.isEmpty()) return emptyList()
-    val adHocEffects = ArrayList<CueAdHocEffectDto>()
+    val adHocEffects = ArrayList<Pair<FxInstance, CueAdHocEffectDto>>()
 
     for (effect in instances) {
         // Owned by a layer: recorded as part of that layer, not as a loose child.
@@ -571,7 +580,7 @@ internal fun fxInstancesToCueChildren(
         // instead of the track-the-default null.
         val dyn = effect.dynamics
         adHocEffects.add(
-                CueAdHocEffectDto(
+            effect to CueAdHocEffectDto(
                     targetType = targetType,
                     targetKey = targetKey,
                     effectType = effect.effectTypeId,
