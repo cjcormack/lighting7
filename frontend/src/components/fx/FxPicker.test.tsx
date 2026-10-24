@@ -550,4 +550,48 @@ describe('FxPicker on the bare effect press', () => {
     await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
     expect(pressFx.mock.calls[0][0]).not.toHaveProperty('families')
   })
+
+  /** The FX editor's *Stack* (FX editor plan D6): nothing replaced, the family's stacking blend the desk's. */
+  function Stacking({ stack }: { stack: boolean }) {
+    const [current, setCurrent] = useState<AuditionedFx | null>(null)
+    return (
+      <FxPicker
+        target={FOUR}
+        initialFamily="INTENSITY"
+        current={current}
+        onCurrent={setCurrent}
+        onEdit={() => {}}
+        press={{ projectId: 3, families: null, stack }}
+      />
+    )
+  }
+
+  it('sends stack: true and no blend under Stack, so the desk starts it on the family’s stacking blend', async () => {
+    render(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    const sent = JSON.parse(JSON.stringify(pressFx.mock.calls[0][0]))
+    expect(sent).toMatchObject({ stack: true, fxType: 'Pulse' })
+    expect(sent).not.toHaveProperty('blendMode')
+  })
+
+  it('sends no stack under Replace, with the FX’s own blend', async () => {
+    render(<Stacking stack={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    expect(pressFx.mock.calls[0][0]).not.toHaveProperty('stack')
+    expect(pressFx.mock.calls[0][0]).toHaveProperty('blendMode')
+  })
+
+  it('keeps a stacked FX’s blend through a swap', async () => {
+    const { rerender } = render(<Stacking stack />)
+    wire.library = [PULSE, { ...PULSE, name: 'Ramp' }]
+    rerender(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
+    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', propertyName: 'dimmer', blendMode: 'MULTIPLY' })]
+    rerender(<Stacking stack />)
+    fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
+    expect(updateFx).toHaveBeenCalledWith(99, expect.not.objectContaining({ blendMode: expect.anything() }))
+  })
 })

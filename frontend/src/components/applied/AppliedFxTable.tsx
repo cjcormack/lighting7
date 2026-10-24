@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { Layers, LayoutGrid, ListOrdered, MoreHorizontal, Pause, Pencil, Play, Plus, Square } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,7 +24,6 @@ import { isOnSeconds } from '@/lib/fxTiming'
 import { isPaletteSteps, isSlotSteps, parseStepList, slotLabel } from '@/lib/stepFx'
 import { getCycleLabel, secondsLabel } from '@/components/fx/fxConstants'
 import { parsePaletteRefUuid } from '@/components/fx/colourUtils'
-import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
 import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
 import { NewPaletteFromFxSheet } from '@/components/programmer/NewPaletteFromFxSheet'
@@ -74,10 +73,11 @@ const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 's
  * amount, direction and runs are the instance's fields, *spent* is its `spent`, and *held · Blind* is
  * `isHeldByBlind`.
  *
- * **A row's actions** — *Edit…* (`FxEditorPopover`, so the split edit and pause come with it),
- * *Save as palette…* behind `saveAsPaletteOffer`'s gate, *Stop* — plus *Pause* / *Resume*, the
- * editor's own, lifted onto the row (`useToggleFxPause`). ⏎ and the name's double click open the
- * editor. The selected rows are published (`fxSelection.ts`): the Values grid rings their cells.
+ * **A row's actions** — *Edit…*, *Save as palette…* behind `saveAsPaletteOffer`'s gate, *Stop* —
+ * plus *Pause* / *Resume* (`useToggleFxPause`). *Edit…*, ⏎ and the name's double click are the
+ * row's press, the host's [onOpenFx]: the FX tab selects its heads and opens it in the FX editor
+ * (FX editor plan D1). The selected rows are published (`fxSelection.ts`): the Values grid rings
+ * their cells.
  *
  * **`+ Effect` is the library row's create verb** (`useProgrammerAddFx`):
  * the bare effect press over the selection in Local, into the Look a focused Look layer applies,
@@ -87,10 +87,16 @@ export function AppliedFxTable({
   projectId,
   view,
   onViewChange,
+  viewSwitch,
+  onOpenFx,
 }: {
   projectId: number
   view: TableView
   onViewChange: (next: TableView) => void
+  /** After the table tabs on row B — the FX tab's *Selection · All*. */
+  viewSwitch?: ReactNode
+  /** A row's press: *Edit…*, ⏎, the name's double click. */
+  onOpenFx: (effect: ActiveFx) => void
 }) {
   const { data: effects } = useActiveFxQuery()
   const { data: layers } = useProgrammerLayersQuery()
@@ -101,7 +107,6 @@ export function AppliedFxTable({
   const stop = useStopFx()
   const controls = useMemo(() => ({ togglePause, stop }), [stop, togglePause])
 
-  const [editingId, setEditingId] = useState<number | null>(null)
   const [saving, setSaving] = useState<ActiveFx | null>(null)
   // The selection, published for the Values grid's rings (tables-colours plan D3) and taken back
   // from the store on mount: the rings are read after a switch away from this table.
@@ -113,7 +118,6 @@ export function AppliedFxTable({
     (rows: readonly FxSheetRow[]) => fxSelection?.set(new Set(rows.map((row) => row.effect.id))),
     [fxSelection],
   )
-  const editAnchor = useRef<HTMLElement | null>(null)
 
   const palettesByUuid = useMemo(() => new Map((templates ?? []).map((t) => [t.uuid, t])), [templates])
   const all = useMemo<FxSheetRow[]>(() => {
@@ -143,11 +147,7 @@ export function AppliedFxTable({
     return sortRows(shown, view.sort, view.dir, sortValue)
   }, [all, chip, view.dir, view.q, view.sort])
 
-  const editing = editingId != null ? (effects ?? []).find((e) => e.id === editingId) ?? null : null
-  const openEditor = useCallback((row: FxSheetRow) => {
-    editAnchor.current = document.querySelector<HTMLElement>(`[data-row-id="${row.id}"]`)
-    setEditingId(row.effect.id)
-  }, [])
+  const openEditor = useCallback((row: FxSheetRow) => onOpenFx(row.effect), [onOpenFx])
 
   const columnsFor = useCallback((band: AppliedBand) => fxColumns(band), [])
   const firstColumnFor = useCallback(
@@ -192,6 +192,7 @@ export function AppliedFxTable({
         view={view}
         onViewChange={onViewChange}
         filterLabel="Filter by FX, attribute, target or home"
+        leading={viewSwitch}
         chips={
           <PartitionChips<FxHome>
             label="Where it lives"
@@ -229,18 +230,6 @@ export function AppliedFxTable({
           </span>
         }
       />
-      {editing != null && (
-        <FxEditorPopover
-          effect={editing}
-          anchorRef={editAnchor}
-          onClose={() => setEditingId(null)}
-          onFollow={setEditingId}
-          onStop={(effect) => {
-            controls.stop(effect)
-            setEditingId(null)
-          }}
-        />
-      )}
       <NewPaletteFromFxSheet
         projectId={projectId}
         open={saving != null}
@@ -597,7 +586,7 @@ function FxVerbs({
       <LibraryVerb
         icon={Pencil}
         label="Edit…"
-        title={`Edit ${first?.effect.fxType ?? 'this FX'} live`}
+        title={`Edit ${first?.effect.fxType ?? 'this FX'} in the FX editor`}
         disabledReason={oneRecordReason('Edit', 'FX', count)}
         onClick={() => onEdit(first)}
       />

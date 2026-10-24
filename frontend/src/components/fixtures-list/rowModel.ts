@@ -566,7 +566,9 @@ export function spreadCellCount(targets: readonly WriteTarget[]): number {
  * string — `fixturesSupportingFamily` counts every head for it, where a descriptor set can say
  * whether a head has a wheel, a zoom, an iris.
  */
-export function targetFamilies(targets: readonly WriteTarget[]): AttributeFamily[] {
+export function targetFamilies(
+  targets: readonly { properties: readonly PropertyDescriptor[]; elements?: readonly { properties: readonly PropertyDescriptor[] }[] }[],
+): AttributeFamily[] {
   const out = new Set<AttributeFamily>()
   // A trigger or a command is no attribute a head can take: neither can be held by a template or a
   // layer, so a head whose only beam-ish descriptor is a reset must not offer Beam.

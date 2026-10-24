@@ -137,6 +137,7 @@ describe('SILENT_ENDPOINTS', () => {
       import('./rigSafety'),
       import('./venues'),
       import('./venueHold'),
+      import('./fxPreview'),
       // The three WebSocket-backed mutations, injected from these two modules.
       import('./park'),
       import('./channels'),

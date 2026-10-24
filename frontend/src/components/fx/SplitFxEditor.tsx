@@ -22,8 +22,8 @@ export type SplitSession = { session: number; ids: readonly number[] } | null
 
 /**
  * The live effect editor that **follows the selection** (apply-model plan D5, §4.5's split editor),
- * wherever it is drawn: inside `FxEditorPopover` — the FX table's *Edit…*, an FX lens chip, a
- * band's running chip — and inline under a row of the busk Effects tab.
+ * wherever it is drawn: inside `FxEditorPopover` — an FX lens chip, a band's running chip — in the
+ * FX editor's inspector, and inline under a row of the busk Effects tab.
  *
  * The desk answers a split with new ids: the host is told the one to read from now on ([onFollow])
  * and the session the copies share ([onSessionChange]), and reads [effect] live from the running
@@ -37,6 +37,7 @@ export function SplitFxEditor({
   onClose,
   onStop,
   onFollow,
+  layout,
 }: {
   effect: ActiveFx
   /** The heads an edit is for — a cell's batch, the busk pair's targets. Absent, the window's pair's. */
@@ -48,6 +49,8 @@ export function SplitFxEditor({
   onStop?: (effect: ActiveFx) => void
   /** A split replaced the effect: the host reads this id from now on — the edited copy it follows. */
   onFollow?: (fxId: number) => void
+  /** `FxFields`' section order: the FX editor's inspector draws its own. */
+  layout?: 'editor' | 'inspector'
 }) {
   const session = follow != null && follow.ids.includes(effect.id) ? follow.session : effect.id
   const followed = follow != null && follow.session === session ? follow.ids : null
@@ -68,6 +71,7 @@ export function SplitFxEditor({
       onSplit={onFollow != null ? onSplit : undefined}
       onDone={onClose}
       onStop={onStop == null ? undefined : () => onStop(effect)}
+      layout={layout}
     />
   )
 }
@@ -100,6 +104,7 @@ function SplitEditor({
   onSplit,
   onDone,
   onStop,
+  layout,
 }: {
   effect: ActiveFx
   selection: readonly CueTarget[] | undefined
@@ -109,6 +114,7 @@ function SplitEditor({
   onSplit?: (ids: readonly number[]) => void
   onDone: () => void
   onStop?: () => void
+  layout?: 'editor' | 'inspector'
 }) {
   const { fixtures } = useFixtureLookup()
   const connected = useIsDeskConnected()
@@ -213,6 +219,7 @@ function SplitEditor({
           alsoIds={alsoIds}
           onDone={onDone}
           onStop={stop}
+          layout={layout}
         />
       </div>
     </div>

@@ -76,9 +76,9 @@ vi.mock('@/components/applied/StackTable', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
   return { StackTable: () => <div data-testid="stack-table"><ProgrammerTableTabs /></div> }
 })
-vi.mock('@/components/applied/AppliedFxTable', async () => {
+vi.mock('@/components/fxEditor/ProgrammerFxTab', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')
-  return { AppliedFxTable: () => <div data-testid="fx-table"><ProgrammerTableTabs /></div> }
+  return { ProgrammerFxTab: () => <div data-testid="fx-table"><ProgrammerTableTabs /></div> }
 })
 vi.mock('@/components/applied/SceneryTable', async () => {
   const { ProgrammerTableTabs } = await import('@/components/programmer/ProgrammerTableTabs')

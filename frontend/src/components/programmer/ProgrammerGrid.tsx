@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { usePublishRemask, type Remask } from '@/components/fixtures-list/remaskStore'
 import { KeyRound, Layers, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
@@ -506,6 +507,7 @@ function ProgrammerGridBody({
                 marqueeDragging={marqueeDragging}
                 onRemask={remask}
               />
+              <PublishRemask remask={remask} />
             </div>
           </div>
         )}
@@ -629,4 +631,10 @@ function ScopedKeyPopover({ className }: { className?: string }) {
       </PopoverContent>
     </Popover>
   )
+}
+
+/** The list's family-pill write, for the FX editor's header (`remaskStore.ts`). */
+function PublishRemask({ remask }: { remask: Remask | null }) {
+  usePublishRemask(remask)
+  return null
 }

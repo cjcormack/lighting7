@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
   setScenery: vi.fn(),
   clearScenery: vi.fn(),
   notes: new Map<string, string>(),
+  selectHeads: vi.fn(),
 }))
 
 const mutation = (spy: (arg: unknown) => void) => () => [
@@ -131,8 +132,12 @@ vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => mocks.b
 vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures: [] }) }))
 vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: ({ currentPage }: { currentPage: string }) => <span>{currentPage}</span> }))
 vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null }))
-vi.mock('@/components/fx/FxEditorPopover', () => ({
-  FxEditorPopover: ({ effect }: { effect: ActiveFx }) => <div data-testid="fx-editor">{effect.id}</div>,
+// The FX editor has its own suite; here *All*'s row press only has to land on it.
+vi.mock('@/components/fxEditor/FxEditorSelection', () => ({
+  FxEditorSelection: ({ viewSwitch }: { viewSwitch: ReactNode }) => <div data-testid="fx-editor-selection">{viewSwitch}</div>,
+}))
+vi.mock('@/components/fixtures-list/programmerSelectRequest', () => ({
+  selectWindowHeads: (...a: unknown[]) => mocks.selectHeads(...a),
 }))
 vi.mock('@/components/programmer/NewPaletteFromFxSheet', () => ({
   NewPaletteFromFxSheet: ({ open, effect }: { open: boolean; effect: ActiveFx | null }) =>
@@ -151,6 +156,7 @@ const { DEFAULT_SCENERY_FILTERS, SCENERY_FILTERS_KEY, resetSceneryFiltersStore }
 )
 const { FxSelectionStoreContext, createFxSelectionStore } = await import('@/components/fixtures-list/fxSelection')
 const { openAddFxDoor } = await import('@/components/programmer/addFxDoor')
+const { getPickedFx, resetFxEditorViewStores, setFxTabView, useFxTabView } = await import('@/lib/fxEditorView')
 
 function effect(id: number, over: Partial<ActiveFx> = {}): ActiveFx {
   return {
@@ -303,6 +309,9 @@ beforeEach(() => {
   sessionStorage.clear()
   resetProgrammerTableStore()
   resetSceneryFiltersStore()
+  // This suite is *All*'s: the FX tab's table of every running FX.
+  resetFxEditorViewStores()
+  setFxTabView('all')
   mocks.blind = false
   mocks.localValues = 0
   mocks.notes = new Map()
@@ -327,7 +336,7 @@ beforeEach(() => {
   ]
   mocks.looks = [look(1, 'Storm'), look(2, 'Thunder')]
   mocks.templates = [template(5, 'Amber'), template(6, 'Flash 3x', { kind: 'fx', rows: [] })]
-  for (const spy of [mocks.removeLayer, mocks.moveLayer, mocks.patchLayer, mocks.detachLayer, mocks.pickUp, mocks.pauseFx, mocks.resumeFx, mocks.removeFx, mocks.removeGroupFx, mocks.openMakeLayer, mocks.setScenery, mocks.clearScenery]) spy.mockClear()
+  for (const spy of [mocks.selectHeads, mocks.removeLayer, mocks.moveLayer, mocks.patchLayer, mocks.detachLayer, mocks.pickUp, mocks.pauseFx, mocks.resumeFx, mocks.removeFx, mocks.removeGroupFx, mocks.openMakeLayer, mocks.setScenery, mocks.clearScenery]) spy.mockClear()
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -364,11 +373,14 @@ describe('the FX table', () => {
     expect(mocks.removeFx.mock.calls).toEqual([[{ id: 2, fixtureKey: 'par-2' }]])
   })
 
-  it('opens the live editor from Edit… in the row’s menu', () => {
+  it('opens Edit… in Selection with the FX picked, its heads selected', () => {
     drawRoute('?table=fx')
     openMenu(within(rowOf('fx:3')).getByRole('button', { name: 'Actions for Lightning' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Edit…' }))
-    expect(screen.getByTestId('fx-editor')).toHaveTextContent('3')
+    expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'fixture', key: 'par-3' }], []]])
+    expect(getPickedFx()).toBe(3)
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Selection' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('publishes its selection for the Values grid’s rings, and takes it back when it mounts again', () => {
@@ -398,11 +410,25 @@ describe('the FX table', () => {
     expect(mocks.resumeFx).toHaveBeenCalledWith({ id: 4, fixtureKey: 'par-4' })
   })
 
-  it('opens the live editor from the row, ⏎ and Edit… alike', () => {
+  it('presses a row with ⏎ as Edit… does, a group FX selecting its group', () => {
     drawRoute('?table=fx')
-    fireEvent.click(rowOf('fx:2').querySelector('[data-first-column]')!)
+    fireEvent.click(rowOf('fx:1').querySelector('[data-first-column]')!)
     fireEvent.keyDown(window, { key: 'Enter' })
-    expect(screen.getByTestId('fx-editor')).toHaveTextContent('2')
+    expect(mocks.selectHeads.mock.calls).toEqual([[[{ type: 'group', key: 'front' }], []]])
+    expect(getPickedFx()).toBe(1)
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
+  })
+
+  it('switches between Selection and All, the window keeping the choice', () => {
+    function View() {
+      return <span data-testid="fx-view">{useFxTabView()}</span>
+    }
+    drawRoute('?table=fx')
+    render(<View />)
+    fireEvent.click(screen.getByRole('button', { name: 'Selection' }))
+    expect(screen.getByTestId('fx-view')).toHaveTextContent('selection')
+    expect(sessionStorage.getItem('programmer.fx.view')).toBe('"selection"')
+    expect(screen.getByTestId('fx-editor-selection')).toBeTruthy()
   })
 
   it('stops every selected effect from the bar', () => {
@@ -719,7 +745,7 @@ describe('the query string', () => {
     expect(tableRows().map((r) => r.dataset.rowId)).toEqual(['fx:2', 'fx:1'])
     fireEvent.click(screen.getByRole('button', { name: 'FX' }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc&home=yours')
-    fireEvent.click(screen.getByRole('button', { name: /^All/ }))
+    fireEvent.click(within(screen.getByRole('navigation', { name: 'Where it lives' })).getByRole('button', { name: /^All/ }))
     expect(where()).toBe('/projects/1/programmer?table=fx&sort=name&dir=desc')
   })
 

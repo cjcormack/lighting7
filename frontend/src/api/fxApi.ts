@@ -153,9 +153,16 @@ export interface FxError {
   message: string
 }
 
+/** An `fxChanged` frame: an FX added, removed or updated (a move re-ranking it included). */
+export interface FxChange {
+  /** `FxChangeType`'s wire names (`plugins/FxSocket.kt`). */
+  changeType: 'added' | 'removed' | 'updated' | 'cleared'
+  fxId?: number
+}
+
 type FxMessage =
   | { type: 'fxState'; activeFx: ActiveFxState[] }
-  | { type: 'fxChanged'; changeType: string; fxId?: number }
+  | ({ type: 'fxChanged' } & FxChange)
   | ({ type: 'fxError' } & FxError)
 
 // === API Interface ===
@@ -180,6 +187,8 @@ export interface FxApi {
   moveFx(fxId: number, above: number | null): boolean
   /** Every `fxError` this socket is sent — `store/fixtureFx.ts` toasts each, keyed per effect. */
   subscribeToErrors(fn: (error: FxError) => void): Subscription
+  /** Every `fxChanged`, naming the FX it is about — the FX editor's preview re-asks on one in its list. */
+  subscribeToChanges(fn: (change: FxChange) => void): Subscription
 }
 
 export function createFxApi(conn: InternalApiConnection): FxApi {
@@ -193,6 +202,7 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
   }
 
   const errorSubscriptions = new Map<number, (error: FxError) => void>()
+  const changeSubscriptions = new Map<number, (change: FxChange) => void>()
 
   conn.subscribe((evType, _ev, frame) => {
     if (evType === InternalEventType.message) {
@@ -205,6 +215,8 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       } else if (message.type === 'fxChanged') {
         // Re-request full state to get updated effect list
         conn.send(JSON.stringify({ type: 'fxState' }))
+        const change: FxChange = { changeType: message.changeType, fxId: message.fxId }
+        changeSubscriptions.forEach((fn) => fn(change))
       } else if (message.type === 'fxError') {
         const error: FxError = { fxId: message.fxId, code: message.code, message: message.message }
         errorSubscriptions.forEach((fn) => fn(error))
@@ -241,6 +253,16 @@ export function createFxApi(conn: InternalApiConnection): FxApi {
       return {
         unsubscribe: () => {
           errorSubscriptions.delete(thisId)
+        },
+      }
+    },
+
+    subscribeToChanges(fn: (change: FxChange) => void): Subscription {
+      const thisId = nextSubscriptionId++
+      changeSubscriptions.set(thisId, fn)
+      return {
+        unsubscribe: () => {
+          changeSubscriptions.delete(thisId)
         },
       }
     },

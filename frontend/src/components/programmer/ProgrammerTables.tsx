@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type ReactNod
 import { useSearchParams } from 'react-router'
 import { cn } from '@/lib/utils'
 import { useStableCallback } from '@/hooks/useStableCallback'
-import { AppliedFxTable } from '@/components/applied/AppliedFxTable'
+import { ProgrammerFxTab } from '@/components/fxEditor/ProgrammerFxTab'
 import { SceneryTable } from '@/components/applied/SceneryTable'
 import { StackTable } from '@/components/applied/StackTable'
 import { HandProgrammerLayerStrip } from '@/components/hand/HandLayerTargets'
@@ -101,7 +101,7 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
             {table === 'stack' ? (
               <StackTable key="stack" projectId={projectId} view={view} onViewChange={setView} />
             ) : table === 'fx' ? (
-              <AppliedFxTable key="fx" projectId={projectId} view={view} onViewChange={setView} />
+              <ProgrammerFxTab key="fx" projectId={projectId} view={view} onViewChange={setView} />
             ) : (
               <SceneryTable key="scenery" projectId={projectId} view={view} onViewChange={setView} />
             )}

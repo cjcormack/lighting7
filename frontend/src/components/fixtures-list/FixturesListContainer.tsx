@@ -56,6 +56,7 @@ import {
   countFixtureRows,
   expandSelectionToTargets,
   wholeGroupOf,
+  elementRowId,
   fixtureRowId,
   groupRowId,
   memberRowId,
@@ -1125,28 +1126,35 @@ export function FixturesListContainer({
     // Prefer the group row when the sheet is in rollup mode and the whole group came in —
     // that is the shape the operator was working in, and it keeps the row count readable.
     const wanted: RowId[] = []
+    const groupSet = grouped ? new Set(groupKeys) : new Set<string>()
     if (grouped) {
-      const groupSet = new Set(groupKeys)
       for (const name of groupKeys) {
         if (groups.some((g) => g.name === name)) wanted.push(groupRowId(name))
       }
-      for (const key of fixtureKeys) {
-        const fixture = fixtures.find((f) => f.key === key)
-        if (!fixture) continue
-        const parent = fixture.groups.find((name) => groups.some((g) => g.name === name))
-        // Skip members already covered by a selected group row.
-        if (parent && groupSet.has(parent)) continue
-        if (parent) {
-          setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
-          wanted.push(memberRowId(parent, key))
-        } else {
-          wanted.push(fixtureRowId(key))
-        }
+    }
+    /** A fixture's own row — its member row under its first group in rollup mode — or null when a selected group row covers it. */
+    const fixtureRowFor = (fixture: Fixture): RowId | null => {
+      if (!grouped) return fixtureRowId(fixture.key)
+      const parent = fixture.groups.find((name) => groups.some((g) => g.name === name))
+      if (parent == null) return fixtureRowId(fixture.key)
+      // Skip members already covered by a selected group row.
+      if (groupSet.has(parent)) return null
+      setExpandedGroups((prev) => (prev.has(parent) ? prev : new Set(prev).add(parent)))
+      return memberRowId(parent, fixture.key)
+    }
+    for (const key of fixtureKeys) {
+      const fixture = fixtures.find((f) => f.key === key)
+      if (fixture) {
+        const id = fixtureRowFor(fixture)
+        if (id != null) wanted.push(id)
+        continue
       }
-    } else {
-      for (const key of fixtureKeys) {
-        if (fixtures.some((f) => f.key === key)) wanted.push(fixtureRowId(key))
-      }
+      // A cell's key: its row under its fixture's, opened.
+      const parent = fixtures.find((f) => (f.elements ?? []).some((e) => e.key === key))
+      if (parent == null) continue
+      const parentRow = fixtureRowFor(parent) ?? fixtureRowId(parent.key)
+      setExpandedFixtures((prev) => (prev.has(parent.key) ? prev : new Set(prev).add(parent.key)))
+      wanted.push(elementRowId(parentRow, key))
     }
     // Nothing resolved — the fixtures may still be loading, so leave the nonce unapplied and
     // let the next run (when they arrive) do it.
