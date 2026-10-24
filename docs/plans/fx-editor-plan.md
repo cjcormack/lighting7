@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a and 3b of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b and 4 of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -447,7 +447,7 @@ Why each gate is where it is:
 - **Docs**: `sync-engineering.md`, the paragraph on an order that needed no version, before
   §"Version 38"; `fx-engineering.md` §"Programmer suppression and the priority band".
 
-### Session 4: the editor's shell (frontend)
+### Session 4: the editor's shell (frontend) — done, `6331f660`
 
 **Gate: terminology session 5, and session 6 done or not started.** Needs 1b and 3a.
 
