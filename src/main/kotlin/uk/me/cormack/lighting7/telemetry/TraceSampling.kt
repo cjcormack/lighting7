@@ -50,7 +50,7 @@ object TraceSampling {
             "updateFx",
             "surfaceScaler.setGrandMaster",
             "grandMaster.set",
-            "stackEffectSize.set",
+            "stackFxAmount.set",
             "speedMasters.setBpm",
             "speedMasters.tap",
             "speedMasters.requestBeat",

@@ -24,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
  * two cues afresh on every tick.
  *
  * Effects fade by size with the cue (effects plan D1), but not by this loop: [CueHolds] gives each
- * instance an envelope that ramps on the clock over the same time and curve ([EffectEnvelope]) — the
+ * instance an envelope that ramps on the clock over the same time and curve ([FxEnvelope]) — the
  * outgoing cue's shrinking to nothing, after which the engine removes them, the incoming cue's growing
  * from nothing — and the envelope is a factor of the effect's weight after the blend (P3), so an
  * `OVERRIDE` effect fades into what is underneath rather than towards 0. What this class keeps for the
@@ -120,7 +120,7 @@ internal class CueCrossfadeDriver(
         fade.outgoingCueId = null
         fade.incomingCueId?.let { cueId ->
             fxEngine.cueLayer.updateFadeWeights(mapOf(cueId to 1.0))
-            fxEngine.settleEffects(fxEngine.cueEffects(cueId))
+            fxEngine.settleFx(fxEngine.cueFx(cueId))
         }
         fade.incomingCueId = null
     }

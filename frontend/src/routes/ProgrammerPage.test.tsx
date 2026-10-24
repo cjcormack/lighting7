@@ -57,8 +57,8 @@ vi.mock('@/components/programmer/ProgrammerGrid', async () => {
 // Provider, like every other child mocked here.
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandProgrammerLayerStrip: () => null }))
 // ⌘K's `+ Effect` door reads the Redux selection once asked; here it only has to be mounted.
-vi.mock('@/components/programmer/ProgrammerAddEffect', () => ({
-  ProgrammerAddEffectDoor: () => null,
+vi.mock('@/components/programmer/ProgrammerAddFx', () => ({
+  ProgrammerAddFxDoor: () => null,
 }))
 // The dock's two editors have their own tests (`RailColourTab.test.tsx`); here they only have to
 // mount and unmount around one grid. The dock itself is real — its header, strip and handle are
@@ -91,7 +91,7 @@ vi.mock('@/hooks/usePress', async (importOriginal) => ({
   useWindowPressPair: () => ({ targets: [], families: null }),
   useWindowPaletteFit: () => ({ families: null, emitters: null }),
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('@/components/programmer/ProgrammerSourceStrip', () => ({
   ProgrammerSourceStrip: () => <div data-testid="source-strip" />,
 }))
@@ -151,9 +151,9 @@ vi.mock('@/store/looks', () => ({
   useLookQuery: () => ({ data: undefined, isSuccess: false }),
   useSaveLookMutation: () => [vi.fn()],
 }))
-// Same reason as `@/store/looks` above, for `FocusedTemplateLayerProvider`: `skip` stops the
+// Same reason as `@/store/looks` above, for `FocusedPaletteLayerProvider`: `skip` stops the
 // *request*, not the hook, so the query still reaches for the store.
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: [] }),
   useVisibleFixtureListQuery: () => ({ data: [] }),

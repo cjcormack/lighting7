@@ -57,8 +57,8 @@ const NO_TARGETS: readonly CueTarget[] = []
  * never drawn. The fallback is written as the Look arm rather than thrown, because a throw in a
  * click handler on a live desk is worse than a request the server refuses by name.
  */
-function layerSource(held: HeldRecord): { templateId: number } | { lookId: number } {
-  return held.kind === 'TEMPLATE' ? { templateId: held.id } : { lookId: held.id }
+function layerSource(held: HeldRecord): { paletteId: number } | { lookId: number } {
+  return held.kind === 'PALETTE' ? { paletteId: held.id } : { lookId: held.id }
 }
 
 /**
@@ -113,7 +113,7 @@ function ProgrammerLayerStripBody({ className }: { className?: string }) {
  * never reaches here (`canHandLand` refuses both layer targets for one).
  */
 function pressSourceOf(held: HeldRecord): PressSource | null {
-  if (held.kind === 'TEMPLATE' && held.template != null) return { kind: 'template', template: held.template }
+  if (held.kind === 'PALETTE' && held.palette != null) return { kind: 'palette', palette: held.palette }
   if (held.kind === 'LOOK' && held.look != null) return { kind: 'look', look: held.look }
   return null
 }

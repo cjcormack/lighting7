@@ -37,11 +37,11 @@ class FxSamplerParkTest : RouteIntegrationTest() {
         )
         val registry = FxSamplerParityTest.registry
         val sine = FxInstance(
-            registry.createEffect("SineWave"), SliderTarget.forGroup("hexes", "dimmer"), FxTiming(BeatDivision.ONE_BAR), BlendMode.OVERRIDE,
+            registry.createFx("SineWave"), SliderTarget.forGroup("hexes", "dimmer"), FxTiming(CycleLength.ONE_BAR), BlendMode.OVERRIDE,
         )
-        engine.addEffect(sine)
+        engine.addFx(sine)
 
-        val samples = engine.sampler { registry.createEffect(it.effectTypeId, it.effect.parameters) }
+        val samples = engine.sampler { registry.createFx(it.fxTypeId, it.effect.parameters) }
             .sample(FxSampleRequest(listOf(sine)))
         val dimmer = samples.attribute("dimmer")!!
         assertTrue(dimmer.row("hex-0")!!.parked, "hex-0's dimmer, channel 1, is parked")

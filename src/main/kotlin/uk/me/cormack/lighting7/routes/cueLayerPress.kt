@@ -19,7 +19,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -49,19 +49,19 @@ internal fun Route.routeApiRestCueLayerPress(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val request = call.receive<CueLayerPressRequest>()
-            if ((request.templateId == null) == (request.lookId == null)) {
-                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Name exactly one of templateId or lookId"))
+            if ((request.paletteId == null) == (request.lookId == null)) {
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse("Name exactly one of paletteId or lookId"))
                 return@withCurrentProject
             }
             // A Look press ignores its targets and mask, so only a palette's are judged.
             val families = try {
-                if (request.templateId != null) parseMaskGroups(request.families) else null
+                if (request.paletteId != null) parseMaskGroups(request.families) else null
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
             }
             val badTargets = request.targets.filter { TargetRef.ofOrNull(it.type, it.key) == null }
-            if (request.templateId != null && badTargets.isNotEmpty()) {
+            if (request.paletteId != null && badTargets.isNotEmpty()) {
                 val named = badTargets.joinToString { "${it.type}:${it.key}" }
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse("A layer's target must be a fixture or a group: $named"))
                 return@withCurrentProject
@@ -105,13 +105,13 @@ internal fun pressCueLayer(
     families: Set<PropertyMaskGroup>?,
 ): CueLayerPressOutcome {
     val coverage = TargetCoverage { state.show.fixtures }
-    val rules = LayerPressRules({ state.show.templateRegistry }, coverage)
+    val rules = LayerPressRules({ state.show.paletteRegistry }, coverage)
     val requested = request.targets.map { CueTargetDto(it.type, it.key) }
     val read: PressedRecord = transaction(state.database) {
         if (DaoCue.findById(cueId)?.takeIf { it.project.id == project.id } == null) {
             return@transaction PressedRecord.Missing("Cue not found")
         }
-        readPressedRecord(project, request.templateId, request.lookId)
+        readPressedRecord(project, request.paletteId, request.lookId)
     }
     val record = when (read) {
         is PressedRecord.Missing -> return CueLayerPressOutcome.NotFound(read.message)
@@ -167,18 +167,18 @@ internal sealed interface PressedRecord {
 }
 
 /**
- * The record a press names — a palette by [templateId] or a Look by [lookId], exactly one — read as
+ * The record a press names — a palette by [paletteId] or a Look by [lookId], exactly one — read as
  * the press needs it, or [PressedRecord.Missing] for one [project] lacks. Must run inside a
  * transaction.
  */
-internal fun readPressedRecord(project: DaoProject, templateId: Int?, lookId: Int?): PressedRecord {
-    if (templateId != null) {
-        val template = DaoTemplate.findById(templateId)?.takeIf { it.project.id == project.id }
+internal fun readPressedRecord(project: DaoProject, paletteId: Int?, lookId: Int?): PressedRecord {
+    if (paletteId != null) {
+        val template = DaoPalette.findById(paletteId)?.takeIf { it.project.id == project.id }
             ?: return PressedRecord.Missing("Palette not found")
         return PressedRecord.Palette(
-            LayerSource.template(template.id.value, template.uuid, template.name),
+            LayerSource.palette(template.id.value, template.uuid, template.name),
             template.familyOf(),
-            template.isGenericTemplate(),
+            template.isGenericPalette(),
         )
     }
     val look = lookId?.let { DaoLook.findById(it) }?.takeIf { it.project.id == project.id }
@@ -219,22 +219,22 @@ internal fun decideCueLayerPress(
             // A generic palette's rows take their targets from the press, so with none the layer
             // would assert nothing — the busk pad's refusal. A per-fixture one names its own heads.
             if (requested.isEmpty() && record.generic) {
-                return CueLayerPressDecision.Refused("This palette needs a selection to press onto", CODE_TEMPLATE_NEEDS_SELECTION)
+                return CueLayerPressDecision.Refused("This palette needs a selection to press onto", CODE_PALETTE_NEEDS_SELECTION)
             }
             val targets = rules.pressTargets(source.uuid, requested)
             val releasing = LayerPress.wouldRelease(layers, source.uuid, targets, ops, coverage)
             if (!releasing && families != null && !maskAllows(families, record.family)) {
-                return CueLayerPressDecision.Refused(templateOutsideMaskMessage(source.name, record.family, families), CODE_TEMPLATE_OUTSIDE_MASK)
+                return CueLayerPressDecision.Refused(paletteOutsideMaskMessage(source.name, record.family, families), CODE_PALETTE_OUTSIDE_MASK)
             }
-            arriving = CueLayerDto(templateId = source.id, targets = targets, propertyMask = record.family?.name, source = source.toDto())
+            arriving = CueLayerDto(paletteId = source.id, targets = targets, propertyMask = record.family?.name, source = source.toDto())
         }
         // A Look lands whole: no targets and no mask, whatever the press carries (D1, D3).
         is PressedRecord.Look -> arriving = CueLayerDto(lookId = record.lookId, source = source.toDto())
     }
     val replaces = rules.familyReplacements(
-        source.isTemplate,
+        source.isPalette,
         source.uuid,
-        layers.mapNotNullTo(HashSet()) { layer -> layer.source?.takeIf { it.kind == "TEMPLATE" }?.let { UUID.fromString(it.uuid) } },
+        layers.mapNotNullTo(HashSet()) { layer -> layer.source?.takeIf { it.kind == "PALETTE" }?.let { UUID.fromString(it.uuid) } },
     )
     val replacesOn = if (replaces.isEmpty()) null else rules.paletteHeads(source.uuid, arriving.targets)
     val pressed = settings?.let { arriving.withSettingsOf(it) } ?: arriving
@@ -268,7 +268,7 @@ private class CueLayerOps(
     layers: List<CueLayerDto>,
 ) : LayerPress.Ops<CueLayerDto> {
     private val boundHeads = rules.boundHeads(
-        layers.filter { it.templateId != null && it.targets.isEmpty() }.mapNotNull { it.sourceUuidOrNull() },
+        layers.filter { it.paletteId != null && it.targets.isEmpty() }.mapNotNull { it.sourceUuidOrNull() },
     )
 
     override fun sourceUuid(layer: CueLayerDto): UUID = layer.sourceUuidOrNull() ?: NO_SOURCE
@@ -299,7 +299,7 @@ private fun CueLayerDto.sourceUuidOrNull(): UUID? = source?.uuid?.let(UUID::from
 
 @Serializable
 internal data class CueLayerPressRequest(
-    val templateId: Int? = null,
+    val paletteId: Int? = null,
     val lookId: Int? = null,
     /** The heads a palette press lands on; none is a per-fixture palette's own. Ignored for a Look. */
     val targets: List<CueTargetDto> = emptyList(),

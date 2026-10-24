@@ -5,37 +5,37 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import type { UpdateFxRequest } from '@/api/fxApi'
-import { useEffectLibraryQuery, useResetFxToTemplateMutation, type ActiveEffect } from '@/store/fixtureFx'
-import { useSaveTemplateMutation } from '@/store/templates'
-import type { TemplateSummary } from '@/api/templatesApi'
+import { useFxLibraryQuery, useResetFxToPaletteMutation, type ActiveFx } from '@/store/fixtureFx'
+import { useSavePaletteMutation } from '@/store/palettes'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { useMaster1Uuid } from '@/store/speedMasters'
 import { useIsDeskConnected } from '@/store/status'
 import { EditorReadout } from '../editor/EditorReadout'
 import { EditorFooter } from '../editor/EditorFooter'
 import { useLivePush } from '../editor/useLivePush'
-import { findEffectEntry } from '../busking/buskingTypes'
-import { FxEffectFields } from './FxEffectFields'
-import { useSpawningTemplate } from './useSpawningTemplate'
-import { useToggleFxPause } from './useEffectControls'
+import { findFxEntry } from '../busking/buskingTypes'
+import { FxFields } from './FxFields'
+import { useSpawningPalette } from './useSpawningPalette'
+import { useToggleFxPause } from './useFxControls'
 import {
   defaultParameters,
-  differsFromTemplate,
+  differsFromPalette,
   draftOf,
-  withTemplateDraft,
+  withPaletteDraft,
   OPTIONAL_FIELDS,
   sameRequest,
   updateRequestOf,
   type FxDraft,
   type OptionalField,
 } from './fxEditorModel'
-import { useEffectScope } from './useEffectScope'
+import { useFxScope } from './useFxScope'
 
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
  * `EffectParameterForm`'s parameter inputs rebuilt on the editor kit, and the one editor every
  * running effect is edited in: the FX tray's rows (inline), the FX table's *Edit…* and the FX
  * lens's chips (both through `EditorSurface`), the add sheet after the picker, and the busk
- * view's Effects tab. Its fields (`FxEffectFields`) are `TemplateEditor`'s too, over a draft.
+ * view's Effects tab. Its fields (`FxFields`) are `PaletteEditor`'s too, over a draft.
  *
  * **There is no Apply.** Every control writes as it moves through `useLivePush` — a 50 ms floor, a
  * dedupe on the whole write, the release always landing — into `updateFx`, which swaps the
@@ -63,7 +63,7 @@ export function FxEditor({
   alsoIds,
   className,
 }: {
-  effect: ActiveEffect
+  effect: ActiveFx
   /** Back to the host's list. */
   onDone: () => void
   /**
@@ -91,8 +91,8 @@ export function FxEditor({
   alsoIds?: readonly number[]
   className?: string
 }) {
-  const { data: library } = useEffectLibraryQuery()
-  const entry = useMemo(() => findEffectEntry(library, effect.effectType), [library, effect.effectType])
+  const { data: library } = useFxLibraryQuery()
+  const entry = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
   const connected = useIsDeskConnected()
   const master1Uuid = useMaster1Uuid()
 
@@ -100,7 +100,7 @@ export function FxEditor({
   const [draft, setDraft] = useState<FxDraft>(snapshot)
   // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
-  const { scope: spreadScope, extendedChannels, settingProperty } = useEffectScope({
+  const { scope: spreadScope, extendedChannels, settingProperty } = useFxScope({
     target: effect,
     propertyName: effect.propertyName,
     entry,
@@ -206,21 +206,21 @@ export function FxEditor({
     write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)
 
   const readOnly = !connected
-  const name = entry?.name ?? effect.effectType
+  const name = entry?.name ?? effect.fxType
   const dirty = JSON.stringify(draft) !== JSON.stringify(snapshot)
   // A pad's effect (§3.3, D20): edited against its template rather than against the open, and its
   // footer is the template's two verbs in place of Revert.
-  const spawning = useSpawningTemplate(effect)
+  const spawning = useSpawningPalette(effect)
   const defaults = useMemo(() => (entry ? defaultParameters(entry) : {}), [entry])
   // The instance says its distribution only where it has one (a group, or heads); the operator
   // setting one here says it too.
-  const hasDistribution = effect.distributionStrategy != null || setFields.current.has('distributionStrategy')
+  const hasOrder = effect.order != null || setFields.current.has('order')
   const edited =
-    spawning?.template.effect != null &&
-    differsFromTemplate(draft, spawning.template.effect, master1Uuid, defaults, { distribution: hasDistribution })
+    spawning?.palette.fx != null &&
+    differsFromPalette(draft, spawning.palette.fx, master1Uuid, defaults, { order: hasOrder })
   /** The desk put the instance back (or re-keyed it): the draft is what it now runs. */
   const reseed = useCallback(
-    (next: ActiveEffect) => {
+    (next: ActiveFx) => {
       live.reset()
       latest.current = null
       touched.current = false
@@ -234,7 +234,7 @@ export function FxEditor({
       <div className="flex items-center gap-1.5">
         <span className="min-w-0 truncate text-[13px] font-medium">{name}</span>
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.propertyName}</span>
-        {edited && <EditedMark template={spawning?.template.name} />}
+        {edited && <EditedMark paletteName={spawning?.palette.name} />}
         <span className="flex-1" />
         {/* Pause and resume in every host: the FX lens's chips have no other. */}
         <button
@@ -268,10 +268,10 @@ export function FxEditor({
         <EditorReadout>
           {library == null
             ? 'Reading the FX library…'
-            : `“${effect.effectType}” is not in this desk's FX library, so its settings cannot be drawn.`}
+            : `“${effect.fxType}” is not in this desk's FX library, so its settings cannot be drawn.`}
         </EditorReadout>
       ) : (
-        <FxEffectFields
+        <FxFields
           entry={entry}
           timingSource={effect.timingSource}
           draft={draft}
@@ -298,12 +298,12 @@ export function FxEditor({
         className={spawning != null ? 'flex-wrap' : undefined}
       >
         {spawning != null ? (
-          <TemplateArm
+          <PaletteArm
             effect={effect}
-            template={spawning.template}
+            palette={spawning.palette}
             projectId={spawning.projectId}
             draft={draft}
-            hasDistribution={hasDistribution}
+            hasOrder={hasOrder}
             edited={edited}
             readOnly={readOnly}
             flushHeld={flushHeld}
@@ -334,7 +334,7 @@ export function FxEditor({
  * *edited* — a pad's running instance differs from its template (D20). Amber, the dot's colour: a
  * press of the pad off and on would put the template's settings back, which is the thing to know.
  */
-export function EditedMark({ template }: { template?: string }) {
+export function EditedMark({ paletteName: template }: { paletteName?: string }) {
   return (
     <span
       data-edited
@@ -348,51 +348,51 @@ export function EditedMark({ template }: { template?: string }) {
 
 /**
  * The footer for a pad's effect (fixture-fx-sheets plan §3.3, D20), in place of Revert. The edit
- * is **this running instance's only** — the template is untouched until **Update template** writes
- * these settings back to it (`PUT` the template's effect), and **Reset to template** puts the
- * template's settings back on the instance, phase kept (W5).
+ * is **this running instance's only** — the palette is untouched until **Update palette** writes
+ * these settings back to it (`PUT` the palette's effect), and **Reset to palette** puts the
+ * palette's settings back on the instance, phase kept (W5).
  *
- * Update template is the PUT **then** W5 on this instance: the PUT alone reaches an applied
+ * Update palette is the PUT **then** W5 on this instance: the PUT alone reaches an applied
  * instance at the stack's next recook by respawning it, phase restarted (session 1's amendment), and
- * the reset re-keys this one to the template's new entry so the recook keeps it. Every *other*
- * running instance of the template still holds the old settings, and reads *edited* until it is
+ * the reset re-keys this one to the palette's new entry so the recook keeps it. Every *other*
+ * running instance of the palette still holds the old settings, and reads *edited* until it is
  * reset by hand (`FU-TMPL-FX-EDIT-NO-RETIME`).
  */
-function TemplateArm({
+function PaletteArm({
   effect,
-  template,
+  palette: template,
   projectId,
   draft,
-  hasDistribution,
+  hasOrder,
   edited,
   readOnly,
   flushHeld,
   dropHeld,
   reseed,
 }: {
-  effect: ActiveEffect
-  template: TemplateSummary
+  effect: ActiveFx
+  palette: PaletteSummary
   projectId: number
   draft: FxDraft
-  hasDistribution: boolean
+  hasOrder: boolean
   edited: boolean
   readOnly: boolean
   flushHeld: () => void
   dropHeld: () => void
-  reseed: (next: ActiveEffect) => void
+  reseed: (next: ActiveFx) => void
 }) {
-  const [saveTemplate, { isLoading: saving }] = useSaveTemplateMutation()
-  const [resetFx, { isLoading: resetting }] = useResetFxToTemplateMutation()
+  const [savePalette, { isLoading: saving }] = useSavePaletteMutation()
+  const [resetFx, { isLoading: resetting }] = useResetFxToPaletteMutation()
   const busy = saving || resetting
 
   const update = async () => {
-    if (template.effect == null) return
+    if (template.fx == null) return
     // The move the floor still holds lands first, so the template takes what the rig shows.
     flushHeld()
     try {
-      await saveTemplate({ projectId, templateId: template.id, effect: withTemplateDraft(template.effect, draft, { distribution: hasDistribution }) }).unwrap()
+      await savePalette({ projectId, paletteId: template.id, fx: withPaletteDraft(template.fx, draft, { order: hasOrder }) }).unwrap()
       reseed(await resetFx({ id: effect.id }).unwrap())
-      toast.success(`Updated “${template.name}” from this ${effect.effectType}`)
+      toast.success(`Updated “${template.name}” from this ${effect.fxType}`)
     } catch {
       // Reported by errorToastMiddleware.
     }

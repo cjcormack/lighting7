@@ -111,8 +111,8 @@ class BindingTargetSerializationTest {
     }
 
     @Test
-    fun `StackEffectSize round trips and is a continuous target`() {
-        val fader: BindingTarget = BindingTarget.StackEffectSize(stackId = 3, stackUuid = "00000000-0000-4000-8000-000000000003")
+    fun `StackFxAmount round trips and is a continuous target`() {
+        val fader: BindingTarget = BindingTarget.StackFxAmount(stackId = 3, stackUuid = "00000000-0000-4000-8000-000000000003")
         val encoded = BindingTargetJson.encodeToString(fader)
         assertTrue(encoded.contains("\"type\":\"stackFxAmount\""), encoded)
         assertEquals(fader, BindingTargetJson.decodeFromString<BindingTarget>(encoded))

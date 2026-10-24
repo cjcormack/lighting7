@@ -10,7 +10,7 @@ import { canClaimInSync, resolveProgrammerSource } from '@/lib/programmerSource'
 import type { ProgrammerSource } from '@/lib/programmerSource'
 import { includedCueEntry } from '@/lib/includedTarget'
 import { useProgrammerSummaryQuery } from '@/store/programmer'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useProjectCueStackListQuery } from '@/store/cueStacks'
 import { useProjectCueListQuery } from '@/store/cues'
 import { useVenueMode } from '@/store/venues'
@@ -162,7 +162,7 @@ export function ProgrammerSourceStrip({
   onRevert: () => void
 }) {
   const { data: summary } = useProgrammerSummaryQuery()
-  const { data: activeEffects } = useActiveEffectsQuery()
+  const { data: activeFx } = useActiveFxQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { isVenue } = useVenueMode(projectId)
   const valuesDirty = useIncludeBaseline()
@@ -172,11 +172,11 @@ export function ProgrammerSourceStrip({
   // An included Look's effects that have been changed since Include — Update writes those back too,
   // so an effect edit alone must un-grey it. The desk says which (`editedSinceInclude`) against the
   // settings it spawned each with; `null` stays `null`, as `withSceneryChanges` keeps it.
-  const effectsDirty =
+  const fxDirty =
     lookId == null
       ? 0
-      : (activeEffects?.filter((e) => e.includedLookId === lookId && e.editedSinceInclude).length ?? 0)
-  const dirty = valuesDirty == null ? null : valuesDirty + effectsDirty
+      : (activeFx?.filter((e) => e.includedLookId === lookId && e.editedSinceInclude).length ?? 0)
+  const dirty = valuesDirty == null ? null : valuesDirty + fxDirty
   // Only to label the Look's families; skipped entirely when a cue (or nothing) is included.
   const { data: looks } = useLookListQuery({ projectId }, { skip: lookId == null })
 
@@ -219,7 +219,7 @@ export function ProgrammerSourceStrip({
   const source = resolveProgrammerSource({
     target,
     entryCount: summary?.entryCount ?? 0,
-    programmerFxCount: activeEffects?.filter((e) => e.programmerOwned).length ?? 0,
+    programmerFxCount: activeFx?.filter((e) => e.programmerOwned).length ?? 0,
     dirty,
     cueLocation,
     lookFamilies,

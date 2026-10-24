@@ -1,9 +1,9 @@
 /*---
 id: ColourCycle
 name: Colour Cycle
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [rgbColour]
 parameters:
   - name: colours

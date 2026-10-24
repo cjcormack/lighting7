@@ -1,9 +1,9 @@
 /*---
 id: ZoomWave
 name: Zoom Wave
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [zoom]
 parameters:
   - name: min

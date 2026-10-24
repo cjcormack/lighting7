@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 4 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 5 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -173,8 +173,11 @@ keep their name.
 | columns `beat_division`, `size`, `n_shot`, `distribution` | `cycle`, `amount`, `runs`, `spread_order` (`ORDER` is an SQL keyword, as `GROUPS` was) |
 | columns `spread_groups`, `spread_blocks` | `spread_parts`, `spread_segments` |
 | columns `step_timing` (bool), `default_step_timing` | `timing` (`CYCLE`/`HEAD`), `default_timing` |
-| columns `template_id`, `property_name`, `property_mask`, `usage`, `category`, `effect_type`, `effect_id`, `allow_effects` | `palette_id`, `attribute`, `attribute_mask`, `family`, `family`, `fx_type`, `fx_id`, `allow_fx` |
+| columns `template_id`, `property_name`, `property_mask`, `usage`, `category`, `effect_type`, `effect_id` | `palette_id`, `attribute`, `attribute_mask`, `family`, `family`, `fx_type`, `fx_id` |
 | archive folder `templates/`, DTO fields as above | `palettes/`, the same renames |
+
+`remote_access_settings.allow_effects` keeps its name: it gates arming, firing and reloading the
+effect tubes, which keep theirs (above), not FX.
 
 ## 5. Storage, migration and sync
 
@@ -263,7 +266,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 - Database step 5 with its backup; `formatVersion` 38; `LegacyNames` complete; a frozen v37 archive
   under `src/test/resources/sync/legacy-v37/` that must import.
 
-### Session 5: the wire (backend + frontend + MCP)
+### Session 5: the wire (backend + frontend + MCP) — done, `08ac328`
 
 - REST fields and paths, WebSocket frames, MCP tool names and schemas (`AiToolSchemas`,
   `describe_rig`, `get_current_state`), and the TypeScript client, in one PR as the git workflow
@@ -275,13 +278,21 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
 - `@FixtureProperty` → `@FixtureAttribute`, `fixture/property/` → `fixture/attribute/`,
   `PropertyCategory` → `AttributeFamily`, and every identifier that says property for a fixture
   attribute. Storage and wire already moved in sessions 4 and 5.
-- The largest diff in the plan and the least risky: no behaviour, no stored name.
+- The largest diff in the plan and the least risky: no behaviour, no stored name but the two below.
+- The surface bindings `fixtureProperty`, `groupProperty` and `selectionProperty` and their
+  `propertyName`, moved from session 5: they are stored (`control_surface_bindings`) and synced, so
+  they need database step 6, `LegacyNames` and `formatVersion` 39.
+- An FX's `panCenter` / `tiltCenter` parameters → `panCentre` / `tiltCentre`, moved from session 5
+  for the same reason: they are stored in every Look, cue and palette FX's parameters.
 
 ### Session 7: the docs sweep (docs)
 
 - Every engineering doc on the glossary's words: tiers in `lighting-composition-model.md`; *project*
   where docs say show; `fx-engineering.md`'s FX tables regenerated from the frontmatter, which adds
   Fluorescent Flicker and fixes the colour parameter names.
+- The prose the desk answers in, moved from session 5: its error messages ("used by 2 look
+  effect(s)", "Effect not found") and the MCP tool descriptions (`AiToolSchemas`, `RigBriefing`) say
+  FX and palette, about 240 strings. Session 5 renamed the identifiers, fields and paths inside them.
 - Every glossary row `done`.
 
 ## 9. Follow-ups to record
@@ -319,7 +330,9 @@ Beyond the suites, at the desk on Sleeping Beauty:
   Beauty's repo import; a pull and a push round-trip; a surface pad bound to a palette still presses
   it.
 - **Session 5.** Swagger shows `/programmer/fan` and `/fx-amount`; Claude clears FX with `clear_fx`.
-- **Session 6.** Export Sleeping Beauty before and after; `diff -r` is empty.
+  Export Sleeping Beauty before and after; `diff -r` is empty, because the archive did not move.
+- **Session 6.** The v38 archive imports; Sleeping Beauty's export differs from its v38 one only in
+  `formatVersion`, the surface bindings' names and the FX parameters' `panCentre` / `tiltCentre`.
 - **Session 7.** A search of `docs/` for each old word finds only the glossary.
 
 ## 11. Questions

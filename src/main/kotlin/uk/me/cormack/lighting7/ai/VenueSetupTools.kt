@@ -447,7 +447,7 @@ internal class VenueSetupTools(private val state: State) {
             val fixtures = state.show.fixtures
             if (tally.elements.isNotEmpty()) fixtures.stageElementListChanged()
             if (report.looks.isNotEmpty()) fixtures.lookListChanged()
-            if (report.templates.isNotEmpty()) fixtures.templateListChanged()
+            if (report.palettes.isNotEmpty()) fixtures.paletteListChanged()
             if (tally.stacks.isNotEmpty()) {
                 fixtures.cueStackListChanged()
                 fixtures.cueListChanged()
@@ -455,7 +455,7 @@ internal class VenueSetupTools(private val state: State) {
         }
         return success(
             "${if (dryRun) "Checked" else "Copied"}: ${tally.elements.size} element(s), ${report.looks.size} Look(s), " +
-                "${report.templates.size} palette(s), ${tally.stacks.size} stack(s) into project ${to.project.id.value}" +
+                "${report.palettes.size} palette(s), ${tally.stacks.size} stack(s) into project ${to.project.id.value}" +
                 if (report.unresolved.isEmpty()) "" else "; ${report.unresolved.size} reference(s) did not resolve",
             buildJsonObject {
                 put("dryRun", dryRun)
@@ -463,8 +463,8 @@ internal class VenueSetupTools(private val state: State) {
                 putJsonArray("elements") { tally.elements.forEach { add(it) } }
                 putJsonArray("looks") { report.looks.forEach { add(it) } }
                 if (report.looksLinked.isNotEmpty()) putJsonArray("looksLinked") { report.looksLinked.forEach { add(it) } }
-                if (report.templates.isNotEmpty()) putJsonArray("palettes") { report.templates.forEach { add(it) } }
-                if (report.templatesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.templatesLinked.forEach { add(it) } }
+                if (report.palettes.isNotEmpty()) putJsonArray("palettes") { report.palettes.forEach { add(it) } }
+                if (report.palettesLinked.isNotEmpty()) putJsonArray("palettesLinked") { report.palettesLinked.forEach { add(it) } }
                 putJsonArray("stacks") {
                     tally.stacks.forEach { (name, cues) -> addJsonObject { put("name", name); put("cues", cues) } }
                 }

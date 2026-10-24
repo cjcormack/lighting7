@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { ColourEditor, emitterHeadCounts, type ColourChannels, type ColourPaletteSource } from '@/components/editor/ColourEditor'
 import type { WriteTarget } from '@/components/fixtures-list/rowModel'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useEditorCramped } from '@/components/editor/EditorSurface'
 import { useLivePush } from '@/components/editor/useLivePush'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
@@ -350,7 +350,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
         onSpread={onSpread}
       />
 
-      <NewTemplateFromSelectionSheet
+      <NewPaletteFromSelectionSheet
         open={saving}
         onOpenChange={setSaving}
         projectId={projectId}

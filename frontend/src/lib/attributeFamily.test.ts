@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
   ATTRIBUTE_FAMILIES,
-  TEMPLATE_EFFECT_FAMILIES,
+  PALETTE_FX_FAMILIES,
   familyForCategory,
-  familyForEffectCategory,
+  maskGroupForFxFamily,
   familySlug,
   fixturesSupportingFamily,
   parseFamilySlug,
   parsePropertyMask,
   serializePropertyMask,
 } from './attributeFamily'
-import { SPEED_MASTER_USAGES } from './speedMasterModel'
+import { SPEED_MASTER_FAMILIES } from './speedMasterModel'
 
 describe('attribute family slugs', () => {
   it('round-trips every family', () => {
@@ -93,15 +93,15 @@ describe('propertyMask round-trip', () => {
   })
 })
 
-describe('familyForEffectCategory', () => {
+describe('maskGroupForFxFamily', () => {
   it('mirrors the backend map, including the `color` spelling', () => {
-    // A direct mirror of `familyForEffectCategory` in projectLooks.kt, which accepts both
+    // A direct mirror of `maskGroupForFxFamily` in projectLooks.kt, which accepts both
     // spellings because the shipped `.fx.kts` files are not consistent about it.
-    expect(familyForEffectCategory('intensity')).toBe('INTENSITY')
-    expect(familyForEffectCategory('colour')).toBe('COLOUR')
-    expect(familyForEffectCategory('color')).toBe('COLOUR')
-    expect(familyForEffectCategory('position')).toBe('POSITION')
-    expect(familyForEffectCategory('beam')).toBe('BEAM')
+    expect(maskGroupForFxFamily('intensity')).toBe('INTENSITY')
+    expect(maskGroupForFxFamily('colour')).toBe('COLOUR')
+    expect(maskGroupForFxFamily('color')).toBe('COLOUR')
+    expect(maskGroupForFxFamily('position')).toBe('POSITION')
+    expect(maskGroupForFxFamily('beam')).toBe('BEAM')
   })
 
   it('answers null for a category that names no family, rather than a catch-all', () => {
@@ -109,31 +109,31 @@ describe('familyForEffectCategory', () => {
     // does not know under BEAM. Here `controls` has no tempo and `steps` (the Steps FX) steps
     // another family, so neither *has* a family — and answering BEAM would be a wrong answer rather
     // than a default, one the write boundary would then refuse under a family the operator never chose.
-    expect(familyForEffectCategory('controls')).toBeNull()
-    expect(familyForEffectCategory('steps')).toBeNull()
-    expect(familyForEffectCategory('some_future_category')).toBeNull()
+    expect(maskGroupForFxFamily('controls')).toBeNull()
+    expect(maskGroupForFxFamily('steps')).toBeNull()
+    expect(maskGroupForFxFamily('some_future_category')).toBeNull()
   })
 
   it('is a different vocabulary from familyForCategory, not a widening of it', () => {
     // `position` is an effect category but not a PropertyCategory; the property side reaches
     // POSITION through `pan`/`tilt`, which are not effect categories at all. The two maps share
     // `colour` and nothing else, which is why neither can absorb the other.
-    expect(familyForEffectCategory('pan')).toBeNull()
+    expect(maskGroupForFxFamily('pan')).toBeNull()
     expect(familyForCategory('controls')).toBe('BEAM')
   })
 })
 
 describe('which families can hold an effect', () => {
   it('is all four, Beam included', () => {
-    expect([...TEMPLATE_EFFECT_FAMILIES].sort()).toEqual(['BEAM', 'COLOUR', 'INTENSITY', 'POSITION'])
-    expect(familyForEffectCategory('beam')).toBe('BEAM')
+    expect([...PALETTE_FX_FAMILIES].sort()).toEqual(['BEAM', 'COLOUR', 'INTENSITY', 'POSITION'])
+    expect(maskGroupForFxFamily('beam')).toBe('BEAM')
   })
 
   it('covers exactly the categories a speed master may be the default for', () => {
     // A usage excludes `controls` and `steps` for want of a tempo, and a template the same two
     // for want of a family.
-    const usageFamilies = SPEED_MASTER_USAGES.map(familyForEffectCategory)
-    expect([...usageFamilies].sort()).toEqual([...TEMPLATE_EFFECT_FAMILIES].sort())
+    const usageFamilies = SPEED_MASTER_FAMILIES.map(maskGroupForFxFamily)
+    expect([...usageFamilies].sort()).toEqual([...PALETTE_FX_FAMILIES].sort())
   })
 })
 

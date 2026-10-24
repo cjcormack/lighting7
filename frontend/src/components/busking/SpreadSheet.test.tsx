@@ -38,7 +38,7 @@ vi.mock('@/components/programmer/RecordLookSheet', () => ({
     open ? <div data-testid="record-look" data-targets={JSON.stringify(targets)} /> : null,
 }))
 let templates: unknown[] = []
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: templates }) }))
 
 const colour = (extra: Record<string, unknown> = {}) => ({
   type: 'colour',
@@ -78,7 +78,7 @@ import { lookLayerTarget } from './buskingTypes'
 const group: BuskingTarget = {
   type: 'group',
   name: 'Front wash',
-  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
+  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
 }
 const moverTarget: BuskingTarget = { type: 'fixture', key: 'mh-1', fixture: mover }
 const barTarget: BuskingTarget = { type: 'fixture', key: 'bar', fixture: bar }
@@ -148,7 +148,7 @@ describe('the request', () => {
       to: '#2456FF;policy=extract',
       curve: 'LINE',
       order: 'NORMAL',
-      parts: 1,
+      runs: 1,
       over: 'HEADS',
       seed: 0,
       fadeMs: 0,
@@ -158,7 +158,7 @@ describe('the request', () => {
   it('sends a pal: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
     templates = [
       { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] },
-      { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'effect', isGeneric: true, rows: [], requiredEmitters: [] },
+      { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'fx', isGeneric: true, rows: [], requiredEmitters: [] },
       { id: 3, uuid: 'u-per', name: 'Per head', family: 'COLOUR', kind: 'value', isGeneric: false, rows: [], requiredEmitters: [] },
       { id: 4, uuid: 'u-pos', name: 'Home', family: 'POSITION', kind: 'value', isGeneric: true, rows: [], requiredEmitters: [] },
       // A legal colour template with no hex: the desk's `spreadEndpoint` has nothing to interpolate
@@ -294,7 +294,7 @@ describe('Save as Look…', () => {
         { type: 'fixture', key: 'bar.c2' },
       ]),
     )
-    expect(spreadSheetSrc).not.toMatch(/from-programmer|NewTemplateFromSelectionSheet/)
+    expect(spreadSheetSrc).not.toMatch(/from-programmer|NewPaletteFromSelectionSheet/)
   })
 })
 

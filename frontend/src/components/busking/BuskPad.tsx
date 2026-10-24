@@ -15,10 +15,10 @@ import type { BuskPad } from '@/api/buskApi'
 import type { CueRing } from '@/api/cueHoldsApi'
 import { buskPadId, type PadAddress } from '@/lib/buskLayout'
 import { useBuskEdit } from './BuskEditProvider'
-import type { EffectPresence } from './buskingTypes'
-import { EffectPadDetail } from './EffectPadDetail'
+import type { FxPresence } from './buskingTypes'
+import { FxPadDetail } from './FxPadDetail'
 import {
-  EFFECT_GLYPH_CLASS,
+  FX_GLYPH_CLASS,
   PAD_FACE_SHELL,
   PAD_SHELL,
   padFaceOf,
@@ -50,15 +50,15 @@ function LookFace({
 }: {
   face: PadFace
   pad: BuskPad
-  presence: EffectPresence
+  presence: FxPresence
   live: boolean
 }) {
   return (
     <>
       <span className="flex items-center gap-1.5">
         {/* An effect template has no value to preview, so the FX glyph stands where a swatch would
-            — the same substitution the template sheet's Value column and `TemplateStrip` make. */}
-        {face.isEffect && <AudioWaveform className={EFFECT_GLYPH_CLASS} />}
+            — the same substitution the template sheet's Value column and `PaletteStrip` make. */}
+        {face.isFx && <AudioWaveform className={FX_GLYPH_CLASS} />}
         {face.swatch && (
           <span
             aria-hidden
@@ -76,8 +76,8 @@ function LookFace({
         </span>
       </span>
       <span className="mt-0.5 line-clamp-1 text-[10px] leading-tight text-muted-foreground">
-        {live && pad.kind === 'TEMPLATE' && pad.template?.kind === 'effect' ? (
-          <EffectPadDetail template={pad.template} />
+        {live && pad.kind === 'PALETTE' && pad.palette?.kind === 'fx' ? (
+          <FxPadDetail palette={pad.palette} />
         ) : (
           face.detail
         )}
@@ -105,7 +105,7 @@ export interface BuskPadButtonProps {
   pad: BuskPad
   at: PadAddress
   /** For a template or Look pad. A cue pad reads {@link cueRing} instead. */
-  presence: EffectPresence
+  presence: FxPresence
   /**
    * For a cue pad (D11): `loose` — a press holds it, drawn solid, and the next press lets it go;
    * `stack` — live only because a stack holds it, drawn as an outline, and a press takes it loose;
@@ -254,7 +254,7 @@ export function BuskPadButton({
     PROGRAMMER_INTO,
     presence,
     hasSelection,
-    !(pad.kind === 'TEMPLATE' && (pad.template?.isGeneric ?? true)),
+    !(pad.kind === 'PALETTE' && (pad.palette?.isGeneric ?? true)),
   )
 
   // No menu while editing: there the pad is a drag handle, `useLongPress` is disabled and the only

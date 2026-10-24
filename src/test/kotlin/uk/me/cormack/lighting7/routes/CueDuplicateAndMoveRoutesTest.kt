@@ -120,7 +120,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val run = UUID.randomUUID()
         transaction(state.database) {
             for ((cueId, property) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
-                DaoCueAdHocEffect.new {
+                DaoCueAdHocFxEntity.new {
                     cue = DaoCue[cueId]; targetType = "fixture"; targetKey = "hex-1"
                     fxType = "Pulse"; family = "intensity"; attribute = property; cycle = 1.0
                     blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
@@ -133,11 +133,11 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val second = client.duplicate(one, a).body<DuplicateCueResponse>()
 
         transaction(state.database) {
-            fun keys(cueId: Int) = DaoCue[cueId].adHocEffects.associate { it.attribute to it.runUuid }
+            fun keys(cueId: Int) = DaoCue[cueId].adHocFx.associate { it.attribute to it.runUuid }
             val copied = keys(first.cueId)
             assertNull(copied["uv"], "an effect in no run stays in none")
             val fresh = assertNotNull(copied["dimmer"])
-            val everyOther = DaoCueAdHocEffect.all().filter { it.cue.id.value != first.cueId }.mapNotNull { it.runUuid }
+            val everyOther = DaoCueAdHocFxEntity.all().filter { it.cue.id.value != first.cueId }.mapNotNull { it.runUuid }
             assertTrue(fresh !in everyOther, "the copy's key is used nowhere else, the next copy's included")
             assertNotNull(keys(second.cueId)["dimmer"])
             assertEquals(mapOf<String?, UUID?>("dimmer" to run, "uv" to null), keys(one), "the source keeps its own")

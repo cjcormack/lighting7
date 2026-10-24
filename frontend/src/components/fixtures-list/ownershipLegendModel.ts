@@ -14,7 +14,7 @@ import type { CellOwnershipSource } from './useRowOwnership'
 export const LEGEND_GLOSS: Record<CellOwnershipSource, string> = {
   programmer: 'You — Record takes this',
   cue: 'Cue',
-  effect: 'FX runs here',
+  fx: 'FX runs here',
   parked: 'Parked',
   baseline: 'Nothing asserts it',
 }
@@ -36,7 +36,7 @@ export const LENS_HELD_GLOSS = 'Held back by a value above it, a stomp or Blind'
 export const LEGEND_SHORT: Record<CellOwnershipSource, string> = {
   programmer: 'You',
   cue: 'Cue',
-  effect: 'FX',
+  fx: 'FX',
   parked: 'Parked',
   baseline: 'Nothing asserts it',
 }
@@ -45,7 +45,7 @@ export const LEGEND_SHORT: Record<CellOwnershipSource, string> = {
 export const LEGEND_ORDER: readonly CellOwnershipSource[] = [
   'programmer',
   'cue',
-  'effect',
+  'fx',
   'parked',
   'baseline',
 ]

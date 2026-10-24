@@ -354,7 +354,7 @@ when nothing is fitted, so a memo keyed on it does not churn for the common rig.
 view, the 2D appearance leaf (the Positions chips, the busk tiles, the side sheet's fold, the colour
 editor's Pick) and the patch sheet's Media box and the Focus tab's list. The surfaces that *set* a
 value do not: the programmer's setting cell and its column, the fixture sheet's setting rows, the
-fixture card and the effect editor's setting list (`FxEffectFields`, once `EffectParameterForm`) list a setting's options with the type's stock `colourPreview`,
+fixture card and the effect editor's setting list (`FxFields`, once `EffectParameterForm`) list a setting's options with the type's stock `colourPreview`,
 because they write a DMX slot and a slot is the type's, whichever gel a unit has in it — and on a
 fixture with extra placements one cell drives several units with different strings, so there is no
 one fitted colour for its swatch to show. Teaching them the patch's own is
@@ -2218,7 +2218,7 @@ one `RING_SEGMENT` geometry per ringed body on the lens material, each the ring'
 by its share, and draws them at full detail only — under 44 px the ring is too small to read.
 
 `RingSync` (in `FixtureModel`) paints the segments from the ring setting and its `ring_speed` slider
-through `lib/ringEffect.ts`, a pure decode with time passed in: an option with `ringColour` lights
+through `lib/ringFx.ts`, a pure decode with time passed in: an option with `ringColour` lights
 every segment that colour, one with `ringChase` runs an arc a quarter of the ring long round it — its
 head bright, fading behind, in the band's colour or else each segment the hue of its place — at
 0.25–1.5 turns a second over the speed's range, and any other band is dark glass. A chase registers
@@ -2374,7 +2374,7 @@ could not be seen to: every focal distance past about 4 m drew the same edge on 
   Focus tab (`StageFocusPanel`), on the live project only. It sends where the beam lands in the view
   to `POST /programmer/focus` (lighting7 `docs/fixtures-engineering.md` §"Focusing a head on a
   point"), which solves the focus channel for the distance from the head's lens to that point and
-  writes it into the programmer; this side never solves, the `templateIntent.ts` rule, and draws the
+  writes it into the programmer; this side never solves, the `paletteIntent.ts` rule, and draws the
   answer's skip by name.
   - The landing is the beam director's own cast along the beam's axis from its first aperture
     (`landedPoints.ts`), lit or dark — a head is focused before it is brought up as often as after.

@@ -17,23 +17,23 @@ import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
 let templates: unknown[] = []
 const toggle = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve({}) })))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [toggle],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: templates }),
+  useApplyPaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useTogglePaletteMutation: () => [toggle],
 }))
 // A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [vi.fn()],
-  useEffectLibraryQuery: () => ({ data: [] }),
-  useActiveEffectsQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/programmer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmer')>()),
@@ -48,8 +48,8 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({ fixtures: [], fixtureTypes: [], fixtureByKey: new Map(), typeByKey: new Map() }),
 }))
 vi.mock('@/components/fixtures/fixtureAppearance', () => ({ FixtureAppearanceSource: () => null }))
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 
@@ -126,7 +126,7 @@ beforeEach(() => {
       isGeneric: true,
       kind: 'value',
       rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
-      effect: null,
+      fx: null,
       requiredEmitters: [],
       lastPressedAt: '2026-09-18T10:00:00Z',
       layerCount: 0,
@@ -184,7 +184,7 @@ describe('ColourCell', () => {
     fireEvent.click(screen.getByText('White Key'))
     expect(toggle).toHaveBeenLastCalledWith({
       projectId: 1,
-      templateId: 3,
+      paletteId: 3,
       targets: [
         { type: 'fixture', key: 'shehds-1.zone-1' },
         { type: 'fixture', key: 'shehds-1.zone-2' },
@@ -291,7 +291,7 @@ describe('ColourCell', () => {
       effects: [],
       pressLayer: vi.fn(),
       landValues: vi.fn(),
-      pickEffect: vi.fn(() => Promise.resolve(true)),
+      pickFx: vi.fn(() => Promise.resolve(true)),
     }
     render(
       <PressCueContext.Provider value={cue}>

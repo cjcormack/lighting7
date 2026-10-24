@@ -72,7 +72,7 @@ registerProperty("intensity", FixturePropertyType.INTENSITY)
 // val group = show.fixtureGroups["My Group"]
 
 // Apply an FX from the library
-// fxEngine.applyEffect("MyEffect", fixtures, mapOf())
+// fxEngine.applyFx("MyFx", fixtures, mapOf())
 
 `,
   FX_CALC: `// Stateless FX calculation — runs every tick

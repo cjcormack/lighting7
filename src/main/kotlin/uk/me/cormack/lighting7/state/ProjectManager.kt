@@ -234,7 +234,7 @@ class ProjectManager(
         }
 
         // 2. Clear all FX and stop the engine
-        show.fxEngine.clearAllEffects()
+        show.fxEngine.clearAllFx()
         show.fxEngine.stop()
 
         // 3. Clear fixtures registry (unregisters listeners, clears all state). This closes every

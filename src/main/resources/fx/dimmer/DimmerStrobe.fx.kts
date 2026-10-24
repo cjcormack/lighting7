@@ -1,9 +1,9 @@
 /*---
 id: DimmerStrobe
 name: Dimmer Strobe
-category: intensity
+family: intensity
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [dimmer, uv]
 parameters:
   - name: offValue

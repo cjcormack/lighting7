@@ -92,7 +92,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.respondLocateWrite(
  * the desk sends each unit now; false clears the units named.
  */
 internal fun writeStoredLocate(state: State, project: DaoProject, targets: List<CueTargetDto>, store: Boolean): LocateStoreResponse {
-    val skipped = ArrayList<SpreadSkipDto>()
+    val skipped = ArrayList<FanSkipDto>()
     val heads = headsOf(state, targets, skipped)
 
     // Per patch, the units this write sets (store) or takes away (clear), by head (null the fixture's own).
@@ -101,7 +101,7 @@ internal fun writeStoredLocate(state: State, project: DaoProject, targets: List<
     for ((key, head) in heads) {
         val units = unitsOf(head)
         if (units.isEmpty()) {
-            skipped += SpreadSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, key), "does not pan and tilt")
+            skipped += FanSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, key), "does not pan and tilt")
             continue
         }
         val patchKey = patchKeyOf(head)
@@ -109,7 +109,7 @@ internal fun writeStoredLocate(state: State, project: DaoProject, targets: List<
             for ((index, unit) in units) {
                 // A unit the rig sends nothing for is skipped rather than stored as 0, a corner of travel.
                 val read = capture(state, index, unit)
-                    ?: run { skipped += SpreadSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, key), "no output for this unit"); null }
+                    ?: run { skipped += FanSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, key), "no output for this unit"); null }
                     ?: continue
                 captured.getOrPut(patchKey) { LinkedHashMap() }[index] = read
             }
@@ -121,14 +121,14 @@ internal fun writeStoredLocate(state: State, project: DaoProject, targets: List<
     // Everything the transaction decides is built inside it and handed out whole, so a retried
     // transaction cannot leave a skip or a change counted twice.
     val (stored, txSkipped, changedKeys) = transaction(state.database) {
-        val txSkipped = ArrayList<SpreadSkipDto>()
+        val txSkipped = ArrayList<FanSkipDto>()
         val changedKeys = LinkedHashMap<String, List<UnitLocate>>()
         val rig = RigScope.of(project)
         val keys = (captured.keys + cleared.keys).toList()
         val stored = keys.mapNotNull { patchKey ->
             val patch = rig.patches(DaoFixturePatches.key eq patchKey).firstOrNull()
             if (patch == null) {
-                txSkipped += SpreadSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, patchKey), "not patched")
+                txSkipped += FanSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, patchKey), "not patched")
                 return@mapNotNull null
             }
             val current = rig.effective(patch).locate
@@ -144,7 +144,7 @@ internal fun writeStoredLocate(state: State, project: DaoProject, targets: List<
             when (rig.ownerOf(patch.project.id)) {
                 RigOwner.VENUE -> {
                     if (rig.isHidden(HideKind.PATCH, patch.uuid)) {
-                        txSkipped += SpreadSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, patchKey), "hidden in this show")
+                        txSkipped += FanSkipDto(CueTargetDto(TargetRef.Fixture.TYPE, patchKey), "hidden in this show")
                         return@mapNotNull null
                     }
                     if (next != current) {
@@ -253,5 +253,5 @@ internal data class LocatePatchDto(val patchId: Int, val key: String, val locate
 @Serializable
 internal data class LocateStoreResponse(
     val stored: List<LocatePatchDto> = emptyList(),
-    val skipped: List<SpreadSkipDto> = emptyList(),
+    val skipped: List<FanSkipDto> = emptyList(),
 )

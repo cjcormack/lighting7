@@ -1,9 +1,9 @@
 /*---
 id: PaletteSteps
 name: Palette Steps
-category: steps
+family: steps
 outputType: STEPS
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
 parameters:
   - name: palettes

@@ -235,10 +235,10 @@ for reuse by a second WW/CW type:
 
 Where it lands:
 
-- `TemplateResolver.resolveColour` has a third arm, after RGB and before a wheel: the value is the
+- `PaletteResolver.resolveColour` has a third arm, after RGB and before a wheel: the value is the
   colour the nearest mix *makes* (what the cell reads back as), reported `Snapped` with the mix's
   temperature and ΔE (the editor's "3000 K · ΔE …" badge) unless the mix reproduces the colour (ΔE under 1, `Exact`).
-  A cell has colour, so `TemplateFanOut` carries a palette pressed on the blinder's parent to both
+  A cell has colour, so `PaletteFanOut` carries a palette pressed on the blinder's parent to both
   cells unchanged.
 - `PropertyChannelWriter` resolves it to the two whites' writes and lists them as its channels.
   Each channel is still covered by its own slider (`coveringKeysByChannel`: single-channel wins), so a
@@ -1816,7 +1816,7 @@ its pattern and no colour, an empty slot to open white and no pattern
   placement knows which unit it is drawing; a backend-resolved descriptor could answer for the
   patch alone. The Stage view, the 2D appearance and the patch sheet all overlay the same way
   (`frontend/docs/stage-vis-engineering.md` §"Fitted media").
-- **The desk resolves it for what it answers alone**: `TemplateResolver.nearestColourSlot` snaps a
+- **The desk resolves it for what it answers alone**: `PaletteResolver.nearestColourSlot` snaps a
   colour against the unit's fitted colours (the patch's own: a placement's DMX is the patch's, so a
   snap can answer for one unit, and the note names the fitted gel, *L201_FULL_CT_BLUE (R26)*);
   Locate's white frame is the one open on this unit; `describe_rig` lists each unit's fitted media.
@@ -2133,7 +2133,7 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   hemisphere behind it.
 - **Fine channels are written.** A head with `PAN_FINE` / `TILT_FINE` sliders gets 16 bits
   (`coarse + fine / 256`, as the view combines them); one step of an 8-bit 540° pan is about 2°,
-  some 37 cm at a 10 m throw. The degree→DMX mapping is `TemplateResolver`'s (range, inversion,
+  some 37 cm at a 10 m throw. The degree→DMX mapping is `PaletteResolver`'s (range, inversion,
   the coarse slider's own `min..max`).
 - **Everything else is skipped by name**, never guessed at: a fixed head, an axis with no degree
   range, an unplaced fixture, a cell (it has no placement of its own), a point at the fixture or
@@ -2145,7 +2145,7 @@ rolled over hangs, and a head on its side is neither and is not flagged. A stati
   like any other entry — so `aim_fixtures` takes `saveAsPalette`: a new palette with one
   fixture-specific `position` row per aimed head, centre-relative (`pos:pan,tilt`, the palette
   grammar since venue-visit plan D3: each head's own coarse bytes about DMX 128), which
-  `TemplateResolver` turns back into exactly the aim's coarse channels. The fine channel is not part
+  `PaletteResolver` turns back into exactly the aim's coarse channels. The fine channel is not part
   of the palette scale, so the palette lands the aim to within a coarse step; the programmer write is
   exact, fine channels included. (It held travel degrees, `deg:`, until D3; those rows still resolve.) It is a focus
   palette cues, Looks and busk pads can reference, and it outlives the programmer. The palette is
@@ -2195,8 +2195,8 @@ was made from (a group sheet, the busk Position tab), so each head writes with i
 `sourceGroup`, as the pad's own writes do; it names no head of its own. `aim_fixtures` does not offer
 the arm.
 
-One head's step is `routes/programmerAim.kt`'s `jogHead`, which the spread route's **stage fan**
-(`mode: FAN` with `fan: {x?, y?}`, `docs/lighting-composition-model.md` §"A fan is a spread about each
+One head's step is `routes/programmerAim.kt`'s `jogHead`, which the Fan route's **stage fan**
+(`mode: ABOUT` with `fan: {x?, y?}`, `docs/lighting-composition-model.md` §"A fan is a spread about each
 head's own position") shares: there each head's `(dx, dy)` is the fan's amount times its weight, so
 the heads' landing points spread apart across the plane rather than move together.
 

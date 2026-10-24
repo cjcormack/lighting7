@@ -1,9 +1,9 @@
 /*---
 id: IrisPulse
 name: Iris Pulse
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [iris]
 parameters:
   - name: min

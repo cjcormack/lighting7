@@ -29,7 +29,7 @@ import kotlin.math.roundToLong
 internal class FxSampler(
     private val view: View,
     /** A new effect object for an FX, so a sample never shares one with the compose pass. */
-    private val freshEffect: (FxInstance) -> Effect,
+    private val freshFx: (FxInstance) -> Fx,
 ) {
     /** What the sampler reads off the engine; [FxEngine.sampler] answers it from the pass's own functions. */
     internal interface View {
@@ -138,7 +138,7 @@ internal class FxSampler(
         }
 
         val heldBack = view.heldBack()
-        val effects = HashMap<FxInstance, Effect?>()
+        val effects = HashMap<FxInstance, Fx?>()
         val representative = HashSet<FxInstance>()
         val attributes = stack.map { it.target.propertyName }.distinct().mapNotNull { attribute ->
             val onAttribute = stack.filter { it.target.propertyName == attribute }
@@ -183,11 +183,11 @@ internal class FxSampler(
     }
 
     /** One FX's place on one head: its unit count for the phase, its offset and the context it is handed. */
-    private class Member(val groupSize: Int, val offset: Double, val context: EffectContext)
+    private class Member(val groupSize: Int, val offset: Double, val context: FxContext)
 
     /**
      * Which heads [effect] paints, each with its member's place: the compose pass's own walk over its
-     * expansion and plans ([FxEngine.processFixtureEffect], [FxEngine.processGroupEffect]).
+     * expansion and plans ([FxEngine.processFixtureFx], [FxEngine.processGroupFx]).
      */
     private fun membersOf(effect: FxInstance, dyn: FxDynamics): Map<String, Member> {
         val expansion = view.expansion(effect, dyn)
@@ -199,7 +199,7 @@ internal class FxSampler(
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val carry = effect.splitMember
                 out[effect.target.targetKey] =
-                    if (carry == null) Member(1, 0.0, EffectContext.SINGLE)
+                    if (carry == null) Member(1, 0.0, FxContext.SINGLE)
                     else Member(carry.groupSize, carry.offset, carry.context)
             }
             FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> spread(expansion.flat, view.plans(effect, expansion, dyn).flat)
@@ -225,7 +225,7 @@ internal class FxSampler(
         offsetsMs: DoubleArray,
         sampleMs: Double,
         heldBack: (FxInstance, String, String) -> HeldBackReason?,
-        effects: HashMap<FxInstance, Effect?>,
+        effects: HashMap<FxInstance, Fx?>,
         representative: MutableSet<FxInstance>,
     ): FxSampledRow? {
         val fixture = try {
@@ -251,14 +251,14 @@ internal class FxSampler(
         val holding = painting.map { BooleanArray(n) }
         val reasons = painting.map { (effect, _) -> heldBack(effect, key, attribute) }
         val dynamics = painting.map { (effect, _) -> reads.dynamicsOf(effect) }
-        val weights = painting.mapIndexed { i, (effect, _) -> FxBlend.weight(dynamics[i].size, ENVELOPE, view.stackAmount(effect)) }
+        val weights = painting.mapIndexed { i, (effect, _) -> FxBlend.weight(dynamics[i].amount, ENVELOPE, view.stackAmount(effect)) }
         // An FX whose object cannot be built (its type no longer registered) holds, as one that throws.
         val stateful = painting.map { (effect, _) ->
-            if (effect.effect !is StatefulEffect) null
-            else (fresh(effect) as? StatefulEffect)?.also { it.initialize(); representative += effect }
+            if (effect.effect !is StatefulFx) null
+            else (fresh(effect) as? StatefulFx)?.also { it.initialize(); representative += effect }
         }
         val standard = painting.map { (effect, _) ->
-            if (effect.effect is StatefulEffect) null
+            if (effect.effect is StatefulFx) null
             else if (effect in effects) effects[effect]
             else fresh(effect).also { effects[effect] = it }
         }
@@ -323,17 +323,17 @@ internal class FxSampler(
         offsetMs: Double,
         reads: Reads,
     ): Double {
-        val division = FxPhase.memberDivision(effect.timing.beatDivision, dyn, member.groupSize)
+        val division = FxPhase.memberDivision(effect.timing.cycle, dyn, member.groupSize)
         return if (effect.timingSource == TimingSource.BEAT) {
             val slot = reads.speedSlotOf(effect)
             val start = clock.tickAt(slot)
             val ticks = start + floor(offsetMs / clock.msPerTick(slot) + TICK_EPSILON).toLong()
-            val anchor = effect.nShotStartTick.takeUnless { it == FxInstance.UNANCHORED || it > start } ?: start
+            val anchor = effect.runsStartTick.takeUnless { it == FxInstance.UNANCHORED || it > start } ?: start
             FxPhase.beatPhaseAt(ticks, anchor, division, member.groupSize, dyn, member.offset)
         } else {
             val start = effect.accumulatedScaledMs
             val scaledMs = start + offsetMs * clock.rateScale(reads.rateSlotOf(effect))
-            val anchor = effect.nShotStartScaledMs.takeUnless { it.isNaN() || it > start } ?: start
+            val anchor = effect.runsStartScaledMs.takeUnless { it.isNaN() || it > start } ?: start
             FxPhase.wallClockPhaseAt(scaledMs, anchor, division, member.groupSize, dyn, member.offset)
         }
     }
@@ -403,7 +403,7 @@ internal class FxSampler(
     /** The picked FX's cycle in real milliseconds, its first unit's Timing included. */
     private fun cycleMs(effect: FxInstance, clock: FxSampleClock, reads: Reads): Double {
         val groupSize = reads.membersOf(effect).values.firstOrNull()?.groupSize ?: 1
-        val division = FxPhase.memberDivision(effect.timing.beatDivision, reads.dynamicsOf(effect), groupSize)
+        val division = FxPhase.memberDivision(effect.timing.cycle, reads.dynamicsOf(effect), groupSize)
         return if (effect.timingSource == TimingSource.BEAT) {
             division * MasterClock.TICKS_PER_BEAT * clock.msPerTick(reads.speedSlotOf(effect))
         } else {
@@ -411,8 +411,8 @@ internal class FxSampler(
         }
     }
 
-    private fun fresh(effect: FxInstance): Effect? = try {
-        freshEffect(effect)
+    private fun fresh(effect: FxInstance): Fx? = try {
+        freshFx(effect)
     } catch (_: Throwable) {
         null
     }

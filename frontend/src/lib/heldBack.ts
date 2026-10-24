@@ -2,8 +2,8 @@
  * Is an effect **held back** on one head — running, but not painting a property there because the
  * programmer holds it (fixture-fx-sheets plan D4, D19)?
  *
- * The client's copy of the desk's `EffectSuppression.heldBackByProgrammer`
- * (`fx/EffectSuppression.kt`), and it has to stay that rule exactly, because a mark that disagrees
+ * The client's copy of the desk's `FxSuppression.heldBackByProgrammer`
+ * (`fx/FxSuppression.kt`), and it has to stay that rule exactly, because a mark that disagrees
  * with the engine is worse than no mark:
  *
  * - **Blind holds nothing back.** The desk's suppression snapshot is empty while blind — the
@@ -22,9 +22,9 @@
  * The FX lens's struck-through chips and the fixture sheet's amber dot both read this; the grid's
  * corner dot (session 5) does, through [heldBackReach].
  */
-import { effectAimKeys, type EffectTargetFields } from './effectTargets'
+import { fxAimKeys, type FxTargetFields } from './fxTargets'
 
-export interface HeldBackEffect {
+export interface HeldBackFx {
   programmerOwned: boolean
   propertyName: string
 }
@@ -33,7 +33,7 @@ export interface HeldBackEffect {
 export type ProgrammerHolds = (headKey: string, propertyName: string) => boolean
 
 export function isHeldBack(
-  effect: HeldBackEffect,
+  effect: HeldBackFx,
   headKey: string,
   holds: ProgrammerHolds,
   blind: boolean,
@@ -54,12 +54,12 @@ export function isHeldBack(
  * band this one names, so the two are never both true of one effect. The FX tray and the programmer's
  * FX table mark a held instance *held · Blind* from it.
  */
-export function isHeldByBlind(effect: Pick<HeldBackEffect, 'programmerOwned'>, blind: boolean): boolean {
+export function isHeldByBlind(effect: Pick<HeldBackFx, 'programmerOwned'>, blind: boolean): boolean {
   return blind && effect.programmerOwned
 }
 
 /** What [heldBackReach] needs of an effect — the wire's own fields. */
-export interface ReachingEffect extends HeldBackEffect, EffectTargetFields {}
+export interface ReachingFx extends HeldBackFx, FxTargetFields {}
 
 /** What [heldBackReach] needs of a fixture. */
 export interface ReachFixture {
@@ -81,14 +81,14 @@ export function heldBackKey(headKey: string, propertyName: string): string {
  * an entry on that key, and the programmer is not blind — which the cell asks of its own keys, so
  * this set moves only with the effect list.
  */
-export function heldBackReach(effects: readonly ReachingEffect[] | undefined, fixtures: readonly ReachFixture[]): Set<string> {
+export function heldBackReach(effects: readonly ReachingFx[] | undefined, fixtures: readonly ReachFixture[]): Set<string> {
   const out = new Set<string>()
   if (effects == null) return out
   const byKey = new Map(fixtures.map((f) => [f.key, f]))
   const heads = (fixture: ReachFixture) => [fixture.key, ...(fixture.elements ?? []).map((e) => e.key)]
   for (const effect of effects) {
     if (effect.programmerOwned) continue
-    const aimed = effectAimKeys(effect, (group) => fixtures.filter((f) => f.groups.includes(group)).map((f) => f.key))
+    const aimed = fxAimKeys(effect, (group) => fixtures.filter((f) => f.groups.includes(group)).map((f) => f.key))
     for (const key of aimed) {
       const fixture = byKey.get(key)
       for (const head of fixture ? heads(fixture) : [key]) out.add(heldBackKey(head, effect.propertyName))

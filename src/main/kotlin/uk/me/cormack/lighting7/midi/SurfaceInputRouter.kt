@@ -257,7 +257,7 @@ class SurfaceInputRouter(
             is BindingTarget.SpeedMasterBpm ->
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             BindingTarget.GrandMasterFader -> actions.writeGrandMaster(value7Bit)
-            is BindingTarget.StackEffectSize -> actions.writeStackEffectSize(target.stackId, target.stackUuid, value7Bit)
+            is BindingTarget.StackFxAmount -> actions.writeStackFxAmount(target.stackId, target.stackUuid, value7Bit)
             is BindingTarget.SelectionProperty ->
                 actions.writeSelectionProperty(target.propertyName, value7Bit, target.colourAxis)
             is BindingTarget.SelectionFan -> actions.writeSelectionFan(target.axis, value7Bit)
@@ -307,7 +307,7 @@ class SurfaceInputRouter(
             // the selection, the pad through its own bank's plan — never any of the three onto
             // whatever the other two would have chosen.
             is BindingTarget.ApplyLook -> actions.applyLook(target.lookUuid)
-            is BindingTarget.PressTemplate -> actions.pressTemplate(target.paletteUuid)
+            is BindingTarget.PressPalette -> actions.pressPalette(target.paletteUuid)
             is BindingTarget.PressPad -> actions.pressPad(target.padUuid)
             // The hand (multi-screen plan §3.5). A hand-off like the records above: what a pick-up
             // reads and what a place appends live in `HandService`, which the window's own doors
@@ -333,8 +333,8 @@ class SurfaceInputRouter(
                 "Ignoring button press on binding {} → grand-master fader (continuous target)",
                 binding.id,
             )
-            is BindingTarget.StackEffectSize -> logger.debug(
-                "Ignoring button press on binding {} → stack effect size (continuous target)",
+            is BindingTarget.StackFxAmount -> logger.debug(
+                "Ignoring button press on binding {} → stack FX amount (continuous target)",
                 binding.id,
             )
             is BindingTarget.SelectionFan -> logger.debug(

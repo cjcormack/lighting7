@@ -18,7 +18,7 @@ export const ATTRIBUTE_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'POS
  * [ATTRIBUTE_FAMILIES]' declaration order. Shared by `/palettes` and `ApplyPicker`, which mount
  * the same `PartitionChips`.
  */
-export const TEMPLATE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
+export const PALETTE_FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
 /** Operator-facing labels. Plural names the *bank*, which is what the library's filter shows. */
 export const FAMILY_LABELS: Record<AttributeFamily, { singular: string; plural: string }> = {
@@ -120,7 +120,7 @@ export function familyForCategory(category: string): AttributeFamily {
  * Which family an **effect library `category`** belongs to — `familyForCategory`'s sibling, and a
  * different question from a different vocabulary.
  *
- * A mirror of `familyForEffectCategory` in lighting7's `routes/projectLooks.kt`. Keep the two in
+ * A mirror of `maskGroupForFxFamily` in lighting7's `routes/projectLooks.kt`. Keep the two in
  * step: it is what derives an effect template's family, and a client that classified a category
  * differently would offer the operator a template the write boundary then refuses.
  *
@@ -131,7 +131,7 @@ export function familyForCategory(category: string): AttributeFamily {
  * steps another family, so neither names one, and saying BEAM for them would be a wrong answer
  * rather than a catch-all. The two vocabularies share one spelling (`colour`) and nothing else.
  */
-export function familyForEffectCategory(category: string): AttributeFamily | null {
+export function maskGroupForFxFamily(category: string): AttributeFamily | null {
   switch (category.toLowerCase()) {
     case 'intensity':
       return 'INTENSITY'
@@ -151,9 +151,9 @@ export function familyForEffectCategory(category: string): AttributeFamily | nul
  * The families an **effect template** can be banked under (fx-templates D4): all four, since the
  * effect library's `beam` category (effects plan D6) gave Beam effects of its own.
  *
- * Mirrors `TEMPLATE_EFFECT_FAMILIES` in `routes/projectTemplates.kt`.
+ * Mirrors `PALETTE_FX_FAMILIES` in `routes/projectPalettes.kt`.
  */
-export const TEMPLATE_EFFECT_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
+export const PALETTE_FX_FAMILIES: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
 /**
  * How many patched heads an effect template of this family would run on.

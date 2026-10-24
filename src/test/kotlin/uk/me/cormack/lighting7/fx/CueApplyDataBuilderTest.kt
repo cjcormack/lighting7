@@ -6,7 +6,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -114,7 +114,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 targetType = "fixture"; targetKey = "hex-1"
                 attribute = "dimmer"; value = "128"; sortOrder = 0
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
                 fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
@@ -153,8 +153,8 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         assertEquals(1, applyData.propertyAssignments.size, "rows — the field the AI path dropped")
         assertEquals(1, applyData.triggers.size, "triggers — the other field the AI path dropped")
         assertEquals(5_000L, applyData.triggers.single().intervalMs)
-        assertEquals(1, applyData.adHocEffects.size)
-        assertEquals(750L, applyData.adHocEffects.single().delayMs, "ad-hoc timing, dropped too")
+        assertEquals(1, applyData.adHocFx.size)
+        assertEquals(750L, applyData.adHocFx.single().delayMs, "ad-hoc timing, dropped too")
     }
 
     /**

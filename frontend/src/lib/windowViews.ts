@@ -233,7 +233,7 @@ export const WINDOW_VIEWS: readonly WindowView[] = [
   },
   { id: 'looks', label: 'Looks', segment: '/looks' },
   { id: 'cues', label: 'Cues', segment: '/cues' },
-  { id: 'templates', label: 'Palettes', segment: '/palettes' },
+  { id: 'palettes', label: 'Palettes', segment: '/palettes' },
 ]
 
 /**

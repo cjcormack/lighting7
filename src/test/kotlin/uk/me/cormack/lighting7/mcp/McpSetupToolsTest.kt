@@ -918,7 +918,7 @@ class McpSetupToolsTest : RouteIntegrationTest() {
         // An anchor names an entry; a cue id alone names no place (cue model plan D4).
         val byCue = call("mark_up_prompt_book", """{"anchors":[{"cueId":${cueIds[0]},"at":{"pdfPage":2,"y":0.4}}]}""")
         assertFalse(byCue.success)
-        assertTrue(byCue.problems().single().contains("cueId alone names no place"), byCue.result)
+        assertTrue("cueId names no place" in byCue.result, byCue.result)
         val unknown = call("mark_up_prompt_book", """{"anchors":[{"stackId":$stackId,"number":"9","at":{"pdfPage":2,"y":0.4}}]}""")
         assertTrue(unknown.problems().single().contains("no cue numbered '9'"), unknown.result)
         val twice = call(

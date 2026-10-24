@@ -35,12 +35,12 @@ class FxRemovalRaceTest {
     }
 
     /** A constant 200 that runs [onFirstCalculate] inside its first pass. */
-    private class RacingEffect(private val onFirstCalculate: () -> Unit) : Effect {
+    private class RacingFx(private val onFirstCalculate: () -> Unit) : Fx {
         override val name = "Racing"
         override val outputType = FxOutputType.SLIDER
         private var raced = false
 
-        override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        override fun calculate(phase: Double, context: FxContext): FxOutput {
             if (!raced) {
                 raced = true
                 onFirstCalculate()
@@ -49,8 +49,8 @@ class FxRemovalRaceTest {
         }
     }
 
-    private fun dimmerFx(effect: Effect, property: String = "dimmer") =
-        FxInstance(effect, SliderTarget("hex-a", property), FxTiming(beatDivision = 1.0)).also {
+    private fun dimmerFx(effect: Fx, property: String = "dimmer") =
+        FxInstance(effect, SliderTarget("hex-a", property), FxTiming(cycle = 1.0)).also {
             it.timingSource = TimingSource.WALL_CLOCK
         }
 
@@ -59,10 +59,10 @@ class FxRemovalRaceTest {
 
     private fun assertRemovalMidPassLeavesNoStaleFrame(remove: (FxEngine) -> Unit) {
         val (controller, engine) = newRig()
-        engine.addEffect(dimmerFx(RacingEffect { thread { remove(engine) }.join() }))
+        engine.addFx(dimmerFx(RacingFx { thread { remove(engine) }.join() }))
 
         assertTrue(engine.processWallClockTick(T0), "the pass ran")
-        assertTrue(engine.getActiveEffects().isEmpty())
+        assertTrue(engine.getActiveFx().isEmpty())
         assertEquals(0, controller.dimmer(), "the racing pass's frame stayed over the removal's reset")
 
         assertFalse(engine.processWallClockTick(T0 + 20), "nothing runs, so the next pass is skipped")
@@ -70,24 +70,24 @@ class FxRemovalRaceTest {
     }
 
     @Test
-    fun `clearAllEffects during a pass leaves the dimmer at the layer below`() =
-        assertRemovalMidPassLeavesNoStaleFrame { it.clearAllEffects() }
+    fun `clearAllFx during a pass leaves the dimmer at the layer below`() =
+        assertRemovalMidPassLeavesNoStaleFrame { it.clearAllFx() }
 
     @Test
-    fun `removeEffect during a pass leaves the dimmer at the layer below`() =
-        assertRemovalMidPassLeavesNoStaleFrame { it.removeEffect(it.getActiveEffects().single().id) }
+    fun `removeFx during a pass leaves the dimmer at the layer below`() =
+        assertRemovalMidPassLeavesNoStaleFrame { it.removeFx(it.getActiveFx().single().id) }
 
     @Test
     fun `a pass whose list never held the removed FX does not repeat its reset`() {
         val (controller, engine) = newRig()
         // Added and removed while the pass runs, so the pass's list never held it; the channel is
         // then written by something else, which the pass must leave alone.
-        engine.addEffect(
+        engine.addFx(
             dimmerFx(
-                RacingEffect {
+                RacingFx {
                     thread {
-                        val late = engine.addEffect(dimmerFx(RacingEffect {}))
-                        engine.removeEffect(late)
+                        val late = engine.addFx(dimmerFx(RacingFx {}))
+                        engine.removeFx(late)
                     }.join()
                     controller.setValues(listOf(1 to ChannelChange(150u, 0)))
                 },
@@ -102,28 +102,28 @@ class FxRemovalRaceTest {
     @Test
     fun `an FX swapped by an edit and then removed during a pass leaves the dimmer at the layer below`() =
         assertRemovalMidPassLeavesNoStaleFrame {
-            val id = it.getActiveEffects().single().id
-            it.updateEffect(id, newBlendMode = BlendMode.ADDITIVE)
-            it.removeEffect(id)
+            val id = it.getActiveFx().single().id
+            it.updateFx(id, newBlendMode = BlendMode.ADDITIVE)
+            it.removeFx(id)
         }
 
     @Test
     fun `an FX split into copies and then removed during a pass leaves the dimmer at the layer below`() =
         assertRemovalMidPassLeavesNoStaleFrame {
-            val parent = it.getActiveEffects().single()
-            it.replaceEffects(mapOf(parent to listOf(dimmerFx(RacingEffect {}))))
-            it.removeEffects(it.getActiveEffects().map { copy -> copy.id })
+            val parent = it.getActiveFx().single()
+            it.replaceFx(mapOf(parent to listOf(dimmerFx(RacingFx {}))))
+            it.removeFxBatch(it.getActiveFx().map { copy -> copy.id })
         }
 
     @Test
     fun `a batch removal during a pass resets only what the pass painted`() {
         val (controller, engine) = newRig()
-        engine.addEffect(
+        engine.addFx(
             dimmerFx(
-                RacingEffect {
+                RacingFx {
                     thread {
-                        engine.addEffect(dimmerFx(RacingEffect {}))
-                        engine.clearAllEffects()
+                        engine.addFx(dimmerFx(RacingFx {}))
+                        engine.clearAllFx()
                     }.join()
                     controller.setValues(listOf(1 to ChannelChange(150u, 0)))
                 },

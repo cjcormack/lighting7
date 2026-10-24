@@ -171,7 +171,7 @@ export function edgeDragRef(activeData: unknown): EdgeDragRef | null {
   const drag = activeData as BuskPaletteDragData | undefined
   if (drag?.type !== 'busk-palette') return null
   const record = drag.record
-  if (record.kind === 'TEMPLATE') return { kind: 'TEMPLATE', id: record.template.id }
+  if (record.kind === 'PALETTE') return { kind: 'PALETTE', id: record.palette.id }
   if (record.kind === 'LOOK') return { kind: 'LOOK', id: record.look.id }
   return { kind: 'CUE', id: record.cue.id }
 }
@@ -285,7 +285,7 @@ export interface EdgeDragHere {
 function isRef(value: unknown): value is EdgeDragRef {
   const r = value as EdgeDragRef | undefined
   return (
-    (r?.kind === 'TEMPLATE' || r?.kind === 'LOOK' || r?.kind === 'CUE') && typeof r.id === 'number'
+    (r?.kind === 'PALETTE' || r?.kind === 'LOOK' || r?.kind === 'CUE') && typeof r.id === 'number'
   )
 }
 

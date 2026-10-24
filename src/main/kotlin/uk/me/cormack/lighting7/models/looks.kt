@@ -12,12 +12,12 @@ import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
 
 /**
- * The `targetType` discriminator marking a [DaoTemplateRows] row as *deferred*: it names no target
+ * The `targetType` discriminator marking a [DaoPaletteRows] row as *deferred*: it names no target
  * of its own and takes its targets from whatever applies it — the selection a template is applied
  * to, or the [DaoCueLayers] line referencing it.
  *
  * **Not a Look's.** A Look row and a Look effect always name their own target. The deferred half of
- * the row became [DaoTemplates] in session 3; a deferred Look *effect* is refused at the write
+ * the row became [DaoPalettes] in session 3; a deferred Look *effect* is refused at the write
  * boundary, dropped on import and was deleted from this database once (absolute-looks plan D2,
  * `state/DeferredLookEffectsMigration.kt`). A stored row or effect carrying it is data from an
  * older database and is dropped on read.
@@ -34,7 +34,7 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
  *
  * **Always bound.** A Look row names a fixture or a group; [DEFERRED_TARGET_TYPE] is rejected at the
  * write boundary. Until session 3 a deferred row was how a Look served as a template — that job
- * moved to [DaoTemplates], which is a better home for it (one family, an intent per row, resolved
+ * moved to [DaoPalettes], which is a better home for it (one family, an intent per row, resolved
  * per head).
  *
  * [value] is always a **literal** in the canonical
@@ -72,65 +72,65 @@ data class LookRowDto(
 }
 
 /**
- * One stored Look effect, on its own fixture, group or selection — the shape [CueAdHocEffectDto]
+ * One stored Look effect, on its own fixture, group or selection — the shape [CueAdHocFxDto]
  * has, with real columns, which is why the two record into one another field for field.
  *
  * The `delayMs` / `intervalMs` / `randomWindowMs` triple is **not** here: timing is a property of
  * the layer applying the Look, not of the Look itself, and it lives on [DaoCueLayers].
  */
 @Serializable
-data class LookEffectDto(
+data class LookFxDto(
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
+    val fxType: String,
+    val family: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
+    val timing: Timing? = null,
     val parameters: Map<String, String> = emptyMap(),
-    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookEffectSpec.speedMasterUuid]. */
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookFxSpec.speedMasterUuid]. */
     val speedMasterUuid: String? = null,
-    /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
+    /** Wall-clock rate master (null → unscaled). See [LookFxSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     /**
      * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
      * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/EffectTiming.kt`.
+     * See `fx/FxTimingChoice.kt`.
      */
     val seconds: Boolean = false,
     /**
-     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
      */
-    val size: Double = 1.0,
+    val amount: Double = 1.0,
     /**
      * Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. A stored
      * FX's field, absent Forward as its archive reads it; the doors that make a new FX (the picker,
-     * the palette editor, MCP) write its type's own Direction (`EffectRegistration.defaultDirection`).
+     * the palette editor, MCP) write its type's own Direction (`FxRegistration.defaultDirection`).
      */
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
-    val nShot: Int? = null,
+    val runs: Int? = null,
     /**
      * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
-     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * Segments at least 1, Parts 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
      * wings under a mirrored Order, at the write boundary.
      */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     val sortOrder: Int = 0,
 ) {
-    /** This effect with its target spelled as the desk stores it ([EffectTargetRef.canonical]). */
-    fun canonicalTarget(): LookEffectDto =
-        EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
+    /** This effect with its target spelled as the desk stores it ([FxTargetsRef.canonical]). */
+    fun canonicalTarget(): LookFxDto =
+        FxTargetsRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
 }
 
 /**
@@ -174,7 +174,7 @@ class DaoLook(id: EntityID<Int>) : IntEntity(id) {
     var notes by DaoLooks.notes
     var uuid by DaoLooks.uuid
     val rows by DaoLookRow referrersOn DaoLookRows.look
-    val effects by DaoLookEffect referrersOn DaoLookEffects.look
+    val effects by DaoLookFxEntity referrersOn DaoLookFx.look
 }
 
 // ─── Look Rows table ───────────────────────────────────────────────────
@@ -226,13 +226,13 @@ class DaoLookRow(id: EntityID<Int>) : IntEntity(id) {
         get() = TargetRef.ofOrNull(targetType, targetKey)
 }
 
-// ─── Look Effects table ────────────────────────────────────────────────
+// ─── Look FX table ─────────────────────────────────────────────────────
 
-object DaoLookEffects : IntIdTable("look_fx") {
+object DaoLookFx : IntIdTable("look_fx") {
     val look = reference("look_id", DaoLooks)
 
     /**
-     * An [EffectTargetRef] discriminator. An older database may hold [DEFERRED_TARGET_TYPE], which
+     * An [FxTargetsRef] discriminator. An older database may hold [DEFERRED_TARGET_TYPE], which
      * nothing reads as a target; `DeferredLookEffectsMigration.kt` deleted those rows once.
      */
     val targetType = varchar("target_type", 50)
@@ -258,20 +258,20 @@ object DaoLookEffects : IntIdTable("look_fx") {
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
 
-    /** D7's *Seconds* for a beat effect; see [LookEffectSpec.seconds]. */
+    /** D7's *Seconds* for a beat effect; see [LookFxSpec.seconds]. */
     val seconds = bool("seconds").default(false)
 
-    /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
+    /** Amount (effects plan D2), 0.0–1.0; see [LookFxSpec.amount]. */
     val amount = double("amount").default(1.0)
 
-    /** Direction (D5) by name; see [LookEffectSpec.direction]. */
+    /** Direction (D5) by name; see [LookFxSpec.direction]. */
     val direction = varchar("direction", 16).default("FORWARD")
 
-    /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
+    /** Runs (D9), null for forever; see [LookFxSpec.runs]. */
     val runs = integer("runs").nullable()
 
     /**
-     * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
+     * The spread's shape (effects plan D4); see [LookFxSpec.spread]. Groups 0 is off. The three
      * counts are `spread_`-prefixed columns: `GROUPS` is an SQLite keyword (window frames).
      */
     val spread = double("spread").default(1.0)
@@ -294,21 +294,21 @@ object DaoLookEffects : IntIdTable("look_fx") {
  * preset's target-less effect stored as a JSON blob purely to avoid DDL. By the time FX presets were
  * retired in session 4 it had long since become the common currency, so it moved here and was
  * renamed rather than deleted with its old home — deleting it would have broken eight subsystems
- * that have nothing to do with presets. `DaoLookEffects` gave its fields real columns; this is still
+ * that have nothing to do with presets. `DaoLookFx` gave its fields real columns; this is still
  * the shape they are handed on in.
  */
 @Serializable
-data class LookEffectSpec(
-    val effectType: String,
-    val category: String,
+data class LookFxSpec(
+    val fxType: String,
+    val family: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
+    val timing: Timing? = null,
     val parameters: Map<String, String> = emptyMap(),
     /**
      * Speed master this effect subscribes to, as the master's **uuid** (null → master 1).
@@ -326,33 +326,33 @@ data class LookEffectSpec(
     val rateSpeedMasterUuid: String? = null,
     /**
      * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
      * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/EffectTiming.kt`.
+     * See `fx/FxTimingChoice.kt`.
      */
     val seconds: Boolean = false,
     /**
-     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
      */
-    val size: Double = 1.0,
+    val amount: Double = 1.0,
     /**
      * Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. A stored
      * FX's field, absent Forward as its archive reads it; the doors that make a new FX (the picker,
-     * the palette editor, MCP) write its type's own Direction (`EffectRegistration.defaultDirection`).
+     * the palette editor, MCP) write its type's own Direction (`FxRegistration.defaultDirection`).
      */
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
-    val nShot: Int? = null,
+    val runs: Int? = null,
     /**
      * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
-     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * Segments at least 1, Parts 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
      * wings under a mirrored Order, at the write boundary.
      */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
 )
 
 /**
@@ -360,40 +360,40 @@ data class LookEffectSpec(
  * A spec on *Seconds* (D7) keeps its own cycle: the override is beats, and a Seconds effect follows
  * no master for a beat to mean anything against.
  */
-fun LookEffectSpec.withBeatDivisionOverride(override: Double?): LookEffectSpec =
-    if (override == null || seconds) this else copy(beatDivision = override)
+fun LookFxSpec.withCycleOverride(override: Double?): LookFxSpec =
+    if (override == null || seconds) this else copy(cycle = override)
 
-class DaoLookEffect(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<DaoLookEffect>(DaoLookEffects)
+class DaoLookFxEntity(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoLookFxEntity>(DaoLookFx)
 
-    var look by DaoLook referencedOn DaoLookEffects.look
-    var targetType by DaoLookEffects.targetType
-    var targetKey by DaoLookEffects.targetKey
-    var fxType by DaoLookEffects.fxType
-    var family by DaoLookEffects.family
-    var attribute by DaoLookEffects.attribute
-    var cycle by DaoLookEffects.cycle
-    var blendMode by DaoLookEffects.blendMode
-    var order by DaoLookEffects.order
-    var phaseOffset by DaoLookEffects.phaseOffset
-    var elementMode by DaoLookEffects.elementMode
-    var elementFilter by DaoLookEffects.elementFilter
-    var timing by DaoLookEffects.timing
-    var parameters by DaoLookEffects.parameters
-    var speedMasterUuid by DaoLookEffects.speedMasterUuid
-    var rateSpeedMasterUuid by DaoLookEffects.rateSpeedMasterUuid
-    var seconds by DaoLookEffects.seconds
-    var amount by DaoLookEffects.amount
-    var direction by DaoLookEffects.direction
-    var runs by DaoLookEffects.runs
-    var spread by DaoLookEffects.spread
-    var wings by DaoLookEffects.wings
-    var segments by DaoLookEffects.segments
-    var parts by DaoLookEffects.parts
-    var sortOrder by DaoLookEffects.sortOrder
-    var uuid by DaoLookEffects.uuid
+    var look by DaoLook referencedOn DaoLookFx.look
+    var targetType by DaoLookFx.targetType
+    var targetKey by DaoLookFx.targetKey
+    var fxType by DaoLookFx.fxType
+    var family by DaoLookFx.family
+    var attribute by DaoLookFx.attribute
+    var cycle by DaoLookFx.cycle
+    var blendMode by DaoLookFx.blendMode
+    var order by DaoLookFx.order
+    var phaseOffset by DaoLookFx.phaseOffset
+    var elementMode by DaoLookFx.elementMode
+    var elementFilter by DaoLookFx.elementFilter
+    var timing by DaoLookFx.timing
+    var parameters by DaoLookFx.parameters
+    var speedMasterUuid by DaoLookFx.speedMasterUuid
+    var rateSpeedMasterUuid by DaoLookFx.rateSpeedMasterUuid
+    var seconds by DaoLookFx.seconds
+    var amount by DaoLookFx.amount
+    var direction by DaoLookFx.direction
+    var runs by DaoLookFx.runs
+    var spread by DaoLookFx.spread
+    var wings by DaoLookFx.wings
+    var segments by DaoLookFx.segments
+    var parts by DaoLookFx.parts
+    var sortOrder by DaoLookFx.sortOrder
+    var uuid by DaoLookFx.uuid
 
     /** The effect's own target, or null when the discriminator is unknown — [DEFERRED_TARGET_TYPE] among them. */
-    val target: EffectTargetRef?
-        get() = EffectTargetRef.ofOrNull(targetType, targetKey)
+    val target: FxTargetsRef?
+        get() = FxTargetsRef.ofOrNull(targetType, targetKey)
 }

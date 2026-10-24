@@ -5,7 +5,7 @@ import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookSaveState } from './LookRowStore'
-import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
 import { useLocalValueCount } from './useLocalFamilyCounts'
 import { useProgrammerScope, useProgrammerScopeActions } from './ProgrammerScope'
 import type { LookSaveState } from './LookRowStore'
@@ -64,7 +64,7 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
   const { data: layers } = useProgrammerLayersQuery()
   const saveState = useLookSaveState()
   const localCount = useLocalValueCount()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
 
   if (!scope || !actions) return null
 
@@ -148,11 +148,11 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
             <LookNameBadge
               name={layer?.source.name}
               missing={layers != null && layer == null}
-              isTemplate={layer?.source.kind === 'TEMPLATE'}
+              isPalette={layer?.source.kind === 'PALETTE'}
               // From the provider rather than a query of this band's own: the grid and the notices
               // need the same answer, and asking three times would be three subscriptions to one
               // list.
-              isEffect={focusedTemplate?.kind === 'effect'}
+              isFx={focusedPalette?.kind === 'fx'}
               className="border-none bg-transparent px-0"
             />
             {/* The phone's save state: the word beside the pill is hidden below `@[600px]` and

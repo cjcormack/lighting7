@@ -1,15 +1,15 @@
-import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
+import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
 
 /**
  * The client half of the speed-master routing/follow model — the mirror of lighting7's
  * `models/speedMasters.kt`, in the same spirit as `lib/attributeFamily.ts` and
- * `lib/templateIntent.ts`. Pure: no React, no queries.
+ * `lib/paletteIntent.ts`. Pure: no React, no queries.
  *
  * Two facts a master can carry beyond its name and tempo:
  *
  * - a **usage**, the effect-library `category` this master is the apply-time default for. A
  *   busked effect with no explicit master is stamped with the usage-matching master's uuid at
- *   the moment it is created (`resolveSpeedMasterForCategory`); nothing resolves usage later,
+ *   the moment it is created (`resolveSpeedMasterForFamily`); nothing resolves usage later,
  *   and a null `speedMasterUuid` still means master 1 everywhere, forever.
  * - a **follow link** to another master, so that master's clock drives this one: the follower
  *   ticks — and beats — at `num/den` of its leader's rate, in phase with it. The server owns the
@@ -24,15 +24,15 @@ import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
  * a tempo: `controls` (a settings slider has no beat) and `steps` (the Steps FX's own, which names
  * no family — each is stamped by the family it steps instead). Effects in `controls` land on master
  * 1, which is what an unmatched category is defined to do. `speedMasterModel.test.ts` pins this against
- * `EFFECT_CATEGORY_INFO`, and lighting7's `GlossaryVocabularyTest` pins the server's
+ * `FX_FAMILY_INFO`, and lighting7's `GlossaryVocabularyTest` pins the server's
  * copy against the shipped `.fx.kts` files — the two ends of one list.
  */
-export const SPEED_MASTER_USAGES = ['intensity', 'colour', 'position', 'beam'] as const
+export const SPEED_MASTER_FAMILIES = ['intensity', 'colour', 'position', 'beam'] as const
 
-export type SpeedMasterUsage = (typeof SPEED_MASTER_USAGES)[number]
+export type SpeedMasterFamily = (typeof SPEED_MASTER_FAMILIES)[number]
 
-export function isSpeedMasterUsage(value: string | null | undefined): value is SpeedMasterUsage {
-  return value != null && (SPEED_MASTER_USAGES as readonly string[]).includes(value)
+export function isSpeedMasterFamily(value: string | null | undefined): value is SpeedMasterFamily {
+  return value != null && (SPEED_MASTER_FAMILIES as readonly string[]).includes(value)
 }
 
 /**
@@ -42,11 +42,11 @@ export function isSpeedMasterUsage(value: string | null | undefined): value is S
  */
 export function usageLabel(usage: string | null | undefined): string | null {
   if (usage == null) return null
-  return EFFECT_CATEGORY_INFO[usage]?.label ?? usage
+  return FX_FAMILY_INFO[usage]?.label ?? usage
 }
 
 /** One-line description for the usage select, so the sheet says what routing *does*. */
-export function usageOptionLabel(usage: SpeedMasterUsage): string {
+export function usageOptionLabel(usage: SpeedMasterFamily): string {
   const label = usageLabel(usage) ?? usage
   return usage === 'position' ? `${label} / movement FX` : `${label} FX`
 }
@@ -228,10 +228,10 @@ export function derivedBpm(leaderBpm: number, num: number, den: number): number 
   return (leaderBpm * num) / den
 }
 
-/** The shape routing needs: a uuid and the usage it claims. */
+/** The shape routing needs: a uuid and the family it claims. */
 export interface RoutableMaster {
   uuid?: string | null
-  usage?: string | null
+  family?: string | null
 }
 
 /**
@@ -246,12 +246,12 @@ export interface RoutableMaster {
  * Usage is unique per project (the server 409s a second claimant), so "the first match" is "the
  * only match" in practice; taking the first keeps this total even if a stale cache shows two.
  */
-export function resolveSpeedMasterForCategory(
+export function resolveSpeedMasterForFamily(
   masters: readonly RoutableMaster[] | undefined,
   category: string | null | undefined,
 ): string | null {
   if (category == null) return null
-  return masters?.find((m) => m.usage === category && m.uuid != null)?.uuid ?? null
+  return masters?.find((m) => m.family === category && m.uuid != null)?.uuid ?? null
 }
 
 /**

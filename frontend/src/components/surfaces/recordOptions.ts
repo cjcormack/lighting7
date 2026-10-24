@@ -1,6 +1,6 @@
 import { useMemo } from "react"
 import { useLookListQuery } from "@/store/looks"
-import { useTemplateListQuery } from "@/store/templates"
+import { usePaletteListQuery } from "@/store/palettes"
 import { useBuskPagesQuery } from "@/store/busk"
 import { allBanks, forEachPad } from "@/lib/buskLayout"
 import { padFaceOf } from "@/components/busking/padFace"
@@ -37,7 +37,7 @@ export interface RecordOption {
 
 export interface RecordBindingOptions {
   looks: RecordOption[]
-  templates: RecordOption[]
+  palettes: RecordOption[]
   /** Every pad on every page, flat: a pad is addressed by uuid and its page is only context. */
   pads: RecordOption[]
   /**
@@ -53,7 +53,7 @@ export interface RecordBindingOptions {
 /** No library loaded yet, or nothing to resolve — a stable empty answer callers can default to. */
 export const EMPTY_RECORD_OPTIONS: RecordBindingOptions = {
   looks: [],
-  templates: [],
+  palettes: [],
   pads: [],
   banks: [],
   pages: [],
@@ -62,7 +62,7 @@ const EMPTY = EMPTY_RECORD_OPTIONS
 
 export function useRecordBindingOptions(projectId: number): RecordBindingOptions {
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: pages } = useBuskPagesQuery(projectId)
 
   return useMemo(() => {
@@ -73,10 +73,10 @@ export function useRecordBindingOptions(projectId: number): RecordBindingOptions
         label: look.name,
         // What an `applyLook` binding will actually do on a button, said where the choice is made:
         // a deferred effect has no own targets, so the write boundary refuses it by name.
-        detail: look.hasDeferredEffects ? "needs a selection — cannot go on a button" : null,
-        disabled: look.hasDeferredEffects,
+        detail: look.hasDeferredFx ? "needs a selection — cannot go on a button" : null,
+        disabled: look.hasDeferredFx,
       })),
-      templates: (templates ?? []).map((template) => ({
+      palettes: (templates ?? []).map((template) => ({
         uuid: template.uuid,
         label: template.name,
         detail: template.family?.toLowerCase() ?? null,
@@ -126,7 +126,7 @@ export function recordTargetName(
     case "applyLook":
       return find(options.looks, target.lookUuid)
     case "pressPalette":
-      return find(options.templates, target.paletteUuid)
+      return find(options.palettes, target.paletteUuid)
     case "pressPad":
       return find(options.pads, target.padUuid)
     // The hand's two uuid-bearing targets. `handDrop` names no record and falls to `null` below,

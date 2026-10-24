@@ -31,20 +31,20 @@ function route(name: string) {
       return {
         unwrap: () =>
           verdict.ok
-            ? Promise.resolve({ action: toggleAction.current, effectCount: 0, skippedFamilies: [] })
+            ? Promise.resolve({ action: toggleAction.current, fxCount: 0, skippedFamilies: [] })
             : Promise.reject(new Error('refused')),
       }
     },
   ]
 }
-vi.mock('@/store/templates', () => ({
-  useToggleTemplateMutation: route('toggleTemplate'),
-  useApplyTemplateMutation: route('applyTemplate'),
+vi.mock('@/store/palettes', () => ({
+  useTogglePaletteMutation: route('togglePalette'),
+  useApplyPaletteMutation: route('applyPalette'),
 }))
 vi.mock('@/store/looks', () => ({
   useToggleLookMutation: route('toggleLook'),
   useApplyLookMutation: route('applyLook'),
-  useAbsorbLookEffectsMutation: route('absorb'),
+  useAbsorbLookFxMutation: route('absorb'),
 }))
 vi.mock('react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('react-router')>()),
@@ -89,12 +89,12 @@ import { HandPlaceStrip } from './HandTarget'
  */
 const wrap = (ui: ReactNode) => render(<Provider store={store}>{ui}</Provider>)
 
-const hold = (kind: 'TEMPLATE' | 'LOOK' | 'CUE', over: Record<string, unknown> = {}) => ({
+const hold = (kind: 'PALETTE' | 'LOOK' | 'CUE', over: Record<string, unknown> = {}) => ({
   kind,
   id: 8,
   uuid: `${kind.toLowerCase()}-uuid-8`,
-  template: kind === 'TEMPLATE' ? { id: 8, name: 'Amber', kind: 'value', isGeneric: true, rows: [] } : null,
-  look: kind === 'LOOK' ? { id: 8, name: 'Warm Wash', effectCount: 0, rowCount: 2 } : null,
+  palette: kind === 'PALETTE' ? { id: 8, name: 'Amber', kind: 'value', isGeneric: true, rows: [] } : null,
+  look: kind === 'LOOK' ? { id: 8, name: 'Warm Wash', fxCount: 0, rowCount: 2 } : null,
   cue: kind === 'CUE' ? { id: 8, name: 'Verse', entries: [{ stackId: 1, stackName: 'Act I', entryId: 108, cueNumber: '3' }] } : null,
   pickedUpOn: null,
   holdId: 1,
@@ -114,7 +114,7 @@ const cue = (): Cue =>
     layers: [
       {
         lookId: 3,
-        templateId: null,
+        paletteId: null,
         sortOrder: 1,
         enabled: true,
         targets: [],
@@ -129,7 +129,7 @@ const cue = (): Cue =>
         randomWindowMs: null,
       },
     ],
-    adHocEffects: [],
+    adHocFx: [],
     propertyAssignments: [],
     triggers: [],
     autoAdvance: false,
@@ -183,15 +183,15 @@ describe('the programmer’s layer stack', () => {
 
   it('presses the record onto the desk selection, then drops naming it', async () => {
     selection.targets = [{ type: 'fixture', key: 'par-1' }]
-    await withHold(<HandProgrammerLayerStrip />, hold('TEMPLATE'), true)
+    await withHold(<HandProgrammerLayerStrip />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
-    await waitFor(() => expect(handWs.dropped).toEqual(['template-uuid-8']))
+    await waitFor(() => expect(handWs.dropped).toEqual(['palette-uuid-8']))
     expect(pressed).toEqual([
       {
-        route: 'toggleTemplate',
-        args: { projectId: 1, templateId: 8, targets: [{ type: 'fixture', key: 'par-1' }], propertyMask: undefined, families: undefined },
+        route: 'togglePalette',
+        args: { projectId: 1, paletteId: 8, targets: [{ type: 'fixture', key: 'par-1' }], propertyMask: undefined, families: undefined },
       },
     ])
   })
@@ -261,7 +261,7 @@ describe('a cue’s stack', () => {
   })
 
   it('undoes by patching back the layers read BEFORE the place', async () => {
-    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('TEMPLATE'), true)
+    await withHold(<HandCueLayerStrip projectId={1} cue={cue()} />, hold('PALETTE'), true)
     await act(async () => {
       screen.getByRole('button', { name: /Place “/ }).click()
     })
@@ -301,7 +301,7 @@ describe('a cue’s stack', () => {
       effects: [],
       pressLayer,
       landValues: vi.fn(() => 0),
-      pickEffect: vi.fn(() => Promise.resolve(true)),
+      pickFx: vi.fn(() => Promise.resolve(true)),
     }
     const host = { targets: [{ type: 'group' as const, key: 'Front' }] }
     await withHold(

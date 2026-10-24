@@ -11,7 +11,7 @@ import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-l
 import { createFxSelectionStore, FxSelectionStoreContext } from '@/components/fixtures-list/fxSelection'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
-import { FocusedTemplateLayerProvider } from '@/components/programmer/FocusedTemplateLayer'
+import { FocusedPaletteLayerProvider } from '@/components/programmer/FocusedPaletteLayer'
 import { ProgrammerRail } from '@/components/programmer/ProgrammerRail'
 import { ProgrammerScopeProvider } from '@/components/programmer/ProgrammerScope'
 import {
@@ -301,7 +301,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
           layer has no `LookRowStore` (that one owns a row draft and engages only for a LOOK), and
           the grid, the notices and the scope band all need to know what it holds. */}
       <LookRowStoreProvider projectId={projectId}>
-        <FocusedTemplateLayerProvider projectId={projectId}>
+        <FocusedPaletteLayerProvider projectId={projectId}>
           <EditorContextProvider value={{ kind: 'live' }}>
             <ProgrammerWorkspace
               header={
@@ -345,7 +345,7 @@ const ProgrammerBody = memo(function ProgrammerBody({ projectId }: { projectId: 
               rail={<ProgrammerRail projectId={projectId} />}
             />
           </EditorContextProvider>
-        </FocusedTemplateLayerProvider>
+        </FocusedPaletteLayerProvider>
       </LookRowStoreProvider>
     </ProgrammerScopeProvider>
   )

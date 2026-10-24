@@ -161,11 +161,11 @@ export function defaultBuskAddTarget(projectId: number, pages: BuskAddPage[]): B
 
 /** The `AddBuskPadRequest` body for a record — exactly one id set. */
 export function buskAddBody(record: BuskAddRecord): {
-  templateId?: number
+  paletteId?: number
   lookId?: number
   cueId?: number
 } {
-  if (record.kind === 'TEMPLATE') return { templateId: record.id }
+  if (record.kind === 'PALETTE') return { paletteId: record.id }
   if (record.kind === 'LOOK') return { lookId: record.id }
   return { cueId: record.id }
 }

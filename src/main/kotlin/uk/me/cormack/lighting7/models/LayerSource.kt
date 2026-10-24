@@ -9,11 +9,11 @@ import java.util.UUID
  * Session 3 makes a layer's referent polymorphic. Before it, "layer" and "Look layer" were the same
  * phrase and the fields were `lookId` / `lookUuid` / `lookName`; a layer can now track a **template**
  * instead, and the two are genuinely different things rather than one thing with a flag — see
- * [DaoTemplates].
+ * [DaoPalettes].
  */
 enum class LayerSourceKind {
     LOOK,
-    TEMPLATE,
+    PALETTE,
 }
 
 /**
@@ -35,12 +35,12 @@ data class LayerSource(
     val uuid: UUID,
     val name: String,
 ) {
-    val isTemplate: Boolean get() = kind == LayerSourceKind.TEMPLATE
+    val isPalette: Boolean get() = kind == LayerSourceKind.PALETTE
 
     companion object {
         fun look(id: Int, uuid: UUID, name: String) = LayerSource(LayerSourceKind.LOOK, id, uuid, name)
-        fun template(id: Int, uuid: UUID, name: String) =
-            LayerSource(LayerSourceKind.TEMPLATE, id, uuid, name)
+        fun palette(id: Int, uuid: UUID, name: String) =
+            LayerSource(LayerSourceKind.PALETTE, id, uuid, name)
     }
 
     /** The wire shape: a uuid travels as a String, matching every other DTO in this codebase. */
@@ -56,7 +56,7 @@ data class LayerSource(
  */
 @Serializable
 data class LayerSourceDto(
-    /** `LOOK` or `TEMPLATE`. */
+    /** `LOOK` or `PALETTE`. */
     val kind: String,
     val id: Int,
     val uuid: String,

@@ -7,7 +7,7 @@ import {
   fxHomeOf,
   fxStateOf,
   getProgrammerTable,
-  layerEffectState,
+  layerFxState,
   layerMoveOf,
   matchesFilter,
   nextSort,
@@ -108,7 +108,7 @@ describe('sorting and filtering', () => {
 })
 
 describe('the rows the rail shows', () => {
-  const layer = (layerId: number, kind: 'LOOK' | 'TEMPLATE'): ProgrammerLayer => ({
+  const layer = (layerId: number, kind: 'LOOK' | 'PALETTE'): ProgrammerLayer => ({
     layerId,
     source: { kind, id: layerId, uuid: `u${layerId}`, name: `L${layerId}` },
     sortOrder: layerId,
@@ -120,7 +120,7 @@ describe('the rows the rail shows', () => {
   })
 
   it('lists every layer top wins, numbered by its place in the stack', () => {
-    const stack = [layer(1, 'LOOK'), layer(2, 'TEMPLATE'), layer(3, 'LOOK'), layer(4, 'TEMPLATE')]
+    const stack = [layer(1, 'LOOK'), layer(2, 'PALETTE'), layer(3, 'LOOK'), layer(4, 'PALETTE')]
     expect(stackLayers(stack).map((e) => [e.layer.layerId, e.position])).toEqual([
       [4, 4],
       [3, 3],
@@ -130,7 +130,7 @@ describe('the rows the rail shows', () => {
   })
 
   it('reads a drag in the table’s top-first order as the desk’s bottom-first move', () => {
-    const stack = [layer(1, 'LOOK'), layer(2, 'TEMPLATE'), layer(3, 'LOOK'), layer(4, 'TEMPLATE')]
+    const stack = [layer(1, 'LOOK'), layer(2, 'PALETTE'), layer(3, 'LOOK'), layer(4, 'PALETTE')]
     const id = (l: ProgrammerLayer) => `layer:${l.layerId}`
     // Drawn: local, 4, 3, 2, 1. The bottom layer dragged to the top goes to the end of the array.
     expect(layerMoveOf(stack, ['local', 'layer:1', 'layer:4', 'layer:3', 'layer:2'], id)).toEqual({ layerId: 1, toIndex: 3 })
@@ -146,9 +146,9 @@ describe('the rows the rail shows', () => {
   })
 
   it('reads a layer’s effect as spent only once every instance it spawned is', () => {
-    expect(layerEffectState(4, [{ programmerLayerId: 4, spent: true }])).toBe('spent')
-    expect(layerEffectState(4, [{ programmerLayerId: 4, spent: true }, { programmerLayerId: 4 }])).toBe('running')
-    expect(layerEffectState(4, [{ programmerLayerId: 5, spent: true }])).toBeNull()
+    expect(layerFxState(4, [{ programmerLayerId: 4, spent: true }])).toBe('spent')
+    expect(layerFxState(4, [{ programmerLayerId: 4, spent: true }, { programmerLayerId: 4 }])).toBe('running')
+    expect(layerFxState(4, [{ programmerLayerId: 5, spent: true }])).toBeNull()
   })
 
   it('files an effect where the rail’s home badge does', () => {

@@ -31,7 +31,7 @@ abstract class FxCalcScript(
     /** Position in the effect cycle, from 0.0 (start) to 1.0 (end) */
     val phase: Double,
     /** Distribution metadata (group size, member index, offsets) */
-    val context: EffectContext,
+    val context: FxContext,
     /** Typed parameter accessor with pre-parsed values */
     val params: TypedParams,
 )
@@ -40,6 +40,7 @@ object FxCalcScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
+            "uk.me.cormack.lighting7.models.Timing",
             "java.awt.Color",
             "kotlin.math.*",
         )
@@ -82,7 +83,7 @@ abstract class FxStatefulCalcScript(
     /** Milliseconds since the last tick (0 on first tick) */
     val deltaMs: Long,
     /** Distribution metadata (group size, member index, offsets) */
-    val context: EffectContext,
+    val context: FxContext,
     /** Typed parameter accessor with pre-parsed values */
     val params: TypedParams,
     /** Persistent state map — survives across calculate calls for this effect instance */
@@ -93,6 +94,7 @@ object FxStatefulCalcScriptConfiguration : ScriptCompilationConfiguration(
     {
         defaultImports(
             "uk.me.cormack.lighting7.fx.*",
+            "uk.me.cormack.lighting7.models.Timing",
             "java.awt.Color",
             "kotlin.math.*",
         )

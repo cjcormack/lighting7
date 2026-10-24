@@ -16,7 +16,7 @@ import uk.me.cormack.lighting7.ai.ToolExecutionResult
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -82,7 +82,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         )
         assertTrue(created.success, created.result)
         assertEquals(5, created.json()["valueCount"]!!.jsonPrimitive.int)
-        assertEquals(0, created.json()["effectCount"]!!.jsonPrimitive.int)
+        assertEquals(0, created.json()["fxCount"]!!.jsonPrimitive.int)
 
         val rows = storedRows("Pre-show")
         assertEquals(
@@ -211,7 +211,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `apply_look lands the Look whole, whatever targets a call names`() {
+    fun `apply_look lands the Look whole, and refuses targets by name`() {
         patchRig()
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val created = call(
@@ -221,7 +221,11 @@ class McpLookValuesTest : RouteIntegrationTest() {
         assertTrue(created.success, created.result)
         val lookId = created.json()["lookId"]!!.jsonPrimitive.int
 
-        val on = call("apply_look", """{"lookId":$lookId,"targets":[{"type":"fixture","key":"hex-1"}]}""")
+        val targeted = call("apply_look", """{"lookId":$lookId,"targets":[{"type":"fixture","key":"hex-1"}]}""")
+        assertFalse(targeted.success)
+        assertTrue("takes no targets" in targeted.result, targeted.result)
+
+        val on = call("apply_look", """{"lookId":$lookId}""")
         assertTrue(on.success, on.result)
         assertEquals("applied", on.json()["action"]!!.jsonPrimitive.content)
         assertEquals(200, controller.getEffectiveValue(70).toInt(), "on its own fixture, not the one named")
@@ -372,30 +376,30 @@ class McpLookValuesTest : RouteIntegrationTest() {
     @Test
     fun `create_look and update_look refuse an effect with no target, and write one with a target`() {
         patchRig()
-        val settings = """"effectType":"Pulse","category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}"""
+        val settings = """"fxType":"Pulse","family":"intensity","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}"""
         fun storedTargets() = transaction(state.database) {
             DaoLook.find { DaoLooks.name eq "Throb" }.single().effects.map { it.targetType to it.targetKey }
         }
         val before = lookCount()
-        val refused = call("create_look", """{"name":"Throb","effects":[{$settings}]}""")
+        val refused = call("create_look", """{"name":"Throb","fx":[{$settings}]}""")
         assertFalse(refused.success)
-        assertTrue("effects[0] is missing 'targetType'" in refused.description, refused.description)
+        assertTrue("fx[0] is missing 'targetType'" in refused.description, refused.description)
         assertEquals(before, lookCount(), "nothing is written")
 
         // A Look effect names its own target, so the Look needs no selection to apply it on.
-        val look = call("create_look", """{"name":"Throb","effects":[{"targetType":"fixture","targetKey":"foh-1",$settings}],"apply":true}""")
+        val look = call("create_look", """{"name":"Throb","fx":[{"targetType":"fixture","targetKey":"foh-1",$settings}],"apply":true}""")
         assertTrue(look.success, look.result)
         assertEquals("applied", look.json()["action"]!!.jsonPrimitive.content)
         assertEquals(listOf("fixture" to "foh-1"), storedTargets())
         val lookId = look.json()["lookId"]!!.jsonPrimitive.int
 
-        val bare = call("update_look", """{"lookId":$lookId,"effects":[{$settings}]}""")
+        val bare = call("update_look", """{"lookId":$lookId,"fx":[{$settings}]}""")
         assertFalse(bare.success)
-        assertTrue("effects[0] is missing 'targetType'" in bare.description, bare.description)
+        assertTrue("fx[0] is missing 'targetType'" in bare.description, bare.description)
         assertEquals(listOf("fixture" to "foh-1"), storedTargets(), "the refused edit wrote nothing")
 
         val targets = """[{"type":"fixture","key":"foh-1"},{"type":"fixture","key":"foh-2"}]"""
-        val selection = call("update_look", """{"lookId":$lookId,"effects":[{"targets":$targets,$settings}]}""")
+        val selection = call("update_look", """{"lookId":$lookId,"fx":[{"targets":$targets,$settings}]}""")
         assertTrue(selection.success, selection.result)
         assertEquals("selection", storedTargets().single().first)
 
@@ -413,7 +417,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         assertTrue(created.success, created.result)
         val lookId = created.json()["lookId"]!!.jsonPrimitive.int
         transaction(state.database) {
-            DaoLookEffect.new {
+            DaoLookFxEntity.new {
                 look = DaoLook[lookId]
                 targetType = "fixture"
                 targetKey = "foh-1"

@@ -180,7 +180,7 @@ private fun Application.startSentry(state: State) {
     if (InstallKind.fromEnv() == InstallKind.DEV) DevCommit.resolve()?.let(state.telemetry::adoptDevCommit)
     val metrics = MetricsReporter(
         midi = { state.midiLatencyTracker },
-        activeEffects = { state.showOrNull?.fxEngine?.activeEffectCount },
+        activeFx = { state.showOrNull?.fxEngine?.activeFxCount },
     )
     val sentry = SentryRuntime(state.telemetry, appDataDir().resolve("sentry"), installTags(state) ?: InstallTags("unknown", "unknown", false), metrics)
     sentry.applyNow(state.telemetry.enabled)

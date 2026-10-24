@@ -269,12 +269,12 @@ export function CueCardEditor({
                 +{targetCount - 4}
               </Badge>
             )}
-            {(cueData?.adHocEffects.length ?? 0) > 0 && (
+            {(cueData?.adHocFx.length ?? 0) > 0 && (
               <Badge
                 variant="outline"
                 className="text-[10px] px-1.5 py-0 border-amber-500/40 text-amber-500 bg-amber-500/10"
               >
-                {cueData!.adHocEffects.length} FX
+                {cueData!.adHocFx.length} FX
               </Badge>
             )}
           </div>

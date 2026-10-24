@@ -210,12 +210,12 @@ class FixtureGroupTest {
             add(createFixture(0))
             configure(
                 symmetricMode = SymmetricMode.MIRROR,
-                defaultDistribution = "CENTRE_OUT"
+                defaultOrder = "CENTRE_OUT"
             )
         }
 
         assertEquals(SymmetricMode.MIRROR, group.metadata.symmetricMode)
-        assertEquals("CENTRE_OUT", group.metadata.defaultDistributionName)
+        assertEquals("CENTRE_OUT", group.metadata.defaultOrderName)
     }
 
     @Test

@@ -17,7 +17,7 @@ package uk.me.cormack.lighting7.fx
  * in step with the effects it started beside. The reset pass has already put the layer below on the
  * property, as for a suppressed effect, so a held key shows the cooked value.
  *
- * Separate from [EffectSuppression], whose rule is unchanged: that one says what the programmer's
+ * Separate from [FxSuppression], whose rule is unchanged: that one says what the programmer's
  * *values* and a layer's stomp hold back, and Blind empties its programmer half. This says what Blind
  * itself holds — the band that rule exempts.
  *

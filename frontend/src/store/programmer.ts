@@ -343,7 +343,7 @@ export function programmerClearScenery(elementUuid?: string, fadeMs?: number) {
 export function programmerAddLayer(input: {
   /** Exactly one of these — a layer applies a Look or a template. */
   lookId?: number
-  templateId?: number
+  paletteId?: number
   targets?: CueTarget[]
   propertyMask?: string
   blendMode?: string

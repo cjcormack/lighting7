@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import type { ActiveFx } from '@/store/fixtureFx'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import { createSyncStore, sessionStorageArea } from './syncStore'
 
@@ -241,7 +241,7 @@ export const FX_HOME_LABELS: Readonly<Record<FxHome, string>> = {
 }
 
 /** `fxRows`' `homeOf`, as a partition: a layer's, the cue's, the programmer band's, or the show's. */
-export function fxHomeOf(effect: Pick<ActiveEffect, 'programmerLayerId' | 'cueId' | 'programmerOwned'>): FxHome {
+export function fxHomeOf(effect: Pick<ActiveFx, 'programmerLayerId' | 'cueId' | 'programmerOwned'>): FxHome {
   if (effect.programmerLayerId != null) return 'layer'
   if (effect.cueId != null) return 'cue'
   if (effect.programmerOwned) return 'yours'
@@ -255,7 +255,7 @@ export function parseFxHome(raw: string | null): FxHome | null {
 /** What an effect is doing, as the desk reports it — the State column and its sort. */
 export type FxState = 'running' | 'paused' | 'held' | 'spent' | 'leaving'
 
-export function fxStateOf(effect: Pick<ActiveEffect, 'isRunning' | 'spent' | 'leaving'>, heldByBlind: boolean): FxState {
+export function fxStateOf(effect: Pick<ActiveFx, 'isRunning' | 'spent' | 'leaving'>, heldByBlind: boolean): FxState {
   if (effect.spent === true) return 'spent'
   if (effect.leaving === true) return 'leaving'
   if (heldByBlind) return 'held'
@@ -323,9 +323,9 @@ export function layerMoveOf(
  * desk keeps a spent N-shot on its layer, painting nothing), `running` while any still runs, null for
  * a layer that spawned none.
  */
-export function layerEffectState(
+export function layerFxState(
   layerId: number,
-  effects: readonly Pick<ActiveEffect, 'programmerLayerId' | 'spent'>[],
+  effects: readonly Pick<ActiveFx, 'programmerLayerId' | 'spent'>[],
 ): 'running' | 'spent' | null {
   const own = effects.filter((effect) => effect.programmerLayerId === layerId)
   if (own.length === 0) return null

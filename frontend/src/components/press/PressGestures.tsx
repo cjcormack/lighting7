@@ -2,12 +2,12 @@ import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent, typ
 import { useNavigate } from 'react-router'
 import { Hand, Layers, ListChecks, Pencil, Undo2 } from 'lucide-react'
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
-import type { EffectPresence } from '@/components/busking/buskingTypes'
+import type { FxPresence } from '@/components/busking/buskingTypes'
 import { useLongPress, type LongPressHandlers } from '@/hooks/useLongPress'
 import type { PressGesture, PressInto } from '@/hooks/usePress'
 import { handPickUp } from '@/store/hand'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
  * The press **gestures** on a palette chip or pad, the same on every surface (apply-model plan D8,
@@ -53,7 +53,7 @@ export function usePressGestures(
  */
 export function tapVerb(
   into: PressInto,
-  presence: EffectPresence,
+  presence: FxPresence,
   hasTargets = true,
   ownHeads = true,
 ): { label: string; gesture: PressGesture } {
@@ -74,14 +74,14 @@ export function tapVerb(
 }
 
 /** The chip's and the pad's shared `title`: every gesture stated, since ⌥click is not guessed. */
-export function templatePressTitle(template: TemplateSummary, into: PressInto): string {
+export function palettePressTitle(template: PaletteSummary, into: PressInto): string {
   if (into.kind === 'look') return `Click to write “${template.name}” into ${into.lookName} · hold or right-click for more`
   if (into.kind === 'cue') {
-    return template.kind === 'effect'
+    return template.kind === 'fx'
       ? `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · hold or right-click for more`
       : `Click to put “${template.name}” on in ${into.cueLabel} as a layer, or take it off · ⌥click to set its values as ${into.cueLabel}’s own · hold or right-click for more`
   }
-  return template.kind === 'effect'
+  return template.kind === 'fx'
     ? `Click to run “${template.name}” as a layer that tracks it · ⌥click to run a copy · hold or right-click for more`
     : `Click to put “${template.name}” on as a layer that tracks it · ⌥click to set its values · hold or right-click for more`
 }
@@ -99,7 +99,7 @@ export function templatePressTitle(template: TemplateSummary, into: PressInto): 
  */
 export function PalettePressButton({
   projectId,
-  template,
+  palette: template,
   into,
   presence,
   hasTargets = true,
@@ -107,13 +107,13 @@ export function PalettePressButton({
   children,
 }: {
   projectId: number
-  template: TemplateSummary
+  palette: PaletteSummary
   into: PressInto
   /** The ring the button draws, which decides the menu's first verb. */
-  presence: EffectPresence
+  presence: FxPresence
   /** False when the press carries no targets — the ring cannot then say which way it goes. */
   hasTargets?: boolean
-  onGesture: (template: TemplateSummary, gesture: PressGesture) => void
+  onGesture: (template: PaletteSummary, gesture: PressGesture) => void
   /** The button itself, given the gesture handlers to spread. */
   children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
 }) {
@@ -128,7 +128,7 @@ export function PalettePressButton({
       <PopoverContent align="start" className="w-auto min-w-44 p-1">
         <PalettePressMenu
           projectId={projectId}
-          template={template}
+          palette={template}
           into={into}
           presence={presence}
           hasTargets={hasTargets}
@@ -146,7 +146,7 @@ export function PalettePressButton({
 /** A palette's menu: the tap's verb, *Apply as values*, *Pick up*, *Edit palette…*. Mounted only while open. */
 function PalettePressMenu({
   projectId,
-  template,
+  palette: template,
   into,
   presence,
   hasTargets,
@@ -154,9 +154,9 @@ function PalettePressMenu({
   onDone,
 }: {
   projectId: number
-  template: TemplateSummary
+  palette: PaletteSummary
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets: boolean
   onGesture: (gesture: PressGesture) => void
   onDone: () => void
@@ -169,11 +169,11 @@ function PalettePressMenu({
       presence={presence}
       hasTargets={hasTargets}
       ownHeads={!template.isGeneric}
-      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'effect')}
+      asValues={into.kind === 'programmer' || (into.kind === 'cue' && template.kind !== 'fx')}
       onGesture={onGesture}
       onPickUp={() => {
         onDone()
-        handPickUp('TEMPLATE', template.id)
+        handPickUp('PALETTE', template.id)
       }}
       onEdit={() => {
         onDone()
@@ -199,7 +199,7 @@ export function LookPressButton({
 }: {
   look: Pick<LookSummary, 'id' | 'name'>
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets?: boolean
   onGesture: (look: Pick<LookSummary, 'id' | 'name'>, gesture: PressGesture) => void
   children: (handlers: ReturnType<typeof usePressGestures>) => ReactElement
@@ -246,7 +246,7 @@ function PressMenuItems({
 }: {
   name: string
   into: PressInto
-  presence: EffectPresence
+  presence: FxPresence
   hasTargets: boolean
   /** A press with no targets lands on the record's own heads — a per-fixture palette, a Look. */
   ownHeads: boolean

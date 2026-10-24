@@ -13,7 +13,7 @@ import type { AvailableProperty } from '@/hooks/useTargetProperties'
  */
 
 const groups = [
-  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
+  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
 ]
 const fixtures = [{ key: 'par-1', name: 'PAR 1', typeKey: 'par', model: 'LED PAR 64' }]
 const stacks = [
@@ -38,10 +38,10 @@ const targetProperties: AvailableProperty[] = [
   { name: 'gobo', displayName: 'gobo', type: 'setting', category: 'gobo', continuous: false },
 ]
 const looks = [
-  { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredEffects: false },
+  { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredFx: false },
   // A Look with a deferred effect presses onto targets it does not have, so the write boundary
   // refuses it by name — the row is offered with no Apply chip rather than one that 400s.
-  { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
+  { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredFx: true },
 ]
 const templates = [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR', rows: [], isGeneric: true, kind: 'value' }]
 const pages = [
@@ -59,9 +59,9 @@ const pages = [
               {
                 id: 2, uuid: 'bank-1', name: 'keys', solo: true, flow: 'WRAP',
                 pads: [
-                  { id: 3, uuid: 'pad-amber', kind: 'TEMPLATE', template: { ...templates[0], name: 'Amber', rows: [], isGeneric: true, kind: 'value' } },
+                  { id: 3, uuid: 'pad-amber', kind: 'PALETTE', palette: { ...templates[0], name: 'Amber', rows: [], isGeneric: true, kind: 'value' } },
                   // No uuid: a pad this client minted and has not saved has nothing to bind to.
-                  { id: undefined, kind: 'TEMPLATE', template: { ...templates[0], name: 'Unsaved', rows: [], isGeneric: true, kind: 'value' } },
+                  { id: undefined, kind: 'PALETTE', palette: { ...templates[0], name: 'Unsaved', rows: [], isGeneric: true, kind: 'value' } },
                 ],
               },
             ],
@@ -87,7 +87,7 @@ vi.mock('@/store/fixtures', () => ({
 }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }) }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: templates }) }))
 vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: pages }) }))
 // The registry: two rows share a name — the duplicated-tab case D9 accepts — and get one row here.
 vi.mock('@/store/windows', () => ({
@@ -140,7 +140,7 @@ describe('SurfaceLibrary', () => {
       'encoder-bank',
       'stack:3',
       'cue:12',
-      'template:tmpl-red',
+      'palette:tmpl-red',
       'look:look-warm',
       'busk-page:page-verse',
       'desk',
@@ -195,13 +195,13 @@ describe('SurfaceLibrary', () => {
     // widening a 360px segmented control to seven.
     draw()
     fireEvent.click(screen.getByRole('button', { name: 'Looks' }))
-    expect(row('template:tmpl-red')).not.toBeNull()
+    expect(row('palette:tmpl-red')).not.toBeNull()
     expect(row('look:look-warm')).not.toBeNull()
     expect(row('busk-page:page-verse')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Desk' }))
     expect(row('busk-page:page-verse')).not.toBeNull()
-    expect(row('template:tmpl-red')).toBeNull()
+    expect(row('palette:tmpl-red')).toBeNull()
   })
 
   it('offers only the properties a fader can actually drive', () => {
@@ -257,11 +257,11 @@ describe('SurfaceLibrary', () => {
     // scoped like any property chip rather than surviving every filter as an `actionChip` would.
     draw()
     fireEvent.click(screen.getByRole('button', { name: 'Position' }))
-    expect(row('template:tmpl-red')).toBeNull()
+    expect(row('palette:tmpl-red')).toBeNull()
 
     fireEvent.click(screen.getByRole('button', { name: 'Colour' }))
-    expect(row('template:tmpl-red')).not.toBeNull()
-    expect(chipsOf('template:tmpl-red')).toContain('Press')
+    expect(row('palette:tmpl-red')).not.toBeNull()
+    expect(chipsOf('palette:tmpl-red')).toContain('Press')
   })
 
   it('narrows to one kind', () => {
@@ -321,7 +321,7 @@ describe('SurfaceLibrary — sections and colour', () => {
     expect(within(desk).getByText('Desk', { selector: 'div' })).toBeInTheDocument()
     expect(within(desk).getByTestId('library-row:selection')).toBeInTheDocument()
     expect(within(desk).getByTestId('library-row:busk-page:page-verse')).toBeInTheDocument()
-    expect(within(screen.getByTestId('library-section:look')).getByTestId('library-row:template:tmpl-red')).toBeInTheDocument()
+    expect(within(screen.getByTestId('library-section:look')).getByTestId('library-row:palette:tmpl-red')).toBeInTheDocument()
   })
 
   it('drops the heading under a kind filter, where the control already says it', () => {

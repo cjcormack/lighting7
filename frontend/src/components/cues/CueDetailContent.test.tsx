@@ -3,10 +3,10 @@ import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Cue, CueLayerDetail } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 vi.mock('@/store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({ data: LOOKS }),
@@ -14,8 +14,8 @@ vi.mock('@/store/looks', () => ({
 // Both libraries, because a layer row names either — and `describeStackSource` only paints a layer
 // as missing once *both* have landed, so a suite mocking one and not the other would show every
 // Look layer as broken.
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: TEMPLATES }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: TEMPLATES }),
 }))
 
 // The Values section fetches the cue's cook. Stubbed out: what this suite is about is the read
@@ -32,16 +32,16 @@ const LOOKS: LookSummary[] = [
     notes: null,
     families: ['COLOUR'],
     rowCount: 3,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 3,
-    hasDeferredEffects: false,
+    hasDeferredFx: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
   },
 ]
 
-const TEMPLATES: TemplateSummary[] = [
+const TEMPLATES: PaletteSummary[] = [
   {
     id: 4,
     uuid: 'ut4',
@@ -50,15 +50,15 @@ const TEMPLATES: TemplateSummary[] = [
     fadeDurationMs: null,
     family: 'COLOUR',
     isGeneric: true,
-    kind: 'effect',
+    kind: 'fx',
     requiredEmitters: [],
     rows: [],
-    effect: {
-      effectType: 'ColourWave',
-      category: 'colour',
-      beatDivision: 0.5,
+    fx: {
+      fxType: 'ColourWave',
+      family: 'colour',
+      cycle: 0.5,
       blendMode: 'OVERRIDE',
-      distribution: 'NORMAL',
+      order: 'NORMAL',
       parameters: {},
       timingSource: 'BEAT',
     },
@@ -91,7 +91,7 @@ function cue(over: Partial<Cue> = {}): Cue {
     cueNumberAuto: false,
     sortOrder: 0,
     layers: [],
-    adHocEffects: [],
+    adHocFx: [],
     propertyAssignments: [],
     triggers: [],
     ...over,

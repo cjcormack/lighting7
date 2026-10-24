@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { programmerPatchLayer } from '@/store/programmer'
 import { useLookRowStore } from './LookRowStore'
-import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
 import type { CueTarget } from '@/api/cuesApi'
 
 /**
@@ -16,7 +16,7 @@ import type { CueTarget } from '@/api/cuesApi'
  *
  * Reads only context, so it costs a mounted row nothing: the layer's target list rides on values the
  * grid is already holding rather than a per-row query subscription. **Both** layer contexts — a
- * focused Look layer's `LookRowStore` and a focused template layer's `FocusedTemplateLayer`, which
+ * focused Look layer's `LookRowStore` and a focused template layer's `FocusedPaletteLayer`, which
  * are mutually exclusive by construction. The template half is not optional: since a template
  * layer's grid became a read, an untargeted row there is painted dashed and non-editable, and
  * without this button that tone would name a state with no way out of it.
@@ -37,8 +37,8 @@ export function AddToTargetsButton({
   name: string
 }) {
   const store = useLookRowStore()
-  const focusedTemplate = useFocusedTemplateLayer()
-  const layer = store ?? focusedTemplate
+  const focusedPalette = useFocusedPaletteLayer()
+  const layer = store ?? focusedPalette
   // `targetedKeys === null` is "the source's own targets" — for a Look, every bound row lands where
   // it names, so there is nothing to widen. Reading it as "no targets" would put this button on
   // every row.

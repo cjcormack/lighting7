@@ -1,11 +1,11 @@
 /*---
 id: Sweep
 name: Sweep
-category: position
+family: position
 outputType: POSITION
-effectMode: STANDARD
+fxMode: STANDARD
 defaultDirection: BOUNCE
-defaultBeatDivision: 2.0
+defaultCycle: 2.0
 compatibleProperties: [position]
 parameters:
   - name: startPan

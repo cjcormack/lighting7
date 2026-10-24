@@ -51,7 +51,7 @@ export interface UpdateRelease {
 export interface LiveHint {
   showReady: boolean
   activeStackName?: string | null
-  activeEffectCount: number
+  activeFxCount: number
 }
 
 export interface ApplyOutcome {

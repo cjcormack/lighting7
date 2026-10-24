@@ -88,7 +88,7 @@ internal data class FocusRequest(
 @Serializable
 internal data class FocusResponse(
     val written: List<FocusWriteDto> = emptyList(),
-    val skipped: List<SpreadSkipDto> = emptyList(),
+    val skipped: List<FanSkipDto> = emptyList(),
 )
 
 /**
@@ -127,7 +127,7 @@ internal fun focusIntoProgrammer(
     }
     if (fadeMs != null && fadeMs < 0) return FocusOutcome.Invalid("fadeMs must not be negative")
 
-    val skipped = ArrayList<SpreadSkipDto>()
+    val skipped = ArrayList<FanSkipDto>()
     val heads = headsOf(state, targets, skipped)
     val placements = aimPlacements(state, project, heads.keys)
     val hints = groupHintsForTargets(state.show.fixtures, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
@@ -138,7 +138,7 @@ internal fun focusIntoProgrammer(
     for ((key, head) in heads) {
         val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
         when (val focus = focusHead(head, placements[key], at)) {
-            is HeadFocus.Skip -> skipped += SpreadSkipDto(target, focus.reason)
+            is HeadFocus.Skip -> skipped += FanSkipDto(target, focus.reason)
             is HeadFocus.Focused -> {
                 writes += ProgrammerWriter.PropertyWrite(head, focus.propertyName, focus.value, hints[key])
                 written += FocusWriteDto(target, focus.value.serialize(), roundCentimetre(focus.distanceM))

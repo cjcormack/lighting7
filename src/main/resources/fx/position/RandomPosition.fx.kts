@@ -1,9 +1,9 @@
 /*---
 id: RandomPosition
 name: Random Position
-category: position
+family: position
 outputType: POSITION
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [position]
 parameters:
   - name: panCenter

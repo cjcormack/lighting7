@@ -1,7 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fx.group.DistributionMemberInfo
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.models.Timing
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.testsupport.SineSlider
 import uk.me.cormack.lighting7.testsupport.WindowedSlider
 import kotlin.test.Test
@@ -27,7 +28,7 @@ class FxInstanceTest {
         groupSize: Int,
     ): Double {
         val dyn = dynamics
-        val offset = dyn.distributionStrategy.calculateOffset(memberInfo, groupSize)
+        val offset = dyn.order.calculateOffset(memberInfo, groupSize)
         return calculatePhaseForMember(tick, groupSize, dyn, offset)
     }
 
@@ -44,17 +45,17 @@ class FxInstanceTest {
     )
 
     @Test
-    fun `stepTiming false - beat division is total cycle time`() {
+    fun `timing false - beat division is total cycle time`() {
         val instance = FxInstance(
             effect = SineSlider(),
             target = stubTarget,
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
-        instance.stepTiming = false
-        instance.distributionStrategy = DistributionStrategy.NORMAL
+        instance.updateDynamics { it.copy(timing = Timing.CYCLE) }
+        instance.order = SpreadOrder.NORMAL
 
         val groupSize = 4
-        // One beat = 24 ticks. With stepTiming=false, one full cycle = 24 ticks.
+        // One beat = 24 ticks. With timing=false, one full cycle = 24 ticks.
         val phaseAt0 = instance.phaseForMember(tick(0), memberInfo(0, groupSize), groupSize)
         val phaseAt12 = instance.phaseForMember(tick(12), memberInfo(0, groupSize), groupSize)
 
@@ -65,41 +66,41 @@ class FxInstanceTest {
     }
 
     @Test
-    fun `stepTiming true - beat division scales by distinct slots`() {
+    fun `timing true - beat division scales by distinct slots`() {
         val instance = FxInstance(
             effect = WindowedSlider(value = 200u),
             target = stubTarget,
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
-        instance.stepTiming = true
-        instance.distributionStrategy = DistributionStrategy.NORMAL
+        instance.updateDynamics { it.copy(timing = Timing.HEAD) }
+        instance.order = SpreadOrder.NORMAL
 
         val groupSize = 4
-        // With stepTiming=true and NORMAL (4 distinct slots):
+        // With timing=true and NORMAL (4 distinct slots):
         // effectiveDivision = 1.0 * 4 = 4.0 beats = 96 ticks per cycle
         // At tick 24 (1 beat into 4-beat cycle), base phase = 24/96 = 0.25
         val phaseAt24 = instance.phaseForMember(tick(24), memberInfo(0, groupSize), groupSize)
         assertEquals(0.25, phaseAt24, 0.01)
 
-        // Compare with stepTiming=false: same tick should give phase 0.0 (24 % 24 = 0)
-        instance.stepTiming = false
+        // Compare with timing=false: same tick should give phase 0.0 (24 % 24 = 0)
+        instance.updateDynamics { it.copy(timing = Timing.CYCLE) }
         val phaseAt24NoStep = instance.phaseForMember(tick(24), memberInfo(0, groupSize), groupSize)
         assertEquals(0.0, phaseAt24NoStep, 0.01)
     }
 
     @Test
-    fun `stepTiming true with symmetric distribution uses distinctSlots not groupSize`() {
+    fun `timing true with symmetric distribution uses distinctSlots not groupSize`() {
         val instance = FxInstance(
             effect = WindowedSlider(value = 200u),
             target = stubTarget,
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
-        instance.stepTiming = true
-        instance.distributionStrategy = DistributionStrategy.CENTRE_OUT
+        instance.updateDynamics { it.copy(timing = Timing.HEAD) }
+        instance.order = SpreadOrder.CENTRE_OUT
 
         val groupSize = 4
         // CENTRE_OUT with 4 members has ceil(4/2) = 2 distinct slots
-        val distinctSlots = DistributionStrategy.CENTRE_OUT.distinctSlots(groupSize)
+        val distinctSlots = SpreadOrder.CENTRE_OUT.distinctSlots(groupSize)
         assertEquals(2, distinctSlots)
 
         // effectiveDivision = 1.0 * 2 = 2.0 beats = 48 ticks per cycle
@@ -111,41 +112,41 @@ class FxInstanceTest {
 
         // Compare: with NORMAL (4 slots), effectiveDivision = 4.0 beats = 96 ticks
         // At tick 24, base phase = 24/96 = 0.25
-        instance.distributionStrategy = DistributionStrategy.NORMAL
+        instance.order = SpreadOrder.NORMAL
         val phaseLinear = instance.phaseForMember(tick(24), memberInfo(0, groupSize), groupSize)
         assertEquals(0.25, phaseLinear, 0.01)
     }
 
     @Test
-    fun `stepTiming has no effect for single-element groups`() {
+    fun `timing has no effect for single-element groups`() {
         val instance = FxInstance(
             effect = SineSlider(),
             target = stubTarget,
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
-        instance.distributionStrategy = DistributionStrategy.NORMAL
+        instance.order = SpreadOrder.NORMAL
 
         val groupSize = 1
         val member = memberInfo(0, groupSize)
 
-        instance.stepTiming = true
+        instance.updateDynamics { it.copy(timing = Timing.HEAD) }
         val phaseWithStep = instance.phaseForMember(tick(12), member, groupSize)
 
-        instance.stepTiming = false
+        instance.updateDynamics { it.copy(timing = Timing.CYCLE) }
         val phaseWithoutStep = instance.phaseForMember(tick(12), member, groupSize)
 
         assertEquals(phaseWithStep, phaseWithoutStep, 0.001)
     }
 
     @Test
-    fun `defaultStepTiming is respected by FxInstance`() {
-        val staticEffect = WindowedSlider(value = 200u)
-        val sineEffect = SineSlider()
+    fun `defaultTiming is respected by FxInstance`() {
+        val staticFx = WindowedSlider(value = 200u)
+        val sineFx = SineSlider()
 
-        val staticInstance = FxInstance(effect = staticEffect, target = stubTarget, timing = FxTiming())
-        val sineInstance = FxInstance(effect = sineEffect, target = stubTarget, timing = FxTiming())
+        val staticInstance = FxInstance(effect = staticFx, target = stubTarget, timing = FxTiming())
+        val sineInstance = FxInstance(effect = sineFx, target = stubTarget, timing = FxTiming())
 
-        assertEquals(true, staticInstance.stepTiming)
-        assertEquals(false, sineInstance.stepTiming)
+        assertEquals(Timing.HEAD, staticInstance.dynamics.timing)
+        assertEquals(Timing.CYCLE, sineInstance.dynamics.timing)
     }
 }

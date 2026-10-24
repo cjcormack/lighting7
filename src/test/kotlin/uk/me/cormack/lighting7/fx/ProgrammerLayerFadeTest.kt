@@ -50,7 +50,7 @@ class ProgrammerLayerFadeTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
-            templateRegistry = { TemplateRegistry(loader = { null }) },
+            paletteRegistry = { PaletteRegistry(loader = { null }) },
             engine = { engine },
             store = store,
             state = { null },

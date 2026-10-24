@@ -137,17 +137,17 @@ fun maskAllows(mask: Set<PropertyMaskGroup>?, group: PropertyMaskGroup?): Boolea
     mask == null || (group != null && group in mask)
 
 /**
- * The attribute family an effect's declared [category] belongs to.
+ * The attribute family an effect's library [fxFamily] belongs to.
  *
- * The category vocabulary is the effect library's own (`"intensity"` / `"colour"` / `"position"` /
+ * The FX family vocabulary is the library's own (`"intensity"` / `"colour"` / `"position"` /
  * `"beam"` / `"steps"` / `"controls"`). `"steps"`, `"controls"` and anything
- * unrecognised answer null rather than defaulting into BEAM, so an unknown category under-banks
- * rather than mis-banks: a Steps FX's family is what it steps ([stepsFxCategory]).
+ * unrecognised answer null rather than defaulting into BEAM, so an unknown family under-banks
+ * rather than mis-banks: a Steps FX's family is what it steps ([stepsFxFamily]).
  *
  * One map for a Look's families, a palette's (fx-templates D4) and the press's family replacement:
  * two copies would be two answers to "which column of the busk view does this belong in".
  */
-internal fun familyForEffectCategory(category: String): PropertyMaskGroup? = when (category.lowercase()) {
+internal fun maskGroupForFxFamily(fxFamily: String): PropertyMaskGroup? = when (fxFamily.lowercase()) {
     "intensity" -> PropertyMaskGroup.INTENSITY
     "colour", "color" -> PropertyMaskGroup.COLOUR
     "position" -> PropertyMaskGroup.POSITION

@@ -10,7 +10,7 @@ const NAMES: TimelineNames = { target: (t) => t.key, element: () => ({ name: 'Ta
 function layer(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer {
   return {
     id,
-    source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
+    source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
     targets: [{ type: 'fixture', key: 'hex-1' }],
     heads: ['hex-1'],
     sortOrder: 0,
@@ -27,7 +27,7 @@ function layer(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer {
 }
 
 function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntry {
-  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], effects: [], scenery: [], trackedScenery: [], ...over }
+  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], fx: [], scenery: [], trackedScenery: [], ...over }
 }
 
 const TIMELINE: StackTimeline = {
@@ -51,13 +51,13 @@ const scenery = BY_ID.get(SCENERY)!
 describe('toggleOps', () => {
   it('turns an empty cell on with the settings of the nearest filled cell above', () => {
     expect(toggleOps(ORDER, GRID, palette, 102)).toEqual([
-      { op: 'layerOn', cueId: 2, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
+      { op: 'layerOn', cueId: 2, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
     ])
   })
 
   it('takes a filled cell off', () => {
     expect(toggleOps(ORDER, GRID, palette, 103)).toEqual([
-      { op: 'layerOff', cueId: 3, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
+      { op: 'layerOff', cueId: 3, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
     ])
   })
 
@@ -98,7 +98,7 @@ describe('a run’s end dragged', () => {
   it('down fills each empty cell it crosses with the dragged cell’s settings', () => {
     expect([...dragPlan(ORDER, GRID, palette, 101, 102)]).toEqual([[102, 'fill']])
     expect(dragOps(ORDER, GRID, palette, 103, 104)).toEqual([
-      { op: 'layerOn', cueId: 4, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
+      { op: 'layerOn', cueId: 4, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
     ])
   })
 
@@ -114,11 +114,11 @@ describe('a run’s end dragged', () => {
 })
 
 it('replacePlan swaps where the cue lacks the replacement and takes the old one off where it holds it', () => {
-  const from = { source: { kind: 'TEMPLATE' as const, id: 7 }, target: { type: 'fixture' as const, key: 'hex-1' } }
-  const to = { source: { kind: 'TEMPLATE' as const, id: 8 }, target: { type: 'fixture' as const, key: 'hex-1' } }
+  const from = { source: { kind: 'PALETTE' as const, id: 7 }, target: { type: 'fixture' as const, key: 'hex-1' } }
+  const to = { source: { kind: 'PALETTE' as const, id: 8 }, target: { type: 'fixture' as const, key: 'hex-1' } }
   const entries = [
     { cueId: 1, layers: [layer(1)] },
-    { cueId: 2, layers: [layer(2), layer(3, { source: { kind: 'TEMPLATE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] },
+    { cueId: 2, layers: [layer(2), layer(3, { source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] },
     { cueId: 3, layers: [] },
   ]
   expect(replacePlan(entries, [1, 2, 3], from, to)).toEqual({ swaps: [1], holds: [2] })

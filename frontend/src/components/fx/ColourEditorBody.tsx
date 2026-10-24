@@ -3,13 +3,13 @@ import { HexColorPicker } from 'react-colorful'
 import { ExtendedChannelSlider } from '../fixtures/ExtendedChannelSlider'
 import {
   isValidHexColour,
-  parseTemplateRefUuid,
+  parsePaletteRefUuid,
   COLOUR_PRESETS,
   type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
-import { FxColourTemplateRow } from './FxColourTemplates'
-import type { TemplateSummary } from '@/api/templatesApi'
+import { FxColourPaletteRow } from './FxColourPalettes'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 interface ColourEditorBodyProps {
   /**
@@ -31,9 +31,9 @@ interface ColourEditorBodyProps {
    * Pick a template: the caller receives a `pal:` reference string. Absent where a colour may not
    * name a palette — Colour Cycle's list takes literal colours only — and no palettes are offered.
    */
-  onPickTemplate?: (ref: string) => void
-  /** The offerable colour templates, from `useColourTemplates`. */
-  templates?: TemplateSummary[]
+  onPickPalette?: (ref: string) => void
+  /** The offerable colour templates, from `useColourPalettes`. */
+  palettes?: PaletteSummary[]
   /** Which extended channels the target fixtures actually have. */
   extendedChannels?: Partial<ExtendedChannelFlags>
 }
@@ -50,8 +50,8 @@ export function ColourEditorBody({
   colour,
   onColourChange,
   rawValue,
-  onPickTemplate,
-  templates,
+  onPickPalette,
+  palettes: templates,
   extendedChannels,
 }: ColourEditorBodyProps) {
   const [hexInput, setHexInput] = useState(colour.hex)
@@ -125,15 +125,15 @@ export function ColourEditorBody({
         ))}
       </div>
 
-      {onPickTemplate != null && (
-        <FxColourTemplateRow
-          templates={templates ?? []}
+      {onPickPalette != null && (
+        <FxColourPaletteRow
+          palettes={templates ?? []}
           currentHex={colour.hex}
           // The sliders below are part of the colour being dialled in, so *Save as template…* saves
           // them too — it used to keep the hex and silently drop the amber the operator had just set.
           currentEmitters={{ white: colour.white, amber: colour.amber, uv: colour.uv }}
-          selectedUuid={parseTemplateRefUuid(rawValue)}
-          onPick={onPickTemplate}
+          selectedUuid={parsePaletteRefUuid(rawValue)}
+          onPick={onPickPalette}
         />
       )}
 

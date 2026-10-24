@@ -13,16 +13,16 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.vendors.currentDialectMetadata
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoBuskPads
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoFxDefinitions
-import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoSpeedMasters
-import uk.me.cormack.lighting7.models.DaoTemplateEffects
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPaletteFx
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.TIMING_CYCLE
 import uk.me.cormack.lighting7.models.TIMING_HEAD
 import uk.me.cormack.lighting7.sync.LegacyNames
@@ -123,11 +123,11 @@ internal object TerminologyMigration {
      * the model, which would otherwise create an empty `palettes` of its own.
      */
     private val REBUILDS = listOf(
-        Rebuild("templates", DaoTemplates, emptyMap()),
-        Rebuild("template_rows", DaoTemplateRows, mapOf("palette_id" to "template_id", "attribute" to "property_name")),
-        Rebuild("template_effects", DaoTemplateEffects, FX_COLUMNS + ("palette_id" to "template_id")),
-        Rebuild("look_effects", DaoLookEffects, FX_COLUMNS),
-        Rebuild("cue_ad_hoc_effects", DaoCueAdHocEffects, FX_COLUMNS),
+        Rebuild("templates", DaoPalettes, emptyMap()),
+        Rebuild("template_rows", DaoPaletteRows, mapOf("palette_id" to "template_id", "attribute" to "property_name")),
+        Rebuild("template_effects", DaoPaletteFx, FX_COLUMNS + ("palette_id" to "template_id")),
+        Rebuild("look_effects", DaoLookFx, FX_COLUMNS),
+        Rebuild("cue_ad_hoc_effects", DaoCueAdHocFx, FX_COLUMNS),
         Rebuild("cue_property_assignments", DaoCuePropertyAssignments, mapOf("attribute" to "property_name")),
         Rebuild("look_rows", DaoLookRows, mapOf("attribute" to "property_name")),
         Rebuild(
@@ -238,13 +238,13 @@ internal object TerminologyMigration {
         val counts = LinkedHashMap<String, Int>()
         fun count(kind: String, n: Int) { if (n > 0) counts[kind] = (counts[kind] ?: 0) + n }
 
-        for (table in listOf(DaoLookEffects, DaoCueAdHocEffects, DaoTemplateEffects).map { it.tableName }) {
+        for (table in listOf(DaoLookFx, DaoCueAdHocFx, DaoPaletteFx).map { it.tableName }) {
             if (!tableExists(table)) continue
             count("Orders", renameColumn(table, "spread_order", LegacyNames::order))
             count("families", renameColumn(table, "family", LegacyNames::family))
             count("palette references", renameColumn(table, "parameters", ::parameters))
         }
-        for (table in listOf(DaoTemplateRows, DaoLookRows, DaoCuePropertyAssignments).map { it.tableName }) {
+        for (table in listOf(DaoPaletteRows, DaoLookRows, DaoCuePropertyAssignments).map { it.tableName }) {
             if (tableExists(table)) count("palette references", renameColumn(table, "value", LegacyNames::paletteRefs))
         }
         for (table in listOf(DaoSpeedMasters, DaoFxDefinitions).map { it.tableName }) {
@@ -303,11 +303,11 @@ internal object TerminologyMigration {
     /** What in a script's [source] this step renamed under it, each in words. */
     internal fun scriptEdits(source: String): List<String> = buildList {
         for ((old, now) in listOf("LINEAR" to "NORMAL", "CENTER_OUT" to "CENTRE_OUT", "EDGES_IN" to "CENTRE_IN")) {
-            if (Regex("DistributionStrategy\\.$old\\b").containsMatchIn(source)) add("DistributionStrategy.$old is now $now")
+            if (Regex("DistributionStrategy\\.$old\\b").containsMatchIn(source)) add("DistributionStrategy.$old is now SpreadOrder.$now")
         }
         if ("tmpl:" in source) add("a palette reference is pal:{uuid}, not tmpl:{uuid}")
-        if (Regex("category\\s*=\\s*\"dimmer\"").containsMatchIn(source)) add("the dimmer family is intensity")
-        if (Regex("category\\s*=\\s*\"palette\"").containsMatchIn(source)) add("the palette family is steps")
+        if (Regex("category\\s*=\\s*\"dimmer\"").containsMatchIn(source)) add("category = \"dimmer\" is now family = \"intensity\"")
+        if (Regex("category\\s*=\\s*\"palette\"").containsMatchIn(source)) add("category = \"palette\" is now family = \"steps\"")
     }
 
 }

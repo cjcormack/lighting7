@@ -3,7 +3,7 @@ import { javaRandom, rawValues, spreadDurations, spreadFractions, spreadPosition
 
 /**
  * The client-walked kinds' arithmetic (editor-kit plan D2, D15): the fraction rules mirrored from
- * lighting7's `fx/SpreadPlan.kt` as a table, the address walk, the byte lerp for Speed, and the
+ * lighting7's `fx/FanPlan.kt` as a table, the address walk, the byte lerp for Speed, and the
  * cue sheet's fade times along a curve. Nothing here touches an intent.
  */
 describe('spreadFractions', () => {
@@ -13,15 +13,15 @@ describe('spreadFractions', () => {
     expect(spreadFractions(2, 'LINE')).toEqual([0, 1])
   })
 
-  it('draws the four curves over eight heads as SpreadPlan.kt draws them', () => {
+  it('draws the four curves over eight heads as FanPlan.kt draws them', () => {
     const round = (xs: number[]) => xs.map((x) => Math.round(x * 100) / 100)
     expect(round(spreadFractions(8, 'LINE'))).toEqual([0, 0.14, 0.29, 0.43, 0.57, 0.71, 0.86, 1])
     expect(round(spreadFractions(8, 'MIRROR'))).toEqual([1, 0.71, 0.43, 0.14, 0.14, 0.43, 0.71, 1])
     expect(round(spreadFractions(8, 'ARROW'))).toEqual([0, 0.29, 0.57, 0.86, 0.86, 0.57, 0.29, 0])
     // Two mirrored fans meeting at the centre: `1 · .67 · .33 · 0 | 0 · .33 · .67 · 1`.
-    expect(round(spreadFractions(8, 'WINGS'))).toEqual([1, 0.67, 0.33, 0, 0, 0.33, 0.67, 1])
+    expect(round(spreadFractions(8, 'MIRROR_OUT'))).toEqual([1, 0.67, 0.33, 0, 0, 0.33, 0.67, 1])
     // An odd run's centre head belongs to both wings: `1 · .5 · 0 · .5 · 1`.
-    expect(spreadFractions(5, 'WINGS')).toEqual([1, 0.5, 0, 0.5, 1])
+    expect(spreadFractions(5, 'MIRROR_OUT')).toEqual([1, 0.5, 0, 0.5, 1])
   })
 
   it('orders as the desk does: Reverse runs the other way, Centre folds the ends together', () => {
@@ -33,7 +33,7 @@ describe('spreadFractions', () => {
   it('deals Random exactly as the desk does — java.util.Random(seed * 31 + n) and a Fisher–Yates walk', () => {
     // The permutations below were dealt by the JDK itself (a `java.util.Random((long) seed * 31
     // + n)` Fisher–Yates walk, `openjdk` on 2026-09-22), not by this port: they are what
-    // `DistributionStrategy.RANDOM` on the desk deals for the same seed and head count.
+    // `SpreadOrder.RANDOM` on the desk deals for the same seed and head count.
     const dealtByJdk: [seed: number, n: number, order: number[]][] = [
       [0, 6, [3, 4, 0, 2, 5, 1]],
       [3, 6, [2, 4, 0, 5, 3, 1]],
@@ -59,10 +59,10 @@ describe('spreadFractions', () => {
     expect(spreadPositions(6, 'RANDOM', 3)).not.toEqual(spreadPositions(6, 'RANDOM', 4))
   })
 
-  it('cuts the order into parts, the first runs one longer when it does not divide', () => {
+  it('cuts the order into runs, the first one longer when it does not divide', () => {
     expect(spreadFractions(4, 'LINE', 'NORMAL', 2)).toEqual([0, 1, 0, 1])
     expect(spreadFractions(5, 'LINE', 'NORMAL', 2)).toEqual([0, 0.5, 1, 0, 1])
-    // More parts than heads is one head per run.
+    // More runs than heads is one head per run.
     expect(spreadFractions(2, 'LINE', 'NORMAL', 5)).toEqual([0, 0])
   })
 })

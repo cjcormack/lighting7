@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
-import type { TemplateIntent } from '@/lib/templateIntent'
+import type { PaletteIntent } from '@/lib/paletteIntent'
 
 /** One percentage of each head's own range — a level, a strobe, a beam role. */
 export function PercentControl({
@@ -12,8 +12,8 @@ export function PercentControl({
 }: {
   label: string
   hint?: string
-  value: TemplateIntent | undefined
-  onChange: (intent: TemplateIntent | null) => void
+  value: PaletteIntent | undefined
+  onChange: (intent: PaletteIntent | null) => void
 }) {
   const current = value?.kind === 'percent' ? value.value : null
 

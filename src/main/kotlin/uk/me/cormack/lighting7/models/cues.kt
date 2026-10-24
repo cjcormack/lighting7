@@ -24,12 +24,12 @@ data class CueTargetDto(
     val key: String,
 ) {
     constructor(target: TargetRef) : this(target.discriminator, target.key)
-    constructor(target: EffectTargetRef) : this(target.discriminator, target.key)
+    constructor(target: FxTargetsRef) : this(target.discriminator, target.key)
 
     val target: TargetRef get() = TargetRef.of(type, key)
 
     /** [target], or a selection (effects plan D3) — only an effect's target may be one. */
-    val effectTarget: EffectTargetRef get() = EffectTargetRef.of(type, key)
+    val fxTarget: FxTargetsRef get() = FxTargetsRef.of(type, key)
 }
 
 /**
@@ -65,14 +65,14 @@ fun sameTargets(a: List<CueTargetDto>, b: List<CueTargetDto>): Boolean {
 @Serializable
 data class CueLayerDto(
     /**
-     * What this layer applies: **exactly one** of [lookId] / [templateId] on write.
+     * What this layer applies: **exactly one** of [lookId] / [paletteId] on write.
      *
      * Two ids rather than a `(kind, id)` pair because that is what a client has in hand — it picked
      * a row out of one library or the other — and because a request naming both is then a shape
      * error the route can refuse rather than a discriminator it has to trust.
      */
     val lookId: Int? = null,
-    val templateId: Int? = null,
+    val paletteId: Int? = null,
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
@@ -89,7 +89,7 @@ data class CueLayerDto(
     /**
      * What the layer applies, resolved server-side on read so a cue card can label it without a
      * second fetch: kind, id, uuid and name. Ignored on write — mirroring how `health` is read-only
-     * on the assignment DTOs, and the reason [lookId] / [templateId] are still the write fields.
+     * on the assignment DTOs, and the reason [lookId] / [paletteId] are still the write fields.
      */
     val source: LayerSourceDto? = null,
     /**
@@ -106,7 +106,7 @@ data class CueLayerDto(
      */
     val id: Int? = null,
     /**
-     * The stored layer's uuid, on read only, as `CueAdHocEffectDto.uuid` is: ignored on write but
+     * The stored layer's uuid, on read only, as `CueAdHocFxDto.uuid` is: ignored on write but
      * by the Timeline's `restore`, which puts a cue back exactly as an edit found it.
      */
     val uuid: String? = null,
@@ -146,57 +146,57 @@ data class CuePropertyAssignmentDto(
 }
 
 @Serializable
-data class CueAdHocEffectDto(
+data class CueAdHocFxDto(
     val targetType: String,
     val targetKey: String,
-    val effectType: String,
-    val category: String,
+    val fxType: String,
+    val family: String,
     val propertyName: String? = null,
-    val beatDivision: Double,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val phaseOffset: Double = 0.0,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean? = null,
+    val timing: Timing? = null,
     val parameters: Map<String, String> = emptyMap(),
     val delayMs: Long? = null,
     val intervalMs: Long? = null,
     val randomWindowMs: Long? = null,
     val sortOrder: Int = 0,
-    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookEffectSpec.speedMasterUuid]. */
+    /** Speed master uuid (null → master 1). Uuid, not int id — see [LookFxSpec.speedMasterUuid]. */
     val speedMasterUuid: String? = null,
-    /** Wall-clock rate master (null → unscaled). See [LookEffectSpec.rateSpeedMasterUuid]. */
+    /** Wall-clock rate master (null → unscaled). See [LookFxSpec.rateSpeedMasterUuid]. */
     val rateSpeedMasterUuid: String? = null,
     /**
      * On *Seconds* (venue-visit plan D7): the effect follows no master. A beat effect's
-     * `beatDivision` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
+     * `cycle` is then its own cycle in seconds; a wall-clock effect's is seconds already, and
      * it is on Seconds whenever it has no rate master, flag or not. The masters are null beside it.
-     * See `fx/EffectTiming.kt`.
+     * See `fx/FxTimingChoice.kt`.
      */
     val seconds: Boolean = false,
     /**
-     * Size (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
+     * Amount (effects plan D2), 0.0–1.0: how much of the effect reaches the stage over what is
      * underneath, weighted after the blend (P3). Refused outside that range at the write boundary.
      */
-    val size: Double = 1.0,
+    val amount: Double = 1.0,
     /**
      * Direction (D5): `FORWARD`, `BACKWARD` or `BOUNCE`, each member's cycle read that way. A stored
      * FX's field, absent Forward as its archive reads it; the doors that make a new FX (the picker,
-     * the palette editor, MCP) write its type's own Direction (`EffectRegistration.defaultDirection`).
+     * the palette editor, MCP) write its type's own Direction (`FxRegistration.defaultDirection`).
      */
     val direction: String = "FORWARD",
     /** Runs (D9): stop after this many cycles, at least 1; null runs forever. */
-    val nShot: Int? = null,
+    val runs: Int? = null,
     /**
      * The spread's shape (effects plan D4): Spread 0.0–2.0 (1.0 the Order's own offsets), Wings and
-     * Blocks at least 1, Groups 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
+     * Segments at least 1, Parts 0 (off) or more — see `fx/SpreadShape.kt`. Refused out of range, or
      * wings under a mirrored Order, at the write boundary.
      */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     /**
      * The stored effect's uuid, on read only, so a client can name one effect across writes
      * (show-cue-editing plan §3.4): a write keeps the uuid of every effect it keeps. Ignored by a
@@ -215,11 +215,11 @@ data class CueAdHocEffectDto(
     val runUuid: String? = null,
 ) {
     /** A fixture, a group, or a selection of them (effects plan D3). */
-    val target: EffectTargetRef get() = EffectTargetRef.of(targetType, targetKey)
+    val target: FxTargetsRef get() = FxTargetsRef.of(targetType, targetKey)
 
-    /** This effect with its target spelled as the desk stores it ([EffectTargetRef.canonical]). */
-    fun canonicalTarget(): CueAdHocEffectDto =
-        EffectTargetRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
+    /** This effect with its target spelled as the desk stores it ([FxTargetsRef.canonical]). */
+    fun canonicalTarget(): CueAdHocFxDto =
+        FxTargetsRef.canonical(targetType, targetKey).let { (type, key) -> copy(targetType = type, targetKey = key) }
 }
 
 // ─── Cue types ──────────────────────────────────────────────────────────
@@ -273,14 +273,14 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var speedMasters by DaoCues.speedMasters
     var uuid by DaoCues.uuid
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
-    val adHocEffects by DaoCueAdHocEffect referrersOn DaoCueAdHocEffects.cue
+    val adHocFx by DaoCueAdHocFxEntity referrersOn DaoCueAdHocFx.cue
     val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
 }
 
-// ─── Cue Ad-Hoc Effects table ──────────────────────────────────────────
+// ─── Cue Ad-Hoc FX table ───────────────────────────────────────────────
 
-object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_fx") {
+object DaoCueAdHocFx : IntIdTable("cue_ad_hoc_fx") {
     val cue = reference("cue_id", DaoCues)
     val targetType = varchar("target_type", 50)
 
@@ -305,20 +305,20 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_fx") {
     val speedMasterUuid = javaUUID("speed_master_uuid").nullable()
     val rateSpeedMasterUuid = javaUUID("rate_speed_master_uuid").nullable()
 
-    /** D7's *Seconds* for a beat effect; see [CueAdHocEffectDto.seconds]. */
+    /** D7's *Seconds* for a beat effect; see [CueAdHocFxDto.seconds]. */
     val seconds = bool("seconds").default(false)
 
-    /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
+    /** Amount (effects plan D2), 0.0–1.0; see [LookFxSpec.amount]. */
     val amount = double("amount").default(1.0)
 
-    /** Direction (D5) by name; see [LookEffectSpec.direction]. */
+    /** Direction (D5) by name; see [LookFxSpec.direction]. */
     val direction = varchar("direction", 16).default("FORWARD")
 
-    /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
+    /** Runs (D9), null for forever; see [LookFxSpec.runs]. */
     val runs = integer("runs").nullable()
 
     /**
-     * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
+     * The spread's shape (effects plan D4); see [LookFxSpec.spread]. Parts 0 is off. The three
      * counts are `spread_`-prefixed columns: `GROUPS` is an SQLite keyword (window frames).
      */
     val spread = double("spread").default(1.0)
@@ -327,52 +327,52 @@ object DaoCueAdHocEffects : IntIdTable("cue_ad_hoc_fx") {
     val parts = integer("spread_parts").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 
-    /** The run key (stack-timeline plan D7), null for an effect in no run; see [CueAdHocEffectDto.runUuid]. */
+    /** The run key (stack-timeline plan D7), null for an effect in no run; see [CueAdHocFxDto.runUuid]. */
     val runUuid = javaUUID("run_uuid").nullable()
 }
 
-class DaoCueAdHocEffect(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<DaoCueAdHocEffect>(DaoCueAdHocEffects)
+class DaoCueAdHocFxEntity(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoCueAdHocFxEntity>(DaoCueAdHocFx)
 
-    var cue by DaoCue referencedOn DaoCueAdHocEffects.cue
-    var targetType by DaoCueAdHocEffects.targetType
-    var targetKey by DaoCueAdHocEffects.targetKey
+    var cue by DaoCue referencedOn DaoCueAdHocFx.cue
+    var targetType by DaoCueAdHocFx.targetType
+    var targetKey by DaoCueAdHocFx.targetKey
 
     /** A fixture, a group, or a selection of them (effects plan D3). */
-    var target: EffectTargetRef
-        get() = EffectTargetRef.of(targetType, targetKey)
+    var target: FxTargetsRef
+        get() = FxTargetsRef.of(targetType, targetKey)
         set(value) {
             targetType = value.discriminator
             targetKey = value.key
         }
 
-    var fxType by DaoCueAdHocEffects.fxType
-    var family by DaoCueAdHocEffects.family
-    var attribute by DaoCueAdHocEffects.attribute
-    var cycle by DaoCueAdHocEffects.cycle
-    var blendMode by DaoCueAdHocEffects.blendMode
-    var order by DaoCueAdHocEffects.order
-    var phaseOffset by DaoCueAdHocEffects.phaseOffset
-    var elementMode by DaoCueAdHocEffects.elementMode
-    var elementFilter by DaoCueAdHocEffects.elementFilter
-    var timing by DaoCueAdHocEffects.timing
-    var parameters by DaoCueAdHocEffects.parameters
-    var delay by DaoCueAdHocEffects.delay
-    var interval by DaoCueAdHocEffects.interval
-    var randomWindow by DaoCueAdHocEffects.randomWindow
-    var sortOrder by DaoCueAdHocEffects.sortOrder
-    var speedMasterUuid by DaoCueAdHocEffects.speedMasterUuid
-    var rateSpeedMasterUuid by DaoCueAdHocEffects.rateSpeedMasterUuid
-    var seconds by DaoCueAdHocEffects.seconds
-    var amount by DaoCueAdHocEffects.amount
-    var direction by DaoCueAdHocEffects.direction
-    var runs by DaoCueAdHocEffects.runs
-    var spread by DaoCueAdHocEffects.spread
-    var wings by DaoCueAdHocEffects.wings
-    var segments by DaoCueAdHocEffects.segments
-    var parts by DaoCueAdHocEffects.parts
-    var uuid by DaoCueAdHocEffects.uuid
-    var runUuid by DaoCueAdHocEffects.runUuid
+    var fxType by DaoCueAdHocFx.fxType
+    var family by DaoCueAdHocFx.family
+    var attribute by DaoCueAdHocFx.attribute
+    var cycle by DaoCueAdHocFx.cycle
+    var blendMode by DaoCueAdHocFx.blendMode
+    var order by DaoCueAdHocFx.order
+    var phaseOffset by DaoCueAdHocFx.phaseOffset
+    var elementMode by DaoCueAdHocFx.elementMode
+    var elementFilter by DaoCueAdHocFx.elementFilter
+    var timing by DaoCueAdHocFx.timing
+    var parameters by DaoCueAdHocFx.parameters
+    var delay by DaoCueAdHocFx.delay
+    var interval by DaoCueAdHocFx.interval
+    var randomWindow by DaoCueAdHocFx.randomWindow
+    var sortOrder by DaoCueAdHocFx.sortOrder
+    var speedMasterUuid by DaoCueAdHocFx.speedMasterUuid
+    var rateSpeedMasterUuid by DaoCueAdHocFx.rateSpeedMasterUuid
+    var seconds by DaoCueAdHocFx.seconds
+    var amount by DaoCueAdHocFx.amount
+    var direction by DaoCueAdHocFx.direction
+    var runs by DaoCueAdHocFx.runs
+    var spread by DaoCueAdHocFx.spread
+    var wings by DaoCueAdHocFx.wings
+    var segments by DaoCueAdHocFx.segments
+    var parts by DaoCueAdHocFx.parts
+    var uuid by DaoCueAdHocFx.uuid
+    var runUuid by DaoCueAdHocFx.runUuid
 }
 
 // ─── Cue Property Assignments table ────────────────────────────────────
@@ -420,7 +420,7 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  * application list carrying `sortOrder`, the timing triple and speed-master overrides. This is an
  * extension of that table rather than a new concept beside it.
  *
- * The cue's own [DaoCuePropertyAssignments] / [DaoCueAdHocEffects] are **the local layer** —
+ * The cue's own [DaoCuePropertyAssignments] / [DaoCueAdHocFx] are **the local layer** —
  * always exactly one, always last, so it needs no identity row here. Keeping them separate is
  * deliberate on two counts: they carry `moveInDark`, and they give a Record / Update write an
  * unambiguous destination — `(targetType, targetKey, propertyName)` with no layer dimension.
@@ -432,7 +432,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
     val cue = reference("cue_id", DaoCues)
 
     /**
-     * What this layer applies: **exactly one** of [look] / [template] is set.
+     * What this layer applies: **exactly one** of [look] / [palette] is set.
      *
      * Two nullable FKs rather than a `(kind, uuid)` pair, because the FKs are what make a layer
      * pointing at a deleted record impossible and what let `LOOK_IN_USE` / `PALETTE_IN_USE` be a
@@ -446,7 +446,7 @@ object DaoCueLayers : IntIdTable("cue_layers") {
      * because archive JSON is untrusted input with a diagnostic channel of its own.
      */
     val look = reference("look_id", DaoLooks).nullable()
-    val palette = reference("palette_id", DaoTemplates).nullable()
+    val palette = reference("palette_id", DaoPalettes).nullable()
     val sortOrder = integer("sort_order").default(0)
     val enabled = bool("enabled").default(true)
 
@@ -528,7 +528,7 @@ private val layerSourceLogger = LoggerFactory.getLogger("cueLayerSource")
  */
 enum class LayerSourceShape {
     LOOK,
-    TEMPLATE,
+    PALETTE,
     NEITHER,
     BOTH,
     ;
@@ -540,7 +540,7 @@ enum class LayerSourceShape {
      * can't leave one of them silently treating it as valid.
      */
     val problem: String? get() = when (this) {
-        LOOK, TEMPLATE -> null
+        LOOK, PALETTE -> null
         NEITHER -> "neither a look nor a palette"
         BOTH -> "both a look and a palette"
     }
@@ -557,7 +557,7 @@ enum class LayerSourceShape {
 fun layerSourceShape(look: Any?, template: Any?): LayerSourceShape = when {
     look != null && template != null -> LayerSourceShape.BOTH
     look != null -> LayerSourceShape.LOOK
-    template != null -> LayerSourceShape.TEMPLATE
+    template != null -> LayerSourceShape.PALETTE
     else -> LayerSourceShape.NEITHER
 }
 
@@ -582,7 +582,7 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
 
     var cue by DaoCue referencedOn DaoCueLayers.cue
     var look by DaoLook optionalReferencedOn DaoCueLayers.look
-    var palette by DaoTemplate optionalReferencedOn DaoCueLayers.palette
+    var palette by DaoPalette optionalReferencedOn DaoCueLayers.palette
     var sortOrder by DaoCueLayers.sortOrder
     var enabled by DaoCueLayers.enabled
     var targets by DaoCueLayers.targets
@@ -616,7 +616,7 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
         return if (look != null) {
             LayerSource.look(look.id.value, look.uuid, look.name)
         } else {
-            LayerSource.template(template!!.id.value, template.uuid, template.name)
+            LayerSource.palette(template!!.id.value, template.uuid, template.name)
         }
     }
 
@@ -641,20 +641,20 @@ internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
     moveInDark = moveInDark,
 )
 
-/** Convert a DaoCueAdHocEffect entity to its DTO form. */
-internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
+/** Convert a DaoCueAdHocFxEntity entity to its DTO form. */
+internal fun DaoCueAdHocFxEntity.toDto() = CueAdHocFxDto(
     targetType = targetType,
     targetKey = targetKey,
-    effectType = fxType,
-    category = family,
+    fxType = fxType,
+    family = family,
     propertyName = attribute,
-    beatDivision = cycle,
+    cycle = cycle,
     blendMode = blendMode,
-    distribution = order,
+    order = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTimingOf(timing),
+    timing = timingOf(timing),
     parameters = parameters,
     delayMs = delay?.toMillis(),
     intervalMs = interval?.toMillis(),
@@ -663,13 +663,13 @@ internal fun DaoCueAdHocEffect.toDto() = CueAdHocEffectDto(
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     seconds = seconds,
-    size = amount,
+    amount = amount,
     direction = direction,
-    nShot = runs,
+    runs = runs,
     spread = spread,
     wings = wings,
-    blocks = segments,
-    groups = parts,
+    segments = segments,
+    parts = parts,
     uuid = uuid.toString(),
     runUuid = runUuid?.toString(),
 )

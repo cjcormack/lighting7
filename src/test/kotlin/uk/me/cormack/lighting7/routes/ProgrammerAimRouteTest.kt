@@ -30,8 +30,8 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoRigging
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.UserRole
 import uk.me.cormack.lighting7.show.JOG_DEFAULT_PLANE_Z
 import uk.me.cormack.lighting7.show.RiggingPose
@@ -409,28 +409,28 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertTrue(state.show.programmerStore.entries().none { it.fixtureKey == "spot-coarse" && it.slots.first().sourceGroup == "spots" })
     }
 
-    // ─── a stage fan (POST /programmer/spread, FAN in metres) ──────────────
+    // ─── a stage fan (POST /programmer/fan, FAN in metres) ──────────────
 
-    private suspend fun HttpClient.spread(request: SpreadRequest): HttpResponse =
-        post("/api/rest/projects/$projectId/programmer/spread") {
+    private suspend fun HttpClient.spread(request: FanRequest): HttpResponse =
+        post("/api/rest/projects/$projectId/programmer/fan") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
 
-    private suspend fun HttpClient.runSpread(request: SpreadRequest): SpreadResponse {
+    private suspend fun HttpClient.runSpread(request: FanRequest): FanResponse {
         val resp = spread(request)
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         return resp.body()
     }
 
-    private fun stageFan(x: Double?, y: Double?, base: List<SpreadBaseDto>? = null, near: List<AimNearDto>? = null) =
-        SpreadRequest(
-            targets = jogFrom.keys.map(::fixture), property = "position", mode = "FAN",
-            fan = SpreadFanDto(x = x, y = y), base = base, near = near,
+    private fun stageFan(x: Double?, y: Double?, base: List<FanBaseDto>? = null, near: List<AimNearDto>? = null) =
+        FanRequest(
+            targets = jogFrom.keys.map(::fixture), property = "position", mode = "ABOUT",
+            fan = FanAmountDto(x = x, y = y), base = base, near = near,
         )
 
     /** Each moved head's landing point on the plane, from the travel degrees the answer gives as `near`. */
-    private fun landings(answer: SpreadResponse, keys: Set<String> = jogFrom.keys): Map<String, StagePoint> =
+    private fun landings(answer: FanResponse, keys: Set<String> = jogFrom.keys): Map<String, StagePoint> =
         answer.near.associate { n ->
             val key = n.target.key
             val (panZero, tiltZero) = jogZero.getValue(key)
@@ -472,14 +472,14 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         seedJogRig()
         mountTestApp(state)
         val client = jsonClient()
-        suspend fun refused(request: SpreadRequest) {
+        suspend fun refused(request: FanRequest) {
             val response = client.spread(request)
             assertEquals(HttpStatusCode.BadRequest, response.status, response.bodyAsText())
         }
-        refused(stageFan(1.0, null).copy(fan = SpreadFanDto(pan = 10, x = 1.0)))
+        refused(stageFan(1.0, null).copy(fan = FanAmountDto(pan = 10, x = 1.0)))
         refused(stageFan(1.0, null).copy(over = "CELLS"))
         refused(stageFan(900.0, null))
-        refused(stageFan(1.0, null, base = listOf(SpreadBaseDto(fixture("spot-fine"), "128,128", panFine = 300))))
+        refused(stageFan(1.0, null, base = listOf(FanBaseDto(fixture("spot-fine"), "128,128", panFine = 300))))
 
         client.jogRig()
         val startAt = client.run(jog(0.0, 0.0)).written.associate { w ->
@@ -543,7 +543,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertEquals(2, template["rowCount"]!!.jsonPrimitive.content.toInt())
 
         val rows = transaction(state.database) {
-            DaoTemplate.find { DaoTemplates.name eq "Wall focus" }.single().rows
+            DaoPalette.find { DaoPalettes.name eq "Wall focus" }.single().rows
                 .associate { it.targetKey to (it.attribute to it.value) }
         }
         // One fixture-specific position row per aimed head, centre-relative (venue-visit plan P3):
@@ -574,7 +574,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertTrue(dry.success, dry.result)
         assertNull(dry.json()["palette"])
         assertNotNull(dry.json()["paletteNote"])
-        assertTrue(transaction(state.database) { DaoTemplate.find { DaoTemplates.name eq "Dry" }.empty() })
+        assertTrue(transaction(state.database) { DaoPalette.find { DaoPalettes.name eq "Dry" }.empty() })
     }
 
     @Test

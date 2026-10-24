@@ -6,8 +6,8 @@ import uk.me.cormack.lighting7.fixture.dmx.UVFixture
 import uk.me.cormack.lighting7.fixture.dmx.WhexFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.LocateValueResolver
-import uk.me.cormack.lighting7.fx.TemplateIntent
-import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.PaletteIntent
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -82,7 +82,7 @@ class LibraryOpticsTest {
     @Test
     fun `a percent on a stepped zoom runs across its angles from DMX min's`() {
         fun at(pct: Double) = assertIs<CueAssignmentResolver.PropertyValue.Setting>(
-            TemplateResolver.resolve(robe(), "zoom", TemplateIntent.Percent(pct), media = null).value,
+            PaletteResolver.resolve(robe(), "zoom", PaletteIntent.Percent(pct), media = null).value,
         ).channelValue
         assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_15.level, at(0.0))
         assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_18.level, at(50.0))

@@ -24,7 +24,7 @@ import {
   type FixtureTypeInfo,
 } from '../../../store/fixtures'
 import { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE } from '../emitterLayout'
-import { RING_INNER } from '../../../lib/ringEffect'
+import { RING_INNER } from '../../../lib/ringFx'
 
 export { MAX_CELLS, MAX_LIGHTS_PER_FIXTURE }
 

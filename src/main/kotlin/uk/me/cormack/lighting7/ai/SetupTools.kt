@@ -122,7 +122,8 @@ class SetupTools(
 
     /** Run [name]; [caller] is the signed-in user's display name, which signs what a tool publishes. */
     suspend fun executeTool(name: String, input: JsonObject, caller: String? = null): ToolExecutionResult = try {
-        when (name) {
+        val refusal = toolDefs.firstOrNull { it.name == name }?.let { undeclaredArgumentRefusal(it, input) }
+        if (refusal != null) failure(refusal) else when (name) {
             listProjectsTool.name -> listProjects()
             createProjectTool.name -> createProject(input)
             switchProjectTool.name -> switchProject(input)
@@ -1331,7 +1332,9 @@ class SetupTools(
 
     private fun setStage(input: JsonObject, target: ToolProject): ToolExecutionResult {
         val project = target.project
-        val problems = mutableListOf<String>()
+        val problems = unknownFields(
+            input, listOf("stage", "regions", "riggings", "removeRegions", "removeRiggings", "projectId"), "set_stage",
+        ).toMutableList()
 
         for ((name, shape) in listOf("stage" to "an object", "regions" to "an array", "riggings" to "an array")) {
             val element = input[name] ?: continue
@@ -1682,7 +1685,7 @@ class SetupTools(
                 aiTools.parseCueLayers(row["layers"] as? JsonArray).also { parsed ->
                     validateCueChildren(emptyList(), parsed, registry = state.show.fxRegistry)?.let { rowProblems += it }
                     rowProblems += aiTools.layerSourceProblems(project, parsed)
-                    rowProblems += aiTools.untargetedEffectLayerProblems(parsed)
+                    rowProblems += aiTools.untargetedFxLayerProblems(parsed)
                 }
             } catch (e: Exception) {
                 rowProblems += "layers: ${e.message ?: "malformed"}"
@@ -1992,14 +1995,9 @@ class SetupTools(
 
     /**
      * The entry an anchor row names — `entryId`, or `stackId` and `number` — in [project], or null after
-     * [problem]. A `cueId` alone is refused: a shared cue has several places, a loose one none. Inside a
-     * transaction.
+     * [problem]. Inside a transaction.
      */
     private fun anchorEntry(row: JsonObject, project: DaoProject, where: String, problem: (String) -> Unit): Int? {
-        if (row["cueId"] != null && listOf("entryId", "number").none { row[it] != null && row[it] !is JsonNull }) {
-            problem("$where: name the entry the cue is called from — entryId, or stackId and number (a cue may sit in several stacks, so cueId alone names no place)")
-            return null
-        }
         return findProjectEntry(project, row, where, problem)?.id?.value
     }
 

@@ -175,25 +175,25 @@ export function detectExtendedChannels(
   return { white, amber, uv }
 }
 
-// --- Template reference support ---
+// --- Palette reference support ---
 
 /**
  * The grammar an **FX colour parameter** uses to name a colour template instead of stating a colour.
  *
- * Mirrors `fx/TemplateColourSource.kt`, which owns it. Two things about the split are deliberate:
+ * Mirrors `fx/PaletteColourSource.kt`, which owns it. Two things about the split are deliberate:
  * this half **serialises and parses only** — resolving a reference to a colour is per-head
- * arithmetic that `TemplateResolver` must be the single answer to — and the prefix is `pal:`
+ * arithmetic that `PaletteResolver` must be the single answer to — and the prefix is `pal:`
  * rather than `ref:`, because `ref:{uuid}` is retired *and* still actively rejected at the Look
  * write boundary as the no-nesting guarantee.
  *
  * It replaced the positional colour list (`P1` / `P2` / `P*`), which was the last thing the word
  * "palette" meant in this codebase.
  */
-const TEMPLATE_REF_PREFIX = 'pal:'
+const PALETTE_REF_PREFIX = 'pal:'
 
 /** Is this colour string a template reference? Shape only — says nothing about the template existing. */
-export function isTemplateRef(value: string): boolean {
-  return value.trim().toLowerCase().startsWith(TEMPLATE_REF_PREFIX)
+export function isPaletteRef(value: string): boolean {
+  return value.trim().toLowerCase().startsWith(PALETTE_REF_PREFIX)
 }
 
 /**
@@ -203,13 +203,13 @@ export function isTemplateRef(value: string): boolean {
  * question is "which template is this row pointing at" — and an unmatched uuid needs to render as a
  * *missing* template, not as a literal colour.
  */
-export function parseTemplateRefUuid(value: string): string | null {
+export function parsePaletteRefUuid(value: string): string | null {
   const trimmed = value.trim()
-  if (!isTemplateRef(trimmed)) return null
-  return trimmed.slice(TEMPLATE_REF_PREFIX.length).trim() || null
+  if (!isPaletteRef(trimmed)) return null
+  return trimmed.slice(PALETTE_REF_PREFIX.length).trim() || null
 }
 
-/** Serialise a reference to `templateUuid`. */
-export function serializeTemplateRef(templateUuid: string): string {
-  return `${TEMPLATE_REF_PREFIX}${templateUuid}`
+/** Serialise a reference to `paletteUuid`. */
+export function serializePaletteRef(paletteUuid: string): string {
+  return `${PALETTE_REF_PREFIX}${paletteUuid}`
 }

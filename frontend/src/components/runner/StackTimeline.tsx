@@ -11,8 +11,8 @@ import { useCueEdited } from '@/store/cueHolds'
 import type { TimelineEditOp } from '@/api/stackTimelineApi'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
 import { useGroupListQuery } from '@/store/groups'
-import { useTemplateListQuery } from '@/store/templates'
-import { templateRowsSwatch } from '@/lib/templateIntent'
+import { usePaletteListQuery } from '@/store/palettes'
+import { paletteRowsSwatch } from '@/lib/paletteIntent'
 import { useStageElementListQuery } from '@/store/stageElements'
 import { useDeskSelection } from '@/store/selection'
 import { useCueFade } from '@/hooks/useCueFade'
@@ -94,21 +94,21 @@ const NEXT_ROW_CLASS = 'bg-blue-500/[0.05] shadow-[inset_3px_0_0_rgb(59,130,246)
 const RUN_CLASS: Record<TimelineKind, string> = {
   look: 'bg-teal-400/20 before:bg-teal-300',
   palette: 'bg-zinc-400/20 before:bg-zinc-300',
-  effect: 'bg-violet-400/25 before:bg-violet-300',
+  fx: 'bg-violet-400/25 before:bg-violet-300',
   scenery: 'bg-amber-300/25',
 }
 const KIND_SWATCH: Record<TimelineKind, string> = {
   look: 'bg-teal-300',
   palette: 'bg-zinc-300',
-  effect: 'bg-violet-300',
+  fx: 'bg-violet-300',
   scenery: 'bg-amber-300',
 }
-const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', effect: 'FX', scenery: 'Scenery' }
+const KIND_LABEL: Record<TimelineKind, string> = { look: 'Looks', palette: 'Palettes', fx: 'FX', scenery: 'Scenery' }
 /** The tracked state's line down a scenery column. */
 const TRACK_LINE_CLASS = 'pointer-events-none absolute inset-y-[-1px] left-1/2 -ml-px w-0.5 bg-amber-300/40'
 
 /** The column's tab in the cue editor (C2). */
-const PANE_TAB: Record<TimelineKind, CueEditorTab> = { look: 'looks', palette: 'looks', effect: 'fx', scenery: 'scenery' }
+const PANE_TAB: Record<TimelineKind, CueEditorTab> = { look: 'looks', palette: 'looks', fx: 'fx', scenery: 'scenery' }
 
 const FAMILY_ORDER: readonly AttributeFamily[] = ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM']
 
@@ -171,10 +171,10 @@ export function StackTimeline({
   const { data: groups } = useGroupListQuery()
   const { data: elements } = useStageElementListQuery(projectId)
   const deskSelection = useDeskSelection()
-  const { data: palettes } = useTemplateListQuery({ projectId })
+  const { data: palettes } = usePaletteListQuery({ projectId })
   /** A generic colour palette's colour, as its busk pad draws it; a per-fixture one has none. */
   const swatches = useMemo(
-    () => new Map((palettes ?? []).flatMap((p) => (p.isGeneric ? [[p.id, templateRowsSwatch(p.rows)] as const] : []))),
+    () => new Map((palettes ?? []).flatMap((p) => (p.isGeneric ? [[p.id, paletteRowsSwatch(p.rows)] as const] : []))),
     [palettes],
   )
 
@@ -358,7 +358,7 @@ export function StackTimeline({
         return {
         key: column.id,
         label: `${column.name} · ${column.sub}`,
-        width: column.kind === 'effect' || column.kind === 'scenery' ? '92px' : '84px',
+        width: column.kind === 'fx' || column.kind === 'scenery' ? '92px' : '84px',
         gutter: false,
         group: {
           key: column.kind,
@@ -792,7 +792,7 @@ export function StackTimeline({
                 }
               : undefined
           }
-          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'effect' || c.kind === 'scenery' ? 92 : 84), 0)}px`}
+          minWidth={`${260 + 116 + shown.reduce((n, c) => n + (c.kind === 'fx' || c.kind === 'scenery' ? 92 : 84), 0)}px`}
           rowClass={(row) =>
             !isCueRow(row.entry)
               ? undefined
@@ -957,8 +957,8 @@ export function settingsChangeLabel(before: Record<string, unknown>, after: Reco
     const b = JSON.stringify(after[key])
     if (a === b) continue
     const value = after[key]
-    if (key === 'beatDivision' && typeof value === 'number') return `${value} beat${value === 1 ? '' : 's'}`
-    if (key === 'size' && typeof value === 'number') return `${Math.round(value * 100)}%`
+    if (key === 'cycle' && typeof value === 'number') return `${value} beat${value === 1 ? '' : 's'}`
+    if (key === 'amount' && typeof value === 'number') return `${Math.round(value * 100)}%`
     if (key === 'parameters') return 'params'
     if (key.endsWith('Uuid')) return 'master'
     return typeof value === 'string' || typeof value === 'number' ? `${key} ${value}` : key
@@ -1070,8 +1070,8 @@ function TimelineCellFace({
         ))}
       </>
     )
-  } else if (filled.kind === 'effect') {
-    const before = previous?.filled?.kind === 'effect' ? previous.filled.effect.settings : null
+  } else if (filled.kind === 'fx') {
+    const before = previous?.filled?.kind === 'fx' ? previous.filled.effect.settings : null
     const change = mark.changed && before ? settingsChangeLabel(before, filled.effect.settings) : null
     body = (
       <>
@@ -1086,10 +1086,10 @@ function TimelineCellFace({
       <span className={runSegmentClass(column.kind, mark, off ? 'border border-teal-300/60 bg-transparent text-muted-foreground before:hidden' : undefined)}>
         {body}
       </span>
-      {column.kind === 'effect' && mark.restart && (
+      {column.kind === 'fx' && mark.restart && (
         <i aria-hidden className="absolute inset-x-3.5 -top-px z-[3] border-t-2 border-dotted border-violet-300" />
       )}
-      {column.kind === 'effect' && mark.changed && (
+      {column.kind === 'fx' && mark.changed && (
         <i aria-hidden className="absolute left-1/2 -top-[5px] z-[3] -ml-1 size-[9px] rotate-45 border border-background bg-violet-300" />
       )}
     </span>
@@ -1123,7 +1123,7 @@ function cellTitle(column: TimelineColumn, cell: TimelineCell, cue: CueStackCueR
   if (filled.kind === 'layer') {
     return `${column.name} · ${column.sub} in ${at} — rank ${filled.rank}${filled.glyphs.length ? ` · ${filled.glyphs.join(' ')}` : ''}`
   }
-  if (filled.kind === 'effect') return `${column.name} · ${column.sub} in ${at}${filled.effect.runUuid ? '' : ' — in no run'}`
+  if (filled.kind === 'fx') return `${column.name} · ${column.sub} in ${at}${filled.effect.runUuid ? '' : ' — in no run'}`
   return `${column.name} in ${at} — ${sceneryWords(filled.state, filled.transitionMs)}`
 }
 
@@ -1134,10 +1134,10 @@ function TimelineLegend({ cues, markers, columns }: { cues: number; markers: num
         {cues} cue{cues === 1 ? '' : 's'}
         {markers > 0 ? ` · ${markers} marker${markers === 1 ? '' : 's'}` : ''} · {columns} column{columns === 1 ? '' : 's'}
       </span>
-      {(['look', 'palette', 'effect'] as const).map((kind) => (
+      {(['look', 'palette', 'fx'] as const).map((kind) => (
         <span key={kind} className="inline-flex items-center gap-1.5">
           <LegendSwatch className={cn('relative overflow-hidden before:absolute before:inset-y-0 before:left-0 before:w-0.5', RUN_CLASS[kind])} />
-          {kind === 'effect' ? 'FX run' : kind === 'look' ? 'Look' : 'Palette'}
+          {kind === 'fx' ? 'FX run' : kind === 'look' ? 'Look' : 'Palette'}
         </span>
       ))}
       <span className="inline-flex items-center gap-1.5">

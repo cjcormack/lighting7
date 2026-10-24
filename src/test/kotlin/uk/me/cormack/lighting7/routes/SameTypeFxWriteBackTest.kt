@@ -58,39 +58,39 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
     }
 
     private fun types(cueId: Int): List<Pair<String, String>> = transaction(state.database) {
-        DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.uuid.toString() to it.fxType }
+        DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.uuid.toString() to it.fxType }
     }
 
     /** One stored child as the test reads it: which row, its blend and its level. */
     private data class Child(val uuid: String, val blendMode: String, val level: String?)
 
     private fun children(cueId: Int): List<Child> = transaction(state.database) {
-        DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { Child(it.uuid.toString(), it.blendMode, it.parameters["max"]) }
+        DaoCue.findById(cueId)!!.adHocFxInOrder().map { Child(it.uuid.toString(), it.blendMode, it.parameters["max"]) }
     }
 
     /** A Sine Wave on Hex 1's dimmer whose min and max agree: one level whatever the phase. */
     private suspend fun HttpClient.pressSine(level: Int, blendMode: String, stack: Boolean): FxInstance =
         pressLevel("SineWave", hex, level, blendMode, stack)
 
-    /** [effectType] on [targets]' dimmer at one level whatever the phase. */
+    /** [fxType] on [targets]' dimmer at one level whatever the phase. */
     private suspend fun HttpClient.pressLevel(
-        effectType: String,
+        fxType: String,
         targets: List<CueTargetDto>,
         level: Int,
         blendMode: String,
         stack: Boolean,
     ): FxInstance {
-        val response = post("/api/rest/projects/$projectId/programmer/effects") {
+        val response = post("/api/rest/projects/$projectId/programmer/fx") {
             contentType(ContentType.Application.Json)
             setBody(
-                ProgrammerEffectRequest(
-                    effectType = effectType, propertyName = "dimmer", targets = targets,
+                ProgrammerFxRequest(
+                    fxType = fxType, propertyName = "dimmer", targets = targets,
                     parameters = mapOf("min" to "$level", "max" to "$level"), blendMode = blendMode, stack = stack,
                 ),
             )
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
-        return assertNotNull(fx.getEffect(response.body<ProgrammerEffectResponse>().effectId))
+        return assertNotNull(fx.getFx(response.body<ProgrammerFxResponse>().fxId))
     }
 
     /** A Replace at [replace] with a Within at [within] stacked on it, so on top. */
@@ -137,7 +137,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
     }
 
     private fun clearStage() {
-        fx.clearAllEffects()
+        fx.clearAllFx()
         awaitDimmer(0, "the stage let go")
     }
 
@@ -154,7 +154,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
     }
 
     private fun included(blendMode: String): FxInstance =
-        fx.getActiveEffects().single { it.isLocalEffect && it.blendMode.name == blendMode }
+        fx.getActiveFx().single { it.isLocalFx && it.blendMode.name == blendMode }
 
     @Test
     fun `an Update that changed nothing keeps both stacked children as they were`() = testApplication {
@@ -180,7 +180,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         val edited = client.put("/api/rest/fx/${included("MULTIPLY").id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateEffectRequest(parameters = mapOf("min" to "64", "max" to "64")))
+            setBody(UpdateFxRequest(parameters = mapOf("min" to "64", "max" to "64")))
         }
         assertEquals(HttpStatusCode.OK, edited.status, edited.bodyAsText())
         awaitDimmer(50, "the edited Within")
@@ -200,7 +200,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         val client = jsonClient()
         val (cueId, stored) = client.includedPair()
 
-        assertTrue(fx.moveLocalEffect(included("MULTIPLY").id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
+        assertTrue(fx.moveLocalFx(included("MULTIPLY").id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
         awaitDimmer(200, "the Replace on top")
 
         assertEquals(2, client.update().fxWritten)
@@ -243,7 +243,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         // At the bottom, so it is the recording's first FX and would take the Replace's child by key.
         val fresh = client.pressSine(150, "OVERRIDE", stack = true)
-        assertTrue(fx.moveLocalEffect(fresh.id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
+        assertTrue(fx.moveLocalFx(fresh.id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
         awaitDimmer(100, "the pair still applies over it")
 
         client.update()
@@ -262,7 +262,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         val swapped = client.put("/api/rest/fx/${included("MULTIPLY").id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateEffectRequest(effectType = "SquareWave", parameters = mapOf("min" to "128", "max" to "128")))
+            setBody(UpdateFxRequest(fxType = "SquareWave", parameters = mapOf("min" to "128", "max" to "128")))
         }
         assertEquals(HttpStatusCode.OK, swapped.status, swapped.bodyAsText())
 
@@ -282,14 +282,14 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         val (cueId, stored) = client.includedPair()
 
         client.include(cueId)
-        assertEquals(2, fx.getActiveEffects().count { it.isLocalEffect }, "no child run twice")
+        assertEquals(2, fx.getActiveFx().count { it.isLocalFx }, "no child run twice")
         awaitDimmer(100, "the stage as one Include left it")
 
         assertEquals(0, client.update().fxWritten)
         assertEquals(stored, children(cueId))
     }
 
-    private fun localFxCount() = fx.getActiveEffects().count { it.isLocalEffect }
+    private fun localFxCount() = fx.getActiveFx().count { it.isLocalFx }
 
     @Test
     fun `Include of a cue just recorded runs its child once, and Update writes nothing`() = testApplication {
@@ -451,7 +451,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         client.pressWash(64, "MULTIPLY", stack = true)
         awaitDimmer(200 * 64 / 255, "the stacked Within over the included Replace")
-        assertEquals(2, fx.getActiveEffects().count { it.isLocalEffect })
+        assertEquals(2, fx.getActiveFx().count { it.isLocalFx })
 
         assertEquals(1, client.update().fxWritten)
         val after = children(cueId)
@@ -476,7 +476,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         client.pressWash(180)
         client.pressWash(64, "MULTIPLY", stack = true)
         awaitDimmer(180 * 64 / 255, "the Within over the Replace that took the included one's place")
-        assertEquals(2, fx.getActiveEffects().count { it.isLocalEffect }, "the first press stopped the included Pulse")
+        assertEquals(2, fx.getActiveFx().count { it.isLocalFx }, "the first press stopped the included Pulse")
 
         assertEquals(2, client.update().fxWritten)
         val after = children(cueId)

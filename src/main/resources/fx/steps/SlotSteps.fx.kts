@@ -1,9 +1,9 @@
 /*---
 id: SlotSteps
 name: Slot Steps
-category: steps
+family: steps
 outputType: STEPS
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [setting]
 parameters:
   - name: slots

@@ -5,7 +5,7 @@ import { ColourEditor } from '../editor/ColourEditor'
 import { EditorLabelLine } from '../editor/EditorLabelLine'
 import { headsLine } from '../editor/editorCopy'
 import { SpreadPanel, type IntentSpreadPlan, type RawSpreadPlan, type SpreadPlan, type SpreadSeed } from '../editor/SpreadPanel'
-import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { landValuesInLook } from '../programmer/landValuesInLook'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
@@ -15,8 +15,8 @@ import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import { parseProgrammerValue } from '../../lib/programmerValue'
 import { usePressFamilies } from '../../store/selection'
 import { useSpreadMutation } from '../../store/programmerOps'
-import { useTemplateListQuery } from '../../store/templates'
-import { isSpreadColourTemplate } from '../fx/FxColourTemplates'
+import { usePaletteListQuery } from '../../store/palettes'
+import { isSpreadColourPalette } from '../fx/FxColourPalettes'
 import { COLUMN_DEFS, cellFamilies, columnFamily, resolveCell } from './columns'
 import {
   clampCommitToResolution,
@@ -93,7 +93,7 @@ interface SpreadPopoverProps {
    * button is offered disabled for a reason other than the scope's.
    */
   columns: readonly SpreadColumn[]
-  /** The project the heads belong to — what `POST /programmer/spread` is addressed to. Absent, no desk-resolved plan is built. */
+  /** The project the heads belong to — what `POST /programmer/fan` is addressed to. Absent, no desk-resolved plan is built. */
   projectId?: number
   /**
    * This surface follows the desk selection — the programmer, whose bridge publishes the marquee
@@ -149,11 +149,11 @@ export interface MarqueeSpreadPlans {
 export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeLabel = 'Local', docked = false }: MarqueeSpreadInput): MarqueeSpreadPlans {
   const writers = useCellWriters()
   const scope = useProgrammerScope()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   const lookStore = useLookRowStore()
   const [spread] = useSpreadMutation()
-  const { data: templates } = useTemplateListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
-  const colourTemplates = useMemo(() => (templates ?? []).filter(isSpreadColourTemplate), [templates])
+  const { data: templates } = usePaletteListQuery({ projectId: projectId ?? 0 }, { skip: projectId == null })
+  const colourPalettes = useMemo(() => (templates ?? []).filter(isSpreadColourPalette), [templates])
   // The cue editor's Values grid (show-cue-editing plan §3.3): the desk resolves with `write: false`
   // and each head's literal lands in the cue's own rows, as a focused Look layer's land in its draft.
   const editorContext = useEditorContext()
@@ -164,7 +164,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       ? 'This cue is read-only here — unlock the show to edit its values'
       : scope?.kind === 'output'
       ? 'Output is a read of the cook — switch to Local to fan values onto these heads'
-      : focusedTemplate != null
+      : focusedPalette != null
         ? 'This layer applies a palette — switch to Local to fan values onto these heads'
         : null
 
@@ -243,7 +243,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         propertiesFor: (family: AttributeFamily) => spreadPropertiesOffered(heads, family),
         initial: { family: columnFamily(first.col), property: spreadPropertyForColumn(first.col) ?? undefined },
         mask,
-        colourTemplates,
+        colourPalettes,
         send: (body) => spread({ ...body, projectId, fadeMs: getProgrammerFadeMs() }).unwrap(),
       }
       // A fan there starts from the row being edited, not the stage (venue-visit plan S12).
@@ -299,7 +299,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       }
     }
     return out
-  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourTemplates, spread, setLookValue, landInLayer, layerStore, cueStore, landInCue, writers])
+  }, [columns, intentColumns, marqueeFamilies, mask, projectId, colourPalettes, spread, setLookValue, landInLayer, layerStore, cueStore, landInCue, writers])
 
   const intent = plans.find((plan): plan is IntentSpreadPlan => plan.kind === 'intent')
   const labelLine: ReactNode =

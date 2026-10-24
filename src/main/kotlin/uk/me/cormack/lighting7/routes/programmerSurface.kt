@@ -215,7 +215,7 @@ private fun stampWrittenFxOrigins(
 ) {
     for ((effectId, childUuid) in recording.adHocSourceIds.zip(outcome.fxChildren)) {
         if (effectId == null || childUuid == null) continue
-        val effect = state.show.fxEngine.getEffect(effectId)?.takeIf(stamps) ?: continue
+        val effect = state.show.fxEngine.getFx(effectId)?.takeIf(stamps) ?: continue
         effect.programmerOrigin = ProgrammerFxOrigin(outcome.cueId, ProgrammerFxOrigin.Kind.AD_HOC, childUuid)
     }
 }
@@ -441,7 +441,7 @@ internal fun performProgrammerUpdate(
             // The stack it reports is the included entry's, in Mode A; a checklist names no entry.
             val entry = includedEntryId?.takeIf { modeLabel == "A" }?.let { DaoCueStackEntry.findById(it) }
                 ?.takeIf { it.cueId == cue.id.value }
-            cue.adHocEffects.filter { it.uuid.toString() in retired }.forEach { it.delete() }
+            cue.adHocFx.filter { it.uuid.toString() in retired }.forEach { it.delete() }
             val written = writeRecordingIntoCue(state, cue, recording, RecordMode.MERGE, mask)
                 .withScenery(writeHeldSceneryIntoCue(cue, held, RecordMode.MERGE))
                 .withRemoved(removeClearedFromCue(cue, cleared, state.show.fixtures))
@@ -469,7 +469,7 @@ internal fun performProgrammerUpdate(
 
         val (written, cueName, stackId) = outcome
         // Their child is gone, and each copy now matches the child it was written as.
-        for (effect in state.show.fxEngine.getActiveEffects()) {
+        for (effect in state.show.fxEngine.getActiveFx()) {
             val origin = effect.programmerOrigin ?: continue
             if (origin.cueId == cueId && origin.childUuid in retired) effect.programmerOrigin = null
         }

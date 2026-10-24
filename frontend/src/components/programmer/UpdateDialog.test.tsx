@@ -21,7 +21,7 @@ const checklist = (cueIds: number[]) => ({
         isActive: false,
         cues: cueIds.map((cueId) => ({
           cueId, cueName: `Cue ${cueId}`, cueNumber: String(cueId), cueNumberAuto: false,
-          isActive: false, keyCount: 1, viaEffectKeyCount: 0, sample: [],
+          isActive: false, keyCount: 1, viaFxKeyCount: 0, sample: [],
         })),
       },
     ],

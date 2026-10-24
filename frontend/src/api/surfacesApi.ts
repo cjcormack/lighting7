@@ -110,7 +110,7 @@ export interface GrandMasterFaderTarget {
  * Set a cue stack's effect size (lighting7 effects plan D10) from a fader / encoder: 0..127 across
  * 0–100 %. The desk stamps `stackUuid` from `stackId` on write, as on the stack buttons.
  */
-export interface StackEffectSizeTarget {
+export interface StackFxAmountTarget {
   type: "stackFxAmount"
   stackId: number
   stackUuid?: string | null
@@ -236,7 +236,7 @@ export interface EncoderBankSetTarget {
 /**
  * Press a Look onto **its own fixtures** — never the selection.
  *
- * The opposite choice from {@link PressTemplateTarget}, and for the reason that makes each of them
+ * The opposite choice from {@link PressPaletteTarget}, and for the reason that makes each of them
  * "one behaviour every press": a Look names its fixtures and a template names none. A Look with a
  * deferred effect has no own targets, so it is refused at bind time
  * (`BINDING_LOOK_NEEDS_SELECTION`) and reads as health `lookNeedsSelection` if it gains one later.
@@ -253,7 +253,7 @@ export interface ApplyLookTarget {
  * A per-fixture one names its own heads. The family mask is derived server-side from the
  * template's rows, so nothing here sends one.
  */
-export interface PressTemplateTarget {
+export interface PressPaletteTarget {
   type: "pressPalette"
   paletteUuid: string
 }
@@ -384,7 +384,7 @@ export type BindingTarget =
   | BlackoutTarget
   | GrandMasterToggleTarget
   | GrandMasterFaderTarget
-  | StackEffectSizeTarget
+  | StackFxAmountTarget
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
@@ -396,7 +396,7 @@ export type BindingTarget =
   | StripTarget
   | EncoderBankSetTarget
   | ApplyLookTarget
-  | PressTemplateTarget
+  | PressPaletteTarget
   | PressPadTarget
   | PickUpPadTarget
   | HandPlaceInBankTarget
@@ -440,7 +440,7 @@ export type BindingHealth =
   | { type: "unknownProperty"; propertyName: string }
   // The record variants. Keyed by uuid because that is what the binding carries.
   | { type: "missingLook"; lookUuid: string }
-  | { type: "missingTemplate"; templateUuid: string }
+  | { type: "missingPalette"; paletteUuid: string }
   | { type: "missingPad"; padUuid: string }
   // A `handPlaceInBank` binding naming a **busk** bank that is gone. Not `unknownBank`, which is a
   // *device profile's* bank (an X-Touch layer): one is a row on a busk page, the other a mode of a

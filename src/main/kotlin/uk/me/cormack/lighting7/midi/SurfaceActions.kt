@@ -25,18 +25,18 @@ import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.routes.AddPadOutcome
 import uk.me.cormack.lighting7.routes.BuskPressService
 import uk.me.cormack.lighting7.routes.HandService
 import uk.me.cormack.lighting7.routes.familyOf
-import uk.me.cormack.lighting7.routes.isGenericTemplate
+import uk.me.cormack.lighting7.routes.isGenericPalette
 import uk.me.cormack.lighting7.routes.pressWouldRelease
-import uk.me.cormack.lighting7.routes.TemplatePressLog
-import uk.me.cormack.lighting7.routes.templateOutsideMaskMessage
+import uk.me.cormack.lighting7.routes.PalettePressLog
+import uk.me.cormack.lighting7.routes.paletteOutsideMaskMessage
 import uk.me.cormack.lighting7.routes.layerSource
 import uk.me.cormack.lighting7.routes.toggleLocate
 import uk.me.cormack.lighting7.state.SelectionSource
@@ -110,11 +110,11 @@ interface SurfaceActions {
     fun writeGrandMaster(midiValue7Bit: UByte)
 
     /**
-     * Set a cue stack's effect size from a continuous control, 0..127 across 0–100 %, the stack
+     * Set a cue stack's FX amount from a continuous control, 0..127 across 0–100 %, the stack
      * resolved as the stack buttons resolve theirs. A default so a test double that does not care
      * about stack sizes need not say so.
      */
-    fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
+    fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {}
 
     /**
      * Set a speed master's tempo from a continuous control, scaling 0..127 across
@@ -155,7 +155,7 @@ interface SurfaceActions {
      * dropped, exactly as its busk pad refuses; a per-fixture one presses on its own heads. The
      * family mask is derived from the template's rows, never sent.
      */
-    fun pressTemplate(templateUuid: String)
+    fun pressPalette(paletteUuid: String)
 
     /** Press a busk pad — its own bank's plan, solo siblings included, on the desk selection. */
     fun pressPad(padUuid: String)
@@ -363,9 +363,9 @@ class DefaultSurfaceActions(
     override fun writeGrandMaster(midiValue7Bit: UByte) =
         globalScalerState.setGrandMasterLevel(grandMasterLevelOf7Bit(midiValue7Bit))
 
-    override fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
+    override fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
         val resolved = resolveFaderStackId(stackId, stackUuid) ?: return
-        cueStackManager.setEffectSize(resolved, stackEffectSizeOf7Bit(midiValue7Bit))
+        cueStackManager.setFxAmount(resolved, stackFxAmountOf7Bit(midiValue7Bit))
     }
 
     /** A stack button's rule — the uuid wins, the int only without one — through the show's kept lookup. */
@@ -491,38 +491,38 @@ class DefaultSurfaceActions(
      * rule as every other door: a template whose family is outside it is refused by name, and the
      * refusal is a log line because a button has no reply channel (multi-screen plan D5).
      */
-    override fun pressTemplate(templateUuid: String) {
-        val uuid = uuidOrNull(templateUuid) ?: run {
-            logger.warn("Surface pressTemplate dropped: '{}' is not a uuid", templateUuid)
+    override fun pressPalette(paletteUuid: String) {
+        val uuid = uuidOrNull(paletteUuid) ?: run {
+            logger.warn("Surface pressPalette dropped: '{}' is not a uuid", paletteUuid)
             return
         }
         val projectId = currentProjectId() ?: return
         val press = transaction(state.database) {
-            DaoTemplate.find { (DaoTemplates.uuid eq uuid) and (DaoTemplates.project eq projectId) }
+            DaoPalette.find { (DaoPalettes.uuid eq uuid) and (DaoPalettes.project eq projectId) }
                 .firstOrNull()
                 ?.let { t ->
                     Triple(
-                        LayerSource.template(t.id.value, t.uuid, t.name),
+                        LayerSource.palette(t.id.value, t.uuid, t.name),
                         t.familyOf(),
-                        t.isGenericTemplate(),
+                        t.isGenericPalette(),
                     )
                 }
         }
         if (press == null) {
-            logger.warn("Surface pressTemplate dropped: no template {} in project {}", templateUuid, projectId)
+            logger.warn("Surface pressPalette dropped: no template {} in project {}", paletteUuid, projectId)
             return
         }
         val (source, family, isGeneric) = press
         val selection = state.deskSelection.state.value
         val targets = selection.targets
         if (isGeneric && targets.isEmpty()) {
-            logger.debug("Surface pressTemplate of '{}' dropped: nothing selected", source.name)
+            logger.debug("Surface pressPalette of '{}' dropped: nothing selected", source.name)
             return
         }
         val mask = selection.families
         // The on arm only: an off press comes off under any mask (`pressWouldRelease`).
         if (mask != null && !maskAllows(mask, family) && !pressWouldRelease(state, source.uuid, targets)) {
-            logger.warn("Surface pressTemplate dropped: {}", templateOutsideMaskMessage(source.name, family, mask))
+            logger.warn("Surface pressPalette dropped: {}", paletteOutsideMaskMessage(source.name, family, mask))
             return
         }
         runCatching {
@@ -530,13 +530,13 @@ class DefaultSurfaceActions(
         }.onSuccess { outcome ->
             // The hardware door of the press log — pressing from the desk's own buttons counts, or
             // the programmer's recents row would disagree with the surface the operator is using.
-            // The **on** arm only: a release is not a press (`TemplatePressLog`). The two refusals
+            // The **on** arm only: a release is not a press (`PalettePressLog`). The two refusals
             // above (no uuid / no such template, and a generic template with nothing selected) have
             // already returned, and a `toggle` that threw lands in `onFailure`.
             if (outcome.action == "applied") {
-                TemplatePressLog.record(state, projectId, source.id)
+                PalettePressLog.record(state, projectId, source.id)
             }
-        }.onFailure { logger.warn("Surface pressTemplate failed: {}", it.message) }
+        }.onFailure { logger.warn("Surface pressPalette failed: {}", it.message) }
     }
 
     /**

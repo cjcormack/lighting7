@@ -44,7 +44,7 @@ function makeBackend() {
                 name: 'Movement',
                 solo: false,
                 flow: 'WRAP',
-                pads: [{ id: 30, uuid: 'p30', kind: 'TEMPLATE', template: { id: 7 } as never }],
+                pads: [{ id: 30, uuid: 'p30', kind: 'PALETTE', palette: { id: 7 } as never }],
               },
             ],
           },
@@ -78,8 +78,8 @@ function makeBackend() {
             pads: bank.pads.map((pad) => ({
               id: pad.padId ?? nextId++,
               uuid: `p${pad.padId ?? nextId}`,
-              kind: pad.templateId != null ? ('TEMPLATE' as const) : ('LOOK' as const),
-              template: pad.templateId != null ? ({ id: pad.templateId } as never) : null,
+              kind: pad.paletteId != null ? ('PALETTE' as const) : ('LOOK' as const),
+              palette: pad.paletteId != null ? ({ id: pad.paletteId } as never) : null,
               look: pad.lookId != null ? ({ id: pad.lookId } as never) : null,
             })),
           })),
@@ -217,7 +217,7 @@ describe('the busk layout save loop', () => {
     await waitFor(() => expect(backend.bodies).toHaveLength(1))
     // The existing pad went out with its id; the new one without, so the server creates it.
     expect(backend.bodies[0].rows[0].columns[0].banks[0].pads).toEqual([
-      { padId: 30, templateId: 7 },
+      { padId: 30, paletteId: 7 },
       { lookId: 42 },
     ])
     await waitFor(() => expect(cachedPage()!.rows[0].columns[0].banks[0].pads).toHaveLength(2))

@@ -72,15 +72,15 @@ abstract class LightingScript(
      *
      * @throws IllegalArgumentException if no effect is registered under [id]
      */
-    fun effect(id: String, params: Map<String, String>): Effect =
-        show.fxRegistry.createEffectWithTemplates(show.templateRegistry, id, params)
+    fun effect(id: String, params: Map<String, String>): Fx =
+        show.fxRegistry.createFxWithPalettes(show.paletteRegistry, id, params)
 
     /**
      * [effect] with parameters as pairs, and the no-parameter form `effect("Pulse")`.
      * Deliberately not a default on the [Map] overload — that would make the bare
      * `effect("Pulse")` call ambiguous between the two.
      */
-    fun effect(id: String, vararg params: Pair<String, String>): Effect =
+    fun effect(id: String, vararg params: Pair<String, String>): Fx =
         effect(id, params.toMap())
 
     fun controller(subnet: Int, universe: Int): DmxController = fixtures.controller(Universe(subnet, universe))
@@ -98,6 +98,7 @@ object LightingScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.hue.*",
             "uk.me.cormack.lighting7.fixture.group.*",
             "uk.me.cormack.lighting7.fx.*",
+            "uk.me.cormack.lighting7.models.Timing",
             "java.awt.Color",
             "uk.me.cormack.lighting7.dmx.*",
             "kotlinx.coroutines.*",

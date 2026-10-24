@@ -20,9 +20,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { formatError } from '@/lib/formatError'
 import { FAMILY_LABELS } from '@/lib/attributeFamily'
 import { useLookQuery, useSaveLookMutation } from '@/store/looks'
-import { useEffectLibraryQuery } from '@/store/fixtureFx'
-import { EffectSummary } from '@/components/fx/EffectSummary'
-import { fromLookEffect } from '@/components/fx/effectSummaryTypes'
+import { useFxLibraryQuery } from '@/store/fixtureFx'
+import { FxSummary } from '@/components/fx/FxSummary'
+import { fromLookFx } from '@/components/fx/fxSummaryTypes'
 import { useInclude } from '@/components/programmer/useInclude'
 import { LookValueChip } from './lookValueChips'
 import { DEFERRED_TARGET_TYPE, type LookSummary } from '@/api/looksApi'
@@ -86,7 +86,7 @@ export function LookDetailSheet({
   })
   const { include, isLoading: isIncluding } = useInclude(projectId)
   // For each effect's parameter labels and colour swatches; only while the sheet is open.
-  const { data: library } = useEffectLibraryQuery(undefined, { skip: !open })
+  const { data: library } = useFxLibraryQuery(undefined, { skip: !open })
 
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
@@ -133,12 +133,12 @@ export function LookDetailSheet({
   // snapshot taken when the library row was clicked.
   const layerCount = detail?.layerCount ?? look.layerCount
   const families = detail?.families ?? look.families
-  const effects = detail?.effects ?? []
-  const effectCount = detail?.effects.length ?? look.effectCount
+  const effects = detail?.fx ?? []
+  const fxCount = detail?.fx.length ?? look.fxCount
 
   const save = async () => {
     if (name.trim() === '') return
-    // Only the metadata keys. Omitting `rows` and `effects` is what tells the backend to leave the
+    // Only the metadata keys. Omitting `rows` and `fx` is what tells the backend to leave the
     // contents alone — sending `[]` would clear them, and clear them out from under every cue
     // resolving through this Look.
     await saveLook({
@@ -164,7 +164,7 @@ export function LookDetailSheet({
           <SheetTitle>{look.name}</SheetTitle>
           <SheetDescription>
             {look.targetCount} fixture{look.targetCount === 1 ? '' : 's'}
-            {effectCount > 0 ? ` · ${effectCount} FX` : ''} · used by{' '}
+            {fxCount > 0 ? ` · ${fxCount} FX` : ''} · used by{' '}
             {layerCount} cue layer{layerCount === 1 ? '' : 's'}
           </SheetDescription>
         </SheetHeader>
@@ -281,9 +281,9 @@ export function LookDetailSheet({
             ) : (
               <div className="space-y-1.5">
                 {effects.map((effect, index) => (
-                  <EffectSummary
-                    key={`${effect.effectType}-${effect.targetKey}-${index}`}
-                    effect={fromLookEffect(effect, library)}
+                  <FxSummary
+                    key={`${effect.fxType}-${effect.targetKey}-${index}`}
+                    effect={fromLookFx(effect, library)}
                     target={
                       effect.targetType === DEFERRED_TARGET_TYPE
                         ? undefined

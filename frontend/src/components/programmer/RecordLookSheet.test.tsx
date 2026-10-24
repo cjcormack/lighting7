@@ -19,7 +19,7 @@ vi.mock('@/store/selectionSlice', () => ({ selectTargetKeys: () => [] }))
 vi.mock('@/store/programmer', () => ({ useProgrammerScenery: () => ({ projectId: 6, elements: [] }) }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalFamilyCounts: () => undefined }))
 vi.mock('@/store/programmerOps', () => ({
   useRecordLookMutation: () => [recordLook, { isLoading: false, error: undefined, reset: () => {} }],

@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { CellResolution } from '@/components/fixtures-list/columns'
 import type { CellBatch, WriteTarget } from '@/components/fixtures-list/rowModel'
-import { chan, makeActiveEffect, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveFx, settingProp, sliderProp } from '@/test/fixtureFactories'
 
 /**
  * The per-property popup (apply-model plan §4.3): the Palettes band round the level and position
@@ -17,25 +17,25 @@ import { chan, makeActiveEffect, settingProp, sliderProp } from '@/test/fixtureF
  * band and no Palettes band, the running effects lit and opened over the cell batch.
  */
 
-let templates: TemplateSummary[] = []
+let templates: PaletteSummary[] = []
 const toggle = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve({ action: 'added' }) })))
 const apply = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve({ written: 1, skipped: [], values: [] }) })))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [apply],
-  useToggleTemplateMutation: () => [toggle],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: templates }),
+  useApplyPaletteMutation: () => [apply],
+  useTogglePaletteMutation: () => [toggle],
 }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 /** The effect library and what runs — the Effects band's offer and its lit chips. */
 const fx = vi.hoisted(() => ({ library: [] as unknown[], active: [] as unknown[] }))
 vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [vi.fn()],
-  useEffectLibraryQuery: () => ({ data: fx.library }),
-  useActiveEffectsQuery: () => ({ data: fx.active }),
+  useFxLibraryQuery: () => ({ data: fx.library }),
+  useActiveFxQuery: () => ({ data: fx.active }),
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()] }))
 /** The picker *+ Effect …* and *All* open, by the props they open it with — its own test is `ApplyPicker.test.tsx`. */
@@ -92,8 +92,8 @@ vi.mock('@/components/programmer/LookRowStore', () => ({
   useLookRowStore: () =>
     look.focused ? { lookName: 'Warm wash', projectId: 1, lookId: 9, targets: [], targetedKeys: null, setValue: vi.fn() } : null,
 }))
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 
@@ -103,7 +103,7 @@ const { SettingCell } = await import('@/components/fixtures-list/cells/SettingCe
 const { paletteCarries } = await import('./PaletteBands')
 const { PressCueContext } = await import('@/components/press/pressCue')
 
-function template(over: Partial<TemplateSummary>): TemplateSummary {
+function template(over: Partial<PaletteSummary>): PaletteSummary {
   return {
     id: 1,
     uuid: 'u1',
@@ -116,7 +116,7 @@ function template(over: Partial<TemplateSummary>): TemplateSummary {
     requiredEmitters: [],
     lastPressedAt: null,
     rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
-    effect: null,
+    fx: null,
     layerCount: 0,
     buskPageCount: 0,
     ...over,
@@ -153,24 +153,24 @@ const HOME = template({
   family: 'POSITION',
   rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'pos:0,0' }],
 })
-const PULSE = template({ id: 7, uuid: 'u7', name: 'Pulse', kind: 'effect', rows: [] })
-const beamEffect = (effectType: string, propertyName: string | null = null) => ({
-  effectType,
-  category: 'beam',
+const PULSE = template({ id: 7, uuid: 'u7', name: 'Pulse', kind: 'fx', rows: [] })
+const beamFx = (fxType: string, propertyName: string | null = null) => ({
+  fxType,
+  family: 'beam',
   propertyName,
-  beatDivision: 4,
+  cycle: 4,
   blendMode: 'OVERRIDE',
-  distribution: 'NORMAL',
+  order: 'NORMAL',
   parameters: {},
 })
-const WAVE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('ZoomWave') })
-const PULSE_IRIS = template({ id: 9, uuid: 'u9', name: 'Iris throb', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('IrisPulse') })
-const GOBO_STEPS = template({ id: 10, uuid: 'u10', name: 'Gobo walk', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('SlotSteps', 'gobo') })
+const WAVE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('ZoomWave') })
+const PULSE_IRIS = template({ id: 9, uuid: 'u9', name: 'Iris throb', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('IrisPulse') })
+const GOBO_STEPS = template({ id: 10, uuid: 'u10', name: 'Gobo walk', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('SlotSteps', 'gobo') })
 const libraryEntry = (name: string, property: string) => ({
   name,
-  category: 'beam',
+  family: 'beam',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   compatibleProperties: [property],
   parameters: [],
 })
@@ -261,7 +261,7 @@ describe('the Palettes band', () => {
     })
     expect(toggle).toHaveBeenCalledWith({
       projectId: 1,
-      templateId: 1,
+      paletteId: 1,
       targets: [
         { type: 'fixture', key: 'hex-1' },
         { type: 'fixture', key: 'hex-2' },
@@ -272,13 +272,13 @@ describe('the Palettes band', () => {
     await act(async () => {
       fireEvent.click(screen.getByText('Half'), { altKey: true })
     })
-    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ templateId: 2, families: ['INTENSITY'] }))
+    expect(apply).toHaveBeenCalledWith(expect.objectContaining({ paletteId: 2, families: ['INTENSITY'] }))
   })
 
   it('wears the pad’s ring from the desk’s applied state', () => {
     applied.current = [
       {
-        source: { kind: 'TEMPLATE', id: 1, uuid: 'u1', name: 'Full' },
+        source: { kind: 'PALETTE', id: 1, uuid: 'u1', name: 'Full' },
         targets: [
           { type: 'fixture', key: 'hex-1', state: 'all' },
           { type: 'fixture', key: 'hex-2', state: 'all' },
@@ -294,7 +294,7 @@ describe('the Palettes band', () => {
     look.focused = true
     applied.current = [
       {
-        source: { kind: 'TEMPLATE', id: 1, uuid: 'u1', name: 'Full' },
+        source: { kind: 'PALETTE', id: 1, uuid: 'u1', name: 'Full' },
         targets: [
           { type: 'fixture', key: 'hex-1', state: 'all' },
           { type: 'fixture', key: 'hex-2', state: 'all' },
@@ -372,7 +372,7 @@ function gobo(over: Partial<React.ComponentProps<typeof SettingCell>> = {}) {
   )
 }
 
-const effectChips = () => [...document.querySelectorAll('[data-band-effect-palette]')].map((chip) => chip.textContent)
+const fxChips = () => [...document.querySelectorAll('[data-band-effect-palette]')].map((chip) => chip.textContent)
 
 describe('the Effects band', () => {
   it('sits below a dimmer cell’s editor, under its family', () => {
@@ -385,12 +385,12 @@ describe('the Effects band', () => {
 
   it('offers a zoom cell Zoom Wave — the Beam effect palettes that drive zoom — and opens the picker on zoom', () => {
     slider(ZOOM)
-    expect(effectChips()).toEqual(['Slow zoom'])
+    expect(fxChips()).toEqual(['Slow zoom'])
     fireEvent.click(screen.getByRole('button', { name: 'FX…' }))
-    expect(screen.getByTestId('picker-effects')).toBeInTheDocument()
+    expect(screen.getByTestId('picker-fx')).toBeInTheDocument()
     expect(picker).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        library: 'effects',
+        library: 'fx',
         family: 'BEAM',
         property: 'zoom',
         pair: { targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }], families: ['BEAM'] },
@@ -402,7 +402,7 @@ describe('the Effects band', () => {
     gobo()
     expect(document.querySelector('[data-palette-band]')).toBeNull()
     expect(document.querySelector('[data-effects-band="BEAM"]')).not.toBeNull()
-    expect(effectChips()).toEqual(['Gobo walk'])
+    expect(fxChips()).toEqual(['Gobo walk'])
     expect(screen.queryByRole('button', { name: 'Save as palette…' })).toBeNull()
   })
 
@@ -417,15 +417,15 @@ describe('the Effects band', () => {
       fireEvent.click(screen.getByText('Slow zoom'))
     })
     expect(toggle).toHaveBeenCalledWith(
-      expect.objectContaining({ templateId: 8, families: ['BEAM'], targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }] }),
+      expect.objectContaining({ paletteId: 8, families: ['BEAM'], targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }] }),
     )
   })
 
   it('lights the effects running on these heads and opens the editor over the cell batch', () => {
     fx.active = [
-      makeActiveEffect({ id: 41, effectType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' }),
-      makeActiveEffect({ id: 42, effectType: 'Pulse', targetKey: 'hex-9', propertyName: 'dimmer' }),
-      makeActiveEffect({ id: 43, effectType: 'ZoomWave', targetKey: 'hex-1', propertyName: 'zoom' }),
+      makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' }),
+      makeActiveFx({ id: 42, fxType: 'Pulse', targetKey: 'hex-9', propertyName: 'dimmer' }),
+      makeActiveFx({ id: 43, fxType: 'ZoomWave', targetKey: 'hex-1', propertyName: 'zoom' }),
     ]
     slider(DIMMER)
     const lit = [...document.querySelectorAll('[data-band-effect]')].map((chip) => chip.getAttribute('data-band-effect'))
@@ -440,7 +440,7 @@ describe('the Effects band', () => {
   })
 
   it('reads a cue’s effect as its cue’s: lit, but not edited here', () => {
-    fx.active = [makeActiveEffect({ id: 44, effectType: 'Pulse', targetKey: 'hex-1', programmerOwned: false, cueId: 12 })]
+    fx.active = [makeActiveFx({ id: 44, fxType: 'Pulse', targetKey: 'hex-1', programmerOwned: false, cueId: 12 })]
     slider(DIMMER)
     expect(document.querySelector('[data-band-effect="44"]')).toBeDisabled()
   })
@@ -450,16 +450,16 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   const storedPulse = (targetKey: string, propertyName = 'dimmer') => ({
     targetType: 'fixture' as const,
     targetKey,
-    effectType: propertyName === 'zoom' ? 'ZoomWave' : 'Pulse',
-    category: 'intensity',
+    fxType: propertyName === 'zoom' ? 'ZoomWave' : 'Pulse',
+    family: 'intensity',
     propertyName,
-    beatDivision: 4,
+    cycle: 4,
     blendMode: 'OVERRIDE',
-    distribution: 'NORMAL',
+    order: 'NORMAL',
     phaseOffset: 0,
     elementMode: null,
     elementFilter: null,
-    stepTiming: null,
+    timing: null,
     parameters: {},
   })
   function inCue(layered: string[] = [], { readOnly = false, effects = [storedPulse('hex-2'), storedPulse('hex-9'), storedPulse('hex-1', 'zoom')] } = {}) {
@@ -472,7 +472,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
       effects,
       pressLayer: vi.fn(() => Promise.resolve({ action: 'applied' as const, cue: {} as never })),
       landValues: vi.fn(() => 0),
-      pickEffect: vi.fn(() => Promise.resolve(true)),
+      pickFx: vi.fn(() => Promise.resolve(true)),
     }
     render(
       <PressCueContext.Provider value={cue}>
@@ -504,7 +504,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
       fireEvent.click(screen.getByText('Full'))
     })
     expect(cue.pressLayer).toHaveBeenCalledWith(
-      { templateId: 1 },
+      { paletteId: 1 },
       [
         { type: 'fixture', key: 'hex-1' },
         { type: 'fixture', key: 'hex-2' },
@@ -515,13 +515,13 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   })
 
   it('rings a chip the cue layers, partly', () => {
-    inCue(['TEMPLATE:2'])
+    inCue(['PALETTE:2'])
     expect(screen.getByText('Half').closest('button')).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Full').closest('button')).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('lists the cue’s stored effects on this property that reach these heads, and nothing running', () => {
-    fx.active = [makeActiveEffect({ id: 41, effectType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' })]
+    fx.active = [makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' })]
     inCue()
     expect(document.querySelector('[data-band-effect]')).toBeNull()
     const stored = [...document.querySelectorAll('[data-band-stored-effect]')]

@@ -707,7 +707,7 @@ describe('CueSheet — the bottom pane', () => {
   })
 
   it("a row's Layers and FX read-outs select it and open the pane on that tab", () => {
-    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { layerCount: 3, adHocEffectCount: 1 }), cue(4)] } })
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { layerCount: 3, adHocFxCount: 1 }), cue(4)] } })
     fireEvent.click(within(row(2)).getByTitle(/Looks in the editor below/))
     expect(row(2)).toHaveAttribute('data-state', 'selected')
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'looks')
@@ -719,7 +719,7 @@ describe('CueSheet — the bottom pane', () => {
   })
 
   it('a read-out’s tab is spent once the pane leaves its row', () => {
-    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { adHocEffectCount: 1 }), cue(4)] } })
+    draw({ stack: { ...STACK, cues: [cue(1), cue(2, { adHocFxCount: 1 }), cue(4)] } })
     fireEvent.click(within(row(2)).getByTitle(/FX in the editor below/))
     expect(pane()!.querySelector('[data-cue-editor]')).toHaveAttribute('data-tab', 'fx')
     fireEvent.click(row(4).firstElementChild as HTMLElement)

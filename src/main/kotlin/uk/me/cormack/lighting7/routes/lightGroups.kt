@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fixture.TriggerIndex
+import uk.me.cormack.lighting7.models.Timing
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
@@ -17,7 +18,7 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.*
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.fx.group.clearFx
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.RigScope
@@ -63,8 +64,8 @@ internal fun Route.routeApiRestGroups(state: State) {
             val request = call.receive<AddGroupFxRequest>()
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
-                val effectId = applyGroupEffect(state, group, request)
-                call.respond(AddGroupFxResponse(effectId))
+                val fxId = applyGroupFx(state, group, request)
+                call.respond(AddGroupFxResponse(fxId))
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             } catch (e: Exception) {
@@ -90,22 +91,22 @@ internal fun Route.routeApiRestGroups(state: State) {
                 state.show.fixtures.untypedGroup(resource.name)
 
                 val engine = state.show.fxEngine
-                val effects = engine.getEffectsForGroup(resource.name)
+                val effects = engine.getFxForGroup(resource.name)
                 val dtos = effects.map { instance ->
                     val expanded = engine.isMultiElementExpanded(instance)
-                    GroupEffectDto(
+                    GroupFxDto(
                         id = instance.id,
                         // The display name is the last fallback, for an effect a script constructed
                         // itself; a display name need not resolve, so an id comes first.
-                        effectType = instance.registrationId ?: instance.effect.registrationId ?: instance.effect.name,
+                        fxType = instance.registrationId ?: instance.effect.registrationId ?: instance.effect.name,
                         propertyName = instance.target.propertyName,
-                        beatDivision = instance.timing.beatDivision,
+                        cycle = instance.timing.cycle,
                         blendMode = instance.blendMode.name,
-                        distribution = instance.distributionStrategy.javaClass.simpleName,
+                        order = instance.order.javaClass.simpleName,
                         elementMode = if (expanded) instance.elementMode.name else null,
                         elementFilter = if (instance.elementFilter != ElementFilter.ALL)
                             instance.elementFilter.name else null,
-                        stepTiming = instance.stepTiming,
+                        timing = instance.dynamics.timing,
                         isRunning = instance.isRunning,
                         phaseOffset = instance.phaseOffset,
                         currentPhase = instance.lastPhase,
@@ -113,19 +114,19 @@ internal fun Route.routeApiRestGroups(state: State) {
                         cueId = instance.cueId,
                         programmerOwned = FxEngine.isProgrammerFxPriority(instance.priority),
                         intensityMultiplier = instance.intensityMultiplier,
-                        // Gated exactly as EffectDto and IndirectEffectDto are — this was the
+                        // Gated exactly as FxDto and IndirectFxDto are — this was the
                         // one effect report sweep item B4 missed, so a BEAT-timed group effect
                         // showed a live rate-master chip for a field it cannot read.
                         speedMasterUuid = instance.reportedSpeedMasterUuid,
                         rateSpeedMasterUuid = instance.reportedRateSpeedMasterUuid,
                         seconds = instance.onSeconds,
-                        size = instance.dynamics.size,
+                        amount = instance.dynamics.amount,
                         direction = instance.dynamics.direction.name,
-                        nShot = instance.dynamics.nShot,
+                        runs = instance.dynamics.runs,
                         spread = instance.dynamics.spread,
                         wings = instance.dynamics.wings,
-                        blocks = instance.dynamics.blocks,
-                        groups = instance.dynamics.groups,
+                        segments = instance.dynamics.segments,
+                        parts = instance.dynamics.parts,
                         spent = instance.spent,
                     )
                 }
@@ -134,13 +135,12 @@ internal fun Route.routeApiRestGroups(state: State) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
         }
+    }
 
-        // Get distribution strategies
-        get<DistributionStrategiesResource> {
-            call.respond(DistributionStrategiesResponse(
-                strategies = DistributionStrategy.availableStrategies
-            ))
-        }
+    // A vocabulary enumeration, beside the groups rather than under them: a literal under
+    // `/groups` would shadow a group of that name.
+    get("/spread-orders") {
+        call.respond(SpreadOrdersResponse(orders = SpreadOrder.availableOrders))
     }
 }
 
@@ -160,9 +160,6 @@ data class GroupFxResource(val name: String)
 @Resource("/{name}/fx/active")
 data class GroupActiveFxResource(val name: String)
 
-@Resource("/distribution-strategies")
-data object DistributionStrategiesResource
-
 // DTOs
 @Serializable
 data class GroupSummaryDto(
@@ -170,7 +167,7 @@ data class GroupSummaryDto(
     val memberCount: Int,
     val capabilities: List<String>,
     val symmetricMode: String,
-    val defaultDistribution: String,
+    val defaultOrder: String,
     /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
     val compatibleLookIds: List<Int> = emptyList(),
     /**
@@ -204,71 +201,71 @@ data class GroupDetailDto(
     val memberCount: Int,
     val capabilities: List<String>,
     val symmetricMode: String,
-    val defaultDistribution: String,
+    val defaultOrder: String,
     val members: List<GroupMemberDto>,
     /** Always empty: a Look lands whole (absolute-looks plan P7). Kept on the wire until the client stops reading it. */
     val compatibleLookIds: List<Int> = emptyList(),
     /**
-     * Each strategy's step per member, by `index` (`DistributionStrategy.stepsBySize`): the order
+     * Each strategy's step per member, by `index` (`SpreadOrder.stepsBySize`): the order
      * the group sheet shows effects and a spread running in under that strategy (venue-visit plan S7)
      * — over the members; an effect expanded to multi-head members' cells distributes over the cells.
      */
-    val distributionSteps: Map<String, List<Int>> = emptyMap(),
+    val orderSteps: Map<String, List<Int>> = emptyMap(),
 )
 
 @Serializable
 data class AddGroupFxRequest(
-    val effectType: String,
+    val fxType: String,
     val propertyName: String,  // "dimmer", "colour", "position", "uv"
-    /** The FX's own default cycle when omitted — see [AddEffectRequest.beatDivision]. */
-    val beatDivision: Double? = null,
+    /** The FX's own default cycle when omitted — see [AddFxRequest.cycle]. */
+    val cycle: Double? = null,
     val blendMode: String = "OVERRIDE",
-    val distribution: String = "NORMAL",
+    val order: String = "NORMAL",
     val phaseOffset: Double = 0.0,
     val parameters: Map<String, String> = emptyMap(),
     val elementMode: String = "PER_FIXTURE",  // PER_FIXTURE or FLAT
     val elementFilter: String = "ALL",
-    val stepTiming: Boolean? = null,
+    val timing: Timing? = null,
     /** Speed master to subscribe to, as the master's uuid (null → master 1). */
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
-    /** On *Seconds* (D7) — see [AddEffectRequest.seconds]. */
+    /** On *Seconds* (D7) — see [AddFxRequest.seconds]. */
     val seconds: Boolean = false,
-    /** Size (effects plan D2), 0–1 — see [AddEffectRequest.size]. */
-    val size: Double = 1.0,
-    /** Direction (D5) — see [AddEffectRequest.direction]. */
+    /** Amount (effects plan D2), 0–1 — see [AddFxRequest.amount]. */
+    val amount: Double = 1.0,
+    /** Direction (D5) — see [AddFxRequest.direction]. */
     val direction: String? = null,
-    /** Runs (D9) — see [AddEffectRequest.nShot]. */
-    val nShot: Int? = null,
-    /** The spread's shape (D4) — see [AddEffectRequest.spread]. */
+    /** Runs (D9) — see [AddFxRequest.runs]. */
+    val runs: Int? = null,
+    /** The spread's shape (D4) — see [AddFxRequest.spread]. */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     /**
      * Create this effect in the programmer's reserved priority band
-     * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddEffectRequest.programmerOwned].
+     * ([FxEngine.PROGRAMMER_FX_PRIORITY_BASE]). See [AddFxRequest.programmerOwned].
      */
     val programmerOwned: Boolean = false,
 )
 
 @Serializable
 data class AddGroupFxResponse(
-    val effectId: Long
+    val fxId: Long
 )
 
 @Serializable
-data class GroupEffectDto(
+data class GroupFxDto(
     val id: Long,
-    val effectType: String,
+    val fxType: String,
     val propertyName: String,
-    val beatDivision: Double,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val elementMode: String? = null,
     val elementFilter: String? = null,
-    val stepTiming: Boolean = false,
+    val timing: Timing = Timing.CYCLE,
     val isRunning: Boolean,
     val phaseOffset: Double,
     val currentPhase: Double,
@@ -276,24 +273,24 @@ data class GroupEffectDto(
     val cueId: Int? = null,
     /** True when this effect sits in the programmer's reserved priority band. */
     val programmerOwned: Boolean = false,
-    /** The envelope — see [uk.me.cormack.lighting7.fx.EffectDto.intensityMultiplier]. */
+    /** The envelope — see [uk.me.cormack.lighting7.fx.FxDto.intensityMultiplier]. */
     val intensityMultiplier: Double = 1.0,
     /** Speed master this effect subscribes to (null → master 1). */
     val speedMasterUuid: String? = null,
     /** Wall-clock rate master (null → unscaled). Only meaningful for WALL_CLOCK effects. */
     val rateSpeedMasterUuid: String? = null,
-    /** D7's reading — see [uk.me.cormack.lighting7.fx.EffectDto.seconds]. */
+    /** D7's reading — see [uk.me.cormack.lighting7.fx.FxDto.seconds]. */
     val seconds: Boolean = false,
-    /** See [uk.me.cormack.lighting7.fx.EffectDto.size] and its three siblings. */
-    val size: Double = 1.0,
+    /** See [uk.me.cormack.lighting7.fx.FxDto.amount] and its three siblings. */
+    val amount: Double = 1.0,
     val direction: String = "FORWARD",
-    val nShot: Int? = null,
+    val runs: Int? = null,
     val spent: Boolean = false,
-    /** See [uk.me.cormack.lighting7.fx.EffectDto.spread] and its three siblings. */
+    /** See [uk.me.cormack.lighting7.fx.FxDto.spread] and its three siblings. */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
 )
 
 @Serializable
@@ -302,8 +299,8 @@ data class ClearGroupFxResponse(
 )
 
 @Serializable
-data class DistributionStrategiesResponse(
-    val strategies: List<String>
+data class SpreadOrdersResponse(
+    val orders: List<String>,
 )
 
 // Helper functions
@@ -321,7 +318,7 @@ internal fun FixtureGroup<*>.toGroupSummaryDto(colour: String? = null): GroupSum
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
-        defaultDistribution = metadata.defaultDistributionName,
+        defaultOrder = metadata.defaultOrderName,
         memberKeys = allMembers.map { it.key },
     )
 }
@@ -332,7 +329,7 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
         memberCount = memberCount,  // Uses allMembers.size (includes subgroups)
         capabilities = detectCapabilities(),
         symmetricMode = metadata.symmetricMode.name,
-        defaultDistribution = metadata.defaultDistributionName,
+        defaultOrder = metadata.defaultOrderName,
         members = allMembers.map { member ->  // Use allMembers to include subgroups
             GroupMemberDto(
                 fixtureKey = member.key,
@@ -345,7 +342,7 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
                 tags = member.metadata.tags.toList()
             )
         },
-        distributionSteps = DistributionStrategy.stepsBySize(memberCount),
+        orderSteps = SpreadOrder.stepsBySize(memberCount),
     )
 }
 
@@ -360,24 +357,24 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
 private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String): Boolean =
     fixturesSupportProperty(group.fixtures, propertyName)
 
-private fun applyGroupEffect(
+private fun applyGroupFx(
     state: State,
     group: FixtureGroup<*>,
     request: AddGroupFxRequest
 ): Long {
     val engine = state.show.fxEngine
-    state.show.fxRegistry.fxWriteProblem(request.effectType, request.parameters)
+    state.show.fxRegistry.fxWriteProblem(request.fxType, request.parameters)
         ?.let { throw IllegalArgumentException(it) }
-    val effect = state.show.fxRegistry.createEffectWithTemplates(
-        state.show.templateRegistry,
-        request.effectType,
+    val effect = state.show.fxRegistry.createFxWithPalettes(
+        state.show.paletteRegistry,
+        request.fxType,
         request.parameters,
     )
-    val registration = state.show.fxRegistry.getRegistration(request.effectType)
-    val timing = FxTiming(request.beatDivision ?: registration?.defaultBeatDivision ?: BeatDivision.ONE_BAR)
-    val blendMode = EffectSpecCoercion.Strict.blendMode(request.blendMode)
-    val distribution = EffectSpecCoercion.Strict.distribution(request.distribution)
-    val elementMode = EffectSpecCoercion.Strict.elementMode(request.elementMode)
+    val registration = state.show.fxRegistry.getRegistration(request.fxType)
+    val timing = FxTiming(request.cycle ?: registration?.defaultCycle ?: CycleLength.ONE_BAR)
+    val blendMode = FxSpecCoercion.Strict.blendMode(request.blendMode)
+    val spreadOrder = FxSpecCoercion.Strict.order(request.order)
+    val elementMode = FxSpecCoercion.Strict.elementMode(request.elementMode)
 
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
     TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
@@ -402,7 +399,7 @@ private fun applyGroupEffect(
     )
     requireOutputTypeMatch(effect, target)
 
-    val elFilter = EffectSpecCoercion.Strict.elementFilter(request.elementFilter)
+    val elFilter = FxSpecCoercion.Strict.elementFilter(request.elementFilter)
 
     // Create SINGLE FxInstance for the entire group
     secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
@@ -410,14 +407,14 @@ private fun applyGroupEffect(
     val instance = FxInstance(effect, target, timing, blendMode).apply {
         registrationId = registration?.id
         phaseOffset = request.phaseOffset
-        distributionStrategy = distribution
+        order = spreadOrder
         this.elementMode = elementMode
         this.elementFilter = elFilter
         applyRequestedDynamics(
-            request.size, request.direction, request.nShot,
-            SpreadShape(request.spread, request.wings, request.blocks, request.groups),
+            request.amount, request.direction, request.runs,
+            SpreadShape(request.spread, request.wings, request.segments, request.parts),
         )
-        request.stepTiming?.let { this.stepTiming = it }
+        request.timing?.let { t -> updateDynamics { it.copy(timing = t) } }
         speedMasterUuid = requireSpeedMasterUuid(request.speedMasterUuid)
         rateSpeedMasterUuid = requireSpeedMasterUuid(request.rateSpeedMasterUuid)
         // The type's loop, and D7's choice — this route never set the loop before S15, so a
@@ -427,6 +424,6 @@ private fun applyGroupEffect(
 
     markProgrammerOwned(instance, request.programmerOwned)
 
-    return engine.addEffect(instance)
+    return engine.addFx(instance)
 }
 

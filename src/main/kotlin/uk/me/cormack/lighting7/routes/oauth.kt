@@ -359,7 +359,7 @@ private fun persistIdentity(state: State, token: TokenResponse, user: GithubUser
     state.oauthTokenStore?.save(identity)
         ?: error("Token store should be present whenever OAuth client is configured")
     // Converted once, then read by both the row and the broadcast frame — the same "one value,
-    // two consumers" rule `TemplatePressLog` follows. `connectedAtMs` is non-null on the blob, so
+    // two consumers" rule `PalettePressLog` follows. `connectedAtMs` is non-null on the blob, so
     // it goes through `Instant.ofEpochMilli` directly: routing it through the nullable
     // `asInstant()` helper would only buy a `!!` that re-asserts what the type already says.
     val accessExpiresAt = identity.accessExpiresAtMs.asInstant()

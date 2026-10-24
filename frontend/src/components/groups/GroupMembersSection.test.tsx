@@ -39,7 +39,7 @@ function member(key: string, index: number): GroupMember {
 const members = ['a', 'b', 'c', 'd'].map(member)
 const steps = { NORMAL: [1, 2, 3, 4], CENTRE_OUT: [2, 1, 1, 2] }
 
-function renderList(defaultDistribution = 'NORMAL') {
+function renderList(defaultOrder = 'NORMAL') {
   return render(
     <GroupMembersSection
       members={members}
@@ -47,8 +47,8 @@ function renderList(defaultDistribution = 'NORMAL') {
       onFixtureClick={() => {}}
       layout="list"
       groupName="wash"
-      distributionSteps={steps}
-      defaultDistribution={defaultDistribution}
+      orderSteps={steps}
+      defaultOrder={defaultOrder}
     />,
   )
 }

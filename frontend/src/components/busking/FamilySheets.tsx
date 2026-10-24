@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { EditorLabel } from '@/components/editor/EditorLabel'
-import { EffectsBand, PaletteBand, PaletteFooter } from '@/components/editor/PaletteBands'
+import { FxBand, PaletteBand, PaletteFooter } from '@/components/editor/PaletteBands'
 import { targetEmitters } from '@/components/fixtures-list/rowModel'
 import type { CellCommit } from '@/components/fixtures-list/rowModel'
 import { PickPositionControls, pickGroups } from '@/components/fixtureSheet/PickPropertyRow'
@@ -8,11 +8,11 @@ import { LevelControl } from '@/components/fixtureSheet/PropertyRow'
 import type { PositionResolution } from '@/components/fixtureSheet/sheetRows'
 import { writePickPosition } from '@/components/fixtureSheet/sheetWrites'
 import { useChannelValues } from '@/components/fixtureSheet/useChannelValues'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { templatePropertyFor } from '@/lib/templateIntent'
+import { palettePropertyFor } from '@/lib/paletteIntent'
 import { cn } from '@/lib/utils'
 import type { ChannelRef, Fixture, SliderPropertyDescriptor } from '@/store/fixtures'
 import { useIsDeskConnected } from '@/store/status'
@@ -94,7 +94,7 @@ function FamilyTab({
           scope="programmer"
         />
         {children}
-        <EffectsBand
+        <FxBand
           projectId={projectId}
           family={family}
           property={property}
@@ -109,7 +109,7 @@ function FamilyTab({
         onSave={() => setSaving(true)}
         className="shrink-0 px-3 py-2"
       />
-      <NewTemplateFromSelectionSheet
+      <NewPaletteFromSelectionSheet
         open={saving}
         onOpenChange={setSaving}
         projectId={projectId}
@@ -203,7 +203,7 @@ export function BeamSheet({ projectId, selectedTargets, families }: FamilyTabPro
   const property = chosen != null && properties.includes(chosen) ? chosen : (properties[0] ?? 'zoom')
   const units = useMemo(() => familyUnits(selected, fixtures, sliderOf(property)), [selected, fixtures, property])
   const without = useMemo(() => headsWithout(selected, fixtures, sliderOf(property)), [selected, fixtures, property])
-  const label = templatePropertyFor(property)?.label ?? property
+  const label = palettePropertyFor(property)?.label ?? property
   const row =
     properties.length > 1 ? (
       <div role="radiogroup" aria-label="Beam attribute" className="flex flex-wrap items-center gap-1">
@@ -219,7 +219,7 @@ export function BeamSheet({ projectId, selectedTargets, families }: FamilyTabPro
               name === property ? 'border-primary bg-primary/10 text-foreground' : 'text-muted-foreground hover:text-foreground',
             )}
           >
-            {templatePropertyFor(name)?.label ?? name}
+            {palettePropertyFor(name)?.label ?? name}
           </button>
         ))}
       </div>

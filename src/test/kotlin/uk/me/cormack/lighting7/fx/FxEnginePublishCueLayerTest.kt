@@ -601,11 +601,11 @@ class FxEnginePublishCueLayerTest {
         // A running effect now covers the key; the effect-coverage cache built by the earlier
         // publishes must be invalidated, or the next weight tick would keep painting Layer 4
         // under the effect (visible flicker between the effect's ticks).
-        rig.engine.addEffect(
+        rig.engine.addFx(
             FxInstance(
                 effect = uk.me.cormack.lighting7.testsupport.SineSlider(),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             ),
         )
 

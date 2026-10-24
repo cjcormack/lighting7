@@ -12,24 +12,24 @@ import { cn } from '@/lib/utils'
 import { LibraryVerb, oneRecordReason } from '@/components/sheet/LibraryVerb'
 import { PartitionChips } from '@/components/sheet/LibraryRow'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
-import { useActiveEffectsQuery, useEffectLibraryQuery, type ActiveEffect } from '@/store/fixtureFx'
+import { useActiveFxQuery, useFxLibraryQuery, type ActiveFx } from '@/store/fixtureFx'
 import { useProgrammerLayersQuery } from '@/store/programmer'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { isHeldByBlind } from '@/lib/heldBack'
-import { effectTargetLabel, selectionItems } from '@/lib/effectTargets'
-import { isOnSeconds } from '@/lib/effectTiming'
-import { isPaletteSteps, isSlotSteps, parseStepList, slotLabel } from '@/lib/stepEffects'
-import { getBeatDivisionLabel, secondsLabel } from '@/components/fx/fxConstants'
-import { parseTemplateRefUuid } from '@/components/fx/colourUtils'
+import { fxTargetLabel, selectionItems } from '@/lib/fxTargets'
+import { isOnSeconds } from '@/lib/fxTiming'
+import { isPaletteSteps, isSlotSteps, parseStepList, slotLabel } from '@/lib/stepFx'
+import { getCycleLabel, secondsLabel } from '@/components/fx/fxConstants'
+import { parsePaletteRefUuid } from '@/components/fx/colourUtils'
 import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
 import { HeldBlindMark } from '@/components/fx/HeldBlindMark'
-import { useStopEffect, useToggleFxPause } from '@/components/fx/useEffectControls'
-import { NewTemplateFromEffectSheet } from '@/components/programmer/NewTemplateFromEffectSheet'
-import { homeOf, layerHomesOf, saveAsTemplateOffer } from './fxRows'
-import { ProgrammerAddEffectSheet, useProgrammerAddEffect } from '@/components/programmer/ProgrammerAddEffect'
+import { useStopFx, useToggleFxPause } from '@/components/fx/useFxControls'
+import { NewPaletteFromFxSheet } from '@/components/programmer/NewPaletteFromFxSheet'
+import { homeOf, layerHomesOf, saveAsPaletteOffer } from './fxRows'
+import { ProgrammerAddFxSheet, useProgrammerAddFx } from '@/components/programmer/ProgrammerAddFx'
 import {
   FX_HOMES,
   FX_HOME_LABELS,
@@ -46,12 +46,12 @@ import {
 } from '@/lib/programmerTables'
 import { useFxSelectionStore } from '@/components/fixtures-list/fxSelection'
 import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
-import { EffectsBelowRule } from './EffectsBelowRule'
+import { FxBelowRule } from './FxBelowRule'
 
-type FxColumnKey = 'property' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'size' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
+type FxColumnKey = 'property' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'amount' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
 
 interface FxSheetRow extends SheetRow {
-  effect: ActiveEffect
+  effect: ActiveFx
   home: ReturnType<typeof homeOf>
   homeKind: FxHome
   state: FxState
@@ -61,25 +61,25 @@ interface FxSheetRow extends SheetRow {
   steps: string | null
 }
 
-const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 'speed', 'size', 'runs', 'home', 'state'])
+const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 'speed', 'amount', 'runs', 'home', 'state'])
 
 /**
  * **The FX table** (venue-visit plan S14's Applied FX, the programmer's FX tab since tables-colours
  * plan D1): every running effect, one row per instance in the desk's order — an effect over a
- * selection one row with its reach from `lib/effectTargets.ts`, a split edit one row per head copy,
+ * selection one row with its reach from `lib/fxTargets.ts`, a split edit one row per head copy,
  * a step effect naming its palettes or slots.
  *
  * **It reads what the desk reports and computes nothing**: timing is *Seconds* or the master the
  * instance names (`seconds`, `speedMasterUuid`, `rateSpeedMasterUuid`, read against the live bank),
- * size, direction and runs are the instance's fields, *spent* is its `spent`, and *held · Blind* is
+ * amount, direction and runs are the instance's fields, *spent* is its `spent`, and *held · Blind* is
  * `isHeldByBlind`.
  *
  * **A row's actions** — *Edit…* (`FxEditorPopover`, so the split edit and pause come with it),
- * *Save as palette…* behind `saveAsTemplateOffer`'s gate, *Stop* — plus *Pause* / *Resume*, the
+ * *Save as palette…* behind `saveAsPaletteOffer`'s gate, *Stop* — plus *Pause* / *Resume*, the
  * editor's own, lifted onto the row (`useToggleFxPause`). ⏎ and the name's double click open the
  * editor. The selected rows are published (`fxSelection.ts`): the Values grid rings their cells.
  *
- * **`+ Effect` is the library row's create verb** (`useProgrammerAddEffect`):
+ * **`+ Effect` is the library row's create verb** (`useProgrammerAddFx`):
  * the bare effect press over the selection in Local, into the Look a focused Look layer applies,
  * refused with the reason in Output and over a palette — so effects are made where they are listed.
  */
@@ -92,17 +92,17 @@ export function AppliedFxTable({
   view: TableView
   onViewChange: (next: TableView) => void
 }) {
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   const { data: layers } = useProgrammerLayersQuery()
-  const { data: library } = useEffectLibraryQuery()
-  const { data: templates } = useTemplateListQuery({ projectId }, { skip: !Number.isFinite(projectId) })
+  const { data: library } = useFxLibraryQuery()
+  const { data: templates } = usePaletteListQuery({ projectId }, { skip: !Number.isFinite(projectId) })
   const blind = useProgrammerBlind()
   const togglePause = useToggleFxPause()
-  const stop = useStopEffect()
+  const stop = useStopFx()
   const controls = useMemo(() => ({ togglePause, stop }), [stop, togglePause])
 
   const [editingId, setEditingId] = useState<number | null>(null)
-  const [saving, setSaving] = useState<ActiveEffect | null>(null)
+  const [saving, setSaving] = useState<ActiveFx | null>(null)
   // The selection, published for the Values grid's rings (tables-colours plan D3) and taken back
   // from the store on mount: the rings are read after a switch away from this table.
   const fxSelection = useFxSelectionStore()
@@ -115,7 +115,7 @@ export function AppliedFxTable({
   )
   const editAnchor = useRef<HTMLElement | null>(null)
 
-  const templatesByUuid = useMemo(() => new Map((templates ?? []).map((t) => [t.uuid, t])), [templates])
+  const palettesByUuid = useMemo(() => new Map((templates ?? []).map((t) => [t.uuid, t])), [templates])
   const all = useMemo<FxSheetRow[]>(() => {
     const layerHomes = layerHomesOf(layers ?? [])
     return (effects ?? []).map((effect) => {
@@ -127,18 +127,18 @@ export function AppliedFxTable({
         homeKind: fxHomeOf(effect),
         state: fxStateOf(effect, heldByBlind),
         heldByBlind,
-        target: effectTargetLabel(effect),
-        steps: stepNames(effect, templatesByUuid),
+        target: fxTargetLabel(effect),
+        steps: stepNames(effect, palettesByUuid),
       }
     })
-  }, [blind, effects, layers, templatesByUuid])
+  }, [blind, effects, layers, palettesByUuid])
 
   const chip = parseFxHome(view.chip)
   const rows = useMemo(() => {
     const shown = all.filter(
       (row) =>
         (chip == null || row.homeKind === chip) &&
-        matchesFilter(view.q, [row.effect.effectType, row.effect.propertyName, row.target, row.home.label, row.steps]),
+        matchesFilter(view.q, [row.effect.fxType, row.effect.propertyName, row.target, row.home.label, row.steps]),
     )
     return sortRows(shown, view.sort, view.dir, sortValue)
   }, [all, chip, view.dir, view.q, view.sort])
@@ -154,13 +154,13 @@ export function AppliedFxTable({
     (band: AppliedBand) => ({
       label: 'FX',
       width: band === 0 ? '210px' : '190px',
-      openLabel: (row: FxSheetRow) => `Edit ${row.effect.effectType}`,
+      openLabel: (row: FxSheetRow) => `Edit ${row.effect.fxType}`,
       render: (row: FxSheetRow) => (
         <FxNameCell
           row={row}
           showProperty={band >= 2}
           library={library}
-          templates={templates}
+          palettes={templates}
           onOpen={() => openEditor(row)}
           onSave={() => setSaving(row.effect)}
           onTogglePause={() => controls.togglePause(row.effect)}
@@ -203,18 +203,18 @@ export function AppliedFxTable({
             fold={400}
           />
         }
-        create={<AddEffectVerb projectId={projectId} />}
-        rule={<EffectsBelowRule />}
+        create={<AddFxVerb projectId={projectId} />}
+        rule={<FxBelowRule />}
         onSelectionChange={onSelectionChange}
         initialSelection={initialSelection}
         noun="FX"
-        rowName={(row) => row.effect.effectType}
+        rowName={(row) => row.effect.fxType}
         onOpenRow={openEditor}
         verbs={(selected) => (
           <FxVerbs
             selected={selected}
             library={library}
-            templates={templates}
+            palettes={templates}
             onEdit={openEditor}
             onSave={(row) => setSaving(row.effect)}
             controls={controls}
@@ -241,7 +241,7 @@ export function AppliedFxTable({
           }}
         />
       )}
-      <NewTemplateFromEffectSheet
+      <NewPaletteFromFxSheet
         projectId={projectId}
         open={saving != null}
         onOpenChange={(next) => !next && setSaving(null)}
@@ -251,25 +251,25 @@ export function AppliedFxTable({
   )
 }
 
-function fxRowId(effectId: number): string {
-  return `fx:${effectId}`
+function fxRowId(fxId: number): string {
+  return `fx:${fxId}`
 }
 
 function sortValue(row: FxSheetRow, key: string): SortValue {
   switch (key) {
     case 'name':
-      return row.effect.effectType
+      return row.effect.fxType
     case 'property':
       return row.effect.propertyName
     case 'target':
       return row.target
     case 'speed':
-      return row.effect.beatDivision
-    case 'size':
-      return row.effect.size ?? 1
+      return row.effect.cycle
+    case 'amount':
+      return row.effect.amount ?? 1
     case 'runs':
       // Forever sorts after every count.
-      return row.effect.nShot ?? Number.MAX_SAFE_INTEGER
+      return row.effect.runs ?? Number.MAX_SAFE_INTEGER
     case 'home':
       return FX_HOMES.indexOf(row.homeKind) * 1000 + (row.effect.programmerLayerId ?? 0)
     case 'state':
@@ -282,37 +282,37 @@ function sortValue(row: FxSheetRow, key: string): SortValue {
 const FX_STATE_ORDER: readonly FxState[] = ['running', 'held', 'paused', 'leaving', 'spent']
 
 /** A step effect's steps as an operator names them: its palettes by name, its slots as words. */
-function stepNames(effect: ActiveEffect, templatesByUuid: ReadonlyMap<string, TemplateSummary>): string | null {
-  if (isPaletteSteps(effect.effectType)) {
+function stepNames(effect: ActiveFx, palettesByUuid: ReadonlyMap<string, PaletteSummary>): string | null {
+  if (isPaletteSteps(effect.fxType)) {
     const names = parseStepList(effect.parameters.palettes).map((ref) => {
-      const uuid = parseTemplateRefUuid(ref)
-      return (uuid != null ? templatesByUuid.get(uuid)?.name : undefined) ?? 'a palette'
+      const uuid = parsePaletteRefUuid(ref)
+      return (uuid != null ? palettesByUuid.get(uuid)?.name : undefined) ?? 'a palette'
     })
     return names.length > 0 ? names.join(', ') : null
   }
-  if (isSlotSteps(effect.effectType)) {
+  if (isSlotSteps(effect.fxType)) {
     const slots = parseStepList(effect.parameters.slots).map(slotLabel)
     return slots.length > 0 ? slots.join(', ') : null
   }
   return null
 }
 
-function speedLabel(effect: ActiveEffect): string {
+function speedLabel(effect: ActiveFx): string {
   return effect.timingSource === 'WALL_CLOCK' || effect.seconds === true
-    ? secondsLabel(effect.beatDivision)
-    : getBeatDivisionLabel(effect.beatDivision)
+    ? secondsLabel(effect.cycle)
+    : getCycleLabel(effect.cycle)
 }
 
-function sizeLabel(effect: ActiveEffect): string {
-  return `${Math.round((effect.size ?? 1) * 100)}%`
+function amountLabel(effect: ActiveFx): string {
+  return `${Math.round((effect.amount ?? 1) * 100)}%`
 }
 
 const DIRECTION_GLYPH = { FORWARD: '→', BACKWARD: '←', BOUNCE: '↔' } as const
 const DIRECTION_WORD = { FORWARD: 'Forward', BACKWARD: 'Backward', BOUNCE: 'Bounce' } as const
 
-function runsLabel(effect: ActiveEffect): string {
-  if (effect.nShot == null) return '∞'
-  return effect.spent === true ? `${effect.nShot}× · spent` : `${effect.nShot}×`
+function runsLabel(effect: ActiveFx): string {
+  if (effect.runs == null) return '∞'
+  return effect.spent === true ? `${effect.runs}× · spent` : `${effect.runs}×`
 }
 
 function cellText(text: string, title?: string, mono = false) {
@@ -359,12 +359,12 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
     value: () => undefined,
     display: (row) => <TimingCell effect={row.effect} speed />,
   }
-  const size: SheetColumn<FxSheetRow, FxColumnKey> = {
-    key: 'size',
+  const amount: SheetColumn<FxSheetRow, FxColumnKey> = {
+    key: 'amount',
     label: 'Amount',
     width: '76px',
     value: () => undefined,
-    display: (row) => cellText(sizeLabel(row.effect), undefined, true),
+    display: (row) => cellText(amountLabel(row.effect), undefined, true),
   }
   const direction: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'direction',
@@ -381,7 +381,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
     label: 'Runs',
     width: '92px',
     value: () => undefined,
-    display: (row) => cellText(runsLabel(row.effect), row.effect.nShot == null ? 'Runs forever' : undefined, true),
+    display: (row) => cellText(runsLabel(row.effect), row.effect.runs == null ? 'Runs forever' : undefined, true),
   }
   const dynamics: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'dynamics',
@@ -390,8 +390,8 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
     value: () => undefined,
     display: (row) => {
       const d = row.effect.direction ?? 'FORWARD'
-      const text = [sizeLabel(row.effect), DIRECTION_GLYPH[d], runsLabel(row.effect)].join(' · ')
-      return cellText(text, `Amount ${sizeLabel(row.effect)} · ${DIRECTION_WORD[d]} · runs ${runsLabel(row.effect)}`, true)
+      const text = [amountLabel(row.effect), DIRECTION_GLYPH[d], runsLabel(row.effect)].join(' · ')
+      return cellText(text, `Amount ${amountLabel(row.effect)} · ${DIRECTION_WORD[d]} · runs ${runsLabel(row.effect)}`, true)
     },
   }
   const home: SheetColumn<FxSheetRow, FxColumnKey> = {
@@ -421,7 +421,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   // Each set's floor — the name column and the tracks' minimums — fits its band: 0 within 1100, 1 within the iPad's 940.
   switch (band) {
     case 0:
-      return { columns: [property, target, timing, speed, size, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 76 + 52 + 92 + 140 + 100 }
+      return { columns: [property, target, timing, speed, amount, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 76 + 52 + 92 + 140 + 100 }
     case 1:
       return { columns: [property, target, timingSpeed, dynamics, home, state], minWidth: 190 + 84 + 140 + 140 + 120 + 140 + 100 }
     default:
@@ -434,7 +434,7 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
  * *Seconds* or the master an effect follows, read off the live bank by uuid: a beat effect's null is
  * master 1, a wall-clock effect's rate master is its only master and none is its own Seconds.
  */
-function TimingCell({ effect, speed = false }: { effect: ActiveEffect; speed?: boolean }) {
+function TimingCell({ effect, speed = false }: { effect: ActiveFx; speed?: boolean }) {
   const wallClock = effect.timingSource === 'WALL_CLOCK'
   const seconds = isOnSeconds(effect, effect.timingSource)
   const uuid = wallClock ? effect.rateSpeedMasterUuid : effect.speedMasterUuid
@@ -498,7 +498,7 @@ function FxNameCell({
   row,
   showProperty,
   library,
-  templates,
+  palettes: templates,
   onOpen,
   onSave,
   onTogglePause,
@@ -507,15 +507,15 @@ function FxNameCell({
   row: FxSheetRow
   /** The narrow bands' fold: the property beside the name, its column gone. */
   showProperty: boolean
-  library: Parameters<typeof saveAsTemplateOffer>[1]
-  templates: Parameters<typeof saveAsTemplateOffer>[2]
+  library: Parameters<typeof saveAsPaletteOffer>[1]
+  palettes: Parameters<typeof saveAsPaletteOffer>[2]
   onOpen: () => void
   onSave: () => void
   onTogglePause: () => void
   onStop: () => void
 }) {
   const { effect } = row
-  const offer = saveAsTemplateOffer(effect, library, templates)
+  const offer = saveAsPaletteOffer(effect, library, templates)
   return (
     <>
       <span
@@ -526,10 +526,10 @@ function FxNameCell({
       />
       <span
         className={cn('min-w-0 flex-1 truncate text-sm font-medium', !effect.isRunning && 'opacity-60')}
-        title={!effect.isRunning ? `${effect.effectType} — paused` : effect.effectType}
+        title={!effect.isRunning ? `${effect.fxType} — paused` : effect.fxType}
         onDoubleClick={onOpen}
       >
-        {effect.effectType}
+        {effect.fxType}
       </span>
       {showProperty && (
         <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{effect.propertyName}</span>
@@ -542,7 +542,7 @@ function FxNameCell({
       <span className="shrink-0" onClick={(e) => e.stopPropagation()}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-6" aria-label={`Actions for ${effect.effectType}`}>
+            <Button variant="ghost" size="icon" className="size-6" aria-label={`Actions for ${effect.fxType}`}>
               <MoreHorizontal className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
@@ -575,21 +575,21 @@ function FxNameCell({
 function FxVerbs({
   selected,
   library,
-  templates,
+  palettes: templates,
   onEdit,
   onSave,
   controls,
 }: {
   selected: readonly FxSheetRow[]
-  library: Parameters<typeof saveAsTemplateOffer>[1]
-  templates: Parameters<typeof saveAsTemplateOffer>[2]
+  library: Parameters<typeof saveAsPaletteOffer>[1]
+  palettes: Parameters<typeof saveAsPaletteOffer>[2]
   onEdit: (row: FxSheetRow) => void
   onSave: (row: FxSheetRow) => void
-  controls: { togglePause: (effect: ActiveEffect) => void; stop: (effect: ActiveEffect) => void }
+  controls: { togglePause: (effect: ActiveFx) => void; stop: (effect: ActiveFx) => void }
 }) {
   const count = selected.length
   const first = selected[0]
-  const offer = first != null ? saveAsTemplateOffer(first.effect, library, templates) : null
+  const offer = first != null ? saveAsPaletteOffer(first.effect, library, templates) : null
   const running = selected.filter((row) => row.effect.isRunning)
   const paused = selected.filter((row) => !row.effect.isRunning)
   return (
@@ -597,7 +597,7 @@ function FxVerbs({
       <LibraryVerb
         icon={Pencil}
         label="Edit…"
-        title={`Edit ${first?.effect.effectType ?? 'this FX'} live`}
+        title={`Edit ${first?.effect.fxType ?? 'this FX'} live`}
         disabledReason={oneRecordReason('Edit', 'FX', count)}
         onClick={() => onEdit(first)}
       />
@@ -638,8 +638,8 @@ function FxVerbs({
  * *+ Effect*, with its own offer: the offer reads the desk selection, which moves at marquee rate,
  * and only this button has to hear it.
  */
-function AddEffectVerb({ projectId }: { projectId: number }) {
-  const offer = useProgrammerAddEffect()
+function AddFxVerb({ projectId }: { projectId: number }) {
+  const offer = useProgrammerAddFx()
   const [open, setOpen] = useState(false)
   return (
     <>
@@ -650,7 +650,7 @@ function AddEffectVerb({ projectId }: { projectId: number }) {
           <span className="hidden @[560px]:inline">FX</span>
         </Button>
       </span>
-      <ProgrammerAddEffectSheet projectId={projectId} open={open} offer={offer} onClose={() => setOpen(false)} />
+      <ProgrammerAddFxSheet projectId={projectId} open={open} offer={offer} onClose={() => setOpen(false)} />
     </>
   )
 }

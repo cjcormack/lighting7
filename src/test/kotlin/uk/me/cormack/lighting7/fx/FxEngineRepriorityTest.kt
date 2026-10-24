@@ -83,21 +83,21 @@ class FxEngineRepriorityTest {
     @Test
     fun `repriority restamps Layer 3 effect instances and skips manual ones`() {
         val engine = newEngine()
-        val cueEffect = makeEffect(cueId = 10, priority = 1_000)
-        val manualEffect = makeEffect(cueId = null, priority = 0)
-        engine.addEffect(cueEffect)
-        engine.addEffect(manualEffect)
+        val cueEffect = makeFx(cueId = 10, priority = 1_000)
+        val manualFx = makeFx(cueId = null, priority = 0)
+        engine.addFx(cueEffect)
+        engine.addFx(manualFx)
 
         assertEquals(1, engine.repriorityCues(mapOf(10 to 4_000)))
         assertEquals(4_000, cueEffect.priority)
         // Manual effects aren't cue-owned, so they stay at 0 and keep composing underneath.
-        assertEquals(0, manualEffect.priority)
+        assertEquals(0, manualFx.priority)
     }
 
-    private fun makeEffect(cueId: Int?, priority: Int): FxInstance = FxInstance(
+    private fun makeFx(cueId: Int?, priority: Int): FxInstance = FxInstance(
         effect = SineSlider(),
         target = SliderTarget(FxTargetRef.fixture("fx-1"), "dimmer"),
-        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     ).apply {
         this.cueId = cueId
         this.priority = priority

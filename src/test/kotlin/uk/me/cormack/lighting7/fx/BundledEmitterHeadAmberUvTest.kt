@@ -164,7 +164,7 @@ class BundledEmitterHeadAmberUvTest {
         )
         for (ordered in listOf(rows, rows.reversed())) {
             val built = buildCueAssignmentsForCue(
-                rig.fixtures, CueApplyData(cueId = 1, cueName = "both", adHocEffects = emptyList(), propertyAssignments = ordered),
+                rig.fixtures, CueApplyData(cueId = 1, cueName = "both", adHocFx = emptyList(), propertyAssignments = ordered),
             )
             val composed = CueAssignmentResolver().resolve(built)
             val composedColour = (composed.getValue(CueAssignmentResolver.Key.fixture(headKey, "rgbColour"))

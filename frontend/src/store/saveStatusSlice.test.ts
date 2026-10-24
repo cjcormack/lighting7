@@ -189,7 +189,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./fixtureFx'),
       import('./groups'),
       import('./looks'),
-      import('./templates'),
+      import('./palettes'),
       import('./busk'),
       import('./fxDefinitions'),
       import('./scripts'),

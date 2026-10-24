@@ -66,13 +66,13 @@ internal fun deleteBuskPage(page: DaoBuskPage) {
  * rows. Pass exactly one id; the others are null.
  */
 internal fun deleteBuskPadsReferencing(
-    templateId: Int? = null,
+    paletteId: Int? = null,
     lookId: Int? = null,
     cueId: Int? = null,
 ): Set<Int> {
-    require(listOfNotNull(templateId, lookId, cueId).size == 1) { "exactly one record id" }
+    require(listOfNotNull(paletteId, lookId, cueId).size == 1) { "exactly one record id" }
     val pads = when {
-        templateId != null -> DaoBuskPad.find { DaoBuskPads.palette eq templateId }
+        paletteId != null -> DaoBuskPad.find { DaoBuskPads.palette eq paletteId }
         lookId != null -> DaoBuskPad.find { DaoBuskPads.look eq lookId }
         else -> DaoBuskPad.find { DaoBuskPads.cue eq cueId!! }
     }.toList()
@@ -105,7 +105,7 @@ internal fun buskPageCountsFor(kind: BuskPadKind, ids: Collection<Int>): Map<Int
     if (ids.isEmpty()) return emptyMap()
     val list = ids.toList()
     val recordColumn = when (kind) {
-        BuskPadKind.TEMPLATE -> DaoBuskPads.palette
+        BuskPadKind.PALETTE -> DaoBuskPads.palette
         BuskPadKind.LOOK -> DaoBuskPads.look
         BuskPadKind.CUE -> DaoBuskPads.cue
     }

@@ -12,9 +12,10 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.TargetRef
+import uk.me.cormack.lighting7.models.Timing
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -36,20 +37,20 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
         LocateTestSupport.seedGroup(state, projectId, "quad", "hex-0", "hex-1", "hex-2", "hex-3")
     }
 
-    private fun pulse(targetType: String, targetKey: String) = CueAdHocEffectDto(
-        targetType = targetType, targetKey = targetKey, effectType = "Pulse",
-        category = categoryFromPropertyName("dimmer"), propertyName = "dimmer",
-        beatDivision = 1.0, blendMode = "override", distribution = "normal",
+    private fun pulse(targetType: String, targetKey: String) = CueAdHocFxDto(
+        targetType = targetType, targetKey = targetKey, fxType = "Pulse",
+        family = categoryFromPropertyName("dimmer"), propertyName = "dimmer",
+        cycle = 1.0, blendMode = "override", order = "normal",
     )
 
-    private fun storedFx(cueId: Int): List<CueAdHocEffectDto> = transaction(state.database) {
-        DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.toDto() }
+    private fun storedFx(cueId: Int): List<CueAdHocFxDto> = transaction(state.database) {
+        DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.toDto() }
     }
 
-    private suspend fun HttpClient.createCue(effect: CueAdHocEffectDto): Int {
+    private suspend fun HttpClient.createCue(effect: CueAdHocFxDto): Int {
         val created = post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Spelt", adHocEffects = listOf(effect)))
+            setBody(NewCue(name = "Spelt", adHocFx = listOf(effect)))
         }
         assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
         return created.body<CueDetails>().id
@@ -94,7 +95,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
         seedQuad()
         val client = jsonClient()
         val cueId = client.createCue(
-            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(elementMode = "FLAT", stepTiming = false),
+            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(elementMode = "FLAT", timing = Timing.CYCLE),
         )
         val stored = storedFx(cueId)
 
@@ -109,7 +110,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
         seedQuad()
         val client = jsonClient()
         val cueId = client.createCue(
-            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(effectType = "CandleFlicker", seconds = true),
+            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(fxType = "CandleFlicker", seconds = true),
         )
         val stored = storedFx(cueId)
         assertEquals(true, stored.single().seconds)
@@ -126,7 +127,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
         val client = jsonClient()
         // Capture files a Pulse on UV under `controls`; the picker stores Pulse's own `intensity`.
         val cueId = client.createCue(
-            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(propertyName = "uv", category = "intensity"),
+            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(propertyName = "uv", family = "intensity"),
         )
         val stored = storedFx(cueId)
 
@@ -144,9 +145,9 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
 
         client.include(cueId)
         assertEquals(0, client.update().fxWritten)
-        val edited = client.put("/api/rest/fx/${fx.getActiveEffects().single().id}") {
+        val edited = client.put("/api/rest/fx/${fx.getActiveFx().single().id}") {
             contentType(ContentType.Application.Json)
-            setBody(UpdateEffectRequest(spread = 0.5))
+            setBody(UpdateFxRequest(spread = 0.5))
         }
         assertEquals(HttpStatusCode.OK, edited.status, edited.bodyAsText())
 

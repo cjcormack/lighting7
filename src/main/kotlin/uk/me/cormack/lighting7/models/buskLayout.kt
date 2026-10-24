@@ -164,11 +164,11 @@ object DaoBuskPads : IntIdTable("busk_pads") {
     val sortOrder = integer("sort_order")
 
     /**
-     * What this pad presses: **exactly one** of [template] / [look] / [cue] is set — the
+     * What this pad presses: **exactly one** of [palette] / [look] / [cue] is set — the
      * [DaoCueLayers] pattern, three-armed. Nullable FKs rather than a `(kind, id)` pair so a pad
      * pointing at a deleted record cannot be expressed once the record's delete has swept its pads.
      */
-    val palette = reference("palette_id", DaoTemplates).nullable()
+    val palette = reference("palette_id", DaoPalettes).nullable()
     val look = reference("look_id", DaoLooks).nullable()
     val cue = reference("cue_id", DaoCues).nullable()
     val uuid = javaUUID("uuid").autoGenerate()
@@ -190,7 +190,7 @@ class DaoBuskPad(id: EntityID<Int>) : IntEntity(id) {
 
     var bank by DaoBuskBank referencedOn DaoBuskPads.bank
     var sortOrder by DaoBuskPads.sortOrder
-    var palette by DaoTemplate optionalReferencedOn DaoBuskPads.palette
+    var palette by DaoPalette optionalReferencedOn DaoBuskPads.palette
     var look by DaoLook optionalReferencedOn DaoBuskPads.look
     var cue by DaoCue optionalReferencedOn DaoBuskPads.cue
     var uuid by DaoBuskPads.uuid
@@ -206,7 +206,7 @@ class DaoBuskPad(id: EntityID<Int>) : IntEntity(id) {
 
 /** The three things a pad can press. Serialised by name on the wire and in sync. */
 enum class BuskPadKind {
-    TEMPLATE,
+    PALETTE,
     LOOK,
     CUE,
 }
@@ -222,7 +222,7 @@ private val buskPadLogger = LoggerFactory.getLogger("buskPad")
  */
 fun buskPadKind(template: Any?, look: Any?, cue: Any?): BuskPadKind? {
     val set = listOfNotNull(
-        template?.let { BuskPadKind.TEMPLATE },
+        template?.let { BuskPadKind.PALETTE },
         look?.let { BuskPadKind.LOOK },
         cue?.let { BuskPadKind.CUE },
     )

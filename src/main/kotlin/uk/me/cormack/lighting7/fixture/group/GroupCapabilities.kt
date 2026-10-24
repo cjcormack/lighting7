@@ -16,7 +16,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithUv
  * `position` / `uv` / `strobe` vocabulary the authoring surfaces speak.
  *
  * Lives beside [FixtureGroup] rather than in `routes/` because effect spawning needs it too:
- * [uk.me.cormack.lighting7.fx.EffectSpawner] asks a group what it can do when a stored spec names
+ * [uk.me.cormack.lighting7.fx.FxSpawner] asks a group what it can do when a stored spec names
  * no property of its own, and the AI tool surface asks the same question. A capability is a fact
  * about the fixtures, not about a REST response.
  */

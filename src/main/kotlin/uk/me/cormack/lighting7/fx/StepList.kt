@@ -14,18 +14,18 @@ const val SLOT_STEPS_ID = "SlotSteps"
 /**
  * The category the Steps FX, Palette Steps and Slot Steps, register under: the library's Steps
  * family (terminology plan D23). It names no attribute family on purpose, since each sits in the
- * family of what it steps, and a stored one carries that family's category ([stepsFxCategory]).
+ * family of what it steps, and a stored one carries that family's category ([stepsFxFamily]).
  */
 const val STEPS_CATEGORY = "steps"
 
 /**
- * The category a Steps FX is stored and stamped under, or null for any other FX, whose own category
+ * The family a Steps FX is stored and stamped under, or null for any other FX, whose own family
  * stands: Slot Steps steps a setting, so Beam; Palette Steps the family of its palettes, which only
- * the caller can name ([paletteFamilyCategory], null when it cannot).
+ * the caller can name ([paletteFxFamily], null when it cannot).
  */
-fun stepsFxCategory(fxId: String, paletteFamilyCategory: String?): String? = when {
+fun stepsFxFamily(fxId: String, paletteFxFamily: String?): String? = when {
     fxId.equals(SLOT_STEPS_ID, ignoreCase = true) -> "beam"
-    fxId.equals(PALETTE_STEPS_ID, ignoreCase = true) -> paletteFamilyCategory
+    fxId.equals(PALETTE_STEPS_ID, ignoreCase = true) -> paletteFxFamily
     else -> null
 }
 
@@ -33,7 +33,7 @@ fun stepsFxCategory(fxId: String, paletteFamilyCategory: String?): String? = whe
  * The property sentinels an effect registration may declare and the client offers an effect
  * through (`fxTargetProperties.ts`): `slider` and `setting` name a kind of property, never one.
  */
-val EFFECT_PROPERTY_SENTINELS: Set<String> = setOf("slider", "setting")
+val FX_PROPERTY_SENTINELS: Set<String> = setOf("slider", "setting")
 
 /**
  * What a step effect steps through (effects plan §3.6), resolved **per head** by the target that
@@ -57,7 +57,7 @@ interface StepList {
      * fills the rest from what is underneath.
      */
     fun colourFor(index: Int, fixture: GroupableFixture): StepColour? =
-        (valueFor(index, fixture, TemplateProperty.COLOUR.propertyName) as? CueAssignmentResolver.PropertyValue.Colour)
+        (valueFor(index, fixture, PaletteProperty.COLOUR.propertyName) as? CueAssignmentResolver.PropertyValue.Colour)
             ?.value?.let(StepColour::whole)
 
     companion object {
@@ -159,14 +159,14 @@ internal fun normaliseSlotName(name: String): String =
  * when the effect resolved its parameters (`TypedParams.paletteSteps`).
  */
 data class PaletteStep(
-    val templateUuid: java.util.UUID,
+    val paletteUuid: java.util.UUID,
     val name: String,
-    val rows: List<Pair<String, TemplateIntent>>,
+    val rows: List<Pair<String, PaletteIntent>>,
 )
 
 /**
  * Palette Steps' list: generic value palettes, each resolved **for the head in hand** through
- * [TemplateResolver] — the one answer to what a palette does on a head, which the cook, *Apply as
+ * [PaletteResolver] — the one answer to what a palette does on a head, which the cook, *Apply as
  * values* and the editor's panel also ask. A position palette lands on each head's own pan and tilt
  * whether it is centre-relative (`pos:`) or in degrees (`deg:`); a beam role on its own range; a
  * colour mixed for that head's emitters, so an RGBW head and an RGB one each get their own.
@@ -240,27 +240,27 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
                 return resolveColour(step, fixture)?.let { CueAssignmentResolver.PropertyValue.Colour(it.over { ExtendedColour.BLACK }) }
             }
             val property = if (propertyName.equals("position", ignoreCase = true)) {
-                TemplateProperty.POSITION
+                PaletteProperty.POSITION
             } else {
-                TemplateProperty.ofOrNull(propertyName)
+                PaletteProperty.ofOrNull(propertyName)
             }
             val row = step.rows.firstOrNull { (name, _) ->
-                if (property != null) TemplateProperty.ofOrNull(name) == property else name.equals(propertyName, ignoreCase = true)
+                if (property != null) PaletteProperty.ofOrNull(name) == property else name.equals(propertyName, ignoreCase = true)
             } ?: return null
-            return TemplateResolver.resolve(fixture, propertyName, row.second, null).value
+            return PaletteResolver.resolve(fixture, propertyName, row.second, null).value
         }
 
         /**
          * The palette's colour family on this head, as a layer of it would put it there: refused
-         * whole where the head lacks an emitter the palette names ([TemplateResolver.unmetColourRequirement],
+         * whole where the head lacks an emitter the palette names ([PaletteResolver.unmetColourRequirement],
          * the cook's own rule — half a colour is a wrong colour), else the hex mixed for its
          * emitters and each explicit emitter row over the emitter it names. What the palette does
          * not name is left to the head underneath ([StepColour.over]).
          */
         internal fun resolveColour(step: PaletteStep, fixture: GroupableFixture): StepColour? {
-            val colourRows = step.rows.filter { TemplateProperty.ofOrNull(it.first)?.family == PropertyMaskGroup.COLOUR }
+            val colourRows = step.rows.filter { PaletteProperty.ofOrNull(it.first)?.family == PropertyMaskGroup.COLOUR }
             if (colourRows.isEmpty()) return null
-            if (TemplateResolver.unmetColourRequirement(fixture, colourRows, null) != TemplateResolver.ColourRequirement.Met) {
+            if (PaletteResolver.unmetColourRequirement(fixture, colourRows, null) != PaletteResolver.ColourRequirement.Met) {
                 return null
             }
             var rgb: ExtendedColour? = null
@@ -268,13 +268,13 @@ class PaletteStepList(val steps: List<PaletteStep>) : StepList {
             var amber: UByte? = null
             var uv: UByte? = null
             for ((name, intent) in colourRows) {
-                val property = TemplateProperty.ofOrNull(name) ?: continue
-                val value = TemplateResolver.resolve(fixture, property.propertyName, intent, null).value
+                val property = PaletteProperty.ofOrNull(name) ?: continue
+                val value = PaletteResolver.resolve(fixture, property.propertyName, intent, null).value
                 when (property) {
-                    TemplateProperty.COLOUR -> rgb = (value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: rgb
-                    TemplateProperty.WHITE -> white = stepByte(value) ?: white
-                    TemplateProperty.AMBER -> amber = stepByte(value) ?: amber
-                    TemplateProperty.UV -> uv = stepByte(value) ?: uv
+                    PaletteProperty.COLOUR -> rgb = (value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: rgb
+                    PaletteProperty.WHITE -> white = stepByte(value) ?: white
+                    PaletteProperty.AMBER -> amber = stepByte(value) ?: amber
+                    PaletteProperty.UV -> uv = stepByte(value) ?: uv
                     else -> Unit
                 }
             }
@@ -311,10 +311,10 @@ fun stepsAt(phase: Double, steps: StepList, fadeRatio: Double = 0.0): FxOutput.S
  * palettes, the category it is stored and offered under, and the property it drives when the row
  * that holds it names none — an effect palette's, or any other stored without one.
  */
-data class PaletteStepsShape(val family: PropertyMaskGroup, val category: String, val property: String)
+data class PaletteStepsShape(val family: PropertyMaskGroup, val fxFamily: String, val property: String)
 
-/** The effect category a family is offered under — [familyForEffectCategory] read backwards. */
-fun effectCategoryForFamily(family: PropertyMaskGroup): String = when (family) {
+/** The FX family an attribute family is offered under — [maskGroupForFxFamily] read backwards. */
+fun fxFamilyForMaskGroup(family: PropertyMaskGroup): String = when (family) {
     PropertyMaskGroup.INTENSITY -> "intensity"
     PropertyMaskGroup.COLOUR -> "colour"
     PropertyMaskGroup.POSITION -> "position"
@@ -330,7 +330,7 @@ fun effectCategoryForFamily(family: PropertyMaskGroup): String = when (family) {
 fun paletteStepsShape(steps: List<PaletteStep>): Result<PaletteStepsShape> {
     if (steps.isEmpty()) return Result.failure(IllegalArgumentException("Palette Steps needs at least one palette"))
     val families = steps.map { step ->
-        step.rows.mapNotNull { TemplateProperty.ofOrNull(it.first)?.family }.distinct().singleOrNull()
+        step.rows.mapNotNull { PaletteProperty.ofOrNull(it.first)?.family }.distinct().singleOrNull()
             ?: return Result.failure(IllegalArgumentException("Palette '${step.name}' is in no one family"))
     }
     val family = families.distinct().singleOrNull()
@@ -341,16 +341,16 @@ fun paletteStepsShape(steps: List<PaletteStep>): Result<PaletteStepsShape> {
             ),
         )
     if (family == PropertyMaskGroup.COLOUR) {
-        return Result.success(PaletteStepsShape(family, effectCategoryForFamily(family), "colour"))
+        return Result.success(PaletteStepsShape(family, fxFamilyForMaskGroup(family), "colour"))
     }
-    val property = TemplateProperty.forFamily(family).firstOrNull { property ->
-        steps.all { step -> step.rows.any { TemplateProperty.ofOrNull(it.first) == property } }
+    val property = PaletteProperty.forFamily(family).firstOrNull { property ->
+        steps.all { step -> step.rows.any { PaletteProperty.ofOrNull(it.first) == property } }
     } ?: return Result.failure(
         IllegalArgumentException("These palettes name no ${family.name.lowercase()} property in common, so the steps have nothing to step"),
     )
-    return Result.success(PaletteStepsShape(family, effectCategoryForFamily(family), property.propertyName))
+    return Result.success(PaletteStepsShape(family, fxFamilyForMaskGroup(family), property.propertyName))
 }
 
 /** Every entry of a Palette Steps `palettes` parameter through [source], an entry that cannot be a step dropped. */
-fun TemplateSource.paletteStepsOf(parameter: String?): List<PaletteStep> =
+fun PaletteSource.paletteStepsOf(parameter: String?): List<PaletteStep> =
     parameter.orEmpty().split(",").map { it.trim() }.filter { it.isNotEmpty() }.mapNotNull(::paletteStep)

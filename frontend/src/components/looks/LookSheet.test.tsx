@@ -64,9 +64,9 @@ function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
     notes: null,
     families: ['COLOUR'],
     rowCount: 8,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 8,
-    hasDeferredEffects: false,
+    hasDeferredFx: false,
     preview: ['#ff9d4a'],
     layerCount: 0,
     buskPageCount: 0,
@@ -76,7 +76,7 @@ function look(id: number, over: Partial<LookSummary> = {}): LookSummary {
 
 /** The board's first three rows, and one more. */
 const LOOKS = [
-  look(1, { name: 'Ballyhoo', families: ['POSITION'], preview: [], effectCount: 1, rowCount: 0, targetCount: 0, hasDeferredEffects: true, buskPageCount: 3 }),
+  look(1, { name: 'Ballyhoo', families: ['POSITION'], preview: [], fxCount: 1, rowCount: 0, targetCount: 0, hasDeferredFx: true, buskPageCount: 3 }),
   look(2, { name: 'Band Spots', families: ['INTENSITY', 'POSITION'], notes: 'Front line', layerCount: 2 }),
   look(3, { name: 'Blackout Front', families: ['INTENSITY'] }),
   look(4, { name: 'Warm Wash', families: ['COLOUR', 'INTENSITY'], notes: 'Act 1 base', layerCount: 5 }),
@@ -317,11 +317,11 @@ describe('LookSheet', () => {
 describe('describeLookContents', () => {
   it('says what a Look covers in one line, the effect count folded in', () => {
     expect(describeLookContents(LOOKS[3])).toBe('8 fixtures · 8 rows')
-    expect(describeLookContents(look(5, { effectCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 FX')
-    expect(describeLookContents(look(6, { targetCount: 0, effectCount: 0 }))).toBe('Empty')
+    expect(describeLookContents(look(5, { fxCount: 1, rowCount: 12, targetCount: 12 }))).toBe('12 fixtures · 12 rows · 1 FX')
+    expect(describeLookContents(look(6, { targetCount: 0, fxCount: 0 }))).toBe('Empty')
     // A Look that only moves scenery is a scenery Look (scenery-programmer plan D9, D10).
     expect(
-      describeLookContents(look(7, { targetCount: 0, effectCount: 0, rowCount: 0, scenery: [{ elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }] })),
+      describeLookContents(look(7, { targetCount: 0, fxCount: 0, rowCount: 0, scenery: [{ elementUuid: 'moon', elementName: 'Moon', state: { trimM: 3 } }] })),
     ).toBe('Scenery only')
   })
 })

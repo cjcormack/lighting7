@@ -49,17 +49,17 @@ class FxComposePassTest {
         )
     }
 
-    private fun fx(id: String, vararg params: Pair<String, String>): Effect =
-        registry.createEffect(id, params.toMap())
+    private fun fx(id: String, vararg params: Pair<String, String>): Fx =
+        registry.createFx(id, params.toMap())
 
     private fun instance(
-        effect: Effect,
+        effect: Fx,
         blendMode: BlendMode,
         timingSource: TimingSource,
         division: Double = 1.0,
         priority: Int = 0,
         property: String = "dimmer",
-    ) = FxInstance(effect, SliderTarget("hex-a", property), FxTiming(beatDivision = division), blendMode).also {
+    ) = FxInstance(effect, SliderTarget("hex-a", property), FxTiming(cycle = division), blendMode).also {
         it.timingSource = timingSource
         it.priority = priority
     }
@@ -68,7 +68,7 @@ class FxComposePassTest {
      * An FX of [timingSource]'s clock on the head's UV, so a pass that clock wakes has work to do
      * (one with nothing running on a clock that woke it is skipped).
      */
-    private fun Rig.withCompanionOn(timingSource: TimingSource) = engine.addEffect(
+    private fun Rig.withCompanionOn(timingSource: TimingSource) = engine.addFx(
         if (timingSource == TimingSource.BEAT) instance(fx("Pulse"), BlendMode.OVERRIDE, timingSource, property = "uv")
         else instance(fx("CandleFlicker"), BlendMode.OVERRIDE, timingSource, property = "uv"),
     )
@@ -125,12 +125,12 @@ class FxComposePassTest {
         assertTrue(schedule.any { it.beat && it.ticker }, "the schedule coalesces some wakes")
 
         val rig = newRig()
-        rig.engine.addEffect(sine)
-        rig.engine.addEffect(candle)
+        rig.engine.addFx(sine)
+        rig.engine.addFx(candle)
 
-        val sineTwin = registry.createEffect("SineWave", sineParams)
-        val sineClock = FxInstance(sineTwin, SliderTarget("hex-a", "dimmer"), FxTiming(beatDivision = sineDivision))
-        val candleTwin = fx("CandleFlicker") as StatefulEffect
+        val sineTwin = registry.createFx("SineWave", sineParams)
+        val sineClock = FxInstance(sineTwin, SliderTarget("hex-a", "dimmer"), FxTiming(cycle = sineDivision))
+        val candleTwin = fx("CandleFlicker") as StatefulFx
         var candleSteps = 0L
 
         // The ticker wakes first, so the Candle Flicker's first step is a ticker pass's.
@@ -141,17 +141,17 @@ class FxComposePassTest {
             rig.run(pass)
             if (pass.ticker) candleLevel = candleTwin.step(candleSteps++)
             val sineLevel =
-                (sineTwin.calculate(sineClock.calculatePhase(tick(pass.tick)), EffectContext.SINGLE)
+                (sineTwin.calculate(sineClock.calculatePhase(tick(pass.tick)), FxContext.SINGLE)
                     as FxOutput.Slider).value.toInt()
             assertEquals(expected(sineLevel, candleLevel), rig.dimmer, "pass $i ($pass): sine $sineLevel, candle $candleLevel")
         }
     }
 
-    private fun StatefulEffect.step(n: Long): Int =
+    private fun StatefulFx.step(n: Long): Int =
         (calculateStateful(
             MasterClock.ClockTick(tickNumber = n, beatNumber = 0, tickInBeat = 0, phase = 0.0, timestampMs = 0L),
             20L,
-            EffectContext.SINGLE,
+            FxContext.SINGLE,
         ) as FxOutput.Slider).value.toInt()
 
     @Test
@@ -190,13 +190,13 @@ class FxComposePassTest {
         fun rigWith(): Pair<Rig, FxInstance> {
             val rig = newRig()
             val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
-            rig.engine.addEffect(sine)
+            rig.engine.addFx(sine)
             return rig to sine
         }
         val (tickerOnly, quiet) = rigWith()
         val (busy, woken) = rigWith()
         // A beat FX keeps the beat wakes doing work on the busy rig.
-        busy.engine.addEffect(instance(fx("Pulse"), BlendMode.MAX, TimingSource.BEAT))
+        busy.engine.addFx(instance(fx("Pulse"), BlendMode.MAX, TimingSource.BEAT))
 
         tickerOnly.engine.processWallClockTick(T0)
         busy.engine.processWallClockTick(T0)
@@ -216,7 +216,7 @@ class FxComposePassTest {
     fun `a stateful wall-clock FX steps only on passes the ticker woke`() {
         val rig = newRig()
         val candle = instance(fx("CandleFlicker"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK)
-        rig.engine.addEffect(candle)
+        rig.engine.addFx(candle)
         rig.withCompanionOn(TimingSource.BEAT)
 
         rig.engine.processWallClockTick(T0)
@@ -231,82 +231,82 @@ class FxComposePassTest {
         val limit = FxEngine.MAX_CONSECUTIVE_TICK_FAILURES
 
         val beatRig = newRig()
-        val beatFx = beatRig.engine.addEffect(instance(Throwing(), BlendMode.OVERRIDE, TimingSource.BEAT))
+        val beatFx = beatRig.engine.addFx(instance(Throwing(), BlendMode.OVERRIDE, TimingSource.BEAT))
         beatRig.withCompanionOn(TimingSource.WALL_CLOCK)
         beatRig.engine.processBeatTick(tick(1), T0)
         repeat(limit * 2) { beatRig.engine.processWallClockTick(T0 + 20L * (it + 1)) }
-        assertTrue(beatRig.engine.getEffect(beatFx)!!.isRunning, "ticker-woken passes do not count against a beat FX")
+        assertTrue(beatRig.engine.getFx(beatFx)!!.isRunning, "ticker-woken passes do not count against a beat FX")
         repeat(limit - 2) { beatRig.engine.processBeatTick(tick(it + 2L), T0 + 5_000 + it) }
-        assertTrue(beatRig.engine.getEffect(beatFx)!!.isRunning, "one short of the limit")
+        assertTrue(beatRig.engine.getFx(beatFx)!!.isRunning, "one short of the limit")
         beatRig.engine.processBeatTick(tick(limit + 1L), T0 + 9_000)
-        assertFalse(beatRig.engine.getEffect(beatFx)!!.isRunning, "paused on its master's ${limit}th failing pass")
+        assertFalse(beatRig.engine.getFx(beatFx)!!.isRunning, "paused on its master's ${limit}th failing pass")
 
         val wallRig = newRig()
-        val wallFx = wallRig.engine.addEffect(instance(Throwing(), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK))
+        val wallFx = wallRig.engine.addFx(instance(Throwing(), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK))
         wallRig.withCompanionOn(TimingSource.BEAT)
         repeat(limit - 1) { wallRig.engine.processWallClockTick(T0 + 20L * it) }
         repeat(limit * 2) { wallRig.engine.processBeatTick(tick(it.toLong()), T0 + 5_000 + it) }
-        assertTrue(wallRig.engine.getEffect(wallFx)!!.isRunning, "beat-woken passes do not count against a wall-clock FX")
+        assertTrue(wallRig.engine.getFx(wallFx)!!.isRunning, "beat-woken passes do not count against a wall-clock FX")
         wallRig.engine.processWallClockTick(T0 + 9_000)
-        assertFalse(wallRig.engine.getEffect(wallFx)!!.isRunning, "paused on the ticker's ${limit}th failing pass")
+        assertFalse(wallRig.engine.getFx(wallFx)!!.isRunning, "paused on the ticker's ${limit}th failing pass")
     }
 
     @Test
     fun `a beat N-shot ends on a beat-woken pass`() {
         val rig = newRig()
         val pulse = instance(fx("Pulse"), BlendMode.OVERRIDE, TimingSource.BEAT, division = 1.0)
-        pulse.updateDynamics { it.copy(nShot = 1) }
-        rig.engine.addEffect(pulse)
+        pulse.updateDynamics { it.copy(runs = 1) }
+        rig.engine.addFx(pulse)
         rig.withCompanionOn(TimingSource.WALL_CLOCK)
 
         rig.engine.processBeatTick(tick(100), T0 + 5)
-        assertEquals(100L, pulse.nShotStartTick, "its count starts on its master's tick")
+        assertEquals(100L, pulse.runsStartTick, "its count starts on its master's tick")
         for (n in 101L until 124L) {
             rig.engine.processBeatTick(tick(n), T0 + 5 + (n - 100) * 21)
             rig.engine.processWallClockTick(T0 + 15 + (n - 100) * 21)
-            assertNotNull(rig.engine.getEffect(pulse.id), "still in its one cycle at tick $n")
+            assertNotNull(rig.engine.getFx(pulse.id), "still in its one cycle at tick $n")
         }
         rig.engine.processBeatTick(tick(124), T0 + 600)
-        assertNull(rig.engine.getEffect(pulse.id), "one beat after it started, it is done")
+        assertNull(rig.engine.getFx(pulse.id), "one beat after it started, it is done")
     }
 
     @Test
     fun `a beat FX given a count mid-run goes on painting on ticker-woken passes`() {
         val rig = newRig()
         val pulse = instance(fx("Pulse", "min" to "200", "max" to "200"), BlendMode.OVERRIDE, TimingSource.BEAT)
-        rig.engine.addEffect(pulse)
+        rig.engine.addFx(pulse)
         rig.withCompanionOn(TimingSource.WALL_CLOCK)
         rig.engine.processBeatTick(tick(10), T0)
         assertEquals(200, rig.dimmer)
 
-        rig.engine.updateEffect(pulse.id, newNShot = 2)
+        rig.engine.updateFx(pulse.id, newRuns = 2)
         rig.engine.processWallClockTick(T0 + 10)
         assertEquals(200, rig.dimmer, "the ticker-woken pass starts its count and paints it")
-        assertEquals(10L, rig.engine.getEffect(pulse.id)!!.nShotStartTick, "from the tick the master is on")
+        assertEquals(10L, rig.engine.getFx(pulse.id)!!.runsStartTick, "from the tick the master is on")
     }
 
     @Test
     fun `a wall-clock N-shot ends on a ticker-woken pass`() {
         val rig = newRig()
         val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 1.0)
-        sine.updateDynamics { it.copy(nShot = 1) }
-        rig.engine.addEffect(sine)
+        sine.updateDynamics { it.copy(runs = 1) }
+        rig.engine.addFx(sine)
         rig.withCompanionOn(TimingSource.BEAT)
 
         rig.engine.processWallClockTick(T0)
         rig.engine.processWallClockTick(T0 + 980)
         // A beat wakes the pass after its one second has run out: it holds, and is not yet ended.
         rig.engine.processBeatTick(tick(1), T0 + 1_005)
-        assertNotNull(rig.engine.getEffect(sine.id), "a beat-woken pass does not end a wall-clock N-shot")
+        assertNotNull(rig.engine.getFx(sine.id), "a beat-woken pass does not end a wall-clock N-shot")
         rig.engine.processWallClockTick(T0 + 1_020)
-        assertNull(rig.engine.getEffect(sine.id), "the next ticker-woken pass does")
+        assertNull(rig.engine.getFx(sine.id), "the next ticker-woken pass does")
     }
 
     @Test
     fun `a pass with nothing running on a clock that woke it is skipped, and its time kept`() {
         val rig = newRig()
         val sine = instance(fx("SineWave"), BlendMode.OVERRIDE, TimingSource.WALL_CLOCK, division = 2.0)
-        rig.engine.addEffect(sine)
+        rig.engine.addFx(sine)
 
         rig.engine.processWallClockTick(T0)
         val level = rig.dimmer
@@ -320,17 +320,17 @@ class FxComposePassTest {
     }
 
     /** Throws on every evaluation. */
-    private class Throwing : Effect {
+    private class Throwing : Fx {
         override val name = "Throwing"
         override val outputType = FxOutputType.SLIDER
-        override fun calculate(phase: Double, context: EffectContext): FxOutput = error("effect blew up")
+        override fun calculate(phase: Double, context: FxContext): FxOutput = error("effect blew up")
     }
 
     companion object {
         private const val T0 = 1_000_000L
 
         val registry: FxRegistry by lazy {
-            FxRegistry().also { FxFileLoader(FxScriptCompiler()).loadBuiltInEffects(it) }
+            FxRegistry().also { FxFileLoader(FxScriptCompiler()).loadBuiltInFx(it) }
         }
     }
 }

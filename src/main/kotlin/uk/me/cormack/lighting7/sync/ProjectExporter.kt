@@ -42,18 +42,18 @@ import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.models.warnMalformedBuskRigTile
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
-import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
+import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
-import uk.me.cormack.lighting7.sync.dto.LookEffectJson
+import uk.me.cormack.lighting7.sync.dto.LookFxJson
 import uk.me.cormack.lighting7.sync.dto.SceneryChangeJson
 import uk.me.cormack.lighting7.sync.dto.CueEventJson
 import uk.me.cormack.lighting7.sync.dto.CueSpeedMasterJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
 import uk.me.cormack.lighting7.sync.dto.LookRowJson
-import uk.me.cormack.lighting7.sync.dto.TemplateJson
-import uk.me.cormack.lighting7.sync.dto.TemplateEffectJson
-import uk.me.cormack.lighting7.sync.dto.TemplateRowJson
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
+import uk.me.cormack.lighting7.sync.dto.PaletteFxJson
+import uk.me.cormack.lighting7.sync.dto.PaletteRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskBankJson
@@ -558,7 +558,7 @@ class ProjectExporter(private val state: State) {
                 val effects = l.effects
                     .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                     .map { e ->
-                        LookEffectJson(
+                        LookFxJson(
                             uuid = e.uuid.toString(),
                             targetType = e.targetType,
                             targetKey = e.targetKey,
@@ -596,8 +596,8 @@ class ProjectExporter(private val state: State) {
                 )
             }
 
-            count += writeAll(targetDir, "palettes", project.templates.toList(), TemplateJson.serializer(), { it.uuid }, liveKeys) { t ->
-                TemplateJson(
+            count += writeAll(targetDir, "palettes", project.palettes.toList(), PaletteJson.serializer(), { it.uuid }, liveKeys) { t ->
+                PaletteJson(
                     uuid = t.uuid.toString(),
                     name = t.name,
                     notes = t.notes,
@@ -605,7 +605,7 @@ class ProjectExporter(private val state: State) {
                     rows = t.rows
                         .sortedWith(compareBy({ it.sortOrder }, { it.uuid }))
                         .map { r ->
-                            TemplateRowJson(
+                            PaletteRowJson(
                                 uuid = r.uuid.toString(),
                                 targetType = r.targetType,
                                 targetKey = r.targetKey,
@@ -616,7 +616,7 @@ class ProjectExporter(private val state: State) {
                         },
                     // At most one (D2), so no `sortedWith` — there is no order to stabilise.
                     fx = t.effect?.let { e ->
-                        TemplateEffectJson(
+                        PaletteFxJson(
                             uuid = e.uuid.toString(),
                             fxType = e.fxType,
                             family = e.family,
@@ -879,12 +879,12 @@ class ProjectExporter(private val state: State) {
                 count++
             }
 
-            c.adHocEffects.forEach { e ->
+            c.adHocFx.forEach { e ->
                 Files.createDirectories(adHocDir)
                 writeJson(
                     adHocDir.resolve("${e.uuid}.json"),
-                    CueAdHocEffectJson.serializer(),
-                    CueAdHocEffectJson(
+                    CueAdHocFxJson.serializer(),
+                    CueAdHocFxJson(
                         uuid = e.uuid.toString(),
                         cueUuid = cueUuid,
                         targetType = e.targetType,

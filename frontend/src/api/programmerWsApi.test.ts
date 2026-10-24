@@ -407,7 +407,7 @@ describe('createProgrammerApi', () => {
 
     const dimmer = vi.fn()
     api.subscribeToKey('hex-1', 'dimmer', dimmer)
-    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 0 })
+    frame({ type: 'programmer.cleared', cleared: 1, fxCleared: 0 })
     dimmer.mockClear()
     frame(stateFrame())
 
@@ -435,7 +435,7 @@ describe('createProgrammerApi', () => {
     const api = createProgrammerApi(conn)
     frame(stateFrame())
 
-    frame({ type: 'programmer.cleared', cleared: 1, effectsCleared: 2 })
+    frame({ type: 'programmer.cleared', cleared: 1, fxCleared: 2 })
 
     expect(api.entryCount()).toBe(0)
   })
@@ -710,12 +710,12 @@ describe('createProgrammerApi', () => {
 
     frame(
       provenanceFrame([
-        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'TEMPLATE', id: 3, uuid: 't3', name: 'Sweep' } },
+        { ...PROV, source: 'CUE', layerId: 1, layerSource: { kind: 'PALETTE', id: 3, uuid: 't3', name: 'Sweep' } },
       ]),
     )
 
     expect(spy).toHaveBeenCalledTimes(2)
-    expect(spy.mock.calls[1][0].provenance?.layerSource?.kind).toBe('TEMPLATE')
+    expect(spy.mock.calls[1][0].provenance?.layerSource?.kind).toBe('PALETTE')
   })
 
   it('stops delivering to a key subscriber after it unsubscribes', () => {
@@ -916,15 +916,15 @@ describe('createProgrammerApi', () => {
 
       frame({
         type: 'programmer.targetCleared', requestId, targetType: 'group', targetKey: 'front',
-        values: 4, effects: 1,
-        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+        values: 4, fx: 1,
+        partial: [{ fxId: 9, fxType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
       })
       await expect(cleared).resolves.toEqual({
         targetType: 'group',
         targetKey: 'front',
         values: 4,
-        effects: 1,
-        partial: [{ effectId: 9, effectType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
+        fx: 1,
+        partial: [{ fxId: 9, fxType: 'Pulse', targetKey: 'all', isGroupTarget: true, propertyName: 'dimmer' }],
       })
     })
 

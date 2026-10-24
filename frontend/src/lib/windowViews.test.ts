@@ -21,7 +21,7 @@ import {
  */
 describe('WINDOW_VIEWS', () => {
   it('is the four live views in ViewSwitcher order, then Stage, then Looks, Cues and Palettes', () => {
-    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'cues', 'templates'])
+    expect(WINDOW_VIEWS.map((v) => v.id)).toEqual(['programmer', 'show', 'prompt-book', 'busk', 'stage', 'looks', 'cues', 'palettes'])
   })
 
   it('names the Cues table by its route, a library: stored data, no options, no rig (cue model plan §3.7)', () => {
@@ -48,7 +48,7 @@ describe('WINDOW_VIEWS', () => {
   })
 
   it('names the palette library by its route and its label, keeping the stored word only in the id', () => {
-    expect(windowViewOf('/projects/1/palettes')?.id).toBe('templates')
+    expect(windowViewOf('/projects/1/palettes')?.id).toBe('palettes')
     expect(windowViewLabel('/projects/1/palettes')).toBe('Palettes')
     expect(windowViewOf('/projects/1/templates')).toBeNull()
   })
@@ -94,7 +94,7 @@ describe('WINDOW_VIEWS', () => {
     // Busk keeps its own and takes Chrome last, so the segment sits at the row's end everywhere.
     expect(WINDOW_VIEWS[3]!.options!.map((o) => o.key)).toEqual(['focus', 'sheet', 'pageFollows', 'page', 'immersive'])
     expect(WINDOW_VIEWS.find((v) => v.id === 'looks')!.options).toBeUndefined()
-    expect(WINDOW_VIEWS.find((v) => v.id === 'templates')!.options).toBeUndefined()
+    expect(WINDOW_VIEWS.find((v) => v.id === 'palettes')!.options).toBeUndefined()
   })
 })
 

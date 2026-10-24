@@ -2,40 +2,40 @@ import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AudioWaveform, LayoutGrid, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { padPresenceClass, templateSwatch } from '@/components/busking/padFace'
-import { targetEmitters, templateTargetsOf, type WriteTarget } from '@/components/fixtures-list/rowModel'
+import { padPresenceClass, paletteSwatch } from '@/components/busking/padFace'
+import { targetEmitters, paletteTargetsOf, type WriteTarget } from '@/components/fixtures-list/rowModel'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
-import { PalettePressButton, templatePressTitle } from '@/components/press/PressGestures'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import { PalettePressButton, palettePressTitle } from '@/components/press/PressGestures'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { usePress, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
-import { FAMILY_LABELS, familyForEffectCategory, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, maskGroupForFxFamily, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { paletteFits, type PaletteFit } from '@/lib/paletteOffer'
-import { templatePropertyFor } from '@/lib/templateIntent'
-import { recentFirst } from '@/lib/templateRecents'
+import { palettePropertyFor } from '@/lib/paletteIntent'
+import { recentFirst } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
-import { isCueEffect } from '@/components/fx/fxEditorModel'
-import { effectReaches, storedEffectReaches } from '@/components/fx/effectSplit'
+import { isCueFx } from '@/components/fx/fxEditorModel'
+import { fxReaches, storedFxReaches } from '@/components/fx/fxSplit'
 import { useCueBandProject, usePressCue } from '@/components/press/pressCue'
 import { pressPresence } from '@/components/press/pressPresence'
 import { FxEditorPopover } from '@/components/fx/FxEditorPopover'
-import { useStopEffect } from '@/components/fx/useEffectControls'
-import { useActiveEffectsQuery, useEffectLibraryQuery } from '@/store/fixtureFx'
+import { useStopFx } from '@/components/fx/useFxControls'
+import { useActiveFxQuery, useFxLibraryQuery } from '@/store/fixtureFx'
 import { useProgrammerAppliedQuery } from '@/store/programmer'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useVenueMode } from '@/store/venues'
-import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
+import type { PaletteSummary, PaletteTarget } from '@/api/palettesApi'
 import { EditorFooter } from './EditorFooter'
 import { EditorLabel } from './EditorLabel'
 
 /**
  * Can a value palette carry this property at all? Its rows are a closed vocabulary
- * (`TEMPLATE_PROPERTIES`), so a slider cell whose property is outside it — a speed, say — has no
+ * (`PALETTE_PROPERTIES`), so a slider cell whose property is outside it — a speed, say — has no
  * Palettes band and nothing to save. A setting cell (gobo, prism) passes `palettes={false}` to
  * [PaletteBands] whatever its property: a value palette cannot carry a slotted role (§4.3).
  */
 export function paletteCarries(property: string): boolean {
-  return templatePropertyFor(property) != null
+  return palettePropertyFor(property) != null
 }
 
 /**
@@ -46,7 +46,7 @@ export function paletteCarries(property: string): boolean {
  *    the cell's family as the mask, then the family's value palettes that fit those heads, recent
  *    first and then by name, two rows of them, with *All …* for the family's whole picker.
  *  - **The editor**, unchanged: a drag or a typed value is a Local value, as it always was.
- *  - **Below**, the Effects band ([EffectsBand]): the effects running on these heads, the family's
+ *  - **Below**, the Effects band ([FxBand]): the effects running on these heads, the family's
  *    effect palettes and *+ Effect …*.
  *  - **Then** the footer: *Save as palette…* from the cell's values, beside the family's own tools
  *    ([PaletteFooter]).
@@ -84,7 +84,7 @@ export function PaletteBands({
   palettes?: boolean
   children: ReactNode
 }) {
-  const pressTargets = useMemo(() => templateTargetsOf(targets), [targets])
+  const pressTargets = useMemo(() => paletteTargetsOf(targets), [targets])
   const emitters = useMemo(() => targetEmitters(targets), [targets])
   const families = useMemo(() => [family], [family])
   const cueProject = useCueBandProject()
@@ -104,7 +104,7 @@ export function PaletteBands({
         />
       )}
       {children}
-      <EffectsBand projectId={bandProject} family={family} property={property} targets={pressTargets} families={families} />
+      <FxBand projectId={bandProject} family={family} property={property} targets={pressTargets} families={families} />
       {carries && projectId != null && <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />}
     </>
   )
@@ -141,7 +141,7 @@ export function PaletteBand({
   family: AttributeFamily
   property?: string
   /** Where a press lands — fixtures by key, a cell by its element key. */
-  targets: readonly TemplateTarget[]
+  targets: readonly PaletteTarget[]
   /** The press's mask. */
   families: readonly AttributeFamily[] | null
   /** The bundled emitters the heads have, for the offer. */
@@ -150,17 +150,17 @@ export function PaletteBand({
   scope?: 'window' | 'programmer'
   className?: string
 }) {
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: applied } = useProgrammerAppliedQuery()
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
   const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, pressOptions)
   const cue = usePressCue()
   const onGesture = useCallback(
-    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+    (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
-  const presenceOf = (template: TemplateSummary) => pressPresence(into, cue, applied, targets, 'TEMPLATE', template.id)
+  const presenceOf = (template: PaletteSummary) => pressPresence(into, cue, applied, targets, 'PALETTE', template.id)
   const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters, property }), [family, emitters, property])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'value' && paletteFits(t, fit))),
@@ -211,12 +211,12 @@ export function PaletteBand({
         <div className="flex max-h-[62px] flex-wrap gap-1.5 overflow-hidden">
           {offered.map((template) => {
             const presence = presenceOf(template)
-            const swatch = templateSwatch(template)
+            const swatch = paletteSwatch(template)
             return (
               <PalettePressButton
                 key={template.id}
                 projectId={projectId}
-                template={template}
+                palette={template}
                 into={into}
                 presence={presence}
                 hasTargets={targets.length > 0}
@@ -227,7 +227,7 @@ export function PaletteBand({
                     type="button"
                     data-band-palette={template.id}
                     {...handlers}
-                    title={templatePressTitle(template, into)}
+                    title={palettePressTitle(template, into)}
                     aria-pressed={presence !== 'none'}
                     className={cn(
                       'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs hover:bg-accent',
@@ -292,7 +292,7 @@ function maskTitle(label: string, family: AttributeFamily, families: readonly At
 }
 
 /** The heads a press lands on, by name — a cell by its element key, which is what the press sends. */
-function HeadsLine({ targets }: { targets: readonly TemplateTarget[] }) {
+function HeadsLine({ targets }: { targets: readonly PaletteTarget[] }) {
   const { fixtureByKey } = useFixtureLookup()
   const names = useMemo(
     () => targets.map((target) => fixtureByKey.get(target.key)?.name ?? target.key),
@@ -363,7 +363,7 @@ export function usePaletteSave(
   const [mounted, setMounted] = useState(false)
   const [open, setOpen] = useState(false)
   const families = useMemo(() => [family], [family])
-  const templateTargets = useMemo(() => templateTargetsOf(targets), [targets])
+  const paletteTargets = useMemo(() => paletteTargetsOf(targets), [targets])
   const onSave = useCallback(() => {
     setMounted(true)
     setOpen(true)
@@ -372,12 +372,12 @@ export function usePaletteSave(
   return {
     onSave,
     sheet: mounted ? (
-      <NewTemplateFromSelectionSheet
+      <NewPaletteFromSelectionSheet
         open={open}
         onOpenChange={setOpen}
         projectId={projectId}
         families={families}
-        targets={templateTargets}
+        targets={paletteTargets}
       />
     ) : null,
   }
@@ -395,9 +395,9 @@ export function usePaletteSave(
  *    ([paletteFits]) — so a zoom cell is offered the Beam effect palettes that drive zoom, a gobo cell
  *    the Slot Steps of its gobo — pressed through `usePress` onto the cell batch under the cell's
  *    family, with the chip's gestures and ring.
- *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="effects"`) on this
+ *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="fx"`) on this
  *    property: `FxPicker` on the family of the cell and the bare effect press, `POST
- *    /programmer/effects` with the same pair, so a Pulse on a uv cell is masked as Colour (the
+ *    /programmer/fx` with the same pair, so a Pulse on a uv cell is masked as Colour (the
  *    family the desk reads off the driven property). Under a focused Look it starts on `/fx/add` and
  *    is absorbed into the Look instead.
  *
@@ -406,7 +406,7 @@ export function usePaletteSave(
  * opened — the FX tab edits them, and no live editor or split is offered — its effect palettes go on
  * as cue layers, and *+ Effect …* stores a bare effect in the cue in draft, running nothing.
  */
-export function EffectsBand({
+export function FxBand({
   projectId,
   family,
   property,
@@ -419,32 +419,32 @@ export function EffectsBand({
   family: AttributeFamily
   property: string
   /** Where a press lands — fixtures by key, a cell by its element key. */
-  targets: readonly TemplateTarget[]
+  targets: readonly PaletteTarget[]
   /** The press's mask. */
   families: readonly AttributeFamily[] | null
   /** `usePress`'s scope — the busk tabs pass `'programmer'`. */
   scope?: 'window' | 'programmer'
   className?: string
 }) {
-  const { data: templates } = useTemplateListQuery({ projectId })
-  const { data: library } = useEffectLibraryQuery()
-  const { data: active } = useActiveEffectsQuery()
+  const { data: templates } = usePaletteListQuery({ projectId })
+  const { data: library } = useFxLibraryQuery()
+  const { data: active } = useActiveFxQuery()
   const { data: applied } = useProgrammerAppliedQuery()
   const { fixtures } = useFixtureLookup()
   const pressCue = usePressCue()
-  const stopEffect = useStopEffect()
+  const stopFx = useStopFx()
   const pair = useMemo<PressPair>(() => ({ targets, families }), [targets, families])
   const pressOptions = useMemo(() => (scope == null ? undefined : { scope }), [scope])
   const { press, into } = usePress(projectId, pair, pressOptions)
   const cue = into.kind === 'cue' ? pressCue : null
   const onGesture = useCallback(
-    (template: TemplateSummary, gesture: PressGesture) => void press({ kind: 'template', template }, gesture),
+    (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
   const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters: null, property }), [family, property])
   const context = useMemo(() => ({ library, templates }), [library, templates])
   const offered = useMemo(
-    () => recentFirst((templates ?? []).filter((t) => t.kind === 'effect' && paletteFits(t, fit, context))),
+    () => recentFirst((templates ?? []).filter((t) => t.kind === 'fx' && paletteFits(t, fit, context))),
     [templates, fit, context],
   )
   const running = useMemo(
@@ -452,7 +452,7 @@ export function EffectsBand({
       cue != null
         ? []
         : (active ?? []).filter(
-            (e) => !e.leaving && sameProperty(e.propertyName, property) && effectReaches(e, targets, fixtures ?? []),
+            (e) => !e.leaving && sameProperty(e.propertyName, property) && fxReaches(e, targets, fixtures ?? []),
           ),
     [cue, active, property, targets, fixtures],
   )
@@ -462,8 +462,8 @@ export function EffectsBand({
     if (cue == null) return []
     return cue.effects.filter((e) =>
       e.propertyName != null
-        ? sameProperty(e.propertyName, property) && storedEffectReaches(e, targets, fixtures ?? [])
-        : familyForEffectCategory(e.category) === family && storedEffectReaches({ ...e, propertyName: property }, targets, fixtures ?? []),
+        ? sameProperty(e.propertyName, property) && storedFxReaches(e, targets, fixtures ?? [])
+        : maskGroupForFxFamily(e.family) === family && storedFxReaches({ ...e, propertyName: property }, targets, fixtures ?? []),
     )
   }, [cue, family, property, targets, fixtures])
 
@@ -510,7 +510,7 @@ export function EffectsBand({
       {running.length > 0 && (
         <div data-effects-band-running className="flex flex-wrap gap-1.5">
           {running.map((effect) => {
-            const cue = isCueEffect(effect)
+            const cue = isCueFx(effect)
             return (
               <button
                 key={effect.id}
@@ -519,8 +519,8 @@ export function EffectsBand({
                 disabled={cue}
                 title={
                   cue
-                    ? `${effect.effectType} — its cue’s; edit it in the cue`
-                    : `${effect.effectType} — running on these heads; click to edit`
+                    ? `${effect.fxType} — its cue’s; edit it in the cue`
+                    : `${effect.fxType} — running on these heads; click to edit`
                 }
                 onClick={(event) => {
                   editAnchor.current = event.currentTarget
@@ -532,7 +532,7 @@ export function EffectsBand({
                 )}
               >
                 <AudioWaveform className="size-3 shrink-0 text-violet-600 dark:text-violet-300" />
-                <span className="max-w-[9rem] truncate">{effect.effectType}</span>
+                <span className="max-w-[9rem] truncate">{effect.fxType}</span>
               </button>
             )
           })}
@@ -542,13 +542,13 @@ export function EffectsBand({
         <div data-effects-band-stored className="flex flex-wrap gap-1.5">
           {stored.map((effect, index) => (
             <span
-              key={effect.uuid ?? `${effect.effectType}-${index}`}
+              key={effect.uuid ?? `${effect.fxType}-${index}`}
               data-band-stored-effect
-              title={`${effect.effectType} — stored in ${cue?.cueLabel ?? 'this cue'}; edit it in the FX tab`}
+              title={`${effect.fxType} — stored in ${cue?.cueLabel ?? 'this cue'}; edit it in the FX tab`}
               className="inline-flex h-7 items-center gap-1.5 rounded-md border border-sky-500/50 bg-sky-500/[0.08] px-2 text-xs"
             >
               <AudioWaveform className="size-3 shrink-0 text-sky-600 dark:text-sky-300" />
-              <span className="max-w-[9rem] truncate">{effect.effectType}</span>
+              <span className="max-w-[9rem] truncate">{effect.fxType}</span>
             </span>
           ))}
         </div>
@@ -556,12 +556,12 @@ export function EffectsBand({
       {offered.length > 0 && (
         <div className="flex max-h-[62px] flex-wrap gap-1.5 overflow-hidden">
           {offered.map((template) => {
-            const presence = pressPresence(into, cue, applied, targets, 'TEMPLATE', template.id)
+            const presence = pressPresence(into, cue, applied, targets, 'PALETTE', template.id)
             return (
               <PalettePressButton
                 key={template.id}
                 projectId={projectId}
-                template={template}
+                palette={template}
                 into={into}
                 presence={presence}
                 hasTargets={targets.length > 0}
@@ -572,7 +572,7 @@ export function EffectsBand({
                     type="button"
                     data-band-effect-palette={template.id}
                     {...handlers}
-                    title={templatePressTitle(template, into)}
+                    title={palettePressTitle(template, into)}
                     aria-pressed={presence !== 'none'}
                     className={cn(
                       'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-xs hover:bg-accent',
@@ -601,7 +601,7 @@ export function EffectsBand({
           onClose={() => setEditingId(null)}
           onFollow={setEditingId}
           onStop={(effect) => {
-            stopEffect(effect)
+            stopFx(effect)
             setEditingId(null)
           }}
         />
@@ -612,7 +612,7 @@ export function EffectsBand({
           open={pickerOpen}
           onOpenChange={setPickerOpen}
           anchorRef={addRef}
-          library="effects"
+          library="fx"
           family={family}
           property={property}
           pair={pair}

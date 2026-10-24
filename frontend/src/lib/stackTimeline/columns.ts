@@ -1,5 +1,5 @@
 import type { CueTarget } from '@/api/cuesApi'
-import type { StackTimeline, TimelineEffect, TimelineLayer } from '@/api/stackTimelineApi'
+import type { StackTimeline, TimelineFx, TimelineLayer } from '@/api/stackTimelineApi'
 import { TIMELINE_KINDS, type TimelineColumn, type TimelineKind } from './model'
 import type { StoredExtraColumn } from './columnOrder'
 
@@ -29,8 +29,8 @@ export function layerTargets(layer: TimelineLayer): (CueTarget | null)[] {
   return layer.targets.length === 0 ? [null] : layer.targets
 }
 
-export function effectColumnId(effect: TimelineEffect): string {
-  return `effect:${effect.effectType}:${effect.propertyName ?? ''}:${effect.targetType}:${effect.targetKey}`
+export function fxColumnId(effect: TimelineFx): string {
+  return `fx:${effect.fxType}:${effect.propertyName ?? ''}:${effect.targetType}:${effect.targetKey}`
 }
 
 export function sceneryColumnId(elementUuid: string): string {
@@ -51,13 +51,13 @@ function targetHeads(layer: TimelineLayer, target: CueTarget | null, names: Time
   return layer.heads.filter((head) => covered.has(head) || covered.has(names.parentOf?.(head) ?? ''))
 }
 
-function effectLabel(effect: TimelineEffect): string {
+function fxLabel(effect: TimelineFx): string {
   const property = effect.propertyName
-  return property ? `${effect.effectType} · ${property.charAt(0).toUpperCase()}${property.slice(1)}` : effect.effectType
+  return property ? `${effect.fxType} · ${property.charAt(0).toUpperCase()}${property.slice(1)}` : effect.fxType
 }
 
 /** A selection target's key as the timeline names it: each item's key, joined. */
-function effectSub(effect: TimelineEffect, names: TimelineNames): string {
+function fxSub(effect: TimelineFx, names: TimelineNames): string {
   if (effect.targetType === 'selection') {
     try {
       const items = JSON.parse(effect.targetKey) as CueTarget[]
@@ -108,16 +108,16 @@ export function columns(timeline: StackTimeline, names: TimelineNames, order: re
         )
       }
     }
-    for (const effect of entry.effects) {
+    for (const effect of entry.fx) {
       add(
         {
-          id: effectColumnId(effect),
-          kind: 'effect',
-          name: effectLabel(effect),
-          sub: effectSub(effect, names),
+          id: fxColumnId(effect),
+          kind: 'fx',
+          name: fxLabel(effect),
+          sub: fxSub(effect, names),
           sourceId: null,
           target: null,
-          effect: { effectType: effect.effectType, propertyName: effect.propertyName, targetType: effect.targetType, targetKey: effect.targetKey },
+          effect: { fxType: effect.fxType, propertyName: effect.propertyName, targetType: effect.targetType, targetKey: effect.targetKey },
         },
         effect.heads,
         effect.family ? [effect.family] : [],

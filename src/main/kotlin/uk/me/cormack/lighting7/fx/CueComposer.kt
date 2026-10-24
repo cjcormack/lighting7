@@ -5,7 +5,7 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -19,7 +19,7 @@ private val logger = LoggerFactory.getLogger("CueComposer")
  * One line of a cue's layer composition, resolved far enough to compose: what the layer applies plus
  * the layer's own operating parameters.
  *
- * [source] carries the uuid alongside the int id so [LookRegistry] and [TemplateRegistry] — both
+ * [source] carries the uuid alongside the int id so [LookRegistry] and [PaletteRegistry] — both
  * uuid-keyed — need no second DB hit at apply time, and carries the *kind* because a layer can apply
  * either a Look or a template and the two resolve differently.
  */
@@ -81,7 +81,7 @@ data class CookWinner(
  * Which of a layer's *own* effects a higher stomping layer has switched off:
  * `layerId → targetKey → property names`.
  *
- * Read per tick by `EffectSuppression.isSuppressed` (through the engine's tick) against an instance's `cueLayerId` /
+ * Read per tick by `FxSuppression.isSuppressed` (through the engine's tick) against an instance's `cueLayerId` /
  * `programmerLayerId`. The key space is the layer's, not the cue's — and the two id spaces
  * (`DaoCueLayer` row ids and `ProgrammerStore.mintLayerId`'s counter) are held in **separate** maps
  * on the engine rather than risking a collision in one.
@@ -195,8 +195,8 @@ internal object CueComposer {
      * The layers of a cue that actually contribute, in rank order.
      *
      * The one definition of "contributing", and deliberately so: it is asked three times —
-     * [cook] (which numbers [CookWinner.index] off it), [cookEffects], and
-     * `ProgrammerLayerStack.syncEffects` (which turns the same rank into an effect priority via
+     * [cook] (which numbers [CookWinner.index] off it), [cookFx], and
+     * `ProgrammerLayerStack.syncFx` (which turns the same rank into an effect priority via
      * `priorityFor`). Those ranks have to agree, and while the predicate was written out three times
      * they only agreed by inspection: the programmer's copy omitted the timed clause. Harmless
      * there *only* because `ProgrammerLayer` carries no timing columns at all, so every layer it
@@ -261,12 +261,12 @@ internal object CueComposer {
          * to darkness and say only that each of its layers could not be loaded.
          */
         resolveLook: (UUID) -> LookSnapshot?,
-        /** How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot]; see [resolveLook]. */
-        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        /** How a palette layer's `source.uuid` becomes a [PaletteSnapshot]; see [resolveLook]. */
+        resolvePalette: (UUID) -> PaletteSnapshot?,
         includeTimed: Set<Int> = emptySet(),
     ): CookResult = cookInternal(
-        fixtures, cueId, priority, layers, localRows, resolveLook, resolveTemplate, includeTimed,
-        collectEffects = null,
+        fixtures, cueId, priority, layers, localRows, resolveLook, resolvePalette, includeTimed,
+        collectFx = null,
     ).values
 
     /**
@@ -275,8 +275,8 @@ internal object CueComposer {
      */
     internal data class FullCook(
         val values: CookResult,
-        /** As [cookEffects] returns them; empty when the cook was asked for values only. */
-        val effects: List<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
+        /** As [cookFx] returns them; empty when the cook was asked for values only. */
+        val effects: List<Triple<CookLayer, StoredFx, FxTargetsRef>>,
         /**
          * `layerId → rank` among the contributing layers — the same number [CookWinner.index]
          * carries, so a caller turning a rank into an effect priority cannot disagree with the rows.
@@ -285,7 +285,7 @@ internal object CueComposer {
     )
 
     /**
-     * [cook] and [cookEffects] in **one pass over the layer stack** — sweep item C8.
+     * [cook] and [cookFx] in **one pass over the layer stack** — sweep item C8.
      *
      * The programmer re-cooks on every stack mutation and needs both halves each time. Asking for
      * them separately walked the stack twice, sorted [contributingLayers] three times (once in each
@@ -293,7 +293,7 @@ internal object CueComposer {
      * registry twice — the second read being a genuine hazard, not just waste, since a Look edited
      * between the two would put rows and effects from different versions of it on stage together.
      *
-     * [withEffects] false yields the values and the ranks with [FullCook.effects] empty, for a
+     * [withFx] false yields the values and the ranks with [FullCook.effects] empty, for a
      * caller that republishes values and deliberately leaves the running effects alone.
      */
     fun cookAll(
@@ -303,16 +303,16 @@ internal object CueComposer {
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment>,
         resolveLook: (UUID) -> LookSnapshot?,
-        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        resolvePalette: (UUID) -> PaletteSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-        withEffects: Boolean = true,
+        withFx: Boolean = true,
     ): FullCook = cookInternal(
-        fixtures, cueId, priority, layers, localRows, resolveLook, resolveTemplate, includeTimed,
-        collectEffects = if (withEffects) ArrayList() else null,
+        fixtures, cueId, priority, layers, localRows, resolveLook, resolvePalette, includeTimed,
+        collectFx = if (withFx) ArrayList() else null,
     )
 
     /**
-     * The one cook. [collectEffects] non-null asks for the effect triples alongside the rows, out of
+     * The one cook. [collectFx] non-null asks for the effect triples alongside the rows, out of
      * the same resolved [LayerContent] the rows came from.
      */
     private fun cookInternal(
@@ -322,9 +322,9 @@ internal object CueComposer {
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment>,
         resolveLook: (UUID) -> LookSnapshot?,
-        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        resolvePalette: (UUID) -> PaletteSnapshot?,
         includeTimed: Set<Int>,
-        collectEffects: MutableList<Triple<CookLayer, StoredEffect, EffectTargetRef>>?,
+        collectFx: MutableList<Triple<CookLayer, StoredFx, FxTargetsRef>>?,
     ): FullCook {
         val acc = LinkedHashMap<Key, Contribution>()
 
@@ -348,7 +348,7 @@ internal object CueComposer {
 
         for ((index, layer) in contributing.withIndex()) {
             ranks[layer.layerId] = index
-            val content = resolveContent(layer.source, resolveLook, resolveTemplate)
+            val content = resolveContent(layer.source, resolveLook, resolvePalette)
             if (content == null) {
                 logger.warn(
                     "cue {}: {} '{}' ({}) could not be loaded — skipping layer",
@@ -363,8 +363,8 @@ internal object CueComposer {
             asserted.add(LayerAssertions(layer.layerId, layer.stomp, keys))
             // Off the content already resolved above, so the effects and the rows come from one
             // version of it.
-            if (collectEffects != null) {
-                effectsForLayer(cueId, layer, content, layerTargets, collectEffects)
+            if (collectFx != null) {
+                fxForLayer(cueId, layer, content, layerTargets, collectFx)
             }
         }
 
@@ -421,7 +421,7 @@ internal object CueComposer {
                     }
                 },
             ),
-            effects = collectEffects ?: emptyList(),
+            effects = collectFx ?: emptyList(),
             ranks = ranks,
         )
     }
@@ -469,7 +469,7 @@ internal object CueComposer {
      * The ordered (layer, effect, target) triples a cue's layers spawn, in layer order.
      *
      * **Spawning in this order is sufficient** — no priority arithmetic needed.
-     * [FxEngine.sortedEffectsComparator] is `compareBy(priority, composeOrder, id)` with
+     * [FxEngine.sortedFxComparator] is `compareBy(priority, composeOrder, id)` with
      * `composeOrder` the creation counter, and per-tick composition is a genuine sequential fold through
      * [FxTarget.applyValue]. So same-priority effects already resolve last-created-wins, and layer
      * order becomes effect order for free.
@@ -477,27 +477,27 @@ internal object CueComposer {
      * A palette's effect runs on each of the layer's targets; a Look's every effect runs on its own
      * target, as its rows land whole.
      */
-    fun cookEffects(
+    fun cookFx(
         fixtures: Fixtures,
         cueId: Int,
         layers: List<CookLayer>,
         /** How a LOOK layer's `source.uuid` becomes a [LookSnapshot]; see [cook]'s own parameter. */
         resolveLook: (UUID) -> LookSnapshot?,
         /**
-         * How a TEMPLATE layer's `source.uuid` becomes a [TemplateSnapshot].
+         * How a palette layer's `source.uuid` becomes a [PaletteSnapshot].
          *
          * Required rather than defaulted, and that is the point. This is the only cook the
          * timed-fire path uses ([CueTriggerManager]), so a default of `{ null }` would leave a
          * template effect firing on GO and silently *not* on a delayed or recurring layer — an
          * asymmetry that reads as a timing bug rather than a missing argument.
          */
-        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        resolvePalette: (UUID) -> PaletteSnapshot?,
         includeTimed: Set<Int> = emptySet(),
-    ): List<Triple<CookLayer, StoredEffect, EffectTargetRef>> {
-        val out = ArrayList<Triple<CookLayer, StoredEffect, EffectTargetRef>>()
+    ): List<Triple<CookLayer, StoredFx, FxTargetsRef>> {
+        val out = ArrayList<Triple<CookLayer, StoredFx, FxTargetsRef>>()
         for (layer in contributingLayers(layers, includeTimed)) {
-            val content = resolveContent(layer.source, resolveLook, resolveTemplate) ?: continue
-            effectsForLayer(cueId, layer, content, LayerTargets(fixtures, cueId, layer), out)
+            val content = resolveContent(layer.source, resolveLook, resolvePalette) ?: continue
+            fxForLayer(cueId, layer, content, LayerTargets(fixtures, cueId, layer), out)
         }
         return out
     }
@@ -505,24 +505,24 @@ internal object CueComposer {
     /**
      * One layer's effect triples, appended to [out].
      *
-     * Shared by [cookEffects] and [cookAll] so the two cannot disagree about which effects a layer
+     * Shared by [cookFx] and [cookAll] so the two cannot disagree about which effects a layer
      * spawns — the combined cook exists precisely to stop the programmer asking twice, and a second
      * copy of this fan-out would be a new way for the two answers to drift.
      */
-    private fun effectsForLayer(
+    private fun fxForLayer(
         cueId: Int,
         layer: CookLayer,
         content: LayerContent,
         /** The layer's own target set, expanded once — see [LayerTargets]. */
         layerTargets: LayerTargets,
-        out: MutableList<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
+        out: MutableList<Triple<CookLayer, StoredFx, FxTargetsRef>>,
     ) {
         when (content) {
             // A Look lands whole (absolute-looks plan D1): every effect on its own target.
             is LayerContent.OfLook -> for (entry in content.look.effects) out.add(Triple(layer, entry.effect, entry.target))
-            is LayerContent.OfTemplate -> {
+            is LayerContent.OfPalette -> {
                 val refs = layerTargets.refs
-                val effect = content.template.effect ?: return
+                val effect = content.palette.effect ?: return
                 if (refs.isEmpty()) {
                     logger.warn(
                         "cue {}: palette '{}' holds an effect but its layer names no targets — skipping",
@@ -530,7 +530,7 @@ internal object CueComposer {
                     )
                     return
                 }
-                for (target in refs) out.add(Triple(layer, effect, EffectTargetRef.Single(target)))
+                for (target in refs) out.add(Triple(layer, effect, FxTargetsRef.Single(target)))
             }
         }
     }
@@ -545,7 +545,7 @@ internal object CueComposer {
      * layer's rows (targets supplying a template's generic rows and filtering bound ones, mask, blend,
      * amount, stomp, specificity, assertion recording) is identical, and duplicating it is how the two
      * would drift. Their effects differ in kind — a Look's are bound, a palette's is generic — which
-     * [effectsForLayer] reads off the arm.
+     * [fxForLayer] reads off the arm.
      */
     private sealed interface LayerContent {
         /** Rows in `sortOrder`, in the shape [applyLayer] consumes. */
@@ -561,15 +561,15 @@ internal object CueComposer {
             }
         }
 
-        /** A template: [TemplateIntent]s, resolved per head by [TemplateResolver]. */
-        class OfTemplate(val template: TemplateSnapshot) : LayerContent {
-            // A template has no element rows by construction — the column does not exist — so the
+        /** A palette: [PaletteIntent]s, resolved per head by [PaletteResolver]. */
+        class OfPalette(val palette: PaletteSnapshot) : LayerContent {
+            // A palette has no element rows by construction — the column does not exist — so the
             // element skip in `applyLayer` simply never fires for this arm.
-            override val rows: List<SourceRow> = template.rows.map {
-                // A template's fade sits on the template, not the row (see
-                // `DaoTemplates.fadeDurationMs`): it is one gesture, so every row it writes moves
+            override val rows: List<SourceRow> = palette.rows.map {
+                // A palette's fade sits on the palette, not the row (see
+                // `DaoPalettes.fadeDurationMs`): it is one gesture, so every row it writes moves
                 // together. Copying it onto each row is what lets `applyLayer` treat both arms alike.
-                SourceRow(it.target, it.propertyName, it.value, elementKey = null, template.fadeDurationMs)
+                SourceRow(it.target, it.propertyName, it.value, elementKey = null, palette.fadeDurationMs)
             }
         }
     }
@@ -589,7 +589,7 @@ internal object CueComposer {
          *
          * Carried through the cook because a *tracked* source has to fade like an *applied* one:
          * *Apply as values* writes literals into the programmer with the template's fade
-         * (`applyTemplateToProgrammer`), and a tap on the same chip adds a layer that tracks it —
+         * (`applyPaletteToProgrammer`), and a tap on the same chip adds a layer that tracks it —
          * which used to snap, because the field stopped here (sweep item B1).
          */
         val fadeDurationMs: Long?,
@@ -598,10 +598,10 @@ internal object CueComposer {
     private fun resolveContent(
         source: LayerSource,
         resolveLook: (UUID) -> LookSnapshot?,
-        resolveTemplate: (UUID) -> TemplateSnapshot?,
+        resolvePalette: (UUID) -> PaletteSnapshot?,
     ): LayerContent? = when (source.kind) {
         LayerSourceKind.LOOK -> resolveLook(source.uuid)?.let { LayerContent.OfLook(it) }
-        LayerSourceKind.TEMPLATE -> resolveTemplate(source.uuid)?.let { LayerContent.OfTemplate(it) }
+        LayerSourceKind.PALETTE -> resolvePalette(source.uuid)?.let { LayerContent.OfPalette(it) }
     }
 
     /** A single (fixture, property) contribution a layer wants to make, before blending. */
@@ -614,14 +614,14 @@ internal object CueComposer {
         /** The originating row's [SourceRow.fadeDurationMs]. */
         val fadeDurationMs: Long?,
         /**
-         * The originating row's parsed [TemplateIntent], for a template layer; null for a Look.
+         * The originating row's parsed [PaletteIntent], for a template layer; null for a Look.
          *
          * Parsed once **per row** rather than once per head (sweep item C8): the string belongs to
          * the row, so a template row fanned over a 24-head group used to parse the same value 24
          * times. Non-null exactly when the layer is a template — a row whose value is not an
          * intent is dropped whole, before it fans out.
          */
-        val intent: TemplateIntent?,
+        val intent: PaletteIntent?,
         /** The row's own target before expansion — see [CueAssignmentResolver.Assignment.sourceTarget]. */
         val sourceTarget: TargetRef,
     ) {
@@ -668,8 +668,8 @@ internal object CueComposer {
         for (row in content.rows) {
             // A template row's intent is the row's, not the head's — parse it here and drop the
             // whole row if it is not one, rather than repeating the parse and the warning per head.
-            val intent = if (content is LayerContent.OfTemplate) {
-                parseTemplateIntent(row.value) ?: run {
+            val intent = if (content is LayerContent.OfPalette) {
+                parsePaletteIntent(row.value) ?: run {
                     logger.warn(
                         "cue {}: template '{}' — '{}' is not an intent for '{}' — skipping row",
                         cueId, layer.source.name, row.value, row.propertyName,
@@ -736,22 +736,22 @@ internal object CueComposer {
         // none of them rather than a *different* colour under this template's name. Computed over
         // `pending` because that is where a row and the head it landed on have already been paired.
         // Empty for a Look layer, whose rows carry no intent.
-        val hasColourRow = content is LayerContent.OfTemplate && pending.any {
-            TemplateProperty.ofOrNull(it.propertyName)?.family == PropertyMaskGroup.COLOUR
+        val hasColourRow = content is LayerContent.OfPalette && pending.any {
+            PaletteProperty.ofOrNull(it.propertyName)?.family == PropertyMaskGroup.COLOUR
         }
         val unmetColour: Map<String, String> = if (hasColourRow) {
             pending.groupBy { it.fixture.targetKey }.mapNotNull { (key, forFixture) ->
                 val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
                 val requirement =
-                    TemplateResolver.unmetColourRequirement(
-                        forFixture.first().fixture, applicable, TemplateFanOut.mediaOf(forFixture.first().fixture, fixtures::fittedMediaFor),
+                    PaletteResolver.unmetColourRequirement(
+                        forFixture.first().fixture, applicable, PaletteFanOut.mediaOf(forFixture.first().fixture, fixtures::fittedMediaFor),
                     )
                 // Both arms drop the head's colour rows; the cook has no panel to stay quiet for, so
                 // "no colour at all" and "no amber" are the same answer to it.
                 when (requirement) {
-                    is TemplateResolver.ColourRequirement.NotACandidate -> key to requirement.reason
-                    is TemplateResolver.ColourRequirement.Unmet -> key to requirement.reason
-                    TemplateResolver.ColourRequirement.Met -> null
+                    is PaletteResolver.ColourRequirement.NotACandidate -> key to requirement.reason
+                    is PaletteResolver.ColourRequirement.Unmet -> key to requirement.reason
+                    PaletteResolver.ColourRequirement.Met -> null
                 }
             }.toMap()
         } else {
@@ -768,7 +768,7 @@ internal object CueComposer {
         for (p in pending.sortedBy { if (it.isGroupOrigin) 0 else 1 }) {
             val unmet = unmetColour[p.fixture.targetKey]
             if (unmet != null &&
-                TemplateProperty.ofOrNull(p.propertyName)?.family == PropertyMaskGroup.COLOUR
+                PaletteProperty.ofOrNull(p.propertyName)?.family == PropertyMaskGroup.COLOUR
             ) {
                 // **Debug, not warn**, for the reason the per-row skip below gives: a template
                 // pointed at a mixed rig meets this on every cook, and it is the editor's
@@ -784,12 +784,12 @@ internal object CueComposer {
             // not an `rgbColour` it does not have. So the resolved name is what the mask, the
             // category lookup and the accumulator key use.
             val pendingIntent = p.intent
-            val resolved: TemplateResolver.Resolution? =
+            val resolved: PaletteResolver.Resolution? =
                 if (pendingIntent == null) {
                     null
                 } else {
-                    val resolution = TemplateResolver.resolve(
-                        p.fixture, p.propertyName, pendingIntent, TemplateFanOut.mediaOf(p.fixture, fixtures::fittedMediaFor),
+                    val resolution = PaletteResolver.resolve(
+                        p.fixture, p.propertyName, pendingIntent, PaletteFanOut.mediaOf(p.fixture, fixtures::fittedMediaFor),
                     )
                     if (!resolution.isSupported) {
                         // **Debug, not warn.** A head that cannot take the intent is the normal
@@ -832,7 +832,7 @@ internal object CueComposer {
             // Recorded here, past every skip above, so an assertion means "this layer really put a
             // value on that key". The group alias goes in alongside the fixture key rather than
             // instead of it: within-cue suppression is checked per member (see
-            // `FxEngine.processGroupEffect`), the cross-cue overlap on the effect's own target.
+            // `FxEngine.processGroupFx`), the cross-cue overlap on the effect's own target.
             asserted.getOrPut(p.fixture.targetKey) { HashSet() }.add(canonical)
             p.groupKey?.let { asserted.getOrPut(it) { HashSet() }.add(canonical) }
 
@@ -857,7 +857,7 @@ internal object CueComposer {
     }
 
     /**
-     * Where a row lands on one expanded head. A **template** row fans through [TemplateFanOut]: a
+     * Where a row lands on one expanded head. A **template** row fans through [PaletteFanOut]: a
      * multi-head fixture whose property lives only on its cells — the Shehds' colour, on its three
      * zones — lands on those cells, where the parent alone would resolve nothing and be skipped
      * (venue-visit plan S1). A **Look** row (no intent) names the property it holds and lands where
@@ -871,9 +871,9 @@ internal object CueComposer {
         fixtures: Fixtures,
         head: GroupableFixture,
         propertyName: String,
-        intent: TemplateIntent?,
+        intent: PaletteIntent?,
     ): List<GroupableFixture> =
-        if (intent == null) listOf(head) else TemplateFanOut.headsFor(head, propertyName, fixtures::fittedMediaFor)
+        if (intent == null) listOf(head) else PaletteFanOut.headsFor(head, propertyName, fixtures::fittedMediaFor)
 
     /**
      * One expanded target: the fixture, and the group it came through if it came through one.
@@ -896,7 +896,7 @@ internal object CueComposer {
      * holds is filtered.
      *
      * Both derived forms are computed **on first ask and only then**. A palette's effect runs on
-     * [refs] as named and never expands them, which is what keeps a bare [cookEffects] from paying
+     * [refs] as named and never expands them, which is what keeps a bare [cookFx] from paying
      * for an effect palette's layer — and, since [expandTargets] warns about a missing group, keeps
      * it from warning about one it had no reason to look up.
      *
@@ -1002,7 +1002,7 @@ internal object CueComposer {
      * plan's four modes are the subset the UI offers.
      */
     private fun parseLayerBlendMode(raw: String, sourceName: String, cueId: Int): BlendMode =
-        EffectSpecCoercion.Lenient.blendMode(raw) { "cue $cueId layer on '$sourceName'" }
+        FxSpecCoercion.Lenient.blendMode(raw) { "cue $cueId layer on '$sourceName'" }
 
     /**
      * Combine [incoming] over [below] under [mode], then mix that result back over [below] by

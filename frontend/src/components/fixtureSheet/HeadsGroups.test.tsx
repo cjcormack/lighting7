@@ -65,7 +65,7 @@ vi.mock('@/store/status', () => ({ useIsDeskConnected: () => wire.connected }))
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => false }))
 vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0 }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: wire.effects }),
+  useActiveFxQuery: () => ({ data: wire.effects }),
   usePauseFxMutation: () => [vi.fn()],
   useResumeFxMutation: () => [vi.fn()],
   useRemoveFxMutation: () => [vi.fn()],
@@ -90,8 +90,8 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
 const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
 vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
-vi.mock('./effectLabels', () => ({
-  useEffectDetail: () => () => '¼ · M1',
+vi.mock('./fxLabels', () => ({
+  useFxDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
 }))
 vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
@@ -358,8 +358,8 @@ describe('rows over a pick of heads', () => {
 
   it('lists what reaches the pick in the tray and starts + Effect on the picked head', () => {
     wire.effects = [
-      { id: 7, effectType: 'Pulse', targetKey: 'bar-a.pixel-2', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
-      { id: 8, effectType: 'Rainbow', targetKey: 'bar-a', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 7, fxType: 'Pulse', targetKey: 'bar-a.pixel-2', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 8, fxType: 'Rainbow', targetKey: 'bar-a', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
     ]
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))

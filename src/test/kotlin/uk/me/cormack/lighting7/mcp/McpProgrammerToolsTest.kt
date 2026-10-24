@@ -319,14 +319,14 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `a per-fixture template with no targets lands on its own heads`() {
         patchRig()
-        val templateId = ok(
+        val paletteId = ok(
             "create_palette",
             """{"name":"Special","rows":[{"targetKey":"foh-3","propertyName":"dimmer","value":"pct:100"}]}""",
         )["paletteId"]!!.jsonPrimitive.int
-        ok("apply_palette", """{"paletteId":$templateId}""")
+        ok("apply_palette", """{"paletteId":$paletteId}""")
         assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)))
         ok("clear_programmer", "{}")
-        ok("apply_palette", """{"paletteId":$templateId,"asValues":true}""")
+        ok("apply_palette", """{"paletteId":$paletteId,"asValues":true}""")
         assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)), "as values too")
         assertTrue(state.show.programmerStore.layers.isEmpty())
     }

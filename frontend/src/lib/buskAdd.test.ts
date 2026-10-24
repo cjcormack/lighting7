@@ -20,7 +20,7 @@ import {
 
 function pad(kind: BuskPad['kind'], id: number): BuskPad {
   const summary = { id } as never
-  if (kind === 'TEMPLATE') return { kind, template: summary }
+  if (kind === 'PALETTE') return { kind, palette: summary }
   if (kind === 'LOOK') return { kind, look: summary }
   return { kind, cue: summary }
 }
@@ -33,7 +33,7 @@ function page(id: number, name: string, banks: BuskBank[]): BuskPage {
   return { id, uuid: `u${id}`, name, sortOrder: id, rows: [{ columns: [{ width: 12, banks }] }] }
 }
 
-const amber: BuskAddRecord = { kind: 'TEMPLATE', id: 7, name: 'Amber Key' }
+const amber: BuskAddRecord = { kind: 'PALETTE', id: 7, name: 'Amber Key' }
 
 beforeEach(() => localStorage.clear())
 afterEach(() => localStorage.clear())
@@ -64,8 +64,8 @@ describe('what the menu offers', () => {
     const targets = buskAddTargets(
       [
         page(1, 'Act 1', [
-          bank({ id: 1, name: 'Keys', pads: [pad('TEMPLATE', 7), pad('LOOK', 7)] }),
-          bank({ id: 2, name: 'Wash', pads: [pad('TEMPLATE', 9)] }),
+          bank({ id: 1, name: 'Keys', pads: [pad('PALETTE', 7), pad('LOOK', 7)] }),
+          bank({ id: 2, name: 'Wash', pads: [pad('PALETTE', 9)] }),
         ]),
       ],
       amber,
@@ -118,7 +118,7 @@ describe('the remembered target', () => {
 
 describe('the request body', () => {
   it('sets exactly one id, matching the kind', () => {
-    expect(buskAddBody({ kind: 'TEMPLATE', id: 1, name: 'a' })).toEqual({ templateId: 1 })
+    expect(buskAddBody({ kind: 'PALETTE', id: 1, name: 'a' })).toEqual({ paletteId: 1 })
     expect(buskAddBody({ kind: 'LOOK', id: 2, name: 'b' })).toEqual({ lookId: 2 })
     expect(buskAddBody({ kind: 'CUE', id: 3, name: 'c' })).toEqual({ cueId: 3 })
   })

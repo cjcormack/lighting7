@@ -23,7 +23,7 @@ import { targetColour, type TargetColours } from '@/lib/targetColours'
 import { colourVar, FIXTURE_COLOUR_LABELS, type FixtureColour } from '@/lib/fixtureColours'
 import { rigTileId, tileOwnName, type RenderTile, type RigTileAddress } from '@/lib/buskRig'
 import { LiveAppearanceReporter } from '@/lib/liveAppearance'
-import type { EffectPresence } from './buskingTypes'
+import type { FxPresence } from './buskingTypes'
 import { RIG_DROP_DEPTH, type RigDropData, type RigTileDragData } from './buskDnd'
 import { NameField } from './NameField'
 import { useRigEdit } from './RigEditProvider'
@@ -119,7 +119,7 @@ export interface RigTileProps {
   at: RigTileAddress | null
   /** The stored tile this render tile came from, for the cell-mode menu. Null on a fallback tile. */
   stored: BuskRigTile | null
-  presence: EffectPresence
+  presence: FxPresence
   /** The tile's colour ([tileColour]), drawn as its 4px top band; null for none. */
   colour: FixtureColour | null
   /**
@@ -150,7 +150,7 @@ const TILE_CLASS =
 const TILE_CONTROL_CLASS =
   'grid size-[18px] place-items-center rounded-full border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'
 
-function presenceClass(presence: EffectPresence) {
+function presenceClass(presence: FxPresence) {
   return cn(
     presence === 'none' && 'border-border bg-card hover:bg-accent/50',
     presence === 'some' && 'border-primary/40 bg-primary/10 hover:bg-primary/15',

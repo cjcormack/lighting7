@@ -2,7 +2,7 @@ import { Link } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookRowStore } from './LookRowStore'
-import { useFocusedTemplateLayer } from './FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
 import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 
 /**
@@ -34,7 +34,7 @@ import { focusedLayerId, useProgrammerScope } from './ProgrammerScope'
 export function LayerRowNotices({ projectId }: { projectId: number }) {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
-  const focusedTemplate = useFocusedTemplateLayer()
+  const focusedPalette = useFocusedPaletteLayer()
   const { data: layers } = useProgrammerLayersQuery()
   const layerId = focusedLayerId(scope)
   const layer = layerId == null ? undefined : layers?.find((l) => l.layerId === layerId)
@@ -43,14 +43,14 @@ export function LayerRowNotices({ projectId }: { projectId: number }) {
 
   // A template layer has no `LookRowStore` at all — the store only engages for a LOOK source — so
   // this arm has to come before the store check below.
-  if (layer?.source.kind === 'TEMPLATE') {
+  if (layer?.source.kind === 'PALETTE') {
     return (
       <div className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-xs">
         <Badge variant="outline" className="shrink-0 px-1.5 py-0 text-[10px]">
           palette
         </Badge>
         <span className="text-muted-foreground">
-          {focusedTemplate?.kind === 'effect'
+          {focusedPalette?.kind === 'fx'
             ? `“${layer.source.name}” runs one FX for the whole family — the grid shows the live value under it, and the wave marks the cells it drives.`
             : `“${layer.source.name}” holds one value for the whole family, resolved per head — so there is nothing to show per fixture.`}
         </span>

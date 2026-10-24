@@ -19,16 +19,16 @@ import kotlinx.serialization.json.putJsonObject
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookRowDto
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.models.speedMastersOf
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -59,8 +59,8 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.palette(name: String): Int =
         post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#8f7bff"))))
-        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<TemplateDto>().id
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "rgbColour", "#8f7bff"))))
+        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<PaletteDto>().id
 
     private suspend fun HttpClient.look(name: String): Int =
         post("$base/looks") {
@@ -83,19 +83,19 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         stackId: Int,
         name: String,
         layers: List<CueLayerDto> = emptyList(),
-        effects: List<CueAdHocEffectDto> = emptyList(),
+        effects: List<CueAdHocFxDto> = emptyList(),
     ): Int = post("$base/cues") {
         contentType(ContentType.Application.Json)
-        setBody(NewCue(name = name, cueStackId = stackId, cueNumber = name.removePrefix("Q"), layers = layers, adHocEffects = effects))
+        setBody(NewCue(name = name, cueStackId = stackId, cueNumber = name.removePrefix("Q"), layers = layers, adHocFx = effects))
     }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<CueDetails>().id
 
-    private fun pulse(targetType: String, targetKey: String, speedMasterUuid: String? = null) = CueAdHocEffectDto(
-        targetType = targetType, targetKey = targetKey, effectType = "Pulse", category = "intensity", propertyName = "dimmer",
-        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL", speedMasterUuid = speedMasterUuid,
+    private fun pulse(targetType: String, targetKey: String, speedMasterUuid: String? = null) = CueAdHocFxDto(
+        targetType = targetType, targetKey = targetKey, fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+        cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL", speedMasterUuid = speedMasterUuid,
     )
 
-    private fun keyRun(cueId: Int, effectType: String, run: UUID) = transaction(state.database) {
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue eq cueId }.single { it.fxType == effectType }.runUuid = run
+    private fun keyRun(cueId: Int, fxType: String, run: UUID) = transaction(state.database) {
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue eq cueId }.single { it.fxType == fxType }.runUuid = run
     }
 
     @Test
@@ -120,8 +120,8 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             act, "Q1",
             layers = listOf(
                 CueLayerDto(lookId = warm, sortOrder = 0),
-                CueLayerDto(templateId = lavender, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")), amount = 0.6),
-                CueLayerDto(templateId = lavender, sortOrder = 2, targets = listOf(CueTargetDto("group", "wash")), delayMs = 500),
+                CueLayerDto(paletteId = lavender, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")), amount = 0.6),
+                CueLayerDto(paletteId = lavender, sortOrder = 2, targets = listOf(CueTargetDto("group", "wash")), delayMs = 500),
             ),
             effects = listOf(pulse("group", "wash")),
         )
@@ -140,7 +140,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             act, "Q2",
             effects = listOf(
                 pulse("group", "wash", speedMasterUuid = master1),
-                pulse("fixture", "hex-1").copy(effectType = "SineWave", propertyName = "dimmer"),
+                pulse("fixture", "hex-1").copy(fxType = "SineWave", propertyName = "dimmer"),
             ),
         )
         // Q1 again, a second place of the same cue.
@@ -160,7 +160,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         assertEquals(listOf(q1, null, q2, q1), timeline.entries.map { it.cueId })
         val (first, marker, second, again) = timeline.entries
         assertEquals("Scene 2", marker.label)
-        assertTrue(marker.layers.isEmpty() && marker.effects.isEmpty())
+        assertTrue(marker.layers.isEmpty() && marker.fx.isEmpty())
         assertTrue(first.entryId != again.entryId)
 
         // Layers, bottom first: the Look on its own fixtures, a palette over two targets, one over a group.
@@ -179,9 +179,9 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         assertEquals(first.layers, again.layers, "a cue's two places carry the same layers")
 
         // Effects: the keyed Pulse in Q1 and Q2 one run with one settings; the SineWave unkeyed.
-        val pulse1 = first.effects.single()
-        val pulse2 = second.effects.single { it.effectType == "Pulse" }
-        val sine = second.effects.single { it.effectType == "SineWave" }
+        val pulse1 = first.fx.single()
+        val pulse2 = second.fx.single { it.fxType == "Pulse" }
+        val sine = second.fx.single { it.fxType == "SineWave" }
         assertEquals(run.toString(), pulse1.runUuid)
         assertEquals(pulse1.runUuid, pulse2.runUuid)
         assertTrue(pulse1.uuid != pulse2.uuid)
@@ -215,8 +215,8 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
         // A per-fixture palette: its rows name hex-2 alone.
         val throne = client.post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = "Throne", rows = listOf(TemplateRowDto("fixture", "hex-2", "dimmer", "pct:100"))))
-        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<TemplateDto>().id
+            setBody(PaletteInput(name = "Throne", rows = listOf(PaletteRowDto("fixture", "hex-2", "dimmer", "pct:100"))))
+        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<PaletteDto>().id
         val lavender = client.palette("Lavender")
         val wash = listOf(CueTargetDto("group", "wash"))
         val act = client.stack("Act 1")
@@ -224,9 +224,9 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             act, "Q1",
             layers = listOf(
                 CueLayerDto(lookId = warm, sortOrder = 0, targets = wash),
-                CueLayerDto(templateId = throne, sortOrder = 1, targets = wash),
-                CueLayerDto(templateId = throne, sortOrder = 2),
-                CueLayerDto(templateId = lavender, sortOrder = 3, targets = wash),
+                CueLayerDto(paletteId = throne, sortOrder = 1, targets = wash),
+                CueLayerDto(paletteId = throne, sortOrder = 2),
+                CueLayerDto(paletteId = lavender, sortOrder = 3, targets = wash),
             ),
         )
 

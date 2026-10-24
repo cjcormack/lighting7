@@ -29,7 +29,7 @@ enum class TriggerType {
 /**
  * Script trigger DTO — triggers are now exclusively for running scripts
  * at cue lifecycle events. Preset application timing has moved to
- * CuePresetApplicationDto and CueAdHocEffectDto.
+ * CuePresetApplicationDto and CueAdHocFxDto.
  */
 @Serializable
 data class CueTriggerDto(

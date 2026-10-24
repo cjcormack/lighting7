@@ -219,7 +219,7 @@ unordered against, the family's live frames: `programmer.state` with `provenance
 `speedMasters.state`. The programmer's resync matters beyond the values: the incoming show's
 `programmerRevision` counts from zero again, and a client compares revisions for change, so the
 snapshot is what lands it on the new count. `grandMaster.state`,
-`stackEffectSize.state` and `surfaceScaler.state` predate the helper and spell the same
+`stackFxAmount.state` and `surfaceScaler.state` predate the helper and spell the same
 `flatMapLatest` out by hand. `ShowFollowingSubscriptionsTest` holds a socket open across a switch.
 
 ## Domain families
@@ -234,7 +234,7 @@ snapshot is what lands it on the new count. `grandMaster.state`,
 | Effects | `EffectsSocket.kt` | — | 3 | — | `setupEffectsSubscriptions` |
 | FX | `FxSocket.kt` | 6 | 3 | `handleFx` | `setupFxSubscriptions` |
 | Grand master | `GrandMasterSocket.kt` | 1 | 1 | `handleGrandMaster` | `setupGrandMasterSubscriptions` |
-| Stack effect size | `StackEffectSizeSocket.kt` | 1 | 1 | `handleStackEffectSize` | `setupStackEffectSizeSubscriptions` |
+| Stack effect size | `StackFxAmountSocket.kt` | 1 | 1 | `handleStackFxAmount` | `setupStackFxAmountSubscriptions` |
 | Hand | `HandSocket.kt` | 2 | 1 | `handleHand` | `setupHandSubscriptions` |
 | Machine | `MachineSocket.kt` | — | 4 | — | `setupMachineSubscriptions` |
 | Park | `ParkSocket.kt` | 3 | 1 | `handlePark` | `setupParkSubscriptions` |
@@ -310,25 +310,25 @@ See `docs/fixtures-engineering.md` §"Venue parks".
 | Message | Fields | Effect |
 |---|---|---|
 | `fxState` | — | Resync: replies `fxState` |
-| `removeFx` | `effectId: Long` | Replies `fxChanged(REMOVED, id)` |
-| `pauseFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
-| `resumeFx` | `effectId: Long` | Replies `fxChanged(UPDATED, id)` |
+| `removeFx` | `fxId: Long` | Replies `fxChanged(REMOVED, id)` |
+| `pauseFx` | `fxId: Long` | Replies `fxChanged(UPDATED, id)` |
+| `resumeFx` | `fxId: Long` | Replies `fxChanged(UPDATED, id)` |
 | `clearFx` | — | Replies `fxChanged(CLEARED)` |
-| `programmer.moveFx` | `effectId: Long`, `above: Long?` | Replies `fxChanged(UPDATED, id)` per FX whose priority moved \| `fxError` |
-| `updateFx` | `effectId: Long` plus every `PUT /fx/{id}` field (`effectType?`, `parameters?`, `beatDivision?`, `blendMode?`, `phaseOffset?`, `distributionStrategy?`, `elementMode?`, `elementFilter?`, `stepTiming?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master; `size?`, `direction?`, `nShot?` and `runForever` — effects plan session 1, edited with the phase kept; `spread?`, `wings?`, `blocks?`, `groups?` — session 2, the spread's shape, `groups: 0` off, wings refused under a mirrored order; `targets?` — apply-model plan session 2, the heads the edit is for, naming some of them splits them off) | Replies `fxChanged(UPDATED, id)` \| on a split `fxChanged(REMOVED, id)` then `fxChanged(ADDED, copy)` per copy, the edited first \| `fxError` |
+| `programmer.moveFx` | `fxId: Long`, `above: Long?` | Replies `fxChanged(UPDATED, id)` per FX whose priority moved \| `fxError` |
+| `updateFx` | `fxId: Long` plus every `PUT /fx/{id}` field (`fxType?`, `parameters?`, `cycle?`, `blendMode?`, `phaseOffset?`, `order?`, `elementMode?`, `elementFilter?`, `timing?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `seconds?` — D7's *Seconds*, refused beside a master; `amount?`, `direction?`, `runs?` and `runForever` — effects plan session 1, edited with the phase kept; `spread?`, `wings?`, `segments?`, `parts?` — session 2, the spread's shape, `parts: 0` off, wings refused under a mirrored order; `targets?` — apply-model plan session 2, the heads the edit is for, naming some of them splits them off) | Replies `fxChanged(UPDATED, id)` \| on a split `fxChanged(REMOVED, id)` then `fxChanged(ADDED, copy)` per copy, the edited first \| `fxError` |
 
 Adding effects is REST (`POST /api/rest/fx/add`), not WS. **Updating one is both**: `updateFx` is
 `PUT /api/rest/fx/{id}` as a frame (fixture-fx-sheets plan W3), for a live FX editor whose every
 drag is a write — a frame rather than a request per 50 ms, and P4 gives it the FX family's spelling
-rather than the boards' `fx.update`. Both doors call one parse, `applyEffectUpdate` in
-`routes/lightFx.kt` — the strict coercion (`EffectSpecCoercion.Strict`), the output-type check, the
+rather than the boards' `fx.update`. Both doors call one parse, `applyFxUpdate` in
+`routes/lightFx.kt` — the strict coercion (`FxSpecCoercion.Strict`), the output-type check, the
 master-uuid check — so the two cannot drift, and `FxLiveEditRoutesTest` pins the frame's field list
-to the request's. The id and the phase are kept (`FxEngine.updateEffect`); a type swap takes the
+to the request's. The id and the phase are kept (`FxEngine.updateFx`); a type swap takes the
 new type's timing source with it, as the add path does. A refusal decides before anything moves.
 `targets` naming some of the effect's heads is the split (apply-model plan §3.4): the effect becomes
 one instance per head it paints, each where it was, and the named heads' copies take the edit, so
 the frame answers the effect `REMOVED` and each copy `ADDED` rather than `UPDATED`. Only a Local
-effect splits — `fxError` `FX_SPLIT_LAYER_EFFECT` for a programmer layer's, `FX_SPLIT_NOT_LOCAL` for
+effect splits — `fxError` `FX_SPLIT_LAYER_FX` for a programmer layer's, `FX_SPLIT_NOT_LOCAL` for
 a cue's or a manual one — and a shape change sent with some heads is `FX_UPDATE_REFUSED`. See
 `fx-engineering.md` §"Local effects follow the selection".
 It is gated exactly as `pauseFx` and `removeFx` are — an operator gesture on both roles, so
@@ -452,7 +452,7 @@ announce nothing until the desk was warm, and the desk chip would read *Desk* fo
 
 | Message | Fields | Reply |
 |---|---|---|
-| `hand.pickUp` | `kind: "TEMPLATE" \| "LOOK" \| "CUE"`, `id: Int` | none — `hand.state` broadcast |
+| `hand.pickUp` | `kind: "PALETTE" \| "LOOK" \| "CUE"`, `id: Int` | none — `hand.state` broadcast |
 | `hand.drop` | `uuid?: String` (absent = drop whatever is held) | none — `hand.state` broadcast |
 
 The desk's one **held record**, picked up on any window and placed on any other (multi-screen plan
@@ -543,19 +543,19 @@ ignored. The Grand Master overview panel's fader, sent at frame rate (floored at
 `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT /projects/{id}/grand-master` reads and sets the
 same value over REST, and a MIDI `grandMasterFader` binding moves it too.
 
-### Stack effect size — `StackEffectSizeSocket.kt`
+### Stack effect size — `StackFxAmountSocket.kt`
 
 | Message | Fields | Reply |
 |---|---|---|
-| `stackEffectSize.set` | `stackId: Int`, `size: Double` | none — `stackEffectSize.state` follows |
+| `stackFxAmount.set` | `stackId: Int`, `amount: Double` | none — `stackFxAmount.state` follows |
 
-One of the live project's stacks' effect size (effects plan D10), clamped into 0–1; a non-finite
-size is ignored. A stack the live project does not have is dropped with a debug log — only a first
+One of the live project's stacks' FX amount (effects plan D10), clamped into 0–1; a non-finite
+amount is ignored. A stack the live project does not have is dropped with a debug log — only a first
 move reads the row, so a fader dragged at frame rate costs no database read after its first frame.
-The *FX size* slider's write, `CONTINUOUS` in `TraceSampling.WS_MESSAGES` and never traced; an
+The *FX amount* slider's write, `CONTINUOUS` in `TraceSampling.WS_MESSAGES` and never traced; an
 operator gesture, so `FU-AUTH-WS-PER-MESSAGE` stays unfired. `GET/PUT
-/projects/{id}/cue-stacks/{sid}/effect-size` reads and sets the same value over REST, and a MIDI
-`stackEffectSize` binding moves it too.
+/projects/{id}/cue-stacks/{sid}/fx-amount` reads and sets the same value over REST, and a MIDI
+`stackFxAmount` binding moves it too.
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
@@ -594,7 +594,7 @@ always a **literal** — a `pal:{uuid}` reference is legal only in an effect par
 | `programmer.clearAll` | `fadeMs?` | `programmer.cleared` |
 | `programmer.setBlind` | `blind: Boolean`, `fadeMs?` | `programmer.blindState` |
 | `programmer.state` | — | `programmer.state` |
-| `programmer.addLayer` | exactly one of `lookId`/`templateId`, `targets` (dropped for a Look, which lands whole), `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
+| `programmer.addLayer` | exactly one of `lookId`/`paletteId`, `targets` (dropped for a Look, which lands whole), `propertyMask?`, `blendMode?`, `amount?`, `speedMasterUuid?`, `rateSpeedMasterUuid?`, `fadeMs?` | `programmer.layerState` \| `programmer.error` |
 | `programmer.removeLayer` | `layerId: Int`, `fadeMs?` | `programmer.layerState` |
 | `programmer.detachLayer` | `layerId: Int` | `programmer.layerState` — the layer's values become Local `web` values and its effects Local effects, and it comes off with nothing on stage moving (`ProgrammerLayerStack.detach`; `lighting-composition-model.md` §"Detach and Apply as values") |
 | `programmer.moveLayer` | `layerId: Int`, `toIndex: Int` | `programmer.layerState` |
@@ -619,7 +619,7 @@ under one property, top first — the read behind the fixture sheet's source chi
 request/reply on the asking socket, never broadcast: only the asker has the stack open, and it
 re-asks when `provenanceState` moves. `clearTarget` is the sheet's *Release*: every owner's slot but
 a layer's, on every property of the fixture and its heads (or of every member of a group), the raw
-sideband on their channels, and the **local** effects on it — `FxInstance.isLocalEffect`, the grid
+sideband on their channels, and the **local** effects on it — `FxInstance.isLocalFx`, the grid
 ⌫'s rule moved to the desk — the effects let go first (one over a value this Release takes stopped,
 the rest shrinking to nothing over `fadeMs`, effects plan D13) and then the values released in one
 sweep with one republish at `fadeMs` (`clearAll`'s order, so a key a stopped effect covered fades
@@ -681,7 +681,7 @@ payload-free, since one project has one rig).
 |---|---|---|
 | `lookListChanged` | — | A Look was created, renamed or deleted (**not** contents — that pushes `provenanceState`) |
 | `paletteListChanged` | — | A palette was created, renamed or deleted (**not** contents — that pushes `cuesRecomposed`) |
-| `palettePressed` | `templateId`, `lastPressedAt` | A palette was pressed from any door; the client patches the stamp into its cached list rather than refetching. The two palette frames were `templateListChanged` / `templatePressed` until venue-visit plan D2 and have no alias; the payload keeps the stored field name |
+| `palettePressed` | `paletteId`, `lastPressedAt` | A palette was pressed from any door; the client patches the stamp into its cached list rather than refetching. The two palette frames were `templateListChanged` / `templatePressed` until venue-visit plan D2 and have no alias |
 | `cuesRecomposed` | `cueIds` | A Look/palette **contents** edit, or a forced Look delete that took their layers, changed what these cues compose to |
 | `cueListChanged` | — | Cue CRUD; also fired (with `cueStackListChanged`) when a forced Look delete took cue layers |
 | `cueStackListChanged` | — | Cue-stack CRUD, a stack's set, and any cue scenery write or element delete that swept scenery — the stack list carries every cue's own changes (`cues[].scenery`, scenery-programmer plan D13/D14) |
@@ -780,13 +780,13 @@ read it (`useCueEdited`). Its first hold and *Update stage* clear it; a Record o
 
 | Message | Payload | When |
 |---|---|---|
-| `fxState` | `activeEffects: [EffectDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
-| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `effectId?` | Unicast ack for the six FX writes |
-| `fxError` | `effectId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED\|FX_SPLIT_LAYER_EFFECT\|FX_SPLIT_NOT_LOCAL\|FX_MOVE_NOT_LOCAL`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame — or of a `programmer.moveFx`, keyed by the FX it moved |
+| `fxState` | `activeFx: [FxDto]` | Every emission of `FxEngine.fxStateFlow` (a `StateFlow`), and as the reply to a `fxState` request |
+| `fxChanged` | `changeType: added\|removed\|updated\|cleared`, `fxId?` | Unicast ack for the six FX writes |
+| `fxError` | `fxId: Long`, `code: FX_NOT_FOUND\|FX_UPDATE_REFUSED\|FX_SPLIT_LAYER_FX\|FX_SPLIT_NOT_LOCAL\|FX_MOVE_NOT_LOCAL`, `message` | Unicast refusal of an `updateFx` — `PUT /fx/{id}`'s 404, 400 and 409, keyed by the effect so a refused live drag replaces one toast rather than stacking one per frame — or of a `programmer.moveFx`, keyed by the FX it moved |
 
 `fxState` is purely an effect frame. It carried `bpm` / `isClockRunning` before the speed-master
-bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `EffectDto` is defined in
-`fx/EffectDto.kt` and is the same object `GET /api/rest/fx/active` returns.
+bank existed; tempo now lives on `speedMasters.*`, per-master and keyed. `FxDto` is defined in
+`fx/FxDto.kt` and is the same object `GET /api/rest/fx/active` returns.
 
 ### Project — `ProjectSocket.kt`
 
@@ -860,10 +860,10 @@ before the socket's collector is running waits in its queue. Nothing is persiste
 
 | Message | Fields | Cadence |
 |---|---|---|
-| `hand.state` | `item?: {kind, id, uuid, template?, look?, cue?, pickedUpOn?, holdId, pickedUpAtMs, expiresAtMs}` (absent = an empty hand) | Connect snapshot + broadcast |
+| `hand.state` | `item?: {kind, id, uuid, palette?, look?, cue?, pickedUpOn?, holdId, pickedUpAtMs, expiresAtMs}` (absent = an empty hand) | Connect snapshot + broadcast |
 
 `StateFlow`-backed, so the subscription *is* the snapshot. `item` carries the record's **own summary
-DTO** — `template` a `TemplateDto`, `look` a `LookDto`, `cue` a `BuskCueDto` — exactly as
+DTO** — `palette` a `PaletteDto`, `look` a `LookDto`, `cue` a `BuskCueDto` — exactly as
 `BuskPadDto` does, so every window draws the ghost from this frame alone with no second fetch; that
 is what lets the client's ghost be frozen and hookless. Exactly one of the three is set, matching
 `kind`.
@@ -990,31 +990,31 @@ with no dimmer; a STROBE channel and an LED ring's RING channel are cut only at 
 sees the scaled output, so `channelState` and the Stage view draw the rig as the grand master
 leaves it.
 
-### Stack effect size — `StackEffectSizeSocket.kt`
+### Stack effect size — `StackFxAmountSocket.kt`
 
 | Message | Payload | Cast |
 |---|---|---|
-| `stackEffectSize.state` | `projectId: Int`, `stacks: [{stackId, size}]` — every stack below full | Connect snapshot + broadcast |
+| `stackFxAmount.state` | `projectId: Int`, `stacks: [{stackId, amount}]` — every stack below full | Connect snapshot + broadcast |
 
 Each cue stack's runtime weight on its effects (effects plan D10; `docs/fx-engineering.md` §"Size,
 direction and N-shot"): a stack absent is at 100 %, so a fresh show's frame is an empty list.
-`StateFlow`-backed (`StackEffectSizes.state`), re-subscribed through `flatMapLatest` off
-`projectChangedFlow`, as `grandMaster.state` is, because the sizes live on the show's
+`StateFlow`-backed (`StackFxAmounts.state`), re-subscribed through `flatMapLatest` off
+`projectChangedFlow`, as `grandMaster.state` is, because the amounts live on the show's
 `CueStackManager`, which a project switch replaces — and with it every stack back at full. Its own
 frame rather than a field of `cueRunStateChanged`, which a fader drag would flood (§11, question 20).
-Nothing is persisted; a same-project reload carries the sizes (`ShowCarry`).
+Nothing is persisted; a same-project reload carries the amounts (`ShowCarry`).
 
 ### Speed masters — `SpeedMasterSocket.kt`
 
 | Message | Payload | When |
 |---|---|---|
-| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, usage?, followNum?, followDen?}]` | Connect snapshot, again on every project switch and reload, on request, and as the reply to every write |
+| `speedMasters.state` | `masters: [{uuid?, index, name, bpm, isRunning, source, family?, followNum?, followDen?}]` | Connect snapshot, again on every project switch and reload, on request, and as the reply to every write |
 | `speedMasters.changed` | `masterUuid?`, `index`, `bpm`, `source`, `timestampMs` | Live BPM push, at tap rate — a follower's derived moves ride this like any other |
 | `speedMasters.beat` | `masterUuid?`, `index`, `beatNumber`, `bpm`, `timestampMs` | Every 16 beats (~8 s at 120 BPM), plus any `speedMasters.requestBeat`, plus the first beat after that master's tempo moves |
 | `speedMasters.error` | `masterUuid?`, `code`, `message` | Unicast failure ack for a refused tempo write (`SPEED_MASTER_FOLLOWER`) or a dropped one (`SPEED_MASTER_UNKNOWN`); always followed by the state reply |
 
 `source` is `MANUAL` or `TAP`. `uuid`/`masterUuid` is null only for the synthetic pre-load master 1.
-`usage` and the `followNum`/`followDen` ratio are the routing/follow settings from the busk-view
+`family` and the `followNum`/`followDen` ratio are the routing/follow settings from the busk-view
 work — all additive with null defaults, so a pre-follow client decodes today's bank untouched.
 Beats are throttled deliberately: the client runs a local timer off `bpm` between frames and only
 needs the server to correct its drift. A tempo move is the exception — it makes that timer wrong
@@ -1075,7 +1075,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.state` | `blind`, `entries: [ProgrammerEntryDto]`, `channels: [ProgrammerChannelDto]`, `lastIncluded?`, `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `layersChangedSinceInclude: Int` | Connect snapshot, again on every project switch and reload, + reply |
 | `programmer.entryChanged` | `targetType`, `targetKey`, `propertyName`, `value` | Unicast reply |
 | `programmer.entryCleared` | `targetType`, `targetKey`, `propertyName` | Unicast reply |
-| `programmer.cleared` | `cleared: Int`, `effectsCleared: Int` | Unicast reply |
+| `programmer.cleared` | `cleared: Int`, `fxCleared: Int` | Unicast reply |
 | `programmer.blindState` | `blind: Boolean` | Unicast reply |
 | `programmer.layerState` | `layers: [ProgrammerLayerDto]`, `applied: [ProgrammerAppliedSourceDto]`, `changedSinceInclude: Int` (the layers Update would write into the included cue, `ProgrammerStore.layerChangesSinceInclude`; 0 unless a cue is included) | **Broadcast** — every tab, on `layersFlow`, which also says the stack again when the include target or the layer baseline moves |
 | `programmer.includeTarget` | `target: IncludedTargetDto?` | **Broadcast** — set by Include or Record, cleared by Clear |
@@ -1083,7 +1083,7 @@ re-read `GET /oauth/github/identity`. See [`sync-engineering.md`](sync-engineeri
 | `programmer.sceneryState` | `projectId?`, `elements: [{elementUuid, state}]`, `changedSinceInclude?` | Connect snapshot + **broadcast** — `StateFlow`-backed (`ProgrammerScenery.flow`); also the reply to `setScenery` / `clearScenery` |
 | `provenanceState` | `entries: [ProvenanceEntryDto]`, `programmerRevision: Long` | **Broadcast** — on every layer event, coalesced to ≤1 per 50 ms |
 | `programmer.keyStack` | `requestId?`, `targetType`, `targetKey`, `propertyName`, `blind`, `stacks: [{targetKey, layers: [KeyStackLayerDto]}]`, `error?` | Unicast reply — one stack for a fixture, one per member for a group |
-| `programmer.targetCleared` | `requestId?`, `targetType`, `targetKey`, `values: Int`, `effects: Int`, `partial: [{effectId, effectType, targetKey, isGroupTarget, propertyName}]`, `error?` | Unicast reply |
+| `programmer.targetCleared` | `requestId?`, `targetType`, `targetKey`, `values: Int`, `fx: Int`, `partial: [{fxId, fxType, targetKey, isGroupTarget, propertyName}]`, `error?` | Unicast reply |
 
 `applied` is the same stack resolved: one entry per Look or palette with every target it covers,
 each group marked `all` or `some` by how many of its heads the record holds
@@ -1117,7 +1117,7 @@ either, and other tabs kept a stale layer list indefinitely.
 `ProgrammerEntryDto` carries `targetKey`, `propertyName`, `value` (the canonical literal), `owner`,
 `touched`, `sourceGroup?` and `owners` (every owner holding the property, most recent first).
 `ProvenanceEntryDto` carries `targetKey`, `propertyName`, `source`
-(`PARKED`|`PROGRAMMER`|`EFFECT`|`CUE`), `cueId?`, `cueStackId?`, `effectId?`, `layerId?` and
+(`PARKED`|`PROGRAMMER`|`FX`|`CUE`), `cueId?`, `cueStackId?`, `fxId?`, `layerId?` and
 `layerSource?` — the last two so the desk can answer "why is this fixture this colour?" by naming
 *Warm Wash* rather than *a cue* — and `bundled` (omitted when empty): for a cue-won colour whose
 W / A / UV a bundled emitter's own row supplied, one `{propertyName, cueId?, cueStackId?, layerId?,
@@ -1126,16 +1126,16 @@ layerSource?}` per emitter, because that colour's bytes came from two contributo
 beats the colour's copy").
 
 **`KeyStackLayerDto`** is one layer of a property's stack (`ProvenanceService.keyStack`), listed
-top first: `PARK` (its `parkedChannels`), `PROGRAMMER_EFFECT` (an effect in the programmer band),
+top first: `PARK` (its `parkedChannels`), `PROGRAMMER_FX` (an effect in the programmer band),
 `PROGRAMMER` (one owner's slot: `owner`, `value`, `ageMs`, and `universe`/`channel` on a raw
-sideband slot), `EFFECT` (any other effect, cue or manual), `CUE` (what the cues compose to, with
+sideband slot), `FX` (any other effect, cue or manual), `CUE` (what the cues compose to, with
 the winning `cueId`, `cueStackId`, `layerId`, `layerSource` — from `underlyingSources` against the
 one Layer 4 snapshot the read takes) and `BASE` (`LayerResolver.baselineFor`). Every layer carries
 `onStage` — contributing to what the rig shows now, walked in output order (park, effects by
 priority, the programmer, the cue, the base), an on-stage Override effect, a programmer value, a
-cue value or a full park covering what is below. The effect kinds carry `effectId`, `effectType`,
-`effectName`, `beatDivision`, `blendMode`, `running`, the reported masters, and **`heldBack`** —
-`EffectSuppression.isSuppressed`'s answer over the engine's own suppression snapshot, and
+cue value or a full park covering what is below. The effect kinds carry `fxId`, `fxType`,
+`fxName`, `cycle`, `blendMode`, `running`, the reported masters, and **`heldBack`** —
+`FxSuppression.isSuppressed`'s answer over the engine's own suppression snapshot, and
 `BlindHold`'s over one read of blind, the tick's questions asked of the same code, so the sheet's
 *held back* mark cannot disagree with the rig — with **`heldBackReason`** beside it whenever it is
 true: `STOMP` (a layer above stomps it), `PROGRAMMER` (the programmer's value on the key, never a
@@ -1328,7 +1328,7 @@ kotlinx.serialization polymorphism over two sealed roots, with a per-domain seal
 
 @Serializable
 @SerialName("removeFx")
-data class RemoveFxInMessage(val effectId: Long) : FxInMessage()
+data class RemoveFxInMessage(val fxId: Long) : FxInMessage()
 ```
 
 `@SerialName` is the JSON `type` discriminator. The intermediate sealed class is what lets the
@@ -1366,7 +1366,7 @@ show-scoped goes after the gate. Then add the family to the tables above.
 | `plugins/CloudSyncSocket.kt` | Sync lifecycle and OAuth identity frames |
 | `plugins/FxSocket.kt` | Active-effect state, the six FX writes and their `fxError` refusal |
 | `plugins/GrandMasterSocket.kt` | The grand master's level: `grandMaster.state` and `grandMaster.set` |
-| `plugins/StackEffectSizeSocket.kt` | Each stack's effect size: `stackEffectSize.state` and `stackEffectSize.set` |
+| `plugins/StackFxAmountSocket.kt` | Each stack's effect size: `stackFxAmount.state` and `stackFxAmount.set` |
 | `plugins/MachineSocket.kt` | Accounts, install row, update state, remote-access tunnel state (machine-scoped band) |
 | `plugins/ParkSocket.kt` | Park state and park/unpark writes |
 | `plugins/ProgrammerSocket.kt` | Programmer values, layer stack, include target, provenance |

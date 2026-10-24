@@ -46,7 +46,7 @@ export function recordNote(result: RecordResponse): WriteNote {
   const triggersKept = preserved.triggers ?? 0
   // One sentence for both kinds of timed child: what the operator needs to know is that a timed
   // thing was preserved rather than dropped, not which shape it had.
-  const timedKept = (preserved.timedLayers ?? 0) + (preserved.timedAdHocEffects ?? 0)
+  const timedKept = (preserved.timedLayers ?? 0) + (preserved.timedAdHocFx ?? 0)
   const outOfMaskKept = preserved.outOfMaskAssignments ?? 0
   const outOfScopeKept = preserved.outOfScopeAssignments ?? 0
   if (triggersKept > 0) notes.push(`${triggersKept} trigger(s) kept`)
@@ -84,7 +84,7 @@ export function recordLookNote(result: RecordLookResponse): WriteNote {
       `${result.created ? 'Created' : 'Updated'} “${result.look.name}” — ` +
       `${plural(result.rowsWritten, 'row')} written` +
       (result.rowsRemoved > 0 ? `, ${result.rowsRemoved} removed` : '') +
-      (result.effectsWritten ? `, ${result.effectsWritten} FX moved in` : '') +
+      (result.fxWritten ? `, ${result.fxWritten} FX moved in` : '') +
       '.',
     description: joined([joined(notes, ' · '), skipNote], ' — '),
     warn: skipNote != null,
@@ -146,7 +146,7 @@ export function updateNote(result: UpdateResponse): WriteNote {
     lines.push(
       `Updated “${look.lookName}” — ${plural(look.rowsWritten, 'row')} written` +
         (look.rowsRemoved ? `, ${look.rowsRemoved} removed` : '') +
-        (look.effectsWritten ? `, ${look.effectsWritten} FX` : '') +
+        (look.fxWritten ? `, ${look.fxWritten} FX` : '') +
         (look.sceneryWritten ? `, ${plural(look.sceneryWritten, 'scenery change')}` : '') +
         (look.cuesRepublished.length > 0 ? `, ${look.cuesRepublished.length} live cue(s) moved with it` : '') +
         '.',

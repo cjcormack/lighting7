@@ -452,7 +452,7 @@ internal fun Route.routeApiRestProjectCueStacks(state: State) {
                         entryId = activeEntryId,
                         cueId = activeCueId,
                         cueName = cueName,
-                        effectCount = 0,
+                        fxCount = 0,
                     ))
                     return@withCurrentProject
                 }
@@ -750,10 +750,10 @@ data class CueStackCueEntry(
      * rather than deleted because it is the count a collapsed cue row wants: a cue built entirely
      * from layers otherwise reads as empty in the Run list. **No client reads it yet** (the
      * frontend's `CueStackCueEntry` declares it and nothing consumes it, along with
-     * `adHocEffectCount`), so treat it as available rather than as load-bearing.
+     * `adHocFxCount`), so treat it as available rather than as load-bearing.
      */
     val layerCount: Int,
-    val adHocEffectCount: Int,
+    val adHocFxCount: Int,
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,
     val fadeDurationMs: Long? = null,
@@ -853,11 +853,11 @@ data class CueStackActivateResponse(
     val entryId: Int,
     val cueId: Int,
     val cueName: String,
-    val effectCount: Int,
+    val fxCount: Int,
 )
 
 private fun CueStackManager.ActivateResult.toResponse(): CueStackActivateResponse =
-    CueStackActivateResponse(stackId = stackId, entryId = entryId, cueId = cueId, cueName = cueName, effectCount = effectCount)
+    CueStackActivateResponse(stackId = stackId, entryId = entryId, cueId = cueId, cueName = cueName, fxCount = fxCount)
 
 @Serializable
 data class CueStackDeactivateResponse(
@@ -931,7 +931,7 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
             name = displayName,
             sortOrder = position,
             layerCount = 0,
-            adHocEffectCount = 0,
+            adHocFxCount = 0,
             cueType = CueType.MARKER.name,
         )
     }
@@ -941,7 +941,7 @@ internal fun DaoCueStackEntry.toCueStackCueEntry(
         name = cue.name,
         sortOrder = position,
         layerCount = cue.layers.count().toInt(),
-        adHocEffectCount = cue.adHocEffects.count().toInt(),
+        adHocFxCount = cue.adHocFx.count().toInt(),
         autoAdvance = autoAdvance,
         autoAdvanceDelayMs = autoAdvanceDelay?.toMillis(),
         fadeDurationMs = cue.fadeDuration?.toMillis(),

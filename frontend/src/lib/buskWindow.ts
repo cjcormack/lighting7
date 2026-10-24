@@ -57,12 +57,12 @@ import { relinkBuskPage, showingBuskPage, unlinkBuskPage, useBuskPageFollow, use
  */
 
 export type BuskFocus = 'split' | 'pads' | 'rig'
-export type BuskSheet = 'none' | 'level' | 'colour' | 'position' | 'beam' | 'spread' | 'effects' | 'speed' | 'show'
+export type BuskSheet = 'none' | 'level' | 'colour' | 'position' | 'beam' | 'spread' | 'fx' | 'speed' | 'show'
 /** A tab the sheet can open onto — every sheet value but the fold. */
 export type BuskSheetTab = Exclude<BuskSheet, 'none'>
 
 export const BUSK_FOCUSES: readonly BuskFocus[] = ['split', 'pads', 'rig']
-export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show']
+export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show']
 
 /**
  * The tabs that have landed — all eight, in the strip's order: a tab per family — **Level**,
@@ -71,7 +71,7 @@ export const BUSK_SHEETS: readonly BuskSheet[] = ['none', 'level', 'colour', 'po
  * a fact naming a hidden tab draws the fold. Adding a tab here lights it in the sheet's strip, the
  * fold's glyph row, the Screens sheet's Sheet segment and the toggle's memory.
  */
-export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show']
+export const LIVE_SHEET_TABS: readonly BuskSheetTab[] = ['level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show']
 
 export const BUSK_FOCUS_KEY = 'busk.focus'
 export const BUSK_RIG_HEIGHT_KEY = 'busk.rigHeight'

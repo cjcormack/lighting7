@@ -7,7 +7,7 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.dao.id.IntIdTable
 import org.jetbrains.exposed.v1.json.json
 import org.jetbrains.exposed.v1.core.java.javaUUID
-import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
@@ -17,7 +17,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     val name = varchar("name", 255)
     val family = varchar("family", 50)
     val outputType = enumerationByName<FxOutputType>("output_type", 20)
-    val fxMode = enumerationByName<EffectMode>("fx_mode", 20).default(EffectMode.STANDARD)
+    val fxMode = enumerationByName<FxMode>("fx_mode", 20).default(FxMode.STANDARD)
     val parameters = json<List<ParameterInfo>>("parameters", Json).default(emptyList())
     val compatibleAttributes = json<List<String>>("compatible_attributes", Json).default(emptyList())
     val script = text("script")
@@ -29,7 +29,7 @@ object DaoFxDefinitions : IntIdTable("fx_definitions") {
     init {
         // Scoped to the project, not global: definitions are always loaded per project
         // (see Show.loadFxDefinitions), and two projects legitimately hold the same
-        // effectId — a cloned or imported project is a copy of one, so a global unique
+        // fxId — a cloned or imported project is a copy of one, so a global unique
         // index made cloning/importing any project with a script-defined effect fail
         // outright. State drops the legacy `fx_definitions_effect_id` index.
         uniqueIndex(project, fxId)

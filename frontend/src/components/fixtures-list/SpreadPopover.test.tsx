@@ -24,8 +24,8 @@ vi.mock('./useCellWriters', async (importOriginal) => ({
   useCellWriters: () => writers,
 }))
 
-const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
-vi.mock('../programmer/FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => focusedTemplate.current }))
+const focusedPalette = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('../programmer/FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => focusedPalette.current }))
 const scopeState = vi.hoisted(() => ({ current: null as null | { kind: 'output' | 'local' } | { kind: 'layer'; layerId: number } }))
 vi.mock('../programmer/ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.current }))
 const lookStore = vi.hoisted(() => ({
@@ -40,7 +40,7 @@ vi.mock('../programmer/LookRowStore', () => ({ useLookRowStore: () => lookStore.
 // The desk's mask, distinguishable from the marquee's so the test can see which one a request carries.
 const deskMask = vi.hoisted(() => ({ current: ['POSITION'] as string[] | null }))
 vi.mock('../../store/selection', () => ({ usePressFamilies: () => deskMask.current }))
-vi.mock('../../store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('../../store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 // Store-bound; the endpoint picker is not under test here.
 vi.mock('../editor/ColourEditor', () => ({ ColourEditor: () => <div data-testid="colour-endpoint" /> }))
 
@@ -73,7 +73,7 @@ const FIXTURES = [
 function rowsOf(textFilter = '', expandedFixtures = new Set<string>()): Row[] {
   return buildRows({
     fixtures: FIXTURES,
-    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] }],
+    groups: [{ name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] }],
     expandedGroups: new Set(['Front wash']),
     expandedFixtures,
     textFilter,
@@ -126,7 +126,7 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   vi.unstubAllGlobals()
-  focusedTemplate.current = null
+  focusedPalette.current = null
   scopeState.current = null
   lookStore.current = null
 })
@@ -168,7 +168,7 @@ describe('the targets (D4)', () => {
       to: 'pct:100',
       curve: 'LINE',
       order: 'NORMAL',
-      parts: 1,
+      runs: 1,
       over: 'HEADS',
       seed: 0,
       fadeMs: 0,
@@ -288,7 +288,7 @@ describe('the scope arm (D6)', () => {
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Pan amount' }), { target: { value: '10' } })
     apply()
     expect(lastRequest()).toMatchObject({
-      mode: 'FAN',
+      mode: 'ABOUT',
       write: false,
       fan: { pan: 10 },
       base: [{ target: { type: 'fixture', key: 'spot-1' }, value: '100,90' }],
@@ -339,7 +339,7 @@ describe('the scope arm (D6)', () => {
   })
 
   it('refuses onto a focused palette layer, and says why', () => {
-    focusedTemplate.current = { layerId: 7, templateId: 4, kind: 'effect' }
+    focusedPalette.current = { layerId: 7, paletteId: 4, kind: 'fx' }
     draw([column('dimmer', ['group:Front wash'])])
     const button = screen.getByRole('button', { name: 'Fan' })
     expect(button).toBeDisabled()

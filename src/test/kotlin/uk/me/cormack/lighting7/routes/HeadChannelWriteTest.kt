@@ -208,7 +208,7 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
         val built = buildCueAssignmentsForCue(
             state.show.fixtures,
             CueApplyData(
-                cueId = 7, cueName = "cells", adHocEffects = emptyList(),
+                cueId = 7, cueName = "cells", adHocFx = emptyList(),
                 propertyAssignments = listOf(CuePropertyAssignmentDto("fixture", head, "white", "120")),
             ),
         )

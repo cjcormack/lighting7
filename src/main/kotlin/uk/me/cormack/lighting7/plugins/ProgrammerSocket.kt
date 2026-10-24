@@ -16,7 +16,7 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.models.LayerSourceDto
@@ -52,7 +52,7 @@ sealed class ProgrammerInMessage : InMessage()
  * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer
  * value is always a **literal**: a `pal:{uuid}` template reference is legal only in an effect
- * parameter, and a dependency on a template is a layer (see [templateColourSource]).
+ * parameter, and a dependency on a template is a layer (see [paletteColourSource]).
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
  * than sending `targetType: "group"` — a group virtual dimmer over heterogeneous members, a
@@ -221,7 +221,7 @@ data class ProgrammerClearedOutMessage(
      * message is now the sole survivor of (that route is gone; see D5 of the backend sweep). */
     val cleared: Int,
     /** Programmer-band FX instances swept alongside the values. */
-    val effectsCleared: Int = 0,
+    val fxCleared: Int = 0,
 ) : ProgrammerOutMessage()
 
 @Serializable
@@ -299,9 +299,9 @@ data class IncludedTargetDto(
 @Serializable
 @SerialName("programmer.addLayer")
 data class ProgrammerAddLayerInMessage(
-    /** Exactly one of [lookId] / [templateId]. */
+    /** Exactly one of [lookId] / [paletteId]. */
     val lookId: Int? = null,
-    val templateId: Int? = null,
+    val paletteId: Int? = null,
     /** A palette layer's targets; a Look's layer names none, so any given for one are dropped. */
     val targets: List<CueTargetDto> = emptyList(),
     val propertyMask: String? = null,
@@ -512,7 +512,7 @@ data class KeyStackParkedChannelDto(val universe: Int, val channel: Int, val val
 
 /**
  * One layer of a property's stack — see `ProvenanceService.keyStack`. [kind] is `PARK`,
- * `PROGRAMMER_EFFECT`, `PROGRAMMER`, `EFFECT`, `CUE` or `BASE`, and decides which of the optional
+ * `PROGRAMMER_FX`, `PROGRAMMER`, `FX`, `CUE` or `BASE`, and decides which of the optional
  * fields are present; every layer carries [onStage]. Absent fields are null (the socket's Json
  * encodes no default), so a client reads absent as "not this kind's".
  */
@@ -532,17 +532,17 @@ data class KeyStackLayerDto(
     val universe: Int? = null,
     val channel: Int? = null,
     /** The two effect kinds: the instance, its type and display name, its timing and its masters. */
-    val effectId: Long? = null,
-    val effectType: String? = null,
-    val effectName: String? = null,
-    val beatDivision: Double? = null,
+    val fxId: Long? = null,
+    val fxType: String? = null,
+    val fxName: String? = null,
+    val cycle: Double? = null,
     val blendMode: String? = null,
     val running: Boolean? = null,
     val speedMasterUuid: String? = null,
     val rateSpeedMasterUuid: String? = null,
     /**
      * The two effect kinds: the loop the effect runs on (`BEAT` | `WALL_CLOCK`) and whether it is on
-     * *Seconds* (venue-visit plan D7) — so [beatDivision] reads as seconds rather than beats.
+     * *Seconds* (venue-visit plan D7) — so [cycle] reads as seconds rather than beats.
      */
     val timingSource: String? = null,
     val seconds: Boolean? = null,
@@ -550,7 +550,7 @@ data class KeyStackLayerDto(
      * The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what [onStage] already
      * weighs, so the sheet can say *why* a 0 % effect is not on stage.
      */
-    val size: Double? = null,
+    val amount: Double? = null,
     val direction: String? = null,
     /** The two effect kinds: running, but not painting this key — `FxEngine`'s own suppression answer. */
     val heldBack: Boolean? = null,
@@ -599,8 +599,8 @@ data class ProgrammerKeyStackOutMessage(
 /** A local effect `programmer.clearTarget` left running because it drives heads outside the target. */
 @Serializable
 data class TargetClearedPartialDto(
-    val effectId: Long,
-    val effectType: String,
+    val fxId: Long,
+    val fxType: String,
     /** The effect's own target — a group, or a fixture the released target only part-covers. */
     val targetKey: String,
     val isGroupTarget: Boolean,
@@ -609,7 +609,7 @@ data class TargetClearedPartialDto(
 
 /**
  * The answer to `programmer.clearTarget`, to the asking socket only: [values] property entries and
- * sideband channels released, [effects] local effects stopped, and [partial] the local effects that
+ * sideband channels released, [fx] local effects stopped, and [partial] the local effects that
  * overlap the target but drive heads outside it, left running and named so the operator can be told.
  */
 @OptIn(ExperimentalSerializationApi::class)
@@ -620,7 +620,7 @@ data class ProgrammerTargetClearedOutMessage(
     val targetType: String,
     val targetKey: String,
     val values: Int,
-    val effects: Int,
+    val fx: Int,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
     val partial: List<TargetClearedPartialDto> = emptyList(),
     val error: String? = null,
@@ -640,11 +640,11 @@ data class ProgrammerErrorOutMessage(
 data class ProvenanceEntryDto(
     val targetKey: String,
     val propertyName: String,
-    /** `PARKED` | `PROGRAMMER` | `EFFECT` | `CUE`. */
+    /** `PARKED` | `PROGRAMMER` | `FX` | `CUE`. */
     val source: String,
     val cueId: Int? = null,
     val cueStackId: Int? = null,
-    val effectId: Long? = null,
+    val fxId: Long? = null,
     /**
      * The Look layer that won this key, when one did — so the desk can answer "why is this fixture
      * this colour?" by naming *Warm Wash* rather than *a cue*.
@@ -845,7 +845,7 @@ private fun buildProvenanceStateMessage(entries: List<ProvenanceEntry>, programm
                 source = it.source.name,
                 cueId = it.cueId,
                 cueStackId = it.cueStackId,
-                effectId = it.effectId,
+                fxId = it.fxId,
                 layerId = it.layerId,
                 layerSource = it.layerSource?.toDto(),
                 bundled = it.bundled.map { b ->
@@ -921,7 +921,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         is ProgrammerClearTargetInMessage -> ProgrammerHandler.clearTarget(state, message)
         is ProgrammerClearAllInMessage -> {
             val cleared = clearProgrammerCompletely(state, message.fadeMs ?: 0)
-            ProgrammerClearedOutMessage(cleared.entryCount, cleared.effectsCleared)
+            ProgrammerClearedOutMessage(cleared.entryCount, cleared.fxCleared)
         }
         is ProgrammerSetBlindInMessage -> {
             state.show.fxEngine.programmer.setBlind(message.blind, message.fadeMs ?: 0)
@@ -966,7 +966,7 @@ suspend fun handleProgrammer(scope: SocketScope, message: ProgrammerInMessage) {
         is ProgrammerPatchLayerInMessage -> {
             // Same rejection as `programmer.addLayer`: a patched blend reaches `cue_layers` through
             // Record just as an added one does, so it is checked where it enters.
-            val problem = EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)
+            val problem = FxSpecCoercion.Strict.problem(blendMode = message.blendMode)
             if (problem != null) {
                 ProgrammerErrorOutMessage(problem)
             } else {
@@ -1190,8 +1190,8 @@ object ProgrammerHandler {
      * `programmer.clearTarget`: release everything the programmer holds on a fixture (and its
      * heads) or a group (every member, and theirs), plus the local effects on it, in one pass.
      *
-     * The effect half is the grid ⌫'s rule moved to the desk ([FxInstance.isLocalEffect], and
-     * `cellEffects.effectsToStop`'s *every head, or none*): a local effect is stopped when it
+     * The effect half is the grid ⌫'s rule moved to the desk ([FxInstance.isLocalFx], and
+     * `cellFx.fxToStop`'s *every head, or none*): a local effect is stopped when it
      * targets exactly what is being released or every head it paints is among the released heads,
      * and is **left running and named** in `partial` when it paints some of them and some others —
      * a group effect on one member's release. There is no "stop it on these heads only".
@@ -1207,7 +1207,7 @@ object ProgrammerHandler {
                 targetType = message.targetType,
                 targetKey = message.targetKey,
                 values = values,
-                effects = effects,
+                fx = effects,
                 partial = partial,
                 error = error,
             )
@@ -1244,19 +1244,19 @@ object ProgrammerHandler {
         val engine = state.show.fxEngine
         val stop = ArrayList<FxInstance>()
         val partial = ArrayList<TargetClearedPartialDto>()
-        for (effect in engine.getActiveEffects()) {
-            if (!effect.isLocalEffect) continue
+        for (effect in engine.getActiveFx()) {
+            if (!effect.isLocalFx) continue
             val exact = effect.target.targetKey == target.key &&
-                effect.isGroupEffect == (target is TargetRef.Group)
+                effect.isGroupFx == (target is TargetRef.Group)
             val painted = engine.fixtureKeysCoveredBy(effect)
             val overlap = painted.count { it in headKeys }
             when {
                 exact || (painted.isNotEmpty() && overlap == painted.size) -> stop += effect
                 overlap > 0 -> partial += TargetClearedPartialDto(
-                    effectId = effect.id,
-                    effectType = effect.effectTypeId,
+                    fxId = effect.id,
+                    fxType = effect.fxTypeId,
                     targetKey = effect.target.targetKey,
-                    isGroupTarget = effect.isGroupEffect,
+                    isGroupTarget = effect.isGroupFx,
                     propertyName = effect.target.propertyName,
                 )
             }
@@ -1268,7 +1268,7 @@ object ProgrammerHandler {
         // first and that value ramps; the rest shrink over the fade (effects plan D13).
         val fadeMs = message.fadeMs ?: 0
         val store = state.show.programmerStore
-        val stopped = engine.releaseEffects(stop, fadeMs) { key, property ->
+        val stopped = engine.releaseFx(stop, fadeMs) { key, property ->
             store.slotsFor(key, property).any { it.owner != ProgrammerOwner.LAYERS }
         }
         val release = engine.programmer.releaseFixtures(heads, footprint, fadeMs)
@@ -1296,14 +1296,14 @@ object ProgrammerHandler {
      * everywhere else, and letting a client supply both invites the two disagreeing.
      */
     fun addLayer(state: State, message: ProgrammerAddLayerInMessage): OutMessage {
-        val source = resolveLayerSource(state, message.lookId, message.templateId)
+        val source = resolveLayerSource(state, message.lookId, message.paletteId)
             ?: return ProgrammerErrorOutMessage(
-                "programmer.addLayer needs exactly one of lookId / templateId, naming a record that exists",
+                "programmer.addLayer needs exactly one of lookId / paletteId, naming a record that exists",
             )
         // A frame has no 400 to be given, so the strict policy's message becomes the error frame.
         // Left unchecked, a bad blend survives Record into `cue_layers` and the operator then sees
         // a blend the desk does not play — the whole point of rejecting it where it enters.
-        EffectSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
+        FxSpecCoercion.Strict.problem(blendMode = message.blendMode)?.let {
             return ProgrammerErrorOutMessage(it)
         }
 
@@ -1422,7 +1422,7 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
     targetKey = targetKey,
     layers = layers.map { layer ->
         val effect = layer.effect
-        val dto = effect?.let { engine.effectDto(it) }
+        val dto = effect?.let { engine.fxDto(it) }
         KeyStackLayerDto(
             kind = layer.kind.name,
             onStage = layer.onStage,
@@ -1433,17 +1433,17 @@ private fun uk.me.cormack.lighting7.fx.KeyStack.toDto(engine: uk.me.cormack.ligh
             ageMs = layer.ageMs,
             universe = layer.channel?.first,
             channel = layer.channel?.second,
-            effectId = effect?.id,
-            effectType = dto?.effectType,
-            effectName = effect?.effect?.name,
-            beatDivision = dto?.beatDivision,
+            fxId = effect?.id,
+            fxType = dto?.fxType,
+            fxName = effect?.effect?.name,
+            cycle = dto?.cycle,
             blendMode = dto?.blendMode,
             running = dto?.isRunning,
             speedMasterUuid = dto?.speedMasterUuid,
             rateSpeedMasterUuid = dto?.rateSpeedMasterUuid,
             timingSource = dto?.timingSource,
             seconds = dto?.seconds,
-            size = dto?.size,
+            amount = dto?.amount,
             direction = dto?.direction,
             heldBack = if (effect != null) layer.heldBack else null,
             heldBackReason = layer.heldBackReason?.name,

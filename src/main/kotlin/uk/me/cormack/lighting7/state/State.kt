@@ -326,7 +326,7 @@ class State(val config: ApplicationConfig) {
         uk.me.cormack.lighting7.update.LiveHintDto(
             showReady = true,
             activeStackName = activeCueStackName(),
-            activeEffectCount = show.fxEngine.getActiveEffects().size,
+            activeFxCount = show.fxEngine.getActiveFx().size,
         )
     }.getOrElse { uk.me.cormack.lighting7.update.LiveHintDto(showReady = false) }
 
@@ -620,7 +620,7 @@ class State(val config: ApplicationConfig) {
             val masters = DaoSpeedMaster.find { DaoSpeedMasters.project eq projectId }
                 .map { it.uuid }.toSet()
             val looks = DaoLook.find { DaoLooks.project eq projectId }.mapTo(HashSet()) { it.uuid }
-            val templates = DaoTemplate.find { DaoTemplates.project eq projectId }.mapTo(HashSet()) { it.uuid }
+            val templates = DaoPalette.find { DaoPalettes.project eq projectId }.mapTo(HashSet()) { it.uuid }
             val pages = DaoBuskPage.find { DaoBuskPages.project eq projectId }.map { it.id.value to it.uuid }
             // A pad has no project column of its own — it is reached through its bank's column's
             // page, which is the one level that has one. `buskPageContents` owns that descent.
@@ -642,7 +642,7 @@ class State(val config: ApplicationConfig) {
                 cues = cues,
                 speedMasterUuids = masters,
                 lookUuids = looks,
-                templateUuids = templates,
+                paletteUuids = templates,
                 padUuids = pads,
                 bankUuids = banks,
                 pageUuids = pages.mapTo(HashSet()) { it.second },
@@ -659,7 +659,7 @@ class State(val config: ApplicationConfig) {
             selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
             colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
             validLookUuids = snapshot.lookUuids,
-            validTemplateUuids = snapshot.templateUuids,
+            validPaletteUuids = snapshot.paletteUuids,
             validPadUuids = snapshot.padUuids,
             validBankUuids = snapshot.bankUuids,
             validPageUuids = snapshot.pageUuids,
@@ -675,7 +675,7 @@ class State(val config: ApplicationConfig) {
         val cues: List<Pair<Int, java.util.UUID>>,
         val speedMasterUuids: Set<java.util.UUID>,
         val lookUuids: Set<java.util.UUID>,
-        val templateUuids: Set<java.util.UUID>,
+        val paletteUuids: Set<java.util.UUID>,
         val padUuids: Set<java.util.UUID>,
         val bankUuids: Set<java.util.UUID>,
         val pageUuids: Set<java.util.UUID>,
@@ -779,7 +779,7 @@ class State(val config: ApplicationConfig) {
         val projectId = projectManager.currentProject.id.value
         transaction(database) {
             when (kind) {
-                BuskPadKind.TEMPLATE -> DaoTemplate.findById(id)?.project?.id?.value
+                BuskPadKind.PALETTE -> DaoPalette.findById(id)?.project?.id?.value
                 BuskPadKind.LOOK -> DaoLook.findById(id)?.project?.id?.value
                 BuskPadKind.CUE -> DaoCue.findById(id)?.project?.id?.value
             } == projectId
@@ -946,7 +946,7 @@ class State(val config: ApplicationConfig) {
                 runCatching { show.cueStackManager.holds.looseHeld(cueId) }.getOrDefault(false)
             },
             buskRefsProvider = ::buildBuskRefs,
-            stackEffectSizesProvider = { show.cueStackManager.effectSizes },
+            stackFxAmountsProvider = { show.cueStackManager.fxAmounts },
             stackIdResolver = { stackUuid -> show.cueStackManager.stackIdForUuid(database, stackUuid) },
             selectionFan = selectionFan,
             latencyTracker = midiLatencyTracker,
@@ -966,7 +966,7 @@ class State(val config: ApplicationConfig) {
             val pads = buskPageContents(pages.map { it.first }).pads.values
                 .mapNotNull { pad ->
                     when (pad.kind) {
-                        BuskPadKind.TEMPLATE -> pad.uuid to PadRef.Layer(pad.palette!!.uuid, isLook = false)
+                        BuskPadKind.PALETTE -> pad.uuid to PadRef.Layer(pad.palette!!.uuid, isLook = false)
                         BuskPadKind.LOOK -> pad.uuid to PadRef.Layer(pad.look!!.uuid, isLook = true)
                         // The pad names the cue and nothing else: a press holds it loose (cue model plan D6).
                         BuskPadKind.CUE -> pad.uuid to PadRef.Cue(pad.cue!!.id.value)
@@ -1170,8 +1170,8 @@ class State(val config: ApplicationConfig) {
             handState.reconcile(BuskPadKind.LOOK)
             refreshActiveProjectBindingHealth()
         }
-        override fun templateListChanged() {
-            handState.reconcile(BuskPadKind.TEMPLATE)
+        override fun paletteListChanged() {
+            handState.reconcile(BuskPadKind.PALETTE)
             refreshActiveProjectBindingHealth()
         }
         override fun buskLayoutChanged(pageIds: List<Int>) {

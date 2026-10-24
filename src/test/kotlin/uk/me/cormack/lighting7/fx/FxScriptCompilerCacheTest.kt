@@ -29,10 +29,10 @@ class FxScriptCompilerCacheTest {
         val first = FxScriptCompiler()
         val second = FxScriptCompiler()
 
-        val a = first.compile(script, EffectMode.STANDARD)
+        val a = first.compile(script, FxMode.STANDARD)
         assertTrue(a.isSuccess, "fixture script must compile: ${a.diagnostics}")
 
-        val b = second.compile(script, EffectMode.STANDARD)
+        val b = second.compile(script, FxMode.STANDARD)
 
         assertSame(
             a,
@@ -48,13 +48,13 @@ class FxScriptCompilerCacheTest {
         FxScriptCompiler.clearProcessCache()
         val compiler = FxScriptCompiler()
 
-        val standard = compiler.compile(script, EffectMode.STANDARD)
-        val stateful = compiler.compile(script, EffectMode.STATEFUL)
+        val standard = compiler.compile(script, FxMode.STANDARD)
+        val stateful = compiler.compile(script, FxMode.STATEFUL)
 
         // Same source text, different wrapper and lambda signature: these must not collide.
         assertTrue(standard.isSuccess, "STANDARD should compile: ${standard.diagnostics}")
-        assertSame(EffectMode.STANDARD, standard.effectMode)
-        assertSame(EffectMode.STATEFUL, stateful.effectMode)
+        assertSame(FxMode.STANDARD, standard.fxMode)
+        assertSame(FxMode.STATEFUL, stateful.fxMode)
     }
 
     @Test
@@ -62,9 +62,9 @@ class FxScriptCompilerCacheTest {
         FxScriptCompiler.clearProcessCache()
         val compiler = FxScriptCompiler()
 
-        val before = compiler.compile(script, EffectMode.STANDARD)
-        compiler.invalidate(script, EffectMode.STANDARD)
-        val after = compiler.compile(script, EffectMode.STANDARD)
+        val before = compiler.compile(script, FxMode.STANDARD)
+        compiler.invalidate(script, FxMode.STANDARD)
+        val after = compiler.compile(script, FxMode.STANDARD)
 
         // FxFileLoader's retry pass depends on this: it distinguishes a transient failure (e.g. a
         // torn cached jar) from a real one by invalidating and compiling again.

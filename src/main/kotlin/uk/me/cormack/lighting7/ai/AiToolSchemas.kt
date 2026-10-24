@@ -9,6 +9,12 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.put
 import uk.me.cormack.lighting7.fx.SpreadShape
 
+/** What `get_current_state` can `include`; anything else is refused by name. */
+internal val CURRENT_STATE_PARTS: Set<String> = linkedSetOf(
+    "active_fx", "bpm", "speed_masters", "fixtures", "groups", "looks", "palettes", "cues",
+    "cue_stacks", "cue_run", "cue_holds", "programmer", "selection", "windows", "parked",
+)
+
 // ─── Tool Schema Definitions ───────────────────────────────────────
 
 private val targetSchema = buildJsonObject {
@@ -27,7 +33,7 @@ private val targetSchema = buildJsonObject {
  * [targetSchema] for a static value — a Look's or a cue's values and `set_programmer`'s targets, the
  * paths that resolve a cell by its own key and fan a value only the cells have out to them
  * (`ai/LookValues.kt`). Kept off the shared schema: not every tool taking a target reaches a cell
- * (`aim_fixtures` skips one, `clear_effects` matches a fixture's own effects), so the hint would be
+ * (`aim_fixtures` skips one, `clear_fx` matches a fixture's own effects), so the hint would be
  * a promise those break.
  */
 private val valueTargetSchema = buildJsonObject {
@@ -50,30 +56,41 @@ private val valueTargetSchema = buildJsonObject {
 }
 
 /** An effect's cycle, where the tools describe one. One bar is venue-visit plan D16's default. */
-private const val BEAT_DIVISION_DESCRIPTION =
+private const val CYCLE_DESCRIPTION =
     "Effect cycle length in beats: 0.25=16th, 0.5=8th, 1.0=one beat, 2.0=half a bar, 4.0=one bar, 8.0=two bars. " +
         "With seconds: true, the cycle in seconds instead. Omit for one bar (4.0)."
 
+/** Timing (terminology plan D22), the same on every FX schema. */
+private val timingSchema = buildJsonObject {
+    put("type", "string")
+    put("enum", buildJsonArray { add("CYCLE"); add("HEAD") })
+    put(
+        "description",
+        "CYCLE: cycle is the length of the whole FX. HEAD: cycle is each head's step, so the whole FX takes cycle × steps. " +
+            "Omit for the FX type's own: HEAD for a step chase, CYCLE for a continuous FX (every built-in).",
+    )
+}
+
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
-    "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose usage " +
+    "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose family " +
         "matches the effect's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
 
 /** D7's Seconds, in the tools' words. */
 private const val SECONDS_DESCRIPTION =
-    "Run on Seconds: beatDivision is the cycle in seconds and the effect follows no speed master (for a slow breathe " +
+    "Run on Seconds: cycle is the cycle in seconds and the effect follows no speed master (for a slow breathe " +
         "that must not move with the tempo). Not with speedMasterUuid or rateSpeedMasterUuid."
 
 /**
- * Size, Direction, Runs (effects plan D2, D5, D9) and the spread's shape (D4), the same on every
+ * Amount, Direction, Runs (effects plan D2, D5, D9) and the spread's shape (D4), the same on every
  * effect schema — added where each schema lists its timing.
  */
-private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
-    put("size", buildJsonObject {
+private fun kotlinx.serialization.json.JsonObjectBuilder.putFxDynamics() {
+    put("amount", buildJsonObject {
         put("type", "number")
         put(
             "description",
-            "Size, 0.0–1.0: how much of the effect reaches the stage over what is underneath (0.5 = halfway between " +
+            "Amount, 0.0–1.0: how much of the effect reaches the stage over what is underneath (0.5 = halfway between " +
                 "the level underneath and the effect; a movement effect's radius halves about the position underneath). " +
                 "Omit for 1.0, the whole effect.",
         )
@@ -83,7 +100,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
         put("enum", buildJsonArray { add("FORWARD"); add("BACKWARD"); add("BOUNCE") })
         put("description", "Which way each head runs the cycle: BACKWARD runs it end to start, BOUNCE forward then back. Omit for FORWARD.")
     })
-    put("nShot", buildJsonObject {
+    put("runs", buildJsonObject {
         put("type", "integer")
         put("minimum", 1)
         put(
@@ -98,10 +115,10 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
         put("maximum", 2)
         put(
             "description",
-            "How much of the cycle the heads cover, 0.0–2.0, over the distribution order: 1.0 spreads them over one " +
+            "How much of the cycle the heads cover, 0.0–2.0, over the order: 1.0 spreads them over one " +
                 "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0. Spread, wings, " +
-                "blocks and groups shape a spreading distribution only — send one (NORMAL for a chase), since an omitted " +
-                "distribution is UNIFIED, under which every head is in step and the shape does nothing.",
+                "segments and parts shape a spreading order only — send one (NORMAL for a chase), since an omitted " +
+                "order is UNIFIED, under which every head is in step and the shape does nothing.",
         )
     })
     put("wings", buildJsonObject {
@@ -115,13 +132,13 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
                 "wings already and refuse it. Omit for 1.",
         )
     })
-    put("blocks", buildJsonObject {
+    put("segments", buildJsonObject {
         put("type", "integer")
         put("minimum", 1)
         put("maximum", SpreadShape.MAX_COUNT)
         put("description", "This many neighbouring heads move as one (3 = the heads in threes). Omit for 1.")
     })
-    put("groups", buildJsonObject {
+    put("parts", buildJsonObject {
         put("type", "integer")
         put("minimum", 0)
         put("maximum", SpreadShape.MAX_COUNT)
@@ -133,7 +150,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
 }
 
 /** Where an effect runs, the same on a look's effects and a cue's ad-hoc ones: one target, or a selection. */
-private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectTarget() {
+private fun kotlinx.serialization.json.JsonObjectBuilder.putFxTarget() {
     put("targetType", buildJsonObject {
         put("type", "string")
         put("enum", buildJsonArray { add("group"); add("fixture") })
@@ -151,28 +168,28 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectTarget() {
     })
 }
 
-private val lookEffectSchema = buildJsonObject {
+private val lookFxSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        putEffectTarget()
-        put("effectType", buildJsonObject { put("type", "string") })
-        put("category", buildJsonObject {
+        putFxTarget()
+        put("fxType", buildJsonObject { put("type", "string") })
+        put("family", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject {
             put("type", "string")
-            put("description", "Target property. Usually inferred from category: intensity→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for controls category.")
+            put("description", "Target property. Usually inferred from family: intensity→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for the controls family.")
         })
-        put("beatDivision", buildJsonObject {
+        put("cycle", buildJsonObject {
             put("type", "number")
-            put("description", BEAT_DIVISION_DESCRIPTION)
+            put("description", CYCLE_DESCRIPTION)
         })
         put("blendMode", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("OVERRIDE"); add("ADDITIVE"); add("MULTIPLY"); add("MAX"); add("MIN") })
         })
-        put("distribution", buildJsonObject {
+        put("order", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
                 add("NORMAL"); add("UNIFIED"); add("CENTRE_OUT"); add("CENTRE_IN")
@@ -184,10 +201,7 @@ private val lookEffectSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("PER_FIXTURE"); add("FLAT") })
         })
-        put("stepTiming", buildJsonObject {
-            put("type", "boolean")
-            put("description", "When true, beat division controls per-step time (total cycle = beatDivision × steps). When false, beat division controls total cycle time. Defaults to the effect type's own setting: true for a step chase, false for a continuous effect (every built-in).")
-        })
+        put("timing", timingSchema)
         put("elementFilter", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
@@ -204,7 +218,7 @@ private val lookEffectSchema = buildJsonObject {
             put("type", "boolean")
             put("description", SECONDS_DESCRIPTION)
         })
-        putEffectDynamics()
+        putFxDynamics()
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
@@ -212,7 +226,7 @@ private val lookEffectSchema = buildJsonObject {
         })
     })
     put("required", buildJsonArray {
-        add("effectType"); add("category"); add("blendMode"); add("parameters")
+        add("fxType"); add("family"); add("blendMode"); add("parameters")
     })
 }
 
@@ -243,7 +257,7 @@ internal val createLookTool = ToolDef(
             "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
             "(the colour of a fixture whose colour is per zone — list_fixture_types' cellProperties) set on the fixture or a group of them lands on every cell, " +
             "and a cell's own value beats it. " +
-            "'effects' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
+            "'fx' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
             "A look always lands whole — its own values, effects and scenery, never narrower and never wider — whether pressed (apply_look) or layered in a cue; " +
             "to point something at a selection, use a palette. Returns the look ID and the values as stored.",
     inputSchema = buildJsonObject {
@@ -256,9 +270,9 @@ internal val createLookTool = ToolDef(
                 put("items", lookValueSchema)
                 put("description", "Static values, each on its own fixture or group. A group stays one row while its members agree on the value, so the look follows the group.")
             })
-            put("effects", buildJsonObject {
+            put("fx", buildJsonObject {
                 put("type", "array")
-                put("items", lookEffectSchema)
+                put("items", lookFxSchema)
             })
             put("scenery", buildJsonObject {
                 put("type", "array")
@@ -293,10 +307,10 @@ internal val updateLookTool = ToolDef(
                 put("items", lookValueSchema)
                 put("description", "The look's static values, replacing all of them — create_look's values.")
             })
-            put("effects", buildJsonObject {
+            put("fx", buildJsonObject {
                 put("type", "array")
-                put("items", lookEffectSchema)
-                put("description", "The look's effects, replacing all of them — create_look's effects, each naming its target.")
+                put("items", lookFxSchema)
+                put("description", "The look's FX, replacing all of them — create_look's fx, each naming its target.")
             })
             put("scenery", buildJsonObject {
                 put("type", "array")
@@ -334,9 +348,9 @@ internal val applyLookTool = ToolDef(
         put("type", "object")
         put("properties", buildJsonObject {
             put("lookId", buildJsonObject { put("type", "integer") })
-            put("beatDivision", buildJsonObject {
+            put("cycle", buildJsonObject {
                 put("type", "number")
-                put("description", "Optional beat division override for the Look's effects that follow a speed master; an effect on Seconds keeps its own cycle")
+                put("description", "Optional cycle override for the Look's FX that follow a speed master; an effect on Seconds keeps its own cycle")
             })
             put("asValues", buildJsonObject {
                 put("type", "boolean")
@@ -382,9 +396,9 @@ internal val createSpeedMasterTool = ToolDef(
     }
 )
 
-internal val clearEffectsTool = ToolDef(
-    name = "clear_effects",
-    description = "Clear active effects. Omit targets to clear ALL effects globally. Naming targets clears " +
+internal val clearFxTool = ToolDef(
+    name = "clear_fx",
+    description = "Clear active FX. Omit targets to clear ALL FX globally. Naming targets clears " +
         "their own effects, and an effect over a selection only when every item it names is among them.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -540,12 +554,7 @@ internal val getCurrentStateTool = ToolDef(
                 put("type", "array")
                 put("items", buildJsonObject {
                     put("type", "string")
-                    put("enum", buildJsonArray {
-                        add("active_effects"); add("bpm"); add("speed_masters"); add("fixtures")
-                        add("groups"); add("looks"); add("palettes"); add("cues")
-                        add("cue_stacks"); add("cue_run"); add("cue_holds"); add("programmer"); add("selection")
-                        add("windows"); add("parked")
-                    })
+                    put("enum", buildJsonArray { CURRENT_STATE_PARTS.forEach { add(it) } })
                 })
                 put("description", "What to include. Defaults to all.")
             })
@@ -558,25 +567,25 @@ internal val getCurrentStateTool = ToolDef(
 // the difference is the point: a colour an effect should follow is a named **palette** (stored as a
 // template) with a uuid, so retuning one moves every effect referencing it without a stage-wide
 // mutation. `get_current_state` lists them under `palettes`.
-private val adHocEffectSchema = buildJsonObject {
+private val adHocFxSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
-        putEffectTarget()
-        put("effectType", buildJsonObject { put("type", "string") })
-        put("category", buildJsonObject {
+        putFxTarget()
+        put("fxType", buildJsonObject { put("type", "string") })
+        put("family", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject { put("type", "string") })
-        put("beatDivision", buildJsonObject {
+        put("cycle", buildJsonObject {
             put("type", "number")
-            put("description", BEAT_DIVISION_DESCRIPTION)
+            put("description", CYCLE_DESCRIPTION)
         })
         put("blendMode", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("OVERRIDE"); add("ADDITIVE"); add("MULTIPLY"); add("MAX"); add("MIN") })
         })
-        put("distribution", buildJsonObject {
+        put("order", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
                 add("NORMAL"); add("UNIFIED"); add("CENTRE_OUT"); add("CENTRE_IN")
@@ -592,7 +601,7 @@ private val adHocEffectSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("ALL"); add("ODD"); add("EVEN"); add("FIRST_HALF"); add("SECOND_HALF") })
         })
-        put("stepTiming", buildJsonObject { put("type", "boolean") })
+        put("timing", timingSchema)
         put("speedMasterUuid", buildJsonObject {
             put("type", "string")
             put("description", SPEED_MASTER_DESCRIPTION)
@@ -605,14 +614,14 @@ private val adHocEffectSchema = buildJsonObject {
             put("type", "boolean")
             put("description", SECONDS_DESCRIPTION)
         })
-        putEffectDynamics()
+        putFxDynamics()
         put("parameters", buildJsonObject {
             put("type", "object")
             put("additionalProperties", buildJsonObject { put("type", "string") })
         })
     })
     put("required", buildJsonArray {
-        add("effectType"); add("category")
+        add("fxType"); add("family")
         add("blendMode"); add("parameters")
     })
 }
@@ -728,9 +737,9 @@ internal val createCueTool = ToolDef(
                 put("items", lookValueSchema)
                 put("description", "The cue's own values, in create_look's values shape: $CUE_VALUES_NOTE")
             })
-            put("adHocEffects", buildJsonObject {
+            put("adHocFx", buildJsonObject {
                 put("type", "array")
-                put("items", adHocEffectSchema)
+                put("items", adHocFxSchema)
                 put("description", "Ad-hoc effects not from a Look layer, stored as full effect definitions")
             })
             put("scenery", buildJsonObject {
@@ -941,7 +950,7 @@ internal val recordCueTool = ToolDef(
             put("cueNumber", buildJsonObject { put("type", "string"); put("description", "New cue's number in cueStackId (CREATE). Omit to let the stack number it.") })
             put("sortOrder", buildJsonObject { put("type", "integer"); put("description", "Position in cueStackId (CREATE). Omit to append.") })
             // No `cueType`: a marker is a stack entry, not a cue, and records nothing (cue model
-            // plan D12). The tool still reads one, so an old caller naming MARKER is refused by name.
+            // plan D12); an old caller naming one is refused as an undeclared argument.
             put("targets", buildJsonObject {
                 put("type", "array")
                 put("items", targetSchema)
@@ -1021,38 +1030,38 @@ internal val updateFromProgrammerTool = ToolDef(
 )
 
 /**
- * The effect an *effect template* holds — [adHocEffectSchema] minus `targetType`, `targetKey` and
+ * The effect an *effect template* holds — [adHocFxSchema] minus `targetType`, `targetKey` and
  * `targets`.
  *
  * A template effect names no target (fx-templates D3): it fans over whatever applies it, so
  * offering the model a target field would invite it to write one the write boundary then refuses.
  */
-private val templateEffectSchema = buildJsonObject {
+private val paletteFxSchema = buildJsonObject {
     put("type", "object")
     put("description", "One effect. It has no target — an effect palette runs on whatever the layer names.")
     put("properties", buildJsonObject {
-        adHocEffectSchema["properties"]!!.jsonObject.forEach { (key, value) ->
-            if (key !in setOf("targetType", "targetKey", "targets", "category")) put(key, value)
+        adHocFxSchema["properties"]!!.jsonObject.forEach { (key, value) ->
+            if (key !in setOf("targetType", "targetKey", "targets", "family")) put(key, value)
         }
         // Narrowed from the ad-hoc enum: `controls` belongs to no attribute family, so the write
         // boundary refuses it (D4). Offering it here only buys a rejected call and a retry.
-        put("category", buildJsonObject {
+        put("family", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam") })
         })
     })
-    put("required", buildJsonArray { add("effectType"); add("category"); add("blendMode") })
+    put("required", buildJsonArray { add("fxType"); add("family"); add("blendMode") })
 }
 
-internal val createTemplateTool = ToolDef(
+internal val createPaletteTool = ToolDef(
     name = "create_palette",
     description = "Create a palette — a named, referenceable value (a colour, a position, an intensity) " +
             "or a named effect, that effects and cue layers point at instead of restating it: retuning the palette moves " +
             "everything referencing it. Returns the uuid, which a colour parameter names as 'pal:{uuid}'. A palette holds one " +
             "attribute family, and holds values OR one effect, never both — for both together, record a " +
             "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
-            "generic one that can be aimed at any fixture) or 'effect' for an effect palette, which always " +
-            "runs on whatever the applying layer or selection names. An effect palette's category must be " +
+            "generic one that can be aimed at any fixture) or 'fx' for an FX palette, which always " +
+            "runs on whatever the applying layer or selection names. An FX palette's family must be " +
             "intensity, colour, position or beam: 'controls' belongs to no attribute family.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -1085,10 +1094,10 @@ internal val createTemplateTool = ToolDef(
                     put("required", buildJsonArray { add("propertyName"); add("value") })
                 })
             })
-            put("effect", templateEffectSchema)
+            put("fx", paletteFxSchema)
         })
-        // `rows` is no longer required: exactly one of rows / effect is, which JSON Schema cannot
-        // say in a way this API's validator enforces — so `executeCreateTemplate` says it, and the
+        // `rows` is no longer required: exactly one of rows / fx is, which JSON Schema cannot
+        // say in a way this API's validator enforces — so `executeCreatePalette` says it, and the
         // description above tells the model which field to reach for.
         put("required", buildJsonArray { add("name") })
     }
@@ -1326,7 +1335,7 @@ internal val setBlindTool = ToolDef(
     }
 )
 
-internal val applyTemplateTool = ToolDef(
+internal val applyPaletteTool = ToolDef(
     name = "apply_palette",
     description = "Press a palette (by paletteId or paletteName) onto targets, as the desk's palette chips and pads do. " +
             "By default it puts on a programmer layer that tracks the palette, and toggles: pressing again on targets it " +
@@ -1366,7 +1375,7 @@ internal val recordLookTool = ToolDef(
             "in-mask rows for the recorded heads; REMOVE deletes the rows the recording names. A group's heads " +
             "that agree are recorded as one group row. Name targets — a Look recorded from the whole programmer " +
             "takes every head it holds. Scenery the programmer holds is recorded too unless scenery is false. " +
-            "Effects are moved into the Look only by effectIds (get_current_state's `activeEffects`). The Look then " +
+            "Effects are moved into the Look only by fxIds (get_current_state's `activeFx`). The Look then " +
             "becomes what a bare update_from_programmer writes back to, as after record_cue. Returns the Look's rows.",
     inputSchema = buildJsonObject {
         put("type", "object")
@@ -1390,7 +1399,7 @@ internal val recordLookTool = ToolDef(
                 put("items", targetSchema)
                 put("description", "Record only these fixtures (groups are expanded). Omit to record the whole programmer.")
             })
-            put("effectIds", buildJsonObject {
+            put("fxIds", buildJsonObject {
                 put("type", "array")
                 put("items", buildJsonObject { put("type", "integer") })
                 put("description", "Programmer effects to move into the Look; they stop running in the programmer and run through the Look instead.")

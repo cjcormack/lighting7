@@ -13,7 +13,7 @@ import {
 import { RgbColorPicker, type RgbColor } from 'react-colorful'
 import { Pipette, Save, Waves } from 'lucide-react'
 import { toast } from 'sonner'
-import type { TemplateTarget } from '@/api/templatesApi'
+import type { PaletteTarget } from '@/api/palettesApi'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { ExtendedChannelSlider } from '@/components/fixtures/ExtendedChannelSlider'
@@ -31,7 +31,7 @@ import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
 import { EditorReadout } from './EditorReadout'
 import { numericSeed } from './useEditorKeyboard'
-import { EffectsBand, PaletteBand } from './PaletteBands'
+import { FxBand, PaletteBand } from './PaletteBands'
 
 /** The whole of what this editor writes: three colour bytes and the three bundled emitters. */
 export interface ColourChannels {
@@ -80,7 +80,7 @@ function zeroIfHeld(value: number | undefined): number | undefined {
 export interface ColourPaletteSource {
   projectId: number
   /** Where a chip press lands — fixtures by key, a cell by its element key. */
-  targets: readonly TemplateTarget[]
+  targets: readonly PaletteTarget[]
   /** The press's mask: *Colour* in the programmer's cell (the cell's own family), the busk pair's in its tab. */
   families: readonly AttributeFamily[] | null
   /** `usePress`'s scope — the busk tab passes `'programmer'`: it writes Local whatever the grid is pointed at. */
@@ -666,9 +666,9 @@ export function ColourEditor({
         className={docked ? 'border-t px-3 pt-2 pb-2' : undefined}
       />
     )
-  const effectsBand =
+  const fxBand =
     effects == null ? null : (
-      <EffectsBand
+      <FxBand
         projectId={effects.projectId}
         family="COLOUR"
         property="rgbColour"
@@ -687,13 +687,13 @@ export function ColourEditor({
     ) : (
       band
     )
-  const effectsSection =
-    effectsBand != null && readOnly ? (
+  const fxSection =
+    fxBand != null && readOnly ? (
       <div inert className="opacity-50">
-        {effectsBand}
+        {fxBand}
       </div>
     ) : (
-      effectsBand
+      fxBand
     )
 
   // The footer: the save first, then Pick and Spread…, the busk Colour tab's shape. **One line,
@@ -768,7 +768,7 @@ export function ColourEditor({
             {readout}
           </div>
           {bandSection}
-          {effectsSection}
+          {fxSection}
         </div>
         {footerRow}
       </div>
@@ -783,7 +783,7 @@ export function ColourEditor({
       {/* The popover's 12px padding is 2px short of the knob's 14px overhang, and the popover scrolls. */}
       <div className="px-0.5">{controls}</div>
       {readout}
-      {effectsSection}
+      {fxSection}
       {footerRow}
     </div>
   )

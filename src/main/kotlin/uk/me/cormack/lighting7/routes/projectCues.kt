@@ -11,6 +11,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.resources.put
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import org.jetbrains.exposed.v1.dao.with
@@ -36,7 +37,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                     .orderBy(DaoCues.name to SortOrder.ASC)
                     .with(
                         DaoCue::layers,
-                        DaoCue::adHocEffects,
+                        DaoCue::adHocFx,
                         DaoCue::propertyAssignments,
                         DaoCue::triggers,
                         DaoCueTrigger::script,
@@ -78,7 +79,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             }
             // No stack makes a loose cue (cue model plan D1).
             val cueStackId = newCue.cueStackId
-            validateCueChildren(newCue.adHocEffects, newCue.layers, newCue.propertyAssignments, state.show.fxRegistry)?.let { problem ->
+            validateCueChildren(newCue.adHocFx, newCue.layers, newCue.propertyAssignments, state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -112,7 +113,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
                 writeCueChildren(
                     cue,
-                    newCue.adHocEffects,
+                    newCue.adHocFx,
                     newCue.propertyAssignments,
                     newCue.triggers,
                     newCue.layers,
@@ -180,7 +181,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val updatedData = call.receive<NewCue>()
-            validateCueChildren(updatedData.adHocEffects, updatedData.layers, updatedData.propertyAssignments, state.show.fxRegistry)?.let { problem ->
+            validateCueChildren(updatedData.adHocFx, updatedData.layers, updatedData.propertyAssignments, state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
@@ -207,7 +208,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 // Replace children, keeping the uuid of every child the write keeps.
                 writeCueChildren(
                     cue,
-                    updatedData.adHocEffects,
+                    updatedData.adHocFx,
                     updatedData.propertyAssignments,
                     updatedData.triggers,
                     updatedData.layers,
@@ -230,7 +231,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
 
     // PATCH /{projectId}/cues/{cueId} - Partial update of cue fields (current project only)
     // Only fields present in the JSON body are updated; absent fields are left unchanged.
-    // Children arrays (layers, adHocEffects, propertyAssignments, triggers) are replaced wholesale when present,
+    // Children arrays (layers, adHocFx, propertyAssignments, triggers) are replaced wholesale when present,
     // each child the new list keeps keeping its uuid (`writeCueChildren`).
     patch<ProjectCueResource> { resource ->
         withCurrentProject(
@@ -239,28 +240,45 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             { p -> "Cannot modify cues in project '${p.name}' - only the current project can be modified" },
         ) { project ->
             val body = call.receive<JsonObject>()
+            unknownFieldsProblem(body, CUE_PATCH_FIELDS)?.let { problem ->
+                call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
+                return@withCurrentProject
+            }
 
             // Children arrays — replace wholesale when present. Decoded *before* the transaction
             // purely so the effect-enum check can answer 400 the way POST and PUT do: validating
             // after the scalar fields had been assigned would mean rejecting a body that had
             // already half-written the cue.
             val hasLayers = "layers" in body
-            val hasEffects = "adHocEffects" in body
+            val hasFx = "adHocFx" in body
             val hasAssignments = "propertyAssignments" in body
             val hasTriggers = "triggers" in body
             val json = Json { ignoreUnknownKeys = true }
-            val effects = if (hasEffects)
-                json.decodeFromJsonElement<List<CueAdHocEffectDto>>(body["adHocEffects"]!!)
-            else null
+            // Strict, unlike the other lists: a field an FX or a layer does not know is an old name
+            // (`size`, `templateId`), refused rather than dropped — a layer that lost its palette
+            // would be dropped itself, and the cue's own layer deleted with it.
+            val effects = if (hasFx) {
+                try {
+                    Json.decodeFromJsonElement<List<CueAdHocFxDto>>(body["adHocFx"]!!)
+                } catch (e: SerializationException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("adHocFx: ${e.message}"))
+                    return@withCurrentProject
+                }
+            } else null
             val assignments = if (hasAssignments)
                 json.decodeFromJsonElement<List<CuePropertyAssignmentDto>>(body["propertyAssignments"]!!)
             else null
             val triggers = if (hasTriggers)
                 json.decodeFromJsonElement<List<CueTriggerDto>>(body["triggers"]!!)
             else null
-            val layers = if (hasLayers)
-                json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
-            else null
+            val layers = if (hasLayers) {
+                try {
+                    Json.decodeFromJsonElement<List<CueLayerDto>>(body["layers"]!!)
+                } catch (e: SerializationException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("layers: ${e.message}"))
+                    return@withCurrentProject
+                }
+            } else null
             validateCueChildren(effects ?: emptyList(), layers ?: emptyList(), assignments ?: emptyList(), state.show.fxRegistry)?.let { problem ->
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
@@ -276,7 +294,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
                 }
             }
 
-            val writesStage = (hasLayers || hasEffects || hasAssignments) && state.show.cueStackManager.holds.isHeld(resource.cueId)
+            val writesStage = (hasLayers || hasFx || hasAssignments) && state.show.cueStackManager.holds.isHeld(resource.cueId)
             var stageChanged = false
             val cueDetails = transaction(state.database) {
                 val cue = DaoCue.findById(resource.cueId) ?: return@transaction null
@@ -459,7 +477,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             if (press == null) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse("Cue not found"))
             } else {
-                call.respond(ApplyCueResponse(effectCount = press.acquired.effectCount, cueName = press.cueName))
+                call.respond(ApplyCueResponse(fxCount = press.acquired.fxCount, cueName = press.cueName))
             }
         }
     }
@@ -520,7 +538,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             // The loose hold only (§3.4): a stack that holds the cue keeps it, and stopping a stack
             // is the stack's own `deactivate`. The cue comes off when nothing else holds it.
             val released = state.show.cueStackManager.holds.dropLoose(state, resource.cueId)
-            call.respond(StopCueResponse(removedCount = released.effectsRemoved, cueId = resource.cueId))
+            call.respond(StopCueResponse(removedCount = released.fxRemoved, cueId = resource.cueId))
         }
     }
 
@@ -534,7 +552,7 @@ internal fun Route.routeApiRestProjectCues(state: State) {
             val captured = captureCurrentState(state)
             call.respond(CueCurrentStateResponse(
                 layers = captured.layers,
-                adHocEffects = captured.adHocEffects,
+                adHocFx = captured.adHocFx,
             ))
         }
     }
@@ -583,7 +601,7 @@ data class CueCurrentStateResource(val parent: ProjectCuesResource)
 data class NewCue(
     val name: String,
     val layers: List<CueLayerDto> = emptyList(),
-    val adHocEffects: List<CueAdHocEffectDto> = emptyList(),
+    val adHocFx: List<CueAdHocFxDto> = emptyList(),
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
     /**
@@ -610,7 +628,7 @@ data class CueDetails(
     val name: String,
     /** The cue's ordered Look composition, in `sortOrder`. */
     val layers: List<CueLayerDto> = emptyList(),
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDetailDto> = emptyList(),
     /**
@@ -686,7 +704,7 @@ private const val DUPLICATE_NAME_MAX = 255
 
 @Serializable
 data class ApplyCueResponse(
-    val effectCount: Int,
+    val fxCount: Int,
     val cueName: String,
 )
 
@@ -701,11 +719,17 @@ data class CueCurrentStateResponse(
      * on the effect's source — so it was already always empty before session 4 deleted the DTO.
      */
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
 )
 
 @Serializable
 data class StopCueResponse(
     val removedCount: Int,
     val cueId: Int,
+)
+
+/** Every field the cue PATCH reads; anything else is refused by name. */
+private val CUE_PATCH_FIELDS = setOf(
+    "name", "fadeDurationMs", "fadeCurve", "notes", "stomp", "speedMasters",
+    "adHocFx", "propertyAssignments", "triggers", "layers",
 )

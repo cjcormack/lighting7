@@ -1,9 +1,9 @@
 /*---
 id: FrostPulse
 name: Frost Pulse
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [frost]
 parameters:
   - name: min

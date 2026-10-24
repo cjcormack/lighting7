@@ -17,10 +17,9 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return `Group '${health.groupName}' no longer exists`
     case "missingProperty":
       return `Attribute '${health.propertyName}' is not defined on '${health.targetKey}'`
-    // Three reference cases stood here — `missingPalette`, `missingPaletteEntry`, and before them
-    // `paletteTypeMismatch`. All retired with the `ref:` value grammar (session 4): a row cannot
-    // hold a reference, so a reference that resolves to nothing is not a state to describe. Note
-    // the `default` arm below still catches them if an older server sends one.
+    // Three reference cases for the old `ref:` value grammar stood here; all retired with it
+    // (looks-and-layers session 4): a row cannot hold a reference, so a reference that resolves to
+    // nothing is not a state to describe. The `missingPalette` below is a binding's, and unrelated.
     case "missingStack":
       return `Cue stack #${health.stackId} no longer exists`
     case "missingCue":
@@ -39,7 +38,7 @@ export function describeHealth(health: BindingHealth | undefined): string | null
     // is pure and has no library to look one up in — the same line `describeTarget` draws.
     case "missingLook":
       return "The Look this button presses no longer exists"
-    case "missingTemplate":
+    case "missingPalette":
       return "The palette this button presses no longer exists"
     case "missingPad":
       return "The busk pad this button presses is no longer on any page"

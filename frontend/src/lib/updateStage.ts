@@ -10,16 +10,16 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
  * press still clears the mark.
  */
 export function updateStageLines(counts: UpdateStageResponse): string[] {
-  const { rows, effects, fadeMs } = counts
-  const effectParts = [
-    effects.edited > 0 ? `${effects.edited} FX edited in place` : null,
-    effects.stopped > 0 ? `${effects.stopped} stopped` : null,
-    effects.started > 0 ? `${effects.started} started` : null,
+  const { rows, fx, fadeMs } = counts
+  const fxParts = [
+    fx.edited > 0 ? `${fx.edited} FX edited in place` : null,
+    fx.stopped > 0 ? `${fx.stopped} stopped` : null,
+    fx.started > 0 ? `${fx.started} started` : null,
   ].filter((p): p is string => p != null)
-  if (rows === 0 && effectParts.length === 0) return ['The stage already shows the cue as stored.']
+  if (rows === 0 && fxParts.length === 0) return ['The stage already shows the cue as stored.']
   const fade = fadeMs > 0 ? `over its ${formatMs(fadeMs)} fade` : 'at once — it is a snap cue'
   return [
     rows > 0 ? `${plural(rows, 'value')} change, ${fade}` : null,
-    effectParts.length > 0 ? effectParts.join(' · ') : null,
+    fxParts.length > 0 ? fxParts.join(' · ') : null,
   ].filter((l): l is string => l != null)
 }

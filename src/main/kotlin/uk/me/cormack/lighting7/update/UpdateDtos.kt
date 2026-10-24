@@ -83,7 +83,7 @@ data class UpdateReleaseDto(
 data class LiveHintDto(
     val showReady: Boolean,
     val activeStackName: String? = null,
-    val activeEffectCount: Int = 0,
+    val activeFxCount: Int = 0,
 )
 
 @Serializable

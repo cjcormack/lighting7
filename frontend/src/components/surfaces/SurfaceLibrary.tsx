@@ -22,14 +22,14 @@ import { useVisibleFixtureListQuery } from "@/store/fixtures"
 import { useGroupListQuery } from "@/store/groups"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
 import { useLookListQuery } from "@/store/looks"
-import { useTemplateListQuery } from "@/store/templates"
+import { usePaletteListQuery } from "@/store/palettes"
 import { useBuskPagesQuery } from "@/store/busk"
 import { useDeskWindows } from "@/store/windows"
 import { BUSK_FOCUSES } from "@/lib/buskWindow"
 import { SUBSELECT_MODE_LABELS } from "@/lib/cellsSubSelection"
 import { FOCUS_LABELS } from "./targetUtils"
 import { allBanks, allPads } from "@/lib/buskLayout"
-import { padFaceOf, templateSwatch } from "@/components/busking/padFace"
+import { padFaceOf, paletteSwatch } from "@/components/busking/padFace"
 import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
 import { surfaceDragData, type SurfaceDragData } from "@/lib/surfaceDrop"
 import type { BindingTarget, BankDefinition } from "@/store/surfaces"
@@ -61,7 +61,7 @@ import type { CueTarget } from "@/api/cuesApi"
  * **busk page** under *Desk*, which already holds the encoder bank.
  *
  * **Chips are grouped by family inside a row**, with a hairline between groups — intensity,
- * position, colour, beam, then the actions — `TemplateStrip`'s split, sideways. It is what keeps a
+ * position, colour, beam, then the actions — `PaletteStrip`'s split, sideways. It is what keeps a
  * fixture row legible now that a colour is **four chips** (hue, hue fine, sat, bright: one per
  * `ColourAxis`, each carrying its axis on the target and its own swatch) and the bundled emitters
  * (white, amber, UV) sit beside them as faders of their own. `groupChipsByFamily` is the pure half.
@@ -254,7 +254,7 @@ function ChipButton({
   )
 }
 
-/** `TemplateStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
+/** `PaletteStrip`'s hairline, verbatim: drawn between two chip groups, never at an end. */
 function Hairline() {
   return <span aria-hidden data-testid="chip-hairline" className="mx-0.5 h-5 w-px shrink-0 bg-border" />
 }
@@ -464,7 +464,7 @@ export function SurfaceLibrary({
   const { data: fixtures } = useVisibleFixtureListQuery()
   const { data: stacks } = useProjectCueStackListQuery(projectId)
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: pages } = useBuskPagesQuery(projectId)
   const windows = useDeskWindows()
   const rigProperties = useRigProperties()
@@ -546,7 +546,7 @@ export function SurfaceLibrary({
     // lookup to do.
     for (const template of templates ?? []) {
       out.push({
-        key: `template:${template.uuid}`,
+        key: `palette:${template.uuid}`,
         name: template.name,
         detail: `${template.family?.toLowerCase() ?? "value"} palette`,
         badge: "Palette",
@@ -562,7 +562,7 @@ export function SurfaceLibrary({
             key: "press",
             label: "Press",
             target: { type: "pressPalette", paletteUuid: template.uuid },
-            swatch: templateSwatch(template),
+            swatch: paletteSwatch(template),
             family: template.family,
           },
         ],
@@ -573,14 +573,14 @@ export function SurfaceLibrary({
       out.push({
         key: `look:${look.uuid}`,
         name: look.name,
-        detail: look.hasDeferredEffects ? "needs a selection" : "bound",
+        detail: look.hasDeferredFx ? "needs a selection" : "bound",
         badge: "Look",
         kind: "look",
         strip: null,
         // A Look with a deferred effect presses onto targets it does not have, and the write
         // boundary refuses it by name — so it is offered with no chip at all rather than with one
         // that 400s. The detail line above is what says why.
-        chips: look.hasDeferredEffects
+        chips: look.hasDeferredFx
           ? []
           : [actionChip("apply", "Apply", { type: "applyLook", lookUuid: look.uuid })],
       })

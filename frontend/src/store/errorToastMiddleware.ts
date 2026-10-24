@@ -22,7 +22,7 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // alert and keeps it for a retry; the sheets' Duplicate by a keyed toast; and `copyLook`'s third
   // caller, the Look detail sheet's Duplicate (`duplicateOne` in routes/Looks.tsx), by a toast too.
   'copyLook', // components/looks/LookSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx), routes/Looks.tsx duplicateOne
-  'copyTemplate', // components/templates/TemplateSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx)
+  'copyPalette', // components/templates/PaletteSheet.tsx (Duplicate, and Copy to… through sheet/CopyToProjectSheet.tsx)
   'copyScript', // src/CopyScriptDialog.tsx, and components/scripts/ScriptSheet.tsx (Copy to… through sheet/CopyToProjectSheet.tsx)
   'cloneProject', // src/CloneProjectDialog.tsx
   'importProject', // src/ImportProjectDialog.tsx
@@ -80,14 +80,14 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   // The template trio, for exactly the reasons above one entity along. `PALETTE_IN_USE` opens the
   // same "delete anyway" guard; a duplicate name and each of the four write-boundary rules (one
   // family, closed vocabulary, right intent shape, no group rows) are 400s the editor renders beside
-  // the field. `useTemplateDelete` — the sheet's batch and the editor's Delete — toasts anything
+  // the field. `usePaletteDelete` — the sheet's batch and the editor's Delete — toasts anything
   // else on delete (D13), and the template sheet's cells toast a refused write by column (D14).
-  'deleteTemplate', // src/components/templates/useTemplateDelete.tsx — TemplateSheet and routes/Templates.tsx (TemplateEditor)
-  'createTemplate', // src/components/templates/TemplateEditor.tsx — inline alert
-  'saveTemplate', // ...same editor (via routes/Templates.tsx), and components/templates/TemplateSheet.tsx
+  'deletePalette', // src/components/templates/usePaletteDelete.tsx — PaletteSheet and routes/Palettes.tsx (PaletteEditor)
+  'createPalette', // src/components/templates/PaletteEditor.tsx — inline alert
+  'savePalette', // ...same editor (via routes/Palettes.tsx), and components/templates/PaletteSheet.tsx
   // Silent too: its sheet stays open on failure and renders the error inline (the strip's chip is
   // what opens it), so a toast beside that alert would say the same thing twice.
-  'createTemplateFromProgrammer', // src/components/programmer/NewTemplateFromSelectionSheet.tsx
+  'createPaletteFromProgrammer', // src/components/programmer/NewPaletteFromSelectionSheet.tsx
   // The 409s are ordinary steps in this flow, not failures: SPEED_MASTER_IN_USE opens the batch
   // delete's "delete anyway" dialog, and SPEED_MASTER_PROTECTED can only be reached by a stale
   // client (master 1 is skipped by name before anything is sent). Every other delete failure is

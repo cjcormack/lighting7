@@ -18,12 +18,12 @@ import org.junit.Test
 import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -65,18 +65,18 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     }
 
     /** One level whatever the phase: a wave whose min and max agree. */
-    private fun level(effectType: String, value: Int, blendMode: String, stack: Boolean) = ProgrammerEffectRequest(
-        effectType = effectType, propertyName = "dimmer", targets = hex,
+    private fun level(fxType: String, value: Int, blendMode: String, stack: Boolean) = ProgrammerFxRequest(
+        fxType = fxType, propertyName = "dimmer", targets = hex,
         parameters = mapOf("min" to "$value", "max" to "$value"), blendMode = blendMode, stack = stack,
     )
 
-    private suspend fun HttpClient.press(request: ProgrammerEffectRequest): FxInstance {
-        val response = post("/api/rest/projects/$projectId/programmer/effects") {
+    private suspend fun HttpClient.press(request: ProgrammerFxRequest): FxInstance {
+        val response = post("/api/rest/projects/$projectId/programmer/fx") {
             contentType(ContentType.Application.Json)
             setBody(request)
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
-        return assertNotNull(fx.getEffect(response.body<ProgrammerEffectResponse>().effectId))
+        return assertNotNull(fx.getFx(response.body<ProgrammerFxResponse>().fxId))
     }
 
     /** The two Local FX, Within pressed last so on top; moved under the Replace when [moved]. */
@@ -85,7 +85,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         val within = press(level("SquareWave", 128, "MULTIPLY", stack = true))
         awaitDimmer(withinOnTop, "pressed last, the Within applies on top")
         if (moved) {
-            assertTrue(fx.moveLocalEffect(within.id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
+            assertTrue(fx.moveLocalFx(within.id, aboveId = null) is FxEngine.LocalMoveOutcome.Moved)
             awaitDimmer(replaceOnTop, "moved to the bottom, the Within applies under the Replace")
         }
         return replace to within
@@ -97,15 +97,15 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     private fun expectedBlends(moved: Boolean) = if (moved) listOf("MULTIPLY", "OVERRIDE") else listOf("OVERRIDE", "MULTIPLY")
 
     private fun cueFx(cueId: Int): List<Pair<String, Int>> = transaction(state.database) {
-        DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.blendMode to it.sortOrder }
+        DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.blendMode to it.sortOrder }
     }
 
     private fun lookFx(lookId: Int): List<Pair<String, Int>> = transaction(state.database) {
-        DaoLook.findById(lookId)!!.effectsInOrder().map { it.blendMode to it.sortOrder }
+        DaoLook.findById(lookId)!!.fxInOrder().map { it.blendMode to it.sortOrder }
     }
 
     private fun clearStage(why: String) {
-        fx.clearAllEffects()
+        fx.clearAllFx()
         awaitDimmer(0, why)
     }
 
@@ -118,10 +118,10 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         return response.body()
     }
 
-    private suspend fun HttpClient.recordLook(name: String, effectIds: List<Long>, mode: String = "CREATE"): LookDetails {
+    private suspend fun HttpClient.recordLook(name: String, fxIds: List<Long>, mode: String = "CREATE"): LookDetails {
         val response = post("/api/rest/programmer/record-look") {
             contentType(ContentType.Application.Json)
-            setBody(ProgrammerRecordLookRequest(projectId.toString(), mode, name = name, effectIds = effectIds))
+            setBody(ProgrammerRecordLookRequest(projectId.toString(), mode, name = name, fxIds = fxIds))
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         return response.body<ProgrammerRecordLookResponse>().look
@@ -168,7 +168,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         // Asked for top first, which is neither order: the Look is written in apply order whatever.
         val look = client.recordLook("Stacked", listOf(within.id, replace.id).let { if (moved) it.reversed() else it })
         assertEquals(expectedBlends(moved).mapIndexed { i, blend -> blend to i }, lookFx(look.id))
-        assertEquals(expectedBlends(moved), look.effects.map { it.blendMode }, "the Look's detail reads them bottom first")
+        assertEquals(expectedBlends(moved), look.fx.map { it.blendMode }, "the Look's detail reads them bottom first")
         awaitDimmer(0, "Record moves a Look's FX out of the programmer")
 
         client.pressLook(look.id)
@@ -193,12 +193,12 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
 
         client.include(lookId = look.id)
         awaitDimmer(withinOnTop, "Include runs them in the Look's order")
-        val included = fx.getActiveEffects().single { it.blendMode.name == "MULTIPLY" }
-        fx.moveLocalEffect(included.id, aboveId = null)
+        val included = fx.getActiveFx().single { it.blendMode.name == "MULTIPLY" }
+        fx.moveLocalFx(included.id, aboveId = null)
         awaitDimmer(replaceOnTop, "moved in the programmer")
 
         val updated = client.update()
-        assertEquals(2, assertNotNull(updated.lookResult).effectsWritten, "both took a new place")
+        assertEquals(2, assertNotNull(updated.lookResult).fxWritten, "both took a new place")
         assertEquals(expectedBlends(moved = true).mapIndexed { i, blend -> blend to i }, lookFx(look.id))
 
         clearStage("cleared")
@@ -236,16 +236,16 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         val (replace, within) = client.stackTwo(moved = false)
         val cueId = client.record("CREATE", name = "Stacked").cue.id
         assertEquals(expectedBlends(moved = false), cueFx(cueId).map { it.first })
-        val uuids = transaction(state.database) { DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.uuid } }
+        val uuids = transaction(state.database) { DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.uuid } }
 
-        fx.moveLocalEffect(within.id, aboveId = replace.id)
+        fx.moveLocalFx(within.id, aboveId = replace.id)
         awaitDimmer(replaceOnTop, "moved in the programmer")
         val recorded = client.record(mode, cueId = cueId)
         assertEquals(2, recorded.fxWritten, "both took a new place")
         assertEquals(expectedBlends(moved = true).mapIndexed { i, blend -> blend to i }, cueFx(cueId))
         assertEquals(
             uuids.reversed(),
-            transaction(state.database) { DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.uuid } },
+            transaction(state.database) { DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.uuid } },
             "the same rows, moved",
         )
 
@@ -266,16 +266,16 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val uv = client.press(
-            ProgrammerEffectRequest(effectType = "Pulse", propertyName = "uv", targets = hex),
+            ProgrammerFxRequest(fxType = "Pulse", propertyName = "uv", targets = hex),
         )
         val cueId = client.record("CREATE", name = "Stacked").cue.id
-        fx.removeEffect(uv.id)
+        fx.removeFx(uv.id)
         client.stackTwo(moved = true)
 
         client.record("MERGE", cueId = cueId)
         assertEquals(listOf("OVERRIDE", "MULTIPLY", "OVERRIDE"), cueFx(cueId).map { it.first })
         assertEquals(listOf(0, 1, 2), cueFx(cueId).map { it.second })
-        val attributes = transaction(state.database) { DaoCue.findById(cueId)!!.adHocEffectsInOrder().map { it.attribute } }
+        val attributes = transaction(state.database) { DaoCue.findById(cueId)!!.adHocFxInOrder().map { it.attribute } }
         assertEquals(listOf("uv", "dimmer", "dimmer"), attributes, "the cue's own first, the recording's above it")
     }
 
@@ -290,8 +290,8 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
 
         client.include(cueId = cueId)
         awaitDimmer(withinOnTop, "Include runs them in the cue's order")
-        val included = fx.getActiveEffects().single { it.blendMode.name == "MULTIPLY" }
-        fx.moveLocalEffect(included.id, aboveId = null)
+        val included = fx.getActiveFx().single { it.blendMode.name == "MULTIPLY" }
+        fx.moveLocalFx(included.id, aboveId = null)
         awaitDimmer(replaceOnTop, "moved in the programmer")
 
         val updated = client.update()
@@ -312,9 +312,9 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
      * the gaps in their stored orders.
      */
     private val twoLanes = listOf(
-        lookEffect("SineWave", 200, "OVERRIDE").copy(sortOrder = 0),
-        lookEffect("SquareWave", 128, "MULTIPLY").copy(sortOrder = 5),
-        lookEffect("Pulse", 0, "OVERRIDE").copy(propertyName = "uv", parameters = emptyMap(), sortOrder = 9),
+        lookFx("SineWave", 200, "OVERRIDE").copy(sortOrder = 0),
+        lookFx("SquareWave", 128, "MULTIPLY").copy(sortOrder = 5),
+        lookFx("Pulse", 0, "OVERRIDE").copy(propertyName = "uv", parameters = emptyMap(), sortOrder = 9),
     )
 
     @Test
@@ -324,7 +324,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         val client = jsonClient()
         val created = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Lanes", effects = twoLanes))
+            setBody(CreateLookRequest(name = "Lanes", fx = twoLanes))
         }
         assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
         val lookId = created.body<LookDetails>().id
@@ -332,8 +332,8 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         assertEquals(listOf(0, 5, 9), stored.map { it.second })
 
         client.include(lookId = lookId)
-        assertEquals(3, fx.getActiveEffects().size)
-        assertEquals(0, assertNotNull(client.update().lookResult).effectsWritten)
+        assertEquals(3, fx.getActiveFx().size)
+        assertEquals(0, assertNotNull(client.update().lookResult).fxWritten)
         assertEquals(stored, lookFx(lookId))
     }
 
@@ -343,17 +343,17 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val effects = twoLanes.map {
-            CueAdHocEffectDto(
+            CueAdHocFxDto(
                 // The family Record infers, so the round trip changes nothing but what the test is about.
-                targetType = it.targetType, targetKey = it.targetKey, effectType = it.effectType,
-                category = categoryFromPropertyName(it.propertyName!!),
-                propertyName = it.propertyName, beatDivision = it.beatDivision, blendMode = it.blendMode,
-                distribution = it.distribution, parameters = it.parameters, sortOrder = it.sortOrder,
+                targetType = it.targetType, targetKey = it.targetKey, fxType = it.fxType,
+                family = categoryFromPropertyName(it.propertyName!!),
+                propertyName = it.propertyName, cycle = it.cycle, blendMode = it.blendMode,
+                order = it.order, parameters = it.parameters, sortOrder = it.sortOrder,
             )
         }
         val created = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Lanes", adHocEffects = effects))
+            setBody(NewCue(name = "Lanes", adHocFx = effects))
         }
         assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
         val cueId = created.body<CueDetails>().id
@@ -361,16 +361,16 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         assertEquals(listOf(0, 5, 9), stored.map { it.second })
 
         client.include(cueId = cueId)
-        assertEquals(3, fx.getActiveEffects().size)
+        assertEquals(3, fx.getActiveFx().size)
         assertEquals(0, client.update().results.single().fxWritten)
         assertEquals(stored, cueFx(cueId))
     }
 
     // ── Explicit lists ──────────────────────────────────────────────────────────────────────
 
-    private fun lookEffect(effectType: String, value: Int, blendMode: String) = LookEffectDto(
-        targetType = TargetRef.Fixture.TYPE, targetKey = "hex-1", effectType = effectType, category = "intensity",
-        propertyName = "dimmer", beatDivision = 4.0, blendMode = blendMode, distribution = "NORMAL",
+    private fun lookFx(fxType: String, value: Int, blendMode: String) = LookFxDto(
+        targetType = TargetRef.Fixture.TYPE, targetKey = "hex-1", fxType = fxType, family = "intensity",
+        propertyName = "dimmer", cycle = 4.0, blendMode = blendMode, order = "NORMAL",
         parameters = mapOf("min" to "$value", "max" to "$value"),
     )
 
@@ -379,12 +379,12 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val replace = lookEffect("SineWave", 200, "OVERRIDE")
-        val within = lookEffect("SquareWave", 128, "MULTIPLY")
+        val replace = lookFx("SineWave", 200, "OVERRIDE")
+        val within = lookFx("SquareWave", 128, "MULTIPLY")
 
         val created = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Listed", effects = listOf(within, replace)))
+            setBody(CreateLookRequest(name = "Listed", fx = listOf(within, replace)))
         }
         assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
         val lookId = created.body<LookDetails>().id
@@ -394,16 +394,16 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         client.pressLook(lookId)
         awaitDimmer(0, "off")
 
-        val uuids = transaction(state.database) { DaoLook.findById(lookId)!!.effectsInOrder().map { it.uuid } }
+        val uuids = transaction(state.database) { DaoLook.findById(lookId)!!.fxInOrder().map { it.uuid } }
         val put = client.put("/api/rest/projects/$projectId/looks/$lookId") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("effects" to listOf(replace, within)))
+            setBody(mapOf("fx" to listOf(replace, within)))
         }
         assertEquals(HttpStatusCode.OK, put.status, put.bodyAsText())
         assertEquals(listOf("OVERRIDE" to 0, "MULTIPLY" to 1), lookFx(lookId))
         assertEquals(
             uuids.reversed(),
-            transaction(state.database) { DaoLook.findById(lookId)!!.effectsInOrder().map { it.uuid } },
+            transaction(state.database) { DaoLook.findById(lookId)!!.fxInOrder().map { it.uuid } },
             "the same rows, in the new list's order",
         )
         client.pressLook(lookId)
@@ -414,14 +414,14 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     fun `create_look keeps its list's order`() {
         seedRig()
         val json = Json { encodeDefaults = false }
-        val effects = listOf(lookEffect("SquareWave", 128, "MULTIPLY"), lookEffect("SineWave", 200, "OVERRIDE"))
-            .joinToString(",", "[", "]") { json.encodeToString(LookEffectDto.serializer(), it) }
+        val effects = listOf(lookFx("SquareWave", 128, "MULTIPLY"), lookFx("SineWave", 200, "OVERRIDE"))
+            .joinToString(",", "[", "]") { json.encodeToString(LookFxDto.serializer(), it) }
         val result = runBlocking {
-            AiTools(state).executeTool("create_look", Json.parseToJsonElement("""{"name":"Tool","effects":$effects}""").jsonObject)
+            AiTools(state).executeTool("create_look", Json.parseToJsonElement("""{"name":"Tool","fx":$effects}""").jsonObject)
         }
         assertTrue(result.success, result.result)
         val stored = transaction(state.database) {
-            DaoLook.find { DaoLooks.name eq "Tool" }.single().effectsInOrder().map { it.blendMode }
+            DaoLook.find { DaoLooks.name eq "Tool" }.single().fxInOrder().map { it.blendMode }
         }
         assertEquals(listOf("MULTIPLY", "OVERRIDE"), stored)
     }

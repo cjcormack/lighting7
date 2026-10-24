@@ -1,11 +1,11 @@
 import type { CueTarget } from '@/api/cuesApi'
 import type { SceneryState } from '@/api/sceneryApi'
-import type { TimelineEffect, TimelineLayer } from '@/api/stackTimelineApi'
+import type { TimelineFx, TimelineLayer } from '@/api/stackTimelineApi'
 
 /** The four column groups, in the order the grid draws them (C7). */
-export type TimelineKind = 'look' | 'palette' | 'effect' | 'scenery'
+export type TimelineKind = 'look' | 'palette' | 'fx' | 'scenery'
 
-export const TIMELINE_KINDS: readonly TimelineKind[] = ['look', 'palette', 'effect', 'scenery']
+export const TIMELINE_KINDS: readonly TimelineKind[] = ['look', 'palette', 'fx', 'scenery']
 
 /**
  * One column (stack-timeline plan §3.2): a Look or a palette on one target — or on none, its own
@@ -28,7 +28,7 @@ export interface TimelineColumn {
   sourceId: number | null
   /** The one target a Look or palette column is on, or null for its own fixtures. */
   target: CueTarget | null
-  effect?: { effectType: string; propertyName: string | null; targetType: string; targetKey: string }
+  effect?: { fxType: string; propertyName: string | null; targetType: string; targetKey: string }
   elementUuid?: string
 }
 
@@ -42,9 +42,9 @@ export interface TimelineLayerCell {
   glyphs: string[]
 }
 
-export interface TimelineEffectCell {
-  kind: 'effect'
-  effect: TimelineEffect
+export interface TimelineFxCell {
+  kind: 'fx'
+  effect: TimelineFx
 }
 
 export interface TimelineSceneryCell {
@@ -53,7 +53,7 @@ export interface TimelineSceneryCell {
   transitionMs: number | null
 }
 
-export type TimelineFilled = TimelineLayerCell | TimelineEffectCell | TimelineSceneryCell
+export type TimelineFilled = TimelineLayerCell | TimelineFxCell | TimelineSceneryCell
 
 /**
  * One column in one cue: [filled] by that cue's own layer, row or change, or null. A scenery cell

@@ -2,8 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { StrictMode, useRef, useState, type ReactNode } from 'react'
-import type { ActiveEffect } from '@/store/fixtureFx'
-import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import type { ActiveFx } from '@/store/fixtureFx'
+import { chan, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
 /**
  * The split editor (apply-model plan §4.5, D5): with part of a Local effect selected the editor says
@@ -20,11 +20,11 @@ vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures
 vi.mock('@/hooks/usePress', () => ({ useWindowPressPair: () => ({ targets: [], families: null }) }))
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => true }))
 
-const COPY_1 = makeActiveEffect({ id: 31, targetKey: 'hex-1' })
-const COPY_2 = makeActiveEffect({ id: 32, targetKey: 'hex-2' })
+const COPY_1 = makeActiveFx({ id: 31, targetKey: 'hex-1' })
+const COPY_2 = makeActiveFx({ id: 32, targetKey: 'hex-2' })
 const splitFx = vi.hoisted(() =>
   vi.fn((_req: { id: number; update: Record<string, unknown> }) => ({
-    unwrap: () => Promise.resolve({ splitEffectId: 7, edited: [COPY_1, COPY_2], rest: [] }),
+    unwrap: () => Promise.resolve({ splitFxId: 7, edited: [COPY_1, COPY_2], rest: [] }),
   })),
 )
 vi.mock('@/store/fixtureFx', () => ({
@@ -32,10 +32,10 @@ vi.mock('@/store/fixtureFx', () => ({
     splitFx: (id: number, update: Record<string, unknown>) => splitFx({ id, update }).unwrap(),
     splitting: false,
   }),
-  isEffectSplit: (answer: object) => 'splitEffectId' in answer,
+  isFxSplit: (answer: object) => 'splitFxId' in answer,
 }))
-const stopEffect = vi.hoisted(() => vi.fn())
-vi.mock('./useEffectControls', () => ({ useStopEffect: () => stopEffect }))
+const stopFx = vi.hoisted(() => vi.fn())
+vi.mock('./useFxControls', () => ({ useStopFx: () => stopFx }))
 vi.mock('../editor/EditorSurface', () => ({
   EditorSurface: ({ open, children, onOpenChange }: { open: boolean; children: ReactNode; onOpenChange: (open: boolean) => void }) =>
     open ? (
@@ -55,7 +55,7 @@ vi.mock('./FxEditor', () => ({
     alsoIds,
     onStop,
   }: {
-    effect: ActiveEffect
+    effect: ActiveFx
     hold?: (request: unknown) => void
     alsoIds?: readonly number[]
     onStop?: () => void
@@ -81,7 +81,7 @@ vi.mock('./FxEditor', () => ({
 
 const { FxEditorPopover } = await import('./FxEditorPopover')
 
-const FRONT = makeActiveEffect({ id: 7, targetKey: 'front', isGroupTarget: true, targetType: 'group' })
+const FRONT = makeActiveFx({ id: 7, targetKey: 'front', isGroupTarget: true, targetType: 'group' })
 const SUBSET = [
   { type: 'fixture' as const, key: 'hex-1' },
   { type: 'fixture' as const, key: 'hex-2' },
@@ -90,7 +90,7 @@ const SUBSET = [
 /** A host as the rail is: it reads the effect it edits from the running list by id. */
 const hostStop = vi.fn()
 
-function Host({ running, selection }: { running: ActiveEffect[]; selection: typeof SUBSET }) {
+function Host({ running, selection }: { running: ActiveFx[]; selection: typeof SUBSET }) {
   const [editingId, setEditingId] = useState<number | null>(running[0].id)
   const anchor = useRef<HTMLElement | null>(null)
   return (
@@ -119,7 +119,7 @@ function Host({ running, selection }: { running: ActiveEffect[]; selection: type
 beforeEach(() => {
   updateFx.mockClear()
   splitFx.mockClear()
-  stopEffect.mockClear()
+  stopFx.mockClear()
   hostStop.mockClear()
 })
 afterEach(cleanup)
@@ -178,7 +178,7 @@ describe('FxEditorPopover — the split editor', () => {
     expect(updateFx.mock.calls.map((c) => c[0])).toEqual([31])
     fireEvent.click(screen.getByRole('button', { name: 'stop' }))
     expect(hostStop).toHaveBeenCalledWith(31)
-    expect(stopEffect).not.toHaveBeenCalled()
+    expect(stopFx).not.toHaveBeenCalled()
   })
 
   it('× after a split stops the other copies too', async () => {
@@ -189,7 +189,7 @@ describe('FxEditorPopover — the split editor', () => {
     rerender(<Host running={[FRONT, COPY_1, COPY_2]} selection={SUBSET} />)
     await waitFor(() => expect(document.querySelector('[data-editing="31"]')).toBeTruthy())
     fireEvent.click(screen.getByRole('button', { name: 'stop' }))
-    expect(stopEffect).toHaveBeenCalledWith(expect.objectContaining({ id: 32 }))
+    expect(stopFx).toHaveBeenCalledWith(expect.objectContaining({ id: 32 }))
     expect(hostStop).toHaveBeenCalledWith(31)
   })
 
@@ -208,7 +208,7 @@ describe('FxEditorPopover — the split editor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'move' }))
     fireEvent.click(screen.getByRole('button', { name: 'Apply to Hex 1–2' }))
     fireEvent.click(screen.getByRole('button', { name: 'close' }))
-    answer({ splitEffectId: 7, edited: [COPY_1, COPY_2], rest: [] })
+    answer({ splitFxId: 7, edited: [COPY_1, COPY_2], rest: [] })
     await new Promise((resolve) => setTimeout(resolve, 0))
     expect(document.querySelector('[data-editing]')).toBeNull()
   })
@@ -223,7 +223,7 @@ describe('FxEditorPopover — the split editor', () => {
   })
 
   it('offers no split for a palette layer’s effect: it is edited as its layer’s', () => {
-    const layer = { ...FRONT, templateId: 4, programmerLayerId: 2, sourceName: 'Amber Breathe' }
+    const layer = { ...FRONT, paletteId: 4, programmerLayerId: 2, sourceName: 'Amber Breathe' }
     render(<Host running={[layer]} selection={SUBSET} />)
     expect(document.querySelector('[data-fx-split]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'move' }))

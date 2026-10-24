@@ -456,6 +456,20 @@ private val pointSchema = objectSchema(required = listOf("x", "y", "z")) {
     prop("z", "number")
 }
 
+/**
+ * What `get_scene` answers beside a row's fields and `set_scene` ignores, so a row read back can be
+ * corrected and resent as it stands: a seating's seat count, a seat view's resolved eye, a note that
+ * its seating has gone, a painted face's image size, the owner, a model's own size. Declared on both
+ * row schemas, or the undeclared-argument check would refuse the resent row.
+ */
+internal val SCENE_READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner", "modelSize")
+
+private fun JsonObjectBuilder.sceneReadOnlyProps() {
+    SCENE_READ_ONLY_FIELDS.forEach { name ->
+        put(name, buildJsonObject { put("description", "Read-only: get_scene answers it and set_scene ignores it.") })
+    }
+}
+
 private val sceneElementSchema = objectSchema(required = listOf("name")) {
     prop("name", "string", "Unique name: 'Hall', 'Proscenium', 'Stalls', 'SR wall', 'Sofa'. An existing name updates that element — fields you send overwrite, fields you omit keep.")
     enumProp("kind", StageElementKind.entries.map { it.name }, "Required for a new element. ROOM: an inward-facing shell. PROSCENIUM: a wall with an opening. FLAT: a panel with doors and windows. DRAPE: soft goods. PLATFORM: a deck, rostrum or balcony. SEATING: rows of seats (viewpoints sit in them). OBJECT: furniture, plants, signs, a flown piece — or, with shape MODEL, any shape built from parts.")
@@ -494,6 +508,7 @@ private val sceneElementSchema = objectSchema(required = listOf("name")) {
         "Copy another element's model: the named OBJECT's MODEL parts, and its size and finish wherever this row leaves them out — so {name: 'Tree 4', x: 2, y: 5, modelFrom: 'Tree 1'} is another tree. " +
             "params may still add flies, travelS or states, but not parts. The source is the scene as it stands at this row: a stored element, or one an earlier row of this call sets. A copy is independent: changing the source later does not change it.",
     )
+    sceneReadOnlyProps()
 }
 
 /**
@@ -520,6 +535,7 @@ private val sceneViewpointSchema = objectSchema(required = listOf("name")) {
     prop("fovDeg", "number", "Lens, 15–90. EYE and SEAT only; default 50 standing, 52 seated.")
     prop("seating", "string", "SEAT: the seating element's name. May be omitted when the scene has one.")
     prop("seat", "string", "SEAT: row letter and number, e.g. 'F6'.")
+    sceneReadOnlyProps()
 }
 
 internal const val PROSCENIUM_HALL_TEMPLATE = "proscenium-hall"
@@ -665,6 +681,9 @@ private val venueFixtureOverrideSchema = objectSchema(required = listOf("key")) 
         put("properties", buildJsonObject {
             PatchFacet.entries.forEach { f -> enumProp(f.name, listOf("SHOW", "VENUE", "KEEP_MINE")) }
         })
+        // A facet's name is read in any case (describe_rig prints them lower-case) and the tool
+        // refuses an unknown one itself, so the keys are a map's rather than fixed properties.
+        put("additionalProperties", buildJsonObject { put("type", "string") })
     })
     put("address", buildJsonObject {
         put("type", "object")

@@ -15,16 +15,16 @@ import org.jetbrains.exposed.v1.jdbc.selectAll
 import org.jetbrains.exposed.v1.jdbc.update
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.ParameterInfo
-import uk.me.cormack.lighting7.fx.normalizeEffectType
+import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCues
-import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProjects
-import uk.me.cormack.lighting7.models.DaoTemplateEffects
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPaletteFx
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.sync.LegacyNames
 import java.util.UUID
 
@@ -60,45 +60,45 @@ internal fun JdbcTransaction.rewriteFxLibrary() {
     val contextOf = { projectId: Int? ->
         contexts.getOrPut(projectId) {
             val own = definitions[projectId].orEmpty()
-            LegacyNames.Context(palettes::get, { own[normalizeEffectType(it)] }, absentPingPongIsOn = true)
+            LegacyNames.Context(palettes::get, { own[normalizeFxType(it)] }, absentPingPongIsOn = true)
         }
     }
 
     rewriteHome(
         home = "Look",
-        table = DaoLookEffects,
-        owner = DaoLookEffects.look,
+        table = DaoLookFx,
+        owner = DaoLookFx.look,
         owners = DaoLooks.selectAll().associate { it[DaoLooks.id].value to (it[DaoLooks.name] to it[DaoLooks.project].value) },
         columns = FxColumns(
-            DaoLookEffects.fxType, DaoLookEffects.family, DaoLookEffects.cycle,
-            DaoLookEffects.order, DaoLookEffects.phaseOffset, DaoLookEffects.parameters,
-            DaoLookEffects.direction, DaoLookEffects.runs, DaoLookEffects.spread,
+            DaoLookFx.fxType, DaoLookFx.family, DaoLookFx.cycle,
+            DaoLookFx.order, DaoLookFx.phaseOffset, DaoLookFx.parameters,
+            DaoLookFx.direction, DaoLookFx.runs, DaoLookFx.spread,
         ),
         projects = projects,
         contextOf = contextOf,
     )
     rewriteHome(
         home = "Cue",
-        table = DaoCueAdHocEffects,
-        owner = DaoCueAdHocEffects.cue,
+        table = DaoCueAdHocFx,
+        owner = DaoCueAdHocFx.cue,
         owners = DaoCues.selectAll().associate { it[DaoCues.id].value to (it[DaoCues.name] to it[DaoCues.project].value) },
         columns = FxColumns(
-            DaoCueAdHocEffects.fxType, DaoCueAdHocEffects.family, DaoCueAdHocEffects.cycle,
-            DaoCueAdHocEffects.order, DaoCueAdHocEffects.phaseOffset, DaoCueAdHocEffects.parameters,
-            DaoCueAdHocEffects.direction, DaoCueAdHocEffects.runs, DaoCueAdHocEffects.spread,
+            DaoCueAdHocFx.fxType, DaoCueAdHocFx.family, DaoCueAdHocFx.cycle,
+            DaoCueAdHocFx.order, DaoCueAdHocFx.phaseOffset, DaoCueAdHocFx.parameters,
+            DaoCueAdHocFx.direction, DaoCueAdHocFx.runs, DaoCueAdHocFx.spread,
         ),
         projects = projects,
         contextOf = contextOf,
     )
     rewriteHome(
         home = "Palette",
-        table = DaoTemplateEffects,
-        owner = DaoTemplateEffects.palette,
-        owners = DaoTemplates.selectAll().associate { it[DaoTemplates.id].value to (it[DaoTemplates.name] to it[DaoTemplates.project].value) },
+        table = DaoPaletteFx,
+        owner = DaoPaletteFx.palette,
+        owners = DaoPalettes.selectAll().associate { it[DaoPalettes.id].value to (it[DaoPalettes.name] to it[DaoPalettes.project].value) },
         columns = FxColumns(
-            DaoTemplateEffects.fxType, DaoTemplateEffects.family, DaoTemplateEffects.cycle,
-            DaoTemplateEffects.order, DaoTemplateEffects.phaseOffset, DaoTemplateEffects.parameters,
-            DaoTemplateEffects.direction, DaoTemplateEffects.runs, DaoTemplateEffects.spread,
+            DaoPaletteFx.fxType, DaoPaletteFx.family, DaoPaletteFx.cycle,
+            DaoPaletteFx.order, DaoPaletteFx.phaseOffset, DaoPaletteFx.parameters,
+            DaoPaletteFx.direction, DaoPaletteFx.runs, DaoPaletteFx.spread,
         ),
         projects = projects,
         contextOf = contextOf,
@@ -171,20 +171,20 @@ private fun <T : IntIdTable> rewriteHome(
 
 /** Every palette's rows, by its uuid, for Colour Cycle's references. */
 private fun palettesByUuid(): Map<UUID, LegacyNames.Palette> {
-    val withFx = DaoTemplateEffects.selectAll().mapTo(HashSet()) { it[DaoTemplateEffects.palette].value }
-    val rows = DaoTemplateRows.selectAll().orderBy(DaoTemplateRows.sortOrder).groupBy(
-        { it[DaoTemplateRows.palette].value },
+    val withFx = DaoPaletteFx.selectAll().mapTo(HashSet()) { it[DaoPaletteFx.palette].value }
+    val rows = DaoPaletteRows.selectAll().orderBy(DaoPaletteRows.sortOrder).groupBy(
+        { it[DaoPaletteRows.palette].value },
         {
             LegacyNames.PaletteRow(
-                attribute = it[DaoTemplateRows.attribute],
-                value = it[DaoTemplateRows.value],
-                deferred = it[DaoTemplateRows.targetType] == DEFERRED_TARGET_TYPE,
+                attribute = it[DaoPaletteRows.attribute],
+                value = it[DaoPaletteRows.value],
+                deferred = it[DaoPaletteRows.targetType] == DEFERRED_TARGET_TYPE,
             )
         },
     )
-    return DaoTemplates.selectAll().associate {
-        val id = it[DaoTemplates.id].value
-        it[DaoTemplates.uuid] to LegacyNames.Palette(it[DaoTemplates.name], rows[id].orEmpty(), id in withFx)
+    return DaoPalettes.selectAll().associate {
+        val id = it[DaoPalettes.id].value
+        it[DaoPalettes.uuid] to LegacyNames.Palette(it[DaoPalettes.name], rows[id].orEmpty(), id in withFx)
     }
 }
 
@@ -200,7 +200,7 @@ private fun JdbcTransaction.definitionsByProject(): Map<Int?, Map<String, Legacy
             val parameters = runCatching {
                 Json.decodeFromString(ListSerializer(ParameterInfo.serializer()), rs.getString(4) ?: "[]")
             }.getOrDefault(emptyList())
-            out.getOrPut(projectId) { HashMap() }[normalizeEffectType(rs.getString(2))] = LegacyNames.Definition(
+            out.getOrPut(projectId) { HashMap() }[normalizeFxType(rs.getString(2))] = LegacyNames.Definition(
                 outputType = rs.getString(3),
                 colourLists = parameters.filter { it.type == "colourList" }.mapTo(HashSet()) { it.name },
             )
@@ -223,7 +223,7 @@ private fun JdbcTransaction.leaveCompositeMode(projects: Map<Int, String>) {
         }
         return found
     }
-    data class Composite(val id: Int, val effectId: String, val projectId: Int?, val family: String, val outputType: String)
+    data class Composite(val id: Int, val fxId: String, val projectId: Int?, val family: String, val outputType: String)
     val composites = ArrayList<Composite>()
     exec("SELECT id, fx_id, project_id, family, output_type FROM fx_definitions WHERE fx_mode = 'COMPOSITE' OR family = 'composite'") { rs ->
         while (rs.next()) {
@@ -240,7 +240,7 @@ private fun JdbcTransaction.leaveCompositeMode(projects: Map<Int, String>) {
         logger.warn(
             "FX definition '{}' in '{}': the composite mode is gone, so it is a standard FX filed under {} — " +
                 "its script must now return one output",
-            d.effectId, d.projectId?.let { id -> projects[id] } ?: "no project", family,
+            d.fxId, d.projectId?.let { id -> projects[id] } ?: "no project", family,
         )
     }
     named("SELECT name, project_id FROM scripts WHERE script_type = 'FX_CALC_COMPOSITE'").forEach {

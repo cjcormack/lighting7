@@ -4,7 +4,7 @@ import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 /**
  * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
  * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle segment draws
- * these labels and every chip reads them through [getBeatDivisionLabel], so a cycle is never *1*
+ * these labels and every chip reads them through [getCycleLabel], so a cycle is never *1*
  * in one place and *1/4* in another. A bar is four beats (venue-visit plan D16's words), so the
  * long cycles say bars.
  *
@@ -42,7 +42,7 @@ export const BLEND_MODE_OPTIONS = [
   { value: 'MIN', label: 'Min', description: 'Use whichever is lower' },
 ] as const
 
-export const EFFECT_CATEGORY_INFO: Record<
+export const FX_FAMILY_INFO: Record<
   string,
   { label: string; icon: LucideIcon; description: string }
 > = {
@@ -54,7 +54,7 @@ export const EFFECT_CATEGORY_INFO: Record<
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
 
-const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
+const ORDER_DESCRIPTIONS: Record<string, string> = {
   NORMAL: 'Chase across heads in order',
   REVERSE: 'Chase in reverse order',
   CENTRE_OUT: 'Expand from centre to edges',
@@ -66,12 +66,12 @@ const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
 }
 
 /**
- * Every distribution strategy, worded and ordered as the FX editor's Order (`lib/orderLabels.ts`,
+ * Every Order, worded and ordered as the FX editor's Order (`lib/orderLabels.ts`,
  * effects plan §3.1) — one vocabulary, so a Look's summary and a group's *Runs as* picker say *Normal*
  * where the editor does. The stored value is the strategy's name.
  */
-export const DISTRIBUTION_STRATEGY_OPTIONS: readonly { value: string; label: string; description: string }[] =
-  ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value), description: DISTRIBUTION_DESCRIPTIONS[value] ?? '' }))
+export const ORDER_OPTION_ENTRIES: readonly { value: string; label: string; description: string }[] =
+  ORDER_OPTIONS.map((value) => ({ value, label: orderLabel(value), description: ORDER_DESCRIPTIONS[value] ?? '' }))
 
 export const ELEMENT_MODE_OPTIONS = [
   { value: 'PER_FIXTURE', label: 'Per Fixture', description: 'FX runs independently on each fixture' },
@@ -97,7 +97,7 @@ export function getElementFilterLabel(filter: string): string {
 }
 
 /** Fallback descriptions if the library API doesn't provide them */
-export const EFFECT_DESCRIPTIONS: Record<string, string> = {
+export const FX_DESCRIPTIONS: Record<string, string> = {
   sinewave: 'Smooth wave oscillation',
   rampup: 'Gradual fade up, then reset',
   rampdown: 'Gradual fade down, then reset',
@@ -126,13 +126,13 @@ export const EFFECT_DESCRIPTIONS: Record<string, string> = {
   slotsteps: 'Steps a gobo or colour wheel through named slots — each head to its own level for each',
 }
 
-export function getEffectDescription(effectName: string, libraryDescription?: string): string {
+export function getFxDescription(fxName: string, libraryDescription?: string): string {
   if (libraryDescription) return libraryDescription
-  return EFFECT_DESCRIPTIONS[effectName.toLowerCase()] ?? effectName
+  return FX_DESCRIPTIONS[fxName.toLowerCase()] ?? fxName
 }
 
-export function getDistributionLabel(strategy: string): string {
-  return ORDER_LABELS[strategy] ?? strategy.toLowerCase()
+export function getOrderLabel(order: string): string {
+  return ORDER_LABELS[order] ?? order.toLowerCase()
 }
 
 /**
@@ -140,24 +140,24 @@ export function getDistributionLabel(strategy: string): string {
  * follows a master, seconds for one on *Seconds* (venue-visit plan D7): a beat effect with
  * [seconds] set, or any `WALL_CLOCK` effect, whose division is seconds already.
  *
- * `beatDivision` carries both readings on one field, and they are a tempo apart: `2` is two beats
+ * `cycle` carries both readings on one field, and they are a tempo apart: `2` is two beats
  * or two seconds, and only the timing says which. Everything that renders a speed away from the
- * live editor's fields (`FxEffectFields`, which have the library entry in hand and label the input
+ * live editor's fields (`FxFields`, which have the library entry in hand and label the input
  * themselves) goes through this, so no surface has to re-derive the rule and none can get it half
  * right.
  *
  * **Null when the timing source is unknown**, and callers should then say nothing about the speed.
- * That happens for a template whose stored `effectType` no longer resolves in the registry — an
+ * That happens for a template whose stored `fxType` no longer resolves in the registry — an
  * import from a desk carrying script-registered effects this one does not have. A confident
  * "2 bars" for a two-second cycle is worse than an absent clause.
  */
-export function effectSpeedLabel(
-  beatDivision: number,
+export function fxSpeedLabel(
+  cycle: number,
   timingSource: string | null | undefined,
   seconds = false,
 ): string | null {
   if (timingSource == null) return null
-  return seconds || timingSource === 'WALL_CLOCK' ? secondsLabel(beatDivision) : getBeatDivisionLabel(beatDivision)
+  return seconds || timingSource === 'WALL_CLOCK' ? secondsLabel(cycle) : getCycleLabel(cycle)
 }
 
 /** A cycle in seconds — `4 s`, `0.5 s`. */
@@ -166,13 +166,13 @@ export function secondsLabel(seconds: number): string {
 }
 
 /** A division in beats a cycle, from [SPEED_STEPS] — `1 bar`, `½ beat`, `3 beats` off the table. */
-export function getBeatDivisionLabel(beatDivision: number): string {
-  const step = SPEED_STEPS.find((o) => Math.abs(o.value - beatDivision) < 0.001)
+export function getCycleLabel(cycle: number): string {
+  const step = SPEED_STEPS.find((o) => Math.abs(o.value - cycle) < 0.001)
   if (step) return step.label
-  const fraction = FRACTION_GLYPHS.find((f) => Math.abs(f.value - beatDivision) < 0.001)
+  const fraction = FRACTION_GLYPHS.find((f) => Math.abs(f.value - cycle) < 0.001)
   if (fraction) return `${fraction.glyph} beat`
-  if (beatDivision >= 4 && Math.abs(beatDivision / 4 - Math.round(beatDivision / 4)) < 0.001) {
-    return `${Math.round(beatDivision / 4)} bars`
+  if (cycle >= 4 && Math.abs(cycle / 4 - Math.round(cycle / 4)) < 0.001) {
+    return `${Math.round(cycle / 4)} bars`
   }
-  return `${trimNumber(beatDivision)} ${beatDivision === 1 ? 'beat' : 'beats'}`
+  return `${trimNumber(cycle)} ${cycle === 1 ? 'beat' : 'beats'}`
 }

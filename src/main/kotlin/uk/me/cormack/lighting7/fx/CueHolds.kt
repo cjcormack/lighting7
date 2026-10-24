@@ -5,10 +5,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.dmx.EasingCurve
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
-import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.models.FxTargetsRef
+import uk.me.cormack.lighting7.models.LookFxSpec
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.telemetry.Tracing
 
@@ -55,7 +55,7 @@ sealed interface CueHold {
  *
  * - A held cue is **edited since GO** ([markEdited], show-cue-editing plan §3.5) when a write
  *   changes what *Update stage* sends of it, or a Look or palette it layers moves its effects
- *   ([markIfLayerEffectsMoved]): the stage still shows what it was when it came on. Its first hold,
+ *   ([markIfLayerFxMoved]): the stage still shows what it was when it came on. Its first hold,
  *   *Update stage* ([clearEdited]) and its last release clear the mark; a Record or Update republish
  *   does not, since it moves the rows alone.
  *
@@ -77,7 +77,7 @@ class CueHolds internal constructor(
     /** Called after every change, outside [lock]: the surfaces' cue-pad LEDs re-read [looseHeld]. */
     private val onChanged: () -> Unit,
     /** How a run handed on with new settings is edited in place, and edited back when it is given back. */
-    private val aligner: EffectAligner,
+    private val aligner: FxAligner,
 ) {
     /** The bank a press sets the cue's speed masters on ([takeLooseCue]). */
     internal val speedMasters: SpeedMasterBank get() = fxEngine.speedMasters
@@ -85,39 +85,39 @@ class CueHolds internal constructor(
     /**
      * How an acquire's contribution arrives: at full now, or from nothing over the GO's fade — its
      * rows at weight 0 for the caller's crossfade to raise, its effects' envelopes on a ramp of
-     * their own ([EffectEnvelope]) over the same time and curve.
+     * their own ([FxEnvelope]) over the same time and curve.
      */
     enum class Arrival { SNAP, FADE_IN }
 
     /**
      * How a release's contribution leaves: dropped now, or over the GO's fade — its rows left at full
      * weight for the caller's crossfade to take down, its effects shrinking to nothing on their own
-     * ramp and removed at 0 ([FxEngine.fadeOutEffects]).
+     * ramp and removed at 0 ([FxEngine.fadeOutFx]).
      */
     enum class Departure { SNAP, FADE_OUT }
 
     /**
      * [first] when this hold brought the cue on; [hasRows] when it published Layer 4 rows;
-     * [fadingEffects] how many of its effects are growing from below full — spawned at nothing, or
+     * [fadingFx] how many of its effects are growing from below full — spawned at nothing, or
      * taken back from a fade-out — which a crossfade must be started for, as for rows; [adopted] what
      * it took over from the cue its GO takes off.
      */
     data class Acquired(
         val first: Boolean,
-        val effectCount: Int,
+        val fxCount: Int,
         val hasRows: Boolean,
-        val fadingEffects: Int = 0,
+        val fadingFx: Int = 0,
         /** What this hold took over from the acquire's `adoptFrom` (P4), for [giveBack]. */
         val adopted: List<Adoption> = emptyList(),
     )
 
     /**
      * [last] when this release took the cue off; [fadingRows] when its rows are left for a crossfade;
-     * [fadingEffects] how many of its effects are shrinking to nothing rather than removed.
+     * [fadingFx] how many of its effects are shrinking to nothing rather than removed.
      */
-    data class Released(val last: Boolean, val effectsRemoved: Int, val fadingRows: Boolean, val fadingEffects: Int = 0) {
+    data class Released(val last: Boolean, val fxRemoved: Int, val fadingRows: Boolean, val fadingFx: Int = 0) {
         companion object {
-            val NOT_HELD = Released(last = false, effectsRemoved = 0, fadingRows = false)
+            val NOT_HELD = Released(last = false, fxRemoved = 0, fadingRows = false)
         }
     }
 
@@ -150,16 +150,16 @@ class CueHolds internal constructor(
 
     /**
      * What each held cue's untimed effects were when it came on or was last brought in line, by
-     * [CueEffectKey]: *Update stage* starts only an effect that is not here, so one that ran out its
+     * [CueFxKey]: *Update stage* starts only an effect that is not here, so one that ran out its
      * N-shot or that a stomp took off stays off.
      */
-    private val spawnedEffects = HashMap<Int, Set<CueEffectKey>>()
+    private val spawnedFx = HashMap<Int, Set<CueFxKey>>()
 
     /**
      * What each held cue's untimed layer effects cooked to at the same moments, as their Looks and
      * palettes held them — so an edit to one of those that moves its effects marks the cue.
      */
-    private val cookedLayerEffects = HashMap<Int, Set<LayerEffectKey>>()
+    private val cookedLayerFx = HashMap<Int, Set<LayerFxKey>>()
     private var looseSeq = 0L
 
     @Volatile private var view: Map<Int, LiveCue> = emptyMap()
@@ -196,29 +196,29 @@ class CueHolds internal constructor(
 
     fun isEdited(cueId: Int): Boolean = view[cueId]?.edited == true
 
-    /** [cueId]'s [spawnedEffects], empty when nothing holds it. */
-    internal fun spawnedEffectsOf(cueId: Int): Set<CueEffectKey> = synchronized(lock) { spawnedEffects[cueId].orEmpty() }
+    /** [cueId]'s [spawnedFx], empty when nothing holds it. */
+    internal fun spawnedFxOf(cueId: Int): Set<CueFxKey> = synchronized(lock) { spawnedFx[cueId].orEmpty() }
 
     /**
-     * Record what held [cueId]'s effects are now — [keys] spawned, its [layerEffects] cooked to —
+     * Record what held [cueId]'s effects are now — [keys] spawned, its [layerFx] cooked to —
      * after *Update stage* brought them in line.
      */
-    internal fun setSpawnedEffects(cueId: Int, keys: Set<CueEffectKey>, layerEffects: List<CookedLayerEffect>) {
+    internal fun setSpawnedFx(cueId: Int, keys: Set<CueFxKey>, layerFx: List<CookedLayerFx>) {
         synchronized(lock) {
             if (cueId !in live) return
-            spawnedEffects[cueId] = keys
-            cookedLayerEffects[cueId] = layerEffects.keys()
+            spawnedFx[cueId] = keys
+            cookedLayerFx[cueId] = layerFx.keys()
         }
     }
 
     /**
-     * Mark held [cueId] edited since GO when its untimed layer effects now cook to [layerEffects]
+     * Mark held [cueId] edited since GO when its untimed layer effects now cook to [layerFx]
      * rather than what they cooked to as it came on or was last brought in line: a Look or palette
      * it layers changed its effects, which its rows' republish does not move. Answers whether the
      * mark is new.
      */
-    internal fun markIfLayerEffectsMoved(cueId: Int, layerEffects: List<CookedLayerEffect>): Boolean {
-        val moved = synchronized(lock) { cookedLayerEffects[cueId]?.let { it != layerEffects.keys() } == true }
+    internal fun markIfLayerFxMoved(cueId: Int, layerFx: List<CookedLayerFx>): Boolean {
+        val moved = synchronized(lock) { cookedLayerFx[cueId]?.let { it != layerFx.keys() } == true }
         return moved && markEdited(cueId)
     }
 
@@ -314,7 +314,7 @@ class CueHolds internal constructor(
         try {
             if (!first) {
                 fxEngine.repriorityCues(mapOf(cueId to priority))
-                return Acquired(first = false, effectCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
+                return Acquired(first = false, fxCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
             }
             // A cue a crossfade elsewhere is still taking down is on again: that fade must stop
             // touching it, or it would pin it back to 0 and drop its rows at its end, and cut its
@@ -371,7 +371,7 @@ class CueHolds internal constructor(
         try {
             if (remaining != null) {
                 fxEngine.repriorityCues(mapOf(cueId to remaining))
-                return Released(last = false, effectsRemoved = 0, fadingRows = false)
+                return Released(last = false, fxRemoved = 0, fadingRows = false)
             }
             return takeOff(state, cueId, if (departure == Departure.FADE_OUT) Fade(fadeMs, curve, crossfade = true) else Fade.SNAP)
         } finally {
@@ -409,7 +409,7 @@ class CueHolds internal constructor(
         val acquired = if (registered == null) {
             priorityOf(cueId)?.let { fxEngine.repriorityCues(mapOf(cueId to it)) }
             onChanged()
-            Acquired(first = false, effectCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
+            Acquired(first = false, fxCount = 0, hasRows = fxEngine.cueLayer.hasAssignments(cueId))
         } else {
             val (first, priority) = registered
             afterRegister(state, data, hold, first, priority, Fade.SNAP, scope, fireEvents, stackTag = null, adoptFrom = null)
@@ -428,7 +428,7 @@ class CueHolds internal constructor(
 
     /** Every loose hold but [exceptCueId]'s — `replaceAll`. A stack's holds are never touched (§3.4). */
     internal fun dropAllLoose(state: State, exceptCueId: Int? = null): Int =
-        view.values.filter { it.looseHeld && it.cueId != exceptCueId }.sumOf { dropLoose(state, it.cueId).effectsRemoved }
+        view.values.filter { it.looseHeld && it.cueId != exceptCueId }.sumOf { dropLoose(state, it.cueId).fxRemoved }
 
     /**
      * Let every hold on [cueId] go, at once — a deleted cue (a forced delete releases every hold
@@ -438,7 +438,7 @@ class CueHolds internal constructor(
     internal fun dropAll(state: State, cueId: Int): Int {
         val holds = view[cueId]?.holds.orEmpty()
         var removed = 0
-        for (hold in holds) removed += release(state, cueId, hold, Departure.SNAP).effectsRemoved
+        for (hold in holds) removed += release(state, cueId, hold, Departure.SNAP).fxRemoved
         if (holds.any { it is CueHold.Loose }) state.sceneryService.onLooseReleased(cueId)
         return removed
     }
@@ -503,8 +503,8 @@ class CueHolds internal constructor(
         synchronized(lock) {
             live.clear()
             editedSinceGo.clear()
-            spawnedEffects.clear()
-            cookedLayerEffects.clear()
+            spawnedFx.clear()
+            cookedLayerFx.clear()
             publishLocked()
             closed = true
             if (sink.value === lastFrame) sink.value = Frame.EMPTY
@@ -548,7 +548,7 @@ class CueHolds internal constructor(
         val cueId = data.cueId
         val priority = cueDerivedPriority(data)
         warnDeadAssignments(state, data)
-        val (immediateAdHoc, timedAdHoc) = data.adHocEffects.partition { it.delayMs == null && it.intervalMs == null }
+        val (immediateAdHoc, timedAdHoc) = data.adHocFx.partition { it.delayMs == null && it.intervalMs == null }
         val cooked = Tracing.span("cue.compose") {
             CueComposer.cookAll(
                 fixtures = state.show.fixtures,
@@ -557,7 +557,7 @@ class CueHolds internal constructor(
                 layers = data.layers,
                 localRows = buildCueAssignmentsForCue(state.show.fixtures, data),
                 resolveLook = state.show.lookRegistry::snapshot,
-                resolveTemplate = state.show.templateRegistry::snapshot,
+                resolvePalette = state.show.paletteRegistry::snapshot,
             )
         }
 
@@ -566,7 +566,7 @@ class CueHolds internal constructor(
         // In compose order, so which of two instances sharing a key is handed on never depends on
         // the engine's map order.
         val adoptable = adoptFrom?.let { from ->
-            fxEngine.cueEffects(from).filter { it.layerEffectUuid != null && it.mayContinue() }
+            fxEngine.cueFx(from).filter { it.layerFxUuid != null && it.mayContinue() }
                 .sortedWith(compareBy({ it.composeOrder }, { it.id })).toMutableList()
         } ?: mutableListOf()
         val master1 = fxEngine.speedMasters.master1Uuid()
@@ -598,12 +598,12 @@ class CueHolds internal constructor(
                     if (running != null) {
                         adopted += Adoption(
                             running, fresh.tagged(cueId, stackTag, priority), continuing.cueId, continuing.cueStackId,
-                            continuing.priority, continuing.source, continuing.cueLayerId, continuing.layerEffectUuid, was,
+                            continuing.priority, continuing.source, continuing.cueLayerId, continuing.layerFxUuid, was,
                         )
-                        fxEngine.retagEffects(listOf(running)) {
+                        fxEngine.retagFx(listOf(running)) {
                             it.source = layer?.source
                             it.cueLayerId = layer?.layerId
-                            it.layerEffectUuid = fresh.layerEffectUuid
+                            it.layerFxUuid = fresh.layerFxUuid
                             it.tagged(cueId, stackTag, priority)
                         }
                         ordered += running
@@ -613,34 +613,34 @@ class CueHolds internal constructor(
                 spawning += fresh.tagged(cueId, stackTag, priority)
                 ordered += fresh
             }
-            val fresh = cueEffectInstances(state, cueId, cooked.effects, immediateAdHoc)
+            val fresh = cueFxInstances(state, cueId, cooked.effects, immediateAdHoc)
             synchronized(lock) {
                 if (cueId in live) {
-                    spawnedEffects[cueId] = fresh.mapTo(HashSet()) { it.first.cueEffectKey() }
-                    cookedLayerEffects[cueId] = cooked.effects.keys()
+                    spawnedFx[cueId] = fresh.mapTo(HashSet()) { it.first.cueFxKey() }
+                    cookedLayerFx[cueId] = cooked.effects.keys()
                 }
             }
             for ((instance, layer) in fresh) arrive(instance, layer)
 
             // On a fade they arrive from nothing, set before the add so no pass paints them at full.
             if (fade.fades) {
-                for (instance in spawning) instance.carryEnvelope(EffectEnvelope.ramp(0.0, 1.0, fade.durationMs, fade.curve, nowMs))
+                for (instance in spawning) instance.carryEnvelope(FxEnvelope.ramp(0.0, 1.0, fade.durationMs, fade.curve, nowMs))
             }
-            fxEngine.addEffects(spawning)
+            fxEngine.addFxBatch(spawning)
             span?.setData("cue.effects", spawning.size)
             span?.setData("cue.effects_continuing", adopted.size + kept.size)
         }
         // Its own instances under the hold that took it back, from where they stand; and what it no
         // longer cooks to finishes going.
         if (kept.isNotEmpty()) {
-            fxEngine.retagEffects(kept) {}
-            if (fade.fades) fxEngine.fadeInEffects(kept, fade.durationMs, fade.curve, nowMs) else fxEngine.settleEffects(kept)
+            fxEngine.retagFx(kept) {}
+            if (fade.fades) fxEngine.fadeInFx(kept, fade.durationMs, fade.curve, nowMs) else fxEngine.settleFx(kept)
         }
-        if (keptPool.isNotEmpty()) fxEngine.fadeOutEffects(keptPool, if (fade.fades) fade.durationMs else 0, fade.curve, nowMs)
+        if (keptPool.isNotEmpty()) fxEngine.fadeOutFx(keptPool, if (fade.fades) fade.durationMs else 0, fade.curve, nowMs)
         // An instance carried over keeps its old compose order; the cue's layer order decides.
         if (kept.isNotEmpty() || adopted.isNotEmpty()) fxEngine.restampComposeOrder(ordered)
-        val fadingEffects = if (fade.fades) spawning.size + kept.size else 0
-        val effectCount = ordered.size
+        val fadingFx = if (fade.fades) spawning.size + kept.size else 0
+        val fxCount = ordered.size
 
         // Its rows. On a crossfade the cue arrives at weight 0 atomically with the insert and the
         // driver raises it; a crossfade is already the transition, so its rows' own fades are not
@@ -660,43 +660,43 @@ class CueHolds internal constructor(
 
         // Its timed effects and its triggers, on every hold's first — a loose cue's included (§3.4).
         if (data.layers.any { it.enabled && it.isTimed } || timedAdHoc.isNotEmpty()) {
-            state.cueTriggerManager.activateTimedEffectsForCue(
+            state.cueTriggerManager.activateTimedFxForCue(
                 cueId = cueId,
                 cueStackId = stackTag,
                 priority = { priorityOf(cueId) ?: priority },
                 cueData = data,
-                timedAdHocEffects = timedAdHoc,
+                timedAdHocFx = timedAdHoc,
                 scope = scope,
             )
         }
         if (data.triggers.isNotEmpty()) {
             state.cueTriggerManager.activateTriggersForCue(cueId = cueId, cueStackId = stackTag, triggers = data.triggers, scope = scope)
         }
-        return Acquired(first = true, effectCount = effectCount, hasRows = hasRows, fadingEffects = fadingEffects, adopted = adopted.toList())
+        return Acquired(first = true, fxCount = fxCount, hasRows = hasRows, fadingFx = fadingFx, adopted = adopted.toList())
     }
 
     /**
      * The instances a cue's untimed effects spawn — each cooked layer effect, then each ad-hoc one,
      * in that order, with the layer it came from (null for an ad-hoc one) — built and not added.
-     * Each carries its stored effect's uuid in [FxInstance.layerEffectUuid]: a Look or palette
+     * Each carries its stored effect's uuid in [FxInstance.layerFxUuid]: a Look or palette
      * effect's for a layer's, the cue's own row's for an ad-hoc one. What [bringOn] arrives and
      * *Update stage* reconciles the running instances against. An unresolvable target is skipped.
      */
-    internal fun cueEffectInstances(
+    internal fun cueFxInstances(
         state: State,
         cueId: Int,
-        layerEffects: List<Triple<CookLayer, StoredEffect, EffectTargetRef>>,
-        adHocEffects: List<CueAdHocEffectDto>,
+        layerFx: List<Triple<CookLayer, StoredFx, FxTargetsRef>>,
+        adHocFx: List<CueAdHocFxDto>,
     ): List<Pair<FxInstance, CookLayer?>> = buildList {
-        for ((layer, lookEffect, target) in layerEffects) {
-            val spec = lookEffect.toEffectSpec()
+        for ((layer, storedFx, target) in layerFx) {
+            val spec = storedFx.toFxSpec()
             val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, target, spec)
+                FxSpawner.resolveTargetForCue(state, target, spec)
             } catch (e: Exception) {
                 logger.warn("cue {}: layer on '{}' — target '{}' unresolvable — skipping effect: {}", cueId, layer.source.name, target.key, e.message)
                 null
             } ?: continue
-            val instance = EffectSpawner.createEffectInstanceOrNull(
+            val instance = FxSpawner.createFxInstanceOrNull(
                 spec, fxTarget, state = state,
                 context = "cue $cueId: layer on '${layer.source.name}'",
                 overrideSpeedMasterUuid = layer.speedMasterUuid,
@@ -706,22 +706,22 @@ class CueHolds internal constructor(
             // `FxInstance.lookId` derives the Look-only id from it.
             instance.source = layer.source
             instance.cueLayerId = layer.layerId
-            instance.layerEffectUuid = lookEffect.uuid
+            instance.layerFxUuid = storedFx.uuid
             add(instance to layer)
         }
-        for (adHoc in adHocEffects) {
-            val spec = adHoc.toLookEffectSpec()
+        for (adHoc in adHocFx) {
+            val spec = adHoc.toLookFxSpec()
             val fxTarget = try {
-                EffectSpawner.resolveTargetForCue(state, adHoc.target, spec)
+                FxSpawner.resolveTargetForCue(state, adHoc.target, spec)
             } catch (e: Exception) {
                 logger.warn("cue {}: ad-hoc effect on '{}' — target unresolvable — skipping: {}", cueId, adHoc.targetKey, e.message)
                 null
             } ?: continue
-            val instance = EffectSpawner.createEffectInstanceOrNull(spec, fxTarget, state, "cue $cueId: ad-hoc effect on '${adHoc.targetKey}'")
+            val instance = FxSpawner.createFxInstanceOrNull(spec, fxTarget, state, "cue $cueId: ad-hoc effect on '${adHoc.targetKey}'")
                 ?: continue
             // Its own row's uuid: what a cue taken back matches its own instance on, and *Update
             // stage* reconciles by. Across a GO it is the run key that hands it on.
-            instance.layerEffectUuid = adHoc.uuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
+            instance.layerFxUuid = adHoc.uuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
             instance.runUuid = adHoc.runUuid?.let { runCatching { java.util.UUID.fromString(it) }.getOrNull() }
             add(instance to null)
         }
@@ -733,8 +733,8 @@ class CueHolds internal constructor(
      * reached 0 is gone, and the cook spawns that effect afresh.
      */
     private fun takeBack(cueId: Int): List<FxInstance> {
-        val leaving = fxEngine.leavingCueEffects(cueId)
-        return if (leaving.isEmpty()) emptyList() else fxEngine.reclaimEffects(leaving)
+        val leaving = fxEngine.leavingCueFx(cueId)
+        return if (leaving.isEmpty()) emptyList() else fxEngine.reclaimFx(leaving)
     }
 
     /**
@@ -744,16 +744,16 @@ class CueHolds internal constructor(
      * is two effects: one leaves and one arrives.
      */
     private fun FxInstance.continues(fresh: FxInstance): Boolean =
-        layerEffectUuid != null && layerEffectUuid == fresh.layerEffectUuid &&
+        layerFxUuid != null && layerFxUuid == fresh.layerFxUuid &&
             target.targetRef == fresh.target.targetRef &&
             target.propertyName == fresh.target.propertyName &&
-            fxEngine.speedMasters.master1Uuid().let { comparableEffectSettings(it) == fresh.comparableEffectSettings(it) }
+            fxEngine.speedMasters.master1Uuid().let { comparableFxSettings(it) == fresh.comparableFxSettings(it) }
 
     /**
      * Whether another cue may take this instance over (P4): not a paused one — the
      * incoming cue's effect starts running — and not an N-shot, which is an accent each GO fires.
      */
-    private fun FxInstance.mayContinue(): Boolean = isRunning && dynamics.nShot == null
+    private fun FxInstance.mayContinue(): Boolean = isRunning && dynamics.runs == null
 
     /**
      * Whether this live instance runs the effect run [fresh] continues (stack-timeline plan D7): an
@@ -762,7 +762,7 @@ class CueHolds internal constructor(
      * GO fires afresh, as [mayContinue] keeps one from being handed on.
      */
     private fun FxInstance.handsRunTo(fresh: FxInstance): Boolean =
-        fresh.dynamics.nShot == null &&
+        fresh.dynamics.runs == null &&
             cueLayerId == null && runUuid != null && runUuid == fresh.runUuid &&
             target.targetRef == fresh.target.targetRef &&
             target.propertyName == fresh.target.propertyName
@@ -780,8 +780,8 @@ class CueHolds internal constructor(
         val fromPriority: Int,
         val fromSource: uk.me.cormack.lighting7.models.LayerSource?,
         val fromLayerId: Int?,
-        val fromLayerEffectUuid: java.util.UUID?,
-        val fromSettings: EffectSettingsSnapshot,
+        val fromLayerFxUuid: java.util.UUID?,
+        val fromSettings: FxSettingsSnapshot,
     )
 
     /**
@@ -795,7 +795,7 @@ class CueHolds internal constructor(
         val master1 = fxEngine.speedMasters.master1Uuid()
         // An edit can swap the instance, so each is read back by id; one gone meanwhile has nothing to give back.
         val returning = adoptions.mapNotNull { a ->
-            val current = fxEngine.getEffect(a.instance.id) ?: return@mapNotNull null
+            val current = fxEngine.getFx(a.instance.id) ?: return@mapNotNull null
             val now = current.settingsSnapshot(master1)
             val restored = if (now.settings == a.fromSettings.settings) current else aligner.align(state, current.id, now, a.fromSettings)
             // Left as the taking cue had it: its own cue is then not what the stage shows.
@@ -805,18 +805,18 @@ class CueHolds internal constructor(
             }
             (restored ?: current) to a
         }
-        fxEngine.retagEffects(returning.map { it.first }) { instance ->
+        fxEngine.retagFx(returning.map { it.first }) { instance ->
             val a = returning.first { it.first === instance }.second
             instance.cueId = a.fromCueId
             instance.cueStackId = a.fromStackId
             instance.priority = a.fromCueId?.let { priorityOf(it) } ?: a.fromPriority
             instance.source = a.fromSource
             instance.cueLayerId = a.fromLayerId
-            instance.layerEffectUuid = a.fromLayerEffectUuid
+            instance.layerFxUuid = a.fromLayerFxUuid
         }
         if (respawnFor != null) {
             val priority = priorityOf(respawnFor) ?: adoptions.first().instance.priority
-            fxEngine.addEffects(adoptions.map { a -> a.fresh.also { it.priority = priority } })
+            fxEngine.addFxBatch(adoptions.map { a -> a.fresh.also { it.priority = priority } })
         }
     }
 
@@ -830,10 +830,10 @@ class CueHolds internal constructor(
      */
     private fun takeOff(state: State, cueId: Int, fade: Fade): Released {
         state.cueTriggerManager.deactivateTriggersForCue(cueId)
-        val (removed, fadingEffects) = if (fade.fades) {
-            0 to fxEngine.fadeOutEffects(fxEngine.cueEffects(cueId), fade.durationMs, fade.curve)
+        val (removed, fadingFx) = if (fade.fades) {
+            0 to fxEngine.fadeOutFx(fxEngine.cueFx(cueId), fade.durationMs, fade.curve)
         } else {
-            fxEngine.removeCueEffects(cueId) to 0
+            fxEngine.removeCueFx(cueId) to 0
         }
         val fading = fade.crossfade && fxEngine.cueLayer.hasAssignments(cueId)
         if (fading) {
@@ -842,7 +842,7 @@ class CueHolds internal constructor(
         } else {
             fxEngine.cueLayer.removeAssignments(cueId)
         }
-        return Released(last = true, effectsRemoved = removed, fadingRows = fading, fadingEffects = fadingEffects)
+        return Released(last = true, fxRemoved = removed, fadingRows = fading, fadingFx = fadingFx)
     }
 
     /**
@@ -894,8 +894,8 @@ class CueHolds internal constructor(
     private fun forgetLocked(cueId: Int) {
         live.remove(cueId)
         editedSinceGo.remove(cueId)
-        spawnedEffects.remove(cueId)
-        cookedLayerEffects.remove(cueId)
+        spawnedFx.remove(cueId)
+        cookedLayerFx.remove(cueId)
     }
 
     /** Rebuild [view] and the frame from [live]. Under [lock]. */
@@ -945,37 +945,37 @@ class CueHolds internal constructor(
 }
 
 /** An ad-hoc cue effect as the spawner takes it. */
-internal fun CueAdHocEffectDto.toLookEffectSpec() = LookEffectSpec(
-    effectType = effectType,
-    category = category,
+internal fun CueAdHocFxDto.toLookFxSpec() = LookFxSpec(
+    fxType = fxType,
+    family = family,
     propertyName = propertyName,
-    beatDivision = beatDivision,
+    cycle = cycle,
     blendMode = blendMode,
-    distribution = distribution,
+    order = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTiming,
+    timing = timing,
     parameters = parameters,
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
     seconds = seconds,
-    size = size,
+    amount = amount,
     direction = direction,
-    nShot = nShot,
+    runs = runs,
     spread = spread,
     wings = wings,
-    blocks = blocks,
-    groups = groups,
+    segments = segments,
+    parts = parts,
 )
 
 /**
- * Edits running effect `effectId` in place from `from`'s settings to `to`'s, phase kept, answering the
+ * Edits running effect `fxId` in place from `from`'s settings to `to`'s, phase kept, answering the
  * instance running now (an edit can swap it), or null when the edit was refused or the effect is gone
- * — `routes.alignEffect`, handed in so `fx/` does not import `routes/`.
+ * — `routes.alignFx`, handed in so `fx/` does not import `routes/`.
  */
-fun interface EffectAligner {
-    fun align(state: State, effectId: Long, from: EffectSettingsSnapshot, to: EffectSettingsSnapshot): FxInstance?
+fun interface FxAligner {
+    fun align(state: State, fxId: Long, from: FxSettingsSnapshot, to: FxSettingsSnapshot): FxInstance?
 }
 
 /** What a loose press did: the cue's name, and whether it brought the cue on. */
@@ -1009,22 +1009,22 @@ internal fun CueHolds.takeLooseCue(
  */
 internal fun CueHolds.toggleLooseCue(state: State, cueId: Int, scope: CoroutineScope = kotlinx.coroutines.GlobalScope): Pair<Boolean, Int>? =
     if (looseHeld(cueId)) {
-        false to dropLoose(state, cueId).effectsRemoved
+        false to dropLoose(state, cueId).fxRemoved
     } else {
-        takeLooseCue(state, cueId, scope = scope)?.let { true to it.acquired.effectCount }
+        takeLooseCue(state, cueId, scope = scope)?.let { true to it.acquired.fxCount }
     }
 
 /** One effect a cue runs: its stored effect's uuid, the layer it came through (none for an ad-hoc one), its target and property. */
-internal data class CueEffectKey(val uuid: java.util.UUID?, val layerId: Int?, val target: FxTargetRef, val propertyName: String)
+internal data class CueFxKey(val uuid: java.util.UUID?, val layerId: Int?, val target: FxTargetRef, val propertyName: String)
 
-internal fun FxInstance.cueEffectKey() = CueEffectKey(layerEffectUuid, cueLayerId, target.targetRef, target.propertyName)
+internal fun FxInstance.cueFxKey() = CueFxKey(layerFxUuid, cueLayerId, target.targetRef, target.propertyName)
 
 /** One layer effect a cue's cook names: its layer, its stored effect and its target. */
-internal typealias CookedLayerEffect = Triple<CookLayer, StoredEffect, EffectTargetRef>
+internal typealias CookedLayerFx = Triple<CookLayer, StoredFx, FxTargetsRef>
 
-/** A [CookedLayerEffect] by its layer's row id, so a change to the cue's own layer is not one to its Look. */
-internal data class LayerEffectKey(val layerId: Int, val effect: StoredEffect, val target: EffectTargetRef)
+/** A [CookedLayerFx] by its layer's row id, so a change to the cue's own layer is not one to its Look. */
+internal data class LayerFxKey(val layerId: Int, val effect: StoredFx, val target: FxTargetsRef)
 
 /** The untimed ones of these, as keys: timed layers' effects are fired, never spawned on GO. */
-private fun List<CookedLayerEffect>.keys(): Set<LayerEffectKey> =
-    filter { (layer, _, _) -> !layer.isTimed }.mapTo(HashSet()) { (layer, effect, target) -> LayerEffectKey(layer.layerId, effect, target) }
+private fun List<CookedLayerFx>.keys(): Set<LayerFxKey> =
+    filter { (layer, _, _) -> !layer.isTimed }.mapTo(HashSet()) { (layer, effect, target) -> LayerFxKey(layer.layerId, effect, target) }

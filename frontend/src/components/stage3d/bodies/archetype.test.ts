@@ -21,7 +21,7 @@ import {
 import { beamMask, focusBlur } from '../beamMask'
 import { resolveEdgeHardness } from '../beamOptics'
 import { bodyFrames } from './bodyGeometry'
-import { RING_INNER } from '../../../lib/ringEffect'
+import { RING_INNER } from '../../../lib/ringFx'
 import focusInverse from '../../../../../src/test/resources/stage/focusInverse.fixture.json'
 import { indexLanterns, type Lantern } from '../../../lib/lanterns'
 // The desk's own library resource, read straight from the backend's tree — so the lanterns this

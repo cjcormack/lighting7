@@ -19,13 +19,13 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import kotlinx.serialization.json.jsonObject
 import uk.me.cormack.lighting7.ai.AiTools
-import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.FxTiming
 import uk.me.cormack.lighting7.fx.SliderTarget
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -63,9 +63,9 @@ class CueChildIdentityTest : RouteIntegrationTest() {
 
     private fun base() = "/api/rest/projects/$projectId/cues"
 
-    private val pulse = CueAdHocEffectDto(
-        targetType = "fixture", targetKey = "hex-1", effectType = "Pulse", category = "intensity",
-        propertyName = "dimmer", beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
+    private val pulse = CueAdHocFxDto(
+        targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
+        propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
     private fun rows() = listOf(
@@ -104,7 +104,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         // spelled the other way, one row dropped and one added, everything else as it was.
         val input = cue.asInput().let { input ->
             input.copy(
-                adHocEffects = input.adHocEffects.map { it.copy(beatDivision = 2.0, parameters = mapOf("min" to "40")) },
+                adHocFx = input.adHocFx.map { it.copy(cycle = 2.0, parameters = mapOf("min" to "40")) },
                 propertyAssignments = input.propertyAssignments
                     .filterNot { it.propertyName == "uv" }
                     .map { if (it.targetKey == "hex-2") it.copy(propertyName = "colour") else it } +
@@ -129,14 +129,14 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertFalse(Row("hex-1", "uv") in after.rows, "dropped")
         assertFalse(after.rows.getValue(Row("hex-2", "dimmer")) in before.rows.values, "added with a fresh uuid")
 
-        val effect = response.body<CueDetails>().adHocEffects.single()
-        assertEquals(2.0, effect.beatDivision)
+        val effect = response.body<CueDetails>().adHocFx.single()
+        assertEquals(2.0, effect.cycle)
         assertEquals(before.effects.single().toString(), effect.uuid, "the answer names the effect it kept")
 
         // Another effect type on the same property is a new effect, not this one edited.
         val swapped = client.put("${base()}/${cue.id}") {
             contentType(ContentType.Application.Json)
-            setBody(input.copy(adHocEffects = listOf(pulse.copy(effectType = "RampUp"))))
+            setBody(input.copy(adHocFx = listOf(pulse.copy(fxType = "RampUp"))))
         }
         assertEquals(HttpStatusCode.OK, swapped.status, swapped.bodyAsText())
         assertNotEquals(before.effects, children(cue.id).effects)
@@ -157,7 +157,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
                     CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "10", sortOrder = 5),
                     CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "20", sortOrder = 1),
                 ),
-                adHocEffects = listOf(pulse.copy(sortOrder = 4), pulse.copy(sortOrder = 2)),
+                adHocFx = listOf(pulse.copy(sortOrder = 4), pulse.copy(sortOrder = 2)),
                 layers = listOf(
                     CueLayerDto(lookId = warm, sortOrder = 3, delayMs = 1_000L),
                     CueLayerDto(lookId = warm, sortOrder = 0),
@@ -165,7 +165,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             ),
         )
         transaction(state.database) {
-            val (first, second) = DaoCue.findById(created.id)!!.adHocEffects.sortedBy { it.id.value }
+            val (first, second) = DaoCue.findById(created.id)!!.adHocFx.sortedBy { it.id.value }
             first.sortOrder = 4
             second.sortOrder = 2
         }
@@ -177,7 +177,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
                 NewCue(
                     name = "twice",
                     propertyAssignments = listOf(CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "30", sortOrder = 0)),
-                    adHocEffects = listOf(pulse.copy(sortOrder = 0)),
+                    adHocFx = listOf(pulse.copy(sortOrder = 0)),
                     layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0)),
                 ),
             )
@@ -197,13 +197,13 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val (warm, cool) = client.twoLooks()
-        val dynamics = pulse.copy(seconds = true, beatDivision = 2.0, size = 0.5, direction = "BOUNCE", nShot = 3)
-        val chase = pulse.copy(targetKey = "hex-2", effectType = "SineWave", sortOrder = 1)
+        val dynamics = pulse.copy(seconds = true, cycle = 2.0, amount = 0.5, direction = "BOUNCE", runs = 3)
+        val chase = pulse.copy(targetKey = "hex-2", fxType = "SineWave", sortOrder = 1)
         val created = client.createCue(
             NewCue(
                 name = "order",
                 cueStackId = ProgrammerRouteTestSupport.createStack(client, projectId, "s"),
-                adHocEffects = listOf(dynamics.copy(sortOrder = 0), chase),
+                adHocFx = listOf(dynamics.copy(sortOrder = 0), chase),
                 layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0), CueLayerDto(lookId = cool, sortOrder = 1)),
             ),
         )
@@ -223,7 +223,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
                             ),
                         ),
                     )
-                    put("adHocEffects", Json.encodeToJsonElement(listOf(chase.copy(sortOrder = 0), dynamics.copy(sortOrder = 1))))
+                    put("adHocFx", Json.encodeToJsonElement(listOf(chase.copy(sortOrder = 0), dynamics.copy(sortOrder = 1))))
                 },
             )
         }
@@ -234,8 +234,8 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(before.effects.reversed(), after.effects, "each effect keeps its uuid in its new place")
         val details = response.body<CueDetails>()
         assertEquals(listOf(true, false), details.layers.map { it.enabled }, "the disabled layer is stored")
-        val moved = details.adHocEffects.single { it.effectType == "Pulse" }
-        assertEquals(listOf(true, 0.5, "BOUNCE", 3), listOf(moved.seconds, moved.size, moved.direction, moved.nShot))
+        val moved = details.adHocFx.single { it.fxType == "Pulse" }
+        assertEquals(listOf(true, 0.5, "BOUNCE", 3), listOf(moved.seconds, moved.amount, moved.direction, moved.runs))
     }
 
     @Test
@@ -265,7 +265,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val cue = client.richCue()
         val cueUuid = transaction(state.database) { DaoCue[cue.id].uuid }
         val edited = cue.asInput().let { input ->
-            input.copy(adHocEffects = input.adHocEffects.map { it.copy(beatDivision = 2.0) })
+            input.copy(adHocFx = input.adHocFx.map { it.copy(cycle = 2.0) })
         }
         client.put("${base()}/${cue.id}") {
             contentType(ContentType.Application.Json)
@@ -312,7 +312,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
 
             ProgrammerHandler.set(state, TargetRef.Fixture("hex-1"), "dimmer", "200", 0)
             ProgrammerHandler.set(state, TargetRef.Fixture("hex-2"), "dimmer", "100", 0)
-            state.show.fxEngine.addEffect(programmerBandSine("hex-1"))
+            state.show.fxEngine.addFx(programmerBandSine("hex-1"))
             val created = client.record(
                 ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId),
             ).body<ProgrammerRecordResponse>()
@@ -320,9 +320,9 @@ class CueChildIdentityTest : RouteIntegrationTest() {
 
             // Re-record hex-1 alone, its dimmer and its effect retuned.
             clearProgrammerCompletely(state)
-            state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+            state.show.fxEngine.getActiveFx().forEach { state.show.fxEngine.removeFx(it.id) }
             ProgrammerHandler.set(state, TargetRef.Fixture("hex-1"), "dimmer", "255", 0)
-            state.show.fxEngine.addEffect(programmerBandSine("hex-1", BeatDivision.HALF))
+            state.show.fxEngine.addFx(programmerBandSine("hex-1", CycleLength.TWO_BEATS))
             val updated = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
@@ -336,7 +336,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             val cue = updated.body<ProgrammerRecordResponse>().cue
             assertEquals("255", cue.propertyAssignments.single { it.targetKey == "hex-1" }.value)
             assertEquals("100", cue.propertyAssignments.single { it.targetKey == "hex-2" }.value, "outside the scope")
-            assertEquals(BeatDivision.HALF, cue.adHocEffects.single().beatDivision)
+            assertEquals(CycleLength.TWO_BEATS, cue.adHocFx.single().cycle)
         }
 
     @Test
@@ -350,7 +350,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
 
             ProgrammerHandler.set(state, TargetRef.Group("front-wash"), "dimmer", "150", 0)
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.group("front-wash")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.group("front-wash")))
             val created = client.record(
                 ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId),
             ).body<ProgrammerRecordResponse>()
@@ -359,9 +359,9 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             // The group effect is outside a hex-1 scope and survives, so the same effect recorded on
             // hex-1 is shadowed: refused with a warning, not paired with anything.
             clearProgrammerCompletely(state)
-            state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+            state.show.fxEngine.getActiveFx().forEach { state.show.fxEngine.removeFx(it.id) }
             ProgrammerHandler.set(state, TargetRef.Fixture("hex-1"), "dimmer", "255", 0)
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.fixture("hex-1")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.fixture("hex-1")))
             val updated = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
@@ -370,7 +370,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             ).body<ProgrammerRecordResponse>()
 
             assertEquals(before.effects, children(created.cue.id).effects)
-            assertEquals(TargetRef.Group.TYPE, updated.cue.adHocEffects.single().targetType)
+            assertEquals(TargetRef.Group.TYPE, updated.cue.adHocFx.single().targetType)
             assertTrue(updated.warnings.any { "already covers hex-1" in it }, updated.warnings.toString())
         }
 
@@ -410,7 +410,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val cue = client.richCue()
-        val key = keyEffects(cue.id)
+        val key = keyFx(cue.id)
 
         val echoed = UUID.randomUUID().toString()
         val response = client.patch("${base()}/${cue.id}") {
@@ -418,10 +418,10 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             setBody(
                 buildJsonObject {
                     put(
-                        "adHocEffects",
+                        "adHocFx",
                         Json.encodeToJsonElement(
                             listOf(
-                                cue.adHocEffects.single().copy(beatDivision = 2.0, runUuid = echoed),
+                                cue.adHocFx.single().copy(cycle = 2.0, runUuid = echoed),
                                 pulse.copy(targetKey = "hex-2", sortOrder = 1, runUuid = echoed),
                             ),
                         ),
@@ -432,7 +432,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
 
         assertEquals(mapOf("hex-1" to key, "hex-2" to null), runKeys(cue.id), "the body's key is no write's to make")
-        val answered = response.body<CueDetails>().adHocEffects.associate { it.targetKey to it.runUuid }
+        val answered = response.body<CueDetails>().adHocFx.associate { it.targetKey to it.runUuid }
         assertEquals(mapOf("hex-1" to key.toString(), "hex-2" to null), answered, "read back on the DTO")
     }
 
@@ -444,15 +444,15 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-2", 13)
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
 
-        state.show.fxEngine.addEffect(programmerBandSine("hex-1"))
+        state.show.fxEngine.addFx(programmerBandSine("hex-1"))
         val created = client.record(
             ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId),
         ).body<ProgrammerRecordResponse>()
-        val key = keyEffects(created.cue.id)
+        val key = keyFx(created.cue.id)
 
-        state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
-        state.show.fxEngine.addEffect(programmerBandSine("hex-1", BeatDivision.HALF))
-        state.show.fxEngine.addEffect(programmerBandSine("hex-2"))
+        state.show.fxEngine.getActiveFx().forEach { state.show.fxEngine.removeFx(it.id) }
+        state.show.fxEngine.addFx(programmerBandSine("hex-1", CycleLength.TWO_BEATS))
+        state.show.fxEngine.addFx(programmerBandSine("hex-2"))
         val updated = client.record(
             ProgrammerRecordRequest(
                 projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = created.cue.id,
@@ -462,17 +462,24 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, updated.status, updated.bodyAsText())
 
         assertEquals(mapOf("hex-1" to key, "hex-2" to null), runKeys(created.cue.id))
-        assertEquals(BeatDivision.HALF, updated.body<ProgrammerRecordResponse>().cue.adHocEffects.single { it.targetKey == "hex-1" }.beatDivision)
+        assertEquals(CycleLength.TWO_BEATS, updated.body<ProgrammerRecordResponse>().cue.adHocFx.single { it.targetKey == "hex-1" }.cycle)
     }
 
     @Test
-    fun `create_cue gives its effects no run key, whatever the tool call says`() = testApplication {
+    fun `create_cue gives its effects no run key, and refuses one a call names`() = testApplication {
         mountTestApp(state)
-        val effect = """{"targetType":"fixture","targetKey":"hex-1","effectType":"Pulse","category":"intensity","propertyName":"dimmer",""" +
-            """"beatDivision":0.5,"blendMode":"OVERRIDE","runUuid":"${UUID.randomUUID()}"}"""
+        val effect = """{"targetType":"fixture","targetKey":"hex-1","fxType":"Pulse","family":"intensity","propertyName":"dimmer",""" +
+            """"cycle":0.5,"blendMode":"OVERRIDE"}"""
+        val keyed = AiTools(state).executeTool(
+            "create_cue",
+            Json.parseToJsonElement("""{"name":"Q0","adHocFx":[${effect.dropLast(1)},"runUuid":"${UUID.randomUUID()}"}]}""").jsonObject,
+        )
+        assertFalse(keyed.success, keyed.result)
+        assertTrue("'adHocFx[0].runUuid' is not an argument" in keyed.result, keyed.result)
+
         val created = AiTools(state).executeTool(
             "create_cue",
-            Json.parseToJsonElement("""{"name":"Q1","adHocEffects":[$effect]}""").jsonObject,
+            Json.parseToJsonElement("""{"name":"Q1","adHocFx":[$effect]}""").jsonObject,
         )
         assertTrue(created.success, created.result)
         val cueId = Json.parseToJsonElement(created.result).jsonObject["cueId"].toString().toInt()
@@ -486,7 +493,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         transaction(state.database) {
             val stored = DaoCue[cue.id]
             val before = stored.stageContent()
-            stored.adHocEffects.single().runUuid = UUID.randomUUID()
+            stored.adHocFx.single().runUuid = UUID.randomUUID()
             assertEquals(before, DaoCue[cue.id].stageContent())
         }
     }
@@ -494,12 +501,12 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     // ── helpers ─────────────────────────────────────────────────────────────
 
     /** Give the cue's one effect a run key, as the timeline would; answers it. */
-    private fun keyEffects(cueId: Int): UUID = transaction(state.database) {
-        UUID.randomUUID().also { DaoCue[cueId].adHocEffects.single().runUuid = it }
+    private fun keyFx(cueId: Int): UUID = transaction(state.database) {
+        UUID.randomUUID().also { DaoCue[cueId].adHocFx.single().runUuid = it }
     }
 
     private fun runKeys(cueId: Int): Map<String, UUID?> = transaction(state.database) {
-        DaoCue[cueId].adHocEffects.associate { it.targetKey to it.runUuid }
+        DaoCue[cueId].adHocFx.associate { it.targetKey to it.runUuid }
     }
 
     private data class Row(val targetKey: String, val propertyName: String)
@@ -513,7 +520,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         Children(
             rows = cue.propertyAssignments.associate { Row(it.targetKey, it.attribute) to it.uuid },
             layers = cue.layers.mapTo(HashSet()) { it.uuid },
-            effects = cue.adHocEffects.mapTo(HashSet()) { it.uuid },
+            effects = cue.adHocFx.mapTo(HashSet()) { it.uuid },
             hooks = cue.triggers.mapTo(HashSet()) { it.uuid },
         )
     }
@@ -523,7 +530,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         Ordered(
             rows = cue.propertyAssignmentsInOrder().map { it.uuid },
             layers = cue.layersInOrder().map { it.uuid },
-            effects = cue.adHocEffectsInOrder().map { it.uuid },
+            effects = cue.adHocFxInOrder().map { it.uuid },
         )
     }
 
@@ -557,7 +564,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
                 name = "rich",
                 cueStackId = ProgrammerRouteTestSupport.createStack(this, projectId, "s"),
                 propertyAssignments = rows(),
-                adHocEffects = listOf(pulse),
+                adHocFx = listOf(pulse),
                 layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0), CueLayerDto(lookId = cool, sortOrder = 1)),
                 triggers = listOf(CueTriggerDto(triggerType = "ACTIVATION", scriptId = scriptId)),
             ),
@@ -577,7 +584,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun CueDetails.asInput() = NewCue(
         name = name,
         layers = layers,
-        adHocEffects = adHocEffects,
+        adHocFx = adHocFx,
         propertyAssignments = propertyAssignments,
         triggers = triggers.map {
             CueTriggerDto(it.triggerType, it.delayMs, it.intervalMs, it.randomWindowMs, it.scriptId, it.sortOrder)
@@ -586,7 +593,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         fadeDurationMs = fadeDurationMs,
         fadeCurve = fadeCurve,
         notes = notes,
-    ).also { assertTrue(adHocEffects.all { it.uuid != null }, "a stored effect is read with its uuid") }
+    ).also { assertTrue(adHocFx.all { it.uuid != null }, "a stored effect is read with its uuid") }
 
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
         post("/api/rest/programmer/record") {
@@ -594,12 +601,12 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             setBody(request)
         }
 
-    private fun programmerBandSine(fixtureKey: String, division: Double = BeatDivision.QUARTER) =
+    private fun programmerBandSine(fixtureKey: String, division: Double = CycleLength.ONE_BEAT) =
         programmerBandSine(FxTargetRef.fixture(fixtureKey), division)
 
-    private fun programmerBandSine(target: FxTargetRef, division: Double = BeatDivision.QUARTER) = FxInstance(
+    private fun programmerBandSine(target: FxTargetRef, division: Double = CycleLength.ONE_BEAT) = FxInstance(
         effect = SineSlider(),
         target = SliderTarget(target, "dimmer"),
-        timing = FxTiming(beatDivision = division),
+        timing = FxTiming(cycle = division),
     ).apply { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
 }

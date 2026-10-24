@@ -9,7 +9,7 @@ import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import kotlin.reflect.KProperty1
 
 /**
@@ -74,7 +74,7 @@ object FxTargetFactory {
      * member.
      */
     fun forSelection(
-        selection: EffectTargetRef.Selection,
+        selection: FxTargetsRef.Selection,
         propertyName: String,
         outputType: FxOutputType?,
         firstFixture: GroupableFixture?,
@@ -145,7 +145,7 @@ object FxTargetFactory {
  * Only the routes call this. Cue/Look/Include spawn paths must not throw at fire time; they get
  * [FxInstance]'s warn instead.
  */
-fun requireOutputTypeMatch(effect: Effect, target: FxTarget) {
+fun requireOutputTypeMatch(effect: Fx, target: FxTarget) {
     if (target.accepts(effect.outputType)) return
     throw IllegalArgumentException(
         "Effect '${effect.name}' outputs ${effect.outputType} but property " +

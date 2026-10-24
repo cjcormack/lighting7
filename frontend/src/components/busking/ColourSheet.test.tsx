@@ -22,28 +22,28 @@ vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).li
 
 const toast = vi.hoisted(() => ({ error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() }))
 const groupList = vi.hoisted(() => () => ({
-  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] })),
+  data: ['Front wash', 'Reds'].map((name) => ({ name, memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] })),
 }))
 vi.mock('sonner', () => ({ toast }))
 
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [] }),
-  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [] }),
+  useApplyPaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useTogglePaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
 // A Palettes band chip is a press (`usePress`): its other routes and the ring's applied state, none of
 // which these tests are about.
 // A refused absorb into a focused Look takes the effects it started off again.
 vi.mock('@/store/fixtureFx', () => ({
   useRemoveFxMutation: () => [vi.fn()],
-  useEffectLibraryQuery: () => ({ data: [] }),
-  useActiveEffectsQuery: () => ({ data: [] }),
+  useFxLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/groups', () => ({ useRemoveGroupFxMutation: () => [vi.fn()], useGroupListQuery: groupList }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/programmer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmer')>()),
@@ -53,8 +53,8 @@ vi.mock('@/store/selection', () => ({
   usePressFamilies: (local: unknown) => local,
   useSelectionPair: () => ({ targets: [], families: null }),
 }))
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: ({ open, targets, families }: { open: boolean; targets: unknown[]; families: string[] }) =>
     open ? <div data-testid="new-template" data-targets={JSON.stringify(targets)} data-families={families.join()} /> : null,
 }))
 /** A built rig naming the bar first, so rig order and selection order differ. */
@@ -129,7 +129,7 @@ import { ColourSheet, planColourWrites, writeTargetsOf } from './ColourSheet'
 const groupOf = (name: string, memberCount: number): BuskingTarget => ({
   type: 'group',
   name,
-  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
+  group: { name, memberCount, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
 })
 /** Mixed: par-1 (RGB), par-2 (RGBW) and a dimmer-only head. */
 const group = groupOf('Front wash', 3)

@@ -25,7 +25,7 @@ import uk.me.cormack.lighting7.models.DaoFixturePatch
 import uk.me.cormack.lighting7.models.DaoFixturePatches
 import uk.me.cormack.lighting7.models.DaoParkedChannel
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.testsupport.EffectTestSupport
+import uk.me.cormack.lighting7.testsupport.FxTestSupport
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.programmerValue
@@ -102,7 +102,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             "dimmer",
             CueAssignmentResolver.PropertyValue.Slider(150u),
         )
-        EffectTestSupport.start(state, "SineWave", "hex-3", "dimmer", programmerBand = true)
+        FxTestSupport.start(state, "SineWave", "hex-3", "dimmer", programmerBand = true)
         state.show.parkManager.park(0, 300, 255u)
         // A channel no fixture covers, left up by a raw write: nothing will hold it after the reload.
         mock().setValue(400, 90u)
@@ -138,7 +138,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             "the programmer came across",
         )
         assertTrue(
-            state.show.fxEngine.getActiveEffects().any { it.target.targetKey == "hex-3" && it.cueId == null },
+            state.show.fxEngine.getActiveFx().any { it.target.targetKey == "hex-3" && it.cueId == null },
             "the hand-run effect is running again",
         )
     }
@@ -147,9 +147,9 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
     fun `a reload keeps the order of the Local FX on a key, a moved one included`() = runBlocking {
         LocateTestSupport.seedHex(state, projectId, "hex-1", startChannel = 1)
         val types = listOf("SineWave", "Pulse", "CandleFlicker")
-        val started = types.map { EffectTestSupport.start(state, it, "hex-1", "dimmer", programmerBand = true) }
-        assertTrue(state.show.fxEngine.moveLocalEffect(started.last().id, aboveId = started.first().id) is FxEngine.LocalMoveOutcome.Moved)
-        fun applyOrder() = state.show.fxEngine.getActiveEffects()
+        val started = types.map { FxTestSupport.start(state, it, "hex-1", "dimmer", programmerBand = true) }
+        assertTrue(state.show.fxEngine.moveLocalFx(started.last().id, aboveId = started.first().id) is FxEngine.LocalMoveOutcome.Moved)
+        fun applyOrder() = state.show.fxEngine.getActiveFx()
             .sortedWith(compareBy({ it.priority }, { it.composeOrder }, { it.id }))
             .map { it.registrationId }
         val before = applyOrder()

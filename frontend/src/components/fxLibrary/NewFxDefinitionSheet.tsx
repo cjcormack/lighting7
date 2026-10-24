@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Plus, Play, Trash2, Wrench } from 'lucide-react'
-import { STEPS_CATEGORY } from '@/lib/stepEffects'
+import { STEPS_CATEGORY } from '@/lib/stepFx'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,8 +18,8 @@ import { LazyScriptEditor } from '@/components/scripts/LazyScriptEditor'
 import { ScriptCompileDialog, ScriptRunDialog } from '@/components/scripts/ScriptResultDialogs'
 import { useCompileProjectScriptMutation, useCurrentProjectQuery, useRunProjectScriptMutation } from '@/store/projects'
 import { useCreateFxDefinitionMutation } from '@/store/fxDefinitions'
-import type { EffectParameterDef } from '@/store/fixtureFx'
-import { FX_CATEGORY_LABELS, FX_CATEGORY_ORDER, effectModeToEditorType, uniqueEffectId } from './fxLibraryModel'
+import type { FxParameterDef } from '@/store/fixtureFx'
+import { FX_FAMILY_LABELS, FX_FAMILY_ORDER, fxModeToEditorType, uniqueFxId } from './fxLibraryModel'
 
 const PARAM_TYPES = ["ubyte", "int", "double", "float", "boolean", "colour", "colourList", "easingCurve", "string"]
 
@@ -34,23 +34,23 @@ FxOutput.Slider(value)
 const NEW_FX_DEFAULTS = {
   category: "intensity",
   outputType: "SLIDER",
-  effectMode: "STANDARD",
+  fxMode: "STANDARD",
   parameters: [
     { name: "min", type: "ubyte", defaultValue: "0", description: "Minimum value" },
     { name: "max", type: "ubyte", defaultValue: "255", description: "Maximum value" },
-  ] as EffectParameterDef[],
+  ] as FxParameterDef[],
 }
 
 /**
- * A new custom definition — the library row's *New effect*. Its `effectId` is the name without
- * spaces, **made unique across the library** ([uniqueEffectId], D9's rule): a new effect named
+ * A new custom definition — the library row's *New effect*. Its `fxId` is the name without
+ * spaces, **made unique across the library** ([uniqueFxId], D9's rule): a new effect named
  * *Pulse* would otherwise take the built-in's id and replace it in the registry.
  */
 export function NewFxDefinitionSheet({
   takenIds,
   onCreated,
 }: {
-  /** Every id in the library and every definition's — `takenEffectIds`. */
+  /** Every id in the library and every definition's — `takenFxIds`. */
   takenIds: readonly string[]
   onCreated: (id: number) => void
 }) {
@@ -69,9 +69,9 @@ export function NewFxDefinitionSheet({
   const trimmedName = name.trim()
   const [category, setCategory] = useState(NEW_FX_DEFAULTS.category)
   const [outputType, setOutputType] = useState(NEW_FX_DEFAULTS.outputType)
-  const [effectMode, setEffectMode] = useState(NEW_FX_DEFAULTS.effectMode)
+  const [fxMode, setFxMode] = useState(NEW_FX_DEFAULTS.fxMode)
   const [scriptCode, setScriptCode] = useState(NEW_FX_TEMPLATE)
-  const [parameters, setParameters] = useState<EffectParameterDef[]>(NEW_FX_DEFAULTS.parameters)
+  const [parameters, setParameters] = useState<FxParameterDef[]>(NEW_FX_DEFAULTS.parameters)
 
   // Everything the form starts with is a default nobody chose, so anything moved off one is work
   // worth asking about before Escape or a stray click outside takes the sheet away.
@@ -79,12 +79,12 @@ export function NewFxDefinitionSheet({
     name !== "" ||
     category !== NEW_FX_DEFAULTS.category ||
     outputType !== NEW_FX_DEFAULTS.outputType ||
-    effectMode !== NEW_FX_DEFAULTS.effectMode ||
+    fxMode !== NEW_FX_DEFAULTS.fxMode ||
     scriptCode !== NEW_FX_TEMPLATE ||
     JSON.stringify(parameters) !== JSON.stringify(NEW_FX_DEFAULTS.parameters)
   )
 
-  const editorType = effectModeToEditorType(effectMode)
+  const editorType = fxModeToEditorType(fxMode)
 
   // Keyed off `outputType`, not `category`: the two are independent selects, and it is the output
   // type that decides which properties can actually take the effect's output. Deriving from the
@@ -106,11 +106,11 @@ export function NewFxDefinitionSheet({
   const handleCreate = async () => {
     try {
       const result = await runCreateMutation({
-        effectId: uniqueEffectId(trimmedName.replace(/\s+/g, ""), takenIds).effectId,
+        fxId: uniqueFxId(trimmedName.replace(/\s+/g, ""), takenIds).fxId,
         name: trimmedName,
-        category,
+        family: category,
         outputType,
-        effectMode,
+        fxMode,
         parameters,
         compatibleProperties,
         script: scriptCode,
@@ -130,11 +130,11 @@ export function NewFxDefinitionSheet({
     setParameters(parameters.filter((_, i) => i !== index))
   }
 
-  const updateParameter = (index: number, field: keyof EffectParameterDef, value: string) => {
+  const updateParameter = (index: number, field: keyof FxParameterDef, value: string) => {
     setParameters(parameters.map((p, i) => i === index ? { ...p, [field]: value } : p))
   }
 
-  // Trimmed: a name of spaces alone would strip to an empty `effectId`.
+  // Trimmed: a name of spaces alone would strip to an empty `fxId`.
   const canCreate = trimmedName !== "" && scriptCode !== ""
 
   return (
@@ -173,7 +173,7 @@ export function NewFxDefinitionSheet({
         </div>
 
         <div className="space-y-1.5">
-          <Label>Category</Label>
+          <Label>Family</Label>
           <Select value={category} onValueChange={setCategory}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -181,9 +181,9 @@ export function NewFxDefinitionSheet({
                   dividers draw — it listed four and left Controls out. Beam is the exception: a
                   beam effect drives one named property, and this form cannot name one. So is
                   Palette, which is Palette Steps' alone: its family is its palettes'. */}
-              {FX_CATEGORY_ORDER.filter((c) => c !== 'beam' && c !== STEPS_CATEGORY).map((c) => (
+              {FX_FAMILY_ORDER.filter((c) => c !== 'beam' && c !== STEPS_CATEGORY).map((c) => (
                 <SelectItem key={c} value={c}>
-                  {FX_CATEGORY_LABELS[c]}
+                  {FX_FAMILY_LABELS[c]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -204,7 +204,7 @@ export function NewFxDefinitionSheet({
 
         <div className="space-y-1.5">
           <Label>Mode</Label>
-          <Select value={effectMode} onValueChange={setEffectMode}>
+          <Select value={fxMode} onValueChange={setFxMode}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="STANDARD">Standard</SelectItem>

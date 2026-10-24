@@ -23,10 +23,10 @@ vi.mock('sonner', () => ({ toast }))
 const apply = vi.fn(() => ({ unwrap: () => Promise.resolve({ written: 1, skipped: [] }) }))
 const toggle = vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))
 let templates: unknown[] = []
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: templates }),
-  useApplyTemplateMutation: () => [apply],
-  useToggleTemplateMutation: () => [toggle],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: templates }),
+  useApplyPaletteMutation: () => [apply],
+  useTogglePaletteMutation: () => [toggle],
 }))
 // A band chip is a press (`usePress`): its other routes and the ring's applied state.
 // A refused absorb into a focused Look takes the effects it started off again.
@@ -34,7 +34,7 @@ vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
 vi.mock('@/store/looks', () => ({
   useApplyLookMutation: () => [vi.fn()],
   useToggleLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/programmer', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/programmer')>()),
@@ -396,14 +396,14 @@ describe('the footer', () => {
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'))
     expect(toggle).toHaveBeenCalledWith({
       projectId: 1,
-      templateId: 2,
+      paletteId: 2,
       targets: [{ type: 'fixture', key: 'par-1' }],
       propertyMask: 'COLOUR',
       families: ['COLOUR'],
     })
     expect(apply).not.toHaveBeenCalled()
     fireEvent.click(within(chips[0] as HTMLElement).getByText('Warm Amber'), { altKey: true })
-    expect(apply).toHaveBeenCalledWith({ projectId: 1, templateId: 2, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] })
+    expect(apply).toHaveBeenCalledWith({ projectId: 1, paletteId: 2, targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'] })
   })
 })
 
@@ -479,7 +479,7 @@ function template(id: number, name: string, extra: Record<string, unknown> = {})
     isGeneric: true,
     kind: 'value',
     rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
-    effect: null,
+    fx: null,
     requiredEmitters: [],
     lastPressedAt: '2026-09-18T10:00:00Z',
     layerCount: 0,

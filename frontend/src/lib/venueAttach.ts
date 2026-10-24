@@ -120,7 +120,7 @@ export function inheritedLineOf(inherited: AttachReview['inherited']): string | 
 const USER_NOUNS: Record<string, [string, string]> = {
   CUE: ['cue', 'cues'],
   LOOK: ['Look', 'Looks'],
-  TEMPLATE: ['palette', 'palettes'],
+  PALETTE: ['palette', 'palettes'],
   BINDING: ['binding', 'bindings'],
 }
 

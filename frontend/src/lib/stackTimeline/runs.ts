@@ -13,14 +13,14 @@ export function joins(column: TimelineColumn, above: TimelineCell, below: Timeli
   const a = above.filled
   const b = below.filled
   if (a == null || b == null || column.kind === 'scenery') return false
-  if (a.kind === 'effect' && b.kind === 'effect') {
-    return a.effect.runUuid != null && a.effect.runUuid === b.effect.runUuid && !isNShot(a.effect) && !isNShot(b.effect)
+  if (a.kind === 'fx' && b.kind === 'fx') {
+    return a.effect.runUuid != null && a.effect.runUuid === b.effect.runUuid && !isRuns(a.effect) && !isRuns(b.effect)
   }
   return true
 }
 
-function isNShot(effect: { settings: Record<string, unknown> }): boolean {
-  return effect.settings.nShot != null
+function isRuns(effect: { settings: Record<string, unknown> }): boolean {
+  return effect.settings.runs != null
 }
 
 /** Whether [cell]'s scenery state carries on below it: a change of its own, or one tracked into it. */
@@ -81,13 +81,13 @@ export function runs(timeline: StackTimeline, columns: readonly TimelineColumn[]
       if (cell.filled == null) continue
       const joinedAbove = above != null && joins(column, above, cell)
       const joinedBelow = below != null && joins(column, cell, below)
-      const effect = cell.filled.kind === 'effect' ? cell.filled.effect : null
-      const aboveEffect = above?.filled?.kind === 'effect' ? above.filled.effect : null
+      const effect = cell.filled.kind === 'fx' ? cell.filled.effect : null
+      const aboveFx = above?.filled?.kind === 'fx' ? above.filled.effect : null
       marks.set(column.id, {
         start: !joinedAbove,
         end: !joinedBelow,
-        restart: effect != null && aboveEffect != null && !joinedAbove,
-        changed: effect != null && aboveEffect != null && joinedAbove && !sameSettings(aboveEffect.settings, effect.settings),
+        restart: effect != null && aboveFx != null && !joinedAbove,
+        changed: effect != null && aboveFx != null && joinedAbove && !sameSettings(aboveFx.settings, effect.settings),
         trackedLine: false,
       })
     }

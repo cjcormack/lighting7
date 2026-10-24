@@ -1,6 +1,6 @@
 import type { SceneryChange, TrackedScenery } from './sceneryApi'
 import type { CueType } from './cueStacksApi'
-import type { EffectDirection } from './fxApi'
+import type { FxDirection, Timing } from './fxApi'
 
 // Cue target (fixture or group)
 export interface CueTarget {
@@ -30,7 +30,7 @@ export interface CueTarget {
  * fixture is the colour it is.
  */
 export interface LayerSource {
-  kind: 'LOOK' | 'TEMPLATE'
+  kind: 'LOOK' | 'PALETTE'
   id: number
   uuid: string
   name: string
@@ -38,14 +38,14 @@ export interface LayerSource {
 
 export interface CueLayer {
   /**
-   * What this layer applies: **exactly one** of `lookId` / `templateId`.
+   * What this layer applies: **exactly one** of `lookId` / `paletteId`.
    *
    * Two ids rather than a `(kind, id)` pair, because that is what a client has in hand — it picked a
    * row out of one library or the other — and because a request naming both is then a shape error
    * the route refuses rather than a discriminator it has to trust.
    */
   lookId?: number | null
-  templateId?: number | null
+  paletteId?: number | null
   sortOrder?: number
   enabled?: boolean
   /**
@@ -85,7 +85,7 @@ export interface CueLayer {
  * A layer as the server reads it back, carrying what it applies — kind, id, uuid and name — so a cue
  * card can label the line without a second fetch.
  *
- * `source` and `id` are **read-only** and must never be sent back: `lookId` / `templateId` are the write
+ * `source` and `id` are **read-only** and must never be sent back: `lookId` / `paletteId` are the write
  * fields. Same contract as `presetName` was and as `health` is on an assignment. `buildCueInput`
  * strips it, and a regression test pins that.
  */
@@ -100,23 +100,23 @@ export interface CueLayerDetail extends CueLayer {
 }
 
 // Ad-hoc effect stored inline in a cue (with optional timing)
-export interface CueAdHocEffect {
+export interface CueAdHocFx {
   /**
    * `selection` is one effect over an ordered list of fixtures and groups (effects plan D3), its
    * [targetKey] the list's canonical JSON — what Record writes for an effect started on a marquee.
    */
   targetType: 'group' | 'fixture' | 'selection'
   targetKey: string
-  effectType: string
-  category: string
+  fxType: string
+  family: string
   propertyName: string | null
-  beatDivision: number
+  cycle: number
   blendMode: string
-  distribution: string
+  order: string
   phaseOffset: number
   elementMode: string | null
   elementFilter: string | null
-  stepTiming: boolean | null
+  timing: Timing | null
   parameters: Record<string, string>
   delayMs?: number | null
   intervalMs?: number | null
@@ -128,21 +128,21 @@ export interface CueAdHocEffect {
   rateSpeedMasterUuid?: string | null
   /**
    * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
-   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
-   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   * `cycle` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/fxTiming.ts`). Absent = false.
    */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; absent at 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; absent at 1. */
+  amount?: number
   /** Direction (D5); absent when forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9); absent or null runs forever. */
-  nShot?: number | null
+  runs?: number | null
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   /**
    * The stored effect's uuid, on read only: a cue write keeps the uuid of every effect it keeps, so
    * this names one effect across writes. The desk ignores it on write and `buildCueInput` strips it.
@@ -162,9 +162,8 @@ export type AssignmentHealth =
   | { type: 'missingFixture'; fixtureKey: string }
   | { type: 'missingGroup'; groupName: string }
   | { type: 'missingProperty'; targetKey: string; propertyName: string }
-// Four arms, down from seven. `missingPalette` / `missingPaletteEntry` described a row whose value
-// was `ref:{uuid}` and whose Look was gone or no longer covered the target, and `paletteTypeMismatch`
-// before them named a wrong-type reference. All three retired with the `ref:` value grammar in
+// Four arms, down from seven. Two described a row whose value was `ref:{uuid}` and whose Look was
+// gone or no longer covered the target, and a third before them named a wrong-type reference. All three retired with the `ref:` value grammar in
 // session 4: a row's value is always a literal, so a cue's only remaining dependency on a Look is a
 // layer — guarded by an indexed FK rather than by a health diagnosis.
 
@@ -233,7 +232,7 @@ export interface Cue {
   name: string
   /** The cue's ordered Look composition, in `sortOrder`. */
   layers: CueLayerDetail[]
-  adHocEffects: CueAdHocEffect[]
+  adHocFx: CueAdHocFx[]
   propertyAssignments: CuePropertyAssignment[]
   triggers: CueTriggerDetail[]
   /**
@@ -375,7 +374,7 @@ export interface CopyCuesFromResponse {
  * cue — exactly one of the two ids — over `targets` under the selection's `families`.
  */
 export interface CueLayerPressRequest {
-  templateId?: number
+  paletteId?: number
   lookId?: number
   targets: CueTarget[]
   families?: string[]
@@ -398,7 +397,7 @@ export interface CueLayerPressResponse {
  */
 export interface UpdateStageResponse {
   rows: number
-  effects: { edited: number; stopped: number; started: number }
+  fx: { edited: number; stopped: number; started: number }
   /** The cue's own fade and curve, which the values move over; 0 is a snap. */
   fadeMs: number
   curve: string
@@ -435,7 +434,7 @@ export interface CueEventWriteItem {
 export interface CueInput {
   name: string
   layers: CueLayer[]
-  adHocEffects: CueAdHocEffect[]
+  adHocFx: CueAdHocFx[]
   propertyAssignments?: CuePropertyAssignment[]
   triggers?: CueTrigger[]
   /** POST only: the stack the new cue's entry goes in. Absent makes a loose cue. */
@@ -449,7 +448,7 @@ export interface CueInput {
   notes?: string | null
   /** Cue-level stomp — see `Cue.stomp`. Not the per-layer flag on `CueLayer`. */
   stomp?: boolean
-  /** Only honoured on POST; PUT/PATCH ignore it so markers cannot be turned into standard cues. */
+  /** Only honoured on POST; a PUT ignores it and a PATCH refuses it, so markers cannot be turned into standard cues. */
   cueType?: CueType
   /** The whole list; a PUT clears what it is not sent, a PATCH leaves an absent list alone. */
   speedMasters?: CueSpeedMaster[]
@@ -457,14 +456,14 @@ export interface CueInput {
 
 // Partial input for PATCH (inline edits — only send changed fields). The place fields — stack,
 // order, number and follow — are the entry's: `patchCueStackEntry` writes them, and the desk
-// ignores them here.
+// refuses them here.
 export type CuePatchInput = Partial<
   Omit<CueInput, 'cueStackId' | 'sortOrder' | 'cueType' | 'cueNumber' | 'autoAdvance' | 'autoAdvanceDelayMs'>
 >
 
 // Apply response
 export interface ApplyCueResponse {
-  effectCount: number
+  fxCount: number
   cueName: string
 }
 

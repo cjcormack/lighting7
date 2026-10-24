@@ -26,7 +26,7 @@ export interface TimelineCellAddress {
 export function sourceOf(column: TimelineColumn): TimelineSourceRef | null {
   if (column.sourceId == null) return null
   if (column.kind === 'look') return { kind: 'LOOK', id: column.sourceId }
-  if (column.kind === 'palette') return { kind: 'TEMPLATE', id: column.sourceId }
+  if (column.kind === 'palette') return { kind: 'PALETTE', id: column.sourceId }
   return null
 }
 

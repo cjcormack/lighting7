@@ -51,7 +51,7 @@ import {
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import type { CueTarget } from '@/api/cuesApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { LayerSource } from '@/api/cuesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 
@@ -148,7 +148,7 @@ interface LookStackProps<T extends LookStackLayer> {
    * the two ids come from different tables and can collide — and because a caller that has only one
    * library loaded should not have to fake the other.
    */
-  templatesById?: ReadonlyMap<number, TemplateSummary>
+  palettesById?: ReadonlyMap<number, PaletteSummary>
   /** False while the libraries are in flight, so a layer is never painted as missing mid-fetch. */
   looksLoaded: boolean
   handlers: LayerHandlers
@@ -191,7 +191,7 @@ interface LookStackProps<T extends LookStackLayer> {
 export function LookStack<T extends LookStackLayer>({
   layers,
   looksById,
-  templatesById,
+  palettesById,
   looksLoaded,
   handlers,
   onAdd,
@@ -232,7 +232,7 @@ export function LookStack<T extends LookStackLayer>({
             sortableId={ids[i]}
             layer={layer}
             index={i}
-            info={describeStackSource(layer.source, looksById, templatesById, looksLoaded)}
+            info={describeStackSource(layer.source, looksById, palettesById, looksLoaded)}
             handlers={handlers}
             sortable={!readOnly}
             showTargets
@@ -278,7 +278,7 @@ export interface StackSourceInfo {
   families: readonly AttributeFamily[]
   /** The library has loaded and does not hold it — the row draws as missing. */
   missing: boolean
-  isTemplate: boolean
+  isPalette: boolean
   /**
    * What that template holds (fx-templates D1), for the wave on the badge.
    *
@@ -286,20 +286,20 @@ export interface StackSourceInfo {
    * the template library knows a layer names a template but not which kind, and drawing the plain
    * chip is the honest answer there.
    */
-  templateKind?: 'value' | 'effect'
+  paletteKind?: 'value' | 'fx'
 }
 
 export function describeStackSource(
   source: LayerSource | null | undefined,
   looksById: ReadonlyMap<number, LookSummary>,
-  templatesById: ReadonlyMap<number, TemplateSummary> | undefined,
+  palettesById: ReadonlyMap<number, PaletteSummary> | undefined,
   librariesLoaded: boolean,
 ): StackSourceInfo {
   if (source == null) {
-    return { name: undefined, families: [], missing: librariesLoaded, isTemplate: false }
+    return { name: undefined, families: [], missing: librariesLoaded, isPalette: false }
   }
-  if (source.kind === 'TEMPLATE') {
-    const template = templatesById?.get(source.id)
+  if (source.kind === 'PALETTE') {
+    const template = palettesById?.get(source.id)
     return {
       name: source.name ?? template?.name,
       // A template is in exactly one family, and it is derived from its rows the same way a Look's
@@ -308,9 +308,9 @@ export function describeStackSource(
       // Only claimable when this caller actually has the template library: a cue's read surface may
       // not, and painting a layer as missing because the *caller* did not load a list would be a
       // lie about the data.
-      missing: librariesLoaded && templatesById != null && template == null,
-      isTemplate: true,
-      templateKind: template?.kind,
+      missing: librariesLoaded && palettesById != null && template == null,
+      isPalette: true,
+      paletteKind: template?.kind,
     }
   }
   const look = looksById.get(source.id)
@@ -318,7 +318,7 @@ export function describeStackSource(
     name: source.name ?? look?.name,
     families: look?.families ?? [],
     missing: librariesLoaded && look == null,
-    isTemplate: false,
+    isPalette: false,
   }
 }
 
@@ -363,8 +363,8 @@ export function LayerRow({
   // Resolved by `describeStackSource`: the layer's own `source.name` arrives with the read, so a row
   // is labelled before either library lands; the library lookup only adds the families and the
   // deleted-since-read case.
-  const { name, missing, isTemplate, templateKind } = info
-  const isEffect = templateKind === 'effect'
+  const { name, missing, isPalette, paletteKind } = info
+  const isFx = paletteKind === 'fx'
 
   return (
     <SortableShell sortable={sortable} sortableId={sortableId}>
@@ -402,16 +402,16 @@ export function LayerRow({
               <LookNameBadge
                 name={name}
                 missing={missing}
-                isTemplate={isTemplate}
-                isEffect={isEffect}
+                isPalette={isPalette}
+                isFx={isFx}
               />
             </button>
           ) : (
             <LookNameBadge
               name={name}
               missing={missing}
-              isTemplate={isTemplate}
-              isEffect={isEffect}
+              isPalette={isPalette}
+              isFx={isFx}
             />
           )}
 
@@ -519,7 +519,7 @@ export function LayerRow({
               size="icon"
               className="size-6 shrink-0 text-muted-foreground"
               aria-label={`Open ${layer.source.name}`}
-              title={isTemplate ? 'Open this palette in the palette library' : 'Open this look in the Looks library — a change there changes every cue that layers it'}
+              title={isPalette ? 'Open this palette in the palette library' : 'Open this look in the Looks library — a change there changes every cue that layers it'}
               onClick={() => handlers.onOpenSource?.(index)}
             >
               <ExternalLink className="size-3.5" />

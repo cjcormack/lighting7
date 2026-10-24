@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState, type ElementType, type ReactNode } from
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { commandsOf, findColourSource, findDimmerProperty, findWhiteMixProperty, triggersOf, useFixtureTypeListQuery, type Fixture } from '@/store/fixtures'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useGroupQuery } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
@@ -12,7 +12,7 @@ import { fixtureChannelRefs } from '@/hooks/useFixturePark'
 import { getPropertyChannels } from '@/hooks/usePropertyParkStatus'
 import { findGel } from '@/lib/gels'
 import type { GroupSummary } from '@/api/groupsApi'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import type { ActiveFx } from '@/store/fixtureFx'
 import type { ChannelRef } from '@/store/fixtures'
 import { useCurrentProjectQuery } from '@/store/projects'
 import { useFixtureColourIndex } from '@/hooks/useFixtureColourIndex'
@@ -51,10 +51,10 @@ import {
   type PickRowGroup,
 } from './sheetPick'
 import { FixtureSheetContext, type FixtureSheetContextValue, type SheetHost, type SheetTarget } from './sheetContext'
-import { useCueLabel, useEffectDetail } from './effectLabels'
+import { useCueLabel, useFxDetail } from './fxLabels'
 import { fixtureHeadKeys, heldLine, useHeldOnTarget, useRelease } from './useRelease'
 
-const EMPTY_EFFECTS: readonly ActiveEffect[] = []
+const EMPTY_FX: readonly ActiveFx[] = []
 
 type TitleComponent = ElementType<{ className?: string; children?: ReactNode; title?: string }>
 
@@ -120,24 +120,24 @@ function useSheetContext(
   const [openRowId, setOpenRowId] = useState<string | null>(null)
   const connected = useIsDeskConnected()
   const blind = useProgrammerBlind()
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   const cueLabel = useCueLabel()
-  const effectDetail = useEffectDetail()
+  const fxDetail = useFxDetail()
   const context = useMemo<FixtureSheetContextValue>(
     () => ({
       target,
       host,
       connected,
       blind,
-      effects: effects ?? EMPTY_EFFECTS,
+      effects: effects ?? EMPTY_FX,
       reachOf,
       cueLabel,
-      effectDetail,
+      fxDetail,
       openRowId,
       setOpenRowId,
       aim,
     }),
-    [target, host, connected, blind, effects, reachOf, cueLabel, effectDetail, openRowId, aim],
+    [target, host, connected, blind, effects, reachOf, cueLabel, fxDetail, openRowId, aim],
   )
   // The picker opens on the family of the row open on the sheet, and starts its effect on that
   // row's property where the effect can take it (Fx board, "Adding"). An open row is keyed by its
@@ -440,8 +440,8 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
         onFixtureClick={onOpenMember ?? (() => {})}
         layout={card ? 'wrap' : 'list'}
         groupName={group.name}
-        distributionSteps={detail?.distributionSteps}
-        defaultDistribution={detail?.defaultDistribution ?? group.defaultDistribution}
+        orderSteps={detail?.orderSteps}
+        defaultOrder={detail?.defaultOrder ?? group.defaultOrder}
       />
     </div>
   )
@@ -534,7 +534,7 @@ function SheetChrome({
   titleComponent?: TitleComponent
   connected: boolean
   blind: boolean
-  effects: readonly ActiveEffect[] | undefined
+  effects: readonly ActiveFx[] | undefined
   scopeWhat?: string
   locate: ReactNode
   park: ReactNode

@@ -10,16 +10,16 @@ import { SheetTable } from '@/components/sheet/SheetTable'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
 import { useSheet } from '@/components/sheet/useSheet'
 import { useUpdateFxDefinitionMutation, type FxDefinition } from '@/store/fxDefinitions'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
 import { cn } from '@/lib/utils'
-import { EFFECT_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, forkRefusal, type FxSource } from './fxLibraryModel'
+import { FX_MODE_LABELS, FX_SOURCE_LABELS, OUTPUT_TYPE_LABELS, forkRefusal, type FxSource } from './fxLibraryModel'
 import { useFxDefinitionDelete, type FxDeleteItem } from './useFxDefinitionDelete'
 
 export type FxColumnKey = 'output' | 'mode' | 'timing' | 'params' | 'drives' | 'source'
 
 export interface FxSheetRow extends SheetRow {
   /** Absent on a category divider. */
-  entry?: EffectLibraryEntry
+  entry?: FxLibraryEntry
   source?: FxSource
   /** A custom row's definition — the discriminator, and what the rename and the delete write. */
   definition?: FxDefinition
@@ -28,10 +28,10 @@ export interface FxSheetRow extends SheetRow {
 }
 
 /** A member row — every row but a divider carries its entry, source and name. */
-export type FxMemberRow = FxSheetRow & { entry: EffectLibraryEntry; source: FxSource; name: string }
+export type FxMemberRow = FxSheetRow & { entry: FxLibraryEntry; source: FxSource; name: string }
 
-export function fxRowId(effectId: string): string {
-  return `fx:${effectId}`
+export function fxRowId(fxId: string): string {
+  return `fx:${fxId}`
 }
 
 function isMember(row: FxSheetRow): row is FxMemberRow {
@@ -47,7 +47,7 @@ export interface FxLibrarySheetProps {
   /** Open a row's record: a custom row its definition, a script's effect its script, a built-in its detail. */
   onOpen: (row: FxMemberRow) => void
   /** Fork a built-in (D9) — the route mints the id, creates it and opens the editor. */
-  onFork: (entry: EffectLibraryEntry) => void
+  onFork: (entry: FxLibraryEntry) => void
   forking: boolean
 }
 
@@ -62,7 +62,7 @@ export interface FxLibrarySheetProps {
  * script's effect's names are the desk's and the script's.
  *
  * **Source is the definition list read against the library** (`fxSourceOf`): custom where a
- * definition's `effectId` is the entry's id, *Script* for any other `USER` entry. That is also what
+ * definition's `fxId` is the entry's id, *Script* for any other `USER` entry. That is also what
  * a row opens (§1's first bug): a custom row its definition, a script-registered row its **script**,
  * a built-in its read-only detail.
  *
@@ -94,7 +94,7 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         label: 'Mode',
         width: '96px',
         value: () => undefined,
-        display: (row) => row.entry && <ReadText>{EFFECT_MODE_LABELS[row.entry.effectMode] ?? row.entry.effectMode}</ReadText>,
+        display: (row) => row.entry && <ReadText>{FX_MODE_LABELS[row.entry.fxMode] ?? row.entry.fxMode}</ReadText>,
       },
       {
         key: 'timing',

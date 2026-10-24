@@ -8,11 +8,11 @@ import {
   EMITTER_TINTS,
   WHITE_POLICIES,
   WHITE_POLICY_LABELS,
-  templatePropertyFor,
-  type TemplateIntent,
+  palettePropertyFor,
+  type PaletteIntent,
   type WhitePolicy,
-} from '@/lib/templateIntent'
-import { colourPolicyLocked, effectiveColourPolicy, type TemplateValues } from './templateRows'
+} from '@/lib/paletteIntent'
+import { colourPolicyLocked, effectiveColourPolicy, type PaletteValues } from './paletteRows'
 
 /**
  * The colour family: a hex with a white/amber policy, plus the three emitters set outright.
@@ -31,13 +31,13 @@ export function ColourControl({
   values,
   onChange,
 }: {
-  values: TemplateValues
-  onChange: (propertyName: string, intent: TemplateIntent | null) => void
+  values: PaletteValues
+  onChange: (propertyName: string, intent: PaletteIntent | null) => void
 }) {
   const value = values.rgbColour
   const current = value?.kind === 'colour' ? value : null
   const hex = current?.hex ?? '#FF9D4A'
-  // Seeded from the parsed value, not from a UI default. `parseTemplateIntent` reads a stored colour
+  // Seeded from the parsed value, not from a UI default. `parsePaletteIntent` reads a stored colour
   // with no policy token as `rgbonly` — matching every other reader of that string — so defaulting
   // the buttons to `extract` here showed Extract selected for a row that was not, and wrote Extract
   // on the next edit the operator made for some other reason. `effectiveColourPolicy` then collapses
@@ -129,7 +129,7 @@ export function ColourControl({
         {EMITTER_PROPERTIES.map((name) => {
           const intent = values[name]
           const level = intent?.kind === 'level' ? intent.value : null
-          const label = templatePropertyFor(name)?.label ?? name
+          const label = palettePropertyFor(name)?.label ?? name
           return (
             <div key={name} className="space-y-1">
               <div className="flex items-center justify-between gap-2">

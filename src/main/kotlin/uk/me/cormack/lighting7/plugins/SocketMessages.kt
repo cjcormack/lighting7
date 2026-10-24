@@ -33,7 +33,7 @@ import kotlin.reflect.KClass
     ProjectInMessage::class,
     SelectionInMessage::class,
     SpeedMasterInMessage::class,
-    StackEffectSizeInMessage::class,
+    StackFxAmountInMessage::class,
     SurfaceInMessage::class,
     WindowsInMessage::class,
 )
@@ -58,7 +58,7 @@ sealed class InMessage
     SceneryOutMessage::class,
     SelectionOutMessage::class,
     SpeedMasterOutMessage::class,
-    StackEffectSizeOutMessage::class,
+    StackFxAmountOutMessage::class,
     StageRenderOutMessage::class,
     SurfaceOutMessage::class,
     VenueOutMessage::class,

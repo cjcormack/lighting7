@@ -34,7 +34,7 @@ class BuildCueAssignmentsForCueTest {
         CueApplyData(
             cueId = 7,
             cueName = "test",
-            adHocEffects = emptyList(),
+            adHocFx = emptyList(),
             propertyAssignments = assignments.toList(),
             cueStackId = 3,
             sortOrder = 2,

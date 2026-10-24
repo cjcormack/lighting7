@@ -16,8 +16,8 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *
  * Targets fall into three rough families:
  *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm], [GrandMasterFader],
- *     [StackEffectSize]) — fader / encoder movements map to a Layer 2 property write (Phase 3), a
- *     tempo write, the grand master's level or a cue stack's effect size.
+ *     [StackFxAmount]) — fader / encoder movements map to a Layer 2 property write (Phase 3), a
+ *     tempo write, the grand master's level or a cue stack's FX amount.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
  *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
@@ -28,7 +28,7 @@ import uk.me.cormack.lighting7.state.SubselectMode
  *     See `docs/plans/completed/midi-surface-plan.md` §D3.
  *   - **The hand** ([PickUpPad], [HandPlaceInBank], [HandDrop]) — the desk's held record, moved
  *     between screens (multi-screen plan §3.5)
- *   - **Records** ([ApplyLook], [PressTemplate], [PressPad]) — a named thing from the library on a
+ *   - **Records** ([ApplyLook], [PressPalette], [PressPad]) — a named thing from the library on a
  *     button, uuid-addressed, **each with exactly one behaviour** (§D6): a Look always onto its own
  *     fixtures, a template always onto the selection, a pad always its own bank's plan.
  *   - **Busk pages** ([BuskPageNext], [BuskPagePrev], [BuskPageSet]) — move the desk's showing busk
@@ -148,12 +148,12 @@ sealed class BindingTarget {
     data object GrandMasterFader : BindingTarget()
 
     /**
-     * Set a cue stack's effect size (effects plan D10) from a fader / encoder: 0..127 across
+     * Set a cue stack's FX amount (effects plan D10) from a fader / encoder: 0..127 across
      * 0–100 %. [stackUuid] wins over [stackId] when set, as on the stack buttons above.
      */
     @Serializable
     @SerialName("stackFxAmount")
-    data class StackEffectSize(val stackId: Int, val stackUuid: String? = null) : BindingTarget()
+    data class StackFxAmount(val stackId: Int, val stackUuid: String? = null) : BindingTarget()
 
     /**
      * Switch the active bank for the given device on press. Device-side bank buttons
@@ -313,7 +313,7 @@ sealed class BindingTarget {
      */
     @Serializable
     @SerialName("pressPalette")
-    data class PressTemplate(val paletteUuid: String) : BindingTarget()
+    data class PressPalette(val paletteUuid: String) : BindingTarget()
 
     /**
      * Press a **busk pad** on button press — the pad's own plan, solo siblings included.

@@ -41,10 +41,10 @@ export function OwnershipSwatch({ source }: { source: CellOwnershipSource }) {
       className={cn(
         source === 'baseline' ? 'bg-muted' : ownershipCellClass(swatchOwnership(source)),
         // The badge the cell wears, so the legend teaches the mark and not only the ring.
-        source === 'effect' && 'bg-violet-500/90 text-white',
+        source === 'fx' && 'bg-violet-500/90 text-white',
       )}
     >
-      {source === 'effect' && <AudioWaveform className="size-2.5" />}
+      {source === 'fx' && <AudioWaveform className="size-2.5" />}
     </LegendSwatch>
   )
 }
@@ -63,11 +63,11 @@ export function OwnershipLegend({
             title={OWNERSHIP_LABELS[source]}
             className={cn('flex shrink-0 items-center gap-1.5', source === 'baseline' && 'opacity-62')}
           >
-            {source === 'effect' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
+            {source === 'fx' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
             <span className="@[1100px]:hidden">{LEGEND_SHORT[source]}</span>
             <span className="hidden @[1100px]:inline">{LEGEND_GLOSS[source]}</span>
           </span>
-          {source === 'effect' && (
+          {source === 'fx' && (
             <span title={LENS_HELD_GLOSS} className="hidden shrink-0 items-center gap-1.5 @[620px]:flex">
               <LensChipSample held />
               <span className="@[1100px]:hidden">{LENS_HELD_SHORT}</span>
@@ -217,10 +217,10 @@ export function OwnershipKey() {
       {LEGEND_ORDER.map((source) => (
         <Fragment key={source}>
           <li className="flex items-center gap-2">
-            {source === 'effect' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
+            {source === 'fx' ? <LensChipSample held={false} /> : <OwnershipSwatch source={source} />}
             <span className={cn(source === 'baseline' && 'opacity-62')}>{LEGEND_GLOSS[source]}</span>
           </li>
-          {source === 'effect' && (
+          {source === 'fx' && (
             <li className="flex items-center gap-2">
               <LensChipSample held />
               {LENS_HELD_GLOSS}

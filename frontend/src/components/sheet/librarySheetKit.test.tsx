@@ -331,8 +331,8 @@ describe('libraryPermission — another project’s library is read-only (D12)',
 
 describe('reportSheetWriteFailure (D14)', () => {
   it('phrases a refusal by its code, and falls back to the desk’s own message', () => {
-    const err = { status: 409, data: { error: 'Colour is taken by M3', code: 'SPEED_MASTER_USAGE_TAKEN' } }
-    expect(sheetWriteFailureMessage(err, { SPEED_MASTER_USAGE_TAKEN: (m) => `Usage refused: ${m}` })).toBe(
+    const err = { status: 409, data: { error: 'Colour is taken by M3', code: 'SPEED_MASTER_FAMILY_TAKEN' } }
+    expect(sheetWriteFailureMessage(err, { SPEED_MASTER_FAMILY_TAKEN: (m) => `Usage refused: ${m}` })).toBe(
       'Usage refused: Colour is taken by M3',
     )
     expect(sheetWriteFailureMessage(err)).toBe('Colour is taken by M3')

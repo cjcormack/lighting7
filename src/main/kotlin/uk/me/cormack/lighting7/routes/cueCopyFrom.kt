@@ -99,8 +99,8 @@ internal fun copyCuesFrom(state: State, target: DaoProject, request: CopyCuesFro
             stackId = stack?.id?.value,
             looksCopied = report.looks.toList(),
             looksLinked = report.looksLinked.toList(),
-            palettesCopied = report.templates.toList(),
-            palettesLinked = report.templatesLinked.toList(),
+            palettesCopied = report.palettes.toList(),
+            palettesLinked = report.palettesLinked.toList(),
         ),
     )
 }
@@ -113,7 +113,7 @@ internal fun copyCuesFrom(state: State, target: DaoProject, request: CopyCuesFro
 internal fun announceCuesCopied(state: State, response: CopyCuesFromResponse, priorities: Map<Int, Int>, live: Boolean) {
     val fixtures = state.show.fixtures
     if (response.looksCopied.isNotEmpty()) fixtures.lookListChanged()
-    if (response.palettesCopied.isNotEmpty()) fixtures.templateListChanged()
+    if (response.palettesCopied.isNotEmpty()) fixtures.paletteListChanged()
     when {
         response.stackId != null && live -> announceEntriesPlaced(state, response.stackId, priorities)
         response.stackId != null -> {

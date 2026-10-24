@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LayerRow, LookStack, describeStackSource, type LookStackLayer } from './LookStack'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: () => ({
@@ -27,9 +27,9 @@ function look(overrides: Partial<LookSummary> = {}): LookSummary {
     notes: null,
     families: ['COLOUR'],
     rowCount: 3,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 3,
-    hasDeferredEffects: false,
+    hasDeferredFx: false,
     preview: [],
     layerCount: 1,
     buskPageCount: 0,
@@ -42,7 +42,7 @@ const LOOKS = new Map([
   [8, look({ id: 8, uuid: 'u8', name: 'Slow Pulse', families: ['INTENSITY'] })],
 ])
 
-function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSummary {
+function paletteSummary(overrides: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
     id: 4,
     uuid: 'ut4',
@@ -61,7 +61,7 @@ function templateSummary(overrides: Partial<TemplateSummary> = {}): TemplateSumm
         value: '#FF9D4A;policy=extract',
       },
     ],
-    effect: null,
+    fx: null,
     layerCount: 0,
     lastPressedAt: null,
     buskPageCount: 0,
@@ -422,23 +422,23 @@ describe('LookStack — a host with a selection of its own (the cue editor’s L
 
 /**
  * The template arm, which had no coverage at all: every existing case passes a LOOK source and
- * `undefined` for the template library, so neither the `isTemplate` badge nor the kind was pinned.
+ * `undefined` for the template library, so neither the `isPalette` badge nor the kind was pinned.
  */
 describe('describeStackSource — palette layers', () => {
-  const templates = new Map<number, TemplateSummary>([
-    [4, templateSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
-    [5, templateSummary({ id: 5, name: 'Amber Breathe', kind: 'effect', rows: [] })],
+  const templates = new Map<number, PaletteSummary>([
+    [4, paletteSummary({ id: 4, name: 'Amber Key', kind: 'value' })],
+    [5, paletteSummary({ id: 5, name: 'Amber Breathe', kind: 'fx', rows: [] })],
   ])
   const source = (id: number, name: string) =>
-    ({ kind: 'TEMPLATE', id, uuid: `ut${id}`, name }) as const
+    ({ kind: 'PALETTE', id, uuid: `ut${id}`, name }) as const
 
   it('reports the family and the kind from the library entry', () => {
     expect(describeStackSource(source(5, 'Amber Breathe'), LOOKS, templates, true)).toEqual({
       name: 'Amber Breathe',
       families: ['COLOUR'],
       missing: false,
-      isTemplate: true,
-      templateKind: 'effect',
+      isPalette: true,
+      paletteKind: 'fx',
     })
   })
 
@@ -446,9 +446,9 @@ describe('describeStackSource — palette layers', () => {
     // A surface that did not load the list knows a layer names a template but not which kind, and
     // it must not be painted as missing on that account either.
     const info = describeStackSource(source(5, 'Amber Breathe'), LOOKS, undefined, true)
-    expect(info.templateKind).toBeUndefined()
+    expect(info.paletteKind).toBeUndefined()
     expect(info.missing).toBe(false)
-    expect(info.isTemplate).toBe(true)
+    expect(info.isPalette).toBe(true)
   })
 
   it('draws the wave beside the palette only for an effect palette', () => {

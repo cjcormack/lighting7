@@ -93,7 +93,7 @@ describe('reorderCueStackCues optimistic patch', () => {
     name: `cue-${id}`,
     sortOrder,
     layerCount: 0,
-    adHocEffectCount: 0,
+    adHocFxCount: 0,
     autoAdvance: false,
     autoAdvanceDelayMs: null,
     fadeDurationMs: null,

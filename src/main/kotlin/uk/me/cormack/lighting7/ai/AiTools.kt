@@ -16,11 +16,11 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.and
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
 import uk.me.cormack.lighting7.fx.*
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
-import uk.me.cormack.lighting7.fx.TemplateProperty
+import uk.me.cormack.lighting7.fx.PaletteProperty
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import org.jetbrains.exposed.v1.core.isNotNull
@@ -47,7 +47,7 @@ class AiTools(private val state: State) {
         applyLookTool,
         setBpmTool,
         createSpeedMasterTool,
-        clearEffectsTool,
+        clearFxTool,
         parkChannelTool,
         unparkChannelTool,
         aimFixturesTool,
@@ -70,9 +70,9 @@ class AiTools(private val state: State) {
         setProgrammerTool,
         clearProgrammerTool,
         setBlindTool,
-        applyTemplateTool,
+        applyPaletteTool,
         recordLookTool,
-        createTemplateTool,
+        createPaletteTool,
         setSceneryTool,
         moveSceneryTool,
         setCueEventsTool,
@@ -83,6 +83,7 @@ class AiTools(private val state: State) {
      * Execute a tool by name and return a JSON result string.
      */
     suspend fun executeTool(name: String, input: JsonObject): ToolExecutionResult {
+        toolDefs.firstOrNull { it.name == name }?.let { def -> undeclaredArgumentRefusal(def, input)?.let { return errorResult(it) } }
         return try {
             when (name) {
                 "create_look" -> executeCreateLook(input)
@@ -91,7 +92,7 @@ class AiTools(private val state: State) {
                 "apply_look" -> executeApplyLook(input)
                 "set_bpm" -> executeSetBpm(input)
                 "create_speed_master" -> executeCreateSpeedMaster(input)
-                "clear_effects" -> executeClearEffects(input)
+                "clear_fx" -> executeClearFx(input)
                 "park_channel" -> executeParkChannel(input)
                 "unpark_channel" -> executeUnparkChannel(input)
                 "aim_fixtures" -> executeAimFixtures(input)
@@ -114,9 +115,9 @@ class AiTools(private val state: State) {
                 "set_programmer" -> programmer.setProgrammer(input)
                 "clear_programmer" -> programmer.clearProgrammer(input)
                 "set_blind" -> programmer.setBlind(input)
-                "apply_palette" -> programmer.applyTemplate(input)
+                "apply_palette" -> programmer.applyPalette(input)
                 "record_look" -> programmer.recordLook(input)
-                "create_palette" -> executeCreateTemplate(input)
+                "create_palette" -> executeCreatePalette(input)
                 "set_scenery" -> executeSetScenery(input)
                 "move_scenery" -> executeMoveScenery(input)
                 "set_cue_events" -> executeSetCueEvents(input)
@@ -144,14 +145,14 @@ class AiTools(private val state: State) {
         val name = input["name"]?.jsonPrimitive?.content?.trim()?.takeIf { it.isNotEmpty() }
             ?: return errorResult("Missing 'name'")
         val notes = input["description"]?.jsonPrimitive?.contentOrNull
-        val effectsArray = input["effects"]?.jsonArray ?: JsonArray(emptyList())
+        val fxArray = input["fx"]?.jsonArray ?: JsonArray(emptyList())
         val valuesArray = input["values"]?.jsonArray ?: JsonArray(emptyList())
         val sceneryArray = input["scenery"]?.jsonArray
-        if (effectsArray.isEmpty() && valuesArray.isEmpty() && sceneryArray.isNullOrEmpty()) {
-            return errorResult("Give 'values', 'effects', 'scenery', or any mix of them")
+        if (fxArray.isEmpty() && valuesArray.isEmpty() && sceneryArray.isNullOrEmpty()) {
+            return errorResult("Give 'values', 'fx', 'scenery', or any mix of them")
         }
 
-        val effects = parseLookEffects(effectsArray)
+        val effects = parseLookFxList(fxArray)
 
         val apply = input["apply"]?.jsonPrimitive?.booleanOrNull ?: false
 
@@ -185,7 +186,7 @@ class AiTools(private val state: State) {
 
         val lookId = look.id.value
 
-        val pressed = if (apply) pressLook(lookId, beatDivision = null) else null
+        val pressed = if (apply) pressLook(lookId, cycle = null) else null
 
         return ToolExecutionResult(
             success = true,
@@ -195,11 +196,11 @@ class AiTools(private val state: State) {
                 put("lookId", lookId)
                 put("name", name)
                 put("valueCount", values.rows.size)
-                put("effectCount", effects.size)
+                put("fxCount", effects.size)
                 putLookValues(values)
                 pressed?.let {
                     put("action", it.action)
-                    put("appliedEffectCount", it.effectCount)
+                    put("appliedFxCount", it.fxCount)
                 }
             }.toString()
         )
@@ -219,10 +220,10 @@ class AiTools(private val state: State) {
         val notesGiven = "description" in input
         val notes = input.present("description")?.jsonPrimitive?.contentOrNull
         val valuesArray = input.present("values")?.let { it as? JsonArray ?: return errorResult("'values' must be an array") }
-        val effectsArray = input.present("effects")?.let { it as? JsonArray ?: return errorResult("'effects' must be an array") }
+        val fxArray = input.present("fx")?.let { it as? JsonArray ?: return errorResult("'fx' must be an array") }
         val sceneryArray = input.present("scenery")?.let { it as? JsonArray ?: return errorResult("'scenery' must be an array") }
-        if (name == null && !notesGiven && valuesArray == null && effectsArray == null && sceneryArray == null) {
-            return errorResult("Give 'name', 'description', 'values', 'effects' or 'scenery' to change")
+        if (name == null && !notesGiven && valuesArray == null && fxArray == null && sceneryArray == null) {
+            return errorResult("Give 'name', 'description', 'values', 'fx' or 'scenery' to change")
         }
 
         val values = valuesArray?.let { resolveLookValues(state.show.fixtures, it) }
@@ -230,8 +231,8 @@ class AiTools(private val state: State) {
             if (values.problems.isNotEmpty()) return errorResult(values.problems.joinToString("; "))
             validateLookRows(values.rows)?.let { return errorResult(it) }
         }
-        val effects = effectsArray?.let { parseLookEffects(it) }
-        effects?.let { validateLookEffects(it, state.show.fxRegistry) }?.let { return errorResult(it) }
+        val effects = fxArray?.let { parseLookFxList(it) }
+        effects?.let { validateLookFx(it, state.show.fxRegistry) }?.let { return errorResult(it) }
 
         val project = state.projectManager.currentProject
         val scenery = sceneryArray?.let { items ->
@@ -271,7 +272,7 @@ class AiTools(private val state: State) {
             "name".takeIf { name != null },
             "description".takeIf { notesGiven },
             "values".takeIf { values != null },
-            "effects".takeIf { effects != null },
+            "fx".takeIf { effects != null },
             "scenery".takeIf { scenery != null },
         )
         return ToolExecutionResult(
@@ -283,7 +284,7 @@ class AiTools(private val state: State) {
                 put("name", lookName)
                 put("changed", buildJsonArray { changed.forEach { add(it) } })
                 values?.let { put("valueCount", it.rows.size); putLookValues(it) }
-                effects?.let { put("effectCount", it.size) }
+                effects?.let { put("fxCount", it.size) }
                 scenery?.let { put("sceneryCount", it.size) }
                 republished?.let { r -> put("cuesRepublished", buildJsonArray { r.cuesRepublished.forEach { add(it) } }) }
             }.toString(),
@@ -339,30 +340,30 @@ class AiTools(private val state: State) {
 
     private fun executeApplyLook(input: JsonObject): ToolExecutionResult {
         val lookId = input["lookId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'lookId'")
-        val beatDivision = input["beatDivision"]?.jsonPrimitive?.doubleOrNull
-        if (input["asValues"]?.jsonPrimitive?.booleanOrNull == true) return applyLookValues(lookId, beatDivision)
+        val cycle = input["cycle"]?.jsonPrimitive?.doubleOrNull
+        if (input["asValues"]?.jsonPrimitive?.booleanOrNull == true) return applyLookValues(lookId, cycle)
 
-        val outcome = pressLook(lookId, beatDivision) ?: return errorResult("Look not found: $lookId")
+        val outcome = pressLook(lookId, cycle) ?: return errorResult("Look not found: $lookId")
         return ToolExecutionResult(
             success = true,
-            description = "${outcome.action} look $lookId (${outcome.effectCount} effects)",
+            description = "${outcome.action} look $lookId (${outcome.fxCount} effects)",
             result = buildJsonObject {
                 put("action", outcome.action)
-                put("effectCount", outcome.effectCount)
+                put("fxCount", outcome.fxCount)
             }.toString()
         )
     }
 
     /** `asValues`: the Look's values and effects into the programmer's own, as `POST /looks/{id}/apply`. */
-    private fun applyLookValues(lookId: Int, beatDivision: Double?): ToolExecutionResult {
+    private fun applyLookValues(lookId: Int, cycle: Double?): ToolExecutionResult {
         val look = lookSource(lookId) ?: return errorResult("Look not found: $lookId")
-        val response = applyLookAsValues(state, look, fadeMs = null, beatDivision)
+        val response = applyLookAsValues(state, look, fadeMs = null, cycle)
         return ToolExecutionResult(
             success = true,
-            description = "Applied look $lookId as values: ${response.written} value(s), ${response.effectIds.size} effect(s)",
+            description = "Applied look $lookId as values: ${response.written} value(s), ${response.fxIds.size} effect(s)",
             result = buildJsonObject {
                 put("written", response.written)
-                put("effectIds", buildJsonArray { response.effectIds.forEach { add(JsonPrimitive(it)) } })
+                put("fxIds", buildJsonArray { response.fxIds.forEach { add(JsonPrimitive(it)) } })
             }.toString(),
         )
     }
@@ -380,9 +381,9 @@ class AiTools(private val state: State) {
      * is pressed whole (absolute-looks plan P1): no targets, so a call's `targets` are not read.
      * Null for a Look the current project lacks.
      */
-    private fun pressLook(lookId: Int, beatDivision: Double?): ToggleOutcome? {
+    private fun pressLook(lookId: Int, cycle: Double?): ToggleOutcome? {
         val look = lookSource(lookId) ?: return null
-        return state.show.programmerLayerStack.toggle(source = look, targets = emptyList(), beatDivisionOverride = beatDivision)
+        return state.show.programmerLayerStack.toggle(source = look, targets = emptyList(), cycleOverride = cycle)
     }
 
     private fun parseTargets(array: JsonArray): List<CueTargetDto> = array.map { t ->
@@ -458,11 +459,11 @@ class AiTools(private val state: State) {
         }
     }
 
-    private fun executeClearEffects(input: JsonObject): ToolExecutionResult {
+    private fun executeClearFx(input: JsonObject): ToolExecutionResult {
         val targets = input["targets"]?.jsonArray
 
         if (targets == null || targets.isEmpty()) {
-            state.show.fxEngine.clearAllEffects()
+            state.show.fxEngine.clearAllFx()
             return ToolExecutionResult(
                 success = true,
                 description = "Cleared all effects",
@@ -477,11 +478,11 @@ class AiTools(private val state: State) {
         }
         for (ref in refs) {
             totalRemoved += when (ref) {
-                is TargetRef.Group -> state.show.fxEngine.removeEffectsForGroup(ref.key)
-                is TargetRef.Fixture -> state.show.fxEngine.removeEffectsForFixture(ref.key)
+                is TargetRef.Group -> state.show.fxEngine.removeFxForGroup(ref.key)
+                is TargetRef.Fixture -> state.show.fxEngine.removeFxForFixture(ref.key)
             }
         }
-        totalRemoved += state.show.fxEngine.removeSelectionEffectsWithin(refs)
+        totalRemoved += state.show.fxEngine.removeSelectionFxWithin(refs)
 
         return ToolExecutionResult(
             success = true,
@@ -492,11 +493,11 @@ class AiTools(private val state: State) {
 
     private fun executeGetCurrentState(input: JsonObject): ToolExecutionResult {
         val include = input["include"]?.jsonArray?.map { it.jsonPrimitive.content }?.toSet()
-            ?: setOf(
-                "active_effects", "bpm", "speed_masters", "fixtures", "groups", "looks",
-                "palettes", "cues", "cue_stacks", "cue_run", "cue_holds", "programmer", "selection", "windows",
-                "parked",
-            )
+            ?: CURRENT_STATE_PARTS
+        val unknown = include - CURRENT_STATE_PARTS
+        if (unknown.isNotEmpty()) {
+            return errorResult("Unknown 'include' value(s): ${unknown.joinToString()}. Known: ${CURRENT_STATE_PARTS.joinToString()}")
+        }
 
         val result = buildJsonObject {
             if ("bpm" in include) {
@@ -523,8 +524,8 @@ class AiTools(private val state: State) {
                             put("isRunning", master.isRunning)
                             // Routing/follow settings, so the model knows a follower's tempo
                             // is derived (set_bpm refuses it) and which master an unassigned
-                            // effect of each category will land on.
-                            master.usage?.let { put("usage", it) }
+                            // effect of each family will land on.
+                            master.family?.let { put("family", it) }
                             master.followNum?.let { put("followNum", it) }
                             master.followDen?.let { put("followDen", it) }
                             master.followTargetUuid?.let { put("followTargetUuid", it.toString()) }
@@ -533,18 +534,18 @@ class AiTools(private val state: State) {
                 })
             }
 
-            if ("active_effects" in include) {
-                put("activeEffects", buildJsonArray {
-                    for (effect in state.show.fxEngine.getActiveEffects()) {
+            if ("active_fx" in include) {
+                put("activeFx", buildJsonArray {
+                    for (effect in state.show.fxEngine.getActiveFx()) {
                         addJsonObject {
                             put("id", effect.id)
                             // The registration id, not the display name: the model echoes this
-                            // straight back into add_effect, and a user-defined effect's name
+                            // straight back into an FX tool, and a user-defined effect's name
                             // resolves to nothing in the registry.
-                            put("effectType", effect.effectTypeId)
+                            put("fxType", effect.fxTypeId)
                             put("targetKey", effect.target.targetKey)
                             put("propertyName", effect.target.propertyName)
-                            put("isGroupTarget", effect.isGroupEffect)
+                            put("isGroupTarget", effect.isGroupFx)
                             put("targetType", effect.target.targetRef.discriminator)
                             (effect.target.targetRef as? FxTargetRef.SelectionRef)?.let { ref ->
                                 put("targets", buildJsonArray {
@@ -554,19 +555,19 @@ class AiTools(private val state: State) {
                                     }
                                 })
                             }
-                            put("beatDivision", effect.timing.beatDivision)
+                            put("cycle", effect.timing.cycle)
                             // D7: the division is seconds and no master is followed.
                             if (effect.onSeconds) put("seconds", true)
                             // Effects plan D2, D5, D9 — each said only where it is not the default.
                             val dyn = effect.dynamics
-                            if (dyn.size != 1.0) put("size", dyn.size)
-                            if (dyn.direction != EffectDirection.FORWARD) put("direction", dyn.direction.name)
-                            dyn.nShot?.let { put("nShot", it) }
+                            if (dyn.amount != 1.0) put("amount", dyn.amount)
+                            if (dyn.direction != FxDirection.FORWARD) put("direction", dyn.direction.name)
+                            dyn.runs?.let { put("runs", it) }
                             // D4's shape, likewise.
                             if (dyn.spread != 1.0) put("spread", dyn.spread)
                             if (dyn.wings != 1) put("wings", dyn.wings)
-                            if (dyn.blocks != 1) put("blocks", dyn.blocks)
-                            if (dyn.groups != 0) put("groups", dyn.groups)
+                            if (dyn.segments != 1) put("segments", dyn.segments)
+                            if (dyn.parts != 0) put("parts", dyn.parts)
                             put("blendMode", effect.blendMode.name)
                             put("isRunning", effect.isRunning)
                             if (effect.leaving) put("leaving", true)
@@ -631,7 +632,7 @@ class AiTools(private val state: State) {
                 // name, and the uuid is what it names them by.
                 val project = state.projectManager.currentProject
                 val templates = transaction(state.database) {
-                    DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
+                    DaoPalette.find { DaoPalettes.project eq project.id }.mapNotNull { template ->
                         // [genericColourRows] owns this rule — see its doc for why the row count is
                         // not one of its clauses any more.
                         val rows = genericColourRows(
@@ -658,7 +659,7 @@ class AiTools(private val state: State) {
                             put("id", cue.id.value)
                             put("name", cue.name)
                             put("layerCount", cue.layers.count())
-                            put("adHocEffectCount", cue.adHocEffects.count())
+                            put("adHocFxCount", cue.adHocFx.count())
                             putJsonArray("entries") {
                                 places[cue.id.value].orEmpty().forEach { slot ->
                                     addJsonObject {
@@ -771,8 +772,7 @@ class AiTools(private val state: State) {
                         for (layer in store.layers) {
                             addJsonObject {
                                 put("layerId", layer.layerId)
-                                // A palette layer's stored kind is TEMPLATE; Claude reads it as PALETTE.
-                                put("sourceKind", if (layer.source.kind == LayerSourceKind.TEMPLATE) "PALETTE" else layer.source.kind.name)
+                                put("sourceKind", layer.source.kind.name)
                                 put("sourceId", layer.source.id)
                                 put("sourceName", layer.source.name)
                                 put("sortOrder", layer.sortOrder)
@@ -959,24 +959,24 @@ class AiTools(private val state: State) {
         // (`pos:`, the unit every new position write takes) — each head's own coarse bytes, so it
         // resolves back to the aim's coarse channels exactly and outlives the programmer. The fine
         // channel is not part of the scale; a palette never wrote it.
-        val templateRows = resolved.written.mapNotNull { w ->
+        val paletteRows = resolved.written.mapNotNull { w ->
             val value = aimed.paletteValues[w.target.key] ?: return@mapNotNull null
-            TemplateRowDto(
+            PaletteRowDto(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = w.target.key,
-                propertyName = TemplateProperty.POSITION.propertyName,
+                propertyName = PaletteProperty.POSITION.propertyName,
                 value = value,
             )
         }
-        var savedTemplate: TemplateDto? = null
-        if (saveAs != null && !dryRun && templateRows.isNotEmpty()) {
-            when (val created = performTemplateCreate(state, project, TemplateInput(name = saveAs, rows = templateRows))) {
-                is TemplateCreateResult.Invalid -> return errorResult(created.message)
-                is TemplateCreateResult.Duplicate -> return errorResult(
+        var savedPalette: PaletteDto? = null
+        if (saveAs != null && !dryRun && paletteRows.isNotEmpty()) {
+            when (val created = performPaletteCreate(state, project, PaletteInput(name = saveAs, rows = paletteRows))) {
+                is PaletteCreateResult.Invalid -> return errorResult(created.message)
+                is PaletteCreateResult.Duplicate -> return errorResult(
                     "${created.message} — nothing was aimed. Pick another name, or combine several aims in one " +
                         "palette by running each with dryRun and passing their positions to create_palette.",
                 )
-                is TemplateCreateResult.Ok -> savedTemplate = created.template
+                is PaletteCreateResult.Ok -> savedPalette = created.palette
             }
         }
         val response = if (dryRun) resolved else when (val outcome = aimIntoProgrammer(state, project, targets, x, y, z, fadeMs)) {
@@ -988,7 +988,7 @@ class AiTools(private val state: State) {
         // would be a focus for nowhere. Aim has already refused anything focus would (a point off
         // the stage, a negative fade), and an empty list of aimed heads skips the call.
         val focused = if (!focus) null else {
-            val notAimed = response.skipped.map { SpreadSkipDto(it.target, "not aimed, so not focused — ${it.reason}") }
+            val notAimed = response.skipped.map { FanSkipDto(it.target, "not aimed, so not focused — ${it.reason}") }
             val aimed = response.written.map { it.target }
             if (aimed.isEmpty()) FocusResponse(skipped = notAimed) else when (
                 val outcome = focusIntoProgrammer(state, project, aimed, FocusPointDto(x, y, z), fadeMs, write = !dryRun)
@@ -1004,7 +1004,7 @@ class AiTools(private val state: State) {
             description = "$verb ${response.written.size} fixture(s) at ($x, $y, $z)" +
                 (if (response.skipped.isEmpty()) "" else ", skipped ${response.skipped.size}") +
                 (focused?.let { ", ${if (dryRun) "would focus" else "focused"} ${it.written.size}" } ?: "") +
-                (savedTemplate?.let { " and saved them as palette '${it.name}'" } ?: ""),
+                (savedPalette?.let { " and saved them as palette '${it.name}'" } ?: ""),
             result = buildJsonObject {
                 put("dryRun", dryRun)
                 focused?.let { f ->
@@ -1026,7 +1026,7 @@ class AiTools(private val state: State) {
                         }
                     })
                 }
-                savedTemplate?.let { t ->
+                savedPalette?.let { t ->
                     putJsonObject("palette") {
                         put("paletteId", t.id)
                         put("uuid", t.uuid)
@@ -1034,7 +1034,7 @@ class AiTools(private val state: State) {
                         put("rowCount", t.rows.size)
                     }
                 }
-                if (saveAs != null && savedTemplate == null) {
+                if (saveAs != null && savedPalette == null) {
                     put(
                         "paletteNote",
                         if (dryRun) "dryRun: palette '$saveAs' was not created"
@@ -1171,7 +1171,7 @@ class AiTools(private val state: State) {
 
     private fun executeCreateCue(input: JsonObject): ToolExecutionResult {
         val name = input["name"]?.jsonPrimitive?.content ?: return errorResult("Missing 'name'")
-        val adHocArray = input["adHocEffects"]?.jsonArray
+        val adHocArray = input["adHocFx"]?.jsonArray
         val stackId = input.present("stackId")?.let { it.jsonPrimitive.intOrNull ?: return errorResult("stackId must be an integer") }
         if (stackId == null && (input.present("number") != null || input.present("after") != null)) {
             return errorResult("number and after place the cue in a stack: give stackId too, or leave them out for a loose cue")
@@ -1179,9 +1179,9 @@ class AiTools(private val state: State) {
 
         val project = state.projectManager.currentProject
         val layers = parseCueLayers(input["layers"]?.jsonArray)
-        (layerSourceProblems(project, layers) + untargetedEffectLayerProblems(layers))
+        (layerSourceProblems(project, layers) + untargetedFxLayerProblems(layers))
             .takeIf { it.isNotEmpty() }?.let { return errorResult(it.joinToString("; ")) }
-        val adHocEffects = adHocArray?.mapIndexed { index, effect -> parseAdHocEffectFromJson(effect.jsonObject, "adHocEffects[$index]") }
+        val adHocFx = adHocArray?.mapIndexed { index, effect -> parseAdHocFxFromJson(effect.jsonObject, "adHocFx[$index]") }
             ?: emptyList()
         val values = input.present("values")?.let { raw ->
             val items = raw as? JsonArray ?: return errorResult("'values' must be an array")
@@ -1226,7 +1226,7 @@ class AiTools(private val state: State) {
                 this.project = project
                 this.speedMasters = speedMasters
             }
-            writeCueChildren(newCue, adHocEffects, assignments, layers = layers, created = true, registry = state.show.fxRegistry)
+            writeCueChildren(newCue, adHocFx, assignments, layers = layers, created = true, registry = state.show.fxRegistry)
             replaceCueScenery(newCue, scenery)
             replaceCueEvents(newCue, events)
             val entry = placement?.let { placeCueInStack(it.stack, newCue, cueNumber = it.number, position = it.position) }
@@ -1244,7 +1244,7 @@ class AiTools(private val state: State) {
         return ToolExecutionResult(
             success = true,
             description = "Created cue '$name' (id=$cueId, ${layers.size} layers, ${assignments.size} values, " +
-                "${adHocEffects.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events, " +
+                "${adHocFx.size} ad-hoc effects, ${scenery.size} scenery changes, ${events.size} events, " +
                 "${speedMasters.size} speed masters)" +
                 (entry?.let { e -> " in stack $stackId" + (e["number"]?.jsonPrimitive?.content?.let { " as Q$it" } ?: "") } ?: ", loose"),
             result = buildJsonObject {
@@ -1253,7 +1253,7 @@ class AiTools(private val state: State) {
                 entry?.let { put("entry", it) }
                 put("layerCount", layers.size)
                 put("valueCount", assignments.size)
-                put("adHocEffectCount", adHocEffects.size)
+                put("adHocFxCount", adHocFx.size)
                 if (speedMasters.isNotEmpty()) {
                     putJsonArray("speedMasters") {
                         speedMasters.forEach { addJsonObject { put("speedMasterUuid", it.speedMasterUuid); put("bpm", it.bpm) } }
@@ -1274,13 +1274,13 @@ class AiTools(private val state: State) {
         layersArray?.mapIndexed { index, layer ->
             val obj = layer as? JsonObject ?: throw IllegalArgumentException("layers[$index] must be an object")
             val lookId = obj.present("lookId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: lookId must be an integer") }
-            val templateId = obj.present("paletteId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: paletteId must be an integer") }
-            if ((lookId == null) == (templateId == null)) {
+            val paletteId = obj.present("paletteId")?.let { it.jsonPrimitive.intOrNull ?: throw IllegalArgumentException("layers[$index]: paletteId must be an integer") }
+            if ((lookId == null) == (paletteId == null)) {
                 throw IllegalArgumentException("layers[$index]: give exactly one of lookId or paletteId")
             }
             CueLayerDto(
                 lookId = lookId,
-                templateId = templateId,
+                paletteId = paletteId,
                 targets = obj["targets"]?.jsonArray?.let(::parseTargets).orEmpty(),
                 // Declaration order is the stack order unless the caller says otherwise, so a tool
                 // call that lists layers bottom-to-top composes the way it reads.
@@ -1300,15 +1300,15 @@ class AiTools(private val state: State) {
      * targets has nothing to land on — refused here rather than left silent at GO, as the busk pad
      * refuses it with nothing selected. A Look needs no targets: its values and effects name their own.
      */
-    internal fun untargetedEffectLayerProblems(layers: List<CueLayerDto>): List<String> {
-        val templateIds = layers.filter { it.targets.isEmpty() }.mapNotNull { it.templateId }.toSet()
-        if (templateIds.isEmpty()) return emptyList()
-        val templateNeeding = transaction(state.database) {
-            DaoTemplate.forIds(templateIds.toList()).filter { it.isGenericTemplate() }.mapTo(HashSet()) { it.id.value }
+    internal fun untargetedFxLayerProblems(layers: List<CueLayerDto>): List<String> {
+        val paletteIds = layers.filter { it.targets.isEmpty() }.mapNotNull { it.paletteId }.toSet()
+        if (paletteIds.isEmpty()) return emptyList()
+        val paletteNeeding = transaction(state.database) {
+            DaoPalette.forIds(paletteIds.toList()).filter { it.isGenericPalette() }.mapTo(HashSet()) { it.id.value }
         }
         return layers.mapIndexedNotNull { index, layer ->
-            if (layer.targets.isEmpty() && layer.templateId in templateNeeding) {
-                "layers[$index]: palette ${layer.templateId} is generic — its effect or values land on the layer's targets, so give targets"
+            if (layer.targets.isEmpty() && layer.paletteId in paletteNeeding) {
+                "layers[$index]: palette ${layer.paletteId} is generic — its effect or values land on the layer's targets, so give targets"
             } else {
                 null
             }
@@ -1322,18 +1322,18 @@ class AiTools(private val state: State) {
      */
     internal fun layerSourceProblems(project: DaoProject, layers: List<CueLayerDto>): List<String> {
         val lookIds = layers.mapNotNull { it.lookId }.toSet()
-        val templateIds = layers.mapNotNull { it.templateId }.toSet()
-        if (lookIds.isEmpty() && templateIds.isEmpty()) return emptyList()
+        val paletteIds = layers.mapNotNull { it.paletteId }.toSet()
+        if (lookIds.isEmpty() && paletteIds.isEmpty()) return emptyList()
         val (looks, templates) = transaction(state.database) {
             val looks = if (lookIds.isEmpty()) emptySet() else
                 DaoLook.find { (DaoLooks.project eq project.id) and (DaoLooks.id inList lookIds) }.mapTo(HashSet()) { it.id.value }
-            val templates = if (templateIds.isEmpty()) emptySet() else
-                DaoTemplate.find { (DaoTemplates.project eq project.id) and (DaoTemplates.id inList templateIds) }
+            val templates = if (paletteIds.isEmpty()) emptySet() else
+                DaoPalette.find { (DaoPalettes.project eq project.id) and (DaoPalettes.id inList paletteIds) }
                     .mapTo(HashSet()) { it.id.value }
             looks to templates
         }
         return (lookIds - looks).sorted().map { "layers: no look $it in this project (see describe_rig)" } +
-            (templateIds - templates).sorted().map { "layers: no palette $it in this project (see describe_rig)" }
+            (paletteIds - templates).sorted().map { "layers: no palette $it in this project (see describe_rig)" }
     }
 
     private fun executeApplyCue(input: JsonObject): ToolExecutionResult {
@@ -1352,12 +1352,12 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Applied cue '${press.cueName}' (${press.acquired.effectCount} effects)" +
+            description = "Applied cue '${press.cueName}' (${press.acquired.fxCount} effects)" +
                 (if (replaceAll) " [let go of every other applied cue]" else "") +
                 (if (press.acquired.first) "" else " — it was already live, and now composes on top"),
             result = buildJsonObject {
                 put("cueName", press.cueName)
-                put("effectCount", press.acquired.effectCount)
+                put("fxCount", press.acquired.fxCount)
                 put("replaceAll", replaceAll)
             }.toString()
         )
@@ -1546,7 +1546,7 @@ class AiTools(private val state: State) {
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
 
         // Its loose hold only (§3.4): a running stack that holds it keeps it on stage.
-        val removedCount = state.show.cueStackManager.holds.dropLoose(state, cueId).effectsRemoved
+        val removedCount = state.show.cueStackManager.holds.dropLoose(state, cueId).fxRemoved
 
         return ToolExecutionResult(
             success = true,
@@ -1588,7 +1588,7 @@ class AiTools(private val state: State) {
 
     private fun executeActivateCueStack(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
-        val entryId = namedEntryId(input, stackId, refuseCueId = true).getOrElse { return errorResult(it.message!!) }
+        val entryId = namedEntryId(input, stackId).getOrElse { return errorResult(it.message!!) }
 
         val manager = state.show.cueStackManager
         // No entry named: `activateAtFirstCue`, not a hand-rolled "first row" query. It skips
@@ -1610,13 +1610,13 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Activated stack $stackId at cue '${result.cueName}' (${result.effectCount} effects)",
+            description = "Activated stack $stackId at cue '${result.cueName}' (${result.fxCount} effects)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("entryId", result.entryId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
-                put("effectCount", result.effectCount)
+                put("fxCount", result.fxCount)
             }.toString()
         )
     }
@@ -1655,12 +1655,12 @@ class AiTools(private val state: State) {
 
         return ToolExecutionResult(
             success = true,
-            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.effectCount} effects)",
+            description = "Advanced stack $stackId ${directionStr.lowercase()} to cue '${result.cueName}' (${result.fxCount} effects)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
-                put("effectCount", result.effectCount)
+                put("fxCount", result.fxCount)
             }.toString()
         )
     }
@@ -1674,7 +1674,7 @@ class AiTools(private val state: State) {
      */
     private fun executeSetStandby(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
-        val entryId = namedEntryId(input, stackId, refuseCueId = true).getOrElse { return errorResult(it.message!!) }
+        val entryId = namedEntryId(input, stackId).getOrElse { return errorResult(it.message!!) }
 
         val manager = state.show.cueStackManager
         val runState = manager.runState
@@ -1752,12 +1752,12 @@ class AiTools(private val state: State) {
             success = true,
             description = "GO on stack $stackId — " +
                 (if (wasActive) "fired" else "started at") +
-                " cue '${result.cueName}' (${result.effectCount} effects)",
+                " cue '${result.cueName}' (${result.fxCount} effects)",
             result = buildJsonObject {
                 put("stackId", result.stackId)
                 put("cueId", result.cueId)
                 put("cueName", result.cueName)
-                put("effectCount", result.effectCount)
+                put("fxCount", result.fxCount)
                 put("started", !wasActive)
             }.toString()
         )
@@ -1766,9 +1766,6 @@ class AiTools(private val state: State) {
     private fun executeAddCueToStack(input: JsonObject): ToolExecutionResult {
         val stackId = input["stackId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'stackId'")
         val cueId = input["cueId"]?.jsonPrimitive?.int ?: return errorResult("Missing 'cueId'")
-        if (input.present("sortOrder") != null) {
-            return errorResult("sortOrder is gone: name the entry the cue goes after with after ({entryId} or {number}), or leave it out to append")
-        }
 
         val project = state.projectManager.currentProject
         var refusal: String? = null
@@ -1891,13 +1888,9 @@ class AiTools(private val state: State) {
 
     /**
      * The entry [input] names in current-project stack [stackId], by `entryId` or `number`; null when it
-     * names none. With [refuseCueId] a `cueId` is refused by name: a cue may be in a stack twice (D7),
-     * so only its entry says which place.
+     * names none.
      */
-    private fun namedEntryId(input: JsonObject, stackId: Int, refuseCueId: Boolean = false): Result<Int?> {
-        if (refuseCueId && input.present("cueId") != null) {
-            return Result.failure(IllegalArgumentException("name the entry by entryId or by its number in the stack, not by cueId: a cue may sit in a stack more than once"))
-        }
+    private fun namedEntryId(input: JsonObject, stackId: Int): Result<Int?> {
         if (input.present("entryId") == null && input.present("number") == null) return Result.success(null)
         var refusal: String? = null
         val entryId = transaction(state.database) { currentStackEntry(stackId, input) { refusal = it }?.id?.value }
@@ -1915,8 +1908,6 @@ class AiTools(private val state: State) {
             ?: return errorResult("Unknown record mode '${input["mode"]?.jsonPrimitive?.content}'")
         val source = parseEnumOrNull<RecordSource>(input["source"]?.jsonPrimitive?.content ?: "TOUCHED")
             ?: return errorResult("Unknown record source '${input["source"]?.jsonPrimitive?.content}'")
-        val cueType = parseEnumOrNull<CueType>(input["cueType"]?.jsonPrimitive?.content ?: "STANDARD")
-            ?: return errorResult("Unknown cue type '${input["cueType"]?.jsonPrimitive?.content}'")
         val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
 
         val result = performProgrammerRecord(
@@ -1924,7 +1915,7 @@ class AiTools(private val state: State) {
             state.projectManager.currentProject,
             mode = mode,
             source = source,
-            cueType = cueType,
+            cueType = CueType.STANDARD,
             cueStackId = input["cueStackId"]?.jsonPrimitive?.intOrNull,
             cueId = input["cueId"]?.jsonPrimitive?.intOrNull,
             mask = mask,
@@ -2072,7 +2063,7 @@ class AiTools(private val state: State) {
             is UpdateCoreResult.LookUpdated -> ToolExecutionResult(
                 success = true,
                 description = "Updated look '${result.result.lookName}' — ${result.result.rowsWritten} row(s), " +
-                    "${result.result.effectsWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written, " +
+                    "${result.result.fxWritten} effect(s) and ${result.result.sceneryWritten} scenery change(s) written, " +
                     "${result.result.rowsRemoved} row(s) removed",
                 result = buildJsonObject {
                     put("mode", "A")
@@ -2081,7 +2072,7 @@ class AiTools(private val state: State) {
                     put("lookName", result.result.lookName)
                     put("rowsWritten", result.result.rowsWritten)
                     put("rowsRemoved", result.result.rowsRemoved)
-                    put("effectsWritten", result.result.effectsWritten)
+                    put("fxWritten", result.result.fxWritten)
                     put("sceneryWritten", result.result.sceneryWritten)
                     putSkips(result.skipped)
                     putStrings("warnings", result.warnings)
@@ -2121,11 +2112,11 @@ class AiTools(private val state: State) {
         }
     }
 
-    private fun executeCreateTemplate(input: JsonObject): ToolExecutionResult {
+    private fun executeCreatePalette(input: JsonObject): ToolExecutionResult {
         val rows = input["rows"]?.jsonArray?.map { row ->
             val obj = row.jsonObject
             val targetKey = obj["targetKey"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-            TemplateRowDto(
+            PaletteRowDto(
                 // A row with no fixture key is *deferred*, which is the generic template an
                 // effect can reference by uuid — so the absent key is the meaningful default,
                 // not a missing field.
@@ -2138,69 +2129,69 @@ class AiTools(private val state: State) {
             )
         } ?: emptyList()
 
-        // An effect template instead of rows (D1). Reuses `parseLookEffect`, which is where the
+        // An effect template instead of rows (D1). Reuses `parseLookFx`, which is where the
         // enum checks live, then drops the fields a template effect has no place for — the target
         // (D3) and the sort order (D2).
-        val effect = input["effect"]?.jsonObject?.let { obj ->
-            val spec = parseLookEffect(obj, "effect")
-            TemplateEffectDto(
-                effectType = spec.effectType,
-                category = spec.category,
+        val effect = input["fx"]?.jsonObject?.let { obj ->
+            val spec = parseLookFx(obj, "fx")
+            PaletteFxDto(
+                fxType = spec.fxType,
+                family = spec.family,
                 propertyName = spec.propertyName,
-                beatDivision = spec.beatDivision,
+                cycle = spec.cycle,
                 blendMode = spec.blendMode,
-                distribution = spec.distribution,
+                order = spec.order,
                 phaseOffset = spec.phaseOffset,
                 elementMode = spec.elementMode,
                 elementFilter = spec.elementFilter,
-                stepTiming = spec.stepTiming,
+                timing = spec.timing,
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
                 seconds = spec.seconds,
-                size = spec.size,
+                amount = spec.amount,
                 direction = spec.direction,
-                nShot = spec.nShot,
+                runs = spec.runs,
                 spread = spec.spread,
                 wings = spec.wings,
-                blocks = spec.blocks,
-                groups = spec.groups,
+                segments = spec.segments,
+                parts = spec.parts,
             )
         }
         // Said here rather than left to the write boundary only because the model reads this
         // message and retries: "must hold at least one value" would not tell it which field to add.
-        if (rows.isEmpty() && effect == null) return errorResult("Missing 'rows' or 'effect'")
+        if (rows.isEmpty() && effect == null) return errorResult("Missing 'rows' or 'fx'")
 
-        val result = performTemplateCreate(
+        val result = performPaletteCreate(
             state,
             state.projectManager.currentProject,
-            TemplateInput(
+            PaletteInput(
                 name = input["name"]?.jsonPrimitive?.contentOrNull,
                 notes = input["notes"]?.jsonPrimitive?.contentOrNull,
                 fadeDurationMs = input["fadeDurationMs"]?.jsonPrimitive?.longOrNull,
                 rows = rows,
-                effect = effect,
+                fx = effect,
             ),
         )
 
         return when (result) {
-            is TemplateCreateResult.Invalid -> errorResult(result.message)
-            is TemplateCreateResult.Duplicate -> errorResult(result.message)
-            is TemplateCreateResult.Ok -> ToolExecutionResult(
+            is PaletteCreateResult.Invalid -> errorResult(result.message)
+            is PaletteCreateResult.Duplicate -> errorResult(result.message)
+            is PaletteCreateResult.Ok -> ToolExecutionResult(
                 success = true,
-                description = "Created palette '${result.template.name}' " +
-                    (result.template.effect
-                        ?.let { "(effect: ${it.effectType})" }
-                        ?: "(${result.template.rows.size} row(s))") +
-                    " — reference it as pal:${result.template.uuid}",
+                description = "Created palette '${result.palette.name}' " +
+                    (result.palette.fx
+                        ?.let { "(effect: ${it.fxType})" }
+                        ?: "(${result.palette.rows.size} row(s))") +
+                    " — reference it as pal:${result.palette.uuid}",
                 result = buildJsonObject {
-                    put("paletteId", result.template.id)
-                    put("uuid", result.template.uuid)
-                    put("name", result.template.name)
-                    put("family", result.template.family)
-                    put("kind", result.template.kind)
-                    put("isGeneric", result.template.isGeneric)
-                    put("rowCount", result.template.rows.size)
+                    put("paletteId", result.palette.id)
+                    put("uuid", result.palette.uuid)
+                    put("name", result.palette.name)
+                    put("family", result.palette.family)
+                    put("kind", result.palette.kind)
+                    put("isGeneric", result.palette.isGeneric)
+                    put("rowCount", result.palette.rows.size)
                 }.toString()
             )
         }
@@ -2215,46 +2206,46 @@ class AiTools(private val state: State) {
      * `look_effects` rows directly, and `executeTool`'s catch is the AI surface's 400 — the model
      * is told the valid set and can retry, rather than the desk storing a blend it will not play.
      */
-    private fun parseLookEffect(obj: JsonObject, at: String): LookEffectSpec {
-        val timing = parseEffectTiming(obj, at)
-        val dynamics = parseEffectDynamics(obj, at)
-        val spec = LookEffectSpec(
-            effectType = obj.requiredString("effectType", at),
-            category = obj.requiredString("category", at),
+    private fun parseLookFx(obj: JsonObject, at: String): LookFxSpec {
+        val timing = parseFxTiming(obj, at)
+        val dynamics = parseFxDynamics(obj, at)
+        val spec = LookFxSpec(
+            fxType = obj.requiredString("fxType", at),
+            family = obj.requiredString("family", at),
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
-            beatDivision = timing.beatDivision,
+            cycle = timing.cycle,
             blendMode = obj.requiredString("blendMode", at),
-            distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
+            order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
-            stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
+            timing = parseTiming(obj, at),
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
             seconds = timing.seconds,
-            size = dynamics.size,
+            amount = dynamics.amount,
             direction = dynamics.direction,
-            nShot = dynamics.nShot,
+            runs = dynamics.runs,
             spread = dynamics.spread,
             wings = dynamics.wings,
-            blocks = dynamics.blocks,
-            groups = dynamics.groups,
+            segments = dynamics.segments,
+            parts = dynamics.parts,
         )
-        EffectSpecCoercion.Strict.problem(
+        FxSpecCoercion.Strict.problem(
             blendMode = spec.blendMode,
-            distribution = spec.distribution,
+            order = spec.order,
             elementMode = spec.elementMode,
             elementFilter = spec.elementFilter,
             direction = spec.direction,
-            size = spec.size,
-            nShot = spec.nShot,
+            amount = spec.amount,
+            runs = spec.runs,
             spread = spec.spread,
             wings = spec.wings,
-            blocks = spec.blocks,
-            groups = spec.groups,
+            segments = spec.segments,
+            parts = spec.parts,
         )?.let { throw IllegalArgumentException(it) }
-        state.show.fxRegistry.fxWriteProblem(spec.effectType, spec.parameters, spec.category)
+        state.show.fxRegistry.fxWriteProblem(spec.fxType, spec.parameters, spec.family)
             ?.let { throw IllegalArgumentException("$at: $it") }
         return spec
     }
@@ -2262,78 +2253,78 @@ class AiTools(private val state: State) {
     /**
      * One ad-hoc cue effect out of a tool call.
      *
-     * No enum check here, unlike [parseLookEffect]: everything this returns goes through
+     * No enum check here, unlike [parseLookFx]: everything this returns goes through
      * `writeCueChildren`, which rejects an unrecognised value itself, and `executeTool`'s catch
      * turns that message into a failed result the same way.
      */
-    private fun parseAdHocEffectFromJson(obj: JsonObject, at: String): CueAdHocEffectDto {
-        val timing = parseEffectTiming(obj, at)
-        val dynamics = parseEffectDynamics(obj, at)
-        val target = parseAdHocEffectTarget(obj, at)
-        return CueAdHocEffectDto(
+    private fun parseAdHocFxFromJson(obj: JsonObject, at: String): CueAdHocFxDto {
+        val timing = parseFxTiming(obj, at)
+        val dynamics = parseFxDynamics(obj, at)
+        val target = parseAdHocFxTarget(obj, at)
+        return CueAdHocFxDto(
             targetType = target.discriminator,
             targetKey = target.key,
-            effectType = obj.requiredString("effectType", at),
-            category = obj.requiredString("category", at),
+            fxType = obj.requiredString("fxType", at),
+            family = obj.requiredString("family", at),
             propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
-            beatDivision = timing.beatDivision,
+            cycle = timing.cycle,
             blendMode = obj.requiredString("blendMode", at),
-            distribution = obj["distribution"]?.jsonPrimitive?.content ?: "UNIFIED",
+            order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
             phaseOffset = obj["phaseOffset"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
             elementMode = obj["elementMode"]?.jsonPrimitive?.contentOrNull,
             elementFilter = obj["elementFilter"]?.jsonPrimitive?.contentOrNull,
-            stepTiming = obj["stepTiming"]?.jsonPrimitive?.booleanOrNull,
+            timing = parseTiming(obj, at),
             parameters = obj["parameters"]?.jsonObject?.mapValues { it.value.jsonPrimitive.content } ?: emptyMap(),
             speedMasterUuid = timing.speedMasterUuid,
             rateSpeedMasterUuid = timing.rateSpeedMasterUuid,
             seconds = timing.seconds,
-            size = dynamics.size,
+            amount = dynamics.amount,
             direction = dynamics.direction,
-            nShot = dynamics.nShot,
+            runs = dynamics.runs,
             spread = dynamics.spread,
             wings = dynamics.wings,
-            blocks = dynamics.blocks,
-            groups = dynamics.groups,
+            segments = dynamics.segments,
+            parts = dynamics.parts,
         )
     }
 
     /**
-     * Size, Direction, Runs and the spread's shape as a tool call gives them (effects plan D2, D5, D9,
+     * Amount, Direction, Runs and the spread's shape as a tool call gives them (effects plan D2, D5, D9,
      * D4), defaults filled in.
      */
-    private data class ParsedEffectDynamics(
-        val size: Double,
+    private data class ParsedFxDynamics(
+        val amount: Double,
         val direction: String,
-        val nShot: Int?,
+        val runs: Int?,
         val spread: Double = 1.0,
         val wings: Int = 1,
-        val blocks: Int = 1,
-        val groups: Int = 0,
+        val segments: Int = 1,
+        val parts: Int = 0,
     )
 
     /**
-     * Those out of one effect in a tool call, each refused by name when malformed — a size outside
-     * 0–1, an unknown direction, a count below one, a spread outside 0–2 or a count of wings, blocks
-     * or groups out of range — so the model is told which and can retry. Wings under a mirrored order
-     * are refused by the spec's own check ([EffectSpecCoercion.Strict.problem]), which has the order.
+     * Those out of one effect in a tool call, each refused by name when malformed — an amount outside
+     * 0–1, an unknown direction, a count below one, a spread outside 0–2 or a count of wings, segments
+     * or parts out of range — so the model is told which and can retry. Wings under a mirrored order
+     * are refused by the spec's own check ([FxSpecCoercion.Strict.problem]), which has the order.
      */
-    private fun parseEffectDynamics(obj: JsonObject, at: String): ParsedEffectDynamics {
-        val size = obj.present("size")?.let {
+    private fun parseFxDynamics(obj: JsonObject, at: String): ParsedFxDynamics {
+        val amount = obj.present("amount")?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
-                ?: throw IllegalArgumentException("$at: 'size' must be a number from 0 to 1")
+                ?: throw IllegalArgumentException("$at: 'amount' must be a number from 0 to 1")
         } ?: 1.0
-        EffectSpecCoercion.Strict.sizeProblem(size)?.let { throw IllegalArgumentException("$at: $it") }
+        FxSpecCoercion.Strict.amountProblem(amount)?.let { throw IllegalArgumentException("$at: $it") }
         val direction = obj.present("direction")?.let {
             val raw = (it as? JsonPrimitive)?.contentOrNull
                 ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE")
-            EffectSpecCoercion.Names.direction(raw)?.name
+            FxSpecCoercion.Names.direction(raw)?.name
                 ?: throw IllegalArgumentException("$at: 'direction' must be FORWARD, BACKWARD or BOUNCE, got '$raw'")
-        } ?: (registrationFor(obj)?.defaultDirection ?: EffectDirection.FORWARD).name
-        val nShot = obj.present("nShot")?.let {
+        } ?: (registrationFor(obj)?.defaultDirection ?: FxDirection.FORWARD).name
+        val runs = obj.present("runs")?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.intOrNull
-                ?: throw IllegalArgumentException("$at: 'nShot' must be a whole number of cycles")
+                ?: throw IllegalArgumentException("$at: 'runs' must be a whole number of cycles")
         }
-        nShot?.let { n -> EffectSpecCoercion.Strict.nShotProblem(n)?.let { throw IllegalArgumentException("$at: $it") } }
+        runs?.let { n -> FxSpecCoercion.Strict.runsProblem(n)?.let { throw IllegalArgumentException("$at: $it") } }
         val spread = obj.present("spread")?.let {
             (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.doubleOrNull
                 ?: throw IllegalArgumentException("$at: 'spread' must be a number from 0 to 2")
@@ -2343,16 +2334,23 @@ class AiTools(private val state: State) {
                 ?: throw IllegalArgumentException("$at: '$field' must be a whole number")
         } ?: default
         val wings = count("wings", 1)
-        val blocks = count("blocks", 1)
-        val groups = count("groups", 0)
-        EffectSpecCoercion.Strict.spreadProblem(spread, wings, blocks, groups, DistributionStrategy.NORMAL)
+        val segments = count("segments", 1)
+        val parts = count("parts", 0)
+        FxSpecCoercion.Strict.spreadProblem(spread, wings, segments, parts, SpreadOrder.NORMAL)
             ?.let { throw IllegalArgumentException("$at: $it") }
-        return ParsedEffectDynamics(size, direction, nShot, spread, wings, blocks, groups)
+        return ParsedFxDynamics(amount, direction, runs, spread, wings, segments, parts)
+    }
+
+    /** An FX's `timing`, `CYCLE` or `HEAD`, as a tool call gives it; absent is the FX type's own. */
+    private fun parseTiming(obj: JsonObject, at: String): Timing? = obj.present("timing")?.let {
+        val raw = (it as? JsonPrimitive)?.contentOrNull
+            ?: throw IllegalArgumentException("$at: 'timing' must be CYCLE or HEAD")
+        timingOf(raw.uppercase()) ?: throw IllegalArgumentException("$at: 'timing' must be CYCLE or HEAD, got '$raw'")
     }
 
     /** An effect's timing as a tool call gives it, with venue-visit plan D16's defaults filled in. */
-    private data class ParsedEffectTiming(
-        val beatDivision: Double,
+    private data class ParsedFxTiming(
+        val cycle: Double,
         val speedMasterUuid: String?,
         val rateSpeedMasterUuid: String?,
         val seconds: Boolean,
@@ -2361,86 +2359,86 @@ class AiTools(private val state: State) {
     /**
      * The timing fields of one effect out of a tool call (venue-visit plan D7, D16).
      *
-     * *Seconds* beside a master is refused — two answers to one question. An omitted `beatDivision`
+     * *Seconds* beside a master is refused — two answers to one question. An omitted `cycle`
      * is the FX's own default (one bar but where its frontmatter says otherwise), and a **beat** effect that names no master and is not on Seconds is stamped with
-     * the master whose `usage` matches its family — the library's category for its type, else the
+     * the master whose `family` matches its family — the library's family for its type, else the
      * call's — as the effect editor stamps a new effect. Null keeps meaning master 1 everywhere: the
      * stamp is a uuid written at creation, never a rule resolved later. A wall-clock effect is left
      * unscaled, its own Seconds, since "one bar" means nothing to an effect timed in seconds.
      */
-    private fun parseEffectTiming(obj: JsonObject, at: String): ParsedEffectTiming {
+    private fun parseFxTiming(obj: JsonObject, at: String): ParsedFxTiming {
         val seconds = obj.present("seconds")?.let {
             it.jsonPrimitive.booleanOrNull ?: throw IllegalArgumentException("$at: 'seconds' must be a boolean")
         } ?: false
         val speed = checkedSpeedMasterUuid(obj["speedMasterUuid"])
         val rate = checkedSpeedMasterUuid(obj["rateSpeedMasterUuid"])
         secondsTimingConflict(seconds, speed, rate)?.let { throw IllegalArgumentException("$at: $it") }
-        val beatDivision = if (obj.present("beatDivision") == null) {
-            registrationFor(obj)?.defaultBeatDivision ?: BeatDivision.ONE_BAR
+        val cycle = if (obj.present("cycle") == null) {
+            registrationFor(obj)?.defaultCycle ?: CycleLength.ONE_BAR
         } else {
-            obj.requiredDouble("beatDivision", at)
+            obj.requiredDouble("cycle", at)
         }
-        if (beatDivision <= 0.0) throw IllegalArgumentException("$at: 'beatDivision' must be greater than 0")
-        val stamped = speed ?: if (seconds) null else usageMasterFor(obj)
-        return ParsedEffectTiming(beatDivision, stamped, rate, seconds)
+        if (cycle <= 0.0) throw IllegalArgumentException("$at: 'cycle' must be greater than 0")
+        val stamped = speed ?: if (seconds) null else familyMasterFor(obj)
+        return ParsedFxTiming(cycle, stamped, rate, seconds)
     }
 
     /** The registration of the effect [obj] names, whose defaults fill what the call leaves out. */
     private fun registrationFor(obj: JsonObject) =
-        obj["effectType"]?.jsonPrimitive?.contentOrNull?.let { state.show.fxRegistry.getRegistration(it) }
+        obj["fxType"]?.jsonPrimitive?.contentOrNull?.let { state.show.fxRegistry.getRegistration(it) }
 
     /** D16's default master for a beat effect named in [obj]: the one tagged for its family, or null. */
-    private fun usageMasterFor(obj: JsonObject): String? {
-        val effectType = obj["effectType"]?.jsonPrimitive?.contentOrNull ?: return null
-        return usageMasterUuidFor(
-            state.show.fxRegistry, state.show.fxEngine.speedMasters, effectType,
-            obj["category"]?.jsonPrimitive?.contentOrNull,
+    private fun familyMasterFor(obj: JsonObject): String? {
+        val fxType = obj["fxType"]?.jsonPrimitive?.contentOrNull ?: return null
+        return familyMasterUuidFor(
+            state.show.fxRegistry, state.show.fxEngine.speedMasters, fxType,
+            obj["family"]?.jsonPrimitive?.contentOrNull,
         )?.toString()
     }
 
     /**
      * A Look's `effects` out of a tool call, each on the target it names — as an ad-hoc effect names
-     * one ([parseAdHocEffectTarget]). A one-shot trigger or fixture command one would name is refused
+     * one ([parseAdHocFxTarget]). A one-shot trigger or fixture command one would name is refused
      * by `writeLookChildren`, against the project's patch.
      */
-    private fun parseLookEffects(items: JsonArray): List<LookEffectDto> =
+    private fun parseLookFxList(items: JsonArray): List<LookFxDto> =
         items.mapIndexed { index, item ->
-            val at = "effects[$index]"
+            val at = "fx[$index]"
             val obj = item as? JsonObject ?: throw IllegalArgumentException("$at must be an object")
-            val spec = parseLookEffect(obj, at)
-            val target = parseAdHocEffectTarget(obj, at)
-            LookEffectDto(
+            val spec = parseLookFx(obj, at)
+            val target = parseAdHocFxTarget(obj, at)
+            LookFxDto(
                 targetType = target.discriminator,
                 targetKey = target.key,
-                effectType = spec.effectType,
-                category = spec.category,
+                fxType = spec.fxType,
+                family = spec.family,
                 propertyName = spec.propertyName,
-                beatDivision = spec.beatDivision,
+                cycle = spec.cycle,
                 blendMode = spec.blendMode,
-                distribution = spec.distribution,
+                order = spec.order,
                 phaseOffset = spec.phaseOffset,
                 elementMode = spec.elementMode,
                 elementFilter = spec.elementFilter,
-                stepTiming = spec.stepTiming,
+                timing = spec.timing,
                 parameters = spec.parameters,
                 speedMasterUuid = spec.speedMasterUuid,
                 rateSpeedMasterUuid = spec.rateSpeedMasterUuid,
                 seconds = spec.seconds,
-                size = spec.size,
+                amount = spec.amount,
                 direction = spec.direction,
-                nShot = spec.nShot,
+                runs = spec.runs,
                 spread = spec.spread,
                 wings = spec.wings,
-                blocks = spec.blocks,
-                groups = spec.groups,
+                segments = spec.segments,
+                parts = spec.parts,
                 sortOrder = index,
             )
         }
 
     /** An ad-hoc effect's `targets` list (effects plan D3), else its `targetType` and `targetKey`. */
-    private fun parseAdHocEffectTarget(obj: JsonObject, at: String): EffectTargetRef {
+    private fun parseAdHocFxTarget(obj: JsonObject, at: String): FxTargetsRef {
         val list = obj["targets"] as? JsonArray
-            ?: return EffectTargetRef.ofOrNull(obj.requiredString("targetType", at), obj.requiredString("targetKey", at))
+            ?: return FxTargetsRef.ofOrNull(obj.requiredString("targetType", at), obj.requiredString("targetKey", at))
                 ?: throw IllegalArgumentException("$at: targetType must be 'fixture' or 'group' (or send targets)")
         if (obj["targetType"] != null || obj["targetKey"] != null) {
             throw IllegalArgumentException("$at: send targets, or targetType and targetKey — not both")
@@ -2451,7 +2449,7 @@ class AiTools(private val state: State) {
             TargetRef.ofOrNull(item.requiredString("type", "$at.targets[$i]"), item.requiredString("key", "$at.targets[$i]"))
                 ?: throw IllegalArgumentException("$at.targets[$i]: type must be 'fixture' or 'group'")
         }
-        return EffectTargetRef.of(refs)
+        return FxTargetsRef.of(refs)
     }
 
     /** [field] of an effect at [at], refused by name when it is absent, null or blank. */
@@ -2486,7 +2484,7 @@ class AiTools(private val state: State) {
      * Unknown uuids are rejected rather than written: `SpeedMasterBank.slotFor` resolves a
      * dangling reference to master 1, so a mistyped uuid would run at the global tempo forever
      * while looking like it had been accepted. Throwing here reaches the model as a failed tool
-     * result it can retry — the same bargain [parseLookEffect] strikes over blend modes.
+     * result it can retry — the same bargain [parseLookFx] strikes over blend modes.
      */
     private fun checkedSpeedMasterUuid(element: JsonElement?): String? {
         val raw = element?.jsonPrimitive?.contentOrNull ?: return null

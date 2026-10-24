@@ -1,9 +1,9 @@
 /*---
 id: CandleFlicker
 name: Candle Flicker
-category: intensity
+family: intensity
 outputType: SLIDER
-effectMode: STATEFUL
+fxMode: STATEFUL
 timingSource: WALL_CLOCK
 compatibleProperties: [dimmer, uv]
 parameters:

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
-import { getBeatDivisionLabel, secondsLabel } from '../fx/fxConstants'
+import { getCycleLabel, secondsLabel } from '../fx/fxConstants'
 import { EditorSurface } from '../editor/EditorSurface'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
@@ -52,11 +52,11 @@ interface LayerLine {
 
 /** One stack entry in the Layers board's words. Pure, so the six kinds read as a table. */
 export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: number) => string | undefined): LayerLine {
-  const effectName = layer.effectName ?? layer.effectType ?? 'FX'
+  const fxName = layer.fxName ?? layer.fxType ?? 'FX'
   // On Seconds, or a wall-clock effect, the division is seconds (venue-visit plan D7).
   const inSeconds = layer.seconds === true || layer.timingSource === 'WALL_CLOCK'
   const division =
-    layer.beatDivision == null ? null : inSeconds ? secondsLabel(layer.beatDivision) : getBeatDivisionLabel(layer.beatDivision)
+    layer.cycle == null ? null : inSeconds ? secondsLabel(layer.cycle) : getCycleLabel(layer.cycle)
   const paused = layer.running === false ? 'paused' : null
   switch (layer.kind) {
     case 'PARK':
@@ -65,9 +65,9 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
         detail: 'the rig ignores everything below it',
         value: layer.parkedChannels?.map((c) => String(c.value)).join(', ') ?? null,
       }
-    case 'PROGRAMMER_EFFECT':
+    case 'PROGRAMMER_FX':
       return {
-        title: effectName,
+        title: fxName,
         detail: ['programmer FX', division, paused, heldBackDetail(layer)].filter(Boolean).join(' · '),
         value: null,
       }
@@ -89,11 +89,11 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
         value: layer.value ?? null,
       }
     }
-    case 'EFFECT': {
+    case 'FX': {
       const cue = layer.cueId != null ? cueLabel(layer.cueId) : undefined
       const home = cue ? `${cue}'s FX` : layer.layerSource?.name ? `${layer.layerSource.name}'s FX` : 'FX'
       return {
-        title: effectName,
+        title: fxName,
         detail: [
           home,
           division,
@@ -118,9 +118,9 @@ export function describeStackLayer(layer: KeyStackLayer, cueLabel: (cueId: numbe
 
 const EDGE: Record<KeyStackLayer['kind'], string> = {
   PARK: 'before:bg-amber-500',
-  PROGRAMMER_EFFECT: 'before:bg-violet-500',
+  PROGRAMMER_FX: 'before:bg-violet-500',
   PROGRAMMER: 'before:bg-primary',
-  EFFECT: 'before:bg-violet-500',
+  FX: 'before:bg-violet-500',
   CUE: 'before:bg-sky-500',
   BASE: 'before:bg-transparent',
 }

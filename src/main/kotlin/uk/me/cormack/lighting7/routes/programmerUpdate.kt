@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerLayer
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.layerTargets
@@ -38,7 +38,7 @@ data class ProgrammerChecklistCueDto(
     val isActive: Boolean,
     val keyCount: Int,
     /** Keys the cue drives through an effect rather than a property assignment. */
-    val viaEffectKeyCount: Int,
+    val viaFxKeyCount: Int,
     val sample: List<ProgrammerChecklistKeyDto>,
 )
 
@@ -51,7 +51,7 @@ data class ProgrammerChecklistKeyDto(
     val currentValue: String,
     /** The value underneath, serialised — null when nothing but baseline is below. */
     val cueValue: String? = null,
-    val viaEffect: Boolean = false,
+    val viaFx: Boolean = false,
 )
 
 /** Overridden cues, grouped by the stack they belong to. */
@@ -349,7 +349,7 @@ internal fun buildUpdateChecklist(
             propertyName = entry.propertyName,
             currentValue = entry.value.serialize(),
             cueValue = cueLayerState[source.key]?.serialize(),
-            viaEffect = source.viaEffectId != null,
+            viaFx = source.viaFxId != null,
         )
         val cueId = source.cueId
         if (cueId == null) {
@@ -403,7 +403,7 @@ internal fun buildUpdateChecklist(
                 // Live is held — by a stack or a loose press (cue model plan §3.4).
                 isActive = state.show.cueStackManager.holds.isHeld(cueId),
                 keyCount = keys.size,
-                viaEffectKeyCount = keys.count { it.viaEffect },
+                viaFxKeyCount = keys.count { it.viaFx },
                 sample = sorted.take(CHECKLIST_SAMPLE_SIZE),
             ),
         )
@@ -466,18 +466,18 @@ internal fun recordingForUpdate(
     includeFx: Boolean,
 ): ProgrammerRecording {
     val collapsed = collapseRecordingToAssignments(entries, state.show.fixtures)
-    val bandEffects = if (includeFx) {
-        state.show.fxEngine.getActiveEffects()
+    val bandFx = if (includeFx) {
+        state.show.fxEngine.getActiveFx()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask = null, state.show.fixtures)
+    val captured = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandFx), mask = null, state.show.fixtures)
     return ProgrammerRecording(
         rows = collapsed.rows,
         // Update never writes the layer stack through this path: the *structural* half of Mode A is
         // a diff against the layers Include staged, applied directly to the cue's rows. Handing a
         // layer list to the MERGE writer as well would append the whole stack on every Update.
         layers = emptyList(),
-        adHocEffects = captured.map { it.second },
+        adHocFx = captured.map { it.second },
         groupRowsEmitted = collapsed.groupRows,
         skipped = collapsed.skipped,
         adHocSourceIds = captured.map { it.first.id },
@@ -491,19 +491,19 @@ internal fun recordingForUpdate(
  * was already written as is on that copy's own head, and is kept.
  */
 internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> {
-    val copies = state.show.fxEngine.getActiveEffects()
+    val copies = state.show.fxEngine.getActiveFx()
         .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
         .groupBy { it.programmerOrigin!!.childUuid }
         .filterValues { instances -> instances.all { it.splitMember != null } }
         .filterKeys { it != null }
     if (copies.isEmpty()) return emptySet()
     val targets = transaction(state.database) {
-        DaoCue.findById(cueId)?.adHocEffects?.associate {
-            it.uuid.toString() to EffectTargetRef.canonical(it.targetType, it.targetKey)
+        DaoCue.findById(cueId)?.adHocFx?.associate {
+            it.uuid.toString() to FxTargetsRef.canonical(it.targetType, it.targetKey)
         }.orEmpty()
     }
     return copies.filter { (uuid, instances) ->
-        instances.none { EffectTargetRef.canonical(it.target.targetRef.discriminator, it.target.targetKey) == targets[uuid] }
+        instances.none { FxTargetsRef.canonical(it.target.targetRef.discriminator, it.target.targetKey) == targets[uuid] }
     }.keys.filterNotNullTo(HashSet())
 }
 
@@ -582,7 +582,7 @@ internal fun writeLayerStackIntoCue(
             addedRows[layer.layerId] = DaoCueLayer.new {
                 this.cue = cue
                 this.look = resolved.look
-                this.palette = resolved.template
+                this.palette = resolved.palette
                 this.sortOrder = index
                 this.enabled = layer.enabled
                 this.targets = layerTargets(layer.source, layer.targets)

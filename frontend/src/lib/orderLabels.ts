@@ -1,7 +1,7 @@
 /**
- * The Order's words — the distribution strategy (effects plan §3.1). One
+ * The Order's words — the Order (effects plan §3.1). One
  * vocabulary for every surface that names a strategy: the FX editor's Order, a Look's or cue's FX
- * summary (`getDistributionLabel`), a group's *Runs as* picker (`DISTRIBUTION_STRATEGY_OPTIONS`)
+ * summary (`getOrderLabel`), a group's *Runs as* picker (`ORDER_OPTION_ENTRIES`)
  * and the Fan's order row (`SPREAD_ORDERS`).
  *
  * It imports nothing, on purpose: `lib/spreadIntent.ts` reads it and must reach no client walk

@@ -23,11 +23,11 @@ import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOWER
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOW_CYCLE
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN
 import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_INVALID
-import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_USAGE_TAKEN
+import uk.me.cormack.lighting7.models.CODE_SPEED_MASTER_FAMILY_TAKEN
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DEFAULT_SPEED_MASTER_COUNT
@@ -138,7 +138,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             val cue = DaoCue.new {
                 this.project = project; name = "c"
             }.inStack(stack, sortOrder = 0)
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "Pulse"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"
@@ -157,7 +157,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.Conflict, del.status)
         val inUse = del.body<SpeedMasterInUseResponse>()
         assertEquals(CODE_SPEED_MASTER_IN_USE, inUse.code)
-        assertEquals(1, inUse.cueAdHocEffectCount)
+        assertEquals(1, inUse.cueAdHocFxCount)
         assertEquals(listOf(cueId), inUse.cueIds)
 
         val forced = client.delete("/api/rest/projects/$projectId/speed-masters/${master2.id}?force=true")
@@ -187,7 +187,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             val cue = DaoCue.new {
                 this.project = project; name = "c"
             }.inStack(stack, sortOrder = 0)
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "CandleFlicker"; family = "intensity"; cycle = 4.0
                 blendMode = "OVERRIDE"; order = "NORMAL"
@@ -229,7 +229,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             val cue = DaoCue.new {
                 this.project = project; name = "c"
             }.inStack(stack, sortOrder = 0)
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "Pulse"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"
@@ -289,9 +289,9 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
 
         val created = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
-            setBody(CreateSpeedMasterRequest(name = "Movement", usage = "position"))
+            setBody(CreateSpeedMasterRequest(name = "Movement", family = "position"))
         }.body<SpeedMasterDto>()
-        assertEquals("position", created.usage)
+        assertEquals("position", created.family)
 
         val putResp = client.put("/api/rest/projects/$projectId/speed-masters/${created.id}") {
             contentType(ContentType.Application.Json)
@@ -306,7 +306,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         val updated = putResp.body<SpeedMasterDto>()
         assertEquals(1, updated.followNum)
         assertEquals(2, updated.followDen)
-        assertEquals("position", updated.usage, "an untouched usage survives a ratio PUT")
+        assertEquals("position", updated.family, "an untouched usage survives a ratio PUT")
 
         val fetched = client.get("/api/rest/projects/$projectId/speed-masters/${created.id}")
             .body<SpeedMasterDto>()
@@ -321,23 +321,23 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
 
         client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
-            setBody(CreateSpeedMasterRequest(name = "Movement", usage = "position"))
+            setBody(CreateSpeedMasterRequest(name = "Movement", family = "position"))
         }
 
         val dupCreate = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
-            setBody(CreateSpeedMasterRequest(name = "Movement 2", usage = "position"))
+            setBody(CreateSpeedMasterRequest(name = "Movement 2", family = "position"))
         }
         assertEquals(HttpStatusCode.Conflict, dupCreate.status)
-        assertEquals(CODE_SPEED_MASTER_USAGE_TAKEN, dupCreate.body<ErrorResponse>().code)
+        assertEquals(CODE_SPEED_MASTER_FAMILY_TAKEN, dupCreate.body<ErrorResponse>().code)
 
         val master2 = client.masterAt(2)
         val dupPut = client.put("/api/rest/projects/$projectId/speed-masters/${master2.id}") {
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("usage", JsonPrimitive("position")) })
+            setBody(buildJsonObject { put("family", JsonPrimitive("position")) })
         }
         assertEquals(HttpStatusCode.Conflict, dupPut.status)
-        assertEquals(CODE_SPEED_MASTER_USAGE_TAKEN, dupPut.body<ErrorResponse>().code)
+        assertEquals(CODE_SPEED_MASTER_FAMILY_TAKEN, dupPut.body<ErrorResponse>().code)
     }
 
     @Test
@@ -347,7 +347,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
 
         val created = client.post("/api/rest/projects/$projectId/speed-masters") {
             contentType(ContentType.Application.Json)
-            setBody(CreateSpeedMasterRequest(name = "Movement", usage = "position"))
+            setBody(CreateSpeedMasterRequest(name = "Movement", family = "position"))
         }.body<SpeedMasterDto>()
 
         // The uniqueness check must exclude the row being edited — a rename that carries the
@@ -357,11 +357,31 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
             setBody(
                 buildJsonObject {
                     put("name", JsonPrimitive("Movement Renamed"))
-                    put("usage", JsonPrimitive("position"))
+                    put("family", JsonPrimitive("position"))
                 }
             )
         }
         assertEquals(HttpStatusCode.OK, resave.status, resave.bodyAsText())
+    }
+
+    @Test
+    fun `a put naming the old usage field is refused rather than ignored`() = testApplication {
+        mountTestApp(state)
+        val client = jsonClient()
+
+        val created = client.post("/api/rest/projects/$projectId/speed-masters") {
+            contentType(ContentType.Application.Json)
+            setBody(CreateSpeedMasterRequest(name = "Movement", family = "position"))
+        }.body<SpeedMasterDto>()
+
+        val old = client.put("/api/rest/projects/$projectId/speed-masters/${created.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("usage", JsonPrimitive("colour")) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, old.status, old.bodyAsText())
+        assertTrue("usage" in old.bodyAsText(), old.bodyAsText())
+        val after = client.get("/api/rest/projects/$projectId/speed-masters/${created.id}").body<SpeedMasterDto>()
+        assertEquals("position", after.family, "the PUT wrote nothing")
     }
 
     @Test
@@ -419,7 +439,7 @@ class SpeedMasterRoutesTest : RouteIntegrationTest() {
         for (bad in listOf("composite", "controls", "smoke")) {
             val resp = client.post("/api/rest/projects/$projectId/speed-masters") {
                 contentType(ContentType.Application.Json)
-                setBody(CreateSpeedMasterRequest(name = "Bad $bad", usage = bad))
+                setBody(CreateSpeedMasterRequest(name = "Bad $bad", family = bad))
             }
             assertEquals(HttpStatusCode.BadRequest, resp.status, "usage '$bad' must be refused")
             assertEquals(CODE_SPEED_MASTER_INVALID, resp.body<ErrorResponse>().code)

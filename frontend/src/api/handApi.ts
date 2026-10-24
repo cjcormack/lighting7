@@ -4,7 +4,7 @@ import { createWsSubscribable } from './wsSubscriptionFactory'
 import { sendGesture } from './wsGesture'
 import type { BuskCue, BuskPadKind } from './buskApi'
 import type { LookSummary } from './looksApi'
-import type { TemplateSummary } from './templatesApi'
+import type { PaletteSummary } from './palettesApi'
 import { parseSelectionSource, type SelectionSource } from './selectionApi'
 
 /**
@@ -43,14 +43,14 @@ import { parseSelectionSource, type SelectionSource } from './selectionApi'
  * window silently changing the desk's hand.
  */
 
-/** What the desk is holding. Exactly one of [template] / [look] / [cue] is set, matching [kind]. */
+/** What the desk is holding. Exactly one of [palette] / [look] / [cue] is set, matching [kind]. */
 export interface HeldRecord {
   kind: BuskPadKind
   /** The record's int id **in the current project** — what every place mutation takes. */
   id: number
   /** The record's uuid, as a string. What a guarded [HandWsApi.drop] names. */
   uuid: string
-  template?: TemplateSummary | null
+  palette?: PaletteSummary | null
   look?: LookSummary | null
   cue?: BuskCue | null
   /**
@@ -123,13 +123,13 @@ interface HandStateMessage {
 export function parseHeldRecord(raw: unknown): HeldRecord | null {
   if (raw == null || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
-  if (r.kind !== 'TEMPLATE' && r.kind !== 'LOOK' && r.kind !== 'CUE') return null
+  if (r.kind !== 'PALETTE' && r.kind !== 'LOOK' && r.kind !== 'CUE') return null
   if (typeof r.id !== 'number' || typeof r.uuid !== 'string') return null
   return {
     kind: r.kind,
     id: r.id,
     uuid: r.uuid,
-    template: (r.template as TemplateSummary | undefined) ?? null,
+    palette: (r.palette as PaletteSummary | undefined) ?? null,
     look: (r.look as LookSummary | undefined) ?? null,
     cue: (r.cue as BuskCue | undefined) ?? null,
     pickedUpOn: parseSelectionSource(r.pickedUpOn),

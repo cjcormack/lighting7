@@ -22,7 +22,7 @@ import kotlinx.serialization.json.put
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.sync.ProjectExporter
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -43,10 +43,10 @@ class LookRowIdentityTest : RouteIntegrationTest() {
 
     private fun base() = "/api/rest/projects/$projectId/looks"
 
-    private val pulse = LookEffectDto(
+    private val pulse = LookFxDto(
         targetType = "fixture", targetKey = "hex-1",
-        effectType = "Pulse", category = "intensity", propertyName = "dimmer",
-        beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
+        fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+        cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
     @Test
@@ -62,7 +62,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
             listOf(pulse),
         )
         val before = rowUuids(lookId)
-        val effectBefore = effectUuids(lookId).single()
+        val effectBefore = fxUuids(lookId).single()
 
         val response = client.putContents(
             lookId,
@@ -71,7 +71,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
                 LookRowDto("fixture", "hex-1", "uv", "99", fadeDurationMs = 400L, sortOrder = 1),
                 LookRowDto("fixture", "hex-2", "rgbColour", "#ff0000", sortOrder = 2),
             ),
-            effects = listOf(pulse.copy(beatDivision = 2.0)),
+            effects = listOf(pulse.copy(cycle = 2.0)),
         )
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
 
@@ -80,13 +80,13 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         assertEquals(before.getValue(Row("hex-1", "uv")), after.getValue(Row("hex-1", "uv")), "changed in place")
         assertFalse(Row("hex-2", "dimmer") in after, "dropped")
         assertFalse(after.getValue(Row("hex-2", "rgbColour")) in before.values, "added with a fresh uuid")
-        assertEquals(effectBefore, effectUuids(lookId).single(), "the effect on the same property is edited in place")
+        assertEquals(effectBefore, fxUuids(lookId).single(), "the effect on the same property is edited in place")
 
         val details = response.body<LookDetails>()
         val uv = details.rows.single { it.propertyName == "uv" }
         assertEquals("99", uv.value)
         assertEquals(400L, uv.fadeDurationMs)
-        assertEquals(2.0, details.effects.single().beatDivision)
+        assertEquals(2.0, details.fx.single().cycle)
     }
 
     @Test
@@ -120,11 +120,11 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val lookId = client.createLook(emptyList(), listOf(pulse))
-        val before = effectUuids(lookId).single()
+        val before = fxUuids(lookId).single()
 
-        client.putContents(lookId, rows = emptyList(), effects = listOf(pulse.copy(effectType = "RampUp")))
+        client.putContents(lookId, rows = emptyList(), effects = listOf(pulse.copy(fxType = "RampUp")))
 
-        assertNotEquals(before, effectUuids(lookId).single())
+        assertNotEquals(before, fxUuids(lookId).single())
     }
 
     @Test
@@ -159,7 +159,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         DaoLook[lookId].rows.sortedBy { it.sortOrder }.map { it.attribute to it.uuid }
     }
 
-    private fun effectUuids(lookId: Int): List<UUID> = transaction(state.database) {
+    private fun fxUuids(lookId: Int): List<UUID> = transaction(state.database) {
         DaoLook[lookId].effects.map { it.uuid }
     }
 
@@ -174,22 +174,22 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         }
     }
 
-    private suspend fun HttpClient.createLook(rows: List<LookRowDto>, effects: List<LookEffectDto> = emptyList()): Int =
+    private suspend fun HttpClient.createLook(rows: List<LookRowDto>, effects: List<LookFxDto> = emptyList()): Int =
         post(base()) {
             contentType(ContentType.Application.Json)
-            setBody(CreateLookRequest(name = "Look", rows = rows, effects = effects))
+            setBody(CreateLookRequest(name = "Look", rows = rows, fx = effects))
         }.body<LookDetails>().id
 
     private suspend fun HttpClient.putContents(
         lookId: Int,
         rows: List<LookRowDto>,
-        effects: List<LookEffectDto>? = null,
+        effects: List<LookFxDto>? = null,
     ) = put("${base()}/$lookId") {
         contentType(ContentType.Application.Json)
         setBody(
             buildJsonObject {
                 put("rows", Json.encodeToJsonElement(rows))
-                if (effects != null) put("effects", Json.encodeToJsonElement(effects))
+                if (effects != null) put("fx", Json.encodeToJsonElement(effects))
             }
         )
     }

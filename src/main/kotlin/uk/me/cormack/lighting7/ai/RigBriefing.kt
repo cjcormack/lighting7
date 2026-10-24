@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.ai
 
-import uk.me.cormack.lighting7.fx.BeatDivision
-import uk.me.cormack.lighting7.fx.EffectDirection
+import uk.me.cormack.lighting7.fx.CycleLength
+import uk.me.cormack.lighting7.fx.FxDirection
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
@@ -175,21 +175,21 @@ class RigBriefing(private val state: State) {
         }
 
         // Effect library summary
-        sb.appendLine("## Effect Library (for create_look)")
+        sb.appendLine("## FX Library (for create_look)")
         for (effect in state.show.fxRegistry.getLibrary()) {
             val params = effect.parameters.joinToString(", ") { "${it.name}:${it.type}=${it.defaultValue}" }
-            val defaults = (if (effect.defaultBeatDivision != BeatDivision.ONE_BAR) ", beatDivision=${effect.defaultBeatDivision}" else "") +
-                (if (effect.defaultDirection != EffectDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
-            sb.appendLine("- **${effect.name}** (category=${effect.category}, output=${effect.outputType}$defaults) params: $params")
+            val defaults = (if (effect.defaultCycle != CycleLength.ONE_BAR) ", cycle=${effect.defaultCycle}" else "") +
+                (if (effect.defaultDirection != FxDirection.FORWARD.name) ", direction=${effect.defaultDirection}" else "")
+            sb.appendLine("- **${effect.name}** (family=${effect.family}, output=${effect.outputType}$defaults) params: $params")
         }
         // The two step effects take references rather than values (effects plan §3.6), which
         // neither the parameter type nor the category says on its own.
         sb.appendLine(
             "PaletteSteps steps through generic value palettes of one family (`palettes`: two or more " +
-                "`pal:{uuid}`, comma-separated) — store it with that family's category (intensity, colour, " +
+                "`pal:{uuid}`, comma-separated) — store it with that family (intensity, colour, " +
                 "position or beam). SlotSteps steps one setting's options by name (`slots`, e.g. " +
                 "`Gobo 3,Gobo 5`) — name the setting as its propertyName, and store it as beam. Where an " +
-                "effect's line names a beatDivision or direction, that is what a new one runs at unless asked " +
+                "effect's line names a cycle or direction, that is what a new one runs at unless asked " +
                 "otherwise.",
         )
         sb.appendLine()
@@ -197,30 +197,30 @@ class RigBriefing(private val state: State) {
         // Current state
         sb.appendLine("## Current State")
         sb.appendLine("BPM: ${state.show.fxEngine.masterClock.bpm.value} (master 1)")
-        val activeEffects = state.show.fxEngine.getActiveEffects()
-        if (activeEffects.isNotEmpty()) {
-            sb.appendLine("Active effects: ${activeEffects.size}")
-            for (effect in activeEffects.take(20)) {
-                sb.appendLine("  - ${effect.effectTypeId} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
+        val activeFx = state.show.fxEngine.getActiveFx()
+        if (activeFx.isNotEmpty()) {
+            sb.appendLine("Active FX: ${activeFx.size}")
+            for (effect in activeFx.take(20)) {
+                sb.appendLine("  - ${effect.fxTypeId} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
                         // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
                         (if (effect.onSeconds) " (seconds=" else " (beat=") +
-                        "${effect.timing.beatDivision}, blend=${effect.blendMode}" +
+                        "${effect.timing.cycle}, blend=${effect.blendMode}" +
                         effect.dynamics.let { dyn ->
                             // Effects plan D2, D5, D9 — said only where not the default.
-                            (if (dyn.size != 1.0) ", size=${dyn.size}" else "") +
-                                (if (dyn.direction != EffectDirection.FORWARD) ", direction=${dyn.direction}" else "") +
-                                (dyn.nShot?.let { ", nShot=$it" } ?: "") +
+                            (if (dyn.amount != 1.0) ", amount=${dyn.amount}" else "") +
+                                (if (dyn.direction != FxDirection.FORWARD) ", direction=${dyn.direction}" else "") +
+                                (dyn.runs?.let { ", runs=$it" } ?: "") +
                                 // D4's shape, likewise.
                                 (if (dyn.spread != 1.0) ", spread=${dyn.spread}" else "") +
                                 (if (dyn.wings != 1) ", wings=${dyn.wings}" else "") +
-                                (if (dyn.blocks != 1) ", blocks=${dyn.blocks}" else "") +
-                                (if (dyn.groups != 0) ", groups=${dyn.groups}" else "")
+                                (if (dyn.segments != 1) ", segments=${dyn.segments}" else "") +
+                                (if (dyn.parts != 0) ", parts=${dyn.parts}" else "")
                         } +
                         (effect.cueId?.let { ", cueId=$it" } ?: "") +
                         (if (effect.leaving) ", leaving" else "") + ")")
             }
         } else {
-            sb.appendLine("No active effects.")
+            sb.appendLine("No active FX.")
         }
         sb.appendLine()
 
@@ -264,9 +264,9 @@ class RigBriefing(private val state: State) {
         val masterNames = masterStates.mapNotNull { m -> m.uuid?.let { it to m.name } }.toMap()
         for (master in masterStates) {
             val uuid = master.uuid?.let { "`$it`" } ?: "(no uuid yet — omit the reference)"
-            // Usage and follow ride the listing so the model can act on the prose above: a
+            // Family and follow ride the listing so the model can act on the prose above: a
             // follower named here without its ratio would invite a set_bpm the bank refuses.
-            val usage = master.usage?.let { ", usage: $it" } ?: ""
+            val family = master.family?.let { ", family: $it" } ?: ""
             val follow = master.followNum?.let {
                 val leader = master.followTargetUuid?.let { t -> masterNames[t] } ?: "Master 1"
                 ", follows $leader at $it/${master.followDen} — tempo derived, set_bpm refused"
@@ -274,7 +274,7 @@ class RigBriefing(private val state: State) {
 
             sb.appendLine(
                 "- **${master.name}** — $uuid (index ${master.index}, ${master.bpm} BPM" +
-                    usage + follow + (if (master.isRunning) "" else ", stopped") + ")"
+                    family + follow + (if (master.isRunning) "" else ", stopped") + ")"
             )
         }
         sb.appendLine()
@@ -308,17 +308,17 @@ class RigBriefing(private val state: State) {
         // An **effect** template is still excluded (D12), now by name rather than by the accident of
         // holding no rows: it is not a colour, so the reference would resolve to nothing and a
         // running effect's colour would silently fall back to white.
-        val colourTemplates = transaction(state.database) {
-            DaoTemplate.find { DaoTemplates.project eq project.id }.mapNotNull { template ->
+        val colourPalettes = transaction(state.database) {
+            DaoPalette.find { DaoPalettes.project eq project.id }.mapNotNull { template ->
                 val colour = genericColourRows(
                     template.rows.toList(), { it.attribute }, { it.isDeferred },
                 ) ?: return@mapNotNull null
                 "${template.name} — `pal:${template.uuid}` (${colour.joinToString(" ") { it.value }})"
             }
         }
-        if (colourTemplates.isNotEmpty()) {
+        if (colourPalettes.isNotEmpty()) {
             sb.appendLine("## Colour Palettes")
-            colourTemplates.forEach { sb.appendLine("- $it") }
+            colourPalettes.forEach { sb.appendLine("- $it") }
             sb.appendLine()
         }
 
@@ -327,7 +327,7 @@ class RigBriefing(private val state: State) {
             val all = DaoCue.find { DaoCues.project eq project.id }.toList()
             val places = entrySlotsOf(all.map { it.id.value })
             all.map {
-                "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocEffects.count()} ad-hoc effects) — " +
+                "**${it.name}** (id=${it.id.value}, ${it.layers.count()} layers, ${it.adHocFx.count()} ad-hoc effects) — " +
                     cuePlacesLabel(places[it.id.value].orEmpty())
             }
         }
@@ -367,23 +367,23 @@ class RigBriefing(private val state: State) {
         val sb = StringBuilder()
         // Key concepts
         sb.appendLine("## Key Concepts")
-        sb.appendLine("- Beat divisions are beats a cycle: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new effect is one bar unless asked otherwise, or unless the library names its own default.")
-        sb.appendLine("- **Size, direction and runs**: every effect takes `size` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement effect's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `nShot` (stop after that many cycles — a flash on cue is 1; omit for forever).")
-        sb.appendLine("- **The spread's shape**: an effect over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the distribution order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTRE_OUT or CENTRE_IN, which are two wings already), `blocks` (neighbouring heads moving as one) and `groups` (the spread repeating every N heads; 0 is off). These shape a spreading `distribution` only — send one, since an omitted distribution is UNIFIED and every head runs in step.")
-        sb.appendLine("- **Seconds**: an effect may run on its own cycle instead of following a master — `seconds: true`, with `beatDivision` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
+        sb.appendLine("- A cycle is a length in beats: 0.125, 0.25, 0.5, 1.0 (one beat), 2.0, 4.0 (one bar), 8.0 (two bars). A new effect is one bar unless asked otherwise, or unless the library names its own default.")
+        sb.appendLine("- **Amount, direction and runs**: every effect takes `amount` (0–1, how much of it reaches the stage over what is underneath — 0.5 sits halfway; a movement effect's radius halves about the position underneath), `direction` (`FORWARD`, `BACKWARD` or `BOUNCE`) and `runs` (stop after that many cycles — a flash on cue is 1; omit for forever).")
+        sb.appendLine("- **The spread's shape**: an effect over several heads also takes `spread` (0–2, how much of the cycle the heads cover over the order; 0.5 is a tighter ripple), `wings` (mirrored wings, not with CENTRE_OUT or CENTRE_IN, which are two wings already), `segments` (neighbouring heads moving as one) and `parts` (the spread repeating every N heads; 0 is off). These shape a spreading `order` only — send one, since an omitted order is UNIFIED and every head runs in step.")
+        sb.appendLine("- **Seconds**: an effect may run on its own cycle instead of following a master — `seconds: true`, with `cycle` the cycle in seconds and no `speedMasterUuid`. Use it for a slow breathe or drift that must not change speed when the tempo does.")
         sb.appendLine("- Blend modes: OVERRIDE (replace), ADDITIVE (add), MULTIPLY, MAX, MIN")
-        sb.appendLine("- Distributions: NORMAL (sequential chase), UNIFIED (all same), CENTRE_OUT, CENTRE_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")
+        sb.appendLine("- Orders: NORMAL (sequential chase), UNIFIED (all same), CENTRE_OUT, CENTRE_IN (from both ends to the centre), PING_PONG, REVERSE, RANDOM, POSITIONAL")
         sb.appendLine("- Colour format: hex '#FF0000', names 'red', extended '#ff0000;w128;a64;uv200', or a palette reference 'pal:{uuid}'.")
         sb.appendLine("- **Palette references**: a colour parameter may name a colour palette by uuid — 'pal:2f1c…' — instead of stating a colour. Retuning that palette moves every running effect that references it, which is the point: it is how a show keeps one set of colours in one place. Only the **generic** colour palettes listed above can be referenced; a per-fixture palette holds no single colour, and an effect palette holds no colour at all. Colour Cycle's 'colours' takes literal colours only; to step through palettes, each landing on every head for itself, use PaletteSteps with 'palettes': 'pal:<warm>,pal:<cold>'. Make a palette with create_palette.")
         sb.appendLine("- A palette reference is legal **only in an effect parameter**. Cue values, look rows and programmer values are always literals; a cue that should follow a palette gets a *layer* applying it (see create_cue / cue layers).")
-        sb.appendLine("- For group effects, use distribution=NORMAL for chases, UNIFIED for all-together")
-        sb.appendLine("- **Step timing**: Controls whether beat division means per-step time or total cycle time. When stepTiming=true, each step gets one full beat-division (total cycle = beatDivision × steps). When false, the entire cycle completes in one beat-division. Each effect type sets its own default: every built-in is continuous and defaults to false; a user effect that steps (a chase) may default to true. You can override this per effect with the `stepTiming` parameter.")
+        sb.appendLine("- For group effects, use order=NORMAL for chases, UNIFIED for all-together")
+        sb.appendLine("- **Timing**: `timing` says what `cycle` measures. `CYCLE`: the whole effect completes in one cycle. `HEAD`: each step takes one cycle, so the whole effect takes cycle × steps. Each effect type sets its own default: every built-in is `CYCLE`; a user effect that steps (a chase) may default to `HEAD`. Set `timing` on an effect to override it.")
         sb.appendLine("- DMX values range 0-255")
         sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look's values always name their own fixtures or groups (create_look's `values`, e.g. the front-wash group at 'pct:70'), so editing a look (update_look) moves every cue layering it, and delete_look removes one, refused while a cue layers it unless forced; list_fixture_types with properties: true names what each type can be set to. A look's *effects* name their own targets as well — a fixture, a group, or several as one effect, taken as create_cue's ad-hoc effects take them. A look always lands whole: pressed (apply_look) or layered in a cue, it lands its own values, effects and scenery, never narrower and never wider, so a cue layer of a look names no targets. A value you want to point at a selection is a *palette*, not a look — and so is a single named effect you want to point at a selection: a palette holds values **or** one effect, never both, so a colour plus a chase is a look and 'a slow amber breathe on the selection' is an effect palette. Create either with create_palette.")
         sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
         sb.appendLine("- **Cues**: A cue is an ordered stack of layers — each applying a look, or a palette by paletteId (a generic one needs layer targets) — plus its own local values (create_cue / build_cue_stack's `values`, in create_look's grammar) and ad-hoc effects. Multiple cues can run concurrently. apply_cue holds a cue loose — live above every running stack, the newest apply on top — without moving any stack; applying a cue already held loose only puts it back on top. stop_cue lets that hold go, and the cue comes off unless a running stack also holds it (stop a stack with deactivate_cue_stack). apply_cue with replaceAll=true lets every other loose cue go first; stacks are never touched. Looks are read fresh at apply time, so edits to a look are always reflected.")
-        sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted on a beat effect means the master whose `usage` matches the effect's family when one is tagged, else master 1; omitted on a wall-clock effect means unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with beat divisions. A master with `followNum`/`followDen` set follows another master (`followTargetUuid`, or Master 1 when absent) at that ratio: it ticks — and beats — in step with that master, its tempo is derived, set_bpm on it is refused, and the way to move it is to retune the master it follows.")
+        sb.appendLine("- **Speed masters**: every beat-synced effect follows exactly one, and a wall-clock effect may additionally scale its rate by one. Both are named by uuid — `speedMasterUuid` and `rateSpeedMasterUuid`, settable on a look effect, a cue's ad-hoc effect, and a cue layer (where they override whatever the layer's own effects asked for). Omitted on a beat effect means the master whose `family` matches the effect's when one is tagged, else master 1; omitted on a wall-clock effect means unscaled. Retune one with set_bpm, add one with create_speed_master. Reach for a second master when part of the rig should run at its own speed — a slow colour wash under a fast strobe chase — rather than fighting it with cycle lengths. A master with `followNum`/`followDen` set follows another master (`followTargetUuid`, or Master 1 when absent) at that ratio: it ticks — and beats — in step with that master, its tempo is derived, set_bpm on it is refused, and the way to move it is to retune the master it follows.")
         sb.appendLine("- **Cue Stacks**: An ordered container of cues for sequential playback (theatre-style cue-to-cue). Create a stack with create_cue_stack, add cues with add_cue_to_stack (or create_cue / build_cue_stack straight into it), then run it with go_cue_stack — one GO fires whatever is on deck, and starts the stack if it is stopped. Use advance_cue_stack for BACKWARD and activate_cue_stack to jump to an entry. Stacks support looping (wraps at end). Each place in a stack is an **entry**, with its own number and its own follow (auto-advance after a delay); the cue's fade and curve are the cue's. Multiple stacks can be active simultaneously.")
         sb.appendLine("- **A cue may be shared, and delete is explicit**: one cue can sit in several stacks, or twice in one, or in none (loose — Existing Cues says `loose`, or `in:` each place). Editing the cue changes it everywhere it plays. So a tool names a place by **entry** — `entryId`, or the stack's `number` (unique in its stack; the cue id alone is ambiguous) — in activate_cue_stack, set_standby, remove_cue_from_stack, move_cue_to_stack, include_into_programmer and the prompt book's anchors; a cue's own edits name the cue. add_cue_to_stack (or a build_cue_stack row naming cueId) shares a cue into a stack; move_cue_to_stack moves one entry whole, its number, follow and prompt-book anchor with it; remove_cue_from_stack takes a place away and never deletes the cue, nor does deleting a stack. Deleting cues is delete_cues alone, refused while anything names them (entries, busk pads, cue slots, anchors, bindings) unless forced — ask the operator before forcing. copy_cues copies cues from another show, resolving their looks, palettes, masters and fixtures there.")
         sb.appendLine("- **The programmer, and how work gets saved**: the programmer is the manual overlay on top of whatever is running — what busking writes, and what set_programmer (plain values — a level, a colour, a position, a gobo; a fixed state is always a value, never an effect), apply_palette, apply_look, aim_fixtures and move_scenery write through. clear_programmer clears it, all of it or just some fixtures and groups; set_blind takes it off stage while it keeps everything, so a state can be built and recorded unseen. record_cue puts it into a cue (CREATE a new one, or MERGE / UPDATE_EXISTING / REMOVE against an existing one), record_look into a Look the same way, and either Record makes what it wrote the target of the next update_from_programmer. The round trip in the other direction is include_into_programmer, which loads a cue or look back in as an edit buffer, then update_from_programmer, which writes back **only what changed** — that is what leaves the rest of the cue, palette references included, alone — and **deletes the row of any included value you cleared since** (a clear_programmer on some fixtures after an include removes those values from the cue or look on update; preview=true does not show that). Call update_from_programmer with preview=true first if you are unsure what the programmer is sitting on top of.")

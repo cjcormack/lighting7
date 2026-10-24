@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EffectLibraryEntry } from '../store/fixtureFx'
+import type { FxLibraryEntry } from '../store/fixtureFx'
 import type { FxDefinition } from '../store/fxDefinitions'
 
 const createDefinition = vi.fn((_body: unknown): Promise<unknown> => Promise.resolve({ id: 99 }))
@@ -30,12 +30,12 @@ vi.mock('../store/projects', () => ({
   useProjectQuery: () => ({ data: { id: 6, name: 'Experiment', isCurrent }, isLoading: false }),
 }))
 
-function entry(name: string, over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
+function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry {
   return {
     name,
-    category: 'intensity',
+    family: 'intensity',
     outputType: 'SLIDER',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: '' }],
     compatibleProperties: ['dimmer'],
@@ -51,22 +51,22 @@ const LIBRARY = [
   entry('Pulse'),
   entry('PulseCustom', { source: 'USER', sourceDefinitionId: 3 }),
   entry('RandomFlicker', { source: 'USER', sourceDefinitionId: 7, timingSource: 'WALL_CLOCK' }),
-  entry('WarmFlicker', { category: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
-  entry('ColourChase', { category: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'] }),
+  entry('WarmFlicker', { family: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
+  entry('ColourChase', { family: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'] }),
 ]
 
-function definition(id: number, effectId: string, name: string): FxDefinition {
+function definition(id: number, fxId: string, name: string): FxDefinition {
   return {
     id,
-    effectId,
+    fxId,
     name,
-    category: 'intensity',
+    family: 'intensity',
     outputType: 'SLIDER',
-    effectMode: 'STANDARD',
+    fxMode: 'STANDARD',
     parameters: [],
     compatibleProperties: ['dimmer'],
     script: '',
-    defaultStepTiming: false,
+    defaultTiming: 'CYCLE',
     timingSource: 'BEAT',
   }
 }
@@ -74,7 +74,7 @@ function definition(id: number, effectId: string, name: string): FxDefinition {
 const DEFINITIONS = [definition(3, 'PulseCustom', 'Pulse (Custom)'), definition(7, 'RandomFlicker', 'Random Flicker')]
 
 vi.mock('../store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: LIBRARY, isLoading: false }),
+  useFxLibraryQuery: () => ({ data: LIBRARY, isLoading: false }),
 }))
 vi.mock('../store/fxDefinitions', () => ({
   useFxDefinitionListQuery: () => ({ data: DEFINITIONS, isLoading: false }),
@@ -83,8 +83,8 @@ vi.mock('../store/fxDefinitions', () => ({
   useDeleteFxDefinitionMutation: () => [(id: unknown) => ({ unwrap: () => deleteDefinition(id) })],
 }))
 // The three sheets it opens are markers here: what matters is which one, with what.
-vi.mock('../components/fxLibrary/EffectDetailSheet', () => ({
-  EffectDetailSheet: ({ effect, source }: { effect: EffectLibraryEntry; source: string }) => (
+vi.mock('../components/fxLibrary/FxDetailSheet', () => ({
+  FxDetailSheet: ({ effect, source }: { effect: FxLibraryEntry; source: string }) => (
     <div data-testid="detail">
       {effect.name}:{source}
     </div>
@@ -118,8 +118,8 @@ function draw() {
   )
 }
 
-function row(effectId: string): HTMLElement {
-  return document.querySelector(`[data-row-id="fx:${effectId}"]`) as HTMLElement
+function row(fxId: string): HTMLElement {
+  return document.querySelector(`[data-row-id="fx:${fxId}"]`) as HTMLElement
 }
 
 function divider(category: string): HTMLElement | null {
@@ -211,15 +211,15 @@ describe('FX Library sheet', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fork' }))
     await waitFor(() => expect(createDefinition).toHaveBeenCalledTimes(1))
     expect(createDefinition.mock.calls[0][0]).toMatchObject({
-      effectId: 'PulseCustom2',
+      fxId: 'PulseCustom2',
       name: 'Pulse (Custom 2)',
-      category: 'intensity',
+      family: 'intensity',
       outputType: 'SLIDER',
-      effectMode: 'STANDARD',
+      fxMode: 'STANDARD',
       compatibleProperties: ['dimmer'],
       script: 'FxOutput.Slider(0u)',
       timingSource: 'BEAT',
-      defaultStepTiming: false,
+      defaultTiming: 'CYCLE',
     })
     expect(await screen.findByTestId('edit')).toHaveTextContent('99:Pulse')
   })

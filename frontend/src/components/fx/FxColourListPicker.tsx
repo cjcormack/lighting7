@@ -20,7 +20,7 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   parseExtendedColour,
   serializeExtendedColour,
-  isTemplateRef,
+  isPaletteRef,
   type ExtendedChannelFlags,
   type ExtendedColour,
 } from './colourUtils'
@@ -253,6 +253,6 @@ function parseColourList(value: string): ColourItem[] {
   return value
     .split(',')
     .map((s) => s.trim())
-    .filter((s) => s !== '' && !isTemplateRef(s))
+    .filter((s) => s !== '' && !isPaletteRef(s))
     .map((raw) => ({ id: makeId(), raw, colour: parseExtendedColour(raw) }))
 }

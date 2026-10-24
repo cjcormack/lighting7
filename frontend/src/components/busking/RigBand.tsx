@@ -75,7 +75,7 @@ import { useTargetColours } from '@/hooks/useTargetColours'
 import type { TargetColours } from '@/lib/targetColours'
 import { BuskFixtureSheet, BuskFixtureSheetContext, type BuskSheetTarget } from './BuskFixtureSheet'
 import { BuskFamilyPill } from './BuskFamilyPill'
-import { buskReleaseTargets, summariseSelection, type BuskingTarget, type EffectPresence } from './buskingTypes'
+import { buskReleaseTargets, summariseSelection, type BuskingTarget, type FxPresence } from './buskingTypes'
 import { ReleaseTargetsButton } from '@/components/fixtureSheet/ReleaseTargetsButton'
 import { useReleaseTargets, type ReleaseTarget } from '@/components/fixtureSheet/useRelease'
 import { SelectionVerbButtons, VERB_CLASS, type SelectionVerbs } from './selectionVerbs'
@@ -521,7 +521,7 @@ function RigBandBody({
   // its whole fixture is — the desk would read a press on that cell as a narrowing, and a dark tile
   // whose press narrows is the worst reading of the three.
   const presenceOf = useCallback(
-    (tile: RenderTile): EffectPresence => {
+    (tile: RenderTile): FxPresence => {
       if (tile.kind === 'run' || tile.kind === 'cell') {
         if (selectedTargets.has(targetKey({ type: 'fixture', key: tile.patch.key }))) return 'all'
       }
@@ -1086,7 +1086,7 @@ function RigRow({
   lookup: TileLookup
   /** The rig's colours, each tile's resolved to the key it is handed (`tileColour`). */
   colours: TargetColours
-  presenceOf: (tile: RenderTile) => EffectPresence
+  presenceOf: (tile: RenderTile) => FxPresence
   wholeSelected: (tile: RenderTile) => boolean
   selectedCells: ReadonlySet<string>
   onPress: (tile: RenderTile) => void

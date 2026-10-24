@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useReducer } from 'react'
 import { lightingApi } from '@/api/lightingApi'
-import { effectsReaching, mergeRowSources, rowSourceOf, type PickSource, type RowSource } from './rowSource'
+import { fxReaching, mergeRowSources, rowSourceOf, type PickSource, type RowSource } from './rowSource'
 import { useFixtureSheet } from './sheetContext'
 
 /**
@@ -18,7 +18,7 @@ export function useRowSource(headKey: string, keys: readonly string[]): RowSourc
  * disagree. One subscription per (head, key), so a row over twelve pixels hears its twelve keys.
  */
 export function usePickSource(headKeys: readonly string[], keys: readonly string[]): PickSource {
-  const { effects, blind, cueLabel, effectDetail, reachOf } = useFixtureSheet()
+  const { effects, blind, cueLabel, fxDetail, reachOf } = useFixtureSheet()
   const [version, bump] = useReducer((n: number) => n + 1, 0)
   const headsKey = headKeys.join('\u0000')
   const keysKey = keys.join('\u0000')
@@ -34,7 +34,7 @@ export function usePickSource(headKeys: readonly string[], keys: readonly string
     () =>
       headsKey.split('\u0000').map((head) => {
         const reach = reachOf(head)
-        return effectsReaching(effects, reach.keys, reach.groups)
+        return fxReaching(effects, reach.keys, reach.groups)
       }),
     [effects, headsKey, reachOf],
   )
@@ -52,13 +52,13 @@ export function usePickSource(headKeys: readonly string[], keys: readonly string
             effects: reaching[i],
             blind,
             cueLabel,
-            effectDetail,
+            fxDetail,
           }),
         })),
       )
     },
     // `version` is the subscription's tick: the states are read from the client's store, which
     // moves without React knowing, and every key's change bumps it.
-    [version, headsKey, keysKey, reaching, blind, cueLabel, effectDetail],
+    [version, headsKey, keysKey, reaching, blind, cueLabel, fxDetail],
   )
 }

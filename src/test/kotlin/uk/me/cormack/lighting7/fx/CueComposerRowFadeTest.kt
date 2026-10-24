@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.models.LayerSource
  * The per-row fade's trip through [CueComposer.cook] — sweep item B1.
  *
  * The defect these pin: a template's fade was honoured when the chip was *clicked*
- * (`applyTemplateToProgrammer` passes it straight to the programmer write) and dropped when the same
+ * (`applyPaletteToProgrammer` passes it straight to the programmer write) and dropped when the same
  * chip was ⌥clicked into a layer, because the cook's `SourceRow` had no field for it. The fade has
  * to survive the cook for a tracked source to arrive the way an applied one does.
  */
@@ -50,10 +50,10 @@ class CueComposerRowFadeTest {
         return LookRegistry(fixtures = { fixtures }, loader = { byUuid[it] })
     }
 
-    private fun template(name: String, fadeDurationMs: Long?, vararg rows: TemplateRowEntry) =
-        TemplateSnapshot(
-            templateId = name.hashCode(),
-            templateUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
+    private fun template(name: String, fadeDurationMs: Long?, vararg rows: PaletteRowEntry) =
+        PaletteSnapshot(
+            paletteId = name.hashCode(),
+            paletteUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
             name = name,
             fadeDurationMs = fadeDurationMs,
             rows = rows.toList(),
@@ -67,8 +67,8 @@ class CueComposerRowFadeTest {
             layerId = layerId,
         )
 
-    private fun templateLayer(t: TemplateSnapshot, sortOrder: Int = 0, layerId: Int = 1) = CookLayer(
-        source = LayerSource.template(t.templateId, t.templateUuid, t.name),
+    private fun paletteLayer(t: PaletteSnapshot, sortOrder: Int = 0, layerId: Int = 1) = CookLayer(
+        source = LayerSource.palette(t.paletteId, t.paletteUuid, t.name),
         sortOrder = sortOrder,
         targets = listOf(CueTargetDto("group", "front-wash")),
         layerId = layerId,
@@ -77,7 +77,7 @@ class CueComposerRowFadeTest {
     private fun cook(
         fixtures: Fixtures,
         registry: LookRegistry? = null,
-        templates: List<TemplateSnapshot> = emptyList(),
+        templates: List<PaletteSnapshot> = emptyList(),
         layers: List<CookLayer>,
         localRows: List<CueAssignmentResolver.Assignment> = emptyList(),
     ) = CueComposer.cook(
@@ -87,7 +87,7 @@ class CueComposerRowFadeTest {
         layers = layers,
         localRows = localRows,
         resolveLook = { uuid -> registry?.snapshot(uuid) },
-        resolveTemplate = { uuid -> templates.firstOrNull { it.templateUuid == uuid } },
+        resolvePalette = { uuid -> templates.firstOrNull { it.paletteUuid == uuid } },
     ).rows
 
     @Test
@@ -119,10 +119,10 @@ class CueComposerRowFadeTest {
         val amber = template(
             "Amber Key",
             fadeDurationMs = 1_200,
-            TemplateRowEntry(target = null, propertyName = "dimmer", value = "pct:50"),
-            TemplateRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
+            PaletteRowEntry(target = null, propertyName = "dimmer", value = "pct:50"),
+            PaletteRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
         )
-        val rows = cook(twoHexes(), templates = listOf(amber), layers = listOf(templateLayer(amber)))
+        val rows = cook(twoHexes(), templates = listOf(amber), layers = listOf(paletteLayer(amber)))
         assertEquals(4, rows.size)
         for (row in rows) assertEquals(1_200L, row.fadeDurationMs, "${row.targetKey}.${row.propertyName}")
     }

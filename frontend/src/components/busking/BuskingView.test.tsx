@@ -118,7 +118,7 @@ const warmAmber = {
   kind: 'value',
   isGeneric: true,
   rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
-  effect: null,
+  fx: null,
   requiredEmitters: [],
   lastPressedAt: null,
   layerCount: 0,
@@ -139,7 +139,7 @@ const padPage: BuskPage = {
               name: 'Colour',
               solo: false,
               flow: 'WRAP',
-              pads: [{ id: 31, uuid: 'pd31', kind: 'TEMPLATE', template: warmAmber }],
+              pads: [{ id: 31, uuid: 'pd31', kind: 'PALETTE', palette: warmAmber }],
             },
           ],
         },
@@ -152,15 +152,15 @@ const padPage: BuskPage = {
 const rig = {
   fixtures: [{ key: 'par-1', name: 'PAR 1', typeKey: 'par' }],
   groups: [
-    { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
+    { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] },
   ],
 }
 
 /** What the press route answers; a test overrides `skippedFamilies` for the Look case. */
 let pressAnswer: BuskPressResponse = {
-  kind: 'TEMPLATE',
+  kind: 'PALETTE',
   action: 'applied',
-  effectCount: 0,
+  fxCount: 0,
   released: 0,
   skippedFamilies: [],
 }
@@ -268,7 +268,7 @@ describe('the busk view', () => {
     resetBuskPageFollowStores()
     resetBuskWindowStores()
     shapeSeen.length = 0
-    pressAnswer = { kind: 'TEMPLATE', action: 'applied', effectCount: 0, released: 0, skippedFamilies: [] }
+    pressAnswer = { kind: 'PALETTE', action: 'applied', fxCount: 0, released: 0, skippedFamilies: [] }
     buskPageWs.reset()
     urlSeen.length = 0
   })
@@ -856,7 +856,7 @@ describe('the busk view', () => {
 
     it('toasts the rows a masked Look skipped, saying rows', async () => {
       selectionWs.last = { targets: [{ type: 'fixture', key: 'par-1' }], families: ['COLOUR'], source: null }
-      pressAnswer = { kind: 'LOOK', action: 'applied', effectCount: 0, released: 0, skippedFamilies: ['POSITION'] }
+      pressAnswer = { kind: 'LOOK', action: 'applied', fxCount: 0, released: 0, skippedFamilies: ['POSITION'] }
       const warning = vi.spyOn(toast, 'warning').mockImplementation(() => '' as never)
       const { calls } = draw([padPage])
       await press(calls)

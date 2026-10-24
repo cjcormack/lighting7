@@ -10,7 +10,7 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.midi.MidiInputEvent
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.captureLogs
 import uk.me.cormack.lighting7.testsupport.testAppConfig
@@ -174,7 +174,7 @@ class TerminologyMigrationTest {
         desk.initializeShow()
         desk.show.start()
         val red = UUID.fromString("7dbf1758-a269-4d26-9ce0-ff0871394569")
-        assertNull(transaction(desk.database) { DaoTemplate.find { uk.me.cormack.lighting7.models.DaoTemplates.uuid eq red }.single().lastPressedAt })
+        assertNull(transaction(desk.database) { DaoPalette.find { uk.me.cormack.lighting7.models.DaoPalettes.uuid eq red }.single().lastPressedAt })
 
         desk.activeBankState.setBank("x-touch-compact-standard", "layer-a")
         desk.deskSelection.set(listOf(CueTargetDto("fixture", "wash-1")))
@@ -182,7 +182,7 @@ class TerminologyMigrationTest {
         desk.surfaceInputRouter.offerInputForTest("x-touch-compact-standard", MidiInputEvent.NoteOn(channel = 0, note = 24, velocity = 127u))
 
         assertNotNull(
-            transaction(desk.database) { DaoTemplate.find { uk.me.cormack.lighting7.models.DaoTemplates.uuid eq red }.single().lastPressedAt },
+            transaction(desk.database) { DaoPalette.find { uk.me.cormack.lighting7.models.DaoPalettes.uuid eq red }.single().lastPressedAt },
             "the pressPalette binding pressed Red on (the stamp is the on arm only)",
         )
     }

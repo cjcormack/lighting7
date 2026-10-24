@@ -33,14 +33,14 @@ vi.mock('@/components/fixtures/ColourPickerPopover', () => ({
     return null
   },
 }))
-vi.mock('./NewTemplateFromSelectionSheet', () => ({ NewTemplateFromSelectionSheet: () => null }))
+vi.mock('./NewPaletteFromSelectionSheet', () => ({ NewPaletteFromSelectionSheet: () => null }))
 
 const scopeState = vi.hoisted(() => ({
   scope: { kind: 'local' } as ProgrammerScope | null,
   template: null as unknown,
 }))
 vi.mock('./ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.scope }))
-vi.mock('./FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => scopeState.template }))
+vi.mock('./FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => scopeState.template }))
 
 const arm = vi.hoisted(() => ({
   value: {

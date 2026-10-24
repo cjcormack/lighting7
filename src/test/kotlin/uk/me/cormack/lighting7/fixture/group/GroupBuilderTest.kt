@@ -155,12 +155,12 @@ class GroupBuilderTest {
             add(createFixture(0))
             configure(
                 symmetricMode = SymmetricMode.MIRROR,
-                defaultDistribution = "CENTRE_OUT"
+                defaultOrder = "CENTRE_OUT"
             )
         }
 
         assertEquals(SymmetricMode.MIRROR, group.metadata.symmetricMode)
-        assertEquals("CENTRE_OUT", group.metadata.defaultDistributionName)
+        assertEquals("CENTRE_OUT", group.metadata.defaultOrderName)
     }
 
     @Test
@@ -170,7 +170,7 @@ class GroupBuilderTest {
         }
 
         assertEquals(SymmetricMode.NONE, group.metadata.symmetricMode)
-        assertEquals("NORMAL", group.metadata.defaultDistributionName)
+        assertEquals("NORMAL", group.metadata.defaultOrderName)
     }
 
     @Test

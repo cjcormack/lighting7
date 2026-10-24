@@ -85,9 +85,9 @@ export function LookTogglePicker({
               disabled={isApplying}
             >
               <span className="truncate">{look.name}</span>
-              {look.effectCount > 0 && (
+              {look.fxCount > 0 && (
                 <Badge variant="secondary" className="text-[10px] px-1 py-0 shrink-0 ml-2">
-                  {look.effectCount} fx
+                  {look.fxCount} fx
                 </Badge>
               )}
             </button>

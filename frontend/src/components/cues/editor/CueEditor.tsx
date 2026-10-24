@@ -28,7 +28,7 @@ import { CueRowStoreProvider, useCueRowSaveState } from './CueRowStore'
 import { CueValuesGrid } from './CueValuesGrid'
 import { CueValuesViewProvider } from './CueValuesView'
 import { CueLooksTab } from './CueLooksTab'
-import { CueEffectsTab } from './CueEffectsTab'
+import { CueFxTab } from './CueFxTab'
 import { SHOW_ON_STAGE_OFF_RIG, ShowOnStageButton } from './ShowOnStageButton'
 
 /** What mounts the editor: the open card, the cue sheet's bottom pane, or a sheet over a view. */
@@ -65,7 +65,7 @@ const TAB_TRIGGER_CLASS = cn(
  *   window chose last (`cueEditorTab.ts`).
  * - **Values edits the cue's own rows** (`CueValuesGrid` over this editor's `CueRowStore`), **Looks
  *   its layers** (`CueLooksTab`, `LookStack` over the cue) and **FX its own effects**
- *   (`CueEffectsTab`), each a whole-list write of the cue. The Values selection is the editor's
+ *   (`CueFxTab`), each a whole-list write of the cue. The Values selection is the editor's
  *   (`CueValuesView`), so the Looks and FX tabs' adds and *Targets* act on it and a tab switch keeps
  *   it. Scenery, Events and Cue edit the cue's scenery, its events, and its notes, hooks and busk
  *   pads.
@@ -153,7 +153,7 @@ export function CueEditor({
             <TabsList className="h-9 w-full shrink-0 justify-start gap-0.5 overflow-x-auto rounded-none border-b bg-transparent p-0 px-3">
               <EditorTab value="values" label="Values" count={cooked?.rows.length} />
               <EditorTab value="looks" label="Looks" count={cue.layers.length} />
-              <EditorTab value="fx" label="FX" count={cue.adHocEffects.length} />
+              <EditorTab value="fx" label="FX" count={cue.adHocFx.length} />
               <EditorTab value="scenery" label="Scenery" count={cue.scenery?.length ?? 0} />
               <EditorTab value="events" label="Events" count={cue.events?.length ?? 0} />
               <EditorTab value="cue" label="Cue" />
@@ -175,7 +175,7 @@ export function CueEditor({
                 />
               </TabsContent>
               <TabsContent value="fx" className="p-3">
-                <CueEffectsTab
+                <CueFxTab
                   cue={cue}
                   projectId={projectId}
                   readOnlyReason={readOnlyReason}

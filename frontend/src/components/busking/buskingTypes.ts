@@ -81,23 +81,23 @@ export function selectedHeadCount(selected: readonly BuskingTarget[]): number {
   return selected.reduce((sum, target) => sum + (target.type === 'group' ? target.group.memberCount : 1), 0)
 }
 
-export type EffectPresence = 'all' | 'some' | 'none'
+export type FxPresence = 'all' | 'some' | 'none'
 
 /**
  * Effect names, folded for comparison — `"Colour Chase"`, `"colour_chase"` and `"ColourChase"` are
- * one effect. Still here after the busk view's effect pads went because `findEffectEntry` below
+ * one effect. Still here after the busk view's effect pads went because `findFxEntry` below
  * compares names this way, for the live editor, the picker and the template sheets.
  */
-export function normalizeEffectName(s: string): string {
+export function normalizeFxName(s: string): string {
   return s.toLowerCase().replace(/[\s_]/g, '')
 }
 
 /**
  * The library entry behind an effect type, by its folded name.
  *
- * **Normalised, not exact.** A running instance and a stored template both carry `effectType` as it
+ * **Normalised, not exact.** A running instance and a stored template both carry `fxType` as it
  * was written when the effect was minted, and that need not be spelled identically to the library
- * entry's `name` — which is the whole reason [normalizeEffectName] exists. An exact `===` lookup
+ * entry's `name` — which is the whole reason [normalizeFxName] exists. An exact `===` lookup
  * therefore answers `undefined` for an effect the library really does have, and every caller reads
  * that as "still loading" and disables itself forever.
  *
@@ -105,13 +105,13 @@ export function normalizeEffectName(s: string): string {
  * apart: a `library` of `undefined` is *still arriving*, while a miss against a loaded library is an
  * effect type this desk's registry does not know.
  */
-export function findEffectEntry<T extends { name: string }>(
+export function findFxEntry<T extends { name: string }>(
   library: readonly T[] | undefined,
-  effectType: string | null | undefined,
+  fxType: string | null | undefined,
 ): T | undefined {
-  if (library == null || effectType == null) return undefined
-  const normalized = normalizeEffectName(effectType)
-  return library.find((entry) => normalizeEffectName(entry.name) === normalized)
+  if (library == null || fxType == null) return undefined
+  const normalized = normalizeFxName(fxType)
+  return library.find((entry) => normalizeFxName(entry.name) === normalized)
 }
 
 /**

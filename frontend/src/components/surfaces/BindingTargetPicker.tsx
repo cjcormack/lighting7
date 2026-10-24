@@ -757,7 +757,7 @@ function TargetBody({
           label="Palette"
           value={value.paletteUuid}
           onChange={(paletteUuid) => onChange({ ...value, paletteUuid })}
-          options={records.templates}
+          options={records.palettes}
         />
         <p className="text-xs text-muted-foreground">
           Presses onto the desk selection as a layer that tracks the palette. With nothing

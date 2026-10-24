@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 
 const state = vi.hoisted(() => ({ scope: { kind: 'local' } as unknown, template: null as unknown }))
 vi.mock('@/components/programmer/ProgrammerScope', () => ({ useProgrammerScope: () => state.scope }))
-vi.mock('@/components/programmer/FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => state.template }))
+vi.mock('@/components/programmer/FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => state.template }))
 
 const { PositionFanContext, PositionSpreadTool } = await import('./PositionSpreadTool')
 
@@ -56,7 +56,7 @@ describe('PositionSpreadTool', () => {
     expect(button()).toHaveAttribute('title', expect.stringContaining('Output is a read of the cook'))
     cleanup()
     state.scope = { kind: 'layer', layerId: 3 }
-    state.template = { templateId: 1 }
+    state.template = { paletteId: 1 }
     draw(vi.fn())
     expect(button()).toHaveAttribute('title', expect.stringContaining('applies a palette'))
     cleanup()

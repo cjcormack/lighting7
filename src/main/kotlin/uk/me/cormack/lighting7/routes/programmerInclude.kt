@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.routes
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fx.EffectSpawner
+import uk.me.cormack.lighting7.fx.FxSpawner
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
@@ -19,9 +19,9 @@ import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
-import uk.me.cormack.lighting7.models.LookEffectSpec
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
+import uk.me.cormack.lighting7.models.LookFxSpec
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.layerTargets
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -166,7 +166,7 @@ internal fun includeCueIntoProgrammer(
         // A palette layer's group targets are *real* information rather than inferred, unlike the
         // member rows' recovered hints — the layer names the group directly.
         groupKeys = (groupHints.values.toSet() + fx.groupKeys + layerGroupKeys).toList().sorted(),
-        fxSpawned = fx.spawned + layerOutcome.effectsSpawned,
+        fxSpawned = fx.spawned + layerOutcome.fxSpawned,
         fxAlreadyRunning = fx.alreadyRunning,
         fxTimedSkipped = fx.timedSkipped + timedLayersSkipped,
         layersInstalled = state.show.programmerStore.layers.size,
@@ -246,7 +246,7 @@ private data class IncludedFxOutcome(
  *    visibly double the effect under any non-`OVERRIDE` blend mode. So is a child the programmer
  *    already runs by its origin — an earlier Include's, or the Record or Update that wrote it.
  * 2. **`cueId`/`cueStackId` stay null** on spawned instances. Tagging them would let
- *    `removeCueEffects` sweep the operator's programmer contents out from under them when
+ *    `removeCueFx` sweep the operator's programmer contents out from under them when
  *    the cue stops. `programmerOrigin` carries the provenance Update needs instead, and it is
  *    not something any cue-teardown path looks at.
  */
@@ -256,7 +256,7 @@ private fun spawnIncludedFx(
     mask: Set<PropertyMaskGroup>?,
 ): IncludedFxOutcome {
     val engine = state.show.fxEngine
-    // Instances are collected here and added in one `addEffects` below: adding them one at a
+    // Instances are collected here and added in one `addFxBatch` below: adding them one at a
     // time rebuilt the engine's sorted snapshots and re-broadcast the whole active-effect list
     // per effect (sweep item C7). The duplicate guard reads the pre-loop `running` snapshot and
     // never the instances this loop makes, so deferring the adds changes nothing it decides.
@@ -266,20 +266,20 @@ private fun spawnIncludedFx(
     val groupKeys = LinkedHashSet<String>()
 
     // Layers are counted by the caller, which knows which of them were timed.
-    val timedSkipped = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null }
+    val timedSkipped = cueData.adHocFx.count { it.delayMs != null || it.intervalMs != null }
 
-    val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId && !it.leaving }
+    val running = engine.getActiveFx().filter { it.cueId == cueData.cueId && !it.leaving }
     // The children an earlier Include already runs in the programmer, which a second one must not double.
-    val included = engine.getActiveEffects().filter { !it.leaving }.mapNotNullTo(HashSet()) { it.programmerOrigin }
+    val included = engine.getActiveFx().filter { !it.leaving }.mapNotNullTo(HashSet()) { it.programmerOrigin }
 
     fun spawn(
-        effectSpec: LookEffectSpec,
-        target: EffectTargetRef,
+        fxSpec: LookFxSpec,
+        target: FxTargetsRef,
         origin: ProgrammerFxOrigin,
     ) {
         if (mask != null) {
             val reference = state.show.fixtures.referenceFixtureFor(target)
-            val propertyName = effectSpec.propertyName
+            val propertyName = fxSpec.propertyName
             val group = if (reference != null && propertyName != null) {
                 maskGroupForProperty(reference, propertyName)
             } else null
@@ -303,10 +303,10 @@ private fun spawnIncludedFx(
         // `source == null` rather than `lookId == null`: a **template** layer owns effects since
         // fx-templates D5, and `lookId` is null for those, so the old test read a template layer's
         // effect as a loose child and let Include mask a genuine one behind it.
-        val registrationId = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.id
+        val registrationId = state.show.fxRegistry.getRegistration(fxSpec.fxType)?.id
         val duplicate = (origin.childUuid != null && origin in included) || running.any {
             it.target.targetKey == target.key &&
-                it.target.propertyName == effectSpec.propertyName &&
+                it.target.propertyName == fxSpec.propertyName &&
                 it.registrationId == registrationId &&
                 it.source == null && it.cueLayerId == null
         }
@@ -316,7 +316,7 @@ private fun spawnIncludedFx(
         }
 
         val fxTarget = try {
-            EffectSpawner.resolveTargetForCue(state, target, effectSpec)
+            FxSpawner.resolveTargetForCue(state, target, fxSpec)
         } catch (e: Exception) {
             logger.warn(
                 "cue {}: included fx on '{}' — target unresolvable — skipping: {}",
@@ -325,8 +325,8 @@ private fun spawnIncludedFx(
             null
         } ?: return
 
-        val instance = EffectSpawner.createEffectInstanceOrNull(
-            effectSpec, fxTarget, state, "cue ${cueData.cueId}: included fx on '${target.key}'",
+        val instance = FxSpawner.createFxInstanceOrNull(
+            fxSpec, fxTarget, state, "cue ${cueData.cueId}: included fx on '${target.key}'",
         ) ?: return
         uk.me.cormack.lighting7.routes.markProgrammerOwned(instance, true)
         instance.programmerOrigin = origin
@@ -338,14 +338,14 @@ private fun spawnIncludedFx(
 
     // A cue's *layer* effects are spawned by `ProgrammerLayerStack`, which owns their lifecycle —
     // retraction on remove, re-ranking on reorder. Only the cue's own ad-hoc children are left here.
-    for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
+    for (adHoc in cueData.adHocFx.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
-            adHoc.toEffectSpec(), adHoc.target,
+            adHoc.toFxSpec(), adHoc.target,
             ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.uuid),
         )
     }
 
-    engine.addEffects(spawning)
+    engine.addFxBatch(spawning)
     val spawned = spawning.size
 
     if (spawned > 0) {
@@ -355,30 +355,30 @@ private fun spawnIncludedFx(
 }
 
 /** Ad-hoc children and look effects share a shape; this is the adapter the hold registry's bring-on also uses. */
-internal fun CueAdHocEffectDto.toEffectSpec() = LookEffectSpec(
-    effectType = effectType,
-    category = category,
+internal fun CueAdHocFxDto.toFxSpec() = LookFxSpec(
+    fxType = fxType,
+    family = family,
     propertyName = propertyName,
-    beatDivision = beatDivision,
+    cycle = cycle,
     blendMode = blendMode,
-    distribution = distribution,
+    order = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTiming,
+    timing = timing,
     parameters = parameters,
     // The timing travels with the child: Include runs it as the cue does, and Update writes back
     // what the operator changed (venue-visit plan S15 — the masters were dropped here before it).
     speedMasterUuid = speedMasterUuid,
     rateSpeedMasterUuid = rateSpeedMasterUuid,
     seconds = seconds,
-    size = size,
+    amount = amount,
     direction = direction,
-    nShot = nShot,
+    runs = runs,
     spread = spread,
     wings = wings,
-    blocks = blocks,
-    groups = groups,
+    segments = segments,
+    parts = parts,
 )
 
 /** The include target for [cueData], included from [entryId], for [uk.me.cormack.lighting7.fx.ProgrammerStore]. */

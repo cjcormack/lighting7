@@ -27,9 +27,9 @@ class CascadePublisher internal constructor(
     private val parkManager: ParkManager?,
     /**
      * The (fixtureKey, propertyName) pairs running effects cover, cached by the engine on
-     * its effect-list epoch — see `FxEngine.coveredByRunningEffects`.
+     * its effect-list epoch — see `FxEngine.coveredByRunningFx`.
      */
-    private val coveredByRunningEffects: () -> Set<Pair<String, String>>,
+    private val coveredByRunningFx: () -> Set<Pair<String, String>>,
     private val throttle: FxLogThrottle,
 ) {
     // The Layer 4 publish lock (the engine's old `cueAssignmentsLock`). Serialises every
@@ -73,10 +73,10 @@ class CascadePublisher internal constructor(
     ): Unit = locked {
         if (keys.isEmpty()) return@locked
 
-        val coveredByEffects = coveredByRunningEffects()
+        val coveredByFx = coveredByRunningFx()
 
-        if (coveredByEffects.isNotEmpty() &&
-            keys.all { (it.targetKey to it.propertyName) in coveredByEffects }) {
+        if (coveredByFx.isNotEmpty() &&
+            keys.all { (it.targetKey to it.propertyName) in coveredByFx }) {
             return@locked
         }
 
@@ -85,7 +85,7 @@ class CascadePublisher internal constructor(
         var wrote = false
 
         for (key in keys) {
-            if ((key.targetKey to key.propertyName) in coveredByEffects) continue
+            if ((key.targetKey to key.propertyName) in coveredByFx) continue
 
             val fixture = try {
                 fixturesWithTx.untypedGroupableFixture(key.targetKey)
@@ -123,7 +123,7 @@ class CascadePublisher internal constructor(
      * Walks the union of (fixtureKey, propertyName) keys from the before and after cue-layer
      * snapshots' indexes, without materialising a union key set — crossfade ticks run this
      * per frame. Skips keys a currently-running effect covers (the effect tick will paint
-     * them; the set comes from [coveredByRunningEffects], cached until the effect list or
+     * them; the set comes from [coveredByRunningFx], cached until the effect list or
      * fixture register moves) and fully-parked targets (park wins at transmit regardless).
      * Otherwise opens a single [ControllerTransaction] and writes the resolved fallback via
      * [FxTarget.resetToFallback] — same mechanism the tick loops' reset pass uses.
@@ -154,7 +154,7 @@ class CascadePublisher internal constructor(
         val afterIndex = after.index
         if (beforeIndex.isEmpty() && afterIndex.isEmpty()) return
 
-        val coveredByEffects = coveredByRunningEffects()
+        val coveredByFx = coveredByRunningFx()
         // Empty for every cue whose rows asked for no fade, which is the common case — so the
         // compound-key allocation `publishKey` otherwise avoids is skipped entirely rather than
         // done and discarded.
@@ -176,7 +176,7 @@ class CascadePublisher internal constructor(
             // keeps a constant composed value the whole way through. Equality is a cheap
             // data-class check.
             if (beforeValue == afterValue) return
-            if ((fixtureKey to propertyName) in coveredByEffects) return
+            if ((fixtureKey to propertyName) in coveredByFx) return
 
             val typeSource = afterValue ?: beforeValue ?: return
             val target = resolveTargetForCueLayerKey(fixtureKey, propertyName, typeSource)

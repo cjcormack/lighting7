@@ -30,7 +30,7 @@ interface CueStackEntryBase {
    * built entirely from layers otherwise reads as empty in the Run list.
    */
   layerCount: number
-  adHocEffectCount: number
+  adHocFxCount: number
   autoAdvance: boolean
   autoAdvanceDelayMs: number | null
   fadeDurationMs: number | null
@@ -184,7 +184,7 @@ export interface CueStackActivateResponse {
   entryId: number
   cueId: number
   cueName: string
-  effectCount: number
+  fxCount: number
 }
 
 export interface CueStackDeactivateResponse {

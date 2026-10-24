@@ -45,7 +45,7 @@ vi.mock('@/store/cueStacks', () => ({
 }))
 vi.mock('@/store/cues', () => ({ useProjectCueListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalFamilyCounts: () => undefined }))
 vi.mock('@/store/programmerOps', () => ({
   useRecordProgrammerMutation: () => [record, { isLoading: false, error: undefined, reset: () => {} }],

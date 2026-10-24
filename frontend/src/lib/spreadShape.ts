@@ -3,7 +3,7 @@ import { javaRandom } from '@/components/editor/spreadPlans'
 /**
  * The spread's shape (effects plan D4, §3.3) — the editor's copy, for the Spread section's **dial
  * preview only** (P2: the desk owns the rule, `fx/SpreadShape.kt`'s `SpreadShaping` and
- * `fx/group/DistributionStrategy.kt`'s ranks). Nothing here is ever sent: the editor writes the four
+ * `fx/group/SpreadOrder.kt`'s ranks). Nothing here is ever sent: the editor writes the four
  * fields and the Order, and the desk shapes the running effect from them. A shared vector,
  * `src/test/resources/fx/spreadShape.fixture.json`, pins this file and the desk's to the same offsets
  * (`spreadShape.test.ts` beside `SpreadShapeTest.kt`), so the dials cannot draw a spread the rig does
@@ -17,20 +17,20 @@ export interface SpreadShapeFields {
   /** Mirrored wings; 1 is none. Not under a mirrored Order. */
   wings?: number
   /** Neighbouring heads sharing one phase; 1 is none. */
-  blocks?: number
+  segments?: number
   /** The spread repeating every this many heads; 0 is off. */
-  groups?: number
+  parts?: number
 }
 
 /** The four fields resolved, as the editor's draft holds them. */
 export interface SpreadShape {
   spread: number
   wings: number
-  blocks: number
-  groups: number
+  segments: number
+  parts: number
 }
 
-export const DEFAULT_SPREAD_SHAPE: SpreadShape = { spread: 1, wings: 1, blocks: 1, groups: 0 }
+export const DEFAULT_SPREAD_SHAPE: SpreadShape = { spread: 1, wings: 1, segments: 1, parts: 0 }
 
 /** Spread's ceiling (200 %) and the counts' — the desk's `SpreadShape.MAX_SPREAD` / `MAX_COUNT`. */
 export const MAX_SPREAD = 2
@@ -41,13 +41,13 @@ export function spreadShapeOf(fields: SpreadShapeFields): SpreadShape {
   return {
     spread: fields.spread ?? 1,
     wings: fields.wings ?? 1,
-    blocks: fields.blocks ?? 1,
-    groups: fields.groups ?? 0,
+    segments: fields.segments ?? 1,
+    parts: fields.parts ?? 0,
   }
 }
 
 export function isDefaultShape(shape: SpreadShape): boolean {
-  return shape.spread === 1 && shape.wings === 1 && shape.blocks === 1 && shape.groups === 0
+  return shape.spread === 1 && shape.wings === 1 && shape.segments === 1 && shape.parts === 0
 }
 
 /**
@@ -58,12 +58,12 @@ export function isMirroredOrder(order: string): boolean {
   return order === 'CENTRE_OUT' || order === 'CENTRE_IN'
 }
 
-/** The Order's words (§3.1: the strategy, renamed in the UI only) — `lib/orderLabels.ts`'s, one vocabulary. */
+/** The Order's words — `lib/orderLabels.ts`'s, one vocabulary. */
 export { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from './orderLabels'
 
 /**
  * Step 1 over [n] notional heads, element `i` at position `i / (n − 1)` (0.5 for one): each head's
- * rank, and the rank count — `DistributionStrategy.ranks` and `distinctSlots`. Random is the desk's
+ * rank, and the rank count — `SpreadOrder.ranks` and `distinctSlots`. Random is the desk's
  * own shuffle (`java.util.Random(seed × 31 + n)`, Fisher–Yates), at its default seed 0.
  */
 export function orderRanks(order: string, n: number): { ranks: number[]; count: number } {
@@ -109,10 +109,10 @@ export function orderRanks(order: string, n: number): { ranks: number[]; count: 
  * Each of [n] notional heads' phase offset under [order] shaped by [shape], and the slot count after
  * step 4 — `DistributionPlan.forElements` on the desk, step for step:
  *
- * 2. Blocks `B`: `r ← floor(r / B)` over `ceil(R / B)` ranks;
+ * 2. Segments `S`: `r ← floor(r / S)` over `ceil(R / S)` ranks;
  * 3. Wings `W` (not under a mirrored Order): runs of `m = ceil(R / W)`, an odd run mirrored within
  *    its own length, over `m`;
- * 4. Groups `G`: `r ← r mod G` over `G`, when `G` is below the rank count;
+ * 4. Parts `P`: `r ← r mod P` over `P`, when `P` is below the rank count;
  * 5. Spread `s`: `offset = s × r / R`.
  *
  * At the default shape the offsets are the Order's own (`rank / count`; a position, for Position).
@@ -126,16 +126,16 @@ export function spreadOffsets(order: string, n: number, shape: SpreadShape): { o
   }
   let count = Math.max(orderCount, 1)
   const wingsApply = !isMirroredOrder(order)
-  // Blocks, Wings and Groups count whole ranks, so Position's continuous rank snaps to its nearest
-  // slot first (`DistributionStrategy.wholeRanks`); Spread alone scales it as it is.
+  // Segments, Wings and Parts count whole ranks, so Position's continuous rank snaps to its nearest
+  // slot first (`SpreadOrder.wholeRanks`); Spread alone scales it as it is.
   const countsRanks =
-    shape.blocks > 1 || (wingsApply && shape.wings > 1) || (shape.groups >= 1 && shape.groups < count)
+    shape.segments > 1 || (wingsApply && shape.wings > 1) || (shape.parts >= 1 && shape.parts < count)
   let r =
     order === 'POSITIONAL' && countsRanks
       ? Array.from({ length: n }, (_, i) => Math.round((n > 1 ? i / (n - 1) : 0.5) * Math.max(n - 1, 0)))
       : ranks.slice()
-  if (shape.blocks > 1) {
-    const b = shape.blocks
+  if (shape.segments > 1) {
+    const b = shape.segments
     count = Math.ceil(count / b)
     r = r.map((x) => Math.min(Math.floor(x / b), count - 1))
   }
@@ -153,8 +153,8 @@ export function spreadOffsets(order: string, n: number, shape: SpreadShape): { o
     })
     count = m
   }
-  if (shape.groups >= 1 && shape.groups < count) {
-    const g = shape.groups
+  if (shape.parts >= 1 && shape.parts < count) {
+    const g = shape.parts
     r = r.map((x) => x - g * Math.floor(x / g))
     count = g
   }
@@ -170,7 +170,7 @@ export function spreadSummary(order: string, shape: SpreadShape): string[] {
   const parts: string[] = []
   if (shape.spread !== 1) parts.push(`${Math.round(shape.spread * 100)} %`)
   if (shape.wings > 1 && !isMirroredOrder(order)) parts.push(`${shape.wings} wings`)
-  if (shape.blocks > 1) parts.push(`segments of ${shape.blocks}`)
-  if (shape.groups > 0) parts.push(`parts of ${shape.groups}`)
+  if (shape.segments > 1) parts.push(`segments of ${shape.segments}`)
+  if (shape.parts > 0) parts.push(`parts of ${shape.parts}`)
   return parts
 }

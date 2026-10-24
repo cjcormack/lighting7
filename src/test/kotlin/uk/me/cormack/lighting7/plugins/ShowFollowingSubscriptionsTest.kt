@@ -17,8 +17,8 @@ import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
 import uk.me.cormack.lighting7.models.SpeedMasterSource
-import uk.me.cormack.lighting7.routes.AddEffectRequest
-import uk.me.cormack.lighting7.routes.AddEffectResponse
+import uk.me.cormack.lighting7.routes.AddFxRequest
+import uk.me.cormack.lighting7.routes.AddFxResponse
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitEachOf
 import uk.me.cormack.lighting7.testsupport.awaitOfType
@@ -72,12 +72,12 @@ class ShowFollowingSubscriptionsTest : RouteIntegrationTest() {
                     }
                 }
 
-                val effectId = rest.post("/api/rest/fx/add") {
+                val fxId = rest.post("/api/rest/fx/add") {
                     contentType(ContentType.Application.Json)
-                    setBody(AddEffectRequest(effectType = "Pulse", fixtureKey = "other-hex", propertyName = "dimmer"))
-                }.body<AddEffectResponse>().effectId
+                    setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "other-hex", propertyName = "dimmer"))
+                }.body<AddFxResponse>().fxId
                 awaitOfType<FxStateOutMessage> { frame ->
-                    frame.activeEffects.any { it.id == effectId && it.targetKey == "other-hex" }
+                    frame.activeFx.any { it.id == fxId && it.targetKey == "other-hex" }
                 }
 
                 show.parkManager.park(0, 9, 77u)

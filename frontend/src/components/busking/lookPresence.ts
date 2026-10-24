@@ -1,6 +1,6 @@
 import type { CueTarget } from '@/api/cuesApi'
 import type { ProgrammerAppliedSource } from '@/store/programmer'
-import type { EffectPresence } from './buskingTypes'
+import type { FxPresence } from './buskingTypes'
 
 /**
  * How much of the selection one library record covers, from the desk's **resolved** applied state.
@@ -27,7 +27,7 @@ function appliedPresence(
   targets: readonly CueTarget[],
   kind: ProgrammerAppliedSource['source']['kind'],
   sourceId: number,
-): EffectPresence {
+): FxPresence {
   if (targets.length === 0) return 'none'
 
   const record = applied.find(
@@ -69,7 +69,7 @@ export function lookLayerPresence(
   applied: readonly ProgrammerAppliedSource[],
   targets: readonly CueTarget[],
   lookId: number,
-): EffectPresence {
+): FxPresence {
   return appliedPresence(applied, targets, 'LOOK', lookId)
 }
 
@@ -78,7 +78,7 @@ export function lookLayerPresence(
  *
  * A separate function rather than a parameter on [lookLayerPresence], because the two match on
  * different things: a Look is found by `source.id` *within the LOOK arm*, a template within the
- * TEMPLATE arm, and the two id spaces are different tables that can collide. Folding them into one
+ * PALETTE arm, and the two id spaces are different tables that can collide. Folding them into one
  * would need a kind argument at every call site to avoid exactly that.
  *
  * This is the *only* way a template's pad can light, and since fx-templates that rule is **more**
@@ -89,12 +89,12 @@ export function lookLayerPresence(
  * answers. The layer is what a press adds and what a second press removes, whatever the template
  * holds.
  */
-export function templateLayerPresence(
+export function paletteLayerPresence(
   applied: readonly ProgrammerAppliedSource[],
   targets: readonly CueTarget[],
-  templateId: number,
-): EffectPresence {
-  return appliedPresence(applied, targets, 'TEMPLATE', templateId)
+  paletteId: number,
+): FxPresence {
+  return appliedPresence(applied, targets, 'PALETTE', paletteId)
 }
 
 /**

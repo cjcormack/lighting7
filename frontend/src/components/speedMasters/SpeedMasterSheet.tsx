@@ -21,7 +21,7 @@ import { formatBpm } from '../../hooks/useBpmDraft'
 import {
   DEFAULT_FOLLOW_RATIO,
   FOLLOW_RATIOS,
-  SPEED_MASTER_USAGES,
+  SPEED_MASTER_FAMILIES,
   eligibleFollowTargets,
   followRatioOf,
   followTargetOf,
@@ -63,12 +63,12 @@ const MAX_BPM = 300
 
 /** The Follows column's first option — the value a manual master holds, and what Clear writes. */
 const MANUAL = 'manual'
-/** The Usage column's "routes nothing". Never on the wire: the PUT wants `usage: null`. */
+/** The Usage column's "routes nothing". Never on the wire: the PUT wants `family: null`. */
 const USAGE_NONE = 'none'
 
 const USAGE_OPTIONS: SheetOption[] = [
   { value: USAGE_NONE, label: 'None' },
-  ...SPEED_MASTER_USAGES.map((u) => ({ value: u, label: usageLabel(u) ?? u })),
+  ...SPEED_MASTER_FAMILIES.map((u) => ({ value: u, label: usageLabel(u) ?? u })),
 ]
 
 const RATIO_OPTIONS: SheetOption[] = FOLLOW_RATIOS.map((r) => ({ value: `${r.num}/${r.den}`, label: r.label }))
@@ -435,7 +435,7 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
         label: 'Usage',
         kind: 'usage',
         width: '96px',
-        value: (row) => row.master.usage ?? USAGE_NONE,
+        value: (row) => row.master.family ?? USAGE_NONE,
         cell: (_row, props) => <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={USAGE_OPTIONS} />,
         write: (batch, value) => {
           if (typeof value !== 'string' || !USAGE_OPTIONS.some((o) => o.value === value)) return false
@@ -448,11 +448,11 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
             return false
           }
           const next = value === USAGE_NONE ? null : value
-          for (const row of batch) if ((row.master.usage ?? null) !== next) put(row.master, 'usage', { usage: next })
+          for (const row of batch) if ((row.master.family ?? null) !== next) put(row.master, 'usage', { family: next })
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (row.master.usage != null) put(row.master, 'usage', { usage: null })
+          for (const row of batch) if (row.master.family != null) put(row.master, 'usage', { family: null })
         },
       },
       {

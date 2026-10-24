@@ -39,7 +39,7 @@ import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCues
@@ -67,11 +67,11 @@ import uk.me.cormack.lighting7.models.DaoShowParkRelease
 import uk.me.cormack.lighting7.models.DaoShowParkReleases
 import uk.me.cormack.lighting7.models.DaoSyncConfig
 import uk.me.cormack.lighting7.models.DaoSyncConfigs
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
 import uk.me.cormack.lighting7.models.DaoUniverseConfigs
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.ParkAddress
 import uk.me.cormack.lighting7.models.ProjectKind
 import uk.me.cormack.lighting7.models.RigOwner
@@ -290,8 +290,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             DaoFixturePatch.new { project = show; universeConfig = u; fixtureTypeKey = "generic-dimmer"; key = "panto-spot"; displayName = "Panto spot"; startChannel = 1 }
             val vu = DaoUniverseConfig.new { project = DaoProject[h.venueId]; subnet = 0; universe = 9; controllerType = "MOCK" }
             DaoFixturePatch.new { project = DaoProject[h.venueId]; universeConfig = vu; fixtureTypeKey = "generic-dimmer"; key = "house-spot"; displayName = "House spot"; startChannel = 1 }
-            val palette = DaoTemplate.new { project = show; name = "Spot level" }
-            DaoTemplateRow.new { this.palette = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
+            val palette = DaoPalette.new { project = show; name = "Spot level" }
+            DaoPaletteRow.new { this.palette = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
             DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); this.palette = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
             DaoControlSurfaceBinding.new {
                 project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureProperty"
@@ -367,16 +367,16 @@ class VenueAttachTest : RouteIntegrationTest() {
             RigKeyReferences.rewrite(show, mapOf("hex-3" to "hex-3b"), emptyMap(), emptyList(), keys)
             val cue = DaoCue.find { DaoCues.project eq h.showId }.first()
             val assignment = DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "200" }
-            val effect = DaoCueAdHocEffect.new {
-                this.cue = cue; targetType = EffectTargetRef.Selection.TYPE
-                targetKey = EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3b"), TargetRef.Fixture("hex-1"))).key
+            val effect = DaoCueAdHocFxEntity.new {
+                this.cue = cue; targetType = FxTargetsRef.Selection.TYPE
+                targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3b"), TargetRef.Fixture("hex-1"))).key
                 fxType = "Pulse"; family = "intensity"; cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
             }
             val look = DaoLook.new { project = show; name = "Hex 3 special" }
             val lookRow = DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "128"; sortOrder = 0 }
-            val palette = DaoTemplate.new { project = show; name = "hex-3 focus" }
-            val paletteRow = DaoTemplateRow.new { this.palette = palette; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "90"; sortOrder = 0 }
+            val palette = DaoPalette.new { project = show; name = "hex-3 focus" }
+            val paletteRow = DaoPaletteRow.new { this.palette = palette; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "90"; sortOrder = 0 }
             val binding = DaoControlSurfaceBinding.new {
                 project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "fixtureProperty"
                 targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("hex-3b", "dimmer"))
@@ -393,7 +393,7 @@ class VenueAttachTest : RouteIntegrationTest() {
         assertEquals(emptyList(), review.notes, "keeping its own key renames nothing")
         assertEquals(UpdateAnswer.KEEP_MINE, identity.answer)
         val reach = identity.rename!!.usedBy.map { it.kind }.toSet()
-        assertTrue(setOf("CUE", "LOOK", "TEMPLATE", "BINDING", "SCRIPT").all { it in reach }, "the rename's reach: $reach")
+        assertTrue(setOf("CUE", "LOOK", "PALETTE", "BINDING", "SCRIPT").all { it in reach }, "the rename's reach: $reach")
 
         val done = attach(h, to = 1, decisions = listOf(UpdateDecisionAnswer(identity.id, UpdateAnswer.TAKE_VENUES)))
         assertEquals("hex-3b", done.renames.single().from)
@@ -403,12 +403,12 @@ class VenueAttachTest : RouteIntegrationTest() {
             val (assignment, effect, lookRow, paletteRow, binding) = seeded
             assertEquals("hex-3", DaoCuePropertyAssignment[assignment].targetKey)
             assertEquals(
-                EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Fixture("hex-1"))).key,
-                DaoCueAdHocEffect[effect].targetKey,
+                FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Fixture("hex-1"))).key,
+                DaoCueAdHocFxEntity[effect].targetKey,
                 "a selection's item",
             )
             assertEquals("hex-3", DaoLookRow[lookRow].targetKey)
-            assertEquals("hex-3", DaoTemplateRow[paletteRow].targetKey)
+            assertEquals("hex-3", DaoPaletteRow[paletteRow].targetKey)
             assertEquals(BindingTarget.FixtureProperty("hex-3", "dimmer"), BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[binding].targetPayload))
             assertEquals(0, DaoFixturePatch.find { (DaoFixturePatches.project eq h.showId) and (DaoFixturePatches.key eq "hex-3b") }.count(), "the show's row is the venue's now")
         }

@@ -462,7 +462,7 @@ function LiveCard({
  * **A component, and four leaves, because the value hooks take a descriptor and hooks cannot be
  * conditional.** `useSliderValue` and `useGroupColourValues` want different shapes and subscribe to
  * different channel sets, so choosing between them inside one component would mean calling one of
- * them with a fabricated descriptor. `EffectPadDetail` is the same shape for the same reason.
+ * them with a fabricated descriptor. `FxPadDetail` is the same shape for the same reason.
  *
  * Only **slider** and **colour** are drawn, which is not a simplification: those are exactly the
  * two `PropertyChannelResolver` writes from a continuous control, so a binding on anything else has

@@ -27,6 +27,7 @@ is nothing to pick up, and the reasoning is there so the idea isn't re-litigated
 | [`FU-FE-REVISION-REFETCH-DEDUP`](#fu-fe-revision-refetch-dedup) | Trigger | FE | a 4th broadcast needs revision-gated refetch coalescing |
 | [`FU-FE-REVISION-NAME-CLASH`](#fu-fe-revision-name-clash) | Ready | FE | — |
 | [`FU-FE-SHARED-LOOK-EDIT-GUARD`](#fu-fe-shared-look-edit-guard) | Ready | FE | — |
+| [`FU-FE-FAN-NAMES`](#fu-fe-fan-names) | Ready | FE | — |
 | [`FU-MIDI-RING-STYLE-MIXED`](#fu-midi-ring-style-mixed) | Trigger | MIDI | a second profile declares a `FAN` or `PAN` encoder ring |
 | [`FU-AI-SET-SELECTION`](#fu-ai-set-selection) | Trigger | AI | a conversation asks the AI to select fixtures rather than act on them |
 | [`FU-SPEED-SURFACE-TAP-LED`](#fu-speed-surface-tap-led) | Trigger | Speed | operator wants tap confirmation on the surface |
@@ -247,6 +248,23 @@ built-in count.
 Metaspace is the one to watch, not heap.
 
 ## Frontend polish
+
+### `FU-FE-FAN-NAMES`
+
+**The client's Fan still says Spread** · Ready · terminology plan session 5, 2026-10-24
+
+The desk's Fan is `FanPlan`, `FanRequest` / `FanResponse`, `FanCurve`, `FanOver` and
+`routes/programmerFan.kt`, on `POST /programmer/fan`. The client kept the old word for it: the wire
+mirrors in `store/programmerOps.ts` (`SpreadCurve`, `SpreadOver`, `SpreadRequest`, `SpreadBase`,
+`SpreadWrite`, `SpreadSkip`, `SpreadResponse`, the `spread` mutation, `useSpreadMutation`),
+`lib/spreadFan.ts`'s `SpreadMode` and `SpreadFanPrefs`, `SpreadPanel`'s `SpreadSeed`,
+`FanSpreadSeed`, `SpreadRequestBody` and `spreadRequestOf`, and the components and files
+`SpreadPanel`, `SpreadPopover`, `SpreadSheet`, `PositionSpreadTool`, `RailSpreadTab`,
+`spreadIntent.ts`, `spreadPlans.ts` and `spreadOver.ts`. Session 5 renamed the wire and left these,
+by Chris's call. Rename them to Fan in one change; the glossary's Fan row names
+`src:components/editor/SpreadPanel.tsx` and `src:lib/spreadIntent.ts` as its keys, so those move
+with the files. The fx Spread section (the spread's shape: Spread %, Wings, Segments, Parts) is a
+different thing and keeps its name.
 
 ### `FU-FE-REBIND-INPLACE`
 

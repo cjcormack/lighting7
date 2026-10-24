@@ -1,5 +1,5 @@
 import type { ChannelRef } from '../store/fixtures'
-import type { EffectDirection } from './fxApi'
+import type { FxDirection, Timing } from './fxApi'
 
 // === Types ===
 
@@ -8,7 +8,7 @@ export interface GroupSummary {
   memberCount: number
   capabilities: string[]
   symmetricMode: string
-  defaultDistribution: string
+  defaultOrder: string
   /**
    * Ids of the Looks the backend reports as compatible with this group.
    *
@@ -48,17 +48,17 @@ export interface GroupDetail extends GroupSummary {
   /**
    * Each strategy's step per member, indexed by the member's `index`: 1 comes round first, and
    * members sharing an offset share a step (a pair under `CENTRE_OUT`). Computed by the desk's
-   * `DistributionStrategy`, so the group sheet shows the order without mirroring a formula. A
+   * `SpreadOrder`, so the group sheet shows the order without mirroring a formula. A
    * function of the group's size alone. Absent from an older desk.
    */
-  distributionSteps?: Partial<Record<DistributionStrategy, number[]>>
+  orderSteps?: Partial<Record<SpreadOrder, number[]>>
 }
 
 export type BlendMode = 'OVERRIDE' | 'ADDITIVE' | 'MULTIPLY' | 'MAX' | 'MIN'
 
 export type ElementMode = 'PER_FIXTURE' | 'FLAT'
 
-export type DistributionStrategy =
+export type SpreadOrder =
   | 'NORMAL'
   | 'UNIFIED'
   | 'CENTRE_OUT'
@@ -71,46 +71,46 @@ export type DistributionStrategy =
 export interface ApplyFxRequest {
   /**
    * The effect's registry id, as `GET /fx/library` reports it — `string`, like every other
-   * `effectType` in this client (`GroupActiveEffect`, `FxEffectState`, `addFixtureFx`).
+   * `fxType` in this client (`GroupActiveFx`, `ActiveFxState`, `addFixtureFx`).
    *
    * Three closed unions stood here (dimmer / colour / position, twenty lowercase literals). The
    * vocabulary they claimed to enumerate is data-driven — `fx/index.txt` plus each `.fx.kts`
    * `id:`, plus whatever an `FX_DEFINITION` script registers — so no union could name a
    * user-defined effect, and the built-in list had already outgrown these by eight. They only
-   * typechecked because the one production call site cast `effect.name as EffectType`, which
+   * typechecked because the one production call site cast `effect.name as FxType`, which
    * constrains nothing. Narrow it from the FX library query at runtime if narrowing is ever wanted.
    *
    * **Send the library's name verbatim.** `FxRegistry` normalises on lookup, which is what lets a
    * `SineWave` id answer a `sinewave` request; canonicalising here would only add a second
    * spelling to keep in step.
    */
-  effectType: string
+  fxType: string
   propertyName: string
-  beatDivision: number
+  cycle: number
   blendMode: BlendMode
-  distribution: DistributionStrategy
+  order: SpreadOrder
   phaseOffset: number
   parameters: Record<string, string>
   elementMode?: ElementMode
   elementFilter?: string
-  stepTiming?: boolean
+  timing?: Timing
   /** Speed master to subscribe to, as the master's uuid (omitted → master 1). */
   speedMasterUuid?: string
   /** Wall-clock rate master, as the master's uuid (omitted → unscaled). */
   rateSpeedMasterUuid?: string
   /** On *Seconds* (D7): the division is seconds, no master. Never beside a master. */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; omitted → 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; omitted → 1. */
+  amount?: number
   /** Direction (D5); omitted → forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9), at least 1; omitted → forever. */
-  nShot?: number
+  runs?: number
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   /**
    * Create the effect in the programmer's reserved priority band, so it composes *on top of*
    * programmer values instead of being suppressed by them, and Clear sweeps it with them.
@@ -120,23 +120,23 @@ export interface ApplyFxRequest {
 }
 
 export interface ApplyFxResponse {
-  effectId: number
+  fxId: number
 }
 
-export interface GroupActiveEffect {
+export interface GroupActiveFx {
   id: number
-  effectType: string
+  fxType: string
   propertyName: string
-  beatDivision: number
+  cycle: number
   blendMode: BlendMode
-  distribution: DistributionStrategy
+  order: SpreadOrder
   isRunning: boolean
   phaseOffset: number
   currentPhase: number
   parameters: Record<string, string>
   elementMode: ElementMode | null
   elementFilter: string | null
-  stepTiming: boolean
+  timing: Timing
   cueId: number | null
   /** Speed master this effect subscribes to (null → master 1). */
   speedMasterUuid?: string | null
@@ -144,17 +144,17 @@ export interface GroupActiveEffect {
   rateSpeedMasterUuid?: string | null
   /** D7's reading: follows no master. */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; absent at 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; absent at 1. */
+  amount?: number
   /** Direction (D5); absent when forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9); absent or null runs forever. */
-  nShot?: number | null
+  runs?: number | null
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   /** A programmer layer's N-shot that has run its count, kept painting nothing until its layer goes. */
   spent?: boolean
 }

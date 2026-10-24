@@ -11,7 +11,7 @@ import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { Fixture } from '@/store/fixtures'
 import { HandCueLayerStrip, type HandCueLayerHost } from '@/components/hand/HandLayerTargets'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import type { Cue, CueLayer, CueLayerDetail, CueTarget } from '@/api/cuesApi'
 import { useCueRowStore } from './CueRowStore'
 import { useCueValuesView } from './CueValuesView'
@@ -75,12 +75,12 @@ function LooksBody({
   const navigate = useNavigate()
   const { fixtures } = useFixtureLookup()
   const { data: looks } = useLookListQuery({ projectId })
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const looksById = useMemo(() => new Map((looks ?? []).map((l) => [l.id, l])), [looks])
-  const templatesById = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t])), [templates])
+  const palettesById = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t])), [templates])
   const readOnly = readOnlyReason != null || store == null
   const unlock = useRefusedEditKeys({ region, readOnly, onRequestUnlock })
-  const [adding, setAdding] = useState<'look' | 'template' | null>(null)
+  const [adding, setAdding] = useState<'look' | 'palette' | null>(null)
 
   // What the tab draws while a write is on its way: each gesture applied to the list it last drew,
   // kept while any is still waiting for its flush or its PATCH, and given up once none is and the
@@ -125,7 +125,7 @@ function LooksBody({
       onOpenSource: (index) => {
         const source = layers[index]?.source
         if (source == null) return
-        const library = source.kind === 'TEMPLATE' ? 'palettes' : 'looks'
+        const library = source.kind === 'PALETTE' ? 'palettes' : 'looks'
         navigate(`/projects/${projectId}/${library}?edit=${source.id}`)
       },
     }
@@ -161,7 +161,7 @@ function LooksBody({
       <LookStack
         layers={layers}
         looksById={looksById}
-        templatesById={templatesById}
+        palettesById={palettesById}
         looksLoaded={looks != null && templates != null}
         handlers={shownHandlers}
         readOnly={readOnly}
@@ -191,8 +191,8 @@ function LooksBody({
               className="h-6 gap-1 px-1.5 text-xs"
               disabled={readOnly}
               title={addTitle('palette')}
-              aria-expanded={adding === 'template'}
-              onClick={() => setAdding((a) => (a === 'template' ? null : 'template'))}
+              aria-expanded={adding === 'palette'}
+              onClick={() => setAdding((a) => (a === 'palette' ? null : 'palette'))}
             >
               <Plus className="size-3" />
               <Palette className="size-3" />

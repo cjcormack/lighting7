@@ -45,7 +45,7 @@ export interface MarqueeSnapshot {
    */
   commit: (col: ColumnKey, commit: CellCommit) => void
   /**
-   * Where a press from this window lands — the palette strip's own targets (`templateTargetsFor`)
+   * Where a press from this window lands — the palette strip's own targets (`paletteTargetsFor`)
    * — and the families the marquee names, null for rows alone. `usePress`'s pair on the
    * programmer, so a door outside the list (the hand's place on the stack, the Stack table's
    * *+ Look or palette*) presses what the strip would. `targetFamilies` and `targetEmitters` are what

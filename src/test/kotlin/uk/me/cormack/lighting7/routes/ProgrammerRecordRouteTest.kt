@@ -10,7 +10,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
@@ -21,7 +21,7 @@ import uk.me.cormack.lighting7.fx.SliderTarget
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
@@ -622,7 +622,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
             // A cue whose effect is asserted on the whole group.
             ProgrammerHandler.set(state, TargetRef.Group("front-wash"), "dimmer", "150", 0)
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.group("front-wash")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.group("front-wash")))
             val created: ProgrammerRecordResponse = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId,
@@ -632,9 +632,9 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
             // Re-record only hex-1, with the same effect now running on hex-1 alone.
             clearProgrammer()
-            state.show.fxEngine.getActiveEffects().forEach { state.show.fxEngine.removeEffect(it.id) }
+            state.show.fxEngine.getActiveFx().forEach { state.show.fxEngine.removeFx(it.id) }
             setProgrammer("hex-1", "dimmer", "255")
-            state.show.fxEngine.addEffect(programmerBandSine(FxTargetRef.fixture("hex-1")))
+            state.show.fxEngine.addFx(programmerBandSine(FxTargetRef.fixture("hex-1")))
             val updated: ProgrammerRecordResponse = client.record(
                 ProgrammerRecordRequest(
                     projectId = projectId.toString(), mode = "UPDATE_EXISTING", cueId = cueId,
@@ -645,7 +645,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             // The group row survives (hex-2 is outside the selection), so a second row naming
             // hex-1 would run the same effect twice on it — cue activation instantiates per row
             // per target with no de-duplication.
-            val dimmerEffects = updated.cue.adHocEffects.filter { it.propertyName == "dimmer" }
+            val dimmerEffects = updated.cue.adHocFx.filter { it.propertyName == "dimmer" }
             val coverage = dimmerEffects.flatMap { effect ->
                 if (effect.targetType == TargetRef.Group.TYPE) listOf("hex-1", "hex-2")
                 else listOf(effect.targetKey)
@@ -1058,13 +1058,13 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
         // A busked effect on a named master, and one on Seconds (venue-visit plan S15, D7). Record
         // dropped the master before S15, so a recorded busk fell back to master 1.
         for ((key, request) in listOf(
-            "hex-1" to AddEffectRequest(
-                effectType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
+            "hex-1" to AddFxRequest(
+                fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
                 speedMasterUuid = master, programmerOwned = true,
             ),
-            "hex-2" to AddEffectRequest(
-                effectType = "Pulse", fixtureKey = "hex-2", propertyName = "dimmer",
-                beatDivision = 8.0, seconds = true, programmerOwned = true,
+            "hex-2" to AddFxRequest(
+                fxType = "Pulse", fixtureKey = "hex-2", propertyName = "dimmer",
+                cycle = 8.0, seconds = true, programmerOwned = true,
             ),
         )) {
             val added = client.post("/api/rest/fx/add") {
@@ -1078,12 +1078,12 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
             ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId, name = "timed"),
         ).body()
 
-        val onMaster = response.cue.adHocEffects.single { it.targetKey == "hex-1" }
+        val onMaster = response.cue.adHocFx.single { it.targetKey == "hex-1" }
         assertEquals(master, onMaster.speedMasterUuid)
         assertEquals(false, onMaster.seconds)
-        val onSeconds = response.cue.adHocEffects.single { it.targetKey == "hex-2" }
+        val onSeconds = response.cue.adHocFx.single { it.targetKey == "hex-2" }
         assertTrue(onSeconds.seconds)
-        assertEquals(8.0, onSeconds.beatDivision)
+        assertEquals(8.0, onSeconds.cycle)
         assertNull(onSeconds.speedMasterUuid)
     }
 
@@ -1098,11 +1098,11 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
 
     /** A generic UV palette, as a layer source. */
     private suspend fun createPalette(client: HttpClient, name: String): LayerSource {
-        val created: TemplateDto = client.post("/api/rest/projects/$projectId/palettes") {
+        val created: PaletteDto = client.post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", "uv", "dmx:200"))))
         }.body()
-        return LayerSource.template(created.id, java.util.UUID.fromString(created.uuid), created.name)
+        return LayerSource.palette(created.id, java.util.UUID.fromString(created.uuid), created.name)
     }
 
     private suspend fun HttpClient.record(request: ProgrammerRecordRequest) =
@@ -1124,7 +1124,7 @@ class ProgrammerRecordRouteTest : RouteIntegrationTest() {
     private fun programmerBandSine(target: FxTargetRef) = FxInstance(
         effect = SineSlider(),
         target = SliderTarget(target, "dimmer"),
-        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     ).apply { priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
 
     private fun seedHex(key: String, startChannel: Int) =

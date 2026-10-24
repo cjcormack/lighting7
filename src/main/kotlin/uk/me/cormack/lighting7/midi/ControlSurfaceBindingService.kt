@@ -743,7 +743,7 @@ class ControlSurfaceBindingService(
         is BindingTarget.CueStackGo -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         is BindingTarget.CueStackBack -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         is BindingTarget.CueStackPause -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
-        is BindingTarget.StackEffectSize -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
+        is BindingTarget.StackFxAmount -> if (stackUuid != null) this else copy(stackUuid = stackUuidFor(stackId, projectId))
         else -> this
     }
 

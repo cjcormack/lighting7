@@ -6,7 +6,7 @@ import { Box } from "lucide-react"
 import {
   navItems,
   programmerTableNavItems,
-  templateFamilyNavItems,
+  paletteFamilyNavItems,
   filterNavItems,
   commandLabelOf,
   NAV_SECTIONS,
@@ -150,7 +150,7 @@ describe("sections", () => {
   })
 
   it("orders Library, with the FX Library called FX", () => {
-    expect(idsIn("library")).toEqual(["looks", "cues", "templates", "fx-library", "speed-masters", "scripts"])
+    expect(idsIn("library")).toEqual(["looks", "cues", "palettes", "fx-library", "speed-masters", "scripts"])
     expect(navItems.find((i) => i.id === "fx-library")?.label).toBe("FX")
   })
 
@@ -180,13 +180,13 @@ describe("venue mode's rail", () => {
     const all = filterNavItems(navItems, true, true).map((i) => i.id)
     // Show, Prompt Book and Busk, and the whole Library.
     expect(all.filter((id) => !shown.includes(id)).sort()).toEqual(
-      ["cues", "fx", "fx-library", "looks", "program", "prompt-book", "scripts", "speed-masters", "templates"],
+      ["cues", "fx", "fx-library", "looks", "palettes", "program", "prompt-book", "scripts", "speed-masters"],
     )
     for (const kept of ["patches", "fixtures", "groups", "programmer", "stage-view", "channels", "project-settings", "stage", "rigging"]) {
       expect(shown).toContain(kept)
     }
     // ⌘K's per-family palette links go with the Palettes row.
-    expect(filterNavItems(templateFamilyNavItems, true, true, true)).toEqual([])
+    expect(filterNavItems(paletteFamilyNavItems, true, true, true)).toEqual([])
   })
 
   it("leaves Library with no row, so its heading goes", () => {
@@ -206,7 +206,7 @@ describe("venue mode's rail", () => {
  */
 describe("⌘K labels", () => {
   it("are unique across everything the Navigation group lists", () => {
-    const all = [...navItems, ...templateFamilyNavItems, ...[0, 1].map((u) => ({ label: `Universe ${u}` }) as NavItem)]
+    const all = [...navItems, ...paletteFamilyNavItems, ...[0, 1].map((u) => ({ label: `Universe ${u}` }) as NavItem)]
     const labels = all.map(commandLabelOf)
     expect(new Set(labels).size).toBe(labels.length)
   })
@@ -323,8 +323,8 @@ describe("look and palette navigation", () => {
   it("gives the Cmd+K per-family items ids that can't collide with the sidebar entry", () => {
     // Asserted against the real array, not against ids rebuilt here: an assertion that
     // reconstructs what it is checking passes just as happily when the source is wrong.
-    const ids = templateFamilyNavItems.map((i) => i.id)
-    expect(ids).toEqual(ATTRIBUTE_FAMILIES.map((family) => `templates-${familySlug(family)}`))
+    const ids = paletteFamilyNavItems.map((i) => i.id)
+    expect(ids).toEqual(ATTRIBUTE_FAMILIES.map((family) => `palettes-${familySlug(family)}`))
     expect(new Set(ids).size).toBe(ids.length)
     const staticIds = new Set(navItems.map((i) => i.id))
     for (const id of ids) expect(staticIds.has(id)).toBe(false)
@@ -338,9 +338,9 @@ describe("look and palette navigation", () => {
     // The filter and these links moved here from `/looks` in session 3, following the argument that
     // justifies one: a palette is in exactly one family, so a family is an exact partition, while a
     // Look spans families and would be hidden from most filters.
-    expect(templateFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
+    expect(paletteFamilyNavItems).toHaveLength(ATTRIBUTE_FAMILIES.length)
     for (const [index, family] of ATTRIBUTE_FAMILIES.entries()) {
-      const item = templateFamilyNavItems[index]
+      const item = paletteFamilyNavItems[index]
       expect(item.path(1)).toBe(`/projects/1/palettes?family=${familySlug(family)}`)
       expect(item.pathMatch).toBe("/palettes")
       expect(item.label).toBe(`${FAMILY_LABELS[family].singular} Palettes`)
@@ -351,7 +351,7 @@ describe("look and palette navigation", () => {
     // The two libraries are two entities, and their paths are siblings — `/looks` must not match a
     // palette route or vice versa. `lib/navMatch.test.ts` pins the matcher itself.
     const looks = navItems.find((i) => i.id === "looks")
-    const templates = navItems.find((i) => i.id === "templates")
+    const templates = navItems.find((i) => i.id === "palettes")
     expect(looks?.pathMatch).toBe("/looks")
     expect(templates?.pathMatch).toBe("/palettes")
     expect(templates?.label).toBe("Palettes")

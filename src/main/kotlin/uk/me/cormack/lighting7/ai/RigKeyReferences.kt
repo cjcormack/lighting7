@@ -15,27 +15,27 @@ import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
-import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
+import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
 import uk.me.cormack.lighting7.models.DaoScripts
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateRow
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.DaoTemplates
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteRow
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.DaoPalettes
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import java.util.UUID
 import uk.me.cormack.lighting7.models.entrySlotsOf
@@ -57,10 +57,10 @@ internal object RigKeyReferences {
         /** The cues a rewrite touched, for `republishCueIfLive` and `cuesRecomposed`. */
         val cues = LinkedHashSet<Int>()
         val looks = LinkedHashSet<UUID>()
-        val templates = LinkedHashSet<UUID>()
+        val palettes = LinkedHashSet<UUID>()
         var bindings = 0
         var buskTiles = 0
-        val isEmpty get() = cues.isEmpty() && looks.isEmpty() && templates.isEmpty() && bindings == 0 && buskTiles == 0
+        val isEmpty get() = cues.isEmpty() && looks.isEmpty() && palettes.isEmpty() && bindings == 0 && buskTiles == 0
     }
 
     /**
@@ -159,9 +159,9 @@ internal object RigKeyReferences {
     private fun walk(project: DaoProject, touched: Touched, visit: (User, String, String) -> String?) {
         // An effect's target may be a selection (effects plan D3): each fixture and group it names is
         // visited, and the key rebuilt when any of them is renamed.
-        fun visitEffect(user: User, type: String, key: String): String? {
-            if (type != EffectTargetRef.Selection.TYPE) return visit(user, type, key)
-            val items = EffectTargetRef.Selection.parseKey(key) ?: return null
+        fun visitFx(user: User, type: String, key: String): String? {
+            if (type != FxTargetsRef.Selection.TYPE) return visit(user, type, key)
+            val items = FxTargetsRef.Selection.parseKey(key) ?: return null
             var changed = false
             val next = items.map { item ->
                 val renamed = visit(user, item.discriminator, item.key) ?: return@map item
@@ -171,7 +171,7 @@ internal object RigKeyReferences {
                     is TargetRef.Group -> TargetRef.Group(renamed)
                 }
             }
-            return if (changed) EffectTargetRef.Selection(next).key else null
+            return if (changed) FxTargetsRef.Selection(next).key else null
         }
 
         val cues = DaoCue.find { DaoCues.project eq project.id }.associateBy { it.id.value }
@@ -188,9 +188,9 @@ internal object RigKeyReferences {
                 val cueId = row.readValues[DaoCuePropertyAssignments.cue].value
                 visit(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
             }
-            DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList ids }.forEach { row ->
-                val cueId = row.readValues[DaoCueAdHocEffects.cue].value
-                visitEffect(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
+            DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList ids }.forEach { row ->
+                val cueId = row.readValues[DaoCueAdHocFx.cue].value
+                visitFx(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
             }
             // A palette layer's targets; a Look's layer names none (absolute-looks plan D1).
             DaoCueLayer.find { (DaoCueLayers.cue inList ids) and DaoCueLayers.look.isNull() }.forEach { layer ->
@@ -214,19 +214,19 @@ internal object RigKeyReferences {
                     visit(lookUser(lookId), TargetRef.Fixture.TYPE, element)?.let { row.elementKey = it; touched.looks += looks.getValue(lookId).uuid }
                 }
             }
-            DaoLookEffect.find { DaoLookEffects.look inList ids }.forEach { row ->
-                val lookId = row.readValues[DaoLookEffects.look].value
-                visitEffect(lookUser(lookId), row.targetType, row.targetKey)?.let { row.targetKey = it; touched.looks += looks.getValue(lookId).uuid }
+            DaoLookFxEntity.find { DaoLookFx.look inList ids }.forEach { row ->
+                val lookId = row.readValues[DaoLookFx.look].value
+                visitFx(lookUser(lookId), row.targetType, row.targetKey)?.let { row.targetKey = it; touched.looks += looks.getValue(lookId).uuid }
             }
         }
 
-        val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.associateBy { it.id.value }
+        val templates = DaoPalette.find { DaoPalettes.project eq project.id }.associateBy { it.id.value }
         if (templates.isNotEmpty()) {
-            DaoTemplateRow.find { DaoTemplateRows.palette inList templates.keys.toList() }.forEach { row ->
-                val templateId = row.readValues[DaoTemplateRows.palette].value
-                val template = templates.getValue(templateId)
-                visit(User("PALETTE", templateId, template.name), row.targetType, row.targetKey)
-                    ?.let { row.targetKey = it; touched.templates += template.uuid }
+            DaoPaletteRow.find { DaoPaletteRows.palette inList templates.keys.toList() }.forEach { row ->
+                val paletteId = row.readValues[DaoPaletteRows.palette].value
+                val template = templates.getValue(paletteId)
+                visit(User("PALETTE", paletteId, template.name), row.targetType, row.targetKey)
+                    ?.let { row.targetKey = it; touched.palettes += template.uuid }
             }
         }
 

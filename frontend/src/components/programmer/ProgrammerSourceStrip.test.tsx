@@ -14,7 +14,7 @@ let projectCues: { id: number }[] | undefined = []
 vi.mock('@/store/programmer', () => ({
   useProgrammerSummaryQuery: () => ({ data: summary }),
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: [] }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: [] }) }))
 vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data: stacks }) }))
 vi.mock('@/store/cues', () => ({
   useProjectCueListQuery: (_projectId: number, options?: { skip?: boolean }) => ({

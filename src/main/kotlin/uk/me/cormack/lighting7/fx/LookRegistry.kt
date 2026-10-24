@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.models.stepTimingOf
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.Timing
 import org.jetbrains.exposed.v1.core.SortOrder
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.Database
@@ -9,11 +10,11 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
-import uk.me.cormack.lighting7.models.DaoLookEffects
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
+import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLookRows
 import uk.me.cormack.lighting7.models.DaoLooks
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.util.UUID
@@ -22,7 +23,7 @@ import uk.me.cormack.lighting7.models.AssignmentHealth
 
 /**
  * One stored Look row. Always bound: a Look row names its own fixture or group, and the deferred
- * half of the entity is [uk.me.cormack.lighting7.models.DaoTemplates] (sweep item B6). A row
+ * half of the entity is [uk.me.cormack.lighting7.models.DaoPalettes] (sweep item B6). A row
  * whose stored target does not resolve never becomes a `LookRowEntry` — see [loadLookSnapshot].
  */
 data class LookRowEntry(
@@ -38,46 +39,46 @@ data class LookRowEntry(
  *
  * A palette's one effect is this alone: it is generic (fx-templates plan D3), so the cook runs it
  * on each target of the layer pressing it. A Look's always names its own target, so it arrives as
- * an [EffectEntry]. What the cook hands on is this and a target, whichever it came from.
+ * an [FxEntry]. What the cook hands on is this and a target, whichever it came from.
  *
  * **Carries no source identity, deliberately, and must not grow one.**
- * [uk.me.cormack.lighting7.fx.ProgrammerLayerEffectKey] freezes a hash over the whole effect so that
+ * [uk.me.cormack.lighting7.fx.ProgrammerLayerFxKey] freezes a hash over the whole effect so that
  * editing an effect produces a *different* key and the stale instance retracts. A `sourceUuid`
  * field here would make every key change on the first recook after an upgrade, retracting and
  * respawning every programmer-layer effect on the desk. Where an effect came from lives on
  * [FxInstance.source] instead.
  */
-data class StoredEffect(
-    val effectType: String,
-    val category: String,
+data class StoredFx(
+    val fxType: String,
+    val family: String,
     val propertyName: String?,
-    val beatDivision: Double,
+    val cycle: Double,
     val blendMode: String,
-    val distribution: String,
+    val order: String,
     val phaseOffset: Double,
     val elementMode: String?,
     val elementFilter: String?,
-    val stepTiming: Boolean?,
+    val timing: Timing?,
     val parameters: Map<String, String>,
     val speedMasterUuid: UUID?,
     val rateSpeedMasterUuid: UUID?,
-    /** D7's *Seconds* for a beat effect; see [uk.me.cormack.lighting7.models.LookEffectSpec.seconds]. */
+    /** D7's *Seconds* for a beat effect; see [uk.me.cormack.lighting7.models.LookFxSpec.seconds]. */
     val seconds: Boolean = false,
-    /** Size (effects plan D2); see [uk.me.cormack.lighting7.models.LookEffectSpec.size]. */
-    val size: Double = 1.0,
-    /** Direction (D5) by name; see [uk.me.cormack.lighting7.models.LookEffectSpec.direction]. */
+    /** Amount (effects plan D2); see [uk.me.cormack.lighting7.models.LookFxSpec.amount]. */
+    val amount: Double = 1.0,
+    /** Direction (D5) by name; see [uk.me.cormack.lighting7.models.LookFxSpec.direction]. */
     val direction: String = "FORWARD",
-    /** Runs (D9); see [uk.me.cormack.lighting7.models.LookEffectSpec.nShot]. */
-    val nShot: Int? = null,
-    /** The spread's shape (effects plan D4) — see [uk.me.cormack.lighting7.models.LookEffectSpec.spread]. */
+    /** Runs (D9); see [uk.me.cormack.lighting7.models.LookFxSpec.runs]. */
+    val runs: Int? = null,
+    /** The spread's shape (effects plan D4) — see [uk.me.cormack.lighting7.models.LookFxSpec.spread]. */
     val spread: Double = 1.0,
     val wings: Int = 1,
-    val blocks: Int = 1,
-    val groups: Int = 0,
+    val segments: Int = 1,
+    val parts: Int = 0,
     /**
      * The stored row's uuid — a Look effect's or a palette effect's — or null for one built from no
-     * row: what a GO matches a continuing effect on (effects plan P4, [FxInstance.layerEffectUuid]).
-     * Not source identity in the sense above: [ProgrammerLayerEffectKey.of] leaves it out.
+     * row: what a GO matches a continuing effect on (effects plan P4, [FxInstance.layerFxUuid]).
+     * Not source identity in the sense above: [ProgrammerLayerFxKey.of] leaves it out.
      */
     val uuid: UUID? = null,
 )
@@ -85,11 +86,11 @@ data class StoredEffect(
 /**
  * One stored Look effect: [effect] on [target], a fixture, a group or a selection (effects plan D3).
  * A Look effect always names its own target (absolute-looks plan D2); a stored one that names none,
- * or names one the desk cannot parse, never becomes an `EffectEntry` — see [loadLookSnapshot].
+ * or names one the desk cannot parse, never becomes an `FxEntry` — see [loadLookSnapshot].
  */
-data class EffectEntry(
-    val target: EffectTargetRef,
-    val effect: StoredEffect,
+data class FxEntry(
+    val target: FxTargetsRef,
+    val effect: StoredFx,
 )
 
 /** A Look's identity and contents, read out of the DB and held immutably. */
@@ -100,7 +101,7 @@ data class LookSnapshot(
     /** Rows in `sortOrder`. */
     val rows: List<LookRowEntry>,
     /** Effects in `sortOrder`. */
-    val effects: List<EffectEntry>,
+    val effects: List<FxEntry>,
 )
 
 /**
@@ -147,8 +148,8 @@ class ExpandedLook(
  *   looks like a Look bug and isn't.
  *
  * [version] increments on every invalidation — twice, once either side of the eviction; see its
- * own KDoc for why both are load-bearing. [TemplateRegistry] is the same idiom one step
- * further on: it versions per template uuid ([TemplateRegistry.versionFor]), because a running
+ * own KDoc for why both are load-bearing. [PaletteRegistry] is the same idiom one step
+ * further on: it versions per template uuid ([PaletteRegistry.versionFor]), because a running
  * effect's colour cache watches its *own* references rather than the whole registry. A Look has no
  * such consumer — an expansion is read at cook, not per tick — so one counter is enough here.
  *
@@ -317,7 +318,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                 },
             effects = look.effects
                 // The order a press spawns them, so the order they apply.
-                .orderBy(DaoLookEffects.sortOrder to SortOrder.ASC, DaoLookEffects.id to SortOrder.ASC)
+                .orderBy(DaoLookFx.sortOrder to SortOrder.ASC, DaoLookFx.id to SortOrder.ASC)
                 .mapNotNull { effect ->
                     if (effect.targetType == DEFERRED_TARGET_TYPE) {
                         snapshotLogger.warn(
@@ -325,7 +326,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                             look.name, effect.uuid, effect.fxType,
                         )
                     }
-                    effect.toEffectEntry()
+                    effect.toFxEntry()
                 },
         )
     }
@@ -337,68 +338,68 @@ private val snapshotLogger = LoggerFactory.getLogger("loadLookSnapshot")
  * parse — [DEFERRED_TARGET_TYPE], which an older database wrote, among them — so it is skipped
  * rather than run on nothing. Must be called inside a transaction.
  */
-internal fun DaoLookEffect.toEffectEntry(): EffectEntry? {
-    val target = EffectTargetRef.ofOrNull(targetType, targetKey) ?: return null
-    return EffectEntry(target, toStoredEffect())
+internal fun DaoLookFxEntity.toFxEntry(): FxEntry? {
+    val target = FxTargetsRef.ofOrNull(targetType, targetKey) ?: return null
+    return FxEntry(target, toStoredFx())
 }
 
 /** This row's settings, without its target. Must be called inside a transaction. */
-private fun DaoLookEffect.toStoredEffect(): StoredEffect =
-    StoredEffect(
-        effectType = fxType,
-        category = family,
+private fun DaoLookFxEntity.toStoredFx(): StoredFx =
+    StoredFx(
+        fxType = fxType,
+        family = family,
         propertyName = attribute,
-        beatDivision = cycle,
+        cycle = cycle,
         blendMode = blendMode,
-        distribution = order,
+        order = order,
         phaseOffset = phaseOffset,
         elementMode = elementMode,
         elementFilter = elementFilter,
-        stepTiming = stepTimingOf(timing),
+        timing = timingOf(timing),
         parameters = parameters,
         speedMasterUuid = speedMasterUuid,
         rateSpeedMasterUuid = rateSpeedMasterUuid,
         seconds = seconds,
-        size = amount,
+        amount = amount,
         direction = direction,
-        nShot = runs,
+        runs = runs,
         spread = spread,
         wings = wings,
-        blocks = segments,
-        groups = parts,
+        segments = segments,
+        parts = parts,
         uuid = uuid,
     )
 
 /**
  * A stored effect as the generic effect spec the instance factories consume.
  *
- * [uk.me.cormack.lighting7.models.LookEffectSpec] already serves as that shared vehicle rather
+ * [uk.me.cormack.lighting7.models.LookFxSpec] already serves as that shared vehicle rather
  * than as anything preset-specific — a cue's ad-hoc effect is converted *into* it before spawning
- * too — so bridging here keeps `createEffectInstance` and `resolveTargetForCue` untouched.
+ * too — so bridging here keeps `createFxInstance` and `resolveTargetForCue` untouched.
  *
  * Carries no target, which is the caller's business: a Look effect's is its own, and a palette's
  * comes from the layer pressing it.
  */
-internal fun StoredEffect.toEffectSpec() = uk.me.cormack.lighting7.models.LookEffectSpec(
-    effectType = effectType,
-    category = category,
+internal fun StoredFx.toFxSpec() = uk.me.cormack.lighting7.models.LookFxSpec(
+    fxType = fxType,
+    family = family,
     propertyName = propertyName,
-    beatDivision = beatDivision,
+    cycle = cycle,
     blendMode = blendMode,
-    distribution = distribution,
+    order = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTiming,
+    timing = timing,
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     seconds = seconds,
-    size = size,
+    amount = amount,
     direction = direction,
-    nShot = nShot,
+    runs = runs,
     spread = spread,
     wings = wings,
-    blocks = blocks,
-    groups = groups,
+    segments = segments,
+    parts = parts,
 )

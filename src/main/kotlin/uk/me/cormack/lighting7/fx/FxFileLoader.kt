@@ -1,6 +1,8 @@
 package uk.me.cormack.lighting7.fx
 
 import io.sentry.ISpan
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.Timing
 import uk.me.cormack.lighting7.telemetry.ScriptCacheProbe
 import uk.me.cormack.lighting7.telemetry.Tracing
 import kotlinx.coroutines.Dispatchers
@@ -27,7 +29,7 @@ class FxFileLoader(
         val relativePath: String,
         val metadata: FxFileMetadata,
         val scriptBody: String,
-        val effectMode: EffectMode,
+        val fxMode: FxMode,
         val outputType: FxOutputType,
         val parameters: List<ParameterInfo>,
     )
@@ -45,7 +47,7 @@ class FxFileLoader(
      *   `(done, total)` — used to drive the boot progress bar. May fire from worker threads.
      * @return Number of effects successfully loaded
      */
-    fun loadBuiltInEffects(
+    fun loadBuiltInFx(
         registry: FxRegistry,
         parallel: Boolean = true,
         progress: ((done: Int, total: Int) -> Unit)? = null,
@@ -80,7 +82,7 @@ class FxFileLoader(
                     relativePath = relativePath,
                     metadata = metadata,
                     scriptBody = scriptBody,
-                    effectMode = EffectMode.valueOf(metadata.effectMode),
+                    fxMode = FxMode.valueOf(metadata.fxMode),
                     outputType = FxOutputType.valueOf(metadata.outputType),
                     parameters = metadata.parameters.map { p ->
                         ParameterInfo(p.name, p.type, p.default, p.description)
@@ -111,7 +113,7 @@ class FxFileLoader(
         fun compileOne(p: ParsedFx, isFinalAttempt: Boolean): CompiledFxScript? = Tracing.childOf(phase, "fx.compile", p.relativePath) { span ->
             ScriptCacheProbe.take()
             val compiled = try {
-                compiler.compile(p.scriptBody, p.effectMode)
+                compiler.compile(p.scriptBody, p.fxMode)
             } catch (e: Exception) {
                 logger.warn("Compiling fx/{} threw", p.relativePath, e)
                 null
@@ -161,7 +163,7 @@ class FxFileLoader(
                         // compile() caches failures (so a user hammering "Test" on a broken script
                         // doesn't re-run the compiler each time), so drop the entry or the retry
                         // would just hand back the cached error without recompiling.
-                        compiler.invalidate(p.scriptBody, p.effectMode)
+                        compiler.invalidate(p.scriptBody, p.fxMode)
                         val retried = compileOne(p, true)
                         if (retried != null && retried.isSuccess) {
                             logger.warn(
@@ -199,12 +201,12 @@ class FxFileLoader(
             }
 
             try {
-                val factory = ScriptEffectAdapter.createFactory(
+                val factory = ScriptFxAdapter.createFactory(
                     compiled = compiled,
                     schema = p.parameters,
-                    effectName = p.metadata.name,
+                    fxName = p.metadata.name,
                     outputType = p.outputType,
-                    defaultStepTiming = p.metadata.defaultStepTiming,
+                    defaultTiming = p.metadata.defaultTiming,
                     registrationId = p.metadata.id,
                     defaultDirection = p.metadata.defaultDirection,
                 )
@@ -215,20 +217,20 @@ class FxFileLoader(
                     TimingSource.BEAT
                 }
 
-                registry.register(EffectRegistration(
+                registry.register(FxRegistration(
                     id = p.metadata.id,
                     aliases = p.metadata.aliases?.toSet() ?: emptySet(),
                     name = p.metadata.name,
-                    category = p.metadata.category,
+                    family = p.metadata.family,
                     outputType = p.outputType,
-                    effectMode = p.effectMode,
+                    fxMode = p.fxMode,
                     parameters = p.parameters,
                     compatibleProperties = p.metadata.compatibleProperties,
-                    source = EffectSource.BUILT_IN,
+                    source = FxSource.BUILT_IN,
                     script = p.scriptBody,
-                    defaultStepTiming = p.metadata.defaultStepTiming,
+                    defaultTiming = p.metadata.defaultTiming,
                     defaultDirection = p.metadata.defaultDirection,
-                    defaultBeatDivision = p.metadata.defaultBeatDivision,
+                    defaultCycle = p.metadata.defaultCycle,
                     timingSource = timingSource,
                     factory = factory,
                 ))
@@ -291,12 +293,12 @@ class FxFileLoader(
             val lines = yaml.lines()
             var id = ""
             var name = ""
-            var category = ""
+            var family = ""
             var outputType = "SLIDER"
-            var effectMode = "STANDARD"
-            var defaultStepTiming = false
-            var defaultDirection = EffectDirection.FORWARD
-            var defaultBeatDivision = BeatDivision.ONE_BAR
+            var fxMode = "STANDARD"
+            var defaultTiming = Timing.CYCLE
+            var defaultDirection = FxDirection.FORWARD
+            var defaultCycle = CycleLength.ONE_BAR
             var timingSource = "BEAT"
             var compatibleProperties = listOf<String>()
             var aliases: List<String>? = null
@@ -377,14 +379,15 @@ class FxFileLoader(
                 when (key) {
                     "id" -> id = value
                     "name" -> name = value
-                    "category" -> category = value
+                    "family" -> family = value
                     "outputType" -> outputType = value
-                    "effectMode" -> effectMode = value
-                    "defaultStepTiming" -> defaultStepTiming = value.toBooleanStrictOrNull() ?: false
-                    "defaultDirection" -> defaultDirection = EffectDirection.byName(value)
+                    "fxMode" -> fxMode = value
+                    "defaultTiming" -> defaultTiming = timingOf(value)
+                        ?: throw IllegalArgumentException("Unknown defaultTiming '$value'")
+                    "defaultDirection" -> defaultDirection = FxDirection.byName(value)
                         ?: throw IllegalArgumentException("Unknown defaultDirection '$value'")
-                    "defaultBeatDivision" -> defaultBeatDivision = value.toDoubleOrNull()?.takeIf { it > 0.0 }
-                        ?: throw IllegalArgumentException("defaultBeatDivision must be a positive number of beats, got '$value'")
+                    "defaultCycle" -> defaultCycle = value.toDoubleOrNull()?.takeIf { it > 0.0 }
+                        ?: throw IllegalArgumentException("defaultCycle must be a positive number of beats, got '$value'")
                     "timingSource" -> timingSource = value
                     "compatibleProperties" -> compatibleProperties = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
@@ -409,12 +412,12 @@ class FxFileLoader(
             return FxFileMetadata(
                 id = id,
                 name = name,
-                category = category,
+                family = family,
                 outputType = outputType,
-                effectMode = effectMode,
-                defaultStepTiming = defaultStepTiming,
+                fxMode = fxMode,
+                defaultTiming = defaultTiming,
                 defaultDirection = defaultDirection,
-                defaultBeatDivision = defaultBeatDivision,
+                defaultCycle = defaultCycle,
                 timingSource = timingSource,
                 compatibleProperties = compatibleProperties,
                 aliases = aliases,
@@ -441,13 +444,13 @@ class FxFileLoader(
 data class FxFileMetadata(
     val id: String,
     val name: String,
-    val category: String,
+    val family: String,
     val outputType: String = "SLIDER",
-    val effectMode: String = "STANDARD",
-    val defaultStepTiming: Boolean = false,
-    val defaultDirection: EffectDirection = EffectDirection.FORWARD,
+    val fxMode: String = "STANDARD",
+    val defaultTiming: Timing = Timing.CYCLE,
+    val defaultDirection: FxDirection = FxDirection.FORWARD,
     /** A new instance's cycle, in beats (one bar unless the frontmatter says otherwise). */
-    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
+    val defaultCycle: Double = CycleLength.ONE_BAR,
     val timingSource: String = "BEAT",
     val compatibleProperties: List<String> = emptyList(),
     val aliases: List<String>? = null,

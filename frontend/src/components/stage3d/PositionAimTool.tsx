@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Crosshair } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { templateTargetsOf, type WriteTarget } from '@/components/fixtures-list/rowModel'
+import { paletteTargetsOf, type WriteTarget } from '@/components/fixtures-list/rowModel'
 import { useProgrammerScope } from '@/components/programmer/ProgrammerScope'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useCurrentProjectQuery } from '@/store/projects'
@@ -24,7 +24,7 @@ export function PositionAimTool({ projectId, targets }: { projectId: number; tar
   const { fixtureByKey } = useFixtureLookup()
   // The heads the desk can aim, as the Stage view offers them — a par or a cell in the batch is not.
   const keys = useMemo(
-    () => templateTargetsOf(targets).map((t) => t.key).filter((key) => isAimable(fixtureByKey.get(key))),
+    () => paletteTargetsOf(targets).map((t) => t.key).filter((key) => isAimable(fixtureByKey.get(key))),
     [targets, fixtureByKey],
   )
 

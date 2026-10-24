@@ -4,9 +4,9 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.captureLogs
@@ -20,11 +20,11 @@ import kotlin.test.assertTrue
  */
 class LookSnapshotLoadTest : RouteIntegrationTest() {
 
-    private fun DaoLook.effect(targetType: String, targetKey: String, effectType: String, sortOrder: Int) = DaoLookEffect.new {
+    private fun DaoLook.effect(targetType: String, targetKey: String, fxType: String, sortOrder: Int) = DaoLookFxEntity.new {
         look = this@effect
         this.targetType = targetType
         this.targetKey = targetKey
-        this.fxType = effectType
+        this.fxType = fxType
         family = "intensity"
         attribute = "dimmer"
         cycle = 1.0
@@ -49,8 +49,8 @@ class LookSnapshotLoadTest : RouteIntegrationTest() {
         val (snapshot, logs) = captureLogs("loadLookSnapshot") { loadLookSnapshot(state.database, lookUuid) }
 
         assertEquals(
-            listOf(EffectTargetRef.Single(TargetRef.Group("front-wash")) to "Pulse"),
-            snapshot!!.effects.map { it.target to it.effect.effectType },
+            listOf(FxTargetsRef.Single(TargetRef.Group("front-wash")) to "Pulse"),
+            snapshot!!.effects.map { it.target to it.effect.fxType },
         )
         assertEquals(1, logs.size, "$logs")
         assertTrue("'S5 Deferred FX'" in logs.single() && "ColourCycle" in logs.single(), logs.single())

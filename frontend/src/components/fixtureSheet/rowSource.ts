@@ -1,20 +1,20 @@
 import { isHeldBack } from '@/lib/heldBack'
 import type { ProgrammerKeyState } from '@/api/programmerWsApi'
-import type { ActiveEffect } from '@/store/fixtureFx'
-import { effectNames } from '@/lib/effectTargets'
+import type { ActiveFx } from '@/store/fixtureFx'
+import { fxNames } from '@/lib/fxTargets'
 
 /**
  * Who is driving a sheet row (fixture-fx-sheets plan D4): the programmer grid's ownership
  * vocabulary — park, programmer, effect, cue, and nothing (*Base*) — with the name of the thing.
  */
-export type RowSourceKind = 'parked' | 'programmer' | 'effect' | 'cue' | 'base'
+export type RowSourceKind = 'parked' | 'programmer' | 'fx' | 'cue' | 'base'
 
 export interface RowSource {
   kind: RowSourceKind
   /** The chip's words: *Programmer*, *Pulse · ¼ · M2*, *Q12 · Night*, *Parked*, *Base*. */
   label: string
-  /** The effect on stage, for an `effect` row. */
-  effect?: ActiveEffect
+  /** The effect on stage, for an `fx` row. */
+  effect?: ActiveFx
   /** The programmer holds an entry on one of the row's keys, by an owner `clearEntry` releases — what draws its ×. */
   holds: boolean
   /** That entry is an operator edit (filled chip) rather than only what Include brought (outline). */
@@ -31,15 +31,15 @@ export interface RowSourceInput {
   /** The row's keys and what the programmer says about each, first key first. */
   states: readonly { key: string; state: ProgrammerKeyState }[]
   /** Every effect that can paint this head: on it, or on a group it is in. */
-  effects: readonly ActiveEffect[]
+  effects: readonly ActiveFx[]
   blind: boolean
   /** `Q12` for a cue id, when the cue is known. */
   cueLabel: (cueId: number) => string | undefined
   /** `½ · M2` — an effect's speed and master, as the sheet's tray and chips spell it. */
-  effectDetail: (effect: ActiveEffect) => string
+  fxDetail: (effect: ActiveFx) => string
 }
 
-const RANK: Record<RowSourceKind, number> = { parked: 4, programmer: 3, effect: 2, cue: 1, base: 0 }
+const RANK: Record<RowSourceKind, number> = { parked: 4, programmer: 3, fx: 2, cue: 1, base: 0 }
 
 function kindOf(source: string | undefined): RowSourceKind {
   switch (source) {
@@ -47,8 +47,8 @@ function kindOf(source: string | undefined): RowSourceKind {
       return 'parked'
     case 'PROGRAMMER':
       return 'programmer'
-    case 'EFFECT':
-      return 'effect'
+    case 'FX':
+      return 'fx'
     case 'CUE':
       return 'cue'
     default:
@@ -64,7 +64,7 @@ function kindOf(source: string | undefined): RowSourceKind {
  * Over several keys (Position reads `position` and its two axes) the strongest wins, the way the
  * grid collapses a cell: a parked axis is the thing to know about first.
  */
-export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectDetail }: RowSourceInput): RowSource {
+export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetail }: RowSourceInput): RowSource {
   let best: { kind: RowSourceKind; state: ProgrammerKeyState } | null = null
   let holds = false
   let touched = false
@@ -88,7 +88,7 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
   const kind = best?.kind ?? 'base'
   const provenance = best?.state.provenance
   let label: string
-  let effect: ActiveEffect | undefined
+  let effect: ActiveFx | undefined
   switch (kind) {
     case 'parked':
       label = 'Parked'
@@ -101,9 +101,9 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
       label = entry?.owner === 'layers' && layerName ? `${layerName} · pressed` : 'Programmer'
       break
     }
-    case 'effect': {
-      effect = provenance?.effectId != null ? effects.find((e) => e.id === provenance.effectId) : undefined
-      label = effect ? [effect.effectType, effectDetail(effect)].filter(Boolean).join(' · ') : 'FX'
+    case 'fx': {
+      effect = provenance?.fxId != null ? effects.find((e) => e.id === provenance.fxId) : undefined
+      label = effect ? [effect.fxType, fxDetail(effect)].filter(Boolean).join(' · ') : 'FX'
       break
     }
     case 'cue': {
@@ -128,15 +128,15 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, effectD
  * fixture's key, so a head row must see it. The tray passes the fixture and every head. Groups list
  * fixtures, not heads, so pass the fixture's own groups.
  */
-export function effectsReaching(
-  effects: readonly ActiveEffect[] | undefined,
+export function fxReaching(
+  effects: readonly ActiveFx[] | undefined,
   targetKeys: readonly string[],
   groups: readonly string[],
-): ActiveEffect[] {
+): ActiveFx[] {
   if (!effects) return []
   const keys = new Set(targetKeys)
   const inGroup = new Set(groups)
-  return effects.filter((e) => effectNames(e, keys, inGroup))
+  return effects.filter((e) => fxNames(e, keys, inGroup))
 }
 
 /**

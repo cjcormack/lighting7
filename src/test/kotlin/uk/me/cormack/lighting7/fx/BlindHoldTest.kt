@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * The three origins the plan names all land in the band, which is the whole of what the rule reads:
  * a busk (`programmerOwned`) and Include's ad-hoc children at [FxEngine.PROGRAMMER_FX_PRIORITY_BASE],
  * a programmer layer's at the base plus its rank. Which route stamps which priority is pinned
- * beside the routes (`BlindHoldsProgrammerEffectsTest`).
+ * beside the routes (`BlindHoldsProgrammerFxTest`).
  */
 class BlindHoldTest {
 
@@ -60,19 +60,19 @@ class BlindHoldTest {
     }
 
     /** Paints its phase: 10 at the top of the cycle, rising 2 a percent — never 0, so a dark channel is held. */
-    private class PhaseSlider : Effect {
+    private class PhaseSlider : Fx {
         override val name = "Phase Slider"
         override val outputType = FxOutputType.SLIDER
-        override fun calculate(phase: Double, context: EffectContext): FxOutput =
+        override fun calculate(phase: Double, context: FxContext): FxOutput =
             FxOutput.Slider((10 + (phase * 200).toInt()).toUByte())
     }
 
-    private fun dimmerEffect(fixtureKey: String, priority: Int, cueId: Int? = null, effect: Effect = PhaseSlider()) =
+    private fun dimmerEffect(fixtureKey: String, priority: Int, cueId: Int? = null, effect: Fx = PhaseSlider()) =
         FxInstance(
             effect = effect,
             target = SliderTarget(fixtureKey, "dimmer"),
             // Two beats a cycle, so the ticks below walk across the cycle rather than landing on 0.
-            timing = FxTiming(beatDivision = 2.0),
+            timing = FxTiming(cycle = 2.0),
             blendMode = BlendMode.OVERRIDE,
         ).also {
             it.priority = priority
@@ -93,7 +93,7 @@ class BlindHoldTest {
         for ((origin, priority) in bandPriorities) {
             val rig = newRig()
             // One call, so the two start in the same pass, as an operator's busk beside a cue would.
-            rig.engine.addEffects(listOf(dimmerEffect("hex-a", priority), dimmerEffect("hex-b", 1_000_001, cueId = 42)))
+            rig.engine.addFxBatch(listOf(dimmerEffect("hex-a", priority), dimmerEffect("hex-b", 1_000_001, cueId = 42)))
 
             rig.engine.processBeatTick(tick(0))
             assertEquals(rig.hexB(), rig.hexA(), "$origin: in step before Blind")
@@ -116,7 +116,7 @@ class BlindHoldTest {
     fun `Blind holds the band only — a manual effect paints, and the programmer's values stop holding it back`() {
         val rig = newRig()
         rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
-        rig.engine.addEffect(dimmerEffect("hex-a", priority = 0))
+        rig.engine.addFx(dimmerEffect("hex-a", priority = 0))
 
         rig.engine.processBeatTick(tick(5))
         assertEquals(180u.toUByte(), rig.hexA(), "suppressed by the programmer's value")
@@ -134,7 +134,7 @@ class BlindHoldTest {
         val rig = newRig()
         val held = dimmerEffect("hex-a", FxEngine.PROGRAMMER_FX_PRIORITY_BASE).apply { timingSource = TimingSource.WALL_CLOCK }
         val twin = dimmerEffect("hex-b", 1_000_001, cueId = 42).apply { timingSource = TimingSource.WALL_CLOCK }
-        rig.engine.addEffects(listOf(held, twin))
+        rig.engine.addFxBatch(listOf(held, twin))
 
         rig.engine.processWallClockTick()
         rig.engine.programmer.setBlind(true)
@@ -156,7 +156,7 @@ class BlindHoldTest {
     fun `a held stateful effect is still computed, so its state does not stall`() {
         val rig = newRig()
         val recorder = CountingSlider()
-        rig.engine.addEffect(dimmerEffect("hex-a", FxEngine.PROGRAMMER_FX_PRIORITY_BASE, effect = recorder))
+        rig.engine.addFx(dimmerEffect("hex-a", FxEngine.PROGRAMMER_FX_PRIORITY_BASE, effect = recorder))
         rig.engine.programmer.setBlind(true)
 
         for (n in 0L..4L) rig.engine.processBeatTick(tick(n))
@@ -175,11 +175,11 @@ class BlindHoldTest {
         assertEquals(false, BlindHold.holds(blind = true, priority = 0), "a manual or script effect")
     }
 
-    private class CountingSlider : StatefulEffect {
+    private class CountingSlider : StatefulFx {
         var calls = 0
         override val name = "Counting Slider"
         override val outputType = FxOutputType.SLIDER
-        override fun calculateStateful(tick: MasterClock.ClockTick, deltaMs: Long, context: EffectContext): FxOutput {
+        override fun calculateStateful(tick: MasterClock.ClockTick, deltaMs: Long, context: FxContext): FxOutput {
             calls++
             return FxOutput.Slider(120u)
         }

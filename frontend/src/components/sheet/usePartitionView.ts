@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router'
 
 /**
  * **A library's partition as a view, never a route** (library-sheets plan D3) — a `?param=` plus a
- * remembered value, both the route's, as `routes/Templates.tsx` owns `?family=` and `looks.family`.
+ * remembered value, both the route's, as `routes/Palettes.tsx` owns `?family=` and `looks.family`.
  * Written for the Scripts and FX Library routes, which partition by type and by category.
  *
  * - The first render reads the remembered value — once, never written back on arrival, since a

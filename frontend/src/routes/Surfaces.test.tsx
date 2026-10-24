@@ -60,7 +60,7 @@ vi.mock('@/store/fixtures', () => ({
 // The inspector resolves a record binding's uuid to a name through these three; empty is the arm
 // every case in this file takes, since none of them binds a record.
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 vi.mock('@/store/busk', () => ({ useBuskPagesQuery: () => ({ data: [] }) }))
 // The narrow fallback and the inspector's two editing surfaces are stubbed: each drags in the
 // binding-target picker and, behind it, the speed-master bank, and none of them is what this file

@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LayerSource
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.routes.StageElementDto
 import uk.me.cormack.lighting7.plugins.InMessage
@@ -79,11 +79,11 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = name,
                     rows = rows,
-                    effects = if (!withEffect) emptyList() else listOf(
-                        LookEffectDto(
+                    fx = if (!withEffect) emptyList() else listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
+                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 ),
@@ -147,7 +147,7 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val look = jsonClient().createLook("Pulse", withEffect = true)
         press(look)
-        val effect = engine.getActiveEffects().single { it.programmerLayerEffectKey != null }
+        val effect = engine.getActiveFx().single { it.programmerLayerFxKey != null }
         // The Pulse keeps moving the dimmer on master 1's live clock, so a tick between the two
         // reads changes it whatever Detach does; that channel is the effect's, asserted below.
         val pulsed = state.show.fixtures.fixture<HexFixture>("hex-1").dimmer.channelNo
@@ -157,10 +157,10 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
 
         assertEquals(before, channelsExcept(pulsed), "every channel the Pulse does not drive stays where it was")
         assertEquals(1, outcome.effects)
-        val after = assertNotNull(engine.getEffect(effect.id), "the same instance, so its phase is kept")
-        assertNull(after.programmerLayerEffectKey)
+        val after = assertNotNull(engine.getFx(effect.id), "the same instance, so its phase is kept")
+        assertNull(after.programmerLayerFxKey)
         assertNull(after.source)
-        assertTrue(after.isLocalEffect)
+        assertTrue(after.isLocalFx)
     }
 
     @Test
@@ -169,11 +169,11 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val look = jsonClient().createLook("Pulse", withEffect = true)
         press(look)
-        val effect = engine.getActiveEffects().single { it.programmerLayerEffectKey != null }
+        val effect = engine.getActiveFx().single { it.programmerLayerFxKey != null }
         effect.spent = true
 
         assertEquals(0, assertNotNull(stack.detach(store.layers.single().layerId)).effects)
-        assertNull(engine.getEffect(effect.id))
+        assertNull(engine.getFx(effect.id))
     }
 
     @Test
@@ -281,7 +281,7 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         press(client.createLook("Pulse", withEffect = true))
-        val layerEffect = engine.getActiveEffects().single { it.programmerLayerEffectKey != null }
+        val layerFx = engine.getActiveFx().single { it.programmerLayerFxKey != null }
         val look = client.createLook("Pulse again", withEffect = true)
 
         val body = client.post("/api/rest/projects/$projectId/looks/${look.id}/apply") {
@@ -289,8 +289,8 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
             setBody(ApplyLookRequest(targets = listOf(CueTargetDto("fixture", "hex-1"))))
         }.body<ApplyLookResponse>()
 
-        val local = assertNotNull(engine.getEffect(body.effectIds.single()))
-        assertTrue(local.priority > layerEffect.priority, "on top, as a press and a Detach would leave it")
+        val local = assertNotNull(engine.getFx(body.fxIds.single()))
+        assertTrue(local.priority > layerFx.priority, "on top, as a press and a Detach would leave it")
     }
 
     @Test
@@ -332,8 +332,8 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         assertEquals(2, body.written)
         assertTrue(store.layers.isEmpty(), "no layer ever goes on")
         assertEquals(ProgrammerOwner.WEB, store.get("hex-1", "dimmer")?.owner)
-        val effect = assertNotNull(engine.getEffect(body.effectIds.single()))
-        assertTrue(effect.isLocalEffect)
+        val effect = assertNotNull(engine.getFx(body.fxIds.single()))
+        assertTrue(effect.isLocalFx)
     }
 
     @Test

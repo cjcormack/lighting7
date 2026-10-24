@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { lookOutsideMaskReason, outsideMaskReason, paletteFits } from './paletteOffer'
-import { recentFirst } from './templateRecents'
+import { recentFirst } from './paletteRecents'
 
 /**
  * The offer the strip, the popup bands and the picker share — so the three offer one set — and the
  * band's order.
  */
-function palette(over: Partial<TemplateSummary>): TemplateSummary {
+function palette(over: Partial<PaletteSummary>): PaletteSummary {
   return {
     id: 1,
     uuid: 'u1',
@@ -19,7 +19,7 @@ function palette(over: Partial<TemplateSummary>): TemplateSummary {
     kind: 'value',
     requiredEmitters: [],
     rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff0000' }],
-    effect: null,
+    fx: null,
     layerCount: 0,
     buskPageCount: 0,
     ...over,
@@ -45,12 +45,12 @@ describe('paletteFits', () => {
   })
 
   it('narrows a Beam cell’s effect palettes to the property the effect drives', () => {
-    const effect = (effectType: string, extra: Partial<NonNullable<TemplateSummary['effect']>> = {}) =>
+    const effect = (fxType: string, extra: Partial<NonNullable<PaletteSummary['fx']>> = {}) =>
       palette({
         family: 'BEAM',
-        kind: 'effect',
+        kind: 'fx',
         rows: [],
-        effect: { effectType, category: 'beam', beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'NORMAL', parameters: {}, ...extra },
+        fx: { fxType, family: 'beam', cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL', parameters: {}, ...extra },
       })
     const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
     const library = [{ name: 'ZoomWave', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
@@ -63,8 +63,8 @@ describe('paletteFits', () => {
     // Palette Steps by its palettes' rows.
     const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
     const steps = effect('PaletteSteps', { parameters: { palettes: 'pal:w' } })
-    expect(paletteFits(steps, zoomFit, { templates: [wide] })).toBe(true)
-    expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { templates: [wide] })).toBe(false)
+    expect(paletteFits(steps, zoomFit, { palettes: [wide] })).toBe(true)
+    expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { palettes: [wide] })).toBe(false)
     // Without what it needs to read, it is not narrowed.
     expect(paletteFits(effect('IrisPulse'), zoomFit)).toBe(true)
   })

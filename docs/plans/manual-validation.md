@@ -432,7 +432,7 @@ at 40 %:
 2. **Only this stack.** Run an effect from a second stack's cue and busk one from a pad: both run whole
    while Act 1 sits at 50 %. Press Act 1's cue on a busk pad as well: under the loose hold its chase
    runs whole.
-3. **Other doors.** Bind Act 1's *FX size* target (`stackEffectSize`) to an X-Touch fader: the motor follows the slider
+3. **Other doors.** Bind Act 1's *FX amount* target (`stackFxAmount`) to an X-Touch fader: the motor follows the slider
    and the fader moves it. On a phone the runner's row under the strip moves it too.
 4. **Reload and switch.** At 50 %, pull Sleeping Beauty from its repo with a change waiting: it stays
    at 50 %. Switch to another show and back: it is at 100 %.

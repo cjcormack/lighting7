@@ -27,7 +27,7 @@ import uk.me.cormack.lighting7.models.DaoBuskPages
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.models.warnMalformedBuskPad
 import uk.me.cormack.lighting7.state.State
@@ -235,7 +235,7 @@ internal fun Route.routeApiRestProjectBusk(state: State) {
             val request = call.receive<AddBuskPadRequest>()
             val outcome = transaction(state.database) {
                 val bank = bankIn(project, resource.bankId) ?: return@transaction AddPadOutcome.NotFound
-                appendBuskPad(state, project, bank, request.templateId, request.lookId, request.cueId)
+                appendBuskPad(state, project, bank, request.paletteId, request.lookId, request.cueId)
             }
             when (outcome) {
                 AddPadOutcome.NotFound -> call.respond(HttpStatusCode.NotFound, ErrorResponse(BANK_NOT_FOUND))
@@ -318,7 +318,7 @@ internal data class BuskBankDto(
 )
 
 /**
- * A pad: which kind it presses, and **the record's own summary DTO** — exactly one of [template] /
+ * A pad: which kind it presses, and **the record's own summary DTO** — exactly one of [palette] /
  * [look] / [cue] is set, matching [kind].
  *
  * Embedded rather than flattened to a name, a swatch and a detail line, because the client already
@@ -332,9 +332,9 @@ internal data class BuskBankDto(
 internal data class BuskPadDto(
     val id: Int,
     val uuid: String,
-    /** `TEMPLATE`, `LOOK` or `CUE`. */
+    /** `PALETTE`, `LOOK` or `CUE`. */
     val kind: String,
-    val template: TemplateDto? = null,
+    val palette: PaletteDto? = null,
     val look: LookDto? = null,
     val cue: BuskCueDto? = null,
 )
@@ -389,21 +389,21 @@ internal data class BuskLayoutBank(
 )
 
 /**
- * One pad appended to a bank. Exactly one of [templateId] / [lookId] / [cueId], the same rule
+ * One pad appended to a bank. Exactly one of [paletteId] / [lookId] / [cueId], the same rule
  * [BuskLayoutPad] carries — there is no `padId`, because an append never names an existing pad.
  */
 @Serializable
 internal data class AddBuskPadRequest(
-    val templateId: Int? = null,
+    val paletteId: Int? = null,
     val lookId: Int? = null,
     val cueId: Int? = null,
 )
 
-/** Exactly one of [templateId] / [lookId] / [cueId]. Int ids, like every REST body; uuids are sync's. */
+/** Exactly one of [paletteId] / [lookId] / [cueId]. Int ids, like every REST body; uuids are sync's. */
 @Serializable
 internal data class BuskLayoutPad(
     val padId: Int? = null,
-    val templateId: Int? = null,
+    val paletteId: Int? = null,
     val lookId: Int? = null,
     val cueId: Int? = null,
 )
@@ -438,7 +438,7 @@ internal sealed interface AddPadOutcome {
 }
 
 /**
- * Append one pad naming exactly one of [templateId] / [lookId] / [cueId] to [bank]. **Must be
+ * Append one pad naming exactly one of [paletteId] / [lookId] / [cueId] to [bank]. **Must be
  * called inside a transaction**, and the caller owns the `buskLayoutChanged` broadcast for the
  * returned page.
  *
@@ -450,26 +450,26 @@ internal fun appendBuskPad(
     state: State,
     project: DaoProject,
     bank: DaoBuskBank,
-    templateId: Int?,
+    paletteId: Int?,
     lookId: Int?,
     cueId: Int?,
     buildPage: Boolean = true,
 ): AddPadOutcome {
-    val kind = buskPadKind(templateId, lookId, cueId)
-        ?: return AddPadOutcome.Invalid("A pad must name exactly one of templateId, lookId or cueId")
+    val kind = buskPadKind(paletteId, lookId, cueId)
+        ?: return AddPadOutcome.Invalid("A pad must name exactly one of paletteId, lookId or cueId")
     val records = BuskRecordCache(state)
     // Resolve the record **before** minting the pad, and set its arm inside the constructor. This
     // is the layout write's "returns before touching a row" rule, and here the database enforces
     // it: a pad row with no arm violates the `busk_pad_exactly_one_ref` check as soon as the
     // transaction flushes, so a refusal that had already created one would commit a 500 in place
     // of a 400.
-    var newTemplate: DaoTemplate? = null
+    var newPalette: DaoPalette? = null
     var newLook: DaoLook? = null
     var newCue: DaoCue? = null
     when (kind) {
-        BuskPadKind.TEMPLATE -> {
-            val id = templateId!!
-            newTemplate = records.template(project, id) ?: return AddPadOutcome.Ref("palette", id)
+        BuskPadKind.PALETTE -> {
+            val id = paletteId!!
+            newPalette = records.palette(project, id) ?: return AddPadOutcome.Ref("palette", id)
         }
         BuskPadKind.LOOK -> {
             val id = lookId!!
@@ -486,7 +486,7 @@ internal fun appendBuskPad(
     DaoBuskPad.new {
         this.bank = bank
         sortOrder = next
-        palette = newTemplate
+        palette = newPalette
         look = newLook
         cue = newCue
     }
@@ -540,8 +540,8 @@ internal fun applyBuskLayout(
                     return BuskLayoutOutcome.Invalid("Flow '${bank.flow}' on bank '${bank.name}' is not one of ${BuskFlow.entries.map { it.name }}")
                 }
                 bank.pads.forEach { pad ->
-                    if (buskPadKind(pad.templateId, pad.lookId, pad.cueId) == null) {
-                        return BuskLayoutOutcome.Invalid("A pad in bank '${bank.name}' must name exactly one of templateId, lookId or cueId")
+                    if (buskPadKind(pad.paletteId, pad.lookId, pad.cueId) == null) {
+                        return BuskLayoutOutcome.Invalid("A pad in bank '${bank.name}' must name exactly one of paletteId, lookId or cueId")
                     }
                 }
             }
@@ -560,7 +560,7 @@ internal fun applyBuskLayout(
     identityProblem("pads", allPads.mapNotNull { it.padId }, pads.keys)?.let { return it }
 
     // References: every record named is in this project.
-    val templates = allPads.mapNotNull { it.templateId }.toSet().associateWith { records.template(project, it) }
+    val templates = allPads.mapNotNull { it.paletteId }.toSet().associateWith { records.palette(project, it) }
     val looks = allPads.mapNotNull { it.lookId }.toSet().associateWith { records.look(project, it) }
     val cues = allPads.mapNotNull { it.cueId }.toSet().associateWith { records.cue(project, it) }
     val missing = listOf("palettes" to templates, "looks" to looks, "cues" to cues)
@@ -611,7 +611,7 @@ internal fun applyBuskLayout(
                     pad.bank = bank
                     pad.sortOrder = padIndex
                     // Refs rewritten from the document, not merged: a pad is what the page says it is.
-                    pad.palette = d.templateId?.let { templates.getValue(it) }
+                    pad.palette = d.paletteId?.let { templates.getValue(it) }
                     pad.look = d.lookId?.let { looks.getValue(it) }
                     pad.cue = d.cueId?.let { cues.getValue(it) }
                     keptPads += pad.id.value
@@ -656,13 +656,13 @@ private fun nameTaken(project: DaoProject, name: String, excluding: Int?): Boole
  * on, and the project-scoped lookups the layout write validates through. Lives for one transaction.
  */
 internal class BuskRecordCache(private val state: State) {
-    private val templates = HashMap<Int, DaoTemplate?>()
+    private val palettes = HashMap<Int, DaoPalette?>()
     private val looks = HashMap<Int, DaoLook?>()
     private val cues = HashMap<Int, DaoCue?>()
-    private val templateDtos = HashMap<Int, TemplateDto>()
+    private val paletteDtos = HashMap<Int, PaletteDto>()
     private val lookDtos = HashMap<Int, LookDto>()
     private val cueDtos = HashMap<Int, BuskCueDto>()
-    private var templateUsages: Map<Int, TemplateUsage>? = null
+    private var paletteUsages: Map<Int, PaletteUsage>? = null
     private var lookUsages: Map<Int, LookUsage>? = null
     private var lookScenery: Map<Int, List<LookScenerySummaryDto>>? = null
     private var primedCueIds: Set<Int> = emptySet()
@@ -673,15 +673,15 @@ internal class BuskRecordCache(private val state: State) {
      * built.
      *
      * Unprimed, each distinct record resolves its own usage — `toDto`'s
-     * `usage ?: templateUsage(id.value)` — which is a query per record on the busk view's hot read.
-     * That was already true; it matters more now that `TemplateUsage` also carries the busk page
+     * `usage ?: paletteUsage(id.value)` — which is a query per record on the busk view's hot read.
+     * That was already true; it matters more now that `PaletteUsage` also carries the busk page
      * count, which is itself four queries. Safe to skip: an unprimed cache just falls back per
      * record, so a caller with one freshly-created page need not bother.
      */
     fun prime(contents: BuskPageContents) {
         val pads = contents.pads.values
         if (pads.isEmpty()) return
-        templateUsages = templateUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.palette]?.value }.distinct())
+        paletteUsages = paletteUsageFor(pads.mapNotNull { it.readValues[DaoBuskPads.palette]?.value }.distinct())
         val lookIds = pads.mapNotNull { it.readValues[DaoBuskPads.look]?.value }.distinct()
         lookUsages = lookUsageFor(lookIds)
         lookScenery = lookScenerySummariesFor(lookIds)
@@ -689,8 +689,8 @@ internal class BuskRecordCache(private val state: State) {
         cuePlaces = entrySlotsOf(primedCueIds)
     }
 
-    fun template(project: DaoProject, id: Int): DaoTemplate? =
-        templates.getOrPut(id) { DaoTemplate.findById(id)?.takeIf { it.project.id == project.id } }
+    fun palette(project: DaoProject, id: Int): DaoPalette? =
+        palettes.getOrPut(id) { DaoPalette.findById(id)?.takeIf { it.project.id == project.id } }
 
     fun look(project: DaoProject, id: Int): DaoLook? =
         looks.getOrPut(id) { DaoLook.findById(id)?.takeIf { it.project.id == project.id } }
@@ -698,9 +698,9 @@ internal class BuskRecordCache(private val state: State) {
     fun cue(project: DaoProject, id: Int): DaoCue? =
         cues.getOrPut(id) { DaoCue.findById(id)?.takeIf { it.project.id == project.id } }
 
-    fun dto(template: DaoTemplate): TemplateDto =
-        templateDtos.getOrPut(template.id.value) {
-            template.toDto(state.show.fxRegistry, templateUsages?.get(template.id.value))
+    fun dto(template: DaoPalette): PaletteDto =
+        paletteDtos.getOrPut(template.id.value) {
+            template.toDto(state.show.fxRegistry, paletteUsages?.get(template.id.value))
         }
 
     fun dto(look: DaoLook): LookDto =
@@ -787,7 +787,7 @@ private fun DaoBuskPage.toDto(records: BuskRecordCache, contents: BuskPageConten
 private fun DaoBuskPad.toDto(records: BuskRecordCache): BuskPadDto? {
     val kind = kind ?: run { warnMalformedBuskPad { uuid.toString() }; return null }
     return when (kind) {
-        BuskPadKind.TEMPLATE -> BuskPadDto(id.value, uuid.toString(), kind.name, template = records.dto(palette!!))
+        BuskPadKind.PALETTE -> BuskPadDto(id.value, uuid.toString(), kind.name, palette = records.dto(palette!!))
         BuskPadKind.LOOK -> BuskPadDto(id.value, uuid.toString(), kind.name, look = records.dto(look!!))
         BuskPadKind.CUE -> BuskPadDto(id.value, uuid.toString(), kind.name, cue = records.dto(cue!!))
     }

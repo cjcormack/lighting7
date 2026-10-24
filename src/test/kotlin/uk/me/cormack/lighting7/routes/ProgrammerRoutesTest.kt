@@ -138,11 +138,11 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         seedHex("hex-band", startChannel = 1)
 
-        val banded: AddEffectResponse = client.post("/api/rest/fx/add") {
+        val banded: AddFxResponse = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
             setBody(
-                AddEffectRequest(
-                    effectType = "SineWave",
+                AddFxRequest(
+                    fxType = "SineWave",
                     fixtureKey = "hex-band",
                     propertyName = "dimmer",
                     programmerOwned = true,
@@ -150,30 +150,30 @@ class ProgrammerRoutesTest : RouteIntegrationTest() {
             )
         }.body()
 
-        val plain: AddEffectResponse = client.post("/api/rest/fx/add") {
+        val plain: AddFxResponse = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
             setBody(
-                AddEffectRequest(
-                    effectType = "SineWave",
+                AddFxRequest(
+                    fxType = "SineWave",
                     fixtureKey = "hex-band",
                     propertyName = "strobe",
                 )
             )
         }.body()
 
-        val bandInstance = state.show.fxEngine.getEffect(banded.effectId)!!
+        val bandInstance = state.show.fxEngine.getFx(banded.fxId)!!
         assertTrue(
             FxEngine.isProgrammerFxPriority(bandInstance.priority),
             "programmerOwned lands in the reserved band, above every cue-derived priority",
         )
-        assertEquals(0, state.show.fxEngine.getEffect(plain.effectId)!!.priority)
+        assertEquals(0, state.show.fxEngine.getFx(plain.fxId)!!.priority)
 
         val response = clearProgrammerCompletely(state, 0)
-        assertEquals(1, response.effectsCleared, "only the band effect is swept")
+        assertEquals(1, response.fxCleared, "only the band effect is swept")
 
-        val surviving = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
-        assertTrue(banded.effectId !in surviving, "programmer FX go with the programmer values")
-        assertTrue(plain.effectId in surviving, "plain manual effects are not the programmer's")
+        val surviving = state.show.fxEngine.getActiveFx().map { it.id }.toSet()
+        assertTrue(banded.fxId !in surviving, "programmer FX go with the programmer values")
+        assertTrue(plain.fxId in surviving, "plain manual effects are not the programmer's")
     }
 
     @Test

@@ -5,10 +5,10 @@ import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoSpeedMaster
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
@@ -64,14 +64,14 @@ class LegacyV37ArchiveTest {
 
         transaction(state.database) {
             data class Stored(val order: String, val family: String, val timing: String?)
-            val fx = DaoLookEffect.all().filter { it.look.project.id.value == imported }.map { Stored(it.order, it.family, it.timing) } +
-                DaoCueAdHocEffect.all().filter { it.cue.project.id.value == imported }.map { Stored(it.order, it.family, it.timing) }
+            val fx = DaoLookFxEntity.all().filter { it.look.project.id.value == imported }.map { Stored(it.order, it.family, it.timing) } +
+                DaoCueAdHocFxEntity.all().filter { it.cue.project.id.value == imported }.map { Stored(it.order, it.family, it.timing) }
             assertTrue(fx.isNotEmpty())
             assertTrue(fx.all { it.order in ORDERS }, "${fx.map { it.order }}")
             assertTrue(fx.none { it.family == "dimmer" } && fx.any { it.family == "intensity" }, "${fx.map { it.family }}")
             assertTrue(fx.mapNotNull { it.timing }.toSet().let { it.isNotEmpty() && it.all { t -> t == "CYCLE" || t == "HEAD" } })
 
-            val palettes = DaoTemplate.all().filter { it.project.id.value == imported }
+            val palettes = DaoPalette.all().filter { it.project.id.value == imported }
             assertEquals(3, palettes.size)
             val paletteFx = palettes.mapNotNull { it.effect }.single()
             assertTrue(paletteFx.parameters.values.any { it.startsWith("pal:") } && paletteFx.parameters.values.none { "tmpl:" in it })

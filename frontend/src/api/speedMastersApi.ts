@@ -21,9 +21,9 @@ export interface SpeedMaster {
   /**
    * Effect-library category this master is the apply-time default for (`intensity` / `colour` /
    * `position` / `beam`), or null/absent to route nothing. Unique within a project — the server 409s
-   * with `SPEED_MASTER_USAGE_TAKEN` on a second claimant.
+   * with `SPEED_MASTER_FAMILY_TAKEN` on a second claimant.
    */
-  usage?: string | null
+  family?: string | null
   /**
    * Follow ratio over {@link followTargetUuid}: this master's clock is *driven* by that
    * master's at `followNum / followDen` of its rate, so their beats line up. Both null (or
@@ -54,8 +54,8 @@ export interface CreateSpeedMasterRequest {
   name?: string
   bpm?: number
   notes?: string
-  /** See {@link SpeedMaster.usage}. */
-  usage?: string | null
+  /** See {@link SpeedMaster.family}. */
+  family?: string | null
   /** See {@link SpeedMaster.followNum} — both-or-neither, and never alongside `bpm`. */
   followNum?: number | null
   followDen?: number | null
@@ -75,13 +75,13 @@ export interface CreateSpeedMasterRequest {
  *   would close a loop a 400 `SPEED_MASTER_FOLLOW_CYCLE`.
  * - `bpm` must not be sent when the resulting state follows another master (400
  *   `SPEED_MASTER_FOLLOWER`) — a follower's tempo is derived, not stored.
- * - `usage` present-with-null clears the routing.
+ * - `family` present-with-null clears the routing.
  */
 export interface UpdateSpeedMasterRequest {
   name?: string
   bpm?: number
   notes?: string | null
-  usage?: string | null
+  family?: string | null
   followNum?: number | null
   followDen?: number | null
   followTargetUuid?: string | null
@@ -93,8 +93,8 @@ export interface SpeedMasterInUseResponse {
   code: string
   referenceCount: number
   /** Effects stored on a Look. Was `presetEffectCount`, over the retired FX presets. */
-  lookEffectCount: number
-  cueAdHocEffectCount: number
+  lookFxCount: number
+  cueAdHocFxCount: number
   /** Per-layer speed-master overrides. Was `cuePresetApplicationCount`. */
   cueLayerCount: number
   cueIds: number[]

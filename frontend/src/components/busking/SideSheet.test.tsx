@@ -32,8 +32,8 @@ vi.mock('./SpreadSheet', () => ({
     </div>
   ),
 }))
-vi.mock('./EffectsSheet', () => ({
-  EffectsSheet: ({ families }: { families: unknown }) => <div data-testid="effects-sheet" data-families={JSON.stringify(families)} />,
+vi.mock('./FxSheet', () => ({
+  FxSheet: ({ families }: { families: unknown }) => <div data-testid="effects-sheet" data-families={JSON.stringify(families)} />,
 }))
 vi.mock('./FamilySheets', () => ({
   LevelSheet: ({ families }: { families: unknown }) => <div data-testid="level-sheet" data-families={JSON.stringify(families)} />,
@@ -131,7 +131,7 @@ describe('docked, on the desk board', () => {
     expect(tabs.map((t) => t.textContent)).toEqual(['Level', 'Colour', 'Position', 'Beam', 'Fan', 'FX', 'Speed', 'Show'])
     expect(tabs[6]).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByTestId('speed-rail')).toBeInTheDocument()
-    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show'])
+    expect(sideSheetTabs('docked').map((t) => t.id)).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show'])
   })
 
   it('mounts the Show tab — the phone runner over the route’s transport — when the fact names it (busk-chrome D1)', () => {
@@ -397,7 +397,7 @@ describe('docked, on the desk board', () => {
 
 describe('the overlay, off the desk board', () => {
   it('carries every tab but Speed in any overlay form — the Show strip has the tempo chip (D6, D7)', () => {
-    const overlay = ['level', 'colour', 'position', 'beam', 'spread', 'effects', 'show']
+    const overlay = ['level', 'colour', 'position', 'beam', 'spread', 'fx', 'show']
     expect(sideSheetTabs('bottom-sheet').map((t) => t.id)).toEqual(overlay)
     expect(sideSheetTabs('side-sheet').map((t) => t.id)).toEqual(overlay)
     // `popover` is what a 640–767px window answers, where the rail is still not drawn: an overlay
@@ -498,12 +498,12 @@ describe('the family tabs and Effects (apply-model plan D10) are in every place 
     { id: 'level', label: 'Level', testId: 'level-sheet' },
     { id: 'position', label: 'Position', testId: 'position-sheet' },
     { id: 'beam', label: 'Beam', testId: 'beam-sheet' },
-    { id: 'effects', label: 'FX', testId: 'effects-sheet' },
+    { id: 'fx', label: 'FX', testId: 'effects-sheet' },
   ] as const
   const masked = { ...props, families: ['COLOUR' as const] }
 
   it('are live, a tab per family ahead of the tools', () => {
-    expect(LIVE_SHEET_TABS).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show'])
+    expect(LIVE_SHEET_TABS).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show'])
   })
 
   for (const { id, label, testId } of TABS) {

@@ -64,7 +64,7 @@ export interface ProgrammerPreservedCounts {
   triggers?: number
   /** Timed layers left untouched. Named `timedPresetApplications` before a preset became a layer. */
   timedLayers?: number
-  timedAdHocEffects?: number
+  timedAdHocFx?: number
   outOfMaskAssignments?: number
   /** Rows left alone because they name a fixture outside the request's `targets`. */
   outOfScopeAssignments?: number
@@ -143,7 +143,7 @@ export interface RecordLookRequest {
    */
   targets?: CueTarget[]
   /**
-   * Running programmer-band effects to fold into the Look, by `ActiveEffect.id`.
+   * Running programmer-band effects to fold into the Look, by `ActiveFx.id`.
    *
    * **Explicit ids, not an `includeFx` flag** — unlike `RecordRequest`. Which effects belong in a
    * Look is a per-effect judgement ("the colour chase is the look; the tilt sine was me looking at
@@ -154,10 +154,10 @@ export interface RecordLookRequest {
    * each other. An unticked effect **keeps running** — leaving one out of a Look is not the same as
    * stopping it, which is exactly why these are checkboxes.
    *
-   * Timing does not travel: `LookEffect` has no delay/interval fields, so a busked "fire after 3s"
+   * Timing does not travel: `LookFx` has no delay/interval fields, so a busked "fire after 3s"
    * becomes the *layer's* delay rather than something baked into the Look.
    */
-  effectIds?: number[]
+  fxIds?: number[]
   /**
    * Record the scenery the programmer holds too (scenery-programmer plan D7, D10): every held state,
    * since a Look asserts rather than tracks. Defaults on at the desk.
@@ -177,7 +177,7 @@ export interface RecordLookResponse {
   rowsRemoved: number
   groupRowsEmitted: number
   /** Programmer-band effects folded in, and so removed from the band. */
-  effectsWritten?: number
+  fxWritten?: number
   skipped: ProgrammerSkip[]
   /** Set when the Look was already live: what the re-resolve moved. */
   programmerKeysRefreshed: number
@@ -237,7 +237,7 @@ export interface ChecklistKey {
   currentValue: string
   cueValue?: string
   /** The cue drives this through an effect, so a written assignment would be masked on GO. */
-  viaEffect: boolean
+  viaFx: boolean
 }
 
 export interface ChecklistCue {
@@ -248,7 +248,7 @@ export interface ChecklistCue {
   cueName: string
   isActive: boolean
   keyCount: number
-  viaEffectKeyCount: number
+  viaFxKeyCount: number
   sample: ChecklistKey[]
 }
 
@@ -302,7 +302,7 @@ export interface LookUpdateResult {
   /** Rows deleted because the value Include staged from them was cleared. Absent from an older desk. */
   rowsRemoved?: number
   /** The Look's included effects changed since Include, written back onto them. Absent from an older desk. */
-  effectsWritten?: number
+  fxWritten?: number
   /** Scenery rows written back into the Look. */
   sceneryWritten?: number
   /** What the re-resolve moved: the live consumers of the Look. */
@@ -345,11 +345,11 @@ export interface ProgrammerConflict {
 
 // ── Spread ──────────────────────────────────────────────────────────────────
 
-/** Titan's four fan shapes, as `fx/SpreadPlan.kt` names them. */
-export type SpreadCurve = 'LINE' | 'MIRROR' | 'ARROW' | 'WINGS'
+/** Titan's four fan shapes, as `fx/FanPlan.kt` names them. */
+export type SpreadCurve = 'LINE' | 'MIRROR' | 'ARROW' | 'MIRROR_OUT'
 
 /**
- * A `DistributionStrategy` name the desk resolves through `byName`: `NORMAL` is rig order
+ * A `SpreadOrder` name the desk resolves through `byName`: `NORMAL` is rig order
  * (`state/BuskRigOrder.kt`) — or, for a spread whose one target is a group, that group's member
  * order (venue-visit plan S7) — `REVERSE` the other way, `CENTRE_OUT` folds the two ends together,
  * `RANDOM` is a permutation seeded from the request. The strategy has more names (`CENTRE_IN`,
@@ -362,8 +362,8 @@ export type SpreadOrder = 'NORMAL' | 'REVERSE' | 'CENTRE_OUT' | 'RANDOM'
 export type SpreadOver = 'HEADS' | 'CELLS'
 
 /**
- * `POST /projects/{id}/programmer/spread` — a mirror of lighting7's `SpreadRequest`
- * (`routes/programmerSpread.kt`). `from` and `to` are serialised `TemplateIntent`s of the
+ * `POST /projects/{id}/programmer/fan` — a mirror of lighting7's `FanRequest`
+ * (`routes/programmerFan.kt`). `from` and `to` are serialised `PaletteIntent`s of the
  * property's shape, or `pal:{uuid}` for a colour; the desk interpolates in the intent's own space
  * and resolves one literal per head, so nothing here is a value (busk-further plan D9).
  */
@@ -372,14 +372,14 @@ export interface SpreadRequest {
   targets: CueTarget[]
   /** The selection's attribute mask; absent is every attribute. */
   families?: PropertyMaskGroup[]
-  /** A `TemplateProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
+  /** A `PaletteProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
   property: string
   /** The two endpoint intents; absent on a fan, which has none. */
   from?: string
   to?: string
   curve?: SpreadCurve
   order?: SpreadOrder
-  parts?: number
+  runs?: number
   over?: SpreadOver
   fadeMs?: number
   /** For `order = RANDOM`. */
@@ -392,18 +392,18 @@ export interface SpreadRequest {
    */
   write?: boolean
   /**
-   * `FAN` is Spread's relative mode (venue-visit plan S12), Position only: an amount around each
-   * head's own position. Absent is `ENDS`, from → to — and absent whenever it is, for `write`'s
-   * reason.
+   * `ABOUT` is the Fan's *About each position* (venue-visit plan S12, terminology plan D6), Position
+   * only: an amount around each head's own position. Absent is `BETWEEN`, from → to — and absent
+   * whenever it is, for `write`'s reason.
    */
-  mode?: 'FAN'
+  mode?: 'ABOUT'
   /**
-   * `FAN`: the outer heads' offset per axis — `pan` and `tilt` in centre steps, or `x` (towards SL)
+   * `ABOUT`: the outer heads' offset per axis — `pan` and `tilt` in centre steps, or `x` (towards SL)
    * and `y` (upstage) in stage metres, a stage fan; never both. An absent axis is not fanned.
    */
   fan?: { pan?: number; tilt?: number; x?: number; y?: number }
   /**
-   * `FAN`: where each head starts, a `"pan,tilt"` literal — the desk's own `base` answer sent back
+   * `ABOUT`: where each head starts, a `"pan,tilt"` literal — the desk's own `base` answer sent back
    * for the rest of the gesture, or the row being edited. A head absent here is read by the desk.
    */
   base?: SpreadBase[]
@@ -439,16 +439,16 @@ export interface SpreadSkip {
 /**
  * The desk's answer: what it wrote, in the order it used (rig order), and what it could not.
  * Every list is optional on this side because the server omits a defaulted empty collection
- * (`encodeDefaults = false`), the `TemplateSummary.rows` rule.
+ * (`encodeDefaults = false`), the `PaletteSummary.rows` rule.
  */
 export interface SpreadResponse {
   written?: SpreadWrite[]
   skipped?: SpreadSkip[]
   /** The property's family, when the mask kept it out — then nothing was written. */
   skippedFamilies?: string[]
-  /** `FAN`: where each head started — the gesture's anchor, sent back with the next request. */
+  /** `ABOUT`: where each head started — the gesture's anchor, sent back with the next request. */
   base?: SpreadBase[]
-  /** `FAN`: the heads the fan took past the end of their travel, held at it. */
+  /** `ABOUT`: the heads the fan took past the end of their travel, held at it. */
   clamped?: CueTarget[]
   /** A stage fan: each moved head's pan and tilt in travel degrees, sent back as the next request's `near`. */
   near?: AimNear[]
@@ -622,7 +622,7 @@ export const programmerOpsApi = restApi.injectEndpoints({
         body: { ...body, projectId: String(projectId) },
       }),
       // Include spawns programmer-band FX, which the FX sheet and the Clear button count.
-      invalidatesTags: ['FixtureEffects'],
+      invalidatesTags: ['FixtureFx'],
     }),
 
     updateProgrammer: build.mutation<UpdateResponse, UpdateRequest>({
@@ -646,7 +646,7 @@ export const programmerOpsApi = restApi.injectEndpoints({
     }),
 
     /**
-     * `POST /projects/{id}/programmer/spread` — spread, resolved on the desk (busk-further plan D9).
+     * `POST /projects/{id}/programmer/fan` — spread, resolved on the desk (busk-further plan D9).
      *
      * A REST mutation for this file's reason: the tab reads the **structured reply** — the desk's
      * `skippedFamilies`, toasted in the press's vocabulary (a preview strip read `written[]` too,
@@ -656,14 +656,14 @@ export const programmerOpsApi = restApi.injectEndpoints({
      * a `write: false` request lands nothing at all — its `written[]` is the programmer's to put
      * in the focused Look layer's draft (editor-kit plan D6).
      *
-     * **Not** in `SILENT_ENDPOINTS`: the two 400s (`SPREAD_INVALID`, `SPREAD_NEEDS_SELECTION`) are
+     * **Not** in `SILENT_ENDPOINTS`: the two 400s (`FAN_INVALID`, `FAN_NEEDS_SELECTION`) are
      * toasted by `errorToastMiddleware` under the endpoint's own id, so a Live gesture that keeps
      * failing replaces one toast rather than stacking twenty. The tab pre-empts the second with its
      * own sentence and never sends under an empty selection.
      */
     spread: build.mutation<SpreadResponse, SpreadRequest>({
       query: ({ projectId, ...body }) => ({
-        url: `projects/${projectId}/programmer/spread`,
+        url: `projects/${projectId}/programmer/fan`,
         method: 'POST',
         body,
       }),

@@ -148,15 +148,15 @@ fun speedMasterFollowRatioOrNull(masterIndex: Int, num: Int?, den: Int?): Pair<I
 const val DEFAULT_SPEED_MASTER_COUNT = 4
 
 /**
- * The categories a speed master's `usage` may name — the effect library's own `category`
+ * The families a speed master's `family` may name — the FX library's own `family`
  * vocabulary (busking-view plan D7), so apply-time routing compares like with like and no
  * parallel enum needs keeping in step. `controls` is deliberately excluded (a settings slider
  * has no tempo); its FX route to master 1 via a null `speedMasterUuid`. So is `palette`, the Steps
  * FX's own, which names no family: a Steps FX is stamped by the family it steps instead — Slot
- * Steps' Beam, Palette Steps' its palettes' (effects plan §3.6, [stepsFxCategory]). Pinned against
+ * Steps' Beam, Palette Steps' its palettes' (effects plan §3.6, [stepsFxFamily]). Pinned against
  * the shipped `.fx.kts` files by `GlossaryVocabularyTest`.
  */
-val SPEED_MASTER_USAGES: Set<String> = setOf("intensity", "colour", "position", "beam")
+val SPEED_MASTER_FAMILIES: Set<String> = setOf("intensity", "colour", "position", "beam")
 
 // The write-boundary half of the speed-master error vocabulary (shared by REST and the WS
 // socket). The delete-guard half (CODE_SPEED_MASTER_PROTECTED / _IN_USE) follows the house
@@ -165,8 +165,8 @@ val SPEED_MASTER_USAGES: Set<String> = setOf("intensity", "colour", "position", 
 /** Error code for a tempo write (typed or tapped) refused because the master follows master 1. */
 const val CODE_SPEED_MASTER_FOLLOWER = "SPEED_MASTER_FOLLOWER"
 
-/** Error code for claiming a usage another master in the project already holds (409). */
-const val CODE_SPEED_MASTER_USAGE_TAKEN = "SPEED_MASTER_USAGE_TAKEN"
+/** Error code for claiming a family another master in the project already holds (409). */
+const val CODE_SPEED_MASTER_FAMILY_TAKEN = "SPEED_MASTER_FAMILY_TAKEN"
 
 /** Error code for putting a follow ratio on master 1, the root every chain ends at. */
 const val CODE_SPEED_MASTER_CANNOT_FOLLOW = "SPEED_MASTER_CANNOT_FOLLOW"
@@ -181,18 +181,18 @@ const val CODE_SPEED_MASTER_FOLLOW_CYCLE = "SPEED_MASTER_FOLLOW_CYCLE"
 /** Error code for a follow target uuid that names no master in this project. */
 const val CODE_SPEED_MASTER_FOLLOW_TARGET_UNKNOWN = "SPEED_MASTER_FOLLOW_TARGET_UNKNOWN"
 
-/** Error code for a malformed usage string or follow-ratio pair. */
+/** Error code for a malformed family string or follow-ratio pair. */
 const val CODE_SPEED_MASTER_INVALID = "SPEED_MASTER_INVALID"
 
 /** Error code for a well-formed uuid that names no master (WS tempo writes). */
 const val CODE_SPEED_MASTER_UNKNOWN = "SPEED_MASTER_UNKNOWN"
 
 /**
- * Canonicalise a client-supplied usage string: trim, lowercase, `color` → `colour`. Blank (or
- * null) is null — "routes nothing". Validation against [SPEED_MASTER_USAGES] is separate, in
+ * Canonicalise a client-supplied family string: trim, lowercase, `color` → `colour`. Blank (or
+ * null) is null — "routes nothing". Validation against [SPEED_MASTER_FAMILIES] is separate, in
  * [validateSpeedMasterSettings]; this only normalises spelling.
  */
-fun normaliseSpeedMasterUsage(raw: String?): String? {
+fun normaliseSpeedMasterFamily(raw: String?): String? {
     val trimmed = raw?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
     return if (trimmed == "color") "colour" else trimmed
 }
@@ -215,12 +215,12 @@ sealed interface SpeedMasterSettingsError {
 /**
  * The write boundary for a master's routing/follow settings — one place shared by REST and any
  * future script surface. Call with the *resulting* (post-write) values so create and update
- * share the implementation; [usage] must already be normalised via [normaliseSpeedMasterUsage].
+ * share the implementation; [family] must already be normalised via [normaliseSpeedMasterFamily].
  * [excludeId] is the row being edited (null on create). Must be called inside a transaction —
  * the uniqueness check queries the project's masters.
  *
  * [checkFollowTarget] is the same "only what this request actually sends goes through the
- * write-boundary rules" carve-out the usage check already has: an update that merely carries
+ * write-boundary rules" carve-out the family check already has: an update that merely carries
  * the stored target forward passes false, because a target that names no master here (an
  * imported row, a hand-edited one) is upstream of this write and would
  * otherwise 400 every later PUT on the row — rename and notes edits included — while the bank
@@ -230,7 +230,7 @@ sealed interface SpeedMasterSettingsError {
 fun validateSpeedMasterSettings(
     project: DaoProject,
     masterIndex: Int,
-    usage: String?,
+    family: String?,
     followNum: Int?,
     followDen: Int?,
     followTargetUuid: UUID? = null,
@@ -258,20 +258,20 @@ fun validateSpeedMasterSettings(
     if (followNum != null && checkFollowTarget) {
         validateFollowTarget(project, followTargetUuid, excludeId)?.let { return it }
     }
-    if (usage != null) {
-        if (usage !in SPEED_MASTER_USAGES) {
+    if (family != null) {
+        if (family !in SPEED_MASTER_FAMILIES) {
             return SpeedMasterSettingsError.Invalid(
-                "Unknown usage '$usage' — must be one of ${SPEED_MASTER_USAGES.sorted().joinToString(", ")}",
+                "Unknown family '$family' — must be one of ${SPEED_MASTER_FAMILIES.sorted().joinToString(", ")}",
                 CODE_SPEED_MASTER_INVALID,
             )
         }
         val holder = DaoSpeedMaster
-            .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.family eq usage) }
+            .find { (DaoSpeedMasters.project eq project.id) and (DaoSpeedMasters.family eq family) }
             .firstOrNull { it.id.value != excludeId }
         if (holder != null) {
             return SpeedMasterSettingsError.Conflict(
-                "'$usage' is already routed to ${holder.name}",
-                CODE_SPEED_MASTER_USAGE_TAKEN,
+                "'$family' is already routed to ${holder.name}",
+                CODE_SPEED_MASTER_FAMILY_TAKEN,
             )
         }
     }

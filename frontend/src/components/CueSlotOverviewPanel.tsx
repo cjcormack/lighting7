@@ -359,7 +359,7 @@ function CueSlotOverviewPanelBody() {
             projectId,
             page,
             slotIndex,
-            // A TEMPLATE never reaches here: `canHandLand`'s `slot` row refuses one, so the tile
+            // A palette never reaches here: `canHandLand`'s `slot` row refuses one, so the tile
             // offers nothing and this is never called for it. The fallback is written as the Look
             // arm rather than thrown for `layerSource`'s reason — a throw in a click handler on a
             // live desk is worse than a request the server refuses by name — but note what it

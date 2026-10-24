@@ -3,7 +3,7 @@ import {
   FOLLOW_RATIOS,
   SLIDE_MAX_BPM,
   SLIDE_MIN_BPM,
-  SPEED_MASTER_USAGES,
+  SPEED_MASTER_FAMILIES,
   bpmAtSlideFraction,
   bpmSlideFraction,
   derivedBpm,
@@ -15,10 +15,10 @@ import {
   leaderNameOf,
   formatFollowRatio,
   isFollowing,
-  resolveSpeedMasterForCategory,
+  resolveSpeedMasterForFamily,
   usageLabel,
 } from './speedMasterModel'
-import { EFFECT_CATEGORY_INFO } from '@/components/fx/fxConstants'
+import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
 
 describe('usage vocabulary vs the effect library', () => {
   it('names only categories the effect library actually has', () => {
@@ -26,8 +26,8 @@ describe('usage vocabulary vs the effect library', () => {
     // `category`, because routing is the literal comparison `usage === effect.category`. A
     // usage naming a category no effect carries could never match anything, and the operator
     // would be offered a routing rule that silently does nothing.
-    for (const usage of SPEED_MASTER_USAGES) {
-      expect(EFFECT_CATEGORY_INFO[usage]).toBeDefined()
+    for (const usage of SPEED_MASTER_FAMILIES) {
+      expect(FX_FAMILY_INFO[usage]).toBeDefined()
     }
   })
 
@@ -36,12 +36,12 @@ describe('usage vocabulary vs the effect library', () => {
     // uuid, which is what an unmatched category is defined to do. `steps` is the Steps FX's,
     // stamped by the family each one steps instead. lighting7's GlossaryVocabularyTest asserts the
     // same exclusions on the server's copy of this list.
-    expect(SPEED_MASTER_USAGES).not.toContain('controls')
-    expect(SPEED_MASTER_USAGES).not.toContain('steps')
+    expect(SPEED_MASTER_FAMILIES).not.toContain('controls')
+    expect(SPEED_MASTER_FAMILIES).not.toContain('steps')
   })
 
   it('labels a usage the way the effect library labels the category', () => {
-    expect(usageLabel('position')).toBe(EFFECT_CATEGORY_INFO.position.label)
+    expect(usageLabel('position')).toBe(FX_FAMILY_INFO.position.label)
     // A category minted by someone's own .fx.kts has no entry; print it rather than nothing.
     expect(usageLabel('sparkle')).toBe('sparkle')
     expect(usageLabel(null)).toBeNull()
@@ -135,33 +135,33 @@ describe('eligibleFollowTargets', () => {
   })
 })
 
-describe('resolveSpeedMasterForCategory', () => {
+describe('resolveSpeedMasterForFamily', () => {
   const bank = [
-    { uuid: 'm1', usage: null },
-    { uuid: 'm2', usage: 'position' },
-    { uuid: 'm3', usage: 'colour' },
+    { uuid: 'm1', family: null },
+    { uuid: 'm2', family: 'position' },
+    { uuid: 'm3', family: 'colour' },
   ]
 
   it('routes an effect to the master claiming its category', () => {
-    expect(resolveSpeedMasterForCategory(bank, 'position')).toBe('m2')
-    expect(resolveSpeedMasterForCategory(bank, 'colour')).toBe('m3')
+    expect(resolveSpeedMasterForFamily(bank, 'position')).toBe('m2')
+    expect(resolveSpeedMasterForFamily(bank, 'colour')).toBe('m3')
   })
 
   it('falls back to master 1 for anything unclaimed', () => {
     // null is master 1 on every wire in this system, so these three are one answer, not three
     // failure modes: an untagged family, a settings effect, and a category a user's own .fx.kts
     // invented.
-    expect(resolveSpeedMasterForCategory(bank, 'intensity')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, 'controls')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, 'sparkle')).toBeNull()
-    expect(resolveSpeedMasterForCategory(bank, null)).toBeNull()
-    expect(resolveSpeedMasterForCategory(undefined, 'position')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, 'intensity')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, 'controls')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, 'sparkle')).toBeNull()
+    expect(resolveSpeedMasterForFamily(bank, null)).toBeNull()
+    expect(resolveSpeedMasterForFamily(undefined, 'position')).toBeNull()
   })
 
   it('ignores a claimant with no uuid', () => {
     // The pre-load synthetic master 1 has a null uuid; stamping an effect with it would be
     // stamping nothing.
-    expect(resolveSpeedMasterForCategory([{ uuid: null, usage: 'intensity' }], 'intensity')).toBeNull()
+    expect(resolveSpeedMasterForFamily([{ uuid: null, family: 'intensity' }], 'intensity')).toBeNull()
   })
 })
 

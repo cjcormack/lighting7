@@ -3,7 +3,7 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { EditorField } from '@/components/editor/EditorField'
 import { CENTRE_MAX, CENTRE_MIN, clampCentre, formatCentre, positionOnScale } from '@/lib/positionScale'
-import type { TemplateIntent } from '@/lib/templateIntent'
+import type { PaletteIntent } from '@/lib/paletteIntent'
 
 /**
  * Pan and tilt **centre-relative** (venue-visit plan D3): `-128..127` on each axis, 0 at the centre
@@ -20,8 +20,8 @@ export function PositionControl({
   value,
   onChange,
 }: {
-  value: TemplateIntent | undefined
-  onChange: (intent: TemplateIntent | null) => void
+  value: PaletteIntent | undefined
+  onChange: (intent: PaletteIntent | null) => void
 }) {
   const current = value?.kind === 'position' ? value : null
   const { pan, tilt } = current != null ? positionOnScale(current) : { pan: 0, tilt: 0 }

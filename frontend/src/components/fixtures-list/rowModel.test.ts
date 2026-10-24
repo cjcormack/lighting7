@@ -16,8 +16,8 @@ import {
   planBatchWrites,
   targetFamilies,
   targetEmitters,
-  templateTargetsFor,
-  templateTargetsOf,
+  paletteTargetsFor,
+  paletteTargetsOf,
   type Row,
   type RowId,
   treeKeyAction,
@@ -739,7 +739,7 @@ describe('batch write planning with multi-head fixtures', () => {
   })
 })
 
-describe('templateTargetsFor', () => {
+describe('paletteTargetsFor', () => {
   const spotA = makeFixture('spotA', dimmerOnly(), { groups: ['Spots'] })
   const spotB = makeFixture('spotB', dimmerOnly(), { groups: ['Spots'] })
   const bar = makePixelBar('bar', 2)
@@ -754,7 +754,7 @@ describe('templateTargetsFor', () => {
       textFilter: '',
     })
     const selected = new Set(['group:Spots', 'member:Spots:spotB'])
-    expect(templateTargetsFor(rows, selected)).toEqual([
+    expect(paletteTargetsFor(rows, selected)).toEqual([
       { type: 'fixture', key: 'spotA' },
       { type: 'fixture', key: 'spotB' },
     ])
@@ -762,7 +762,7 @@ describe('templateTargetsFor', () => {
 
   it('respects the filter through the group row, like every other group-row action', () => {
     const rows = buildRows({ fixtures, groups, expandedGroups: new Set(), textFilter: 'spotA' })
-    expect(templateTargetsFor(rows, new Set(['group:Spots']))).toEqual([
+    expect(paletteTargetsFor(rows, new Set(['group:Spots']))).toEqual([
       { type: 'fixture', key: 'spotA' },
     ])
   })
@@ -775,7 +775,7 @@ describe('templateTargetsFor', () => {
       expandedFixtures: new Set(['bar']),
       textFilter: '',
     })
-    expect(templateTargetsFor(rows, new Set(['element:fixture:bar:bar.pixel-1']))).toEqual([
+    expect(paletteTargetsFor(rows, new Set(['element:fixture:bar:bar.pixel-1']))).toEqual([
       { type: 'fixture', key: 'bar.pixel-1' },
     ])
   })
@@ -789,7 +789,7 @@ describe('templateTargetsFor', () => {
       textFilter: '',
     })
     const parent = rows.find((row) => row.kind === 'fixture' && row.fixture.key === 'bar')!
-    expect(templateTargetsFor(rows, new Set([parent.id, 'element:fixture:bar:bar.pixel-1']))).toEqual([
+    expect(paletteTargetsFor(rows, new Set([parent.id, 'element:fixture:bar:bar.pixel-1']))).toEqual([
       { type: 'fixture', key: 'bar' },
     ])
   })
@@ -979,10 +979,10 @@ describe('treeKeyAction', () => {
   })
 })
 
-describe('templateTargetsOf', () => {
+describe('paletteTargetsOf', () => {
   it('keeps each cell by its element key rather than folding it onto the parent (venue-visit plan S1)', () => {
     expect(
-      templateTargetsOf([
+      paletteTargetsOf([
         { key: 'shehds-1.zone-1', properties: [], fixtureKey: 'shehds-1', cellIndex: 0 },
         { key: 'shehds-1.zone-3', properties: [], fixtureKey: 'shehds-1', cellIndex: 2 },
       ]),
@@ -993,7 +993,7 @@ describe('templateTargetsOf', () => {
   })
 
   it('names a whole fixture by its own key — the desk fans it to the cells that carry the property', () => {
-    expect(templateTargetsOf([{ key: 'shehds-1', properties: [] }, { key: 'par-1', properties: [] }])).toEqual([
+    expect(paletteTargetsOf([{ key: 'shehds-1', properties: [] }, { key: 'par-1', properties: [] }])).toEqual([
       { type: 'fixture', key: 'shehds-1' },
       { type: 'fixture', key: 'par-1' },
     ])
@@ -1001,7 +1001,7 @@ describe('templateTargetsOf', () => {
 
   it('drops a cell whose parent is in the batch too, since the parent covers it', () => {
     expect(
-      templateTargetsOf([
+      paletteTargetsOf([
         { key: 'shehds-1.zone-2', properties: [], fixtureKey: 'shehds-1', cellIndex: 1 },
         { key: 'shehds-1', properties: [] },
         { key: 'shehds-2.zone-1', properties: [], fixtureKey: 'shehds-2', cellIndex: 0 },
@@ -1014,7 +1014,7 @@ describe('templateTargetsOf', () => {
 
   it('dedupes a target named twice', () => {
     expect(
-      templateTargetsOf([
+      paletteTargetsOf([
         { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
         { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
       ]),

@@ -25,8 +25,8 @@ import { useProgrammerTables } from '@/components/programmer/ProgrammerTableTabs
 import { useLocalValueCount } from '@/components/programmer/useLocalFamilyCounts'
 import { ApplyLayerPicker } from '@/components/programmer/ApplyLayerPicker'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
-import { useActiveEffectsQuery, type ActiveEffect } from '@/store/fixtureFx'
+import { usePaletteListQuery } from '@/store/palettes'
+import { useActiveFxQuery, type ActiveFx } from '@/store/fixtureFx'
 import {
   programmerDetachLayer,
   programmerMoveLayer,
@@ -41,7 +41,7 @@ import { sourceKey } from '@/lib/replacementNotes'
 import {
   STACK_KINDS,
   fxHomeOf,
-  layerEffectState,
+  layerFxState,
   layerMoveOf,
   matchesFilter,
   parseStackKind,
@@ -53,31 +53,31 @@ import {
   type TableView,
 } from '@/lib/programmerTables'
 import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
-import { EffectsBelowRule } from './EffectsBelowRule'
+import { FxBelowRule } from './FxBelowRule'
 
-type StackColumnKey = 'position' | 'kind' | 'targets' | 'amount' | 'blend' | 'mask' | 'stomp' | 'settings' | 'effects' | 'note'
+type StackColumnKey = 'position' | 'kind' | 'targets' | 'amount' | 'blend' | 'mask' | 'stomp' | 'settings' | 'fx' | 'note'
 
 interface LayerRow extends SheetRow {
-  kind: 'LOOK' | 'TEMPLATE'
+  kind: 'LOOK' | 'PALETTE'
   entry: AppliedLayer
   info: StackSourceInfo
   note: string | null
   /** The instances this layer spawned, in the desk's order. */
-  effects: readonly ActiveEffect[]
-  effectState: 'running' | 'spent' | null
+  effects: readonly ActiveFx[]
+  fxState: 'running' | 'spent' | null
   targetsLabel: string
 }
 
 interface LocalRow extends SheetRow {
   kind: 'LOCAL'
   /** The programmer's own effects — Local, not a layer's, a cue's or the show's. */
-  effects: readonly ActiveEffect[]
+  effects: readonly ActiveFx[]
 }
 
 type StackSheetRow = LayerRow | LocalRow
 
 const LOCAL_ROW_ID = 'local'
-const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'position', 'kind', 'targets', 'amount', 'effects', 'note'])
+const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'position', 'kind', 'targets', 'amount', 'fx', 'note'])
 const KIND_LABELS: Readonly<Record<StackKind, string>> = { looks: 'Looks', palettes: 'Palettes' }
 
 /**
@@ -109,8 +109,8 @@ export function StackTable({
   const navigate = useNavigate()
   const { data: layerList } = useProgrammerLayersQuery()
   const { data: lookList } = useLookListQuery({ projectId }, { skip: !projectId })
-  const { data: templateList } = useTemplateListQuery({ projectId }, { skip: !projectId })
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: paletteList } = usePaletteListQuery({ projectId }, { skip: !projectId })
+  const { data: effects } = useActiveFxQuery()
   const notes = useReplacementNotes()
   const scopeActions = useProgrammerScopeActions()
   const scope = useProgrammerScope()
@@ -119,8 +119,8 @@ export function StackTable({
   const sheets = useProgrammerSheets()
 
   const looksById = useMemo(() => new Map((lookList ?? []).map((l) => [l.id, l])), [lookList])
-  const templatesById = useMemo(() => new Map((templateList ?? []).map((t) => [t.id, t])), [templateList])
-  const loaded = lookList != null && templateList != null
+  const palettesById = useMemo(() => new Map((paletteList ?? []).map((t) => [t.id, t])), [paletteList])
+  const loaded = lookList != null && paletteList != null
   const layers = useMemo(() => layerList ?? [], [layerList])
 
   const local = useMemo<LocalRow>(
@@ -134,16 +134,16 @@ export function StackTable({
         const own = (effects ?? []).filter((e) => e.programmerLayerId === layer.layerId)
         return {
           id: layerRowId(layer),
-          kind: layer.source.kind === 'TEMPLATE' ? 'TEMPLATE' : 'LOOK',
+          kind: layer.source.kind === 'PALETTE' ? 'PALETTE' : 'LOOK',
           entry,
-          info: describeStackSource(layer.source, looksById, templatesById, loaded),
+          info: describeStackSource(layer.source, looksById, palettesById, loaded),
           note: notes.get(sourceKey(layer.source)) ?? null,
           effects: own,
-          effectState: layerEffectState(layer.layerId, own),
+          fxState: layerFxState(layer.layerId, own),
           targetsLabel: targetsLabelOf(layer),
         }
       }),
-    [effects, layers, loaded, looksById, notes, templatesById],
+    [effects, layers, loaded, looksById, notes, palettesById],
   )
 
   const kindChip = parseStackKind(view.chip)
@@ -223,7 +223,7 @@ export function StackTable({
 
   const looks = all.filter((row) => row.kind === 'LOOK').length
   const total = all.length
-  const spent = all.filter((row) => row.effectState === 'spent').length
+  const spent = all.filter((row) => row.fxState === 'spent').length
   const lookForSheet = lookOpen != null ? (lookList ?? []).find((l) => l.id === lookOpen) ?? null : null
 
   return (
@@ -256,9 +256,9 @@ export function StackTable({
         create={<AddLayerMenu onAdd={setAdding} />}
         rule={
           <>
-            <EffectsBelowRule>
-              <EffectsElsewhere count={effects?.length ?? 0} onShow={() => tables?.select('fx')} />
-            </EffectsBelowRule>
+            <FxBelowRule>
+              <FxElsewhere count={effects?.length ?? 0} onShow={() => tables?.select('fx')} />
+            </FxBelowRule>
             {noMatch && (
               <p data-stack-no-match className="shrink-0 border-b px-3 py-1.5 text-xs text-muted-foreground">
                 No layers match the filter.
@@ -347,7 +347,7 @@ function sortValue(row: LayerRow, key: string): SortValue {
       return row.targetsLabel
     case 'amount':
       return row.entry.layer.amount
-    case 'effects':
+    case 'fx':
       return row.effects.length > 0 ? row.effects.length : null
     case 'note':
       return row.note
@@ -476,12 +476,12 @@ function stackColumns(band: AppliedBand, onMakeLayer: () => void): { columns: Sh
       return text(words, { muted: words === '—' })
     },
   }
-  const effectsColumn: SheetColumn<StackSheetRow, StackColumnKey> = {
-    key: 'effects',
+  const fxColumn: SheetColumn<StackSheetRow, StackColumnKey> = {
+    key: 'fx',
     label: 'FX',
     width: band === 0 ? 'minmax(100px, 140px)' : '90px',
     value: () => undefined,
-    display: (row) => <EffectsCell row={row} />,
+    display: (row) => <FxCell row={row} />,
   }
   const note: SheetColumn<StackSheetRow, StackColumnKey> = {
     key: 'note',
@@ -507,9 +507,9 @@ function stackColumns(band: AppliedBand, onMakeLayer: () => void): { columns: Sh
   const set = (cols: SheetColumn<StackSheetRow, StackColumnKey>[]) => ({ columns: cols, minWidth: sum(cols) })
 
   // Each set's floor fits its band: 0 within 1100, 1 within 860.
-  if (band === 0) return set([position, kind, targets, amount, blend, mask, stomp, effectsColumn, note])
-  if (band === 1) return set([position, kind, targets, amount, settings, effectsColumn, note])
-  return set([targets, amount, note, kind, settings, effectsColumn])
+  if (band === 0) return set([position, kind, targets, amount, blend, mask, stomp, fxColumn, note])
+  if (band === 1) return set([position, kind, targets, amount, settings, fxColumn, note])
+  return set([targets, amount, note, kind, settings, fxColumn])
 }
 
 /** The name column by band: the row's toggle and two buttons beside the badge, then the badge alone. */
@@ -568,9 +568,9 @@ function MakeLayerButton({ onMakeLayer }: { onMakeLayer: () => void }) {
   )
 }
 
-function EffectsCell({ row }: { row: StackSheetRow }) {
+function FxCell({ row }: { row: StackSheetRow }) {
   const { effects } = row
-  if (row.kind !== 'LOCAL' && row.effectState === 'spent') {
+  if (row.kind !== 'LOCAL' && row.fxState === 'spent') {
     return (
       <span className="mx-1.5">
         <SpentBadge />
@@ -581,8 +581,8 @@ function EffectsCell({ row }: { row: StackSheetRow }) {
   const words =
     row.kind === 'LOCAL'
       ? `${effects.length} Local`
-      : `${effects.length} · ${effects[0].effectType}${effects.length > 1 ? ` +${effects.length - 1}` : ''}`
-  return text(words, { title: effects.map((e) => `${e.effectType} on ${e.targetKey}`).join(', ') })
+      : `${effects.length} · ${effects[0].fxType}${effects.length > 1 ? ` +${effects.length - 1}` : ''}`
+  return text(words, { title: effects.map((e) => `${e.fxType} on ${e.targetKey}`).join(', ') })
 }
 
 function SpentBadge() {
@@ -640,7 +640,7 @@ function LayerNameCell({
   const { layer, position } = row.entry
   const handlers = handlersFor(layer)
   const enabled = layer.enabled !== false
-  const isTemplate = layer.source.kind === 'TEMPLATE'
+  const isPalette = layer.source.kind === 'PALETTE'
   return (
     <>
       {/* Clicks on the controls are theirs, not the row's selection. */}
@@ -654,12 +654,12 @@ function LayerNameCell({
         <LookNameBadge
           name={row.info.name}
           missing={row.info.missing}
-          isTemplate={isTemplate}
-          isEffect={row.info.templateKind === 'effect'}
+          isPalette={isPalette}
+          isFx={row.info.paletteKind === 'fx'}
           className="max-w-full"
         />
       </span>
-      {compact && row.effectState === 'spent' && <SpentBadge />}
+      {compact && row.fxState === 'spent' && <SpentBadge />}
       <span className="flex shrink-0 items-center" onClick={(e) => e.stopPropagation()}>
         <LayerSettingsPopover
           layer={layer}
@@ -683,7 +683,7 @@ function LayerNameCell({
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onEditRecord}>
               <Pencil className="size-3.5" />
-              {isTemplate ? 'Edit palette…' : 'Edit look…'}
+              {isPalette ? 'Edit palette…' : 'Edit look…'}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onSettingsOpenChange(true)}>
               <SlidersHorizontal className="size-3.5" />
@@ -790,7 +790,7 @@ function StackVerbs({
         <>
           <LibraryVerb
             icon={Pencil}
-            label={firstLayer.kind === 'TEMPLATE' ? 'Edit palette…' : 'Edit look…'}
+            label={firstLayer.kind === 'PALETTE' ? 'Edit palette…' : 'Edit look…'}
             title={`Open ${firstLayer.info.name ?? 'this layer'}`}
             disabledReason={oneLayer('Edit')}
             onClick={() => onEditRecord(firstLayer)}
@@ -835,7 +835,7 @@ function StackVerbs({
 }
 
 /** The rule's second half on the Stack table: the effects under the stack, a press away on the FX tab. */
-function EffectsElsewhere({ count, onShow }: { count: number; onShow: () => void }) {
+function FxElsewhere({ count, onShow }: { count: number; onShow: () => void }) {
   return (
     <span className="min-w-0 truncate text-[11px] text-amber-200/80">
       ·{' '}

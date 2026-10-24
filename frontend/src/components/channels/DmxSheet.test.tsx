@@ -417,7 +417,7 @@ describe('DmxSheet', () => {
 
   it('lets a sideband slot beat a cue on its address, but never an effect', () => {
     keyStates.set('par-1|rgbColour', { provenance: { targetKey: 'par-1', propertyName: 'rgbColour', source: 'CUE' } })
-    keyStates.set('par-2|rgbColour', { provenance: { targetKey: 'par-2', propertyName: 'rgbColour', source: 'EFFECT' } })
+    keyStates.set('par-2|rgbColour', { provenance: { targetKey: 'par-2', propertyName: 'rgbColour', source: 'FX' } })
     sidebandChannels = [
       { universe: 1, channel: 2, value: 80, owner: 'web', touched: true },
       { universe: 1, channel: 8, value: 80, owner: 'web', touched: true },

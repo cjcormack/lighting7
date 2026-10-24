@@ -92,7 +92,7 @@ const IDENTITY = {
       { kind: 'CUE', id: 1, name: 'Q1' },
       { kind: 'CUE', id: 2, name: 'Q2' },
       { kind: 'LOOK', id: 3, name: 'Warm' },
-      { kind: 'TEMPLATE', id: 4, name: 'Amber' },
+      { kind: 'PALETTE', id: 4, name: 'Amber' },
       { kind: 'BINDING', id: 5, name: 'Fader 1' },
     ],
   },

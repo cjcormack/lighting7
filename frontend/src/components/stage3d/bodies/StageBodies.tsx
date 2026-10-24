@@ -32,7 +32,7 @@ import {
   type BodyLod,
 } from './bodyGeometry'
 import type { Mount } from './mount'
-import { RING_SEGMENTS } from '../../../lib/ringEffect'
+import { RING_SEGMENTS } from '../../../lib/ringFx'
 import {
   BODY_LENS_COLOR,
   HOUSING_ACTIVE_COLOR,

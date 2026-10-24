@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { cellHoldsBack, heldBackKey, heldBackReach, isHeldBack, isHeldByBlind, type ReachingEffect } from './heldBack'
+import { cellHoldsBack, heldBackKey, heldBackReach, isHeldBack, isHeldByBlind, type ReachingFx } from './heldBack'
 
 /**
- * The client's copy of the desk's `EffectSuppression.heldBackByProgrammer`. Each case is one clause
+ * The client's copy of the desk's `FxSuppression.heldBackByProgrammer`. Each case is one clause
  * of the desk's rule; a mark that disagrees with the engine is worse than none.
  */
 const holdsDimmerOnHex1 = (head: string, property: string) => head === 'hex-1' && property === 'dimmer'
@@ -54,7 +54,7 @@ describe('isHeldByBlind — the desk’s BlindHold (show-cue-editing plan D7)', 
 describe('the grid’s reach and its cell rule (D19)', () => {
   const bar = { key: 'bar', groups: ['Bars'], elements: [{ key: 'bar.1' }, { key: 'bar.2' }] }
   const spot = { key: 'spot', groups: [] }
-  const effect = (over: Partial<ReachingEffect>): ReachingEffect => ({
+  const effect = (over: Partial<ReachingFx>): ReachingFx => ({
     programmerOwned: false,
     propertyName: 'dimmer',
     targetKey: 'bar',

@@ -7,7 +7,7 @@ import { store } from "./store"
 import { applyThemeClass, getInitialTheme } from "./lib/theme"
 import { startOAuthIdentityBridge } from "./store/oauthGithub"
 import { startLooksBridge } from "./store/looks"
-import { startTemplatesBridge } from "./store/templates"
+import { startPalettesBridge } from "./store/palettes"
 import { startProgrammerErrorBridge } from "./store/programmerErrors"
 import { windowName } from "./lib/windowIdentity"
 import { applyImmersiveLaunch } from "./lib/immersive"
@@ -36,7 +36,7 @@ startOAuthIdentityBridge()
 // Same reason, one slice along: store/looks is imported from the sidebar's nav registry and from
 // pickers that mount everywhere, so its WS bridge cannot run at module-eval time either.
 startLooksBridge()
-startTemplatesBridge()
+startPalettesBridge()
 
 // The programmer's WS write path reports its refusals on `programmer.error` and nothing else —
 // there is no REST action for `errorToastMiddleware` to catch — so an unheard frame means a

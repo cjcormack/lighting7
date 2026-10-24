@@ -13,7 +13,7 @@ import type { ColumnKey } from './columns'
  * (all members of a group row, all heads of a collapsed multi-head fixture). A cell with
  * nothing above baseline reads `baseline`.
  */
-export type CellOwnershipSource = 'parked' | 'programmer' | 'effect' | 'cue' | 'baseline'
+export type CellOwnershipSource = 'parked' | 'programmer' | 'fx' | 'cue' | 'baseline'
 
 export interface CellOwnership {
   source: CellOwnershipSource
@@ -81,7 +81,7 @@ export type RowOwnership = Partial<Record<ColumnKey, CellOwnership>>
 const SOURCE_RANK: Record<CellOwnershipSource, number> = {
   parked: 4,
   programmer: 3,
-  effect: 2,
+  fx: 2,
   cue: 1,
   baseline: 0,
 }
@@ -89,7 +89,7 @@ const SOURCE_RANK: Record<CellOwnershipSource, number> = {
 const PROVENANCE_TO_SOURCE: Record<ProvenanceSource, CellOwnershipSource> = {
   PARKED: 'parked',
   PROGRAMMER: 'programmer',
-  EFFECT: 'effect',
+  FX: 'fx',
   CUE: 'cue',
 }
 

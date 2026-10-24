@@ -57,16 +57,16 @@ fun stripCommandRows(project: DaoProject): Int {
                     (it.elementKey == null && inSharedBand(it.targetType, it.targetKey, it.attribute, it.value))
             }
             .forEach { it.delete(); stripped++ }
-        DaoLookEffect.find { DaoLookEffects.look inList looks }
+        DaoLookFxEntity.find { DaoLookFx.look inList looks }
             .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
-    val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
+    val templates = DaoPalette.find { DaoPalettes.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.palette inList templates }
+        DaoPaletteRow.find { DaoPaletteRows.palette inList templates }
             .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.palette inList templates }
+        DaoPaletteFxEntity.find { DaoPaletteFx.palette inList templates }
             .filter { namedCommand(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
@@ -78,7 +78,7 @@ fun stripCommandRows(project: DaoProject): Int {
                     inSharedBand(it.targetType, it.targetKey, it.attribute, it.value)
             }
             .forEach { it.delete(); stripped++ }
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cues }
             .filter { namedCommand(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }

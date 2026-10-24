@@ -31,7 +31,7 @@ import {
 import {
   DEFAULT_FOLLOW_RATIO,
   FOLLOW_RATIOS,
-  SPEED_MASTER_USAGES,
+  SPEED_MASTER_FAMILIES,
   derivedBpm,
   eligibleFollowTargets,
   followRatioOf,
@@ -45,7 +45,7 @@ import { formatBpm } from '../../hooks/useBpmDraft'
 
 /**
  * Radix `Select` reserves the empty string for "no value", so "routes nothing" needs a sentinel
- * of its own rather than `''`. It never reaches the wire — {@link usageToSend} maps it back to
+ * of its own rather than `''`. It never reaches the wire — {@link familyToSend} maps it back to
  * the null the PUT wants.
  */
 const USAGE_NONE = '__none__'
@@ -138,7 +138,7 @@ export function SpeedMasterDetailSheet({
     setName(master.name)
     setNotes(master.notes ?? '')
     setStartingBpm(String(master.bpm))
-    setUsage(master.usage ?? USAGE_NONE)
+    setUsage(master.family ?? USAGE_NONE)
     setFollow(followRatioOf(master))
     setFollowTarget(followTargetOf(master))
   }, [master])
@@ -169,15 +169,15 @@ export function SpeedMasterDetailSheet({
   // server refuses it (400 SPEED_MASTER_FOLLOW_CYCLE). Offering a choice that can only fail is
   // worse than not offering it.
   const followTargetOptions = eligibleFollowTargets(bank, master)
-  const usageToSend = usage === USAGE_NONE ? null : usage
-  const usageChanged = usageToSend !== (master.usage ?? null)
+  const familyToSend = usage === USAGE_NONE ? null : usage
+  const familyChanged = familyToSend !== (master.family ?? null)
   // A follower's tempo is derived, so its stored default is meaningless while linked and the
   // BPM field is not rendered at all — which also means it can never be dirty.
   const bpmChanged = follow == null && bpmValid && parsedBpm !== master.bpm
   const dirty =
     name.trim() !== master.name ||
     (notes.trim() || null) !== (master.notes ?? null) ||
-    usageChanged ||
+    familyChanged ||
     followChanged ||
     bpmChanged
   // Only the manual arm can be invalid: the BPM field is the only one with a range.
@@ -196,8 +196,8 @@ export function SpeedMasterDetailSheet({
       // alongside a follow ratio: the server 400s the pair (SPEED_MASTER_FOLLOWER), because
       // a follower's tempo comes from master 1 rather than from a stored default.
       ...(bpmChanged ? { bpm: parsedBpm } : {}),
-      // The PUT is a patch, so an untouched key is left alone; usage present-with-null clears.
-      ...(usageChanged ? { usage: usageToSend } : {}),
+      // The PUT is a patch, so an untouched key is left alone; family present-with-null clears.
+      ...(familyChanged ? { family: familyToSend } : {}),
       // Both halves or neither — a half-patch is a 400. Unlinking is both explicitly null, and
       // the target rides with the pair (the server carries the stored leader forward when a
       // ratio-only patch omits it, but this sheet always knows which master it means).
@@ -246,7 +246,7 @@ export function SpeedMasterDetailSheet({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={USAGE_NONE}>Not routed</SelectItem>
-                {SPEED_MASTER_USAGES.map((u) => (
+                {SPEED_MASTER_FAMILIES.map((u) => (
                   <SelectItem key={u} value={u}>
                     {usageOptionLabel(u)}
                   </SelectItem>

@@ -49,12 +49,12 @@ function statWindow() {
   }
 }
 
-const TEMPLATE_7 = { kind: 'TEMPLATE', id: 7 } as const
+const PALETTE_7 = { kind: 'PALETTE', id: 7 } as const
 
 const paletteDrag = (id = 7): Active =>
   ({
     id: 'busk-palette-template-7',
-    data: { current: { type: 'busk-palette', record: { kind: 'TEMPLATE', template: { id } } } },
+    data: { current: { type: 'busk-palette', record: { kind: 'PALETTE', palette: { id } } } },
   }) as unknown as Active
 
 const slotDrag = (): Active =>
@@ -179,7 +179,7 @@ describe('presence — the gesture arms only when there is somewhere to hand off
 
     await settle()
     pointer('pointermove', 1120)
-    expect(handWs.pickedUp).toEqual([{ kind: 'TEMPLATE', id: 7 }])
+    expect(handWs.pickedUp).toEqual([{ kind: 'PALETTE', id: 7 }])
   })
 
   it('arms once another window has answered the handshake', async () => {
@@ -189,7 +189,7 @@ describe('presence — the gesture arms only when there is somewhere to hand off
     act(() => result.current.armEdgeDrag(paletteDrag(7)))
     pointer('pointermove', 1100)
 
-    expect(handWs.pickedUp).toEqual([{ kind: 'TEMPLATE', id: 7 }])
+    expect(handWs.pickedUp).toEqual([{ kind: 'PALETTE', id: 7 }])
   })
 })
 
@@ -224,7 +224,7 @@ describe('the source window — handing a drag off at the boundary', () => {
     act(() => result.current.armEdgeDrag(paletteDrag(7)))
     pointer('pointermove', 1100)
 
-    expect(handWs.pickedUp).toEqual([{ kind: 'TEMPLATE', id: 7 }])
+    expect(handWs.pickedUp).toEqual([{ kind: 'PALETTE', id: 7 }])
     expect(cancels).toHaveLength(1)
     // The cancel is a pointer event, never a key. An Escape here would sit in front of HandChip's
     // Escape ladder and every other document-level Escape listener on the page.
@@ -316,7 +316,7 @@ describe('the source window — handing a drag off at the boundary', () => {
     await settle()
 
     expect(heard).toEqual([
-      { type: 'edge-drag-release', screen: { x: 1150, y: 420 }, record: TEMPLATE_7 },
+      { type: 'edge-drag-release', screen: { x: 1150, y: 420 }, record: PALETTE_7 },
     ])
   })
 
@@ -338,7 +338,7 @@ describe('the source window — handing a drag off at the boundary', () => {
     await settle()
 
     expect(heard).toEqual([
-      { type: 'edge-drag-release', screen: { x: 1100, y: 430 }, record: TEMPLATE_7 },
+      { type: 'edge-drag-release', screen: { x: 1100, y: 430 }, record: PALETTE_7 },
     ])
   })
 
@@ -377,7 +377,7 @@ describe('the source window — handing a drag off at the boundary', () => {
     // here would strand the first record with no release ever posted.
     act(() => result.current.armEdgeDrag(paletteDrag(9)))
     pointer('pointermove', 1200, 400, 2)
-    expect(handWs.pickedUp).toEqual([{ kind: 'TEMPLATE', id: 7 }])
+    expect(handWs.pickedUp).toEqual([{ kind: 'PALETTE', id: 7 }])
   })
 })
 
@@ -419,7 +419,7 @@ describe('the receiving window — claiming a posted release', () => {
   }
 
   /** The hand holds the record the release names — the state a place needs. */
-  function handHolds(kind = 'TEMPLATE', id = 7) {
+  function handHolds(kind = 'PALETTE', id = 7) {
     act(() => {
       handWs.fire({ kind, id, uuid: `${kind}-${id}`, holdId: 1 })
     })
@@ -435,7 +435,7 @@ describe('the receiving window — claiming a posted release', () => {
   const release = (screen = { x: 300, y: 500 }): EdgeDragRelease => ({
     type: 'edge-drag-release',
     screen,
-    record: TEMPLATE_7,
+    record: PALETTE_7,
   })
 
   it('places by clicking the hand target under the point', async () => {
@@ -502,13 +502,13 @@ describe('the receiving window — claiming a posted release', () => {
       configurable: true,
     })
     renderHook(() => useEdgeDragReceiver())
-    handHolds('TEMPLATE', 7)
+    handHolds('PALETTE', 7)
 
     const source = new BroadcastChannel(DESK_DRAG_CHANNEL)
     source.postMessage(release())
     await settle(40)
     // Someone else picks something up, and only then does this window's band appear.
-    handHolds('TEMPLATE', 99)
+    handHolds('PALETTE', 99)
     visible = true
     await settle(RESOLVE_MS)
     source.close()
