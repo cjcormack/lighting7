@@ -33,7 +33,7 @@ import { useFxScope } from './useFxScope'
 /**
  * The live effect editor (fixture-fx-sheets plan D11, D12, D12a, D15; §3.3) — the old
  * `EffectParameterForm`'s parameter inputs rebuilt on the editor kit, and the one editor every
- * running effect is edited in: the FX tray's rows (inline), the FX table's *Edit…* and the FX
+ * running effect is edited in: the FX tray's rows (inline), the FX editor's inspector, the FX
  * lens's chips (both through `EditorSurface`), the add sheet after the picker, and the busk
  * view's Effects tab. Its fields (`FxFields`) are `PaletteEditor`'s too, over a draft.
  *
@@ -62,6 +62,7 @@ export function FxEditor({
   hold,
   alsoIds,
   className,
+  layout,
 }: {
   effect: ActiveFx
   /** Back to the host's list. */
@@ -90,6 +91,8 @@ export function FxEditor({
    */
   alsoIds?: readonly number[]
   className?: string
+  /** `FxFields`' section order: the FX editor's inspector draws its own (FX editor plan §4.5). */
+  layout?: 'editor' | 'inspector'
 }) {
   const { data: library } = useFxLibraryQuery()
   const entry = useMemo(() => findFxEntry(library, effect.fxType), [library, effect.fxType])
@@ -282,6 +285,7 @@ export function FxEditor({
           readOnly={readOnly}
           set={set}
           setParam={setParam}
+          layout={layout}
         />
       )}
 

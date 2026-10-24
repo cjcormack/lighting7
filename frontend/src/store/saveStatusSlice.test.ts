@@ -199,6 +199,7 @@ describe('NON_SAVE_ENDPOINTS', () => {
       import('./programmerOps'),
       import('./perf'),
       import('./status'),
+      import('./fxPreview'),
     ])
 
     const known = new Set(Object.keys(restApi.endpoints))

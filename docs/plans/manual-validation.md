@@ -768,18 +768,20 @@ in a group, two movers with zoom and a gobo wheel, an Amber Breathe effect palet
 
 1. **The band.** Select Hex 1–4's Dimmer cells and open one: below the slider, *Effects* with *+
    Effect…*. Press *+ Effect…*, tap Pulse: the four hexes pulse as **one** chase (one row on the
-   programmer's FX table), and the band lists Pulse, lit.
+   FX tab's *All*), and the band lists Pulse, lit.
 2. **Replacement.** Start Colour Cycle on Hex 1–4 from a colour cell's *+ Effect…*, then select Hex 3–4
    only and start Rainbow Cycle from their colour cell: Hex 3–4 run the rainbow, Hex 1–2 keep cycling,
    and nothing else on the rig moves.
-3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and open it from the FX
-   table's *Edit…*: the editor says *Hex 1–2 of Hex 1–4*. Drag Max down — nothing on the rig moves — then
+3. **The split.** With the Pulse from step 1 running, select Hex 1–2 and pick the Pulse's card on
+   the FX tab's *Selection* (or click its chip on one of their Dimmer cells): the editor says *Hex
+   1–2 of Hex 1–4*. (*All*'s *Edit…* selects all four heads first, and opens it with no *Apply to …*
+   line.) Drag Max down — nothing on the rig moves — then
    press *Apply to Hex 1–2*: Hex 1–2 take the new Max **at the phase they had**, Hex 3–4 run on
    untouched, and no head jumps. Drag Max again: both Hex 1 and Hex 2 follow. Repeat on a step-timed
    chase and on a ping-pong one.
-4. **Edit all.** Start a fresh Pulse on Hex 1–4, select Hex 1–2 and open it: drag Max, then press
+4. **Edit all.** Start a fresh Pulse on Hex 1–4, select Hex 1–2 and pick it on *Selection*: drag Max, then press
    *Edit all 4*: all four take the held change at once, and every later drag moves all four live.
-5. **No split for a layer.** Press Amber Breathe on Hex 1–4, select Hex 1–2 and open its effect: no
+5. **No split for a layer.** Press Amber Breathe on Hex 1–4, select Hex 1–2 and pick its effect on *Selection*: no
    *Apply to …* line; a change moves all four.
 6. **Beam and settings.** Open a mover's Zoom cell: the band offers Zoom Breathe (*+ Effect…* opens
    on Beam with Zoom Breathe in it) and no frost palette. Open its Gobo cell: an Effects band with
@@ -1251,8 +1253,8 @@ walk across loose fixtures in the order they were marqueed, or a recorded one co
 
 **Test**, on Sleeping Beauty, from the programmer:
 
-1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX table
-   shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
+1. **Loose fixtures.** Marquee eight loose pars' Dimmer cells and *+ Effect* → Pulse: the FX tab's
+   *All* shows one effect, its target *Par 1, Par 2 +6*, and the chase runs down the grid's order. Open it:
    *Spread* shows eight dials.
 2. **With a group.** Select those eight rows and a group of four below them: one chase, twelve
    steps, the group's members in the group's own order after the pars. Set Order to *Reverse*: it

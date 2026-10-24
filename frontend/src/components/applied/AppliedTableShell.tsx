@@ -53,6 +53,8 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
   view: TableView
   onViewChange: (next: TableView) => void
   filterLabel: string
+  /** After the table tabs — the FX tab's *Selection · All*. */
+  leading?: ReactNode
   /** The partition chips, where the table has some. */
   chips?: ReactNode
   /** The library row's create verb — *+ Effect*, *+ Look or palette*. */
@@ -124,6 +126,7 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
   view,
   onViewChange,
   filterLabel,
+  leading,
   chips,
   create,
   rule,
@@ -196,7 +199,12 @@ export function AppliedTableShell<Row extends SheetRow, C extends string>({
       {/* The row's own `@container`: the tabs and the create verb fold their words by its width. */}
       <div className="@container">
         <LibraryRow
-          leading={<ProgrammerTableTabs />}
+          leading={
+            <>
+              <ProgrammerTableTabs />
+              {leading}
+            </>
+          }
           filter={view.q}
           onFilterChange={setFilter}
           filterLabel={filterLabel}

@@ -39,6 +39,7 @@ import { announceWrite, recordLookNote } from './writeToasts'
 import { useLocalFamilyCounts } from './useLocalFamilyCounts'
 import { Badge } from '@/components/ui/badge'
 import { useActiveFxQuery } from '@/store/fixtureFx'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 
 export interface RecordLookSheetProps {
   open: boolean
@@ -52,6 +53,10 @@ export interface RecordLookSheetProps {
    * the sheet reads the programmer scope's row selection as it always has.
    */
   targets?: CueTarget[]
+  /** The mask to open on, in place of the window's — the FX editor's lanes' families. */
+  initialMask?: AttributeFamily[] | null
+  /** FX to open ticked — the FX editor's list. Only the programmer's own are offered. */
+  initialFxIds?: readonly number[]
 }
 
 const SOURCES: { value: RecordSource; label: string; hint: string }[] = [
@@ -107,6 +112,8 @@ export function RecordLookSheet({
   projectId,
   targetLookId,
   targets,
+  initialMask,
+  initialFxIds,
 }: RecordLookSheetProps) {
   const { data: looks } = useLookListQuery({ projectId }, { skip: !projectId })
   const [record, { isLoading, error, reset }] = useRecordLookMutation()
@@ -145,6 +152,9 @@ export function RecordLookSheet({
   // effect depending on it *and* calling it re-fires — here that would wipe the operator's form
   // the instant a Record failed.
   const openedRef = useRef(false)
+  // Read once per open, as the window's mask is: a host re-rendering meanwhile changes nothing.
+  const initialRef = useRef({ initialMask, initialFxIds })
+  initialRef.current = { initialMask, initialFxIds }
   useEffect(() => {
     if (!open) {
       openedRef.current = false
@@ -154,14 +164,15 @@ export function RecordLookSheet({
     openedRef.current = true
     setMode(targetLookId ? 'MERGE' : 'CREATE')
     setSource('TOUCHED')
-    setMask(readSelectionMask())
+    const initial = initialRef.current
+    setMask(initial.initialMask !== undefined ? initial.initialMask : readSelectionMask())
     // On by default here, unlike `RecordSheet`: see the class doc. Still guarded by `scoped`, so
     // an empty selection falls back to the whole programmer rather than sending a 400.
     setSelectedOnly(true)
     // Effects default **off**, unlike the fixture selection. A value the operator busked is almost
     // certainly part of the look; a chase they started to see what it looked like very often is not,
-    // and folding one in moves a running effect out of their hands.
-    setFxIds([])
+    // and folding one in moves a running effect out of their hands — unless the opener named them.
+    setFxIds(initial.initialFxIds != null ? [...initial.initialFxIds] : [])
     // On whenever anything is held (the row is absent otherwise): a look recorded with only the moon
     // held is a scenery look, the busk pad that flies it (D9, D10).
     setIncludeScenery(true)

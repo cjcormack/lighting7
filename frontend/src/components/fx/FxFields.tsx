@@ -123,6 +123,7 @@ export function FxFields({
   readOnly,
   set,
   setParam,
+  layout = 'editor',
 }: {
   entry: FxLibraryEntry
   /** The instance's or the template's timing source — the library entry's wins where it says. */
@@ -144,6 +145,13 @@ export function FxFields({
   readOnly: boolean
   set: (patch: Partial<FxDraft>, release?: boolean) => void
   setParam: (name: string, value: string, release: boolean) => void
+  /**
+   * `inspector` is the FX editor's order (FX editor plan §4.5): Cycle, Amount, Direction and Order;
+   * **Shape**, every parameter; Spread; **Over what's underneath**, the family's question and the
+   * raw blend; **Advanced**, Phase, Timing, Runs and the element fields. `editor` is every other
+   * host's.
+   */
+  layout?: 'editor' | 'inspector'
 }) {
   const centred = hasCentre(entry)
   // An absent centre is the library's default (128 on every built-in) — a script or a cue may store a
@@ -179,143 +187,182 @@ export function FxFields({
     />
   )
 
+  // Where the raw blend is drawn, for a question whose answer is neither of its two.
+  const blendHome = layout === 'inspector' ? 'Blend' : 'Advanced'
+  const speed = <SpeedSection timingSource={timingSource} entry={entry} draft={draft} readOnly={readOnly} set={set} />
+  const amount = <AmountSection draft={draft} ordered={scope.heads} readOnly={readOnly} set={set} />
+  const centreQuestion = centred && (
+    <Question
+      label="Centre"
+      value={centreMode}
+      readOnly={readOnly}
+      options={[
+        { value: 'around', label: 'Around current position' },
+        { value: 'absolute', label: 'Absolute' },
+      ]}
+      onChange={(mode) => set(withCentreMode(draft, mode as CentreMode))}
+      readout={
+        centreMode === 'around'
+          ? 'Orbits whatever holds the position underneath — your value, else the cue’s, else the base.'
+          : centreMode === 'absolute'
+            ? 'Moves about the centre set here, whatever is underneath.'
+            : `Blended ${draft.blendMode.toLowerCase()} — see ${blendHome}.`
+      }
+    />
+  )
+  const levelQuestion = level && (
+    <Question
+      label="Over the level underneath"
+      value={levelMode}
+      readOnly={readOnly}
+      options={[
+        { value: 'replace', label: 'Replace it' },
+        { value: 'within', label: 'Within it' },
+      ]}
+      onChange={(mode) => set({ blendMode: blendForLevelMode(mode as LevelMode) })}
+      readout={
+        levelMode === 'replace'
+          ? 'Runs between its low and high whatever the level underneath.'
+          : levelMode === 'within'
+            ? 'Runs inside the level underneath — scaled by it.'
+            : `Blended ${draft.blendMode.toLowerCase()} — see ${blendHome}.`
+      }
+    />
+  )
+  const spread = scope.heads && <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} />
+  const shapeSummaries = shape.map(({ param }) => shapeSummary(param, draft.parameters[param.name] ?? param.defaultValue))
+  const phase = (
+    <SliderRow
+      label="Phase"
+      unit="°"
+      value={draft.phaseOffset - phaseCycles}
+      min={0}
+      max={1}
+      step={0.01}
+      display={(v) => Math.round(v * 360)}
+      fromDisplay={(d) => Math.max(0, Math.min(1, d / 360))}
+      displayMax={360}
+      readOnly={readOnly}
+      onChange={(v, release) => set({ phaseOffset: phaseCycles + v }, release)}
+    />
+  )
+  const runs = <RunsRow draft={draft} readOnly={readOnly} set={set} />
+  const blend = (
+    <SelectRow
+      label="Blend"
+      value={draft.blendMode}
+      readOnly={readOnly}
+      options={BLEND_MODE_OPTIONS}
+      onChange={(blendMode) => set({ blendMode })}
+    />
+  )
+  const timingRow = showTiming && (
+    <div className="flex items-center gap-2">
+      <EditorLabel>Timing</EditorLabel>
+      <span className="flex-1" />
+      <ToggleGroup
+        type="single"
+        size="sm"
+        value={draft.timing === 'HEAD' ? 'head' : 'cycle'}
+        disabled={readOnly}
+        onValueChange={(v) => v && set({ timing: v === 'head' ? 'HEAD' : 'CYCLE' })}
+        aria-label="Timing"
+      >
+        <ToggleGroupItem value="cycle" className="px-2 text-xs">
+          Per cycle
+        </ToggleGroupItem>
+        <ToggleGroupItem value="head" className="px-2 text-xs">
+          Per head
+        </ToggleGroupItem>
+      </ToggleGroup>
+    </div>
+  )
+  const elementRows = (
+    <>
+      {scope.elementMode && (
+        <SelectRow
+          label="Element mode"
+          value={draft.elementMode}
+          readOnly={readOnly}
+          options={ELEMENT_MODE_OPTIONS}
+          onChange={(elementMode) => set({ elementMode })}
+        />
+      )}
+      {scope.elementFilter && (
+        <SelectRow
+          label="Heads"
+          value={draft.elementFilter}
+          readOnly={readOnly}
+          options={ELEMENT_FILTER_OPTIONS}
+          onChange={(elementFilter) => set({ elementFilter })}
+        />
+      )}
+    </>
+  )
+  const timingSummary = showTiming ? [`timing per ${draft.timing === 'HEAD' ? 'head' : 'cycle'}`] : []
+  const runsSummary = draft.runs != null ? [runsWord(draft.runs)] : []
+  const phaseSummary = `phase ${Math.round((draft.phaseOffset - phaseCycles) * 360)}°`
+
+  if (layout === 'inspector') {
+    return (
+      <>
+        {speed}
+        {amount}
+        {(main.length > 0 || shape.length > 0) && (
+          <section aria-label="Shape" className="flex flex-col gap-2.5">
+            <SectionLabel>Shape</SectionLabel>
+            {main.map(paramControl)}
+            {shape.map(paramControl)}
+          </section>
+        )}
+        {spread}
+        <section aria-label="Over what’s underneath" className="flex flex-col gap-2.5">
+          <SectionLabel>Over what’s underneath</SectionLabel>
+          {centreQuestion}
+          {levelQuestion}
+          {blend}
+        </section>
+        <Disclosure label="Advanced" summary={[phaseSummary, ...timingSummary, ...runsSummary]}>
+          {phase}
+          {timingRow}
+          {runs}
+          {elementRows}
+        </Disclosure>
+      </>
+    )
+  }
+
   return (
     <>
-      <SpeedSection
-        timingSource={timingSource}
-        entry={entry}
-        draft={draft}
-        readOnly={readOnly}
-        set={set}
-      />
-
-      <AmountSection draft={draft} ordered={scope.heads} readOnly={readOnly} set={set} />
-
-      {centred && (
-        <Question
-          label="Centre"
-          value={centreMode}
-          readOnly={readOnly}
-          options={[
-            { value: 'around', label: 'Around current position' },
-            { value: 'absolute', label: 'Absolute' },
-          ]}
-          onChange={(mode) => set(withCentreMode(draft, mode as CentreMode))}
-          readout={
-            centreMode === 'around'
-              ? 'Orbits whatever holds the position underneath — your value, else the cue’s, else the base.'
-              : centreMode === 'absolute'
-                ? 'Moves about the centre set here, whatever is underneath.'
-                : `Blended ${draft.blendMode.toLowerCase()} — see Advanced.`
-          }
-        />
-      )}
-
-      {level && (
-        <Question
-          label="Over the level underneath"
-          value={levelMode}
-          readOnly={readOnly}
-          options={[
-            { value: 'replace', label: 'Replace it' },
-            { value: 'within', label: 'Within it' },
-          ]}
-          onChange={(mode) => set({ blendMode: blendForLevelMode(mode as LevelMode) })}
-          readout={
-            levelMode === 'replace'
-              ? 'Runs between its low and high whatever the level underneath.'
-              : levelMode === 'within'
-                ? 'Runs inside the level underneath — scaled by it.'
-                : `Blended ${draft.blendMode.toLowerCase()} — see Advanced.`
-          }
-        />
-      )}
+      {speed}
+      {amount}
+      {centreQuestion}
+      {levelQuestion}
 
       {main.length > 0 && <div className="flex flex-col gap-2.5">{main.map(paramControl)}</div>}
 
-      {scope.heads && <SpreadSection draft={draft} headCount={scope.headCount} readOnly={readOnly} set={set} />}
+      {spread}
 
       {shape.length > 0 && (
-        <Disclosure
-          label="Shape"
-          summary={shape.map(({ param }) => shapeSummary(param, draft.parameters[param.name] ?? param.defaultValue))}
-        >
+        <Disclosure label="Shape" summary={shapeSummaries}>
           {shape.map(paramControl)}
         </Disclosure>
       )}
 
-      <Disclosure
-        label="Advanced"
-        summary={[
-          `phase ${Math.round((draft.phaseOffset - phaseCycles) * 360)}°`,
-          draft.blendMode.toLowerCase(),
-          ...(draft.runs != null ? [runsWord(draft.runs)] : []),
-          ...(showTiming ? [`timing per ${draft.timing === 'HEAD' ? 'head' : 'cycle'}`] : []),
-        ]}
-      >
-        <SliderRow
-          label="Phase"
-          unit="°"
-          value={draft.phaseOffset - phaseCycles}
-          min={0}
-          max={1}
-          step={0.01}
-          display={(v) => Math.round(v * 360)}
-          fromDisplay={(d) => Math.max(0, Math.min(1, d / 360))}
-          displayMax={360}
-          readOnly={readOnly}
-          onChange={(v, release) => set({ phaseOffset: phaseCycles + v }, release)}
-        />
-        <RunsRow draft={draft} readOnly={readOnly} set={set} />
-        <SelectRow
-          label="Blend"
-          value={draft.blendMode}
-          readOnly={readOnly}
-          options={BLEND_MODE_OPTIONS}
-          onChange={(blendMode) => set({ blendMode })}
-        />
-        {showTiming && (
-          <div className="flex items-center gap-2">
-            <EditorLabel>Timing</EditorLabel>
-            <span className="flex-1" />
-            <ToggleGroup
-              type="single"
-              size="sm"
-              value={draft.timing === 'HEAD' ? 'head' : 'cycle'}
-              disabled={readOnly}
-              onValueChange={(v) => v && set({ timing: v === 'head' ? 'HEAD' : 'CYCLE' })}
-              aria-label="Timing"
-            >
-              <ToggleGroupItem value="cycle" className="px-2 text-xs">
-                Per cycle
-              </ToggleGroupItem>
-              <ToggleGroupItem value="head" className="px-2 text-xs">
-                Per head
-              </ToggleGroupItem>
-            </ToggleGroup>
-          </div>
-        )}
-        {scope.elementMode && (
-          <SelectRow
-            label="Element mode"
-            value={draft.elementMode}
-            readOnly={readOnly}
-            options={ELEMENT_MODE_OPTIONS}
-            onChange={(elementMode) => set({ elementMode })}
-          />
-        )}
-        {scope.elementFilter && (
-          <SelectRow
-            label="Heads"
-            value={draft.elementFilter}
-            readOnly={readOnly}
-            options={ELEMENT_FILTER_OPTIONS}
-            onChange={(elementFilter) => set({ elementFilter })}
-          />
-        )}
+      <Disclosure label="Advanced" summary={[phaseSummary, draft.blendMode.toLowerCase(), ...runsSummary, ...timingSummary]}>
+        {phase}
+        {runs}
+        {blend}
+        {timingRow}
+        {elementRows}
       </Disclosure>
     </>
   )
+}
+
+/** A section's heading in the inspector layout. */
+function SectionLabel({ children }: { children: ReactNode }) {
+  return <span className="text-[11px] font-medium text-muted-foreground">{children}</span>
 }
 
 // ─── Amount, direction and order ──────────────────────────────────────────────────────────────

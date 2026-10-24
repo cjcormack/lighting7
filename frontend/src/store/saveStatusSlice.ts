@@ -38,6 +38,8 @@ export const NON_SAVE_ENDPOINTS: ReadonlySet<string> = new Set([
   // with the value-level references they resolved.
 
   // ── Live output: DMX and effects state, none of it persisted ──
+  // The FX editor's preview: a read the desk answers by sampling, asked on every change it hears.
+  'previewFx',
   'updateChannel',
   'parkChannel',
   'unparkChannel',

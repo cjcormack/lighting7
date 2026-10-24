@@ -39,6 +39,9 @@ export const SILENT_ENDPOINTS: ReadonlySet<string> = new Set([
   'saveBuskRig', // src/store/busk.ts, useBuskRigCommit
   // A refused colour (COLOUR_UNKNOWN from a desk that knows other keys) is toasted by the sheet by code.
   'setPatchColours', // src/components/patches/PatchSheet.tsx
+  // The FX editor asks on every change it hears; one asked between an FX stopping and the list
+  // dropping it is refused (an FX not running), and the next ask answers.
+  'previewFx', // src/components/fxEditor/useFxPreview.ts
   // Update stage's confirm draws a refused dry run (CUE_NOT_LIVE: the cue went off) and toasts a refused send itself.
   'updateCueStage', // src/components/cues/UpdateStageDialog.tsx
   'runFixtureCommand', // src/components/fixtures/FixtureCommandsMenu.tsx — toasts the refusal naming the unit and the command

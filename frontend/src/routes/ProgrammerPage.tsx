@@ -9,6 +9,7 @@ import { ProgrammerActionBar } from '@/components/programmer/ProgrammerActionBar
 import { useColumnVisibility } from '@/components/fixtures-list/ColumnsMenu'
 import { createMarqueeStore, MarqueeStoreContext } from '@/components/fixtures-list/marqueeContext'
 import { createFxSelectionStore, FxSelectionStoreContext } from '@/components/fixtures-list/fxSelection'
+import { createRemaskStore, RemaskStoreContext } from '@/components/fixtures-list/remaskStore'
 import { ProgrammerGrid } from '@/components/programmer/ProgrammerGrid'
 import { LookRowStoreProvider } from '@/components/programmer/LookRowStore'
 import { FocusedPaletteLayerProvider } from '@/components/programmer/FocusedPaletteLayer'
@@ -115,6 +116,8 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   // publishes into it and each ringable cell reads it, so it outlives the table's mount and a
   // selection change re-renders only the cells whose ring moves.
   const [fxSelectionStore] = useState(createFxSelectionStore)
+  // The list's family-pill write, for the FX editor's header to draw the same pill.
+  const [remaskStore] = useState(createRemaskStore)
 
   // Loading and not-found keep the list's shape (CLAUDE.md §List shell): the same header row,
   // the body centred on the spinner or the sentence, so nothing changes shape when the grid
@@ -144,6 +147,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
   return (
     <MarqueeStoreContext.Provider value={marqueeStore}>
       <FxSelectionStoreContext.Provider value={fxSelectionStore}>
+      <RemaskStoreContext.Provider value={remaskStore}>
       <ProgrammerSheetsProvider projectId={projectIdNum}>
         <div className="flex h-full flex-col">
           <ShowHeader
@@ -190,6 +194,7 @@ const ProgrammerView = memo(function ProgrammerView({ projectIdNum }: { projectI
           <ProgrammerBody projectId={projectIdNum} />
         </div>
       </ProgrammerSheetsProvider>
+      </RemaskStoreContext.Provider>
       </FxSelectionStoreContext.Provider>
     </MarqueeStoreContext.Provider>
   )

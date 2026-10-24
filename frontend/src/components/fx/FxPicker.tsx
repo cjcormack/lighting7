@@ -131,8 +131,12 @@ export function FxPicker({
    * under the door's mask: one Local effect over the target, which first takes those heads off every
    * other Local effect of its family. Absent — a focused Look, which a press must leave as the stage
    * was — the effect starts on `/fx/add` alone, for its host to absorb.
+   *
+   * [stack] is the FX editor's *Stack* (FX editor plan D6): the press stops and narrows nothing,
+   * and no blend is sent, so the desk starts it on its family's stacking blend and Amount — a swap
+   * then keeps the blend it started on.
    */
-  press?: { projectId: number; families: readonly AttributeFamily[] | null }
+  press?: { projectId: number; families: readonly AttributeFamily[] | null; stack?: boolean }
   /**
    * Start on some of a multi-head fixture's heads — the sheet's head strip picking exactly the odd,
    * even or a half of them (`elementFilterFor`). Absent: every head.
@@ -340,7 +344,9 @@ export function FxPicker({
       const timing = swappedTiming(runningFx ?? {}, fromEntry, entry, fromUnit === toUnit)
       const speed = timing.cycle === runningFx?.cycle ? {} : { cycle: timing.cycle }
       const direction = timing.direction === (runningFx?.direction ?? 'FORWARD') ? {} : { direction: timing.direction }
-      if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...spec, ...speed, ...direction })) {
+      const { blendMode, ...unblended } = spec
+      const swapped = press?.stack === true ? unblended : { ...unblended, blendMode }
+      if (lightingApi.fx.updateFx(running.fxId, { fxType: entry.name, ...swapped, ...speed, ...direction })) {
         onCurrent?.({ ...running, fxType: entry.name })
       }
       return
@@ -377,6 +383,7 @@ export function FxPicker({
         press != null
           ? pressFx({
               ...request,
+              ...(press.stack === true ? { blendMode: undefined, stack: true } : {}),
               speedMasterUuid: request.speedMasterUuid ?? undefined,
               projectId: press.projectId,
               targets: pressTargetsOf(target),

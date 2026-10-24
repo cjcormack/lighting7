@@ -816,8 +816,8 @@ Release folds to its glyph and the scope line drops the fade.
   `fx/SpreadShape.kt` and the strategies' ranks — Random through `spreadPlans.ts`' `javaRandom` — and
   `spreadShape.test.ts` reads the desk's vector, `src/test/resources/fx/spreadShape.fixture.json`,
   so a dial is the offset the rig runs. The rules are pure, in `fxEditorModel.ts`.
-  The programmer's FX table's *Edit…*, the Values grid's lens chips and a cell popup's Effects band
-  open the same editor in `EditorSurface` (`FxEditorPopover`), and the busk FX tab
+  The Values grid's lens chips and a cell popup's Effects band open the same editor in
+  `EditorSurface` (`FxEditorPopover`), the FX editor draws it in its inspector, and the busk FX tab
   draws it inline under a row — `SplitFxEditor` (`components/fx/SplitFxEditor.tsx`), which the
   popover hosts, so the two cannot split two ways; the copies a split follows (`SplitSession`) are
   the host's to hold, since the tab's editor moves to the first copy's row. It **follows the
@@ -5174,11 +5174,13 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   memo barrier).
 - **Every cell is a read-out** but the Scenery table's state cells (below); a row acts through its own actions and the desk's mutations, the bar
   carrying the same verbs over a selection, a one-row verb disabled over several with the reason.
-  **FX** (`applied/AppliedFxTable.tsx`, Applied FX moved, unchanged columns, bands and verbs):
-  `fx/active`, one row per instance in the desk's order; timing *Seconds* or the instance's master
-  off the live bank, size, direction, runs and *spent* the instance's fields, *held · Blind*
-  `isHeldByBlind`; *Edit…* (`FxEditorPopover`, the split edit with it), *Pause* / *Resume*, *Save
-  as palette…* (`applied/fxRows.ts`' `saveAsPaletteOffer`), *Stop*; ⏎ opens the editor. Its library
+  **FX** is two views, *Selection* (the FX editor, below) and *All* (`applied/AppliedFxTable.tsx`,
+  Applied FX moved, unchanged columns, bands and verbs): `fx/active`, one row per instance in the
+  desk's order; timing *Seconds* or the instance's master off the live bank, size, direction, runs
+  and *spent* the instance's fields, *held · Blind* `isHeldByBlind`; *Edit…*, *Pause* / *Resume*,
+  *Save as palette…* (`applied/fxRows.ts`' `saveAsPaletteOffer`), *Stop*. *Edit…*, ⏎ and the
+  name's double click are the row's press: it selects that FX's heads and opens it in *Selection*,
+  picked (the host's `onOpenFx`). Its library
   row's create verb is **+ FX** (`useProgrammerAddFx`: the bare effect press over the
   selection in Local, into the Look a focused Look layer applies, refused with the reason in Output
   and over a palette), in its own component so only the button hears the selection; under the
@@ -5229,6 +5231,79 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
   the 1180×820 iPad, the dock a strip, ~900 too. On a programmer table the partition chips carry
   `PROGRAMMER_CHIPS_CLASS` (`min-w-32`): with the tabs leading the row, the filter would otherwise
   take the slack and the chips' folded select would run under the create verb.
+
+**The FX editor** (FX editor plan D1–D6, session 4) is the FX tab's *Selection* view
+(`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
+desk's selection while the window follows it, else the programmer list's rows). The graph column is
+a placeholder until session 5 draws the preview's answer. Things that will bite:
+
+- **The view is a per-window fact** (`lib/fxEditorView.ts`, `sessionStorage`, P6): *Selection ·
+  All* (`programmer.fx.view`, Selection the default), the picked FX, the one Solo marks and the
+  folded lanes. Solo is a mark on the card: the graph draws it (D14), the stage never changes.
+  `ProgrammerFxTab` is the tab's host and draws *Selection · All* after the table tabs on row B.
+  *All*'s row press and *Select the heads of a running FX…* select through
+  `fixtures-list/programmerSelectRequest.ts`: `setDeskSelection` while following, the desk's mask
+  kept, else Include's request (`store/includeSelection.ts`), which opens the group or fixture a head
+  sits in and clears the filter — a group sent as its row and its members, since a flat list has no
+  group row, and a cell as its row under its fixture's. The Values grid never unmounts, so the list
+  is always there to hear it. The picked FX is drawn only while it is on the selection: the id
+  outlives a selection and a desk restart.
+- **The list is the desk's apply order, read, never computed** (`fxEditorList.ts`' `fxLanes`):
+  Intensity · Colour · Position · Beam, a lane for each family an FX is in or the selection can
+  take, each FX reaching a selected head (`fxPaintedHeads`) a card. Top first: Local FX, then the
+  programmer's layers' FX, then cue FX (read-only, *on Q12*, opening the cue editor through
+  `OwnerEditor`), then *Underneath* (`useUnderneath`: `programmer.keyStack`'s top value — park, the
+  programmer's slot, the cue's, the base, passing over the programmer's slot while it is blind, as
+  `LayerResolver.fallbackFor` does — for the lane's first FX's attribute on the first selected head
+  carrying it, re-asked on that key's provenance), then *+ FX*. `fx/active` carries no priority,
+  so the tiers are read from each FX's home and the order within a tier from the preview's answer,
+  whose `fx` is the apply order bottom first; one the answer has not reached goes on top of its tier,
+  where a new Local FX lands. A card's family is the answer's, else its attribute's category on a
+  head that carries it. A card names its attribute in words where the lane's family has several
+  (`palettePropertyFor`'s label — *UV*, *Zoom*), and its Direction only where it is not the FX
+  type's own (`newFxDirection`; the sweeps bounce by default). A layer's card has pause and no ×,
+  as the busk Effects tab's pad FX has none: stopping the instance alone, the layer respawns it on
+  its next recook, so the layer is what lets it go.
+- **The subject line is row C's**: the family pill (`SelectionMaskPill`) writes through the
+  programmer list's desk bridge, which the grid's toolbar publishes in `fixtures-list/remaskStore.ts`
+  (`ProgrammerPage` provides it), so a marquee whose columns no longer say the mask drops to its
+  rows as it does from row C; on a window with its own selection the pill is a read-out.
+- **A drag is one `programmer.moveFx`** (`moveLocalFx`, `localMovesFor`): a Local card drops on
+  another Local card of its lane and takes its place, the frame naming the card that ends directly
+  above it; the grip moves it with ↑ / ↓. The desk can only put an FX *below* another, so the one
+  drop that is two frames is to the top of a lane from further down than second — the dragged FX
+  below the top one, then the top one below it. Layer and cue cards have no grip. Nothing is
+  renumbered here: the desk's `fxChanged` refetches the list and re-asks the preview.
+- **+ FX opens `FxPicker` in the inspector on the lane's family**, the press arm. Where the lane
+  holds a Local FX on a selected head it asks ***Replace · Stack***, starting on *Replace*; *Stack*
+  is the picker's `press.stack`, which sends `stack: true` and **no blend**, so the desk starts it on
+  the family's stacking blend (`fx/FxStacking.kt`), and a swap keeps that blend. A focused Look layer
+  takes `+ FX`'s own sheet instead, which absorbs into the Look; Output and a palette layer refuse
+  with the offer's reason, as *+ FX* does everywhere (`useProgrammerAddFx`).
+- **The inspector is the live editor** (`SplitFxEditor`, so the split, the 50 ms floor, Revert,
+  *Update palette* and *Reset to palette* are unchanged) with `layout="inspector"`, which orders
+  `FxFields` as §4.5 does: Cycle · Amount · Direction · Order, **Shape** (every parameter), Spread
+  (the phase dials stay until the ladder replaces them), **Over what's underneath** (the family's
+  question and the raw blend), **Advanced** (Phase, Timing, Runs, element mode and filter). Every
+  other host keeps the old order.
+- **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
+  columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's
+  right half while something is picked or the picker is open; below 760 one column, the inspector
+  under the list.
+- **The preview** (`useFxPreview`, `store/fxPreview.ts`, whose types mirror `routes/fxPreview.kt`)
+  asks `POST /fx/preview` over the selection with the picked FX (else the list's top card), `include:
+  STACK` — the desk folds every FX reaching the selection beside it, and naming more would cut those
+  past the eighth out of the fold. It asks again, the latest ask winning and an older answer dropped,
+  when the selection or the list's FX change (one joining included), on `fxChanged` for an FX in
+  the list (how an `updateFx` this window sent is answered, and how a move lands; a `removed` one is
+  left to the list), on a tempo move on a master in the answer's `clock`, and on an entry or
+  provenance move on a row's key for an attribute it drew. Moves arriving together coalesce into one
+  ask a microtask later, and **one ask is in flight at a time** with at most one waiting behind it,
+  sent with whatever is asked by then — a fader dragged under a drawn row moves its key every frame,
+  and the desk samples the whole stack each time. `previewFx` is a mutation, so it is in
+  `NON_SAVE_ENDPOINTS` (it would flash *Saving…*) and `SILENT_ENDPOINTS` (a refused ask is followed
+  by one that answers). Nothing decodes the planes yet; the list reads only the apply order and the
+  held-back reasons.
 
 **The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an effect
 drives carries a violet chip — the wave and the division (`lensDivision`: `½` for a fraction of a
