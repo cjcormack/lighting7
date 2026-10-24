@@ -486,21 +486,15 @@ private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
     this.parts = dto.groups
 }
 
-/** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
+/**
+ * Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. Each
+ * recorded FX deletes the child [matchStoredChildren] pairs it with, so of two stacked FX of one
+ * type on one head that Include brought back, the one still running is the one removed.
+ */
 private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
-    var removed = 0
-    for (effect in recording.adHocEffects) {
-        val match = cue.adHocEffects.firstOrNull {
-            !it.isTimed &&
-                it.targetType == effect.targetType &&
-                it.targetKey == effect.targetKey &&
-                it.fxType == effect.effectType &&
-                it.attribute == effect.propertyName
-        } ?: continue
-        match.delete()
-        removed++
-    }
-    return removed
+    val matches = matchStoredChildren(cue.adHocEffectsInOrder(), recording.adHocEffects).filterNotNull()
+    matches.forEach { it.delete() }
+    return matches.size
 }
 
 /**
