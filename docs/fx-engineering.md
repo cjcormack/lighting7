@@ -973,7 +973,11 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
   of a home's FX (Record's Merge and Replace into a cue, Update) gives the FX it writes, new ones
   included, the places of the stored ones it wrote over, in that order, and puts any extra on top
   (`renumberInApplyOrder`): an FX it did not write keeps its place in the list, though a written one
-  may move past it. A write that moves no FX renumbers nothing, gaps and ties included. A writer that takes an explicit list — the
+  may move past it. A write that moves no FX renumbers nothing, gaps and ties included. Merge and
+  Update into a cue write an FX Include brought back onto the child it came from (its origin's
+  uuid, whatever its type is now), and any other FX onto the first child of its target, type and
+  attribute that no other FX took; Replace pairs by that key alone, in order. Either way two stacked
+  FX of one type on one head stay two children, and a second Include does not run a child twice. A writer that takes an explicit list — the
   cue and Look bodies, MCP's `create_look` and `create_cue` — stores it in the list's order
   (`inListOrder`). The spawners give the order back: a cue's GO and loose holds, a Look press,
   Include, copy and duplicate all read a home's FX by `sortOrder`, then id, and add them in that

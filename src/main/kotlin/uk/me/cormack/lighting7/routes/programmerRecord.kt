@@ -360,23 +360,17 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     // unreachable: `recording.presetApplications` had been `emptyList()` since `captureCurrentState`
     // moved to keying on `lookId`, so it iterated nothing. Gone with `cue_preset_applications`.
     val existingAdHoc = cue.adHocEffectsInOrder()
+    // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which* effect this
+    // is; everything else about it — parameters, blend, phase, distribution — is what the operator
+    // may have just changed in the programmer. Skipping on a match would make Update silently
+    // unable to persist an FX edit: Include a cue, retune the effect's speed, press Update, and the
+    // cue keeps the old speed while reporting success. Matches the property-assignment branch of
+    // MERGE, which upserts.
+    val matches = matchStoredChildren(existingAdHoc, recording.adHocEffects)
     // Every child the recording names, in its (apply) order, and those of them nothing else changed.
     val recorded = ArrayList<DaoCueAdHocEffect>()
     val unchanged = HashSet<DaoCueAdHocEffect>()
-    for (effect in recording.adHocEffects) {
-        // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which*
-        // effect this is; everything else about it — parameters, blend, phase, distribution —
-        // is what the operator may have just changed in the programmer. Skipping on a match
-        // would make Update silently unable to persist an FX edit: Include a cue, retune the
-        // effect's speed, press Update, and the cue keeps the old speed while reporting
-        // success. Matches the property-assignment branch of MERGE, which upserts.
-        val match = existingAdHoc.firstOrNull {
-            !it.isTimed &&
-                it.targetType == effect.targetType &&
-                it.targetKey == effect.targetKey &&
-                it.fxType == effect.effectType &&
-                it.attribute == effect.propertyName
-        }
+    for ((effect, match) in recording.adHocEffects.zip(matches)) {
         if (match != null) {
             if (!match.matches(effect)) {
                 match.applyFrom(effect)
@@ -395,6 +389,31 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
         count += renumberInApplyOrder(existingAdHoc, recorded, DaoCueAdHocEffect::sortOrder).count { it in unchanged }
     }
     return count
+}
+
+/**
+ * The stored child each of [recorded] writes onto, or null for a new one. One that Include brought
+ * back (its `uuid` names the child) takes that child, whatever its type is now; the rest take, in
+ * order, the first child of their target, type and property that nothing else took. So two stacked
+ * FX of one type on one head stay two children, each written back onto its own.
+ */
+private fun matchStoredChildren(
+    stored: List<DaoCueAdHocEffect>,
+    recorded: List<CueAdHocEffectDto>,
+): List<DaoCueAdHocEffect?> {
+    fun DaoCueAdHocEffect.drives(effect: CueAdHocEffectDto) =
+        !isTimed && targetType == effect.targetType && targetKey == effect.targetKey && attribute == effect.propertyName
+    fun DaoCueAdHocEffect.isChildOf(effect: CueAdHocEffectDto) = drives(effect) && fxType == effect.effectType
+    val byUuid = stored.associateBy { it.uuid.toString() }
+    val taken = HashSet<DaoCueAdHocEffect>()
+    // Origins first, so an FX matched by key alone cannot take the child another FX came from. Its
+    // type need not match: one swapped in place is still that child.
+    val byOrigin = recorded.map { effect ->
+        effect.uuid?.let(byUuid::get)?.takeIf { it.drives(effect) && taken.add(it) }
+    }
+    return recorded.zip(byOrigin) { effect, origin ->
+        origin ?: stored.firstOrNull { it.isChildOf(effect) && it !in taken }?.also { taken += it }
+    }
 }
 
 /**
@@ -419,7 +438,8 @@ private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
 
 /** True when the stored child already says exactly what [dto] says (ignoring cue-owned timing). */
 private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
-    family == dto.category &&
+    fxType == dto.effectType &&
+        family == dto.category &&
         cycle == dto.beatDivision &&
         blendMode == dto.blendMode &&
         order == dto.distribution &&
@@ -435,8 +455,12 @@ private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
         direction == dto.direction &&
         runs == dto.nShot
 
-/** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
+/**
+ * Copy [dto]'s tunable fields over the stored child, leaving its target, property and timing alone.
+ * Its type too, which differs only for an FX Include brought back and swapped since.
+ */
 private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
+    fxType = dto.effectType
     family = dto.category
     cycle = dto.beatDivision
     blendMode = dto.blendMode
