@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary, TemplateTarget } from '@/api/templatesApi'
+import type { PaletteSummary, PaletteTarget } from '@/api/palettesApi'
 import type { PressPair } from '@/hooks/usePress'
 
 /**
@@ -15,7 +15,7 @@ import type { PressPair } from '@/hooks/usePress'
  * the three forms come from the cell editor's media queries. The press itself is `usePress`'s
  * (`usePress.test.tsx`).
  */
-let library: TemplateSummary[] = []
+let library: PaletteSummary[] = []
 let looks: LookSummary[] = []
 
 const press = vi.fn(async () => 'on' as const)
@@ -24,7 +24,7 @@ const pairs: PressPair[] = []
 const focus = vi.hoisted(() => ({
   look: null as null | { projectId: number; lookId: number; lookName: string },
   /** The cue editor, where a test says so: presses write the cue (`PressCue`). */
-  cue: null as null | { cueLabel: string; layered: ReadonlySet<string>; pickEffect: (effect: unknown, replacing: unknown) => Promise<boolean> },
+  cue: null as null | { cueLabel: string; layered: ReadonlySet<string>; pickFx: (effect: unknown, replacing: unknown) => Promise<boolean> },
 }))
 vi.mock('@/hooks/usePress', () => ({
   usePress: (_projectId: number, pair: PressPair) => {
@@ -43,17 +43,17 @@ vi.mock('@/hooks/usePress', () => ({
   usePressInCue: () => focus.cue,
 }))
 
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: library }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: library }),
 }))
 const absorb = vi.hoisted(() => vi.fn((_args: unknown) => ({ unwrap: () => Promise.resolve() })))
-vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }), useAbsorbLookEffectsMutation: () => [absorb] }))
-const stopEffect = vi.hoisted(() => vi.fn())
-vi.mock('@/components/fx/useEffectControls', () => ({ useStopEffect: () => stopEffect }))
+vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: looks }), useAbsorbLookFxMutation: () => [absorb] }))
+const stopFx = vi.hoisted(() => vi.fn())
+vi.mock('@/components/fx/useFxControls', () => ({ useStopFx: () => stopFx }))
 const fxWire = vi.hoisted(() => ({ active: [] as unknown[] }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: fxWire.active }),
-  useEffectLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: fxWire.active }),
+  useFxLibraryQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
@@ -71,7 +71,7 @@ vi.mock('@/components/fx/FxPicker', () => ({
   FxPicker: (props: { onCurrent: (c: unknown) => void }) => {
     fxPicker(props)
     return (
-      <button type="button" data-fx-picker onClick={() => props.onCurrent({ effectId: 77, effectType: 'Pulse', propertyName: 'dimmer' })}>
+      <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', propertyName: 'dimmer' })}>
         start
       </button>
     )
@@ -96,14 +96,14 @@ vi.mock('react-router', async (importOriginal) => ({
 }))
 
 // Counted, not stubbed: the real ordering still runs, but the picker must not call it while shut.
-const recentTemplatesSpy = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/templateRecents', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/lib/templateRecents')>()
+const recentPalettesSpy = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/paletteRecents', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/paletteRecents')>()
   return {
     ...real,
-    recentTemplates: (...args: Parameters<typeof real.recentTemplates>) => {
-      recentTemplatesSpy()
-      return real.recentTemplates(...args)
+    recentPalettes: (...args: Parameters<typeof real.recentPalettes>) => {
+      recentPalettesSpy()
+      return real.recentPalettes(...args)
     },
   }
 })
@@ -112,8 +112,8 @@ vi.mock('@/lib/templateRecents', async (importOriginal) => {
 vi.mock('@/store/speedMasters', () => ({ useSpeedMasterDisplay: () => undefined }))
 
 const newSheetProps = vi.fn()
-vi.mock('@/components/programmer/NewTemplateFromSelectionSheet', () => ({
-  NewTemplateFromSelectionSheet: (props: { open: boolean }) => {
+vi.mock('@/components/programmer/NewPaletteFromSelectionSheet', () => ({
+  NewPaletteFromSelectionSheet: (props: { open: boolean }) => {
     newSheetProps(props)
     return props.open ? <div data-testid="new-sheet" /> : null
   },
@@ -127,9 +127,9 @@ vi.mock('@/components/editor/EditorSurface', () => ({
 
 const { ApplyPicker } = await import('./ApplyPicker')
 
-const HEX_1: TemplateTarget[] = [{ type: 'fixture', key: 'hex-1' }]
+const HEX_1: PaletteTarget[] = [{ type: 'fixture', key: 'hex-1' }]
 
-function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
+function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
     id: 1,
     uuid: 'u1',
@@ -142,7 +142,7 @@ function template(over: Partial<TemplateSummary> = {}): TemplateSummary {
     requiredEmitters: [],
     lastPressedAt: null,
     rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' }],
-    effect: null,
+    fx: null,
     layerCount: 0,
     buskPageCount: 0,
     ...over,
@@ -157,9 +157,9 @@ function look(over: Partial<LookSummary> = {}): LookSummary {
     notes: null,
     families: ['COLOUR', 'INTENSITY'],
     rowCount: 4,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 4,
-    hasDeferredEffects: false,
+    hasDeferredFx: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,
@@ -181,14 +181,14 @@ const EFFECT = template({
   id: 4,
   uuid: 'u4',
   name: 'Amber Breathe',
-  kind: 'effect',
+  kind: 'fx',
   rows: [],
-  effect: {
-    effectType: 'ColourWave',
-    category: 'colour',
-    beatDivision: 0.5,
+  fx: {
+    fxType: 'ColourWave',
+    family: 'colour',
+    cycle: 0.5,
     blendMode: 'OVERRIDE',
-    distribution: 'NORMAL',
+    order: 'NORMAL',
     parameters: {},
     timingSource: 'BEAT',
   },
@@ -248,14 +248,14 @@ beforeEach(() => {
   pairs.length = 0
   newSheetProps.mockClear()
   form.current = 'popover'
-  recentTemplatesSpy.mockClear()
+  recentPalettesSpy.mockClear()
   library = [PRESSED, GENERIC, PER_FIXTURE, EFFECT, WHITE_KEY, FULL, WIDE, SOFT]
   looks = []
   focus.look = null
   focus.cue = null
   fxPicker.mockClear()
   absorb.mockClear()
-  stopEffect.mockClear()
+  stopFx.mockClear()
   fxWire.active = []
 })
 afterEach(cleanup)
@@ -268,7 +268,7 @@ describe('ApplyPicker — palettes', () => {
     // effect palette holds no rows at all, so each gets a section that says what it is.
     expect(sectionPads('all')).toEqual(['Amber Key', 'Blue Wash'])
     expect(sectionPads('per-fixture')).toEqual(['Front Focus'])
-    expect(sectionPads('effects')).toEqual(['Amber Breathe'])
+    expect(sectionPads('fx')).toEqual(['Amber Breathe'])
   })
 
   it('offers only what the heads can take: the family and every emitter a palette names', () => {
@@ -301,7 +301,7 @@ describe('ApplyPicker — palettes', () => {
     await act(async () => {
       fireEvent.click(outside)
     })
-    expect(press).toHaveBeenCalledWith({ kind: 'template', template: GENERIC }, 'press')
+    expect(press).toHaveBeenCalledWith({ kind: 'palette', palette: GENERIC }, 'press')
   })
 
   it('filters every section from the one search field', () => {
@@ -309,7 +309,7 @@ describe('ApplyPicker — palettes', () => {
     fireEvent.change(within(panel()).getByLabelText('Search palettes'), { target: { value: 'amber' } })
     expect(sectionPads('recent')).toEqual(['Amber Key'])
     expect(sectionPads('all')).toEqual(['Amber Key'])
-    expect(sectionPads('effects')).toEqual(['Amber Breathe'])
+    expect(sectionPads('fx')).toEqual(['Amber Breathe'])
     expect(sectionPads('per-fixture')).toEqual([])
   })
 
@@ -324,7 +324,7 @@ describe('ApplyPicker — palettes', () => {
     await act(async () => {
       fireEvent.click(panel().querySelector('[data-picker-section="all"] [data-picker-palette="2"]')!)
     })
-    expect(press).toHaveBeenCalledWith({ kind: 'template', template: GENERIC }, 'press')
+    expect(press).toHaveBeenCalledWith({ kind: 'palette', palette: GENERIC }, 'press')
     expect(pairs.at(-1)).toBe(pair)
     expect(panel()).toBeInTheDocument()
   })
@@ -334,14 +334,14 @@ describe('ApplyPicker — palettes', () => {
     await act(async () => {
       fireEvent.click(panel().querySelector('[data-picker-section="all"] [data-picker-palette="2"]')!, { altKey: true })
     })
-    expect(press).toHaveBeenCalledWith({ kind: 'template', template: GENERIC }, 'asValues')
+    expect(press).toHaveBeenCalledWith({ kind: 'palette', palette: GENERIC }, 'asValues')
   })
 
   it('offers the family segments where the heads take more than one', () => {
     render(picker())
     fireEvent.click(within(panel()).getByText('Position'))
     expect(sectionPads('per-fixture')).toEqual(['Front Focus'])
-    expect(sectionPads('effects')).toEqual([])
+    expect(sectionPads('fx')).toEqual([])
   })
 
   it('is a sheet on a phone, a popover at a desk, and a side sheet at a desk with no anchor', () => {
@@ -369,10 +369,10 @@ describe('ApplyPicker — palettes', () => {
     for (let frame = 0; frame < 5; frame++) {
       rerender(picker({ open: false, pair: { targets: [...HEX_1], families: null } }))
     }
-    expect(recentTemplatesSpy).not.toHaveBeenCalled()
+    expect(recentPalettesSpy).not.toHaveBeenCalled()
 
     rerender(picker({ open: true }))
-    expect(recentTemplatesSpy).toHaveBeenCalled()
+    expect(recentPalettesSpy).toHaveBeenCalled()
     expect(sectionPads('recent')).toEqual(['Amber Key'])
   })
 
@@ -418,7 +418,7 @@ describe('ApplyPicker — palettes', () => {
 
 describe('ApplyPicker — Looks', () => {
   const OWN = look({ id: 21, name: 'Warm wash' })
-  const DEFERRED = look({ id: 22, uuid: 'l22', name: 'Chase', families: ['INTENSITY'], effectCount: 1, hasDeferredEffects: true })
+  const DEFERRED = look({ id: 22, uuid: 'l22', name: 'Chase', families: ['INTENSITY'], fxCount: 1, hasDeferredFx: true })
   const MOVES = look({ id: 23, uuid: 'l23', name: 'Sweep', families: ['POSITION'] })
 
   beforeEach(() => {
@@ -469,7 +469,7 @@ describe('ApplyPicker — effects', () => {
   const MASKED: PressPair = { targets: HEX_1, families: ['COLOUR'] }
 
   it('hands FxPicker the bare effect press with the door’s mask, on the cell’s property', () => {
-    render(picker({ library: 'effects', pair: MASKED, family: 'COLOUR', property: 'uv' }))
+    render(picker({ library: 'fx', pair: MASKED, family: 'COLOUR', property: 'uv' }))
     expect(fxPicker).toHaveBeenLastCalledWith(
       expect.objectContaining({
         press: { projectId: 1, families: ['COLOUR'] },
@@ -482,7 +482,7 @@ describe('ApplyPicker — effects', () => {
   })
 
   it('sizes the effects to their list, where the palettes hold their height', () => {
-    render(picker({ library: 'effects', pair: MASKED }))
+    render(picker({ library: 'fx', pair: MASKED }))
     expect(panel().className).not.toContain('h-[540px]')
     cleanup()
     render(picker())
@@ -499,74 +499,74 @@ describe('ApplyPicker — effects', () => {
 
   it('in a focused Look starts on /fx/add and absorbs the effect it ends on, once, when it closes', () => {
     focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
-    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
     expect(fxPicker).toHaveBeenLastCalledWith(expect.objectContaining({ press: undefined }))
     fireEvent.click(panel().querySelector('[data-fx-picker]')!)
-    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    rerender(picker({ library: 'fx', pair: MASKED, open: false }))
     expect(absorb).toHaveBeenCalledTimes(1)
-    expect(absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, effectIds: [77] })
+    expect(absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, fxIds: [77] })
     cleanup()
     expect(absorb).toHaveBeenCalledTimes(1)
   })
 
   it('stops the auditioned effect from its editor’s ×, and then absorbs nothing', () => {
     focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
-    fxWire.active = [{ id: 77, effectType: 'Pulse', propertyName: 'dimmer' }]
-    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    fxWire.active = [{ id: 77, fxType: 'Pulse', propertyName: 'dimmer' }]
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
     fireEvent.click(panel().querySelector('[data-fx-picker]')!)
     fxPicker.mock.lastCall![0].onEdit()
-    rerender(picker({ library: 'effects', pair: MASKED }))
+    rerender(picker({ library: 'fx', pair: MASKED }))
     fireEvent.click(within(panel()).getByRole('button', { name: 'stop it' }))
-    expect(stopEffect).toHaveBeenCalledWith(expect.objectContaining({ id: 77 }))
-    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    expect(stopFx).toHaveBeenCalledWith(expect.objectContaining({ id: 77 }))
+    rerender(picker({ library: 'fx', pair: MASKED, open: false }))
     expect(absorb).not.toHaveBeenCalled()
   })
 
   it('in the cue editor stores the bare effect in draft — no press, no Edit — and a second tap swaps it', () => {
-    const pickEffect = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(true))
-    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickEffect }
-    const { rerender } = render(picker({ library: 'effects', pair: MASKED }))
+    const pickFx = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(true))
+    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickFx }
+    const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
     expect(panel().textContent).toContain('stored in Q4')
     const first = fxPicker.mock.lastCall![0]
     expect(first.press).toBeUndefined()
     expect(first.onEdit).toBeUndefined()
-    const pick = { effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pick = { fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
     act(() => first.draft.onPick(pick))
-    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ targetType: 'fixture', targetKey: 'hex-1', effectType: 'Pulse' }), null)
+    expect(pickFx).toHaveBeenLastCalledWith(expect.objectContaining({ targetType: 'fixture', targetKey: 'hex-1', fxType: 'Pulse' }), null)
     const second = fxPicker.mock.lastCall![0]
-    expect(second.draft.current).toEqual({ effectType: 'Pulse', propertyName: 'dimmer' })
-    act(() => second.draft.onPick({ ...pick, effectType: 'SineWave' }))
-    expect(pickEffect).toHaveBeenLastCalledWith(
-      expect.objectContaining({ effectType: 'SineWave' }),
-      expect.objectContaining({ effectType: 'Pulse', targetKey: 'hex-1' }),
+    expect(second.draft.current).toEqual({ fxType: 'Pulse', propertyName: 'dimmer' })
+    act(() => second.draft.onPick({ ...pick, fxType: 'SineWave' }))
+    expect(pickFx).toHaveBeenLastCalledWith(
+      expect.objectContaining({ fxType: 'SineWave' }),
+      expect.objectContaining({ fxType: 'Pulse', targetKey: 'hex-1' }),
     )
     expect(absorb).not.toHaveBeenCalled()
 
     // A tap over another selection adds afresh rather than swapping the effect on the first.
-    rerender(picker({ library: 'effects', pair: { ...MASKED, targets: [{ type: 'fixture', key: 'hex-2' }] } }))
+    rerender(picker({ library: 'fx', pair: { ...MASKED, targets: [{ type: 'fixture', key: 'hex-2' }] } }))
     expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
     act(() => fxPicker.mock.lastCall![0].draft.onPick(pick))
-    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ targetKey: 'hex-2' }), null)
+    expect(pickFx).toHaveBeenLastCalledWith(expect.objectContaining({ targetKey: 'hex-2' }), null)
   })
 
   it('in the cue editor, an append that did not land is not swapped by the next tap', async () => {
-    const pickEffect = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(false))
-    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickEffect }
-    render(picker({ library: 'effects', pair: MASKED }))
-    const pick = { effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer', beatDivision: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pickFx = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(false))
+    focus.cue = { cueLabel: 'Q4', layered: new Set(), pickFx }
+    render(picker({ library: 'fx', pair: MASKED }))
+    const pick = { fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick(pick))
     expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
-    await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, effectType: 'SineWave' }))
-    expect(pickEffect).toHaveBeenLastCalledWith(expect.objectContaining({ effectType: 'SineWave' }), null)
+    await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, fxType: 'SineWave' }))
+    expect(pickFx).toHaveBeenLastCalledWith(expect.objectContaining({ fxType: 'SineWave' }), null)
   })
 
   it('absorbs nothing on the programmer, or when nothing was started', () => {
-    const { rerender, unmount } = render(picker({ library: 'effects', pair: MASKED }))
+    const { rerender, unmount } = render(picker({ library: 'fx', pair: MASKED }))
     fireEvent.click(panel().querySelector('[data-fx-picker]')!)
-    rerender(picker({ library: 'effects', pair: MASKED, open: false }))
+    rerender(picker({ library: 'fx', pair: MASKED, open: false }))
     unmount()
     focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
-    render(picker({ library: 'effects', pair: MASKED })).unmount()
+    render(picker({ library: 'fx', pair: MASKED })).unmount()
     expect(absorb).not.toHaveBeenCalled()
   })
 })

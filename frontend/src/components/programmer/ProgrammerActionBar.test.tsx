@@ -28,7 +28,7 @@ vi.mock('@/store/programmer', () => ({
   programmerClearAll: (...a: unknown[]) => programmerClearAll(...a),
   programmerSetBlind: (...a: unknown[]) => programmerSetBlind(...a),
 }))
-vi.mock('@/store/fixtureFx', () => ({ useActiveEffectsQuery: () => ({ data: effects }) }))
+vi.mock('@/store/fixtureFx', () => ({ useActiveFxQuery: () => ({ data: effects }) }))
 const desk = { connected: true }
 vi.mock('@/store/status', () => ({ useIsDeskConnected: () => desk.connected }))
 vi.mock('@/store/cueStacks', () => ({

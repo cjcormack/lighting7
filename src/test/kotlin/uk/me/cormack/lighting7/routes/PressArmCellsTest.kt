@@ -27,7 +27,7 @@ class PressArmCellsTest : RouteIntegrationTest() {
 
     private val uuid: UUID = UUID.fromString("7b2d0c1e-4a5f-4e1b-9c3d-0f6a8e2b1d47")
     /** A palette's layer: a Look's is pressed whole, so the per-head rule is a palette's. */
-    private val source = LayerSource.template(41, uuid, "Bar palette")
+    private val source = LayerSource.palette(41, uuid, "Bar palette")
 
     private fun seedBar() {
         LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-1", 1)

@@ -27,7 +27,7 @@ internal fun JdbcTransaction.dropDeferredLookEffects() {
 
     // Left joins, so an effect whose Look or project has gone (foreign keys are off) is logged and
     // deleted too.
-    data class Dropped(val lookId: Int, val project: String?, val look: String?, val effectType: String)
+    data class Dropped(val lookId: Int, val project: String?, val look: String?, val fxType: String)
     val dropped = ArrayList<Dropped>()
     exec(
         """
@@ -44,7 +44,7 @@ internal fun JdbcTransaction.dropDeferredLookEffects() {
         logger.warn(
             "Look '{}' in '{}': dropped {} that named no target of its own ({})",
             effects.first().look ?: "#$lookId, deleted", effects.first().project ?: "no project",
-            if (effects.size == 1) "an effect" else "${effects.size} effects", effects.joinToString { it.effectType },
+            if (effects.size == 1) "an effect" else "${effects.size} effects", effects.joinToString { it.fxType },
         )
     }
     exec("PRAGMA user_version = $DEFERRED_LOOK_EFFECTS_DROPPED_USER_VERSION", explicitStatementType = StatementType.OTHER)

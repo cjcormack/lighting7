@@ -1,9 +1,9 @@
 /*---
 id: ColourFlicker
 name: Colour Flicker
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [rgbColour]
 parameters:
   - name: baseColour

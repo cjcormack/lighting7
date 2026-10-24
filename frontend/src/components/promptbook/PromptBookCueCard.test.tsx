@@ -25,7 +25,7 @@ afterEach(cleanup)
 
 const noop = () => {}
 const entry: CueStackCueRow = {
-  id: 2, entryId: 102, name: 'Moon rise', sortOrder: 2, layerCount: 0, adHocEffectCount: 0, autoAdvance: false,
+  id: 2, entryId: 102, name: 'Moon rise', sortOrder: 2, layerCount: 0, adHocFxCount: 0, autoAdvance: false,
   autoAdvanceDelayMs: null, fadeDurationMs: 3000, fadeCurve: 'LINEAR', cueNumber: '2', cueNumberAuto: false,
   notes: null, cueType: 'STANDARD',
 }

@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.fx.group.DistributionStrategy
+import uk.me.cormack.lighting7.fx.group.SpreadOrder
+import uk.me.cormack.lighting7.models.Timing
 import uk.me.cormack.lighting7.sync.LegacyNames
 import kotlin.math.PI
 import kotlin.math.abs
@@ -21,7 +22,7 @@ class LegacyFxOutputTest {
 
     private companion object {
         val registry: FxRegistry by lazy {
-            FxRegistry().also { FxFileLoader(FxScriptCompiler()).loadBuiltInEffects(it) }
+            FxRegistry().also { FxFileLoader(FxScriptCompiler()).loadBuiltInFx(it) }
         }
         const val HEADS = 6
     }
@@ -30,28 +31,28 @@ class LegacyFxOutputTest {
     private fun pingPong(phase: Double) = if (phase > 0.5) 1.0 - (phase - 0.5) * 2 else phase * 2
 
     /** [today] as it ran with `pingPong` on: today's body over the remapped phase. */
-    private fun withPingPong(today: Effect) = object : Effect {
+    private fun withPingPong(today: Fx) = object : Fx {
         override val name = "old ${today.name}"
         override val outputType = today.outputType
-        override fun calculate(phase: Double, context: EffectContext) = today.calculate(pingPong(phase), context)
+        override fun calculate(phase: Double, context: FxContext) = today.calculate(pingPong(phase), context)
     }
 
     /** Breathe's body, `min + (max − min) sin²(πφ)`. */
-    private fun breathe(min: Int, max: Int) = object : Effect {
+    private fun breathe(min: Int, max: Int) = object : Fx {
         override val name = "Breathe"
         override val outputType = FxOutputType.SLIDER
-        override fun calculate(phase: Double, context: EffectContext): FxOutput {
+        override fun calculate(phase: Double, context: FxContext): FxOutput {
             val s = sin(phase * PI)
             return FxOutput.Slider((min + (max - min) * s * s).toInt().coerceIn(0, 255).toUByte())
         }
     }
 
     private fun dynamicsOf(fx: LegacyNames.StoredFx) = FxDynamics(
-        stepTiming = false,
+        timing = Timing.CYCLE,
         phaseOffset = fx.phaseOffset,
-        distributionStrategy = DistributionStrategy.byName(fx.order)!!,
-        direction = EffectDirection.byName(fx.direction)!!,
-        nShot = fx.runs,
+        order = SpreadOrder.byName(fx.order)!!,
+        direction = FxDirection.byName(fx.direction)!!,
+        runs = fx.runs,
         spread = fx.spread,
     )
 
@@ -64,10 +65,10 @@ class LegacyFxOutputTest {
     )
 
     /** Every head's output of [effect] on [fx]'s fields at every tick in [ticks], null where it holds. */
-    private fun run(effect: Effect, fx: LegacyNames.StoredFx, heads: Int, ticks: LongRange): List<List<FxOutput?>> {
+    private fun run(effect: Fx, fx: LegacyNames.StoredFx, heads: Int, ticks: LongRange): List<List<FxOutput?>> {
         val dynamics = dynamicsOf(fx)
-        val instance = FxInstance(effect, SliderTarget("front", "dimmer"), FxTiming(beatDivision = fx.cycle))
-        val plan = DistributionPlan.forElements(dynamics.distributionStrategy, heads, SpreadShape(spread = dynamics.spread))
+        val instance = FxInstance(effect, SliderTarget("front", "dimmer"), FxTiming(cycle = fx.cycle))
+        val plan = DistributionPlan.forElements(dynamics.order, heads, SpreadShape(spread = dynamics.spread))
         return ticks.map { n ->
             (0 until heads).map { i ->
                 val phase = instance.calculatePhaseForMember(tick(n), heads, dynamics, plan.offsets[i])
@@ -106,7 +107,7 @@ class LegacyFxOutputTest {
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 2 * 3).toLong()
         assertSameOutput(
             run(breathe(20, 230), stored, HEADS, ticks),
-            run(registry.createEffect(rewritten.fxType, rewritten.parameters), rewritten, HEADS, ticks),
+            run(registry.createFx(rewritten.fxType, rewritten.parameters), rewritten, HEADS, ticks),
             "Breathe",
         )
     }
@@ -120,7 +121,7 @@ class LegacyFxOutputTest {
         val stored = LegacyNames.StoredFx("Sweep", "position", 4.0, "NORMAL", 0.3, params, "FORWARD", 2, 0.75)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
         assertEquals("BOUNCE", rewritten.direction)
-        val today = registry.createEffect("Sweep", rewritten.parameters)
+        val today = registry.createFx("Sweep", rewritten.parameters)
         // Past both runs and the stagger, so the hold after the last run is compared too.
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 4 * 4).toLong()
         assertSameOutput(run(withPingPong(today), stored, HEADS, ticks), run(today, rewritten, HEADS, ticks), "Sweep")
@@ -131,7 +132,7 @@ class LegacyFxOutputTest {
         val params = mapOf("fromColour" to "#ff0000", "toColour" to "#0000ff", "pingPong" to "true")
         val stored = LegacyNames.StoredFx("ColourFade", "colour", 1.0, "REVERSE", 0.8, params, "BACKWARD", null, 1.0)
         val rewritten = LegacyNames.rewriteFx(stored, LegacyNames.Context({ null }, { null }, absentPingPongIsOn = true))!!.fx
-        val today = registry.createEffect("ColourFade", rewritten.parameters)
+        val today = registry.createFx("ColourFade", rewritten.parameters)
         val ticks = 0L until (MasterClock.TICKS_PER_BEAT * 5).toLong()
         assertSameOutput(run(withPingPong(today), stored, HEADS, ticks), run(today, rewritten, HEADS, ticks), "ColourFade")
     }

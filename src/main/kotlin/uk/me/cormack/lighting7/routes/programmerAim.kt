@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
@@ -131,7 +131,7 @@ internal data class AimRequest(
 @Serializable
 internal data class AimResponse(
     val written: List<AimWriteDto> = emptyList(),
-    val skipped: List<SpreadSkipDto> = emptyList(),
+    val skipped: List<FanSkipDto> = emptyList(),
     /** `JOG`: where each head started — the gesture's anchor a later request sends back. */
     val base: List<AimBaseDto> = emptyList(),
 )
@@ -193,7 +193,7 @@ internal fun aimIntoProgrammer(
     if (fadeMs != null && fadeMs < 0) return AimOutcome.Invalid("fadeMs must not be negative")
 
     val fixtures = state.show.fixtures
-    val skipped = ArrayList<SpreadSkipDto>()
+    val skipped = ArrayList<FanSkipDto>()
     val heads = headsOf(state, targets, skipped)
 
     val placements = aimPlacements(state, project, heads.keys)
@@ -206,13 +206,13 @@ internal fun aimIntoProgrammer(
     for ((key, head) in heads) {
         val target = CueTargetDto(TargetRef.Fixture.TYPE, key)
         when (val aim = aimHead(head, placements[key], point)) {
-            is HeadAim.Skip -> skipped += SpreadSkipDto(target, aim.reason)
+            is HeadAim.Skip -> skipped += FanSkipDto(target, aim.reason)
             is HeadAim.Aimed -> {
                 val sourceGroup = hints[key]
                 writes += ProgrammerWriter.PropertyWrite(head, "position", aim.position, sourceGroup)
                 aim.fines.forEach { (name, value) -> writes += ProgrammerWriter.PropertyWrite(head, name, value, sourceGroup) }
                 written += AimWriteDto(target, aim.position.serialize(), roundTenth(aim.panDeg), roundTenth(aim.tiltDeg))
-                TemplateResolver.centreIntentOf(head, aim.position)?.let { paletteValues[key] = it.serialize() }
+                PaletteResolver.centreIntentOf(head, aim.position)?.let { paletteValues[key] = it.serialize() }
             }
         }
     }
@@ -249,7 +249,7 @@ internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRe
     val planeZ = request.planeZ ?: JOG_DEFAULT_PLANE_Z
 
     val fixtures = state.show.fixtures
-    val skipped = ArrayList<SpreadSkipDto>()
+    val skipped = ArrayList<FanSkipDto>()
     val heads = headsOf(state, request.targets, skipped)
     val placements = aimPlacements(state, project, heads.keys)
     val hints = groupHintsForTargets(
@@ -265,7 +265,7 @@ internal fun jogIntoProgrammer(state: State, project: DaoProject, request: AimRe
         val jog = jogHead(state, head, placements[key], given[key], readLocal = request.write, near[key], dx, dy, planeZ)
         jog.base?.let { bases += AimBaseDto(target, it.position.serialize(), it.panFine?.toInt(), it.tiltFine?.toInt()) }
         when (jog) {
-            is HeadJog.Skip -> skipped += SpreadSkipDto(target, jog.reason)
+            is HeadJog.Skip -> skipped += FanSkipDto(target, jog.reason)
             is HeadJog.Moved -> {
                 writes += jog.propertyWrites(head, hints[key])
                 written += AimWriteDto(target, jog.position.serialize(), roundTenth(jog.panDeg), roundTenth(jog.tiltDeg))
@@ -401,7 +401,7 @@ internal fun jogAxisStart(localCoarse: UByte?, localFine: UByte?, sentCoarse: UB
  * by key — with a target that names nothing patched added to [skipped] as `not patched`. Shared by
  * aim and focus.
  */
-internal fun headsOf(state: State, targets: List<CueTargetDto>, skipped: MutableList<SpreadSkipDto>): LinkedHashMap<String, GroupableFixture> {
+internal fun headsOf(state: State, targets: List<CueTargetDto>, skipped: MutableList<FanSkipDto>): LinkedHashMap<String, GroupableFixture> {
     val fixtures = state.show.fixtures
     val heads = LinkedHashMap<String, GroupableFixture>()
     for (target in targets) {
@@ -413,7 +413,7 @@ internal fun headsOf(state: State, targets: List<CueTargetDto>, skipped: Mutable
             }
         }.getOrNull()
         if (members == null) {
-            skipped += SpreadSkipDto(target, "not patched")
+            skipped += FanSkipDto(target, "not patched")
             continue
         }
         for (member in members) heads.putIfAbsent(member.targetKey, member)

@@ -67,7 +67,7 @@ export interface ScriptSheetProps {
  * - **Check** is this tab's last Compile (D8, `scriptCheck.ts`) — ✓, or the error count and line —
  *   and reads *not checked* again the moment the script's text is not the text it compiled.
  * - **Used by** is the effects an `FX_DEFINITION` script registers (the FX Library's discriminator,
- *   `effectsRegisteredBy`); anything else reads *—* until `FU-SCRIPT-USED-BY`, since cue hooks are
+ *   `fxRegisteredBy`); anything else reads *—* until `FU-SCRIPT-USED-BY`, since cue hooks are
  *   only on full cue details and no list the client reads carries them.
  *
  * **The verbs are Compile · Run · Copy to… · Delete · Deselect** (D11). Run acts on one script and

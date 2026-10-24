@@ -67,7 +67,7 @@ export interface PartitionOption<V extends string> {
 /**
  * The partition chips (library-sheets plan D3): *All* plus one per partition, each with its count —
  * what `LookFamilyFilterBar` was, generalised (it is gone — `/palettes` and `ApplyPicker` both
- * mount these), and **controlled** as that was: a value and the counts in, a change out. The `?param=` and the remembered value are the **route's** (as `routes/Templates.tsx`
+ * mount these), and **controlled** as that was: a value and the counts in, a change out. The `?param=` and the remembered value are the **route's** (as `routes/Palettes.tsx`
  * owns `looks.family` through `get/setStoredLookFamily`), so the same chips mount with local state
  * inside `ApplyPicker`'s portalled popover.
  *

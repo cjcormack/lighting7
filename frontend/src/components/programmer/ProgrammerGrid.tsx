@@ -154,7 +154,7 @@ function ProgrammerGridBody({
           cells,
           cellEntryKey,
           cellClearKey,
-          templateTargets,
+          paletteTargets,
           targetFamilies,
           targetEmitters,
           marqueeDragging,
@@ -500,7 +500,7 @@ function ProgrammerGridBody({
                 cells={cells}
                 cellEntryKey={cellEntryKey}
                 cellClearKey={cellClearKey}
-                templateTargets={templateTargets}
+                paletteTargets={paletteTargets}
                 targetFamilies={targetFamilies}
                 targetEmitters={targetEmitters}
                 marqueeDragging={marqueeDragging}

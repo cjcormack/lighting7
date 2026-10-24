@@ -59,7 +59,7 @@ class FxScriptCompiler(
      * Compile a script body and extract its lambda for the given effect mode.
      *
      * @param script The script body (calculate logic only, no metadata)
-     * @param effectMode Determines which base class and lambda signature to use
+     * @param fxMode Determines which base class and lambda signature to use
      * @return The compiled script with extracted lambda, or an error result
      */
     /**
@@ -71,23 +71,23 @@ class FxScriptCompiler(
      * that want to force a genuine recompile — e.g. [FxFileLoader]'s retry pass, which is
      * distinguishing a transient failure from a real one — must call [invalidate] first.
      */
-    fun compile(script: String, effectMode: EffectMode): CompiledFxScript {
-        val cacheKey = "${effectMode.name}-${script.cacheKey()}"
+    fun compile(script: String, fxMode: FxMode): CompiledFxScript {
+        val cacheKey = "${fxMode.name}-${script.cacheKey()}"
         cache[cacheKey]?.let {
             ScriptCacheProbe.record(ScriptCacheProbe.Source.MEMORY)
             return it
         }
         return cache.getOrPut(cacheKey) {
-            doCompileAndExtract(script, effectMode)
+            doCompileAndExtract(script, fxMode)
         }
     }
 
     /**
      * Compile without caching or lambda extraction (for compile-check operations).
      */
-    fun compileCheck(script: String, effectMode: EffectMode): CompileCheckResult {
-        val wrapped = ScriptSourceWrapper.wrap(script, effectMode.asScriptType())
-        val compilationConfiguration = compilationConfigFor(effectMode)
+    fun compileCheck(script: String, fxMode: FxMode): CompileCheckResult {
+        val wrapped = ScriptSourceWrapper.wrap(script, fxMode.asScriptType())
+        val compilationConfiguration = compilationConfigFor(fxMode)
 
         val result = kotlinx.coroutines.runBlocking {
             scriptingHost.compiler(wrapped.text.toScriptSource(), compilationConfiguration)
@@ -103,14 +103,14 @@ class FxScriptCompiler(
     /**
      * Invalidate the cache entry for a given script.
      */
-    fun invalidate(script: String, effectMode: EffectMode) {
-        val cacheKey = "${effectMode.name}-${script.cacheKey()}"
+    fun invalidate(script: String, fxMode: FxMode) {
+        val cacheKey = "${fxMode.name}-${script.cacheKey()}"
         cache.remove(cacheKey)
     }
 
-    private fun doCompileAndExtract(script: String, effectMode: EffectMode): CompiledFxScript {
-        val wrapped = ScriptSourceWrapper.wrap(script, effectMode.asScriptType())
-        val compilationConfiguration = compilationConfigFor(effectMode)
+    private fun doCompileAndExtract(script: String, fxMode: FxMode): CompiledFxScript {
+        val wrapped = ScriptSourceWrapper.wrap(script, fxMode.asScriptType())
+        val compilationConfiguration = compilationConfigFor(fxMode)
 
         // Step 1: Compile
         val compileResult = kotlinx.coroutines.runBlocking {
@@ -123,7 +123,7 @@ class FxScriptCompiler(
             return CompiledFxScript(
                 isSuccess = false,
                 diagnostics = diagnostics,
-                effectMode = effectMode,
+                fxMode = fxMode,
             )
         }
 
@@ -132,16 +132,16 @@ class FxScriptCompiler(
         val evalResult = kotlinx.coroutines.runBlocking {
             scriptingHost.evaluator(compiledScript, ScriptEvaluationConfiguration {
                 // Provide dummy values — the lambda is just being defined, not invoked
-                when (effectMode) {
-                    EffectMode.STANDARD -> {
+                when (fxMode) {
+                    FxMode.STANDARD -> {
                         providedProperties(Pair("phase", 0.0))
-                        providedProperties(Pair("context", EffectContext.SINGLE))
+                        providedProperties(Pair("context", FxContext.SINGLE))
                         providedProperties(Pair("params", TypedParams(emptyMap(), emptyList())))
                     }
-                    EffectMode.STATEFUL -> {
+                    FxMode.STATEFUL -> {
                         providedProperties(Pair("tick", MasterClock.ClockTick(0L, 0L, 0, 0.0, 0L)))
                         providedProperties(Pair("deltaMs", 0L))
-                        providedProperties(Pair("context", EffectContext.SINGLE))
+                        providedProperties(Pair("context", FxContext.SINGLE))
                         providedProperties(Pair("params", TypedParams(emptyMap(), emptyList())))
                         providedProperties(Pair("state", mutableMapOf<String, Any>()))
                     }
@@ -154,7 +154,7 @@ class FxScriptCompiler(
             return CompiledFxScript(
                 isSuccess = false,
                 diagnostics = diagnostics + evalDiags,
-                effectMode = effectMode,
+                fxMode = fxMode,
             )
         }
 
@@ -169,21 +169,21 @@ class FxScriptCompiler(
             return CompiledFxScript(
                 isSuccess = false,
                 diagnostics = diagnostics + FxCompileDiagnostic("ERROR", "Failed to extract calculate lambda from script"),
-                effectMode = effectMode,
+                fxMode = fxMode,
             )
         }
 
         return CompiledFxScript(
             isSuccess = true,
             diagnostics = diagnostics,
-            effectMode = effectMode,
-            standardFn = if (effectMode == EffectMode.STANDARD) {
+            fxMode = fxMode,
+            standardFn = if (fxMode == FxMode.STANDARD) {
                 @Suppress("UNCHECKED_CAST")
-                lambda as? (Double, EffectContext, TypedParams) -> FxOutput
+                lambda as? (Double, FxContext, TypedParams) -> FxOutput
             } else null,
-            statefulFn = if (effectMode == EffectMode.STATEFUL) {
+            statefulFn = if (fxMode == FxMode.STATEFUL) {
                 @Suppress("UNCHECKED_CAST")
-                lambda as? (MasterClock.ClockTick, Long, EffectContext, TypedParams, MutableMap<String, Any>) -> FxOutput
+                lambda as? (MasterClock.ClockTick, Long, FxContext, TypedParams, MutableMap<String, Any>) -> FxOutput
             } else null,
         )
     }
@@ -193,13 +193,13 @@ class FxScriptCompiler(
      * different name — mapping here keeps [ScriptSourceWrapper] the only place that knows how
      * either is wrapped or configured.
      */
-    private fun EffectMode.asScriptType() = when (this) {
-        EffectMode.STANDARD -> ScriptType.FX_CALC
-        EffectMode.STATEFUL -> ScriptType.FX_CALC_STATEFUL
+    private fun FxMode.asScriptType() = when (this) {
+        FxMode.STANDARD -> ScriptType.FX_CALC
+        FxMode.STATEFUL -> ScriptType.FX_CALC_STATEFUL
     }
 
-    private fun compilationConfigFor(effectMode: EffectMode) =
-        ScriptSourceWrapper.compilationConfiguration(effectMode.asScriptType())
+    private fun compilationConfigFor(fxMode: FxMode) =
+        ScriptSourceWrapper.compilationConfiguration(fxMode.asScriptType())
 
     /**
      * [lineOffset] shifts diagnostics back out of the lambda wrapper's coordinate space; every
@@ -231,16 +231,16 @@ class FxScriptCompiler(
  * A compiled FX script with an extracted lambda for direct invocation.
  *
  * Exactly one of [standardFn] or [statefulFn] will be non-null
- * for successful compilations, matching the [effectMode].
+ * for successful compilations, matching the [fxMode].
  */
 data class CompiledFxScript(
     val isSuccess: Boolean,
     val diagnostics: List<FxCompileDiagnostic>,
-    val effectMode: EffectMode,
+    val fxMode: FxMode,
     /** Direct lambda for STANDARD effects: (phase, context, params) -> FxOutput */
-    val standardFn: ((Double, EffectContext, TypedParams) -> FxOutput)? = null,
+    val standardFn: ((Double, FxContext, TypedParams) -> FxOutput)? = null,
     /** Direct lambda for STATEFUL effects: (tick, deltaMs, context, params, state) -> FxOutput */
-    val statefulFn: ((MasterClock.ClockTick, Long, EffectContext, TypedParams, MutableMap<String, Any>) -> FxOutput)? = null,
+    val statefulFn: ((MasterClock.ClockTick, Long, FxContext, TypedParams, MutableMap<String, Any>) -> FxOutput)? = null,
 )
 
 data class FxCompileDiagnostic(

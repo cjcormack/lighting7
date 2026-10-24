@@ -25,7 +25,7 @@ import type {
  *
  * Two things here are not the shapes the rest of the store uses, and both are argued:
  *
- * - **A layout write patches the cache from its own response**, where `reorderTemplates` patches
+ * - **A layout write patches the cache from its own response**, where `reorderPalettes` patches
  *   optimistically and then invalidates. The difference is the response: that route answers
  *   `void`, so a refetch is the only way to learn what it did; this one answers **the page as
  *   written, carrying the ids it minted**. Those ids are load-bearing — the *next* gesture must
@@ -84,7 +84,7 @@ export const buskApi = restApi.injectEndpoints({
         method: 'DELETE',
       }),
       // Guarded on the error rather than the result: a 204 carries no body, so `result` is
-      // undefined on success too (the `deleteTemplate` note).
+      // undefined on success too (the `deletePalette` note).
       invalidatesTags: (_result, error) => (error != null ? [] : ['BuskPage']),
     }),
 
@@ -148,11 +148,11 @@ export const buskApi = restApi.injectEndpoints({
       BuskPage,
       { projectId: number; pageId: number; bankId: number } & AddBuskPadRequest
     >({
-      query: ({ projectId, bankId, templateId, lookId, cueId }) => ({
+      query: ({ projectId, bankId, paletteId, lookId, cueId }) => ({
         url: `projects/${projectId}/busk/banks/${bankId}/pads`,
         method: 'POST',
         // Spelled out rather than spread, so `pageId` and `bankId` cannot leak into the body.
-        body: { templateId, lookId, cueId },
+        body: { paletteId, lookId, cueId },
       }),
       async onQueryStarted({ projectId, pageId }, { dispatch, queryFulfilled }) {
         beginBuskPageWrite(pageId)
@@ -304,7 +304,7 @@ function endBuskPageWrite(pageId: number, landed: boolean) {
 }
 
 /** The lists whose rows count a record's pads: the libraries' `buskPageCount`, the cue list's `usedBy`. */
-const BUSK_COUNT_TAGS: ('TemplateList' | 'LookList' | 'CueList')[] = ['TemplateList', 'LookList', 'CueList']
+const BUSK_COUNT_TAGS: ('PaletteList' | 'LookList' | 'CueList')[] = ['PaletteList', 'LookList', 'CueList']
 
 /**
  * Refresh the library rows' `buskPageCount`, but **only when the set of records on the page moved**.

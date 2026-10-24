@@ -432,9 +432,9 @@ export function CueSheet({
         width: '56px',
         value: () => undefined,
         display: (row) =>
-          cueOf(row).adHocEffectCount > 0 ? (
+          cueOf(row).adHocFxCount > 0 ? (
             <ReadOutButton onClick={() => openPaneRef.current(row, 'fx')} title="Open this cue's FX in the editor below" className="text-violet-400">
-              <CountBadge n={cueOf(row).adHocEffectCount} className="border-violet-400/60" />
+              <CountBadge n={cueOf(row).adHocFxCount} className="border-violet-400/60" />
               <AudioWaveform className="size-3" />
             </ReadOutButton>
           ) : null,

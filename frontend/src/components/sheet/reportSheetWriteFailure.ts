@@ -6,7 +6,7 @@ import { formatError } from '@/lib/formatError'
  *
  * The library sheets' writes are mostly in `SILENT_ENDPOINTS`, because the dialogs they replaced
  * rendered their refusals inline; a sheet has no inline place, so the sheet says it — once, by the
- * code the desk answered with (`SPEED_MASTER_USAGE_TAKEN`, `SPEED_MASTER_FOLLOW_CYCLE`, a name
+ * code the desk answered with (`SPEED_MASTER_FAMILY_TAKEN`, `SPEED_MASTER_FOLLOW_CYCLE`, a name
  * clash), in the sentence [messages] gives that code, and with the desk's own message as the
  * fallback. The middleware stays silent on those endpoints, or it would say it a second time,
  * generically. `rigWriteFailureMessage` in `store/busk.ts` is the pattern.

@@ -15,12 +15,12 @@ import uk.me.cormack.lighting7.routes.AimNearDto
 import uk.me.cormack.lighting7.routes.AimPlacement
 import uk.me.cormack.lighting7.routes.aimPlacements
 import uk.me.cormack.lighting7.routes.LocalPosition
-import uk.me.cormack.lighting7.routes.SpreadBaseDto
-import uk.me.cormack.lighting7.routes.SpreadFanDto
-import uk.me.cormack.lighting7.routes.SpreadOutcome
-import uk.me.cormack.lighting7.routes.SpreadRequest
+import uk.me.cormack.lighting7.routes.FanBaseDto
+import uk.me.cormack.lighting7.routes.FanAmountDto
+import uk.me.cormack.lighting7.routes.FanOutcome
+import uk.me.cormack.lighting7.routes.FanRequest
 import uk.me.cormack.lighting7.routes.localPosition
-import uk.me.cormack.lighting7.routes.spreadIntoProgrammer
+import uk.me.cormack.lighting7.routes.fanIntoProgrammer
 import uk.me.cormack.lighting7.show.Show
 import uk.me.cormack.lighting7.state.BuskRigOrder
 import uk.me.cormack.lighting7.state.State
@@ -50,7 +50,7 @@ interface FanRing {
 /**
  * The surface's **fan** (venue-visit plan S12): an encoder bound to [BindingTarget.SelectionFan]
  * fans the desk selection's positions about their own, through the same desk resolve as the Spread
- * panel's Fan ([spreadIntoProgrammer], owner `SURFACE`).
+ * panel's Fan ([fanIntoProgrammer], owner `SURFACE`).
  *
  * It holds the gesture's **anchor** — where each head started, as the desk answered it, and the rig
  * order read once for the gesture rather than once per detent — and the amount on each axis, so a
@@ -98,7 +98,7 @@ class SelectionFan(private val state: State) : FanRing {
         val targets: List<CueTargetDto>,
         /** Whether the gesture is a stage fan. */
         val stage: Boolean,
-        val bases: List<SpreadBaseDto>,
+        val bases: List<FanBaseDto>,
         /** A stage fan's latest degrees per head, so each stays on the side it is on. */
         val near: List<AimNearDto>,
         /** A stage fan's placements, read once for the gesture as the rig order is. */
@@ -147,26 +147,26 @@ class SelectionFan(private val state: State) : FanRing {
         val rigOrder = held?.rigOrder ?: lazy { state.buskRigOrder() }
         val placements = held?.placements ?: PlacementsOnce { aimPlacements(state, state.show.project, it) }
         val fan = if (axis.stage) {
-            SpreadFanDto(x = raw.across / DECIMETRES_PER_METRE, y = raw.depth / DECIMETRES_PER_METRE)
+            FanAmountDto(x = raw.across / DECIMETRES_PER_METRE, y = raw.depth / DECIMETRES_PER_METRE)
         } else {
-            SpreadFanDto(pan = raw.pan, tilt = raw.tilt)
+            FanAmountDto(pan = raw.pan, tilt = raw.tilt)
         }
-        val request = SpreadRequest(
+        val request = FanRequest(
             targets = targets,
             property = "position",
-            mode = "FAN",
+            mode = "ABOUT",
             fan = fan,
             base = held?.bases,
             near = held?.near,
         )
-        val outcome = spreadIntoProgrammer(
+        val outcome = fanIntoProgrammer(
             state, request, null, ProgrammerOwner.SURFACE,
             rigOrder = { rigOrder.value },
             placementsOf = placements::of,
         )
         when (outcome) {
-            is SpreadOutcome.Invalid -> logger.debug("Surface fan refused: {}", outcome.message)
-            is SpreadOutcome.Done -> {
+            is FanOutcome.Invalid -> logger.debug("Surface fan refused: {}", outcome.message)
+            is FanOutcome.Done -> {
                 val answer = outcome.response
                 anchor = Anchor(
                     show = WeakReference(state.show),

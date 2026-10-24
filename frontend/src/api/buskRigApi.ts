@@ -17,7 +17,7 @@ import type { GroupSummary } from './groupsApi'
  * **Every defaulted list is optional here.** lighting7's converters set `encodeDefaults = false`,
  * so an empty `rows`, an empty `tiles` (never served, the write refuses it) or a single-head
  * fixture's empty `elements` is *omitted* from the frame rather than sent as `[]`. Declaring them
- * required is what let `TemplateSummary.rows` crash every route (CLAUDE.md §The hand); the readers
+ * required is what let `PaletteSummary.rows` crash every route (CLAUDE.md §The hand); the readers
  * here take an absent list as an empty one.
  */
 

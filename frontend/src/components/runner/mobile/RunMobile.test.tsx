@@ -20,7 +20,7 @@ vi.mock('@/hooks/useCueFade', () => ({ useCueFade: () => ({ fadeProgress: null, 
 vi.mock('../../SpeedMasters', () => ({ SpeedMastersChip: () => null }))
 vi.mock('../StackPickerSheet', () => ({ StackPickerSheet: () => null }))
 vi.mock('../MobileCueListSheet', () => ({ MobileCueListSheet: () => null }))
-vi.mock('../StackEffectSizeControl', () => ({ MobileStackEffectSize: () => null }))
+vi.mock('../StackFxAmountControl', () => ({ MobileStackFxAmount: () => null }))
 
 import { RunMobile, type RunnerDisplayState } from './RunMobile'
 
@@ -31,7 +31,7 @@ function entry(id: number, cueNumber: string): CueStackCueRow {
     name: `Q${cueNumber}`,
     sortOrder: id,
     layerCount: 0,
-    adHocEffectCount: 0,
+    adHocFxCount: 0,
     autoAdvance: false,
     autoAdvanceDelayMs: null,
     fadeDurationMs: 2000,

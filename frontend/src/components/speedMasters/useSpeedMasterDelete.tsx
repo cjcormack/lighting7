@@ -20,9 +20,9 @@ export const MASTER_1_DELETE_REFUSAL = 'Master 1 is the global tempo — every u
 export function describeSpeedMasterInUse(summary: SpeedMasterInUseResponse): string {
   const parts: string[] = []
   const counted = summary.referenceCount - (summary.followerNames?.length ?? 0)
-  if (summary.lookEffectCount > 0) parts.push(`${summary.lookEffectCount} look FX`)
-  if (summary.cueAdHocEffectCount > 0) {
-    parts.push(`${summary.cueAdHocEffectCount} cue FX`)
+  if (summary.lookFxCount > 0) parts.push(`${summary.lookFxCount} look FX`)
+  if (summary.cueAdHocFxCount > 0) {
+    parts.push(`${summary.cueAdHocFxCount} cue FX`)
   }
   if (summary.cueLayerCount > 0) parts.push(`${summary.cueLayerCount} cue layer${summary.cueLayerCount === 1 ? '' : 's'}`)
   const tempos = summary.cueTempoCount ?? 0

@@ -204,9 +204,9 @@ describe('the sheet is one fact', () => {
 
   it('still gates the memory on the live list, so a ninth tab could land hidden the way the third to eighth did', () => {
     expect(isLiveSheetTab('show')).toBe(true)
-    expect(isLiveSheetTab('effects')).toBe(true)
+    expect(isLiveSheetTab('fx')).toBe(true)
     expect(isLiveSheetTab('cheese')).toBe(false)
-    expect(LIVE_SHEET_TABS).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'effects', 'speed', 'show'])
+    expect(LIVE_SHEET_TABS).toEqual(['level', 'colour', 'position', 'beam', 'spread', 'fx', 'speed', 'show'])
   })
 
   for (const tab of ['level', 'position', 'beam'] as const) {
@@ -232,15 +232,15 @@ describe('the sheet is one fact', () => {
   }
 
   it('remembers Effects once it has been open — the MIDI {sheet} toggle unfolds back onto it (fixture-fx-sheets D20)', () => {
-    applyBuskArrival({ focus: null, sheet: 'effects' })
-    expect(getBuskSheet()).toBe('effects')
+    applyBuskArrival({ focus: null, sheet: 'fx' })
+    expect(getBuskSheet()).toBe('fx')
     act(() => toggleBuskSheet())
     expect(getBuskSheet()).toBe('none')
     // The MIDI `BuskSheetToggle`'s own spelling, `{sheet: 'toggle'}`, reads the same memory.
     act(() => {
       applyBuskViewOptions({ sheet: 'toggle' })
     })
-    expect(getBuskSheet()).toBe('effects')
+    expect(getBuskSheet()).toBe('fx')
   })
 
   it('remembers Show once it has been open, and ?sheet=show arrives as an ordinary open (busk-chrome session A)', () => {

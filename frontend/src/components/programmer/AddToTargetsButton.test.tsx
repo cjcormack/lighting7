@@ -9,9 +9,9 @@ vi.mock('@/store/programmer', () => ({
 
 const lookStore = vi.hoisted(() => ({ current: null as unknown }))
 vi.mock('./LookRowStore', () => ({ useLookRowStore: () => lookStore.current }))
-const focusedTemplate = vi.hoisted(() => ({ current: null as unknown }))
-vi.mock('./FocusedTemplateLayer', () => ({
-  useFocusedTemplateLayer: () => focusedTemplate.current,
+const focusedPalette = vi.hoisted(() => ({ current: null as unknown }))
+vi.mock('./FocusedPaletteLayer', () => ({
+  useFocusedPaletteLayer: () => focusedPalette.current,
 }))
 
 import { AddToTargetsButton } from './AddToTargetsButton'
@@ -20,7 +20,7 @@ afterEach(() => {
   cleanup()
   patchLayer.mockClear()
   lookStore.current = null
-  focusedTemplate.current = null
+  focusedPalette.current = null
 })
 
 const props = {
@@ -50,7 +50,7 @@ describe('AddToTargetsButton', () => {
     // Not optional. A template layer's grid is a read, and an untargeted row there is painted
     // dashed and non-editable — so without this the tone names a state with no way out of it, on a
     // surface whose only widening affordance is this button.
-    focusedTemplate.current = {
+    focusedPalette.current = {
       layerId: 9,
       targetedKeys: new Set(['hex-1']),
       targets: [{ type: 'fixture', key: 'hex-1' }],
@@ -70,7 +70,7 @@ describe('AddToTargetsButton', () => {
     expect(screen.queryByRole('button')).toBeNull()
     unmount()
 
-    focusedTemplate.current = {
+    focusedPalette.current = {
       layerId: 9,
       targetedKeys: new Set(['mover-1']),
       targets: [{ type: 'fixture', key: 'mover-1' }],

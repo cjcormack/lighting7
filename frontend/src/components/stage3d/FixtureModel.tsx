@@ -71,7 +71,7 @@ import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedM
 import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from '../../lib/colourBands'
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
-import { makeRingPaint, ringBandAt, ringFrame, RING_SEGMENTS } from '../../lib/ringEffect'
+import { makeRingPaint, ringBandAt, ringFrame, RING_SEGMENTS } from '../../lib/ringFx'
 import {
   colourTimed,
   findTimingChannels,
@@ -2439,7 +2439,7 @@ const RING_HUE = new Color()
 const RING_TMP = new Color()
 
 /**
- * Paints an LED ring round the lens (`lib/ringEffect.ts`) from its effect setting and its speed
+ * Paints an LED ring round the lens (`lib/ringFx.ts`) from its effect setting and its speed
  * slider, segment by segment, on the instanced ring. Beside the colour sync rather than inside it:
  * the beam's dimmer and strobe do not reach the ring. A chase registers with the [ticker] while it
  * runs and the ring is [drawn], as an animated colour band does.

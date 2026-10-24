@@ -55,9 +55,9 @@ function m(n: number, over: Partial<SpeedMaster> = {}): SpeedMaster {
  */
 const BANK: SpeedMaster[] = [
   m(1, { referenceCount: 14, notes: 'The desk tempo' }),
-  m(2, { followNum: 1, followDen: 2, usage: 'colour', referenceCount: 6 }),
-  m(3, { bpm: 96, usage: 'position' }),
-  m(4, { followNum: 1, followDen: 1, usage: 'intensity' }),
+  m(2, { followNum: 1, followDen: 2, family: 'colour', referenceCount: 6 }),
+  m(3, { bpm: 96, family: 'position' }),
+  m(4, { followNum: 1, followDen: 1, family: 'intensity' }),
   m(5, { bpm: 60 }),
   m(6, { followNum: 1, followDen: 2, followTargetUuid: U(3) }),
 ]
@@ -263,13 +263,13 @@ describe('SpeedMasterSheet', () => {
     cleanup()
 
     saveMaster.mockImplementationOnce(() =>
-      Promise.reject({ status: 409, data: { error: 'Colour is already M2’s', code: 'SPEED_MASTER_USAGE_TAKEN' } }),
+      Promise.reject({ status: 409, data: { error: 'Colour is already M2’s', code: 'SPEED_MASTER_FAMILY_TAKEN' } }),
     )
     draw()
     drag('usage', 5, 5)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
     fireEvent.click(await screen.findByRole('option', { name: 'Colour' }))
-    expect(saveMaster).toHaveBeenCalledWith({ projectId: 1, masterId: 5, usage: 'colour' })
+    expect(saveMaster).toHaveBeenCalledWith({ projectId: 1, masterId: 5, family: 'colour' })
     await waitFor(() =>
       expect(toastError).toHaveBeenCalledWith('Colour is already M2’s', { id: 'sheet-write:speed-masters:usage' }),
     )

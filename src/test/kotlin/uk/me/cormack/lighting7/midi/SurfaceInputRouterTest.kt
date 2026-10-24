@@ -295,16 +295,16 @@ class SurfaceInputRouterTest {
     }
 
     @Test
-    fun `StackEffectSize passes the fader's value and its stack to the stack's size, and ignores a press`() {
+    fun `StackFxAmount passes the fader's value and its stack to the stack's size, and ignores a press`() {
         val actions = RecordingActions()
-        val target = BindingTarget.StackEffectSize(stackId = 4, stackUuid = "00000000-0000-0000-0000-000000000004")
+        val target = BindingTarget.StackFxAmount(stackId = 4, stackUuid = "00000000-0000-0000-0000-000000000004")
         val router = buildRouter(actions, listOf(binding(1, "enc-1", target), binding(2, "btn-3", target)))
 
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 10, value = 64u))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 18, velocity = 127u))
 
         assertEquals(
-            listOf<RecordedCall>(RecordedCall.WriteStackEffectSize(4, "00000000-0000-0000-0000-000000000004", 64u)),
+            listOf<RecordedCall>(RecordedCall.WriteStackFxAmount(4, "00000000-0000-0000-0000-000000000004", 64u)),
             actions.calls.toList(),
         )
     }
@@ -787,12 +787,12 @@ class SurfaceInputRouterTest {
     @Test
     fun `a record button dispatches to its own action with its own uuid`() {
         val lookUuid = "11111111-1111-4111-8111-111111111111"
-        val templateUuid = "22222222-2222-4222-8222-222222222222"
+        val paletteUuid = "22222222-2222-4222-8222-222222222222"
         val padUuid = "33333333-3333-4333-8333-333333333333"
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(
             binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid)),
-            binding(2, "btn-2", BindingTarget.PressTemplate(templateUuid)),
+            binding(2, "btn-2", BindingTarget.PressPalette(paletteUuid)),
             binding(3, "btn-3", BindingTarget.PressPad(padUuid)),
         ))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.NoteOn(0, note = 16, velocity = 127u))
@@ -801,7 +801,7 @@ class SurfaceInputRouterTest {
         assertEquals(
             listOf(
                 RecordedCall.ApplyLook(lookUuid),
-                RecordedCall.PressTemplate(templateUuid),
+                RecordedCall.PressPalette(paletteUuid),
                 RecordedCall.PressPad(padUuid),
             ),
             actions.calls,
@@ -843,7 +843,7 @@ class SurfaceInputRouterTest {
         // dispatch must drop it rather than find some arm for it.
         val actions = RecordingActions()
         val router = buildRouter(actions, listOf(
-            binding(1, "fader-1", BindingTarget.PressTemplate("22222222-2222-4222-8222-222222222222")),
+            binding(1, "fader-1", BindingTarget.PressPalette("22222222-2222-4222-8222-222222222222")),
         ))
         router.offerInputForTest(deviceTypeKey, MidiInputEvent.ControlChange(0, cc = 1, value = 100u))
         assertTrue(actions.calls.isEmpty())
@@ -970,8 +970,8 @@ private class RecordingActions : SurfaceActions {
     override fun toggleBlackout(): Boolean { calls += RecordedCall.ToggleBlackout; return true }
     override fun toggleGrandMaster(): Boolean { calls += RecordedCall.ToggleGrandMaster; return true }
     override fun writeGrandMaster(midiValue7Bit: UByte) { calls += RecordedCall.WriteGrandMaster(midiValue7Bit) }
-    override fun writeStackEffectSize(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
-        calls += RecordedCall.WriteStackEffectSize(stackId, stackUuid, midiValue7Bit)
+    override fun writeStackFxAmount(stackId: Int, stackUuid: String?, midiValue7Bit: UByte) {
+        calls += RecordedCall.WriteStackFxAmount(stackId, stackUuid, midiValue7Bit)
     }
     override fun writeSpeedMasterBpm(masterUuid: String?, minBpm: Double, maxBpm: Double, midiValue7Bit: UByte) {
         calls += RecordedCall.WriteSpeedMasterBpm(masterUuid, minBpm, maxBpm, midiValue7Bit)
@@ -980,7 +980,7 @@ private class RecordingActions : SurfaceActions {
         calls += RecordedCall.TapSpeedMaster(masterUuid)
     }
     override fun applyLook(lookUuid: String) { calls += RecordedCall.ApplyLook(lookUuid) }
-    override fun pressTemplate(templateUuid: String) { calls += RecordedCall.PressTemplate(templateUuid) }
+    override fun pressPalette(paletteUuid: String) { calls += RecordedCall.PressPalette(paletteUuid) }
     override fun pressPad(padUuid: String) { calls += RecordedCall.PressPad(padUuid) }
     override fun pickUpPad(padUuid: String) { calls += RecordedCall.PickUpPad(padUuid) }
     override fun handPlaceInBank(bankUuid: String) { calls += RecordedCall.HandPlaceInBank(bankUuid) }
@@ -1040,9 +1040,9 @@ private sealed class RecordedCall {
     data object ToggleBlackout : RecordedCall()
     data object ToggleGrandMaster : RecordedCall()
     data class WriteGrandMaster(val value: UByte) : RecordedCall()
-    data class WriteStackEffectSize(val stackId: Int, val stackUuid: String?, val value: UByte) : RecordedCall()
+    data class WriteStackFxAmount(val stackId: Int, val stackUuid: String?, val value: UByte) : RecordedCall()
     data class ApplyLook(val lookUuid: String) : RecordedCall()
-    data class PressTemplate(val templateUuid: String) : RecordedCall()
+    data class PressPalette(val paletteUuid: String) : RecordedCall()
     data class PressPad(val padUuid: String) : RecordedCall()
     data class PickUpPad(val padUuid: String) : RecordedCall()
     data class HandPlaceInBank(val bankUuid: String) : RecordedCall()

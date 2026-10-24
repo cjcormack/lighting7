@@ -14,16 +14,16 @@ import kotlin.test.assertTrue
 class LegacyNamesTest {
 
     private fun fx(
-        effectType: String,
+        fxType: String,
         parameters: Map<String, String> = emptyMap(),
         category: String = "intensity",
-        beatDivision: Double = 4.0,
+        cycle: Double = 4.0,
         distribution: String = "NORMAL",
         phaseOffset: Double = 0.0,
         direction: String = "FORWARD",
-        nShot: Int? = null,
+        runs: Int? = null,
         spread: Double = 1.0,
-    ) = LegacyNames.StoredFx(effectType, category, beatDivision, distribution, phaseOffset, parameters, direction, nShot, spread)
+    ) = LegacyNames.StoredFx(fxType, category, cycle, distribution, phaseOffset, parameters, direction, runs, spread)
 
     private val red = UUID.fromString("00000000-0000-0000-0000-00000000000a")
     private val blue = UUID.fromString("00000000-0000-0000-0000-00000000000b")
@@ -59,7 +59,7 @@ class LegacyNamesTest {
 
     @Test
     fun `pingPong on is Bounce at half the cycle, its phase offset, spread and runs doubled`() {
-        val stored = fx("Sweep", mapOf("startPan" to "0", "pingPong" to "true"), category = "position", beatDivision = 4.0, phaseOffset = 0.75, nShot = 2, spread = 0.5)
+        val stored = fx("Sweep", mapOf("startPan" to "0", "pingPong" to "true"), category = "position", cycle = 4.0, phaseOffset = 0.75, runs = 2, spread = 0.5)
         val out = assertNotNull(rewrite(stored)).fx
         assertEquals(2.0, out.cycle)
         assertEquals(1.5, out.phaseOffset, 1e-12, "kept modulo 2: Bounce's parity is part of where each head is")
@@ -92,7 +92,7 @@ class LegacyNamesTest {
     @Test
     fun `an absent pingPong was on in a database, and is today's in an archive`() {
         assertEquals("BOUNCE", rewrite(fx("TiltSweep"), absentPingPongIsOn = true)?.fx?.direction)
-        assertNull(rewrite(fx("TiltSweep", direction = "BOUNCE", beatDivision = 2.0), absentPingPongIsOn = false))
+        assertNull(rewrite(fx("TiltSweep", direction = "BOUNCE", cycle = 2.0), absentPingPongIsOn = false))
     }
 
     @Test

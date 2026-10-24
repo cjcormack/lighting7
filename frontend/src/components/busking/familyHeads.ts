@@ -3,7 +3,7 @@ import { resolveCell } from '@/components/fixtures-list/columns'
 import type { PickWrite } from '@/components/fixtureSheet/sheetPick'
 import type { PositionResolution } from '@/components/fixtureSheet/sheetRows'
 import { serializeLevel } from '@/lib/programmerValue'
-import { templatePropertiesForFamily } from '@/lib/templateIntent'
+import { palettePropertiesForFamily } from '@/lib/paletteIntent'
 import type { Fixture, PropertyDescriptor, SliderPropertyDescriptor } from '@/store/fixtures'
 import type { BuskingTarget } from './buskingTypes'
 
@@ -124,7 +124,7 @@ export function positionOf(properties: PropertyDescriptor[]): PositionResolution
  * one. A Beam setting (gobo, prism) is a setting cell's, not a level's.
  */
 export function beamPropertiesOf(selected: readonly BuskingTarget[], fixtures: readonly Fixture[]): string[] {
-  return templatePropertiesForFamily('BEAM')
+  return palettePropertiesForFamily('BEAM')
     .filter((p) => p.intent === 'percent')
     .map((p) => p.propertyName)
     .filter((name) => familyUnits(selected, fixtures, sliderOf(name)).length > 0)

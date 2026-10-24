@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.SpreadOver
+import uk.me.cormack.lighting7.fx.FanOver
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -242,7 +242,7 @@ class DeskSelection(
             SubselectMode.INVERT -> {
                 val cellular = isCellular(targets)
                 val universe = if (order != null) {
-                    order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS).flatten()
+                    order.steps(if (cellular) FanOver.CELLS else FanOver.HEADS).flatten()
                 } else {
                     // The rig order's own fallback, without it: never infrastructure (`BuskRigOrder`).
                     fixturesProvider()?.operatorFixtures?.map { CueTargetDto(TargetRef.Fixture.TYPE, it.key) }.orEmpty()
@@ -253,7 +253,7 @@ class DeskSelection(
             SubselectMode.NEXT, SubselectMode.PREV -> {
                 if (order == null) return null
                 val cellular = targets.isNotEmpty() && targets.all { coverageRule.parentOf(it) != null }
-                val steps = order.steps(if (cellular) SpreadOver.CELLS else SpreadOver.HEADS)
+                val steps = order.steps(if (cellular) FanOver.CELLS else FanOver.HEADS)
                 if (steps.isEmpty()) return null
                 // A step is occupied when the selection covers every target on it — and not when a
                 // *larger* occupied step already covers it: with a group selected, its member's own

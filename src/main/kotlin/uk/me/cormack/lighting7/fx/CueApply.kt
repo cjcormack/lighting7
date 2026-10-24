@@ -40,7 +40,7 @@ private val logger = LoggerFactory.getLogger("cueApply")
 internal data class CueApplyData(
     val cueId: Int,
     val cueName: String,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     /**
      * The cue's ordered Look composition, resolved far enough for [CueComposer.cook] — the Look's
      * uuid is carried so the uuid-keyed [LookRegistry] needs no second DB hit at apply time.
@@ -83,7 +83,7 @@ private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayO
     DaoCue::layers,
     DaoCueLayer::look,
     DaoCueLayer::palette,
-    DaoCue::adHocEffects,
+    DaoCue::adHocFx,
     DaoCue::propertyAssignments,
     DaoCue::triggers,
     DaoCueTrigger::script,
@@ -165,7 +165,7 @@ internal fun buildCueApplyDataForCues(cueIds: Collection<Int>): Map<Int, CueAppl
 private fun DaoCue.toCueApplyData(placement: EntryPlacement?): CueApplyData = CueApplyData(
     cueId = id.value,
     cueName = name,
-    adHocEffects = adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+    adHocFx = adHocFx.sortedBy { it.sortOrder }.map { it.toDto() },
     layers = layers.sortedBy { it.sortOrder }.mapNotNull { it.toCookLayer() },
     propertyAssignments = propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
     triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->
@@ -529,7 +529,7 @@ internal fun buildCombinedCueLayerRows(
      * publish at, else [applyData]'s own.
      */
     priority: Int? = null,
-): CookResult = buildCombinedCueLayerCook(state, cueId, applyData, firedTimedLayerIds, priority, withEffects = false).values
+): CookResult = buildCombinedCueLayerCook(state, cueId, applyData, firedTimedLayerIds, priority, withFx = false).values
 
 /**
  * [buildCombinedCueLayerRows] with its layers' effects from the same cook ([CueComposer.cookAll]),
@@ -541,7 +541,7 @@ internal fun buildCombinedCueLayerCook(
     applyData: CueApplyData,
     firedTimedLayerIds: Set<Int>? = null,
     priority: Int? = null,
-    withEffects: Boolean = true,
+    withFx: Boolean = true,
 ): CueComposer.FullCook {
     // A live cue composes at its holds' priority, whichever entry (or none) [applyData] was built from.
     // A cue whose last hold has gone while its rows still fade out keeps the priority they publish at.
@@ -557,8 +557,8 @@ internal fun buildCombinedCueLayerCook(
         layers = data.layers,
         localRows = cueOwn,
         resolveLook = state.show.lookRegistry::snapshot,
-        resolveTemplate = state.show.templateRegistry::snapshot,
+        resolvePalette = state.show.paletteRegistry::snapshot,
         includeTimed = firedTimedLayerIds ?: state.cueTriggerManager.firedTimedLayerIds(cueId),
-        withEffects = withEffects,
+        withFx = withFx,
     )
 }

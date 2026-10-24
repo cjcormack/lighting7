@@ -70,7 +70,7 @@ internal object HandService {
                 }
                 // Safe: `kind` is derived from exactly these three FK columns' `readValues`, which
                 // is why `DaoBuskPad.toDto` and `BuskPressService` unwrap them the same way.
-                BuskPadKind.TEMPLATE -> kind to pad.palette!!.id.value
+                BuskPadKind.PALETTE -> kind to pad.palette!!.id.value
                 BuskPadKind.LOOK -> kind to pad.look!!.id.value
                 BuskPadKind.CUE -> kind to pad.cue!!.id.value
             }
@@ -96,8 +96,8 @@ internal object HandService {
         val (kind, id) = address() ?: return null
         val records = BuskRecordCache(state)
         return when (kind) {
-            BuskPadKind.TEMPLATE -> records.template(project, id)?.let {
-                HandState.Held(kind, it.id.value, it.uuid.toString(), template = records.dto(it), pickedUpOn = pickedUpOn)
+            BuskPadKind.PALETTE -> records.palette(project, id)?.let {
+                HandState.Held(kind, it.id.value, it.uuid.toString(), palette = records.dto(it), pickedUpOn = pickedUpOn)
             }
             BuskPadKind.LOOK -> records.look(project, id)?.let {
                 HandState.Held(kind, it.id.value, it.uuid.toString(), look = records.dto(it), pickedUpOn = pickedUpOn)
@@ -132,7 +132,7 @@ internal object HandService {
                 state = state,
                 project = project,
                 bank = bank,
-                templateId = held.id.takeIf { held.kind == BuskPadKind.TEMPLATE },
+                paletteId = held.id.takeIf { held.kind == BuskPadKind.PALETTE },
                 lookId = held.id.takeIf { held.kind == BuskPadKind.LOOK },
                 cueId = held.id.takeIf { held.kind == BuskPadKind.CUE },
                 // A button has nowhere to put a page document; it needs the id to broadcast and

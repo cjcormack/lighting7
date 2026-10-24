@@ -15,8 +15,8 @@ vi.mock('sonner', () => ({ toast }))
 import { useReleaseTargets } from './useRelease'
 
 const selectionKey = '[{"key":"par-1","type":"fixture"},{"key":"par-2","type":"fixture"}]'
-const chase = { effectId: 9, effectType: 'Chase', targetKey: selectionKey, isGroupTarget: false, propertyName: 'dimmer' }
-const cleared = (key: string): TargetCleared => ({ targetType: 'fixture', targetKey: key, values: 1, effects: 0, partial: [chase] })
+const chase = { fxId: 9, fxType: 'Chase', targetKey: selectionKey, isGroupTarget: false, propertyName: 'dimmer' }
+const cleared = (key: string): TargetCleared => ({ targetType: 'fixture', targetKey: key, values: 1, fx: 0, partial: [chase] })
 
 afterEach(() => vi.clearAllMocks())
 

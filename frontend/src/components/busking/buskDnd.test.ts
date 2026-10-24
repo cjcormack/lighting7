@@ -44,8 +44,8 @@ const page: BuskPage = {
               solo: false,
               flow: 'WRAP',
               pads: [
-                { id: 1, uuid: 'pa', kind: 'TEMPLATE', template: { id: 1 } as never },
-                { id: 2, uuid: 'pb', kind: 'TEMPLATE', template: { id: 2 } as never },
+                { id: 1, uuid: 'pa', kind: 'PALETTE', palette: { id: 1 } as never },
+                { id: 2, uuid: 'pb', kind: 'PALETTE', palette: { id: 2 } as never },
               ],
             },
           ],
@@ -335,7 +335,7 @@ describe('the slot and the landing place agree', () => {
     const next = applyDrop(page, { kind: 'pad', at: { row: 0, column: 0, bank: 0, pad: fromPad } }, target!)
     return {
       slotBefore: target?.kind === 'pad' ? target.at.pad : null,
-      pads: (next ?? page).rows[0].columns[0].banks[0].pads.map((p) => p.template!.id),
+      pads: (next ?? page).rows[0].columns[0].banks[0].pads.map((p) => p.palette!.id),
     }
   }
 
@@ -364,7 +364,7 @@ describe('the slot and the landing place agree', () => {
       name,
       solo: false,
       flow: 'WRAP' as const,
-      pads: [{ id: id * 10, uuid: `p${id}`, kind: 'TEMPLATE' as const, template: { id } as never }],
+      pads: [{ id: id * 10, uuid: `p${id}`, kind: 'PALETTE' as const, palette: { id } as never }],
     })
     return {
       ...page,

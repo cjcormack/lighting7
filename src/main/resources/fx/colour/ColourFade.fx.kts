@@ -1,11 +1,11 @@
 /*---
 id: ColourFade
 name: Colour Fade
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
+fxMode: STANDARD
 defaultDirection: BOUNCE
-defaultBeatDivision: 2.0
+defaultCycle: 2.0
 compatibleProperties: [rgbColour]
 parameters:
   - name: fromColour

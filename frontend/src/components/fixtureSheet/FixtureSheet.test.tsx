@@ -37,7 +37,7 @@ vi.mock('@/store/status', () => ({ useIsDeskConnected: () => wire.connected }))
 vi.mock('@/hooks/useProgrammerBlind', () => ({ useProgrammerBlind: () => wire.blind }))
 vi.mock('@/store/programmer', () => ({ useProgrammerRevision: () => 0 }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: wire.effects }),
+  useActiveFxQuery: () => ({ data: wire.effects }),
   usePauseFxMutation: () => [vi.fn()],
   useResumeFxMutation: () => [vi.fn()],
   useRemoveFxMutation: () => [vi.fn()],
@@ -55,8 +55,8 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/hooks/useGelIndex', () => ({ useGelIndex: () => new Map() }))
 const sheetColours = vi.hoisted(() => ({ current: new Map<string, string>() }))
 vi.mock('@/hooks/useFixtureColourIndex', () => ({ useFixtureColourIndex: () => sheetColours.current }))
-vi.mock('./effectLabels', () => ({
-  useEffectDetail: () => () => '¼ · M1',
+vi.mock('./fxLabels', () => ({
+  useFxDetail: () => () => '¼ · M1',
   useCueLabel: () => (id: number) => `Q${id}`,
 }))
 vi.mock('../surfaces/FixtureBoundControlsRow', () => ({ FixtureBoundControlsRow: () => null, GroupBoundControlsRow: () => null }))
@@ -93,7 +93,7 @@ vi.mock('../stage/OwnerEditor', () => ({
 import { toast } from 'sonner'
 import { lightingApi } from '@/api/lightingApi'
 import { programmerWs } from '@/test/backendMock'
-import { chan, makeActiveEffect, makeFixture, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
+import { chan, makeActiveFx, makeFixture, positionProp, settingProp, sliderProp } from '@/test/fixtureFactories'
 import type { ProgrammerEntry, ProvenanceEntry } from '@/api/programmerWsApi'
 import type { Fixture } from '@/store/fixtures'
 import { resetProgrammerFadeStore, setProgrammerFade } from '@/lib/programmerFade'
@@ -173,13 +173,13 @@ describe('FixtureSheet — rows', () => {
   })
 
   it('draws each source kind as a chip and an edge', () => {
-    const pulse = makeActiveEffect({ id: 7, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'zoom', programmerOwned: false })
+    const pulse = makeActiveFx({ id: 7, fxType: 'Pulse', targetKey: 'spot-3', propertyName: 'zoom', programmerOwned: false })
     wire.effects = [pulse]
     hold(
       [entry('dimmer')],
       [
         prov('dimmer', {}),
-        prov('zoom', { source: 'EFFECT', effectId: 7 }),
+        prov('zoom', { source: 'FX', fxId: 7 }),
         prov('gobo', { source: 'CUE', cueId: 12, layerSource: { kind: 'LOOK', id: 3, name: 'Night' } as never }),
         prov('position', { source: 'PARKED' }),
       ],
@@ -204,7 +204,7 @@ describe('FixtureSheet — rows', () => {
   })
 
   it('marks a row whose value holds a cue effect back with the amber dot', () => {
-    wire.effects = [makeActiveEffect({ id: 9, targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
+    wire.effects = [makeActiveFx({ id: 9, targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
     hold([entry('dimmer')], [prov('dimmer', {})])
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     expect(within(row('dimmer')).getByTestId('held-back-dot')).toBeTruthy()
@@ -249,8 +249,8 @@ describe('FixtureSheet — clearing', () => {
       targetType: 'fixture',
       targetKey: 'spot-3',
       values: 2,
-      effects: 1,
-      partial: [{ effectId: 4, effectType: 'Pulse', targetKey: 'Front wash', isGroupTarget: true, propertyName: 'dimmer' }],
+      fx: 1,
+      partial: [{ fxId: 4, fxType: 'Pulse', targetKey: 'Front wash', isGroupTarget: true, propertyName: 'dimmer' }],
     })
     hold([entry('dimmer'), entry('zoom')], [prov('dimmer', {}), prov('zoom', {})])
     render(<FixtureSheet fixture={SPOT} host="popup" />)
@@ -343,7 +343,7 @@ describe('FixtureSheet — the shape', () => {
 
   it("asks before stopping a group's effect from a fixture's tray, which stops it on every member", () => {
     wire.effects = [
-      makeActiveEffect({ id: 4, effectType: 'Pulse', targetKey: 'Front wash', isGroupTarget: true, propertyName: 'dimmer' }),
+      makeActiveFx({ id: 4, fxType: 'Pulse', targetKey: 'Front wash', isGroupTarget: true, propertyName: 'dimmer' }),
     ]
     const fixture = { ...SPOT, groups: ['Front wash'] }
     const confirm = vi.fn(() => false)
@@ -369,7 +369,7 @@ describe('FixtureSheet — the shape', () => {
   })
 
   it("opens a row's effect in the live editor inline, under its row", () => {
-    wire.effects = [makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.effects = [makeActiveFx({ id: 5, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     fireEvent.click(screen.getByRole('button', { name: /^Circle/ }))
     const tray = document.querySelector('[data-fx-tray]') as HTMLElement
@@ -380,8 +380,8 @@ describe('FixtureSheet — the shape', () => {
   it('marks a programmer effect held · Blind in the tray while blind — the chip and the row — and a cue’s not (D7)', () => {
     wire.blind = true
     wire.effects = [
-      makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' }),
-      makeActiveEffect({ id: 9, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 }),
+      makeActiveFx({ id: 5, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position' }),
+      makeActiveFx({ id: 9, fxType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 }),
     ]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     // Folded: the chip's hover says so, and only the programmer's.
@@ -396,7 +396,7 @@ describe('FixtureSheet — the shape', () => {
   })
 
   it("shows a cue's effect read-only in the tray — its cue named, no editor, pause or stop (session 5) — and its cue opens the cue", () => {
-    wire.effects = [makeActiveEffect({ id: 9, effectType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
+    wire.effects = [makeActiveFx({ id: 9, fxType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })]
     render(<FixtureSheet fixture={SPOT} host="popup" />)
     // Its folded chip opens the tray, where the row names the cue — never the cue itself.
     fireEvent.click(screen.getByTitle('Pulse on dimmer — the cue’s'))
@@ -471,7 +471,7 @@ describe('FixtureSheet — the shape', () => {
 describe('FixtureSheet — the phone host', () => {
   it('takes finger sizes: a 36px field, a 32px ×, 32px tray chips — and the desk hosts keep theirs', () => {
     hold([entry('dimmer')], [prov('dimmer', {})])
-    wire.effects = [makeActiveEffect({ id: 5, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.effects = [makeActiveFx({ id: 5, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
     const { unmount } = render(<FixtureSheet fixture={SPOT} host="phone" />)
     const field = within(row('dimmer')).getByLabelText('dimmer percent')
     expect(field.className).toContain('h-9')

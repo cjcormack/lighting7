@@ -38,7 +38,7 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
       return ownership.touched
         ? 'rounded-sm ring-1 ring-inset ring-primary bg-primary/10' + mixed
         : 'rounded-sm ring-1 ring-inset ring-primary/40' + mixed
-    case 'effect':
+    case 'fx':
       return 'rounded-sm ring-1 ring-inset ring-violet-500/50' + mixed
     case 'cue':
       return 'rounded-sm ring-1 ring-inset ring-sky-500/40' + mixed
@@ -119,7 +119,7 @@ export function cueSourceTitle(source: CueCellStateSource | undefined): string |
 export const OWNERSHIP_LABELS: Record<CellOwnershipSource, string> = {
   parked: 'Parked — the rig ignores everything below it',
   programmer: 'Programmer',
-  effect: 'FX',
+  fx: 'FX',
   cue: 'Cue',
   baseline: 'Baseline — nothing asserts this',
 }

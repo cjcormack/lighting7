@@ -284,7 +284,7 @@ Every flush reads and resets what it reports, and sends nothing for a window tha
 | `artnet.frame.lateness` | histogram | `ArtNetController`'s loop, at the top of each frame: how far past its deadline it started | `universe` (`subnet:universe`) |
 | `artnet.frame.overrun` | count | the same loop, each time it fell more than a whole interval behind and re-based its deadline | `universe` |
 | `fx.tick.duration` | histogram | `FxEngine`'s compose pass, around each pass (an idle pass included) | `loop`: `beat` when a master's tick woke it (alone or with the ticker), else `wall_clock` |
-| `fx.active_effects` | gauge | the live show's `FxEngine.activeEffectCount` | — |
+| `fx.active_effects` | gauge | the live show's `FxEngine.activeFxCount` | — |
 | `ws.clients` | gauge | sockets past the warm-up gate | — |
 | `ws.outbound.dropped` | count | frames a socket never sent, see below | `type` (the frame's `@SerialName`), `reason` (`conflated`, `closed`) |
 | `midi.latency` | histogram | `MidiLatencyTracker`, read and never reset | `stage` (`ingressButton`, …) |

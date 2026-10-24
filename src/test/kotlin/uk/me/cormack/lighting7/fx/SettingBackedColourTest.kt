@@ -67,7 +67,7 @@ class SettingBackedColourTest {
         val out = buildCueAssignmentsForCue(fixtures, CueApplyData(
             cueId = 7,
             cueName = "test",
-            adHocEffects = emptyList(),
+            adHocFx = emptyList(),
             propertyAssignments = listOf(
                 CuePropertyAssignmentDto(
                     targetType = "fixture",

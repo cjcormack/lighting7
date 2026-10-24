@@ -8,11 +8,11 @@ import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { withoutInfrastructure } from '@/lib/infrastructure'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
-import { cueEffectInput, cueLayerInput } from '@/lib/cueUtils'
+import { cueFxInput, cueLayerInput } from '@/lib/cueUtils'
 import type {
   CookedRow,
   Cue,
-  CueAdHocEffect,
+  CueAdHocFx,
   CueLayer,
   CueLayerDetail,
   CueLayerPressResponse,
@@ -29,7 +29,7 @@ import {
   type CueRowTargetType,
 } from './cueRowDraft'
 import { appendItem, replaceAt } from './cueListEdits'
-import { lastIndexOfDraft } from '@/components/fx/draftEffect'
+import { lastIndexOfDraft } from '@/components/fx/draftFx'
 
 /**
  * What one save changed, for its Undo: the rows' keys and the rows the cue held under them before
@@ -38,11 +38,11 @@ import { lastIndexOfDraft } from '@/components/fx/draftEffect'
 interface UndoStep {
   rows?: { keys: readonly string[]; rows: readonly CuePropertyAssignment[] }
   layers?: readonly CueLayer[]
-  adHocEffects?: readonly CueAdHocEffect[]
+  adHocFx?: readonly CueAdHocFx[]
 }
 
 /** One of the cue's two other child lists, as the Looks and FX tabs write them. */
-export type CueChildList = 'layers' | 'adHocEffects'
+export type CueChildList = 'layers' | 'adHocFx'
 
 /**
  * A gesture on one child list: the list as the desk holds it in — a layer with its `id`, an effect
@@ -53,7 +53,7 @@ export type CueListEdit<T> = (stored: readonly T[]) => T[] | null
 
 interface ListEdits {
   layers: CueListEdit<CueLayerDetail> | null
-  adHocEffects: CueListEdit<CueAdHocEffect> | null
+  adHocFx: CueListEdit<CueAdHocFx> | null
 }
 
 /**
@@ -127,7 +127,7 @@ export interface CueRowStoreValue {
    * whether the write that carried it landed.
    */
   editLayers: (edit: CueListEdit<CueLayerDetail>, now?: boolean) => Promise<boolean>
-  editEffects: (edit: CueListEdit<CueAdHocEffect>, now?: boolean) => Promise<boolean>
+  editFx: (edit: CueListEdit<CueAdHocFx>, now?: boolean) => Promise<boolean>
   /**
    * A layer or effect gesture is waiting for its flush or its PATCH: a tab drawing its gesture
    * ahead of the desk keeps drawing it until this goes false and the cue is read again.
@@ -161,7 +161,7 @@ export const CUE_ROW_SAVE_CEILING_MS = 2000
 
 const EMPTY_ROWS: readonly CookedRow[] = []
 const EMPTY_ASSIGNMENTS: readonly CuePropertyAssignment[] = []
-const EMPTY_EFFECTS: readonly CueAdHocEffect[] = []
+const EMPTY_FX: readonly CueAdHocFx[] = []
 
 export function CueRowStoreProvider({
   projectId,
@@ -216,7 +216,7 @@ export function CueRowStoreProvider({
   /** What the last save changed — the rows' keys and the rows they replaced — for its Undo. */
   const undoRef = useRef<UndoStep | null>(null)
   /** The layer and effect gestures no flush has carried yet, each list's composed into one edit. */
-  const listEditsRef = useRef<ListEdits>({ layers: null, adHocEffects: null })
+  const listEditsRef = useRef<ListEdits>({ layers: null, adHocFx: null })
   /** Those gestures' answers — what the flush that takes them settles, and counts back down. */
   const carriedRef = useRef<((landed: boolean) => void)[]>([])
   const cueLabel = cue ? cueLabelOf(cue) : 'Cue'
@@ -310,7 +310,7 @@ export function CueRowStoreProvider({
       body: {
         ...(step.rows ? { propertyAssignments: restoreCueRows(latest.propertyAssignments, step.rows.keys, step.rows.rows) } : {}),
         ...(step.layers ? { layers: [...step.layers] } : {}),
-        ...(step.adHocEffects ? { adHocEffects: [...step.adHocEffects] } : {}),
+        ...(step.adHocFx ? { adHocFx: [...step.adHocFx] } : {}),
       },
       undo: null,
     })).then((result) => {
@@ -323,11 +323,11 @@ export function CueRowStoreProvider({
     // Only what no save has carried yet: a sent entry is in the cue, or about to be, and sending it
     // again would re-assert it over a later edit of that row from elsewhere.
     const sent = draft.unsaved()
-    const { layers: layerEdit, adHocEffects: effectEdit } = listEditsRef.current
-    listEditsRef.current = { layers: null, adHocEffects: null }
+    const { layers: layerEdit, adHocFx: fxEdit } = listEditsRef.current
+    listEditsRef.current = { layers: null, adHocFx: null }
     const carried = carriedRef.current
     carriedRef.current = []
-    if (sent.size === 0 && layerEdit == null && effectEdit == null) return
+    if (sent.size === 0 && layerEdit == null && fxEdit == null) return
     if (sent.size > 0) draft.markSending(sent)
     const keys = [...sent.keys()]
     // One PATCH for everything pending, so one Undo puts back everything it changed.
@@ -343,10 +343,10 @@ export function CueRowStoreProvider({
         body.layers = layers.map(cueLayerInput)
         step.layers = latest.layers.map(cueLayerInput)
       }
-      const effects = effectEdit?.(latest.adHocEffects) ?? null
+      const effects = fxEdit?.(latest.adHocFx) ?? null
       if (effects != null) {
-        body.adHocEffects = effects.map(cueEffectInput)
-        step.adHocEffects = latest.adHocEffects.map(cueEffectInput)
+        body.adHocFx = effects.map(cueFxInput)
+        step.adHocFx = latest.adHocFx.map(cueFxInput)
       }
       return Object.keys(body).length === 0 ? null : { body, undo: step }
     }).then((result) => {
@@ -433,8 +433,8 @@ export function CueRowStoreProvider({
     (edit: CueListEdit<CueLayerDetail>, now = false) => editList('layers', edit, now),
     [editList],
   )
-  const editEffects = useCallback(
-    (edit: CueListEdit<CueAdHocEffect>, now = false) => editList('adHocEffects', edit, now),
+  const editFx = useCallback(
+    (edit: CueListEdit<CueAdHocFx>, now = false) => editList('adHocFx', edit, now),
     [editList],
   )
 
@@ -485,10 +485,10 @@ export function CueRowStoreProvider({
   )
 
   /** A bare effect stored in draft — appended, or in place of the one the picker is auditioning. */
-  const pickEffect = useCallback<PressCue['pickEffect']>(
+  const pickFx = useCallback<PressCue['pickFx']>(
     (effect, replacing) =>
-      editList<CueAdHocEffect>(
-        'adHocEffects',
+      editList<CueAdHocFx>(
+        'adHocFx',
         (stored) => {
           const at = replacing == null ? -1 : lastIndexOfDraft(stored, replacing)
           return at < 0 ? appendItem(stored, effect) : replaceAt(stored, at, effect)
@@ -668,7 +668,7 @@ export function CueRowStoreProvider({
       ownGroups,
       ownTargets,
       editLayers,
-      editEffects,
+      editFx,
       listsBusy: listsInFlight > 0,
       undoSeq,
       undo,
@@ -698,7 +698,7 @@ export function CueRowStoreProvider({
     setValue,
     removeValue,
     editLayers,
-    editEffects,
+    editFx,
     listsInFlight,
     undoSeq,
     undo,
@@ -709,7 +709,7 @@ export function CueRowStoreProvider({
   // Keyed on what the bands read, not on the cue: a value save refetches the cue, and every cell in
   // the grid reads this context.
   const layeredKey = (cue?.layers ?? []).flatMap((layer) => (layer.source ? [`${layer.source.kind}:${layer.source.id}`] : [])).join('|')
-  const effects = cue?.adHocEffects ?? EMPTY_EFFECTS
+  const effects = cue?.adHocFx ?? EMPTY_FX
   const pressCue = useMemo<PressCue>(
     () => ({
       projectId,
@@ -720,9 +720,9 @@ export function CueRowStoreProvider({
       effects,
       pressLayer,
       landValues,
-      pickEffect,
+      pickFx,
     }),
-    [projectId, cueId, cueLabel, readOnly, layeredKey, effects, pressLayer, landValues, pickEffect],
+    [projectId, cueId, cueLabel, readOnly, layeredKey, effects, pressLayer, landValues, pickFx],
   )
 
   return (
@@ -736,7 +736,7 @@ export function CueRowStoreProvider({
 
 /** What a save or its Undo changed, in the toast's words: `values`, `looks and FX`. */
 function wordsFor(step: UndoStep): string {
-  const words = [step.rows && 'values', step.layers && 'looks', step.adHocEffects && 'FX'].filter((w): w is string => !!w)
+  const words = [step.rows && 'values', step.layers && 'looks', step.adHocFx && 'FX'].filter((w): w is string => !!w)
   return words.length <= 1 ? (words[0] ?? 'values') : `${words.slice(0, -1).join(', ')} and ${words[words.length - 1]}`
 }
 

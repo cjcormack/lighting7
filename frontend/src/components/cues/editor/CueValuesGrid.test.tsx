@@ -107,9 +107,9 @@ vi.mock('@/store/programmerOps', async (importOriginal) => ({
   ],
 }))
 const palettes = vi.hoisted(() => ({ list: [] as unknown[] }))
-vi.mock('@/store/templates', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/store/templates')>()),
-  useTemplateListQuery: () => ({ data: palettes.list }),
+vi.mock('@/store/palettes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/store/palettes')>()),
+  usePaletteListQuery: () => ({ data: palettes.list }),
 }))
 vi.mock('@/store/selection', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/selection')>()),
@@ -130,7 +130,7 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/store/groups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/groups')>()),
   useGroupListQuery: () => ({
-    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', memberKeys: ['orbit-sr', 'orbit-sl'] }],
+    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', memberKeys: ['orbit-sr', 'orbit-sl'] }],
   }),
 }))
 const toasts = vi.hoisted(() => ({ last: null as null | { message: string; undo?: () => void } }))
@@ -184,7 +184,7 @@ function cue(id: number, propertyAssignments: CuePropertyAssignment[]): Cue {
     cueNumber: String(id),
     cueNumberAuto: false,
     layers: [],
-    adHocEffects: [],
+    adHocFx: [],
     propertyAssignments,
     triggers: [],
     cueStackId: 7,
@@ -363,7 +363,7 @@ describe('CueValuesGrid', () => {
 
   it('draws a group row only the cells its own row can take — not a colour its members hold on their cells', () => {
     rig.fixtures = [makePixelBar('bar-1', 2, [sliderProp('dimmer', 'dimmer', chan(90))], { name: 'Bar 1', groups: ['Bars'] })]
-    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', memberKeys: ['bar-1'] }]
+    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', memberKeys: ['bar-1'] }]
     data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Bars', propertyName: 'dimmer', value: '115', sortOrder: 0 }]))
     data.cooked.set(1, [
       { targetType: 'group', targetKey: 'bar-1', propertyName: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Bars' },
@@ -463,16 +463,16 @@ describe('CueValuesGrid', () => {
       isGeneric: true,
       rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: hex }],
       requiredEmitters: [],
-      effect: null,
+      fx: null,
     })
     palettes.list = [colour(1, 'Red', '#ff0000'), colour(2, 'Blue', '#0000ff')]
-    const RED = { kind: 'TEMPLATE', id: 1, uuid: 't1', name: 'Red' } as const
-    const BLUE = { kind: 'TEMPLATE', id: 2, uuid: 't2', name: 'Blue' } as const
+    const RED = { kind: 'PALETTE', id: 1, uuid: 't1', name: 'Red' } as const
+    const BLUE = { kind: 'PALETTE', id: 2, uuid: 't2', name: 'Blue' } as const
     // An own level on the head, so its row is in the grid.
     const own: CuePropertyAssignment[] = [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }]
     const layered = (...sources: (typeof RED | typeof BLUE)[]): Cue => ({
       ...cue(1, own),
-      layers: sources.map((source, i) => ({ templateId: source.id, sortOrder: i, enabled: true, targets: [{ type: 'fixture', key: 'orbit-sr' }], propertyMask: 'COLOUR', source })),
+      layers: sources.map((source, i) => ({ paletteId: source.id, sortOrder: i, enabled: true, targets: [{ type: 'fixture', key: 'orbit-sr' }], propertyMask: 'COLOUR', source })),
     })
     data.cues.set(1, cue(1, own))
     const view = render(<Editor cueId={1} />)
@@ -484,13 +484,13 @@ describe('CueValuesGrid', () => {
     data.answers.push({ action: 'applied', cue: layered(RED) })
     fireEvent.click(await chip(1))
     await waitFor(() => expect(data.presses).toHaveLength(1))
-    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, templateId: 1, targets: [{ type: 'fixture', key: 'orbit-sr' }], families: ['COLOUR'] })
+    expect(data.presses[0]).toEqual({ projectId: 1, cueId: 1, paletteId: 1, targets: [{ type: 'fixture', key: 'orbit-sr' }], families: ['COLOUR'] })
 
     // The desk replaced Red with Blue on the pressed head; the chip rings where the cue layers it.
     data.answers.push({ action: 'applied', cue: layered(BLUE) })
     fireEvent.click(await chip(2))
     await waitFor(() => expect(data.presses).toHaveLength(2))
-    expect(data.presses[1]).toEqual(expect.objectContaining({ templateId: 2 }))
+    expect(data.presses[1]).toEqual(expect.objectContaining({ paletteId: 2 }))
     data.cues.set(1, layered(BLUE))
     view.rerender(
       <Provider store={store}>

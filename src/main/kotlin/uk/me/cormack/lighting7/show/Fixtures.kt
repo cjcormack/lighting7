@@ -41,28 +41,28 @@ interface FixturesChangeListener {
      * change invalidates only the template cache, which holds nothing patch-shaped. Folding them
      * would make each edit drop the other's cache for no reason.
      *
-     * A template's *contents* changing goes through `republishForTemplateEdit` instead, which
+     * A template's *contents* changing goes through `republishForPaletteEdit` instead, which
      * invalidates the one template directly.
      */
-    fun templateListChanged() {}
+    fun paletteListChanged() {}
 
     /**
      * A template was **pressed** — applied from any of the four doors — and now carries
      * [lastPressedAt] (ISO-8601).
      *
-     * Separate from [templateListChanged] because the two cost different things: that one is a CRUD
+     * Separate from [paletteListChanged] because the two cost different things: that one is a CRUD
      * signal whose client bridge drops the template, cue and cue-list caches, and a press happens
      * at busking rate. This one carries the whole of what moved, so a client patches rather than
      * refetches — the same argument [cuesRecomposed] makes for being keyed.
      *
-     * Not fired for a toggle *off*: a release is not a press. See `TemplatePressLog`.
+     * Not fired for a toggle *off*: a release is not a press. See `PalettePressLog`.
      */
-    fun templatePressed(templateId: Int, lastPressedAt: String) {}
+    fun palettePressed(paletteId: Int, lastPressedAt: String) {}
 
     /**
      * A Look or template contents edit changed what [cueIds] compose to.
      *
-     * The *contents* counterpart to [lookListChanged] / [templateListChanged], and deliberately
+     * The *contents* counterpart to [lookListChanged] / [paletteListChanged], and deliberately
      * keyed rather than a bare signal: a retune moves a handful of cues, so naming them lets a
      * client refresh exactly those reads instead of dropping every cue cache — which is the storm
      * the two list signals refuse to be fired for.
@@ -428,7 +428,7 @@ class Fixtures {
     }
 
     /**
-     * The fitted media of the patch keyed [fixtureKey] — what [TemplateResolver][uk.me.cormack.lighting7.fx.TemplateResolver]
+     * The fitted media of the patch keyed [fixtureKey] — what [PaletteResolver][uk.me.cormack.lighting7.fx.PaletteResolver]
      * and Locate resolve a loadable setting's options through. Null for nothing fitted, a cell
      * key, a Hue fixture or an unknown key: every option its stock.
      */
@@ -484,15 +484,15 @@ class Fixtures {
         }
     }
 
-    fun templateListChanged() {
+    fun paletteListChanged() {
         changeListeners.forEach {
-            it.templateListChanged()
+            it.paletteListChanged()
         }
     }
 
-    fun templatePressed(templateId: Int, lastPressedAt: String) {
+    fun palettePressed(paletteId: Int, lastPressedAt: String) {
         changeListeners.forEach {
-            it.templatePressed(templateId, lastPressedAt)
+            it.palettePressed(paletteId, lastPressedAt)
         }
     }
 

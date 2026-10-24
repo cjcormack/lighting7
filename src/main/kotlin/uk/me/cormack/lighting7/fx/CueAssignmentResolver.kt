@@ -209,7 +209,7 @@ class CueAssignmentResolver {
                 PropertyCategory.COLOUR -> {
                     val level = if (settingBacked) trimmed.toUByteParam() else null
                     if (level != null) PropertyValue.Setting(level)
-                    else if (isTemplateColourRef(trimmed)) null
+                    else if (isPaletteColourRef(trimmed)) null
                     else runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
                 }
                 // Wheel-like roles read as discrete selections. Which arm a category lands

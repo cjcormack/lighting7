@@ -28,7 +28,7 @@ const clearSelection = vi.fn()
 const subselectSelection = vi.fn()
 const maskSelection = vi.fn()
 
-const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] }
+const movers = { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NORMAL', compatibleLookIds: [] }
 const par = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: [] }
 const bar = {
   key: 'bar-1',

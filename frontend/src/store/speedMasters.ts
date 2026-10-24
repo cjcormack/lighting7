@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { restApi } from './restApi'
 import { lightingApi } from '../api/lightingApi'
 import { store } from './index'
-import { resolveSpeedMasterForCategory, type RoutableMaster } from '../lib/speedMasterModel'
+import { resolveSpeedMasterForFamily, type RoutableMaster } from '../lib/speedMasterModel'
 import type { SpeedMasterBeat, SpeedMasterLiveState } from '../api/speedMastersWsApi'
 import type {
   CreateSpeedMasterRequest,
@@ -127,7 +127,7 @@ export const speedMastersApi = restApi.injectEndpoints({
               existing.source = master.source
               // Routing and follow move on CRUD, not at tap rate — but they still have to be
               // copied here. A field this merge forgets is written once, from the first frame,
-              // and then never again: a usage retagged on another tab would leave this one
+              // and then never again: a family retagged on another tab would leave this one
               // routing busked effects at the old master for the life of the page.
               //
               // Compared before writing, unlike the four above, because these are optional
@@ -137,7 +137,7 @@ export const speedMastersApi = restApi.injectEndpoints({
               // hand every master a fresh identity on every tempo push: exactly the churn this
               // field-wise merge exists to avoid, and which `useSpeedMasterDisplay`'s per-master
               // subscription depends on not happening.
-              if (existing.usage !== master.usage) existing.usage = master.usage
+              if (existing.family !== master.family) existing.family = master.family
               if (existing.followNum !== master.followNum) existing.followNum = master.followNum
               if (existing.followDen !== master.followDen) existing.followDen = master.followDen
               if (existing.followTargetUuid !== master.followTargetUuid) {
@@ -176,20 +176,20 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
 /**
  * The apply-time routing lookup: category in, speed-master uuid (or null for master 1) out.
  *
- * **Its caller is `TemplateEditor`** (fx-templates D8): an effect template's master is stamped at
- * the moment the effect is chosen, so a Colour effect template picks up the master whose usage is
+ * **Its caller is `PaletteEditor`** (fx-templates D8): an effect template's master is stamped at
+ * the moment the effect is chosen, so a Colour effect template picks up the master whose family is
  * `colour` without the operator being asked. It spent a while with no caller at all — the busk
  * view's ad-hoc effect pads were the original one, and they went when that view was brought back
  * onto its design — and was kept for exactly this. Every other half of the rule stands unchanged: a
- * master declares a `usage`, the detail sheet sets it, `BuskSpeedRail` badges it, and a null
+ * master declares a `family`, the detail sheet sets it, `BuskSpeedRail` badges it, and a null
  * `speedMasterUuid` still means master 1 everywhere.
  *
- * The cost of stamping rather than resolving is that retagging a master's usage later does not move
+ * The cost of stamping rather than resolving is that retagging a master's family later does not move
  * templates already stamped — accepted, and recorded as `FU-TMPL-USAGE-RETAG`.
  *
  * Reads the **live** bank rather than the project list because every caller is acting on the
  * current show and already has the socket open — no `projectId`, no second fetch, and the WS
- * layer re-requests a state frame on `speedMasters.listChanged`, so a usage retagged anywhere
+ * layer re-requests a state frame on `speedMasters.listChanged`, so a family retagged anywhere
  * lands here. (The manage page and the detail sheet use the list query instead: they are
  * project-scoped and may be looking at a project that isn't current.)
  *
@@ -198,12 +198,12 @@ export function useSpeedMasterDisplay(speedMasterUuid: string | null | undefined
  * an array or a map here would hand back a new identity per tap of any master and re-render
  * every pad that holds this hook. The key only changes when the routing actually does.
  */
-export function useSpeedMasterForCategory(): (category: string | null | undefined) => string | null {
+export function useSpeedMasterForFamily(): (category: string | null | undefined) => string | null {
   const { routingKey } = useSpeedMasterLiveQuery(undefined, {
     selectFromResult: ({ data }) => ({
       routingKey: (data ?? [])
-        .filter((m) => m.usage != null && m.uuid != null)
-        .map((m) => `${m.usage}\u0000${m.uuid}`)
+        .filter((m) => m.family != null && m.uuid != null)
+        .map((m) => `${m.family}\u0000${m.uuid}`)
         .join('\u001f'),
     }),
   })
@@ -213,10 +213,10 @@ export function useSpeedMasterForCategory(): (category: string | null | undefine
       routingKey === ''
         ? []
         : routingKey.split('\u001f').map((pair) => {
-            const [usage, uuid] = pair.split('\u0000')
-            return { usage, uuid }
+            const [family, uuid] = pair.split('\u0000')
+            return { family, uuid }
           })
-    return (category) => resolveSpeedMasterForCategory(routed, category)
+    return (category) => resolveSpeedMasterForFamily(routed, category)
   }, [routingKey])
 }
 

@@ -3,10 +3,10 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
-import type { ActiveEffect } from '@/store/fixtureFx'
+import type { ActiveFx } from '@/store/fixtureFx'
 import type { ProgrammerLayer } from '@/api/programmerWsApi'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { StageElementDto } from '@/api/stageElementApi'
 import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
 
@@ -20,10 +20,10 @@ import type { LiveScenery, ProgrammerScenery } from '@/api/sceneryApi'
  * *+ Effect* door. Sort, filter and chip ride the query string beside `?table=`.
  */
 const mocks = vi.hoisted(() => ({
-  effects: [] as ActiveEffect[],
+  effects: [] as ActiveFx[],
   layers: [] as ProgrammerLayer[],
   looks: [] as LookSummary[],
-  templates: [] as TemplateSummary[],
+  templates: [] as PaletteSummary[],
   blind: false,
   removeLayer: vi.fn(),
   moveLayer: vi.fn(),
@@ -84,15 +84,15 @@ vi.mock('@/components/programmer/useLocalFamilyCounts', () => ({ useLocalValueCo
 vi.mock('@/components/programmer/ApplyLayerPicker', () => ({
   ApplyLayerPicker: ({ library }: { library: string }) => <div data-testid="apply-picker">{library}</div>,
 }))
-vi.mock('@/components/programmer/ProgrammerAddEffect', async () => {
+vi.mock('@/components/programmer/ProgrammerAddFx', async () => {
   const { useEffect, useState } = await import('react')
-  const { registerAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
+  const { registerAddFxDoor } = await import('@/components/programmer/addFxDoor')
   return {
-    useProgrammerAddEffect: () => ({ disabled: false, reason: 'Add an FX to the programmer.', pair: { targets: [], families: null } }),
-    ProgrammerAddEffectSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
-    ProgrammerAddEffectDoor: () => {
+    useProgrammerAddFx: () => ({ disabled: false, reason: 'Add an FX to the programmer.', pair: { targets: [], families: null } }),
+    ProgrammerAddFxSheet: ({ open }: { open: boolean }) => (open ? <div data-testid="add-effect" /> : null),
+    ProgrammerAddFxDoor: () => {
       const [asked, setAsked] = useState(false)
-      useEffect(() => registerAddEffectDoor(() => setAsked(true)), [])
+      useEffect(() => registerAddFxDoor(() => setAsked(true)), [])
       return asked ? <div data-testid="add-effect-door" /> : null
     },
   }
@@ -103,8 +103,8 @@ vi.mock('@/components/programmer/useReplacementNotes', () => ({
   useReplacementNotes: () => mocks.notes,
 }))
 vi.mock('@/store/fixtureFx', () => ({
-  useActiveEffectsQuery: () => ({ data: mocks.effects }),
-  useEffectLibraryQuery: () => ({ data: [] }),
+  useActiveFxQuery: () => ({ data: mocks.effects }),
+  useFxLibraryQuery: () => ({ data: [] }),
   usePauseFxMutation: mutation(mocks.pauseFx),
   useResumeFxMutation: mutation(mocks.resumeFx),
   useRemoveFxMutation: mutation(mocks.removeFx),
@@ -115,7 +115,7 @@ vi.mock('@/store/groups', () => ({
   useRemoveGroupFxMutation: mutation(mocks.removeGroupFx),
 }))
 vi.mock('@/store/looks', () => ({ useLookListQuery: () => ({ data: mocks.looks }), useLookQuery: () => ({ currentData: undefined }) }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: mocks.templates }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: mocks.templates }) }))
 vi.mock('@/store/speedMasters', () => ({
   useSpeedMasterLiveQuery: (_: unknown, opts: { selectFromResult: (r: { data: unknown }) => unknown }) =>
     opts.selectFromResult({
@@ -132,10 +132,10 @@ vi.mock('@/hooks/useFixtureLookup', () => ({ useFixtureLookup: () => ({ fixtures
 vi.mock('@/components/Breadcrumbs', () => ({ Breadcrumbs: ({ currentPage }: { currentPage: string }) => <span>{currentPage}</span> }))
 vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null }))
 vi.mock('@/components/fx/FxEditorPopover', () => ({
-  FxEditorPopover: ({ effect }: { effect: ActiveEffect }) => <div data-testid="fx-editor">{effect.id}</div>,
+  FxEditorPopover: ({ effect }: { effect: ActiveFx }) => <div data-testid="fx-editor">{effect.id}</div>,
 }))
-vi.mock('@/components/programmer/NewTemplateFromEffectSheet', () => ({
-  NewTemplateFromEffectSheet: ({ open, effect }: { open: boolean; effect: ActiveEffect | null }) =>
+vi.mock('@/components/programmer/NewPaletteFromFxSheet', () => ({
+  NewPaletteFromFxSheet: ({ open, effect }: { open: boolean; effect: ActiveFx | null }) =>
     open ? <div data-testid="save-sheet">{effect?.id}</div> : null,
 }))
 vi.mock('@/components/looks/LookDetailSheet', () => ({
@@ -150,27 +150,27 @@ const { DEFAULT_SCENERY_FILTERS, SCENERY_FILTERS_KEY, resetSceneryFiltersStore }
   '@/components/programmer/ProgrammerSceneryList'
 )
 const { FxSelectionStoreContext, createFxSelectionStore } = await import('@/components/fixtures-list/fxSelection')
-const { openAddEffectDoor } = await import('@/components/programmer/addEffectDoor')
+const { openAddFxDoor } = await import('@/components/programmer/addFxDoor')
 
-function effect(id: number, over: Partial<ActiveEffect> = {}): ActiveEffect {
+function effect(id: number, over: Partial<ActiveFx> = {}): ActiveFx {
   return {
     id,
-    effectType: `Effect ${id}`,
+    fxType: `Effect ${id}`,
     targetKey: `par-${id}`,
     propertyName: 'dimmer',
-    beatDivision: 1,
+    cycle: 1,
     blendMode: 'OVERRIDE',
     isRunning: true,
     phaseOffset: 0,
     currentPhase: 0,
     parameters: {},
     isGroupTarget: false,
-    distributionStrategy: null,
+    order: null,
     elementMode: null,
     elementFilter: null,
-    stepTiming: false,
+    timing: 'CYCLE',
     lookId: null,
-    templateId: null,
+    paletteId: null,
     sourceName: null,
     programmerLayerId: null,
     cueId: null,
@@ -183,7 +183,7 @@ function effect(id: number, over: Partial<ActiveEffect> = {}): ActiveEffect {
   }
 }
 
-function layer(layerId: number, kind: 'LOOK' | 'TEMPLATE', id: number, name: string, over: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
+function layer(layerId: number, kind: 'LOOK' | 'PALETTE', id: number, name: string, over: Partial<ProgrammerLayer> = {}): ProgrammerLayer {
   return {
     layerId,
     source: { kind, id, uuid: `u-${kind}-${id}`, name },
@@ -206,16 +206,16 @@ function look(id: number, name: string): LookSummary {
     notes: null,
     families: ['COLOUR'],
     rowCount: 1,
-    effectCount: 0,
+    fxCount: 0,
     targetCount: 1,
-    hasDeferredEffects: false,
+    hasDeferredFx: false,
     preview: [],
     layerCount: 0,
     buskPageCount: 0,
   }
 }
 
-function template(id: number, name: string, over: Partial<TemplateSummary> = {}): TemplateSummary {
+function template(id: number, name: string, over: Partial<PaletteSummary> = {}): PaletteSummary {
   return {
     id,
     uuid: `u-TEMPLATE-${id}`,
@@ -225,7 +225,7 @@ function template(id: number, name: string, over: Partial<TemplateSummary> = {})
     isGeneric: true,
     rows: [{ targetType: null, targetKey: null, propertyName: 'colour', value: '#ff9d4a;policy=extract' }],
     ...over,
-  } as TemplateSummary
+  } as PaletteSummary
 }
 
 function element(uuid: string, name: string, layer: 'VENUE' | 'SET', kind: 'DRAPE' | 'OBJECT', params: Record<string, unknown>): StageElementDto {
@@ -314,19 +314,19 @@ beforeEach(() => {
     element('e-sofa', 'Sofa', 'SET', 'OBJECT', {}),
   ]
   mocks.effects = [
-    effect(1, { effectType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
-    effect(2, { effectType: 'Circle', propertyName: 'position', size: 0.6, direction: 'BOUNCE' }),
-    effect(3, { effectType: 'Lightning', programmerOwned: false, programmerLayerId: 12, nShot: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', beatDivision: 4 }),
-    effect(4, { effectType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
+    effect(1, { fxType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
+    effect(2, { fxType: 'Circle', propertyName: 'position', amount: 0.6, direction: 'BOUNCE' }),
+    effect(3, { fxType: 'Lightning', programmerOwned: false, programmerLayerId: 12, runs: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', cycle: 4 }),
+    effect(4, { fxType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
   ]
   mocks.layers = [
     layer(10, 'LOOK', 1, 'Storm'),
-    layer(11, 'TEMPLATE', 5, 'Amber'),
-    layer(12, 'TEMPLATE', 6, 'Flash 3x'),
+    layer(11, 'PALETTE', 5, 'Amber'),
+    layer(12, 'PALETTE', 6, 'Flash 3x'),
     layer(13, 'LOOK', 2, 'Thunder', { enabled: false }),
   ]
   mocks.looks = [look(1, 'Storm'), look(2, 'Thunder')]
-  mocks.templates = [template(5, 'Amber'), template(6, 'Flash 3x', { kind: 'effect', rows: [] })]
+  mocks.templates = [template(5, 'Amber'), template(6, 'Flash 3x', { kind: 'fx', rows: [] })]
   for (const spy of [mocks.removeLayer, mocks.moveLayer, mocks.patchLayer, mocks.detachLayer, mocks.pickUp, mocks.pauseFx, mocks.resumeFx, mocks.removeFx, mocks.removeGroupFx, mocks.openMakeLayer, mocks.setScenery, mocks.clearScenery]) spy.mockClear()
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -696,11 +696,11 @@ describe('what the tables’ frame carries for every table', () => {
     const view = drawRoute('')
     expect(screen.queryByTestId('add-effect-door')).toBeNull()
     act(() => {
-      expect(openAddEffectDoor()).toBe(true)
+      expect(openAddFxDoor()).toBe(true)
     })
     expect(screen.getByTestId('add-effect-door')).toBeInTheDocument()
     view.unmount()
-    expect(openAddEffectDoor()).toBe(false)
+    expect(openAddFxDoor()).toBe(false)
   })
 })
 

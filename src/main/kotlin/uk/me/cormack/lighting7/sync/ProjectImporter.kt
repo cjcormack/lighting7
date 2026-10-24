@@ -8,9 +8,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.ParameterInfo
-import uk.me.cormack.lighting7.fx.normalizeEffectType
+import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.models.FixtureColours
 import uk.me.cormack.lighting7.models.ProjectKind
@@ -31,9 +31,9 @@ import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLookRow
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.deletePlacementsOf
@@ -104,15 +104,15 @@ import uk.me.cormack.lighting7.routes.deleteBuskRig
 import uk.me.cormack.lighting7.routes.deleteCueChildren
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.dto.ControlSurfaceBindingJson
-import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
+import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueJson
 import uk.me.cormack.lighting7.sync.dto.CueStackEntryJson
 import uk.me.cormack.lighting7.sync.dto.LegacyCuePlacementJson
 import uk.me.cormack.lighting7.sync.dto.LookJson
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateRow
-import uk.me.cormack.lighting7.sync.dto.TemplateJson
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteRow
+import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
@@ -182,8 +182,8 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // MIN stays at 5 because every field defaults to null. Imported as stored: the library is not
 // consulted, so an id a newer desk's library holds survives a round trip through this one.
 //
-// v30 added `size`, `direction` and `nShot` to the three stored effect shapes — `LookEffectJson`,
-// `TemplateEffectJson` and `CueAdHocEffectJson` (effects plan session 1, D2, D5, D9). SUPPORTED moved
+// v30 added `size`, `direction` and `nShot` to the three stored effect shapes — `LookFxJson`,
+// `PaletteFxJson` and `CueAdHocFxJson` (effects plan session 1, D2, D5, D9). SUPPORTED moved
 // for v14's reason — a v29 reader would run a 40 % effect at full size, a backward one forward and a
 // one-shot forever, and write all three away on its next push; MIN stays at 5 because each field
 // defaults to what a row without it meant.
@@ -193,13 +193,13 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // Imported as stored (canonicalised, no type check): the write boundary refuses a unit the type does
 // not pan and tilt, and Locate ignores an entry it cannot place.
 // v33 added `spread`, `wings`, `blocks` and `groups` to the three stored effect shapes —
-// `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` (effects plan session 2, D4).
+// `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` (effects plan session 2, D4).
 // SUPPORTED moved for v14's reason — a v32 reader would run a 50 % ripple over the whole cycle and two
 // wings as one, and write all four away on its next push; MIN stays at 5 because each field defaults to
 // what a row without it meant. Imported as stored: a value out of range is clamped when the effect
-// spawns (`EffectSpecCoercion.Lenient.spreadShape`), not refused here.
+// spawns (`FxSpecCoercion.Lenient.spreadShape`), not refused here.
 // v34 gave an effect a third target (effects plan session 3, D3): `targetType: "selection"` on a
-// `LookEffectJson` or `CueAdHocEffectJson`, its `targetKey` the canonical JSON of the ordered
+// `LookFxJson` or `CueAdHocFxJson`, its `targetKey` the canonical JSON of the ordered
 // `[{key, type}]` fixtures and groups it spreads over. No field moved. SUPPORTED moved for v14's
 // reason — a v33 reader would store a target it cannot spawn, and every cue holding one would skip
 // that effect; MIN stays at 5 because nothing older uses the value. Imported as stored: a key that
@@ -209,15 +209,15 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // without them and write them away on its next push; MIN stays at 5 because a missing list sets
 // nothing. Imported as stored: a uuid the archive's masters lack is skipped at GO, not here.
 //
-// v29 added `seconds` to the three stored effect shapes — `LookEffectJson`, `TemplateEffectJson` and
-// `CueAdHocEffectJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
+// v29 added `seconds` to the three stored effect shapes — `LookFxJson`, `PaletteFxJson` and
+// `CueAdHocFxJson` — D7's *Seconds* (venue-visit plan S15): the effect follows no master, and a
 // beat effect's `beatDivision` is then its cycle in seconds. SUPPORTED moved for v14's reason — a v28
 // reader would import a ten-second breathe as ten beats of master 1 and write the flag away on its
 // next push; MIN stays at 5 because the field defaults to false.
 //
 // v28 gave a palette's position row a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
 // centre-relative coarse DMX, beside the `deg:` travel degrees every earlier row holds. No field
-// moved — `TemplateRowJson.value` is a string, imported verbatim — but its meaning did: a v27 reader
+// moved — `PaletteRowJson.value` is a string, imported verbatim — but its meaning did: a v27 reader
 // parses a `pos:` row as no intent and skips it with a warn, so it would run every new position
 // palette as nothing while its push wrote the row back unchanged. SUPPORTED moves so a v27 install
 // refuses the repo instead; MIN stays at 5 because a `deg:` row still resolves as angles.
@@ -244,7 +244,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // them away on its next push. MIN stays at 5: a missing colour is none. Imported as stored (a key this
 // desk does not know reads as none, and survives the round trip), as a gel code is.
 //
-// v37 added `runUuid` to `CueAdHocEffectJson` (stack-timeline plan D7): the run key ad-hoc effects of
+// v37 added `runUuid` to `CueAdHocFxJson` (stack-timeline plan D7): the run key ad-hoc effects of
 // neighbouring cues share, for a GO to hand the running effect on (session 2). SUPPORTED moved for v14's reason — a v36
 // reader would import every effect out of its run and write the keys away on its next push. MIN stays at
 // 5: a missing key is no run. Imported as stored: nothing checks that a key's rows are neighbours, or
@@ -572,7 +572,7 @@ class ProjectImporter(private val state: State) {
             // Templates after cues (deleteCueChildren already dropped any layer pointing at one).
             // Without this, the surviving row is untouched and `populateProject` below re-imports
             // the JSON templates on top of it, tripping `uniqueIndex(project, name)`.
-            project.templates.forEach { template ->
+            project.palettes.forEach { template ->
                 template.rows.forEach { it.delete() }
                 template.effects.forEach { it.delete() }
                 template.delete()
@@ -718,7 +718,7 @@ class ProjectImporter(private val state: State) {
         val scriptMap = importScripts(sourceDir, project)
         val legacy = legacyContext(sourceDir, importFxDefinitions(sourceDir, project).values, formatVersion, fxLibrary)
         val lookMap = importLooks(sourceDir, project, elementMap, legacy)
-        val templateMap = importTemplates(sourceDir, project, legacy)
+        val paletteMap = importPalettes(sourceDir, project, legacy)
         importSpeedMasters(sourceDir, project)
         val universeMap = venue.universes + importUniverseConfigs(sourceDir, project)
         val riggingMap = venue.riggings + importRiggings(sourceDir, project)
@@ -734,8 +734,8 @@ class ProjectImporter(private val state: State) {
         val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, formatVersion, legacyPlaces)
         val (entryMap, numberClashes) = importCueStackEntries(sourceDir, cueStackMap, cueMap, legacyPlaces)
         importCuePropertyAssignments(sourceDir, cueMap)
-        importCueLayers(sourceDir, cueMap, lookMap, templateMap)
-        importCueAdHocEffects(sourceDir, cueMap, legacy)
+        importCueLayers(sourceDir, cueMap, lookMap, paletteMap)
+        importCueAdHocFx(sourceDir, cueMap, legacy)
         importCueTriggers(sourceDir, cueMap, scriptMap)
         importLegacyShowOrder(sourceDir, project, cueStackMap)
         val promptBook = importPromptBook(sourceDir, project)
@@ -743,7 +743,7 @@ class ProjectImporter(private val state: State) {
         importPromptBookAnnotations(sourceDir, promptBook)
         importCueSlots(sourceDir, project, cueMap, lookMap)
         // Pages after every record a pad can name.
-        importBuskPages(sourceDir, project, templateMap, lookMap, cueMap)
+        importBuskPages(sourceDir, project, paletteMap, lookMap, cueMap)
         importParkedChannels(sourceDir, project)
         importShowParkReleases(sourceDir, project)
         importControlSurfaceBindings(sourceDir, project)
@@ -929,7 +929,7 @@ class ProjectImporter(private val state: State) {
                 name = d.name
                 family = LegacyNames.familyOf(d.family, d.outputType.name)
                 outputType = d.outputType
-                fxMode = EffectMode.valueOf(LegacyNames.fxMode(d.fxMode))
+                fxMode = FxMode.valueOf(LegacyNames.fxMode(d.fxMode))
                 parameters = d.parameters?.let {
                     canonicalJson.decodeFromJsonElement(ListSerializer(ParameterInfo.serializer()), it)
                 } ?: emptyList()
@@ -979,7 +979,7 @@ class ProjectImporter(private val state: State) {
             // No strict effect-enum check here, deliberately, unlike the authoring routes: a
             // snapshot can come from a *newer* build whose blend modes this one does not know
             // yet, and refusing the whole import over one unrecognised string is worse than the
-            // warn `EffectSpecCoercion.Lenient` logs when the effect eventually spawns.
+            // warn `FxSpecCoercion.Lenient` logs when the effect eventually spawns.
             //
             // A deferred effect is dropped: a Look effect names its own target (absolute-looks plan
             // D2), and one an older desk wrote ran on whatever applied the Look.
@@ -989,7 +989,7 @@ class ProjectImporter(private val state: State) {
                     return@forEach
                 }
                 val e = legacyFx("Look '${l.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
-                DaoLookEffect.new {
+                DaoLookFxEntity.new {
                     look = dao
                     targetType = e.targetType
                     targetKey = e.targetKey
@@ -1601,15 +1601,15 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importTemplates(
+    private fun importPalettes(
         dir: Path,
         project: DaoProject,
         legacy: LegacyNames.Context,
-    ): Map<UUID, DaoTemplate> =
+    ): Map<UUID, DaoPalette> =
         readDir(dir.resolve("palettes")) { json ->
-            val t = canonicalDecode(TemplateJson.serializer(), json)
+            val t = canonicalDecode(PaletteJson.serializer(), json)
             val uuid = UUID.fromString(t.uuid)
-            val dao = DaoTemplate.new {
+            val dao = DaoPalette.new {
                 this.project = project
                 name = t.name
                 notes = t.notes
@@ -1617,7 +1617,7 @@ class ProjectImporter(private val state: State) {
                 this.uuid = uuid
             }
             t.rows.forEach { r ->
-                DaoTemplateRow.new {
+                DaoPaletteRow.new {
                     palette = dao
                     targetType = r.targetType
                     targetKey = r.targetKey
@@ -1630,10 +1630,10 @@ class ProjectImporter(private val state: State) {
             // Written verbatim, like an imported Look effect and for the same reason: the write
             // boundary's rules don't run on import, so a snapshot from a *newer* build whose
             // category or blend mode this one does not recognise still lands rather than aborting
-            // the pull. `EffectSpecCoercion.Lenient` warns if it eventually fails to spawn.
+            // the pull. `FxSpecCoercion.Lenient` warns if it eventually fails to spawn.
             t.fx?.let { stored ->
                 val e = legacyFx("Palette '${t.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
-                DaoTemplateEffect.new {
+                DaoPaletteFxEntity.new {
                     palette = dao
                     fxType = e.fxType
                     family = e.family
@@ -1666,7 +1666,7 @@ class ProjectImporter(private val state: State) {
         dir: Path,
         cueMap: Map<UUID, DaoCue>,
         lookMap: Map<UUID, DaoLook>,
-        templateMap: Map<UUID, DaoTemplate>,
+        paletteMap: Map<UUID, DaoPalette>,
     ) {
         readDir(dir.resolve("cueLayers")) { json ->
             val l = canonicalDecode(CueLayerJson.serializer(), json)
@@ -1684,23 +1684,23 @@ class ProjectImporter(private val state: State) {
             // JSON is untrusted input arriving through a call that can fail, so here it fails —
             // silently losing a layer of someone's show on a sync pull is the worse outcome.
             val lookUuidRaw = l.lookUuid
-            val templateUuidRaw = l.paletteUuid
-            layerSourceShape(lookUuidRaw, templateUuidRaw).problem?.let { problem ->
+            val paletteUuidRaw = l.paletteUuid
+            layerSourceShape(lookUuidRaw, paletteUuidRaw).problem?.let { problem ->
                 throw ImportError.invalidArchive(
                     "Cue layer ${l.uuid} names $problem; exactly one of lookUuid / paletteUuid is required",
                 )
             }
             var look: DaoLook? = null
-            var template: DaoTemplate? = null
+            var template: DaoPalette? = null
             if (lookUuidRaw != null) {
                 val lookUuid = UUID.fromString(lookUuidRaw)
                 look = lookMap[lookUuid]
                     ?: throw ImportError.invalidArchive("Cue layer ${l.uuid} references unknown look $lookUuid")
             } else {
-                val templateUuid = UUID.fromString(templateUuidRaw)
-                template = templateMap[templateUuid]
+                val paletteUuid = UUID.fromString(paletteUuidRaw)
+                template = paletteMap[paletteUuid]
                     ?: throw ImportError.invalidArchive(
-                        "Cue layer ${l.uuid} references unknown template $templateUuid",
+                        "Cue layer ${l.uuid} references unknown template $paletteUuid",
                     )
             }
             // A Look lands whole (absolute-looks plan D1): a Look layer an older desk wrote with
@@ -1734,15 +1734,15 @@ class ProjectImporter(private val state: State) {
         }
     }
 
-    private fun importCueAdHocEffects(dir: Path, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
+    private fun importCueAdHocFx(dir: Path, cueMap: Map<UUID, DaoCue>, legacy: LegacyNames.Context) {
         readDir(dir.resolve("cueAdHocFx")) { json ->
-            val stored = canonicalDecode(CueAdHocEffectJson.serializer(), json)
+            val stored = canonicalDecode(CueAdHocFxJson.serializer(), json)
             val cueUuid = UUID.fromString(stored.cueUuid)
             val cue = cueMap[cueUuid]
                 ?: throw ImportError.invalidArchive("Ad-hoc effect ${stored.uuid} references unknown cue $cueUuid")
             val e = legacyFx("Cue '${cue.name}'", stored.storedFx(), legacy)?.let { stored.with(it) } ?: stored
             val uuid = UUID.fromString(e.uuid)
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue
                 targetType = e.targetType
                 targetKey = e.targetKey
@@ -1902,7 +1902,7 @@ class ProjectImporter(private val state: State) {
     private fun importBuskPages(
         dir: Path,
         project: DaoProject,
-        templateMap: Map<UUID, DaoTemplate>,
+        paletteMap: Map<UUID, DaoPalette>,
         lookMap: Map<UUID, DaoLook>,
         cueMap: Map<UUID, DaoCue>,
     ) {
@@ -1937,7 +1937,7 @@ class ProjectImporter(private val state: State) {
                             logger.warn("Busk pad {} on page {} names no record or more than one; dropping the pad", d.uuid, p.name)
                             return@forEach
                         }
-                        val template = d.paletteUuid?.let { templateMap[UUID.fromString(it)] }
+                        val template = d.paletteUuid?.let { paletteMap[UUID.fromString(it)] }
                         val look = d.lookUuid?.let { lookMap[UUID.fromString(it)] }
                         val cue = d.cueUuid?.let { cueMap[UUID.fromString(it)] }
                         if (template == null && look == null && cue == null) {
@@ -2198,7 +2198,7 @@ class ProjectImporter(private val state: State) {
     private fun legacyContext(dir: Path, definitions: Collection<DaoFxDefinition>, formatVersion: Int, fxLibrary: Int?): LegacyNames.Context {
         val palettes by lazy {
             readDir(dir.resolve("palettes")) { json ->
-                val t = canonicalDecode(TemplateJson.serializer(), json)
+                val t = canonicalDecode(PaletteJson.serializer(), json)
                 UUID.fromString(t.uuid) to LegacyNames.Palette(
                     name = t.name,
                     rows = t.rows.sortedBy { it.sortOrder }.map {
@@ -2209,12 +2209,12 @@ class ProjectImporter(private val state: State) {
             }
         }
         val byId = definitions.associate { d ->
-            normalizeEffectType(d.fxId) to
+            normalizeFxType(d.fxId) to
                 LegacyNames.Definition(d.outputType.name, d.parameters.filter { it.type == "colourList" }.mapTo(HashSet()) { it.name })
         }
         return LegacyNames.Context(
             palettes = { palettes[it] },
-            definitions = { byId[normalizeEffectType(it)] },
+            definitions = { byId[normalizeFxType(it)] },
             absentPingPongIsOn = LegacyNames.absentPingPongIsOn(formatVersion, fxLibrary),
         )
     }

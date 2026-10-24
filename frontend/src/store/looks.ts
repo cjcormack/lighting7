@@ -107,7 +107,7 @@ export const looksApi = restApi.injectEndpoints({
       // A rename can collide (409) and a bad row can 400; nothing moved when either happens.
       // Cues are invalidated because a contents edit republishes every cue layering this Look.
       //
-      // `Fixture`/`GroupList` ride on **`effects` alone**, and that conditional is the point.
+      // `Fixture`/`GroupList` ride on **`fx` alone**, and that conditional is the point.
       // `compatibleLookIds` is derived server-side by `compatibleIdsFor`, which filters on a Look's
       // effect categories and nothing else — the `editorFixtureType` type gate that used to sit
       // beside it went with the column in session 3, so the comment that once justified these two
@@ -118,7 +118,7 @@ export const looksApi = restApi.injectEndpoints({
       // bodies every 400 ms through a layer-scope drag, and `Fixture` is the fixture list — 48
       // consumers here, `loadLookCompatibilityInfos` + `detectCapabilities` per fixture server-side
       // — so every drag tick refetched it and handed every consumer a new array identity mid-drag.
-      invalidatesTags: (result, _error, { lookId, effects }) =>
+      invalidatesTags: (result, _error, { lookId, fx }) =>
         result == null
           ? []
           : [
@@ -126,7 +126,7 @@ export const looksApi = restApi.injectEndpoints({
               'LookList' as const,
               'Cue' as const,
               'CueList' as const,
-              ...(effects === undefined
+              ...(fx === undefined
                 ? []
                 : (['Fixture', 'GroupList'] as const)),
             ],
@@ -185,21 +185,21 @@ export const looksApi = restApi.injectEndpoints({
      * asked to add one. Invalidates the effect tags as well as the Look, since the instances leave
      * the programmer band and come back through the layer.
      */
-    absorbLookEffects: build.mutation<
+    absorbLookFx: build.mutation<
       { look: LookDetails; absorbed: number },
-      { projectId: number; lookId: number; effectIds: number[] }
+      { projectId: number; lookId: number; fxIds: number[] }
     >({
-      query: ({ projectId, lookId, effectIds }) => ({
-        url: `projects/${projectId}/looks/${lookId}/absorb-effects`,
+      query: ({ projectId, lookId, fxIds }) => ({
+        url: `projects/${projectId}/looks/${lookId}/absorb-fx`,
         method: 'POST',
-        body: { effectIds },
+        body: { fxIds },
       }),
       // Absorbing is an effect write, so it moves `compatibleLookIds` the same way
-      // `saveLook`'s `effects` arm does — hence `Fixture`/`GroupList` here too.
+      // `saveLook`'s `fx` arm does — hence `Fixture`/`GroupList` here too.
       invalidatesTags: (_result, _error, { lookId }) => [
         { type: 'Look' as const, id: lookId },
         'LookList' as const,
-        'FixtureEffects' as const,
+        'FixtureFx' as const,
         'Fixture' as const,
         'GroupList' as const,
       ],
@@ -222,14 +222,14 @@ export const looksApi = restApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { targets }) => {
         const tags: Array<
-          | { type: 'FixtureEffects'; id: string }
-          | { type: 'GroupActiveEffects'; id: string }
+          | { type: 'FixtureFx'; id: string }
+          | { type: 'GroupActiveFxList'; id: string }
         > = []
         for (const t of targets) {
           if (t.type === 'fixture') {
-            tags.push({ type: 'FixtureEffects', id: t.key })
+            tags.push({ type: 'FixtureFx', id: t.key })
           } else {
-            tags.push({ type: 'GroupActiveEffects', id: t.key })
+            tags.push({ type: 'GroupActiveFxList', id: t.key })
           }
         }
         return tags
@@ -249,8 +249,8 @@ export const looksApi = restApi.injectEndpoints({
       invalidatesTags: (_result, _error, { targets }) =>
         targets.map((t) =>
           t.type === 'fixture'
-            ? ({ type: 'FixtureEffects', id: t.key } as const)
-            : ({ type: 'GroupActiveEffects', id: t.key } as const),
+            ? ({ type: 'FixtureFx', id: t.key } as const)
+            : ({ type: 'GroupActiveFxList', id: t.key } as const),
         ),
     }),
   }),
@@ -263,7 +263,7 @@ export const {
   useSaveLookMutation,
   useDeleteLookMutation,
   useCopyLookMutation,
-  useAbsorbLookEffectsMutation,
+  useAbsorbLookFxMutation,
   useToggleLookMutation,
   useApplyLookMutation,
 } = looksApi

@@ -29,7 +29,7 @@ data class SpeedMasterSnapshot(
     val bpm: Double,
     val source: SpeedMasterSource,
     /** Effect-library category this master is the apply-time default for; null routes nothing. */
-    val usage: String? = null,
+    val family: String? = null,
     /** Follow ratio over [followTargetUuid] — both null = manual, both positive = follower (D2). */
     val followNum: Int? = null,
     val followDen: Int? = null,
@@ -77,7 +77,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         val isRunning: Boolean,
         val source: SpeedMasterSource,
         /** Effect-library category this master is the apply-time default for; null routes nothing. */
-        val usage: String? = null,
+        val family: String? = null,
         /** Follow ratio over [followTargetUuid]; both null = manual. */
         val followNum: Int? = null,
         val followDen: Int? = null,
@@ -159,7 +159,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
         @Volatile var name: String,
         val clock: MasterClock,
         @Volatile var source: SpeedMasterSource,
-        @Volatile var usage: String? = null,
+        @Volatile var family: String? = null,
         /**
          * The live link, or null for a manual master. Set from the row at [load] and cleared
          * there when the row's target is dangling or loops — so everything downstream can read
@@ -352,7 +352,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
             bpm = entry.clock.bpm.value,
             isRunning = entry.clock.isRunning.value,
             source = entry.source,
-            usage = entry.usage,
+            family = entry.family,
             followNum = entry.follow?.num,
             followDen = entry.follow?.den,
             followTargetUuid = entry.leader?.uuid,
@@ -417,7 +417,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     // Refreshed on the reuse branch as much as the rebuild branch: a usage or
                     // ratio edit arrives as a reload of the same uuid, and stale values here
                     // would silently ignore it.
-                    entry.usage = row.usage
+                    entry.family = row.family
                     // Read before the write: on the reuse branch `entry` *is* `existing`, so
                     // the old spec is gone the moment the new one lands.
                     val previousFollow = existing.follow
@@ -438,7 +438,7 @@ class SpeedMasterBank(master1Clock: MasterClock = MasterClock()) {
                     newSlots.add(
                         Entry(
                             row.uuid, row.index, row.name, clock, row.source,
-                            usage = row.usage, follow = followOf(row),
+                            family = row.family, follow = followOf(row),
                         )
                     )
                 }

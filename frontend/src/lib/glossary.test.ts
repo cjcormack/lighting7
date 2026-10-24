@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import glossary from '../../../docs/glossary.md?raw'
 import {
   BLEND_MODE_OPTIONS,
-  EFFECT_CATEGORY_INFO,
+  FX_FAMILY_INFO,
   ELEMENT_MODE_OPTIONS,
 } from '@/components/fx/fxConstants'
 import { ORDER_LABELS } from '@/lib/orderLabels'
@@ -26,8 +26,8 @@ interface Row {
 const KEYED_STATUSES = new Set(['done', 'screen'])
 const STATUSES = [...KEYED_STATUSES, 'planned']
 
-const BACKEND_PREFIXES = new Set(['fx', 'category', 'usage'])
-const FRONTEND_PREFIXES = new Set(['src', 'ORDER_LABELS', 'EFFECT_CATEGORY_INFO', 'BLEND_MODE_OPTIONS', 'ELEMENT_MODE_OPTIONS'])
+const BACKEND_PREFIXES = new Set(['fx', 'family', 'masterFamily'])
+const FRONTEND_PREFIXES = new Set(['src', 'ORDER_LABELS', 'FX_FAMILY_INFO', 'BLEND_MODE_OPTIONS', 'ELEMENT_MODE_OPTIONS'])
 
 const SOURCES = import.meta.glob<string>(['/src/**/*.{ts,tsx}', '!/src/**/*.test.{ts,tsx}'], {
   query: '?raw',
@@ -139,8 +139,8 @@ function labelAt(key: string): string | undefined {
   switch (table) {
     case 'ORDER_LABELS':
       return ORDER_LABELS[entry]
-    case 'EFFECT_CATEGORY_INFO':
-      return EFFECT_CATEGORY_INFO[entry]?.label
+    case 'FX_FAMILY_INFO':
+      return FX_FAMILY_INFO[entry]?.label
     case 'BLEND_MODE_OPTIONS':
       return optionLabel(BLEND_MODE_OPTIONS, entry)
     case 'ELEMENT_MODE_OPTIONS':

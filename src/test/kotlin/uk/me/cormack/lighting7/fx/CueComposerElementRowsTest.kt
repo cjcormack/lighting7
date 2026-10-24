@@ -51,9 +51,9 @@ class CueComposerElementRowsTest {
         effects = emptyList(),
     )
 
-    private fun template(vararg rows: TemplateRowEntry) = TemplateSnapshot(
-        templateId = 6,
-        templateUuid = UUID.nameUUIDFromBytes("Amber".toByteArray()),
+    private fun template(vararg rows: PaletteRowEntry) = PaletteSnapshot(
+        paletteId = 6,
+        paletteUuid = UUID.nameUUIDFromBytes("Amber".toByteArray()),
         name = "Amber",
         fadeDurationMs = null,
         rows = rows.toList(),
@@ -66,8 +66,8 @@ class CueComposerElementRowsTest {
         layerId = 1,
     )
 
-    private fun templateLayer(template: TemplateSnapshot, targets: List<CueTargetDto>) = CookLayer(
-        source = LayerSource.template(template.templateId, template.templateUuid, template.name),
+    private fun paletteLayer(template: PaletteSnapshot, targets: List<CueTargetDto>) = CookLayer(
+        source = LayerSource.palette(template.paletteId, template.paletteUuid, template.name),
         sortOrder = 0,
         targets = targets,
         layerId = 1,
@@ -77,7 +77,7 @@ class CueComposerElementRowsTest {
         fixtures: Fixtures,
         layer: CookLayer,
         look: LookSnapshot? = null,
-        template: TemplateSnapshot? = null,
+        template: PaletteSnapshot? = null,
     ): CookResult = CueComposer.cook(
         fixtures = fixtures,
         cueId = cueId,
@@ -85,7 +85,7 @@ class CueComposerElementRowsTest {
         layers = listOf(layer),
         localRows = emptyList(),
         resolveLook = { if (it == look?.lookUuid) look else null },
-        resolveTemplate = { if (it == template?.templateUuid) template else null },
+        resolvePalette = { if (it == template?.paletteUuid) template else null },
     )
 
     private fun colourAt(rows: List<CueAssignmentResolver.Assignment>, key: String): ExtendedColour {
@@ -123,28 +123,28 @@ class CueComposerElementRowsTest {
 
     /** A per-fixture palette with a colour row on each of [cells]. */
     private fun cellPalette(vararg cells: Int) = template(
-        *cells.map { TemplateRowEntry(target = TargetRef.Fixture("bar-1.pixel-$it"), propertyName = "rgbColour", value = "#FF0000;policy=extract") }
+        *cells.map { PaletteRowEntry(target = TargetRef.Fixture("bar-1.pixel-$it"), propertyName = "rgbColour", value = "#FF0000;policy=extract") }
             .toTypedArray(),
     )
 
     @Test
     fun `a palette layer on one cell filters its bound rows to that cell`() {
         val red = cellPalette(2, 5)
-        val result = cook(rig(), templateLayer(red, targets = listOf(cell(2))), template = red)
+        val result = cook(rig(), paletteLayer(red, targets = listOf(cell(2))), template = red)
         assertEquals(listOf("bar-1.pixel-2"), result.rows.map { it.targetKey })
     }
 
     @Test
     fun `a palette layer on another fixture drops the cells' rows`() {
         val red = cellPalette(2)
-        val result = cook(rig(), templateLayer(red, targets = listOf(CueTargetDto("fixture", "hex-1"))), template = red)
+        val result = cook(rig(), paletteLayer(red, targets = listOf(CueTargetDto("fixture", "hex-1"))), template = red)
         assertTrue(result.rows.isEmpty())
     }
 
     @Test
     fun `a generic template row fans over cell targets and resolves on the cell's own emitters`() {
-        val amber = template(TemplateRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"))
-        val result = cook(rig(), templateLayer(amber, targets = listOf(cell(2), cell(5))), template = amber)
+        val amber = template(PaletteRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"))
+        val result = cook(rig(), paletteLayer(amber, targets = listOf(cell(2), cell(5))), template = amber)
 
         assertEquals(setOf("bar-1.pixel-2", "bar-1.pixel-5"), result.rows.map { it.targetKey }.toSet())
         assertEquals(74u.toUByte(), colourAt(result.rows, "bar-1.pixel-2").white, "the neutral part went to the pixel's white")
@@ -155,7 +155,7 @@ class CueComposerElementRowsTest {
         // A cell target is `{fixture, <elementKey>}`, and the parent covers it as it covers an
         // element row.
         val red = cellPalette(2)
-        val result = cook(rig(), templateLayer(red, targets = listOf(bar)), template = red)
+        val result = cook(rig(), paletteLayer(red, targets = listOf(bar)), template = red)
         assertEquals(listOf("bar-1.pixel-2"), result.rows.map { it.targetKey })
     }
 }

@@ -1,6 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.HttpClient
+import uk.me.cormack.lighting7.models.Timing
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -17,13 +18,13 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateEffects
-import uk.me.cormack.lighting7.models.DaoTemplateRow
-import uk.me.cormack.lighting7.models.DaoTemplateRows
-import uk.me.cormack.lighting7.models.TemplateEffectDto
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteFx
+import uk.me.cormack.lighting7.models.DaoPaletteRow
+import uk.me.cormack.lighting7.models.DaoPaletteRows
+import uk.me.cormack.lighting7.models.PaletteFxDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.models.nowUtc
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -52,7 +53,7 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         DaoProject.new { this.name = name; isCurrent = false }.id.value
     }
 
-    private suspend fun HttpClient.createTemplate(input: TemplateInput): TemplateDto {
+    private suspend fun HttpClient.createPalette(input: PaletteInput): PaletteDto {
         val resp = post(templates()) {
             contentType(ContentType.Application.Json)
             setBody(input)
@@ -61,23 +62,23 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         return resp.body()
     }
 
-    private suspend fun HttpClient.copyTemplate(
-        templateId: Int,
+    private suspend fun HttpClient.copyPalette(
+        paletteId: Int,
         targetProjectId: Int,
         newName: String? = null,
         fromProject: Int = projectId,
-    ): HttpResponse = post("${templates(fromProject)}/$templateId/copy") {
+    ): HttpResponse = post("${templates(fromProject)}/$paletteId/copy") {
         contentType(ContentType.Application.Json)
-        setBody(CopyTemplateRequest(targetProjectId = targetProjectId, newName = newName))
+        setBody(CopyPaletteRequest(targetProjectId = targetProjectId, newName = newName))
     }
 
-    private fun perFixtureTemplate(name: String) = TemplateInput(
+    private fun perFixturePalette(name: String) = PaletteInput(
         name = name,
         notes = "aim at the lectern",
         fadeDurationMs = 2_500L,
         rows = listOf(
-            TemplateRowDto("fixture", "mover-1", "position", "deg:12,-8"),
-            TemplateRowDto("fixture", "mover-2", "position", "deg:-14,-8"),
+            PaletteRowDto("fixture", "mover-1", "position", "deg:12,-8"),
+            PaletteRowDto("fixture", "mover-2", "position", "deg:-14,-8"),
         ),
     )
 
@@ -85,18 +86,18 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
     fun `a same-project copy under a new name is a new template with the same contents`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val source = client.createTemplate(perFixtureTemplate("lectern"))
+        val source = client.createPalette(perFixturePalette("lectern"))
         // A press history belongs to the template that was pressed.
-        transaction(state.database) { DaoTemplate[source.id].lastPressedAt = nowUtc() }
+        transaction(state.database) { DaoPalette[source.id].lastPressedAt = nowUtc() }
 
-        val resp = client.copyTemplate(source.id, projectId, newName = "lectern (Copy)")
+        val resp = client.copyPalette(source.id, projectId, newName = "lectern (Copy)")
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
-        val answer = resp.body<CopyTemplateResponse>()
-        assertEquals("lectern (Copy)", answer.templateName)
+        val answer = resp.body<CopyPaletteResponse>()
+        assertEquals("lectern (Copy)", answer.paletteName)
         assertEquals(projectId, answer.targetProjectId)
-        assertNotEquals(source.id, answer.templateId)
+        assertNotEquals(source.id, answer.paletteId)
 
-        val copy = client.get("${templates()}/${answer.templateId}").body<TemplateDto>()
+        val copy = client.get("${templates()}/${answer.paletteId}").body<PaletteDto>()
         assertNotEquals(source.uuid, copy.uuid, "a copy is a new entity — sync must not see one record")
         assertEquals("aim at the lectern", copy.notes)
         assertEquals(2_500L, copy.fadeDurationMs)
@@ -108,14 +109,14 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         )
         assertNull(copy.lastPressedAt, "the copy has never been pressed")
         assertNotNull(
-            client.get("${templates()}/${source.id}").body<TemplateDto>().lastPressedAt,
+            client.get("${templates()}/${source.id}").body<PaletteDto>().lastPressedAt,
             "the source keeps its own stamp",
         )
 
         // Fresh child uuids, and the source's rows untouched.
         transaction(state.database) {
-            val sourceRowUuids = DaoTemplateRow.find { DaoTemplateRows.palette eq source.id }.map { it.uuid }.toSet()
-            val copyRowUuids = DaoTemplateRow.find { DaoTemplateRows.palette eq answer.templateId }.map { it.uuid }.toSet()
+            val sourceRowUuids = DaoPaletteRow.find { DaoPaletteRows.palette eq source.id }.map { it.uuid }.toSet()
+            val copyRowUuids = DaoPaletteRow.find { DaoPaletteRows.palette eq answer.paletteId }.map { it.uuid }.toSet()
             assertEquals(2, sourceRowUuids.size)
             assertEquals(2, copyRowUuids.size)
             assertTrue(sourceRowUuids.intersect(copyRowUuids).isEmpty(), "every row uuid is fresh")
@@ -128,39 +129,39 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val master = UUID.randomUUID().toString()
         val rateMaster = UUID.randomUUID().toString()
-        val effect = TemplateEffectDto(
-            effectType = "ColourWave",
-            category = "colour",
+        val effect = PaletteFxDto(
+            fxType = "ColourWave",
+            family = "colour",
             propertyName = "rgbColour",
-            beatDivision = 0.5,
+            cycle = 0.5,
             blendMode = "ADDITIVE",
-            distribution = "NORMAL",
+            order = "NORMAL",
             phaseOffset = 0.25,
             elementMode = "PER_FIXTURE",
-            stepTiming = true,
+            timing = Timing.HEAD,
             parameters = mapOf("colour" to "#FF0000"),
             speedMasterUuid = master,
             rateSpeedMasterUuid = rateMaster,
         )
-        val source = client.createTemplate(TemplateInput(name = "red-pulse", effect = effect))
-        val sourceEffect = assertNotNull(source.effect)
+        val source = client.createPalette(PaletteInput(name = "red-pulse", fx = effect))
+        val sourceFx = assertNotNull(source.fx)
 
         val other = otherProject()
-        val resp = client.copyTemplate(source.id, other)
+        val resp = client.copyPalette(source.id, other)
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
-        val answer = resp.body<CopyTemplateResponse>()
-        assertEquals("red-pulse", answer.templateName, "an absent newName keeps the source's name")
+        val answer = resp.body<CopyPaletteResponse>()
+        assertEquals("red-pulse", answer.paletteName, "an absent newName keeps the source's name")
 
-        val copy = client.get("${templates(other)}/${answer.templateId}").body<TemplateDto>()
+        val copy = client.get("${templates(other)}/${answer.paletteId}").body<PaletteDto>()
         assertTrue(copy.rows.isEmpty())
         // The whole DTO, `timingSource` included, since both are read through the same registry.
-        assertEquals(sourceEffect, copy.effect, "the effect arrives with the same contents")
-        assertEquals(master, copy.effect?.speedMasterUuid, "a master that is not in the target is kept")
-        assertEquals(rateMaster, copy.effect?.rateSpeedMasterUuid)
+        assertEquals(sourceFx, copy.fx, "the effect arrives with the same contents")
+        assertEquals(master, copy.fx?.speedMasterUuid, "a master that is not in the target is kept")
+        assertEquals(rateMaster, copy.fx?.rateSpeedMasterUuid)
 
         transaction(state.database) {
-            val sourceUuid = DaoTemplateEffect.find { DaoTemplateEffects.palette eq source.id }.single().uuid
-            val copyUuid = DaoTemplateEffect.find { DaoTemplateEffects.palette eq answer.templateId }.single().uuid
+            val sourceUuid = DaoPaletteFxEntity.find { DaoPaletteFx.palette eq source.id }.single().uuid
+            val copyUuid = DaoPaletteFxEntity.find { DaoPaletteFx.palette eq answer.paletteId }.single().uuid
             assertNotEquals(sourceUuid, copyUuid)
         }
     }
@@ -169,16 +170,16 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
     fun `a copy into another project lands there and says where`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val source = client.createTemplate(perFixtureTemplate("lectern"))
+        val source = client.createPalette(perFixturePalette("lectern"))
         val other = otherProject("touring")
 
-        val answer = client.copyTemplate(source.id, other).body<CopyTemplateResponse>()
+        val answer = client.copyPalette(source.id, other).body<CopyPaletteResponse>()
         assertEquals(other, answer.targetProjectId)
         assertEquals("touring", answer.targetProjectName)
-        assertEquals(listOf("lectern"), client.get(templates(other)).body<List<TemplateDto>>().map { it.name })
-        assertEquals(listOf("lectern"), client.get(templates()).body<List<TemplateDto>>().map { it.name })
+        assertEquals(listOf("lectern"), client.get(templates(other)).body<List<PaletteDto>>().map { it.name })
+        assertEquals(listOf("lectern"), client.get(templates()).body<List<PaletteDto>>().map { it.name })
         transaction(state.database) {
-            assertEquals(other, DaoTemplate[answer.templateId].project.id.value)
+            assertEquals(other, DaoPalette[answer.paletteId].project.id.value)
         }
     }
 
@@ -188,11 +189,11 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val other = otherProject()
         val sourceId = transaction(state.database) {
-            val template = DaoTemplate.new {
+            val template = DaoPalette.new {
                 project = DaoProject[other]
                 name = "far-amber"
             }
-            DaoTemplateRow.new {
+            DaoPaletteRow.new {
                 this.palette = template
                 targetType = DEFERRED_TARGET_TYPE
                 targetKey = ""
@@ -202,43 +203,43 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
             template.id.value
         }
 
-        val resp = client.copyTemplate(sourceId, projectId, fromProject = other)
+        val resp = client.copyPalette(sourceId, projectId, fromProject = other)
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
-        assertEquals(listOf("far-amber"), client.get(templates()).body<List<TemplateDto>>().map { it.name })
+        assertEquals(listOf("far-amber"), client.get(templates()).body<List<PaletteDto>>().map { it.name })
     }
 
     @Test
     fun `a name already taken in the target is a conflict that names it`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val source = client.createTemplate(perFixtureTemplate("lectern"))
+        val source = client.createPalette(perFixturePalette("lectern"))
 
-        val sameName = client.copyTemplate(source.id, projectId)
+        val sameName = client.copyPalette(source.id, projectId)
         assertEquals(HttpStatusCode.Conflict, sameName.status)
         assertTrue("'lectern'" in sameName.bodyAsText(), sameName.bodyAsText())
 
-        client.createTemplate(perFixtureTemplate("lectern 2"))
-        val taken = client.copyTemplate(source.id, projectId, newName = "  lectern 2  ")
+        client.createPalette(perFixturePalette("lectern 2"))
+        val taken = client.copyPalette(source.id, projectId, newName = "  lectern 2  ")
         assertEquals(HttpStatusCode.Conflict, taken.status)
         assertTrue("'lectern 2'" in taken.bodyAsText(), "the name is trimmed before it is judged")
 
-        assertEquals(2, client.get(templates()).body<List<TemplateDto>>().size, "nothing was written")
+        assertEquals(2, client.get(templates()).body<List<PaletteDto>>().size, "nothing was written")
     }
 
     @Test
     fun `a template of another project, a missing one and a missing target are not found`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        val source = client.createTemplate(perFixtureTemplate("lectern"))
+        val source = client.createPalette(perFixturePalette("lectern"))
         val other = otherProject()
 
         // Addressed through a project it does not belong to.
-        assertEquals(HttpStatusCode.NotFound, client.copyTemplate(source.id, other, fromProject = other).status)
-        assertEquals(HttpStatusCode.NotFound, client.copyTemplate(source.id + 1_000, projectId).status)
-        val noTarget = client.copyTemplate(source.id, 9_999)
+        assertEquals(HttpStatusCode.NotFound, client.copyPalette(source.id, other, fromProject = other).status)
+        assertEquals(HttpStatusCode.NotFound, client.copyPalette(source.id + 1_000, projectId).status)
+        val noTarget = client.copyPalette(source.id, 9_999)
         assertEquals(HttpStatusCode.NotFound, noTarget.status)
         assertTrue("Target project" in noTarget.bodyAsText(), noTarget.bodyAsText())
-        assertTrue(client.get(templates(other)).body<List<TemplateDto>>().isEmpty())
+        assertTrue(client.get(templates(other)).body<List<PaletteDto>>().isEmpty())
     }
 
     // ─── Scripts ────────────────────────────────────────────────────────

@@ -31,7 +31,7 @@ vi.mock('@/store/programmer', () => ({
   useProgrammerLayersQuery: () => ({ data: [LAYER] }),
 }))
 vi.mock('./LookRowStore', () => ({ useLookSaveState: () => state.save }))
-vi.mock('./FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => null }))
+vi.mock('./FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => null }))
 vi.mock('./useLocalFamilyCounts', () => ({ useLocalValueCount: () => 0 }))
 vi.mock('./ProgrammerScope', () => ({
   useProgrammerScope: () => state.scope,

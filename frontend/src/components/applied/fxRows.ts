@@ -1,9 +1,9 @@
-import type { TemplateSummary } from '@/api/templatesApi'
-import { familyForEffectCategory } from '@/lib/attributeFamily'
-import { stepEffectPaletteShape } from '@/lib/stepEffects'
+import type { PaletteSummary } from '@/api/palettesApi'
+import { maskGroupForFxFamily } from '@/lib/attributeFamily'
+import { stepFxPaletteShape } from '@/lib/stepFx'
 import type { ProgrammerLayer } from '@/store/programmer'
-import type { ActiveEffect, EffectLibraryEntry } from '@/store/fixtureFx'
-import { findEffectEntry } from '../busking/buskingTypes'
+import type { ActiveFx, FxLibraryEntry } from '@/store/fixtureFx'
+import { findFxEntry } from '../busking/buskingTypes'
 
 /**
  * What the FX table says of an effect beyond its own fields: where it lives, and whether it can
@@ -30,12 +30,12 @@ export function layerHomesOf(
  * Returns a reason rather than false, because the item is **shown disabled** in both cases. A menu
  * that silently loses an entry teaches nobody why.
  */
-export function saveAsTemplateOffer(
-  effect: ActiveEffect,
-  library: EffectLibraryEntry[] | undefined,
-  templates: TemplateSummary[] | undefined,
+export function saveAsPaletteOffer(
+  effect: ActiveFx,
+  library: FxLibraryEntry[] | undefined,
+  templates: PaletteSummary[] | undefined,
 ): { enabled: boolean; reason?: string } {
-  if (!effect.programmerOwned || effect.lookId != null || effect.templateId != null || effect.programmerLayerId != null) {
+  if (!effect.programmerOwned || effect.lookId != null || effect.paletteId != null || effect.programmerLayerId != null) {
     return {
       enabled: false,
       reason:
@@ -49,22 +49,22 @@ export function saveAsTemplateOffer(
   // — an import from a desk with script-registered effects. Reporting the second as the first
   // leaves the item disabled forever under a message that promises it is about to work.
   if (library == null) return { enabled: false, reason: 'Reading the FX library…' }
-  const entry = findEffectEntry(library, effect.effectType)
+  const entry = findFxEntry(library, effect.fxType)
   if (entry == null) {
     return {
       enabled: false,
-      reason: `“${effect.effectType}” is not in this desk's FX library, so its category — and so the palette's family — cannot be read.`,
+      reason: `“${effect.fxType}” is not in this desk's FX library, so its category — and so the palette's family — cannot be read.`,
     }
   }
   // A step effect is banked by its palettes' family or as Beam on its setting, never by its library
   // category — Palette Steps' `steps` names no family at all.
-  const step = stepEffectPaletteShape(effect, templates)
+  const step = stepFxPaletteShape(effect, templates)
   if (step != null) return step.reason != null ? { enabled: false, reason: step.reason } : { enabled: true }
-  const family = familyForEffectCategory(entry.category)
+  const family = maskGroupForFxFamily(entry.family)
   if (family == null) {
     return {
       enabled: false,
-      reason: `A “${entry.category}” FX is not banked by family, so it cannot be a palette. It can live in a recorded look.`,
+      reason: `A “${entry.family}” FX is not banked by family, so it cannot be a palette. It can live in a recorded look.`,
     }
   }
   return { enabled: true }
@@ -79,7 +79,7 @@ export function saveAsTemplateOffer(
  * programmer band, which is what a busked effect is until something records it.
  */
 export function homeOf(
-  effect: ActiveEffect,
+  effect: ActiveFx,
   layerHomes: ReadonlyMap<number, { name: string; position: number }>,
 ): { label: string; detail?: string } {
   if (effect.programmerLayerId != null) {

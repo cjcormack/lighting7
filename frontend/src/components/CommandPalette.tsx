@@ -18,7 +18,7 @@ import type { GroupSummary } from "@/api/groupsApi"
 import {
   useNavItems,
   useUniverseNavItems,
-  useTemplateFamilyNavItems,
+  usePaletteFamilyNavItems,
   programmerTableNavItems,
   useWindowCommands,
   filterNavItems,
@@ -29,8 +29,8 @@ import {
 import { fixtureSelectParam, groupSelectParam } from "@/components/fixtures-list/rowModel"
 import { useViewedProject } from "@/ProjectSwitcher"
 import type { PressPair } from "@/hooks/usePress"
-import { effectTargetOf, useWindowEffectPair } from "@/components/fx/selectionEffectTarget"
-import { openAddEffectDoor } from "@/components/programmer/addEffectDoor"
+import { fxTargetOf, useWindowFxPair } from "@/components/fx/selectionFxTarget"
+import { openAddFxDoor } from "@/components/programmer/addFxDoor"
 import { useGetParkStateListQuery } from "@/store/park"
 import { useGetChannelMappingListQuery } from "@/store/channelMapping"
 import type { ProjectSummary } from "@/api/projectApi"
@@ -174,9 +174,9 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   // One effect over this window's selection, in its order (effects plan D3) — the programmer's rows
   // on the programmer, the desk's or the busk view's own elsewhere.
   const { pathname } = useLocation()
-  const windowPair = useWindowEffectPair(pathname.includes("/programmer"))
+  const windowPair = useWindowFxPair(pathname.includes("/programmer"))
   const selectionTarget = useMemo(
-    () => effectTargetOf(windowPair.targets, fixtures, groups),
+    () => fxTargetOf(windowPair.targets, fixtures, groups),
     [windowPair.targets, fixtures, groups],
   )
   const selectionLabel =
@@ -189,7 +189,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
           : selectionTarget.fixture.name
   const allNavItems = useNavItems()
   const universeNavItems = useUniverseNavItems()
-  const templateFamilyNavItems = useTemplateFamilyNavItems()
+  const paletteFamilyNavItems = usePaletteFamilyNavItems()
   const isNavAdmin = useIsNavAdmin()
   // The telemetry card is drawn for a signed-in admin only (`InstallSettings`), so its command is too.
   const { data: authStatus } = useAuthStatusQuery()
@@ -220,7 +220,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
   const visibleProgrammerTableItems = filterNavItems(programmerTableNavItems, isViewingActiveProject, true, isVenue)
   // A universe item names the live rig's universes, so only the project on the rig is offered them.
   const visibleUniverseItems = isViewingActiveProject ? filterNavItems(universeNavItems, true) : []
-  const visibleTemplateFamilyItems = filterNavItems(templateFamilyNavItems, isViewingActiveProject, true, isVenue)
+  const visiblePaletteFamilyItems = filterNavItems(paletteFamilyNavItems, isViewingActiveProject, true, isVenue)
 
   const activePage = pages[pages.length - 1] ?? "root"
 
@@ -309,7 +309,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
             {/* Navigation */}
             {viewedProject && (
               <Command.Group heading="Navigation" className={groupClassName}>
-                {[...visibleItems, ...visibleProgrammerTableItems, ...visibleUniverseItems, ...visibleTemplateFamilyItems].map((item) => (
+                {[...visibleItems, ...visibleProgrammerTableItems, ...visibleUniverseItems, ...visiblePaletteFamilyItems].map((item) => (
                   <Command.Item
                     key={item.id}
                     // cmdk keys selection on `value`, so it must be unique: `commandLabel` names
@@ -623,7 +623,7 @@ export default function CommandPalette({ onApplyFx, onParkChannelAtValue, onSetC
                   value={`On the selection ${selectionLabel}`}
                   keywords={["selection", "selected", "marquee"]}
                   onSelect={() => {
-                    if (onApplyFx) runAction(() => openAddEffectDoor() || onApplyFx(windowPair))
+                    if (onApplyFx) runAction(() => openAddFxDoor() || onApplyFx(windowPair))
                   }}
                   className={itemClassName}
                 >

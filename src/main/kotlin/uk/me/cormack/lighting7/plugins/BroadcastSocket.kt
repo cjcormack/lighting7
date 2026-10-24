@@ -38,13 +38,13 @@ data object LookListChangedOutMessage : BroadcastOutMessage()
  */
 @Serializable
 @SerialName("paletteListChanged")
-data object TemplateListChangedOutMessage : BroadcastOutMessage()
+data object PaletteListChangedOutMessage : BroadcastOutMessage()
 
 /**
  * A palette was **pressed** — applied, from any of the four doors — and now carries [lastPressedAt].
  *
- * Keyed, and deliberately **not** a reuse of [TemplateListChangedOutMessage]: that frame's client
- * bridge invalidates `TemplateList`, `Cue` and `CueList`, and a press happens at busking rate. This
+ * Keyed, and deliberately **not** a reuse of [PaletteListChangedOutMessage]: that frame's client
+ * bridge invalidates `PaletteList`, `Cue` and `CueList`, and a press happens at busking rate. This
  * one carries the whole of what changed, so the client patches its cached list in place and makes
  * no request at all — the same reasoning [CuesRecomposedOutMessage] records for naming its ids.
  *
@@ -58,8 +58,8 @@ data object TemplateListChangedOutMessage : BroadcastOutMessage()
  */
 @Serializable
 @SerialName("palettePressed")
-data class TemplatePressedOutMessage(
-    val templateId: Int,
+data class PalettePressedOutMessage(
+    val paletteId: Int,
     val lastPressedAt: String,
 ) : BroadcastOutMessage()
 
@@ -253,7 +253,7 @@ data class CueHoldsStateOutMessage(
 
 /**
  * One live cue. [stackId] is its highest hold's stack, null when that hold is loose — the stack whose
- * effect size weighs its effects (effects plan D10). [edited] while its stored rows, layers or effects
+ * FX amount weighs its effects (effects plan D10). [edited] while its stored rows, layers or effects
  * differ from what came on with it, until *Update stage* or its next first hold.
  */
 @Serializable
@@ -321,9 +321,9 @@ fun setupBroadcastSubscriptions(scope: SocketScope): () -> Unit {
         }
 
         override fun lookListChanged() = fire(LookListChangedOutMessage)
-        override fun templateListChanged() = fire(TemplateListChangedOutMessage)
-        override fun templatePressed(templateId: Int, lastPressedAt: String) =
-            fire(TemplatePressedOutMessage(templateId, lastPressedAt))
+        override fun paletteListChanged() = fire(PaletteListChangedOutMessage)
+        override fun palettePressed(paletteId: Int, lastPressedAt: String) =
+            fire(PalettePressedOutMessage(paletteId, lastPressedAt))
         override fun cuesRecomposed(cueIds: List<Int>) = fire(CuesRecomposedOutMessage(cueIds))
         override fun cueListChanged() = fire(CueListChangedOutMessage)
         override fun cueStackListChanged() = fire(CueStackListChangedOutMessage)

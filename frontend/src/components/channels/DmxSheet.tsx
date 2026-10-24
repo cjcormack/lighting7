@@ -224,7 +224,7 @@ function useChannelOwnership(
             return states[index] ?? {}
           })
         : undefined
-    if (sideband && fromKeys?.source !== 'parked' && fromKeys?.source !== 'effect') {
+    if (sideband && fromKeys?.source !== 'parked' && fromKeys?.source !== 'fx') {
       const owners = fromKeys?.source === 'programmer' ? fromKeys.owners : []
       return {
         source: 'programmer',
@@ -774,7 +774,7 @@ export function DmxSheet({
           [
             ['programmer', 'You'],
             ['cue', 'Cue'],
-            ['effect', 'FX'],
+            ['fx', 'FX'],
             ['parked', 'Parked'],
           ] as const
         ).map(([source, name]) => (

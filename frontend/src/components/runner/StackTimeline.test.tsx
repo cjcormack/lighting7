@@ -22,8 +22,8 @@ vi.mock('@/store/fixtures', () => ({
   useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }, { key: 'bar', name: 'Bar', elements: [{ key: 'bar.1' }, { key: 'bar.2' }] }] }),
 }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [{ name: 'wash', memberKeys: ['hex-1', 'hex-2'] }] }) }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#8f7bff' }] }] }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#8f7bff' }] }] }),
 }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [{ uuid: 'tabs', name: 'House tabs', kind: 'DRAPE' }] }) }))
 let DESK_SELECTION: { type: 'fixture' | 'group'; key: string }[] = []
@@ -68,7 +68,7 @@ const STACK: CueStack = {
 function lavender(over: Partial<TimelineLayer> = {}): TimelineLayer {
   return {
     id: 1,
-    source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
+    source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
     targets: [{ type: 'fixture', key: 'hex-1' }],
     heads: ['hex-1'],
     sortOrder: 0,
@@ -85,7 +85,7 @@ function lavender(over: Partial<TimelineLayer> = {}): TimelineLayer {
 }
 
 function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntry {
-  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], effects: [], scenery: [], trackedScenery: [], ...over }
+  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], fx: [], scenery: [], trackedScenery: [], ...over }
 }
 
 beforeEach(() => {
@@ -99,7 +99,7 @@ beforeEach(() => {
     entries: [
       entry(101, { layers: [lavender()], scenery: [{ elementUuid: 'tabs', state: { open: 1 }, transitionMs: 4000 }] }),
       entry(102, { layers: [lavender({ id: 2, amount: 0.5 })], trackedScenery: [{ elementUuid: 'tabs', state: { open: 1 }, fromCueId: 1 }] }),
-      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], effects: [], scenery: [], trackedScenery: [] },
+      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], fx: [], scenery: [], trackedScenery: [] },
       entry(103, { layers: [lavender({ id: 3 })], trackedScenery: [{ elementUuid: 'tabs', state: { open: 1 }, fromCueId: 1 }] }),
     ],
   }

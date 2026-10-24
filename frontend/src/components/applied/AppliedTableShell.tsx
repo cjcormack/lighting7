@@ -105,7 +105,7 @@ export interface AppliedTableShellProps<Row extends SheetRow, C extends string> 
  * over the live programmer.
  *
  * **A column is a read-out unless the table says otherwise** ([cells]). What a row can change it
- * changes through its actions, which call the desk's mutations (`useEffectControls`, the stack's
+ * changes through its actions, which call the desk's mutations (`useFxControls`, the stack's
  * `LayerHandlers`); the Scenery table alone edits its state in cells, Set over a marquee as on any
  * sheet. The sheet selects rows — a click, a drag down the name column, ⌘A, ↑ / ↓ — for the bar's
  * verbs over several.

@@ -18,7 +18,7 @@ import kotlin.test.Test
  * MIDI flood harness — drives the backend's surface fader hot path under realistic
  * sustained load.
  *
- * Phase B item 4 of the follow-up drain plan; companion to `EffectStormHarness`.
+ * Phase B item 4 of the follow-up drain plan; companion to `FxStormHarness`.
  * Referenced by `FU-MANUAL-SUSPEND-PATH`.
  *
  * The original target was `cueEdit`: 100 Hz of fader CC ran through

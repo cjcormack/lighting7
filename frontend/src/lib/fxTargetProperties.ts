@@ -3,7 +3,7 @@ import type {
   SettingPropertyDescriptor,
   SliderPropertyDescriptor,
 } from '@/store/fixtures'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
 
 /**
  * The one answer to "what properties does this FX target have, which effects fit them, and which
@@ -18,7 +18,7 @@ import type { EffectLibraryEntry } from '@/store/fixtureFx'
  * advertises `compatibleProperties` in fixture-agnostic terms, so a user effect may say it fits
  * `setting` or `slider` — names no fixture descriptor ever carries.
  * A target therefore grows those two names *synthetically* when it has a property that answers to
- * one, and `resolveEffectProperty` turns the sentinel back into the real property name at apply
+ * one, and `resolveFxProperty` turns the sentinel back into the real property name at apply
  * time. Get either half wrong and the effect is either never offered or applied to nothing.
  */
 
@@ -28,8 +28,8 @@ export const SETTING_SENTINEL = 'setting'
 /** The synthetic name a target grows when it has an *extra* slider — see `isExtraSliderProperty`. */
 export const SLIDER_SENTINEL = 'slider'
 
-/** Both sentinels — a kind of property, never one; the desk's `EFFECT_PROPERTY_SENTINELS`. */
-export const EFFECT_PROPERTY_SENTINELS: ReadonlySet<string> = new Set([SETTING_SENTINEL, SLIDER_SENTINEL])
+/** Both sentinels — a kind of property, never one; the desk's `FX_PROPERTY_SENTINELS`. */
+export const FX_PROPERTY_SENTINELS: ReadonlySet<string> = new Set([SETTING_SENTINEL, SLIDER_SENTINEL])
 
 /**
  * An FX target with its member fixtures already resolved.
@@ -101,10 +101,10 @@ export function propertyNamesFor(targets: FxPropertyTarget[]): Set<string> {
 }
 
 /** The library entries at least one of whose declared properties the targets can supply. */
-export function compatibleEffectsFor(
-  library: EffectLibraryEntry[] | undefined,
+export function compatibleFxFor(
+  library: FxLibraryEntry[] | undefined,
   propertyNames: Set<string>,
-): EffectLibraryEntry[] {
+): FxLibraryEntry[] {
   if (!library) return []
   return library.filter((effect) =>
     effect.compatibleProperties.some((propName) => propertyNames.has(propName)),
@@ -117,15 +117,15 @@ export function compatibleEffectsFor(
  * `exclude` is for the pad, which renders the `controls` category as property buttons instead and
  * must not also offer it as a list of effects.
  */
-export function effectsByCategory(
-  effects: EffectLibraryEntry[],
+export function fxByFamily(
+  effects: FxLibraryEntry[],
   options?: { exclude?: readonly string[] },
-): Record<string, EffectLibraryEntry[]> {
-  const grouped: Record<string, EffectLibraryEntry[]> = {}
+): Record<string, FxLibraryEntry[]> {
+  const grouped: Record<string, FxLibraryEntry[]> = {}
   for (const effect of effects) {
-    if (options?.exclude?.includes(effect.category)) continue
-    if (!grouped[effect.category]) grouped[effect.category] = []
-    grouped[effect.category].push(effect)
+    if (options?.exclude?.includes(effect.family)) continue
+    if (!grouped[effect.family]) grouped[effect.family] = []
+    grouped[effect.family].push(effect)
   }
   return grouped
 }
@@ -166,9 +166,9 @@ function distinctByName(
  * a surface offers one (the picker's *On* row), honoured only while it still names a
  * property this target has, and otherwise the first such property.
  */
-export function resolveEffectProperty(
+export function resolveFxProperty(
   target: FxPropertyTarget,
-  effect: EffectLibraryEntry,
+  effect: FxLibraryEntry,
   preferred?: { setting?: string | null; slider?: string | null },
 ): string | null {
   const names = propertyNamesFor([target])

@@ -4,7 +4,7 @@ import { describeCellScope, type CellRef } from '@/components/sheet/cellSelectio
 import { cellFamilies, columnLabel, type ColumnKey } from '@/components/fixtures-list/columns'
 import { SelectionBar as SheetSelectionBar } from '@/components/sheet/SelectionBar'
 import { DeskChip } from '@/components/desk/DeskChip'
-import { TemplateStrip } from './TemplateStrip'
+import { PaletteStrip } from './PaletteStrip'
 import { usePressFamilies } from '@/store/selection'
 import { SelectionMaskPill } from './SelectionMaskPill'
 import type { LocateTarget } from '@/store/locate'
@@ -54,7 +54,7 @@ export function SelectionBar({
   cells,
   cellEntryKey,
   cellClearKey,
-  templateTargets,
+  paletteTargets,
   targetFamilies = NO_FAMILIES,
   targetEmitters = NO_EMITTERS,
   marqueeDragging,
@@ -66,7 +66,7 @@ export function SelectionBar({
   cells: readonly CellRef<ColumnKey>[]
   cellEntryKey: boolean
   cellClearKey: boolean
-  templateTargets: readonly LocateTarget[]
+  paletteTargets: readonly LocateTarget[]
   targetFamilies?: readonly AttributeFamily[]
   targetEmitters?: readonly string[]
   marqueeDragging: boolean
@@ -77,18 +77,18 @@ export function SelectionBar({
   const pressFamilies = usePressFamilies(askedFamilies)
   const shownFamilies = projectId != null ? pressFamilies : askedFamilies
 
-  // The head count is `templateTargets` — the heads a press actually lands on, which is the
+  // The head count is `paletteTargets` — the heads a press actually lands on, which is the
   // cells' heads under a marquee and the selected rows' otherwise — and deliberately not the
   // footer's `selectedCount`, which counts visible *rows* with a group as one. Two numbers, two
   // questions: the footer says how much of the list you have picked, this says how many heads
   // your next gesture reaches. *Heads*, not fixtures: since venue-visit plan S1 a selected cell is
   // its own target, so three zones of one Shehds are three heads, and calling them three fixtures
   // would be wrong.
-  const fixtures = `${templateTargets.length} head${templateTargets.length === 1 ? '' : 's'}`
+  const fixtures = `${paletteTargets.length} head${paletteTargets.length === 1 ? '' : 's'}`
 
   return (
     <SheetSelectionBar
-      rowLabel={templateTargets.length > 0 ? fixtures : null}
+      rowLabel={paletteTargets.length > 0 ? fixtures : null}
       cellLabel={cells.length > 0 ? `${cells.length} cell${cells.length === 1 ? '' : 's'}` : null}
       // Session 1's rule: the sentence becomes the hover. `describeCellScope` is the same string
       // the drag chip shows, so the two agree by construction. The fixture count rides it too,
@@ -107,11 +107,11 @@ export function SelectionBar({
       // for the counts and Deselect alone.
       strip={
         projectId != null ? (
-          <TemplateStrip
+          <PaletteStrip
             projectId={projectId}
             cells={cells}
             askedFamilies={askedFamilies}
-            targets={templateTargets}
+            targets={paletteTargets}
             targetFamilies={targetFamilies}
             targetEmitters={targetEmitters}
           />

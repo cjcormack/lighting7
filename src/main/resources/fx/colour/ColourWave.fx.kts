@@ -1,9 +1,9 @@
 /*---
 id: ColourWave
 name: Colour Wave
-category: colour
+family: colour
 outputType: COLOUR
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [rgbColour]
 parameters:
   - name: colourA

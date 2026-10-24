@@ -334,16 +334,15 @@ export const navItems: NavItem[] = [
     hiddenInVenue: true,
   },
   {
-    id: "templates",
+    id: "palettes",
     // Palettes: named values you build looks and cues out of, one attribute family each, no targets
-    // of their own, applied to a selection. Stored as templates (`models/templates.kt`, which says
-    // why they are a separate entity from a Look rather than one with a flag), so the id keeps the
-    // stored word while the label and route say palette.
+    // of their own, applied to a selection (`models/palettes.kt` says why they are a separate
+    // entity from a Look rather than one with a flag).
     //
     // **One entry, one route, with a sticky family filter.** Sibling routes would now be legitimate
     // (a palette is in exactly one family, so they would partition it exactly), and this is still
     // one route: the filter is a *view* of a small library rather than a division of it, and
-    // `useTemplateFamilyNavItems` gives Cmd+K the four deep links as `?family=` params either way.
+    // `usePaletteFamilyNavItems` gives Cmd+K the four deep links as `?family=` params either way.
     label: "Palettes",
     icon: Palette,
     path: (p) => `/projects/${p}/palettes`,
@@ -533,9 +532,9 @@ export function useUniverseNavItems(): NavItem[] {
  * on one route**, not four routes, and `pathMatch` is the bare `/palettes`, so the sidebar
  * highlights the one row whichever family you arrived in.
  */
-export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
-  // Prefixed rather than bare, so these can never collide with the static `templates` id.
-  id: `templates-${familySlug(family)}`,
+export const paletteFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family) => ({
+  // Prefixed rather than bare, so these can never collide with the static `palettes` id.
+  id: `palettes-${familySlug(family)}`,
   label: `${FAMILY_LABELS[family].singular} Palettes`,
   icon: Palette,
   path: (p: number) => `/projects/${p}/palettes?family=${familySlug(family)}`,
@@ -546,8 +545,8 @@ export const templateFamilyNavItems: NavItem[] = ATTRIBUTE_FAMILIES.map((family)
   hiddenInVenue: true,
 }))
 
-export function useTemplateFamilyNavItems(): NavItem[] {
-  return templateFamilyNavItems
+export function usePaletteFamilyNavItems(): NavItem[] {
+  return paletteFamilyNavItems
 }
 
 const PROGRAMMER_TABLE_NAV: readonly { table: Exclude<ProgrammerTable, "values">; icon: LucideIcon }[] = [
@@ -559,7 +558,7 @@ const PROGRAMMER_TABLE_NAV: readonly { table: Exclude<ProgrammerTable, "values">
 /**
  * The Programmer's Stack, FX and Scenery tables (tables-colours plan D1), ⌘K only — the sidebar has
  * the one Programmer row, which lands on the window's own table. `?table=` on the one route,
- * `pathMatch` the route's, as [templateFamilyNavItems] are `?family=`; the page lands each on the
+ * `pathMatch` the route's, as [paletteFamilyNavItems] are `?family=`; the page lands each on the
  * view this window left it on.
  */
 export const programmerTableNavItems: NavItem[] = PROGRAMMER_TABLE_NAV.map(({ table, icon }) => ({
@@ -735,7 +734,7 @@ export interface WindowCommandInputs {
 const FOCUS_LABELS: Record<BuskFocus, string> = { split: "Split", pads: "Focus pads", rig: "Focus rig" }
 
 /**
- * The window commands, built the way [templateFamilyNavItems] is built — from a vocabulary, in a
+ * The window commands, built the way [paletteFamilyNavItems] is built — from a vocabulary, in a
  * fixed order — so a test can pin the shapes without a store (`Screens.dc.html` §3):
  *
  * - *Go full screen* / *Exit full screen* (⇧F), only where the API exists;

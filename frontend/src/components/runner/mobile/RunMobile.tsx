@@ -6,7 +6,7 @@ import { StackPickerSheet } from '../StackPickerSheet'
 import { MobileCueListSheet } from '../MobileCueListSheet'
 import { RunMobileCueCard, type MobileExpansion } from './RunMobileCueCard'
 import { CueActions } from '../CueActions'
-import { MobileStackEffectSize } from '../StackEffectSizeControl'
+import { MobileStackFxAmount } from '../StackFxAmountControl'
 import type { CueStack, CueStackCueEntry, CueStackCueRow } from '@/api/cueStacksApi'
 
 /**
@@ -202,7 +202,7 @@ export function RunMobile({
         <SpeedMastersChip />
       </div>
 
-      {stack && stack.type === 'STACK' && <MobileStackEffectSize key={stack.id} projectId={projectId} stackId={stack.id} stackName={stack.name} />}
+      {stack && stack.type === 'STACK' && <MobileStackFxAmount key={stack.id} projectId={projectId} stackId={stack.id} stackName={stack.name} />}
 
       {/* Stacked Current + Next cards */}
       <div className="flex-1 min-h-0 overflow-y-auto p-3 flex flex-col gap-2.5 bg-background">

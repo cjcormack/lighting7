@@ -18,7 +18,7 @@ import uk.me.cormack.lighting7.fx.AppliedSource
 import uk.me.cormack.lighting7.fx.CueRunState
 import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
-import uk.me.cormack.lighting7.fx.StackEffectSizes
+import uk.me.cormack.lighting7.fx.StackFxAmounts
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -133,7 +133,7 @@ class SurfaceFeedbackPublisher(
     /** Locate state for `LocateSelection` LEDs; a provider because the manager is per show. */
     private val locateManagerProvider: (() -> LocateManager)? = null,
     /**
-     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressTemplate` read its
+     * The programmer's layer stack, for the record LEDs — `ApplyLook` and `PressPalette` read its
      * `appliedState`, which is the same answer a busk pad's ring reads, resolved server-side so the
      * two cannot drift. A provider because the stack is per show.
      */
@@ -165,12 +165,12 @@ class SurfaceFeedbackPublisher(
      */
     private val buskRefsProvider: ((projectId: Int) -> BuskRefs)? = null,
     /**
-     * The live show's stack effect sizes, for `StackEffectSize` faders (effects plan D10). A
-     * provider because the sizes are per show, like [globalScalerStateProvider].
+     * The live show's stack FX amounts, for `StackFxAmount` faders (effects plan D10). A
+     * provider because the FX amounts are per show, like [globalScalerStateProvider].
      */
-    private val stackEffectSizesProvider: (() -> StackEffectSizes)? = null,
+    private val stackFxAmountsProvider: (() -> StackFxAmounts)? = null,
     /**
-     * A stack uuid's id in the live show, for a `StackEffectSize` fader — the input path's own lookup
+     * A stack uuid's id in the live show, for a `StackFxAmount` fader — the input path's own lookup
      * (`CueStackManager.stackIdForUuid`), kept for the show's life, so a rebuild reads no row twice.
      */
     private val stackIdResolver: ((stackUuid: String) -> Int?)? = null,
@@ -294,11 +294,11 @@ class SurfaceFeedbackPublisher(
     )
 
     /**
-     * A control bound to a cue stack's effect size — [GrandMasterEntry]'s shape, its value in the
-     * show's [StackEffectSizes]. [stackId] is resolved at rebuild; null when the binding's stack is
+     * A control bound to a cue stack's FX amount — [GrandMasterEntry]'s shape, its value in the
+     * show's [StackFxAmounts]. [stackId] is resolved at rebuild; null when the binding's stack is
      * not in this project, which health already marks dead.
      */
-    private data class StackSizeEntry(
+    private data class StackFxAmountEntry(
         val displayKey: String,
         val control: ControlDescriptor,
         val stackId: Int?,
@@ -328,7 +328,7 @@ class SurfaceFeedbackPublisher(
         /** `EncoderBankSet` buttons: lit while that property is the device's encoder bank. */
         val encoderBankLeds: List<LedEntry>,
         /**
-         * `ApplyLook` / `PressTemplate` / `PressPad` buttons, with their records resolved — as a
+         * `ApplyLook` / `PressPalette` / `PressPad` buttons, with their records resolved — as a
          * list for the layer-change sweep and **by binding id** for [ledOn], which is handed one
          * entry at a time by the full resync and has only the binding to go on.
          */
@@ -346,8 +346,8 @@ class SurfaceFeedbackPublisher(
         val speedMasterEntries: List<SpeedMasterEntry>,
         /** Grand-master faders: a flat list, scanned per level change, for [speedMasterEntries]' reason. */
         val grandMasterEntries: List<GrandMasterEntry>,
-        /** Stack effect-size faders: likewise. */
-        val stackSizeEntries: List<StackSizeEntry>,
+        /** Stack FX amount faders: likewise. */
+        val stackFxAmountEntries: List<StackFxAmountEntry>,
         /** Fan encoders: likewise. */
         val fanEntries: List<FanEntry> = emptyList(),
     ) {
@@ -377,7 +377,7 @@ class SurfaceFeedbackPublisher(
         // merely health ones. A layout write is included: it is what moves a pad between banks and
         // what takes one off a page.
         override fun lookListChanged() { rebuildAndResync() }
-        override fun templateListChanged() { rebuildAndResync() }
+        override fun paletteListChanged() { rebuildAndResync() }
         override fun buskLayoutChanged(pageIds: List<Int>) { rebuildAndResync() }
         // A cue pad's ring is its stack's live cue, so a GO or a release moves it. Discrete — this
         // fires on transitions, not per fade frame.
@@ -389,7 +389,7 @@ class SurfaceFeedbackPublisher(
     private var scalerJob: Job? = null
     private var grandMasterJob: Job? = null
     private var speedMasterJob: Job? = null
-    private var stackSizeJob: Job? = null
+    private var stackFxAmountJob: Job? = null
     private var fanJob: Job? = null
     private var locateJob: Job? = null
     private var layersJob: Job? = null
@@ -444,7 +444,7 @@ class SurfaceFeedbackPublisher(
         }
         subscribeScaler(scope)
         subscribeSpeedMasters(scope)
-        subscribeStackSizes(scope)
+        subscribeStackFxAmounts(scope)
         subscribeLocate(scope)
         subscribeProgrammerLayers(scope)
         selectionFan?.let { fan ->
@@ -539,22 +539,22 @@ class SurfaceFeedbackPublisher(
             .launchIn(scope)
     }
 
-    /** (Re)subscribe to the current show's stack effect sizes, per show like [subscribeScaler]. */
-    private fun subscribeStackSizes(scope: CoroutineScope) {
-        stackSizeJob?.cancel()
-        val sizes = try {
-            stackEffectSizesProvider?.invoke()
+    /** (Re)subscribe to the current show's stack FX amounts, per show like [subscribeScaler]. */
+    private fun subscribeStackFxAmounts(scope: CoroutineScope) {
+        stackFxAmountJob?.cancel()
+        val amounts = try {
+            stackFxAmountsProvider?.invoke()
         } catch (_: Exception) {
             null
         } ?: return
         // Only the controls on a stack that moved: a fader dragged at frame rate must not re-send
         // every other stack's control its unchanged value.
-        var last = sizes.state.value
-        stackSizeJob = sizes.state
+        var last = amounts.state.value
+        stackFxAmountJob = amounts.state
             .onEach { now ->
                 val moved = (last.keys + now.keys).filterTo(HashSet()) { last[it] != now[it] }
                 last = now
-                if (moved.isNotEmpty()) resyncStackSizeEntries(index.get().stackSizeEntries.filter { it.stackId in moved })
+                if (moved.isNotEmpty()) resyncStackFxAmountEntries(index.get().stackFxAmountEntries.filter { it.stackId in moved })
             }
             .launchIn(scope)
     }
@@ -582,8 +582,8 @@ class SurfaceFeedbackPublisher(
         grandMasterJob = null
         speedMasterJob?.cancel()
         speedMasterJob = null
-        stackSizeJob?.cancel()
-        stackSizeJob = null
+        stackFxAmountJob?.cancel()
+        stackFxAmountJob = null
         fanJob?.cancel()
         fanJob = null
         locateJob?.cancel()
@@ -607,7 +607,7 @@ class SurfaceFeedbackPublisher(
         publisherScope?.let {
             subscribeScaler(it)
             subscribeSpeedMasters(it)
-            subscribeStackSizes(it)
+            subscribeStackFxAmounts(it)
             subscribeLocate(it)
             subscribeProgrammerLayers(it)
         }
@@ -829,7 +829,7 @@ class SurfaceFeedbackPublisher(
         }
 
         fun lookUuid(raw: String): UUID? = uuidOrNull(raw)
-        fun templateUuid(raw: String): UUID? = uuidOrNull(raw)
+        fun paletteUuid(raw: String): UUID? = uuidOrNull(raw)
         fun pageId(raw: String): Int? = uuidOrNull(raw)?.let { refs.pageIds[it] }
 
         fun padLed(entry: LedEntry, raw: String): RecordLedEntry =
@@ -876,7 +876,7 @@ class SurfaceFeedbackPublisher(
         val buskPageLeds = mutableListOf<Pair<LedEntry, Int?>>()
         val speedMasterEntries = mutableListOf<SpeedMasterEntry>()
         val grandMasterEntries = mutableListOf<GrandMasterEntry>()
-        val stackSizeEntries = mutableListOf<StackSizeEntry>()
+        val stackFxAmountEntries = mutableListOf<StackFxAmountEntry>()
         val fanEntries = mutableListOf<FanEntry>()
         // Every record and page uuid a bound button on an attached device names, resolved in one
         // batch below rather than one lookup per button.
@@ -918,8 +918,8 @@ class SurfaceFeedbackPublisher(
                     (binding.target as? BindingTarget.SelectionFan)?.let { fan ->
                         fanEntries += FanEntry(displayKey, control, fan.axis, binding.takeoverPolicy ?: classDefault)
                     }
-                    (binding.target as? BindingTarget.StackEffectSize)?.let { stack ->
-                        stackSizeEntries += StackSizeEntry(
+                    (binding.target as? BindingTarget.StackFxAmount)?.let { stack ->
+                        stackFxAmountEntries += StackFxAmountEntry(
                             displayKey = displayKey,
                             control = control,
                             // The input path's rule: a uuid that resolves to nothing here is no stack,
@@ -967,9 +967,9 @@ class SurfaceFeedbackPublisher(
                             )
                             true
                         }
-                        is BindingTarget.PressTemplate -> {
+                        is BindingTarget.PressPalette -> {
                             recordLeds += RecordLedEntry(
-                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.templateUuid(target.paletteUuid),
+                                entry, RecordLedKind.COVERS_SELECTION, recordRefs.paletteUuid(target.paletteUuid),
                             )
                             true
                         }
@@ -1005,7 +1005,7 @@ class SurfaceFeedbackPublisher(
                 buskPageIdByBindingId = buskPageLeds.associate { (entry, pageId) -> entry.binding.id to pageId },
                 speedMasterEntries = speedMasterEntries,
                 grandMasterEntries = grandMasterEntries,
-                stackSizeEntries = stackSizeEntries,
+                stackFxAmountEntries = stackFxAmountEntries,
                 fanEntries = fanEntries,
             )
         )
@@ -1013,7 +1013,7 @@ class SurfaceFeedbackPublisher(
         // the operator's first touch, rather than only after the first tempo change.
         resyncSpeedMasterEntries(speedMasterEntries)
         resyncGrandMasterEntries(grandMasterEntries)
-        resyncStackSizeEntries(stackSizeEntries)
+        resyncStackFxAmountEntries(stackFxAmountEntries)
         resyncFanEntries(fanEntries)
     }
 
@@ -1085,8 +1085,8 @@ class SurfaceFeedbackPublisher(
         resyncGrandMasterEntries(
             idx.grandMasterEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
-        resyncStackSizeEntries(
-            idx.stackSizeEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
+        resyncStackFxAmountEntries(
+            idx.stackFxAmountEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId },
         )
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey && it.control.controlId == controlId })
         val entries = idx.continuousByDisplay[displayKey] ?: return
@@ -1130,7 +1130,7 @@ class SurfaceFeedbackPublisher(
         // above wiped their rows: re-feed them here or the stream reports a lit ring as unbound.
         resyncSpeedMasterEntries(idx.speedMasterEntries.filter { it.displayKey == displayKey })
         resyncGrandMasterEntries(idx.grandMasterEntries.filter { it.displayKey == displayKey })
-        resyncStackSizeEntries(idx.stackSizeEntries.filter { it.displayKey == displayKey })
+        resyncStackFxAmountEntries(idx.stackFxAmountEntries.filter { it.displayKey == displayKey })
         resyncFanEntries(idx.fanEntries.filter { it.displayKey == displayKey })
         // Folded once for the whole device resync rather than once per record-button LED in it.
         val applied = appliedSources()
@@ -1165,7 +1165,7 @@ class SurfaceFeedbackPublisher(
         // function has only the binding, and a uuid → record lookup here would be a database read
         // per LED per resync.
         is BindingTarget.ApplyLook,
-        is BindingTarget.PressTemplate,
+        is BindingTarget.PressPalette,
         is BindingTarget.PressPad,
             -> index.get().recordLedByBindingId[entry.binding.id]
                 ?.let { recordLedOn(it, applied ?: appliedSources()) }
@@ -1361,13 +1361,13 @@ class SurfaceFeedbackPublisher(
         }
     }
 
-    /** Push each entry's stack's effect size onto its control, and record it for PICKUP. */
-    private fun resyncStackSizeEntries(entries: List<StackSizeEntry>) {
+    /** Push each entry's stack's FX amount onto its control, and record it for PICKUP. */
+    private fun resyncStackFxAmountEntries(entries: List<StackFxAmountEntry>) {
         if (entries.isEmpty()) return
-        val sizes = runCatching { stackEffectSizesProvider?.invoke() }.getOrNull() ?: return
+        val amounts = runCatching { stackFxAmountsProvider?.invoke() }.getOrNull() ?: return
         for (entry in entries) {
             val stackId = entry.stackId ?: continue
-            val value7Bit = stackEffectSizeTo7Bit(sizes.of(stackId))
+            val value7Bit = stackFxAmountTo7Bit(amounts.of(stackId))
             sendControlFeedback(entry.displayKey, entry.control, value7Bit)
             takeover.setLogical(entry.displayKey, entry.control.controlId, value7Bit, entry.policy)
         }

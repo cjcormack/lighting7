@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { SettingPropertyDescriptor } from '@/store/fixtures'
 
-const wire = vi.hoisted(() => ({ templates: [] as TemplateSummary[] }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: wire.templates, isLoading: false }) }))
+const wire = vi.hoisted(() => ({ templates: [] as PaletteSummary[] }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: wire.templates, isLoading: false }) }))
 vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
 
-const palette = (name: string, family: TemplateSummary['family'], propertyName: string, value: string) =>
+const palette = (name: string, family: PaletteSummary['family'], propertyName: string, value: string) =>
   ({
     id: 1,
     uuid: `uuid-${name}`,
@@ -22,8 +22,8 @@ const palette = (name: string, family: TemplateSummary['family'], propertyName: 
     kind: 'value',
     requiredEmitters: [],
     rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
-    effect: null,
-  }) as unknown as TemplateSummary
+    fx: null,
+  }) as unknown as PaletteSummary
 
 const GOBO = {
   type: 'setting',

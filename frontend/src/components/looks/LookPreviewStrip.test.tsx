@@ -29,7 +29,7 @@ describe('LookPreviewStrip', () => {
 
   it('draws only the chips that fit on one line, and +N for the rest', () => {
     stubWidths(100)
-    render(<LookPreviewStrip preview={VALUES} effectCount={0} />)
+    render(<LookPreviewStrip preview={VALUES} fxCount={0} />)
     // 30 + 4 + 30 + 4 + "+3" 14 = 82 fits 100; a third chip would need 116.
     expect(drawnLine().map((el) => el.textContent)).toEqual(['10', '20', '+3'])
     expect(document.querySelector('[data-preview-line]')!.getAttribute('title')).toContain('10  20  30  40  50')
@@ -37,27 +37,27 @@ describe('LookPreviewStrip', () => {
 
   it('draws every chip, with no +N, when they all fit', () => {
     stubWidths(400)
-    render(<LookPreviewStrip preview={VALUES} effectCount={0} />)
+    render(<LookPreviewStrip preview={VALUES} fxCount={0} />)
     expect(drawnLine().map((el) => el.textContent)).toEqual(VALUES)
   })
 
   it('keeps room for the effects glyph after the chips', () => {
     // 100 less the glyph and its gap is 82: two chips and "+3" exactly.
     stubWidths(100 + 18)
-    render(<LookPreviewStrip preview={VALUES} effectTypes={['Pulse']} effectCount={1} />)
+    render(<LookPreviewStrip preview={VALUES} fxTypes={['Pulse']} fxCount={1} />)
     const drawn = drawnLine()
     expect(drawn.slice(0, 3).map((el) => el.textContent)).toEqual(['10', '20', '+3'])
     expect(screen.getByLabelText('1 FX: Pulse')).toBeInTheDocument()
   })
 
   it('names the effects of a Look that holds nothing else', () => {
-    render(<LookPreviewStrip preview={[]} effectTypes={['ColourCycle', 'Pulse']} effectCount={2} />)
+    render(<LookPreviewStrip preview={[]} fxTypes={['ColourCycle', 'Pulse']} fxCount={2} />)
     expect(screen.getByText('Colour Cycle, Pulse')).toBeInTheDocument()
     expect(screen.getByLabelText('FX only')).toBeInTheDocument()
   })
 
   it('draws nothing for a Look with no values and no effects', () => {
-    const { container } = render(<LookPreviewStrip preview={[]} effectCount={0} />)
+    const { container } = render(<LookPreviewStrip preview={[]} fxCount={0} />)
     expect(container).toBeEmptyDOMElement()
   })
 })

@@ -1,6 +1,6 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { LookSummary } from '@/api/looksApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 
 /**
  * The **busk layout**: pages of rows of columns of banks of pads, built by the operator.
@@ -43,7 +43,7 @@ export const BUSK_FLOW_LABELS: Readonly<Record<BuskFlow, string>> = {
 }
 
 /** The three things a pad can press. */
-export type BuskPadKind = 'TEMPLATE' | 'LOOK' | 'CUE'
+export type BuskPadKind = 'PALETTE' | 'LOOK' | 'CUE'
 
 /**
  * The width shares a column may take, **in twelfths**: ¼, ⅓, ½, ⅔, ¾ and full.
@@ -105,7 +105,7 @@ export interface BuskPad {
   /** Client-minted React/drag key for an unsaved node. Never sent; see `toLayoutRequest`. */
   localKey?: string
   kind: BuskPadKind
-  template?: TemplateSummary | null
+  palette?: PaletteSummary | null
   look?: LookSummary | null
   cue?: BuskCue | null
 }
@@ -165,7 +165,7 @@ export interface ReorderBuskPagesRequest {
 /** Exactly one of the three is set. */
 export interface BuskLayoutPadInput {
   padId?: number
-  templateId?: number
+  paletteId?: number
   lookId?: number
   cueId?: number
 }
@@ -213,7 +213,7 @@ export interface BuskLayoutRequest {
  * same contract `BuskLayoutRequest` has and for the same reason: the ids it minted.
  */
 export interface AddBuskPadRequest {
-  templateId?: number
+  paletteId?: number
   lookId?: number
   cueId?: number
 }
@@ -232,13 +232,13 @@ export interface AddBuskPadRequest {
 export interface BuskPressRequest {
   targets: { type: 'group' | 'fixture'; key: string }[]
   families?: AttributeFamily[]
-  beatDivision?: number
+  cycle?: number
 }
 
 export interface BuskPressResponse {
   kind: BuskPadKind
   action: 'applied' | 'removed'
-  effectCount: number
+  fxCount: number
   /**
    * What an *on* press turned off: the palettes of the pressed palette's family and kind it
    * replaced on the pressed heads (apply-model plan D2, D6), and in a **solo** bank its siblings

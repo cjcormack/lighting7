@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fx
 
-import uk.me.cormack.lighting7.models.SPEED_MASTER_USAGES
+import uk.me.cormack.lighting7.models.SPEED_MASTER_FAMILIES
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -9,12 +9,12 @@ import kotlin.test.fail
 
 /**
  * Holds the backend's words to `docs/glossary.md` (terminology plan D17): every `done` or `screen`
- * row's `fx:`, `category:` and `usage:` locators must give the row's word, and every built-in FX
- * must have a row. The frontend's locators are `glossary.test.ts`'s.
+ * row's `fx:`, `family:` and `masterFamily:` locators must give the row's word, and every built-in
+ * FX must have a row. The frontend's locators are `glossary.test.ts`'s.
  *
- * It also pins the speed-master usage vocabulary (busking-view plan D7): a master's `usage` is one
- * of the FX library's `category` strings, so apply-time routing (`usage == effect.category`)
- * compares like with like. `category` is a free string in script frontmatter, so a typo'd or new
+ * It also pins the speed-master family vocabulary (busking-view plan D7): a master's `family` is one
+ * of the FX library's `family` strings, so apply-time routing (`master.family == fx.family`)
+ * compares like with like. `family` is a free string in script frontmatter, so a typo'd or new
  * one would otherwise route nowhere without anyone deciding that.
  *
  * Metadata only: each `.fx.kts` frontmatter is parsed with [FxFileLoader.parseFxFile], never
@@ -36,7 +36,7 @@ class GlossaryVocabularyTest {
         index.map { path -> FxFileLoader.parseFxFile(loader.getResource("fx/$path")!!.readText()).first }
     }
 
-    private fun builtInCategories(): Set<String> = builtIns.map { it.category }.toSet()
+    private fun builtInFamilies(): Set<String> = builtIns.map { it.family }.toSet()
 
     private val rows: List<Row> by lazy { parseGlossary(File("docs/glossary.md").readText()) }
 
@@ -63,7 +63,7 @@ class GlossaryVocabularyTest {
     @Test
     fun `every done or screen row's backend keys give its word`() {
         val names = builtIns.associate { it.id to it.name }
-        val categories = builtInCategories()
+        val families = builtInFamilies()
         for (row in rows.filter { it.status in KEYED_STATUSES }) {
             for (key in row.keys) {
                 val target = key.substringAfter(':')
@@ -72,12 +72,12 @@ class GlossaryVocabularyTest {
                         val name = names[target] ?: fail("$row: $key names no built-in FX")
                         assertEquals(row.word, name, "$row: $key is called '$name', expected '${row.word}'")
                     }
-                    "category" -> {
-                        assertTrue(target in categories, "$row: $key is no category the built-in FX declare")
+                    "family" -> {
+                        assertTrue(target in families, "$row: $key is no family the built-in FX declare")
                         assertTrue(target.equals(row.word, ignoreCase = true), "$row: $key is '$target', expected '${row.word}'")
                     }
-                    "usage" -> {
-                        assertTrue(target in SPEED_MASTER_USAGES, "$row: $key is not in SPEED_MASTER_USAGES")
+                    "masterFamily" -> {
+                        assertTrue(target in SPEED_MASTER_FAMILIES, "$row: $key is not in SPEED_MASTER_FAMILIES")
                         assertTrue(target.equals(row.word, ignoreCase = true), "$row: $key is '$target', expected '${row.word}'")
                     }
                 }
@@ -93,42 +93,42 @@ class GlossaryVocabularyTest {
     }
 
     @Test
-    fun `the shipped effect library's categories are exactly the known set`() {
+    fun `the shipped FX library's families are exactly the known set`() {
         assertEquals(
             setOf("intensity", "colour", "position", "beam", STEPS_CATEGORY),
-            builtInCategories(),
-            "the built-in category vocabulary moved. If you added a category, decide whether it " +
-                "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +
+            builtInFamilies(),
+            "the built-in family vocabulary moved. If you added a family, decide whether it " +
+                "routes to a family-tagged speed master (add it to SPEED_MASTER_FAMILIES and this " +
                 "set) or lands on master 1 like controls (add it to this set only) — " +
                 "see D7 in docs/plans/completed/busking-view-plan.md",
         )
     }
 
     @Test
-    fun `every routable usage names a real effect category`() {
-        val categories = builtInCategories()
+    fun `every routable master family names a real FX family`() {
+        val families = builtInFamilies()
         assertTrue(
-            SPEED_MASTER_USAGES.all { it in categories },
-            "SPEED_MASTER_USAGES ${SPEED_MASTER_USAGES - categories} name no shipped effect " +
-                "category — routing on them could never match an apply",
+            SPEED_MASTER_FAMILIES.all { it in families },
+            "SPEED_MASTER_FAMILIES ${SPEED_MASTER_FAMILIES - families} name no shipped FX " +
+                "family — routing on them could never match an apply",
         )
     }
 
     @Test
-    fun `controls is not a routable usage`() {
-        // `controls` is the synthetic category for from-state settings effects (EffectSpawner,
+    fun `controls is not a routable master family`() {
+        // `controls` is the synthetic family for from-state settings effects (FxSpawner,
         // categoryFromPropertyName), and a settings slider has no tempo. It routes to master 1 via
-        // a null `speedMasterUuid`, which is what an unmatched category is defined to do.
-        assertTrue("controls" !in SPEED_MASTER_USAGES)
+        // a null `speedMasterUuid`, which is what an unmatched family is defined to do.
+        assertTrue("controls" !in SPEED_MASTER_FAMILIES)
     }
 
     @Test
-    fun `the Steps FX route by what they step, so their registry category is no usage`() {
+    fun `the Steps FX route by what they step, so their registry family is no master family`() {
         // Palette Steps and Slot Steps register under the Steps family, which names no attribute
         // family: a stored one carries the family it steps (effects plan §3.6) — Slot Steps' Beam,
-        // Palette Steps' its palettes' — and that category, a usage, is what the picker and the
+        // Palette Steps' its palettes' — and that family, a master family, is what the picker and the
         // MCP tools route its master by.
-        assertTrue(STEPS_CATEGORY !in SPEED_MASTER_USAGES)
+        assertTrue(STEPS_CATEGORY !in SPEED_MASTER_FAMILIES)
     }
 
     private companion object {
@@ -138,10 +138,10 @@ class GlossaryVocabularyTest {
         val KEYED_STATUSES = setOf("done", "screen")
         val STATUSES = KEYED_STATUSES + "planned"
 
-        val BACKEND_PREFIXES = setOf("fx", "category", "usage")
+        val BACKEND_PREFIXES = setOf("fx", "family", "masterFamily")
 
         /** `glossary.test.ts` reads these; both tests know every prefix so a typo fails both. */
-        val FRONTEND_PREFIXES = setOf("src", "ORDER_LABELS", "EFFECT_CATEGORY_INFO", "BLEND_MODE_OPTIONS", "ELEMENT_MODE_OPTIONS")
+        val FRONTEND_PREFIXES = setOf("src", "ORDER_LABELS", "FX_FAMILY_INFO", "BLEND_MODE_OPTIONS", "ELEMENT_MODE_OPTIONS")
 
         fun locatorPrefix(key: String): String = key.substringBefore(':').substringBefore('.')
 

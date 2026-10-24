@@ -36,7 +36,7 @@ describe('recordNote', () => {
 describe('recordLookNote', () => {
   it('counts rows and the effects moved in', () => {
     const note = recordLookNote({
-      look: { name: 'Night' }, created: true, rowsWritten: 1, rowsRemoved: 0, effectsWritten: 2, groupRowsEmitted: 0,
+      look: { name: 'Night' }, created: true, rowsWritten: 1, rowsRemoved: 0, fxWritten: 2, groupRowsEmitted: 0,
       skipped: [], programmerKeysRefreshed: 0, cuesRepublished: [], sceneryWritten: 0,
     } as unknown as RecordLookResponse)
     expect(note).toEqual({ title: 'Created “Night” — 1 row written, 2 FX moved in.', description: undefined, warn: false })
@@ -80,7 +80,7 @@ describe('updateNote', () => {
   it('says how many live cues a Look update moved', () => {
     const note = updateNote({
       applied: true, results: [], warnings: [],
-      lookResult: { lookName: 'Night', rowsWritten: 4, effectsWritten: 0, sceneryWritten: 1, cuesRepublished: [7, 8] },
+      lookResult: { lookName: 'Night', rowsWritten: 4, fxWritten: 0, sceneryWritten: 1, cuesRepublished: [7, 8] },
     } as unknown as UpdateResponse)
     expect(note.title).toBe('Updated “Night” — 4 rows written, 1 scenery change, 2 live cue(s) moved with it.')
   })

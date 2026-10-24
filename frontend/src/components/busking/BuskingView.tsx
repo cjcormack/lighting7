@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { useDispatch, useSelector } from 'react-redux'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useCueRings } from '@/store/cueHolds'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import { enterBuskEdit, exitBuskEdit, selectBuskEdit } from '@/store/buskEditSlice'
@@ -53,7 +53,7 @@ import { skippedRowsMessage } from '@/lib/selectionMask'
 import { followIsForced, relinkToDesk, useDeskFollow } from '@/lib/deskFollow'
 import { windowName } from '@/lib/windowIdentity'
 import type { BuskPad } from '@/api/buskApi'
-import { lookLayerPresence, templateLayerPresence } from './lookPresence'
+import { lookLayerPresence, paletteLayerPresence } from './lookPresence'
 import { COMPACT_FOCUS_WORD_CLASS, EDIT_WORD_CLASS, FOCUS_WORD_CLASS, RigBand, VERB_WORD_CLASS } from './RigBand'
 import { RigStrip, RigStripContent } from './RigStrip'
 import { SideSheet, SideSheetOverlay, sideSheetTabs } from './SideSheet'
@@ -67,7 +67,7 @@ import { LibraryPalette } from './LibraryPalette'
 import { useBuskingState } from './useBuskingState'
 import { useSelectionVerbs } from './selectionVerbs'
 import type { PadBehaviour } from './padBehaviour'
-import { type EffectPresence } from './buskingTypes'
+import { type FxPresence } from './buskingTypes'
 import { cueOpenPath } from '@/lib/cuesTable'
 
 /**
@@ -182,7 +182,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   const verbs = useSelectionVerbs(selectedTargets)
   const { data: pages, isLoading } = useBuskPagesQuery(projectId)
   const { data: rig } = useBuskRigQuery(projectId)
-  const { data: templates } = useTemplateListQuery({ projectId })
+  const { data: templates } = usePaletteListQuery({ projectId })
   const { data: looks } = useLookListQuery({ projectId })
   const cueRings = useCueRings(projectId)
   const { editing } = useSelector(selectBuskEdit)
@@ -374,10 +374,10 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
   }, [editing, activePage, dispatch])
 
   const presenceOf = useCallback(
-    (pad: BuskPad): EffectPresence => {
+    (pad: BuskPad): FxPresence => {
       const applied = programmerApplied ?? []
-      if (pad.kind === 'TEMPLATE' && pad.template != null) {
-        return templateLayerPresence(applied, selectedLayerTargets, pad.template.id)
+      if (pad.kind === 'PALETTE' && pad.palette != null) {
+        return paletteLayerPresence(applied, selectedLayerTargets, pad.palette.id)
       }
       if (pad.kind === 'LOOK' && pad.look != null) {
         return lookLayerPresence(applied, selectedLayerTargets, pad.look.id)
@@ -420,14 +420,14 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
           .catch(ignoreReportedError)
       },
       onApplyValues: (pad) => {
-        if (pad.kind === 'TEMPLATE' && pad.template != null) {
-          void pressValues({ kind: 'template', template: pad.template }, 'asValues')
+        if (pad.kind === 'PALETTE' && pad.palette != null) {
+          void pressValues({ kind: 'palette', palette: pad.palette }, 'asValues')
         } else if (pad.kind === 'LOOK' && pad.look != null) {
           void pressValues({ kind: 'look', look: pad.look }, 'asValues')
         }
       },
       onInspect: (pad) => {
-        if (pad.kind === 'TEMPLATE') navigate(`/projects/${projectId}/palettes`)
+        if (pad.kind === 'PALETTE') navigate(`/projects/${projectId}/palettes`)
         else if (pad.kind === 'LOOK') navigate(`/projects/${projectId}/looks`)
         // A cue opens at its first entry; a loose cue in the Cues table, filtered to it.
         else if (pad.cue != null) navigate(cueOpenPath(projectId, pad.cue))
@@ -436,7 +436,7 @@ export function BuskingView({ projectId, show }: { projectId: number; show: Show
       // cue, and placing it elsewhere makes a second pad rather than moving this one. (The MIDI
       // door is `PickUpPad(padUuid)` and resolves to the same record server-side.)
       onPickUp: (pad) => {
-        const id = pad.template?.id ?? pad.look?.id ?? pad.cue?.id
+        const id = pad.palette?.id ?? pad.look?.id ?? pad.cue?.id
         if (id != null) handPickUp(pad.kind, id)
       },
       // A place is this window's own append followed by `hand.drop` (D12). The append answers the

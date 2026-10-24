@@ -1,11 +1,11 @@
 /*---
 id: FocusPull
 name: Focus Pull
-category: beam
+family: beam
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 defaultDirection: BOUNCE
-defaultBeatDivision: 2.0
+defaultCycle: 2.0
 compatibleProperties: [focus]
 parameters:
   - name: start

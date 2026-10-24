@@ -3,8 +3,8 @@
     "The spread's shape (effects plan D4, section 3.3 steps 1-5) over notional heads, element i at",
     "position i/(heads-1) (0.5 for one head): each head's phase offset and the slot count after step 4.",
     "Read by fx/SpreadShapeTest.kt (DistributionPlan.forElements) and frontend/src/lib/spreadShape.test.ts.",
-    "An absent spread, wings, blocks or groups is its default: 1.0, 1, 1, 0 (off). Offsets compare to 1e-9.",
-    "Random is DistributionStrategy.RANDOM's default seed 0."
+    "An absent spread, wings, segments or parts is its default: 1.0, 1, 1, 0 (off). Offsets compare to 1e-9.",
+    "Random is SpreadOrder.RANDOM's default seed 0."
   ],
   "cases": [
     {
@@ -78,7 +78,7 @@
       "name": "Blocks of 3 over 12",
       "order": "NORMAL",
       "heads": 12,
-      "blocks": 3,
+      "segments": 3,
       "offsets": [
         0.0,
         0.0,
@@ -99,7 +99,7 @@
       "name": "Blocks of 3 over 10, a short last block",
       "order": "NORMAL",
       "heads": 10,
-      "blocks": 3,
+      "segments": 3,
       "offsets": [
         0.0,
         0.0,
@@ -169,7 +169,7 @@
       "name": "Groups of 2 over 8",
       "order": "NORMAL",
       "heads": 8,
-      "groups": 2,
+      "parts": 2,
       "offsets": [
         0.0,
         0.5,
@@ -186,8 +186,8 @@
       "name": "Groups of 3 over 12 in blocks of 2",
       "order": "NORMAL",
       "heads": 12,
-      "blocks": 2,
-      "groups": 3,
+      "segments": 2,
+      "parts": 3,
       "offsets": [
         0.0,
         0.0,
@@ -208,7 +208,7 @@
       "name": "Groups larger than the heads",
       "order": "NORMAL",
       "heads": 4,
-      "groups": 6,
+      "parts": 6,
       "offsets": [
         0.0,
         0.25,
@@ -221,7 +221,7 @@
       "name": "Groups of 1 over 6",
       "order": "NORMAL",
       "heads": 6,
-      "groups": 1,
+      "parts": 1,
       "offsets": [
         0.0,
         0.0,
@@ -238,8 +238,8 @@
       "heads": 16,
       "spread": 0.75,
       "wings": 2,
-      "blocks": 2,
-      "groups": 2,
+      "segments": 2,
+      "parts": 2,
       "offsets": [
         0.0,
         0.0,
@@ -295,7 +295,7 @@
       "name": "Centre out, blocks of 2 over 8",
       "order": "CENTRE_OUT",
       "heads": 8,
-      "blocks": 2,
+      "segments": 2,
       "offsets": [
         0.5,
         0.5,
@@ -345,7 +345,7 @@
       "name": "Centre in, groups of 2 over 8",
       "order": "CENTRE_IN",
       "heads": 8,
-      "groups": 2,
+      "parts": 2,
       "offsets": [
         0.0,
         0.5,
@@ -442,7 +442,7 @@
       "name": "Position, blocks of 2 over 5",
       "order": "POSITIONAL",
       "heads": 5,
-      "blocks": 2,
+      "segments": 2,
       "offsets": [
         0.0,
         0.0,
@@ -469,7 +469,7 @@
       "name": "Position, groups of 2 over 5, snapped to whole slots",
       "order": "POSITIONAL",
       "heads": 5,
-      "groups": 2,
+      "parts": 2,
       "offsets": [
         0.0,
         0.5,
@@ -497,7 +497,7 @@
       "name": "Random, blocks of 2 over 8: heads beside each other in the shuffle share a phase",
       "order": "RANDOM",
       "heads": 8,
-      "blocks": 2,
+      "segments": 2,
       "offsets": [
         0.25,
         0.75,

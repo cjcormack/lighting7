@@ -29,8 +29,8 @@ vi.mock('@/store/cueStacks', () => ({
 }))
 vi.mock('@/store/fixtures', () => ({ useVisibleFixtureListQuery: () => ({ data: [{ key: 'hex-1', name: 'Hex 1' }] }) }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({
     data: [
       { id: 7, name: 'Lavender', isGeneric: true, family: 'COLOUR', rows: [] },
       { id: 8, name: 'Amber', isGeneric: true, family: 'COLOUR', rows: [] },
@@ -95,7 +95,7 @@ const STACK: CueStack = {
 function lavender(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer {
   return {
     id,
-    source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
+    source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender', families: ['COLOUR'] },
     targets: [{ type: 'fixture', key: 'hex-1' }],
     heads: ['hex-1'],
     sortOrder: 0,
@@ -112,7 +112,7 @@ function lavender(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer 
 }
 
 function entry(entryId: number, over: Partial<TimelineEntry> = {}): TimelineEntry {
-  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], effects: [], scenery: [], trackedScenery: [], ...over }
+  return { entryId, kind: 'CUE', cueId: entryId - 100, layers: [], fx: [], scenery: [], trackedScenery: [], ...over }
 }
 
 const PALETTE = 'palette:7:fixture:hex-1'
@@ -131,13 +131,13 @@ beforeEach(() => {
   timelineFiltersStore.reset()
   sessionStorage.clear()
   EDITED = false
-  ANSWER = { changed: [2], released: [], before: [{ cueId: 2, layers: [], adHocEffects: [], scenery: [] }], edited: [] }
+  ANSWER = { changed: [2], released: [], before: [{ cueId: 2, layers: [], adHocFx: [], scenery: [] }], edited: [] }
   TIMELINE = {
     stackId: 10,
     entries: [
       entry(101, { layers: [lavender(11, { amount: 0.6 })], scenery: [{ elementUuid: 'tabs', state: { open: 0 }, transitionMs: 4000 }] }),
       entry(102),
-      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], effects: [], scenery: [], trackedScenery: [] },
+      { entryId: 150, kind: 'MARKER', label: 'Scene 2', layers: [], fx: [], scenery: [], trackedScenery: [] },
       entry(103, { layers: [lavender(13)] }),
       entry(104),
     ],
@@ -161,7 +161,7 @@ describe('one cell', () => {
     fireEvent.click(cell(102, PALETTE))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
     expect(requests[0].ops).toEqual([
-      { op: 'layerOn', cueId: 2, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
+      { op: 'layerOn', cueId: 2, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 11 },
     ])
   })
 
@@ -179,11 +179,11 @@ describe('one cell', () => {
   it('names what a press released, and its toast’s Undo sends the before back as one restore', async () => {
     ANSWER = {
       changed: [3],
-      released: [{ cueId: 3, source: { kind: 'TEMPLATE', id: 7, uuid: 'p7', name: 'Lavender' }, targets: [{ type: 'fixture', key: 'hex-1' }] }],
-      before: [{ cueId: 3, layers: [{ templateId: 7 }], adHocEffects: [], scenery: [] }],
+      released: [{ cueId: 3, source: { kind: 'PALETTE', id: 7, uuid: 'p7', name: 'Lavender' }, targets: [{ type: 'fixture', key: 'hex-1' }] }],
+      before: [{ cueId: 3, layers: [{ paletteId: 7 }], adHocFx: [], scenery: [] }],
       edited: [],
     }
-    TIMELINE!.entries.push(entry(105, { layers: [lavender(15, { source: { kind: 'TEMPLATE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] }))
+    TIMELINE!.entries.push(entry(105, { layers: [lavender(15, { source: { kind: 'PALETTE', id: 8, uuid: 'p8', name: 'Amber', families: ['COLOUR'] } })] }))
     mount({ stack: { ...STACK, cues: [...STACK.cues, cueRow(5, { name: 'Five' })] } })
     const amber = 'palette:8:fixture:hex-1'
     fireEvent.click(cell(103, amber))
@@ -193,7 +193,7 @@ describe('one cell', () => {
     expect(message).toBe('Amber on Hex 1 in Q3. Lavender released there.')
     act(() => options.action.onClick())
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(2))
-    expect(requests[1].ops).toEqual([{ op: 'restore', cueId: 3, layers: [{ templateId: 7 }], adHocEffects: [], scenery: [] }])
+    expect(requests[1].ops).toEqual([{ op: 'restore', cueId: 3, layers: [{ paletteId: 7 }], adHocFx: [], scenery: [] }])
   })
 
   it('⌘Z undoes the last gesture as one request', async () => {
@@ -295,7 +295,7 @@ describe('a range', () => {
     mount()
     selectColumn()
     fireEvent.click(document.querySelector('[data-timeline-verb="Replace"]')!)
-    fireEvent.change(screen.getByLabelText('Replacement'), { target: { value: 'TEMPLATE:8' } })
+    fireEvent.change(screen.getByLabelText('Replacement'), { target: { value: 'PALETTE:8' } })
     expect(document.querySelector('[data-replace-readout]')?.textContent).toContain('Q1 and Q3 swap Lavender for Amber')
     fireEvent.click(screen.getByRole('button', { name: /^Replace 2/ }))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
@@ -303,8 +303,8 @@ describe('a range', () => {
       {
         op: 'replace',
         cueIds: [1, 3],
-        from: { source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
-        to: { source: { kind: 'TEMPLATE', id: 8 }, target: { type: 'fixture', key: 'hex-1' } },
+        from: { source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' } },
+        to: { source: { kind: 'PALETTE', id: 8 }, target: { type: 'fixture', key: 'hex-1' } },
         keepSettings: true,
       },
     ])
@@ -358,7 +358,7 @@ it('dragging a run’s end down fills the cells it crosses in one request', asyn
   })
   await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
   expect(requests[0].ops).toEqual([
-    { op: 'layerOn', cueId: 4, source: { kind: 'TEMPLATE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
+    { op: 'layerOn', cueId: 4, source: { kind: 'PALETTE', id: 7 }, target: { type: 'fixture', key: 'hex-1' }, settingsFrom: 13 },
   ])
 })
 

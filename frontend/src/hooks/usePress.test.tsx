@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 
 /**
@@ -10,8 +10,8 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
  * decision this side could get wrong in a way the desk would not catch.
  */
 const calls = vi.hoisted(() => ({
-  applyTemplate: vi.fn(),
-  toggleTemplate: vi.fn(),
+  applyPalette: vi.fn(),
+  togglePalette: vi.fn(),
   applyLook: vi.fn(),
   toggleLook: vi.fn(),
   absorb: vi.fn(),
@@ -21,7 +21,7 @@ const calls = vi.hoisted(() => ({
 }))
 const answers = vi.hoisted(() => ({
   apply: { written: 1, skipped: [] } as Record<string, unknown>,
-  look: { action: 'applied', effectCount: 0, skippedFamilies: [] } as Record<string, unknown>,
+  look: { action: 'applied', fxCount: 0, skippedFamilies: [] } as Record<string, unknown>,
   absorbOk: true,
 }))
 function mutation(spy: (args: unknown) => void, answer: () => unknown) {
@@ -32,14 +32,14 @@ function mutation(spy: (args: unknown) => void, answer: () => unknown) {
     },
   ]
 }
-vi.mock('@/store/templates', () => ({
-  useApplyTemplateMutation: mutation(calls.applyTemplate, () => answers.apply),
-  useToggleTemplateMutation: mutation(calls.toggleTemplate, () => ({ action: 'applied', effectCount: 0 })),
+vi.mock('@/store/palettes', () => ({
+  useApplyPaletteMutation: mutation(calls.applyPalette, () => answers.apply),
+  useTogglePaletteMutation: mutation(calls.togglePalette, () => ({ action: 'applied', fxCount: 0 })),
 }))
 vi.mock('@/store/looks', () => ({
-  useApplyLookMutation: mutation(calls.applyLook, () => ({ written: 2, effectIds: [], skippedFamilies: [] })),
+  useApplyLookMutation: mutation(calls.applyLook, () => ({ written: 2, fxIds: [], skippedFamilies: [] })),
   useToggleLookMutation: mutation(calls.toggleLook, () => answers.look),
-  useAbsorbLookEffectsMutation: () => [
+  useAbsorbLookFxMutation: () => [
     (args: unknown) => {
       calls.absorb(args)
       return { unwrap: () => (answers.absorbOk ? Promise.resolve({ absorbed: 1 }) : Promise.reject(new Error('409'))) }
@@ -89,8 +89,8 @@ const AMBER = {
   family: 'COLOUR',
   isGeneric: true,
   rows: [],
-} as unknown as TemplateSummary
-const BREATHE = { ...AMBER, id: 2, name: 'Breathe', kind: 'effect' } as TemplateSummary
+} as unknown as PaletteSummary
+const BREATHE = { ...AMBER, id: 2, name: 'Breathe', kind: 'fx' } as PaletteSummary
 const HEX = [{ type: 'fixture' as const, key: 'hex-1' }]
 
 beforeEach(() => {
@@ -118,21 +118,21 @@ async function send(...args: Parameters<ReturnType<typeof usePress>['press']>) {
 
 describe('usePress — the programmer', () => {
   it('a press puts a palette on as a layer that tracks it', async () => {
-    await send({ kind: 'template', template: AMBER }, 'press')
-    expect(calls.toggleTemplate).toHaveBeenCalledWith({
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(calls.togglePalette).toHaveBeenCalledWith({
       projectId: 1,
-      templateId: 1,
+      paletteId: 1,
       targets: HEX,
       propertyMask: 'COLOUR',
       families: undefined,
     })
-    expect(calls.applyTemplate).not.toHaveBeenCalled()
+    expect(calls.applyPalette).not.toHaveBeenCalled()
   })
 
   it('Apply as values is the palette’s apply route', async () => {
-    await send({ kind: 'template', template: AMBER }, 'asValues')
-    expect(calls.applyTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 1, targets: HEX, families: undefined })
-    expect(calls.toggleTemplate).not.toHaveBeenCalled()
+    await send({ kind: 'palette', palette: AMBER }, 'asValues')
+    expect(calls.applyPalette).toHaveBeenCalledWith({ projectId: 1, paletteId: 1, targets: HEX, families: undefined })
+    expect(calls.togglePalette).not.toHaveBeenCalled()
   })
 
   it('a Look presses its toggle, and Apply as values its apply', async () => {
@@ -144,7 +144,7 @@ describe('usePress — the programmer', () => {
 
   it('toasts a Look’s skipped families in the rows vocabulary', async () => {
     desk.pair = { targets: HEX, families: ['COLOUR'] }
-    answers.look = { action: 'applied', effectCount: 0, skippedFamilies: ['POSITION'] }
+    answers.look = { action: 'applied', fxCount: 0, skippedFamilies: ['POSITION'] }
     await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
     expect(calls.toggleLook).toHaveBeenCalledWith(expect.objectContaining({ families: ['COLOUR'] }))
     expect(toast.warning).toHaveBeenCalledWith('Position rows skipped — the selection is Colour')
@@ -152,43 +152,43 @@ describe('usePress — the programmer', () => {
 
   it('refuses a generic palette with no targets, which the palette routes would land nowhere', async () => {
     desk.pair = { targets: [], families: null }
-    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBeNull()
-    expect(await send({ kind: 'template', template: AMBER }, 'asValues')).toBeNull()
-    expect(calls.toggleTemplate).not.toHaveBeenCalled()
-    expect(calls.applyTemplate).not.toHaveBeenCalled()
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBeNull()
+    expect(await send({ kind: 'palette', palette: AMBER }, 'asValues')).toBeNull()
+    expect(calls.togglePalette).not.toHaveBeenCalled()
+    expect(calls.applyPalette).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith('Select the fixtures this should land on first')
   })
 
   it('refuses a per-fixture palette applied as values with no targets — the apply has no own heads', async () => {
     desk.pair = { targets: [], families: null }
-    expect(await send({ kind: 'template', template: { ...AMBER, isGeneric: false } }, 'asValues')).toBeNull()
-    expect(calls.applyTemplate).not.toHaveBeenCalled()
+    expect(await send({ kind: 'palette', palette: { ...AMBER, isGeneric: false } }, 'asValues')).toBeNull()
+    expect(calls.applyPalette).not.toHaveBeenCalled()
   })
 
   it('sends a per-fixture palette or a Look with no targets — they name their own heads', async () => {
     desk.pair = { targets: [], families: null }
-    await send({ kind: 'template', template: { ...AMBER, isGeneric: false } }, 'press')
-    expect(calls.toggleTemplate).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
+    await send({ kind: 'palette', palette: { ...AMBER, isGeneric: false } }, 'press')
+    expect(calls.togglePalette).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
     await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')
     expect(calls.toggleLook).toHaveBeenCalledWith(expect.objectContaining({ targets: [] }))
   })
 
   it('says whether the press put the record on or took it off', async () => {
-    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBe('on')
-    answers.look = { action: 'removed', effectCount: 0, skippedFamilies: [] }
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('on')
+    answers.look = { action: 'removed', fxCount: 0, skippedFamilies: [] }
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')).toBe('off')
   })
 })
 
 describe('usePress — the pair', () => {
   it('is the desk’s while following and the window’s own when unlinked', async () => {
-    await send({ kind: 'template', template: AMBER }, 'press')
-    expect(calls.toggleTemplate).toHaveBeenLastCalledWith(expect.objectContaining({ targets: HEX }))
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(calls.togglePalette).toHaveBeenLastCalledWith(expect.objectContaining({ targets: HEX }))
 
     desk.following = false
     desk.local = { targets: [{ type: 'group', key: 'wash' }], families: ['COLOUR'] }
-    await send({ kind: 'template', template: AMBER }, 'press')
-    expect(calls.toggleTemplate).toHaveBeenLastCalledWith(
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(calls.togglePalette).toHaveBeenLastCalledWith(
       expect.objectContaining({ targets: [{ type: 'group', key: 'wash' }], families: ['COLOUR'] }),
     )
   })
@@ -198,8 +198,8 @@ describe('usePress — the pair', () => {
     marquee.current = {
       press: { targets: [{ type: 'fixture', key: 'par-3' }], askedFamilies: ['INTENSITY'], targetFamilies: ['INTENSITY'], targetEmitters: [] },
     }
-    await send({ kind: 'template', template: AMBER }, 'press')
-    expect(calls.toggleTemplate).toHaveBeenLastCalledWith(
+    await send({ kind: 'palette', palette: AMBER }, 'press')
+    expect(calls.togglePalette).toHaveBeenLastCalledWith(
       expect.objectContaining({ targets: [{ type: 'fixture', key: 'par-3' }], families: ['INTENSITY'] }),
     )
   })
@@ -235,39 +235,39 @@ describe('usePress — a focused Look layer', () => {
     const { result } = renderHook(() => useWindowPress(1))
     expect(result.current.into).toEqual({ kind: 'look', lookName: 'Night' })
     await act(async () => {
-      await result.current.press({ kind: 'template', template: AMBER }, 'press')
+      await result.current.press({ kind: 'palette', palette: AMBER }, 'press')
     })
-    expect(calls.applyTemplate).toHaveBeenCalledWith({
+    expect(calls.applyPalette).toHaveBeenCalledWith({
       projectId: 1,
-      templateId: 1,
+      paletteId: 1,
       targets: HEX,
       families: undefined,
       write: false,
     })
     expect(calls.setValue).toHaveBeenCalledWith('hex-1', 'rgbColour', '#ff8800')
-    expect(calls.toggleTemplate).not.toHaveBeenCalled()
+    expect(calls.togglePalette).not.toHaveBeenCalled()
     expect(calls.programmerFrame).not.toHaveBeenCalled()
   })
 
   it('lands nothing on a head the layer does not target, and says so', async () => {
     lookStore.current = { ...(lookStore.current as object), targetedKeys: new Set(['hex-2']) }
-    const landed = await send({ kind: 'template', template: AMBER }, 'press')
+    const landed = await send({ kind: 'palette', palette: AMBER }, 'press')
     expect(landed).toBeNull()
     expect(calls.setValue).not.toHaveBeenCalled()
     expect(toast.warning).toHaveBeenCalledWith('0 values into Night · 1 could not take it')
   })
 
   it('absorbs an effect palette’s effect into the Look', async () => {
-    answers.apply = { written: 0, skipped: [], effectIds: [31] }
-    await send({ kind: 'template', template: BREATHE }, 'press')
-    expect(calls.applyTemplate).toHaveBeenCalledWith(expect.not.objectContaining({ write: false }))
-    expect(calls.absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, effectIds: [31] })
+    answers.apply = { written: 0, skipped: [], fxIds: [31] }
+    await send({ kind: 'palette', palette: BREATHE }, 'press')
+    expect(calls.applyPalette).toHaveBeenCalledWith(expect.not.objectContaining({ write: false }))
+    expect(calls.absorb).toHaveBeenCalledWith({ projectId: 1, lookId: 9, fxIds: [31] })
   })
 
   it('takes the started effects off again when the absorb is refused — nothing is left on stage', async () => {
-    answers.apply = { written: 0, skipped: [], effectIds: [31, 32] }
+    answers.apply = { written: 0, skipped: [], fxIds: [31, 32] }
     answers.absorbOk = false
-    expect(await send({ kind: 'template', template: BREATHE }, 'press')).toBeNull()
+    expect(await send({ kind: 'palette', palette: BREATHE }, 'press')).toBeNull()
     expect(calls.removeFx).toHaveBeenCalledTimes(2)
     expect(calls.removeFx).toHaveBeenCalledWith(expect.objectContaining({ id: 31 }))
     expect(calls.removeFx).toHaveBeenCalledWith(expect.objectContaining({ id: 32 }))
@@ -276,9 +276,9 @@ describe('usePress — a focused Look layer', () => {
   it('starts an effect palette only on the heads the layer targets', async () => {
     desk.pair = { targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-9' }], families: null }
     lookStore.current = { ...(lookStore.current as object), targetedKeys: new Set(['hex-1']), targets: [] }
-    answers.apply = { written: 0, skipped: [], effectIds: [31] }
-    await send({ kind: 'template', template: BREATHE }, 'press')
-    expect(calls.applyTemplate).toHaveBeenCalledWith(expect.objectContaining({ targets: [{ type: 'fixture', key: 'hex-1' }] }))
+    answers.apply = { written: 0, skipped: [], fxIds: [31] }
+    await send({ kind: 'palette', palette: BREATHE }, 'press')
+    expect(calls.applyPalette).toHaveBeenCalledWith(expect.objectContaining({ targets: [{ type: 'fixture', key: 'hex-1' }] }))
   })
 
   it('refuses a Look, since Looks don’t nest', async () => {
@@ -293,9 +293,9 @@ describe('usePress — a focused Look layer', () => {
     const { result } = renderHook(() => usePress(1, { targets: HEX, families: null }, { scope: 'programmer' }))
     expect(result.current.into).toEqual({ kind: 'programmer' })
     await act(async () => {
-      await result.current.press({ kind: 'template', template: AMBER }, 'press')
+      await result.current.press({ kind: 'palette', palette: AMBER }, 'press')
     })
-    expect(calls.toggleTemplate).toHaveBeenCalled()
+    expect(calls.togglePalette).toHaveBeenCalled()
     expect(calls.setValue).not.toHaveBeenCalled()
   })
 })
@@ -330,7 +330,7 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
       effects: [],
       pressLayer: vi.fn(() => Promise.resolve({ action, skippedFamilies: [], cue: {} })),
       landValues: vi.fn((values: readonly unknown[]) => values.length),
-      pickEffect: vi.fn(() => Promise.resolve(true)),
+      pickFx: vi.fn(() => Promise.resolve(true)),
     }
     cueArm.current = value
     return value
@@ -339,18 +339,18 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
   it('a palette or a Look press is the cue’s layer press, with the pair, and nothing else is sent', async () => {
     const cue = arm()
     desk.pair = { targets: HEX, families: ['COLOUR'] }
-    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBe('on')
-    expect(cue.pressLayer).toHaveBeenCalledWith({ templateId: 1 }, HEX, ['COLOUR'])
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('on')
+    expect(cue.pressLayer).toHaveBeenCalledWith({ paletteId: 1 }, HEX, ['COLOUR'])
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'press')).toBe('on')
     expect(cue.pressLayer).toHaveBeenLastCalledWith({ lookId: 7 }, HEX, ['COLOUR'])
-    for (const spy of [calls.toggleTemplate, calls.toggleLook, calls.applyLook, calls.absorb, calls.programmerFrame]) {
+    for (const spy of [calls.togglePalette, calls.toggleLook, calls.applyLook, calls.absorb, calls.programmerFrame]) {
       expect(spy).not.toHaveBeenCalled()
     }
   })
 
   it('answers off when the desk took it off, and names the cue as where presses go', async () => {
     arm('removed')
-    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBe('off')
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBe('off')
     const { result } = renderHook(() => useWindowPress(1))
     expect(result.current.into).toEqual({ kind: 'cue', cueLabel: 'Q4' })
   })
@@ -358,10 +358,10 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
   it('Apply as values lands a value palette’s literals as the cue’s own rows; a Look or an effect palette is refused', async () => {
     const cue = arm()
     answers.apply = { written: 1, skipped: [], values: [{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }] }
-    expect(await send({ kind: 'template', template: AMBER }, 'asValues')).toBe('into')
-    expect(calls.applyTemplate).toHaveBeenCalledWith({ projectId: 1, templateId: 1, targets: HEX, families: undefined, write: false })
+    expect(await send({ kind: 'palette', palette: AMBER }, 'asValues')).toBe('into')
+    expect(calls.applyPalette).toHaveBeenCalledWith({ projectId: 1, paletteId: 1, targets: HEX, families: undefined, write: false })
     expect(cue.landValues).toHaveBeenCalledWith([{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }])
-    expect(await send({ kind: 'template', template: BREATHE }, 'asValues')).toBeNull()
+    expect(await send({ kind: 'palette', palette: BREATHE }, 'asValues')).toBeNull()
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'asValues')).toBeNull()
     expect(toast.error).toHaveBeenCalledTimes(2)
     expect(cue.pressLayer).not.toHaveBeenCalled()
@@ -369,11 +369,11 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
 
   it('a read-only cue refuses the press out loud and writes nothing', async () => {
     const cue = arm('applied', true)
-    expect(await send({ kind: 'template', template: AMBER }, 'press')).toBeNull()
-    expect(await send({ kind: 'template', template: AMBER }, 'asValues')).toBeNull()
+    expect(await send({ kind: 'palette', palette: AMBER }, 'press')).toBeNull()
+    expect(await send({ kind: 'palette', palette: AMBER }, 'asValues')).toBeNull()
     expect(toast.error).toHaveBeenCalledWith('Q4 is read-only here — nothing was written')
     expect(cue.pressLayer).not.toHaveBeenCalled()
-    expect(calls.applyTemplate).not.toHaveBeenCalled()
+    expect(calls.applyPalette).not.toHaveBeenCalled()
   })
 
   it('a door that writes Local whatever the window is pointed at ignores the cue', async () => {

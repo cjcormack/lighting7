@@ -1,12 +1,13 @@
 package uk.me.cormack.lighting7.fx
 
 import kotlinx.serialization.Serializable
+import uk.me.cormack.lighting7.models.Timing
 import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Source of an effect registration.
  */
-enum class EffectSource {
+enum class FxSource {
     /** Built-in effect shipped with the application (from .fx.kts resource files) */
     BUILT_IN,
     /** User-created effect (from fx_definitions database table) */
@@ -14,19 +15,19 @@ enum class EffectSource {
 }
 
 /**
- * Factory function that creates an [Effect] from string parameters.
+ * Factory function that creates an [Fx] from string parameters.
  *
  * @param params Effect-specific parameters as string key-value pairs
  * @param resolveColourSource Optional resolver for a colour parameter that *names* a colour rather
- *        than stating one — a `pal:{uuid}` template reference. See [templateColourSource].
+ *        than stating one — a `pal:{uuid}` template reference. See [paletteColourSource].
  * @param colourSourceVersion Optional version counter, bumped when a referenced template is edited,
  *        so a running effect re-resolves without being rebuilt.
  */
-typealias EffectFactory = (
+typealias FxFactory = (
     params: Map<String, String>,
     resolveColourSource: ((String) -> ExtendedColour?)?,
     colourSourceVersion: (() -> Long)?,
-) -> Effect
+) -> Fx
 
 /**
  * Metadata for a registered effect type.
@@ -34,7 +35,7 @@ typealias EffectFactory = (
  * Contains everything needed to list the effect in the library API,
  * create instances from parameters, and display in the UI.
  */
-data class EffectRegistration(
+data class FxRegistration(
     /** Canonical identifier (e.g., "SineWave") */
     val id: String,
     /** Alternative names for lookup (normalized lowercase, no spaces) */
@@ -42,42 +43,42 @@ data class EffectRegistration(
     /** Human-readable display name */
     val name: String,
     /** UI category (e.g., "intensity", "colour", "position", "beam", "controls") */
-    val category: String,
+    val family: String,
     /** Output type this effect produces */
     val outputType: FxOutputType,
     /** How this effect is evaluated (STANDARD, STATEFUL) */
-    val effectMode: EffectMode = EffectMode.STANDARD,
+    val fxMode: FxMode = FxMode.STANDARD,
     /** Parameter schema for UI and API */
     val parameters: List<ParameterInfo> = emptyList(),
     /** Which fixture properties this effect can target */
     val compatibleProperties: List<String>,
     /** Whether this is built-in or user-created */
-    val source: EffectSource = EffectSource.BUILT_IN,
+    val source: FxSource = FxSource.BUILT_IN,
     /** Database ID of the fx_definition (for USER source) */
     val sourceDefinitionId: Int? = null,
     /** The calculate script body (Kotlin source) */
     val script: String? = null,
     /** Default step-timing mode for new instances */
-    val defaultStepTiming: Boolean = false,
+    val defaultTiming: Timing = Timing.CYCLE,
     /** Direction a new instance runs in when its author names none */
-    val defaultDirection: EffectDirection = EffectDirection.FORWARD,
+    val defaultDirection: FxDirection = FxDirection.FORWARD,
     /** Cycle, in beats, a new instance runs at when its author names none */
-    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
+    val defaultCycle: Double = CycleLength.ONE_BAR,
     /** Timing source for this effect (BEAT or WALL_CLOCK) */
     val timingSource: TimingSource = TimingSource.BEAT,
     /** Factory to create an Effect instance from string parameters */
-    val factory: EffectFactory,
+    val factory: FxFactory,
 )
 
 /**
  * DTO describing an available effect type for the API.
  */
 @Serializable
-data class EffectTypeInfo(
+data class FxTypeInfo(
     val name: String,
-    val category: String,
+    val family: String,
     val outputType: String,
-    val effectMode: String = "STANDARD",
+    val fxMode: String = "STANDARD",
     val parameters: List<ParameterInfo>,
     val compatibleProperties: List<String>,
     val source: String? = null,
@@ -85,9 +86,9 @@ data class EffectTypeInfo(
     val script: String? = null,
     val timingSource: String = "BEAT",
     /** What a new instance's `direction` is when its author names none. */
-    val defaultDirection: String = EffectDirection.FORWARD.name,
-    /** What a new instance's `beatDivision` is when its author names none. */
-    val defaultBeatDivision: Double = BeatDivision.ONE_BAR,
+    val defaultDirection: String = FxDirection.FORWARD.name,
+    /** What a new instance's `cycle` is when its author names none. */
+    val defaultCycle: Double = CycleLength.ONE_BAR,
 )
 
 /**
@@ -112,16 +113,16 @@ data class ParameterInfo(
  * Thread-safe via [ConcurrentHashMap].
  */
 class FxRegistry {
-    private val registrations = ConcurrentHashMap<String, EffectRegistration>()
+    private val registrations = ConcurrentHashMap<String, FxRegistration>()
     private val aliasIndex = ConcurrentHashMap<String, String>()
 
     /**
      * Register an effect type.
      *
-     * The canonical [EffectRegistration.id] and all [EffectRegistration.aliases]
+     * The canonical [FxRegistration.id] and all [FxRegistration.aliases]
      * are indexed for lookup. Aliases are normalized (lowercased, spaces removed).
      */
-    fun register(registration: EffectRegistration) {
+    fun register(registration: FxRegistration) {
         registrations[registration.id] = registration
 
         // Index the canonical id (normalized)
@@ -155,37 +156,37 @@ class FxRegistry {
      *
      * @throws IllegalArgumentException if the effect type is not registered
      */
-    fun createEffect(
-        effectType: String,
+    fun createFx(
+        fxType: String,
         params: Map<String, String> = emptyMap(),
         resolveColourSource: ((String) -> ExtendedColour?)? = null,
         colourSourceVersion: (() -> Long)? = null,
-    ): Effect {
-        val registration = getRegistration(effectType)
-            ?: throw IllegalArgumentException("Unknown effect type: $effectType")
+    ): Fx {
+        val registration = getRegistration(fxType)
+            ?: throw IllegalArgumentException("Unknown effect type: $fxType")
         return registration.factory(params, resolveColourSource, colourSourceVersion)
     }
 
     /**
      * Look up a registration by canonical id or alias.
      */
-    fun getRegistration(effectType: String): EffectRegistration? {
-        val canonicalId = aliasIndex[normalize(effectType)] ?: return null
+    fun getRegistration(fxType: String): FxRegistration? {
+        val canonicalId = aliasIndex[normalize(fxType)] ?: return null
         return registrations[canonicalId]
     }
 
     /**
      * Get the effect library as DTOs for the API.
      */
-    fun getLibrary(): List<EffectTypeInfo> {
+    fun getLibrary(): List<FxTypeInfo> {
         return registrations.values
             .sortedBy { it.id }
             .map { reg ->
-                EffectTypeInfo(
+                FxTypeInfo(
                     name = reg.id,
-                    category = reg.category,
+                    family = reg.family,
                     outputType = reg.outputType.name,
-                    effectMode = reg.effectMode.name,
+                    fxMode = reg.fxMode.name,
                     parameters = reg.parameters,
                     compatibleProperties = reg.compatibleProperties,
                     source = reg.source.name,
@@ -193,7 +194,7 @@ class FxRegistry {
                     script = reg.script,
                     timingSource = reg.timingSource.name,
                     defaultDirection = reg.defaultDirection.name,
-                    defaultBeatDivision = reg.defaultBeatDivision,
+                    defaultCycle = reg.defaultCycle,
                 )
             }
     }
@@ -201,7 +202,7 @@ class FxRegistry {
     /**
      * Get all registrations (snapshot).
      */
-    val allRegistrations: List<EffectRegistration>
+    val allRegistrations: List<FxRegistration>
         get() = registrations.values.toList()
 
     /**
@@ -210,9 +211,9 @@ class FxRegistry {
     val size: Int
         get() = registrations.size
 
-    private fun normalize(name: String): String = normalizeEffectType(name)
+    private fun normalize(name: String): String = normalizeFxType(name)
 }
 
 /** An effect type as [FxRegistry] matches one: case, spaces and underscores ignored. */
-fun normalizeEffectType(name: String): String =
+fun normalizeFxType(name: String): String =
     name.lowercase().replace(" ", "").replace("_", "")

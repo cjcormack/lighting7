@@ -43,7 +43,7 @@ vi.mock('./CueRowStore', () => ({
 }))
 // The Looks and FX tables are pinned in `CueLooksFxTabs.test.tsx`.
 vi.mock('./CueLooksTab', () => ({ CueLooksTab: () => <div data-testid="looks" /> }))
-vi.mock('./CueEffectsTab', () => ({ CueEffectsTab: () => <div data-testid="fx" /> }))
+vi.mock('./CueFxTab', () => ({ CueFxTab: () => <div data-testid="fx" /> }))
 vi.mock('./CueValuesView', () => ({ CueValuesViewProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/components/scenery/CueSceneryEditor', () => ({
   CueSceneryEditorBody: () => <div data-testid="scenery-editor" />,
@@ -76,7 +76,7 @@ function makeCue(over: Partial<Cue> = {}): Cue {
     id: 1,
     name: 'Tabs out',
     layers: [],
-    adHocEffects: [],
+    adHocFx: [],
     propertyAssignments: [],
     triggers: [],
     cueStackId: 7,
@@ -418,7 +418,7 @@ describe('CueEditor', () => {
       name: 'Tabs out',
       sortOrder: 0,
       layerCount: 0,
-      adHocEffectCount: 0,
+      adHocFxCount: 0,
       autoAdvance: false,
       autoAdvanceDelayMs: null,
       fadeDurationMs: 2000,

@@ -96,7 +96,7 @@ vi.mock('@/api/lightingApi', async () => {
       prop === 'clearTarget'
         ? (...args: unknown[]) => {
             releaseFrames.calls.push(args)
-            return Promise.resolve({ targetType: args[0], targetKey: args[1], values: 1, effects: 0, partial: [] })
+            return Promise.resolve({ targetType: args[0], targetKey: args[1], values: 1, fx: 0, partial: [] })
           }
         : target[prop],
   })
@@ -123,10 +123,10 @@ vi.mock('./useCellWriters', () => ({
   applyPlannedWrite: () => {},
 }))
 /** The gate under test: `enabled`, which decides whether the FX subscription is mounted at all. */
-const clearCellEffects = vi.hoisted(() => ({ enabled: undefined as boolean | undefined }))
-vi.mock('./useClearCellEffects', () => ({
-  useClearCellEffects: (enabled: boolean) => {
-    clearCellEffects.enabled = enabled
+const clearCellFx = vi.hoisted(() => ({ enabled: undefined as boolean | undefined }))
+vi.mock('./useClearCellFx', () => ({
+  useClearCellFx: (enabled: boolean) => {
+    clearCellFx.enabled = enabled
     return () => {}
   },
 }))
@@ -224,7 +224,7 @@ beforeEach(() => {
   rowSelection.clear.mockClear()
   rowSelection.setSelection.mockClear()
   programmerScope.value = null
-  clearCellEffects.enabled = undefined
+  clearCellFx.enabled = undefined
   table.cellSelection = undefined
   table.closeEditorCell = null
   table.editorOpen = false
@@ -327,7 +327,7 @@ describe('FixturesListContainer on the plain list routes', () => {
     // values while the effect driving them kept running — indistinguishable, on the rig, from the
     // key having done nothing.
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="fixtures" />)
-    expect(clearCellEffects.enabled).toBe(true)
+    expect(clearCellFx.enabled).toBe(true)
   })
 })
 
@@ -755,7 +755,7 @@ describe('Release over a row selection on the programmer (fixture-fx-sheets plan
 
 describe('FixturesListContainer — what a palette press lands on (venue-visit plan S1)', () => {
   const press = (key: string) => fireEvent.keyDown(window, { key })
-  type ToolbarParts = { templateTargets: readonly { type: string; key: string }[]; targetFamilies: readonly string[] }
+  type ToolbarParts = { paletteTargets: readonly { type: string; key: string }[]; targetFamilies: readonly string[] }
 
   function renderWithToolbar(): { parts: () => ToolbarParts } {
     let last: ToolbarParts | null = null
@@ -776,7 +776,7 @@ describe('FixturesListContainer — what a palette press lands on (venue-visit p
 
   it('sends a cell by its element key and offers the families the cell can take', () => {
     const { parts } = renderWithToolbar()
-    expect(parts().templateTargets).toEqual([{ type: 'fixture', key: 'c.pixel-0' }])
+    expect(parts().paletteTargets).toEqual([{ type: 'fixture', key: 'c.pixel-0' }])
     // The cell's own colour: keyed by fixture alone, the map dropped the cell and offered nothing.
     expect(parts().targetFamilies).toEqual(['COLOUR'])
   })

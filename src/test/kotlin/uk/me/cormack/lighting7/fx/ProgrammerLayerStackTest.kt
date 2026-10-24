@@ -20,8 +20,8 @@ import kotlin.test.assertTrue
  * The programmer's layer stack, at the value level.
  *
  * Effects need a real `State` (the FX registry and target resolution both take one) and are covered
- * in `ProgrammerLayerStackEffectsTest`; everything here runs against map-backed [LookRegistry] and
- * [TemplateRegistry]s and no database, which is what keeps the composition rules cheap to assert.
+ * in `ProgrammerLayerStackFxTest`; everything here runs against map-backed [LookRegistry] and
+ * [PaletteRegistry]s and no database, which is what keeps the composition rules cheap to assert.
  * A Look lands whole, so the per-target press rules are a palette's and are asserted on palettes.
  */
 class ProgrammerLayerStackTest {
@@ -35,7 +35,7 @@ class ProgrammerLayerStackTest {
         val stack: ProgrammerLayerStack,
         val looks: MutableMap<UUID, LookSnapshot>,
         val registry: LookRegistry,
-        val palettes: MutableMap<UUID, TemplateSnapshot>,
+        val palettes: MutableMap<UUID, PaletteSnapshot>,
     )
 
     private fun newRig(): Rig {
@@ -52,8 +52,8 @@ class ProgrammerLayerStackTest {
         val store = ProgrammerStore()
         val looks = HashMap<UUID, LookSnapshot>()
         val registry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
-        val palettes = HashMap<UUID, TemplateSnapshot>()
-        val templateRegistry = TemplateRegistry(loader = { palettes[it] })
+        val palettes = HashMap<UUID, PaletteSnapshot>()
+        val paletteRegistry = PaletteRegistry(loader = { palettes[it] })
         val engine = FxEngine(
             fixtures = fixtures,
             speedMasters = SpeedMasterBank(),
@@ -63,7 +63,7 @@ class ProgrammerLayerStackTest {
         val stack = ProgrammerLayerStack(
             fixtures = { fixtures },
             lookRegistry = { registry },
-            templateRegistry = { templateRegistry },
+            paletteRegistry = { paletteRegistry },
             engine = { engine },
             store = store,
             // No effects in these Looks or palettes, so nothing ever reaches the spawn path.
@@ -97,17 +97,17 @@ class ProgrammerLayerStackTest {
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
         stack.add(source = lookSource(name, dimmer, *fixtureKeys), targets = emptyList()).first
 
-    /** A generic palette of one row, `property` at `value` (a [TemplateIntent] string), and its source. */
+    /** A generic palette of one row, `property` at `value` (a [PaletteIntent] string), and its source. */
     private fun Rig.palette(name: String, property: String, value: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes("palette:$name".toByteArray())
-        palettes[uuid] = TemplateSnapshot(
-            templateId = name.hashCode(),
-            templateUuid = uuid,
+        palettes[uuid] = PaletteSnapshot(
+            paletteId = name.hashCode(),
+            paletteUuid = uuid,
             name = name,
             fadeDurationMs = null,
-            rows = listOf(TemplateRowEntry(target = null, propertyName = property, value = value)),
+            rows = listOf(PaletteRowEntry(target = null, propertyName = property, value = value)),
         )
-        return LayerSource.template(name.hashCode(), uuid, name)
+        return LayerSource.palette(name.hashCode(), uuid, name)
     }
 
     /** A UV palette: `dmx:` is a literal level, so [valueOf] reads [level] back exactly. */
@@ -385,7 +385,7 @@ class ProgrammerLayerStackTest {
         rig.stack.toggle(LayerSource.look(7, uuid, "Warm"), on("hex-1"))
         // Same id, different record. The palette resolves to null here (the map does not hold it),
         // so it contributes no values — but it must still take a layer of its own.
-        rig.stack.toggle(LayerSource.template(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"), on("hex-1"))
+        rig.stack.toggle(LayerSource.palette(7, UUID.nameUUIDFromBytes("t7".toByteArray()), "Amber Key"), on("hex-1"))
 
         assertEquals(2, rig.store.layers.size, "sharing an int PK must not collapse two pads into one")
         assertEquals(200, rig.valueOf("hex-1"), "the Look's pad is still on")

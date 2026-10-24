@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { LocateButton } from '../fixtures/LocateButton'
 import { COLUMN_DEFS, columnFamily, columnLabel } from './columns'
-import { rowColour, rowLocateTarget, templateTargetsOf } from './rowModel'
+import { rowColour, rowLocateTarget, paletteTargetsOf } from './rowModel'
 import { tagClass, type FixtureColour } from '../../lib/fixtureColours'
 import { TagMark } from '../fixtureColours/ColourSwatches'
 import { buildCueRowCells, buildRowCells, useRowValues } from './useRowValues'
@@ -26,10 +26,10 @@ import { useScopedRowValues } from './useScopedRowValues'
 import { parsePropertyMask } from '../../lib/attributeFamily'
 import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
 import { useLookRowStore } from '../programmer/LookRowStore'
-import { useFocusedTemplateLayer } from '../programmer/FocusedTemplateLayer'
+import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
 import { useProgrammerScope, useProgrammerScopeActions } from '../programmer/ProgrammerScope'
 import { useEditorContext } from '../programmer/EditorContext'
-import { effectSpeedLabel } from '../fx/fxConstants'
+import { fxSpeedLabel } from '../fx/fxConstants'
 import { useIsDeskConnected } from '../../store/status'
 import { DESK_OFFLINE_LABEL } from '../../api/wsGesture'
 import { useRowOwnership } from './useRowOwnership'
@@ -766,13 +766,13 @@ const RowView = React.memo(function RowView({
   // rather than a second mask/target computation that could disagree with the one that painted the
   // ring. The label is null where the effect type no longer resolves in the registry — the wave
   // still draws, because "an effect drives this" is true whether or not its speed can be read.
-  const focusedTemplate = useFocusedTemplateLayer()
-  const effectDriven = scope?.kind === 'layer' && focusedTemplate?.kind === 'effect'
-  const templateEffect = focusedTemplate?.template?.effect
-  const effectDivision =
-    templateEffect == null
+  const focusedPalette = useFocusedPaletteLayer()
+  const fxDriven = scope?.kind === 'layer' && focusedPalette?.kind === 'fx'
+  const paletteFx = focusedPalette?.palette?.fx
+  const fxDivision =
+    paletteFx == null
       ? null
-      : effectSpeedLabel(templateEffect.beatDivision, templateEffect.timingSource, templateEffect.seconds)
+      : fxSpeedLabel(paletteFx.cycle, paletteFx.timingSource, paletteFx.seconds)
   const cellByCol = useMemo(() => new Map(cells.map((cell) => [cell.col, cell])), [cells])
   // Every fixture this row covers — a group row's members, a fixture row's own key. The same
   // expansion the cells were resolved through, so "is this row in the layer's targets?" and "what
@@ -1059,13 +1059,13 @@ const RowView = React.memo(function RowView({
                 glyph above is undefined exactly where this one draws. Around the cell rather than
                 inside it, for the reason that one documents — the four cell editors encode value
                 shape, and a marker drawn inside one of them would have to be drawn four times. */}
-            {effectDriven && state?.value != null && (
+            {fxDriven && state?.value != null && (
               <span
                 className="pointer-events-none absolute bottom-0.5 right-1 flex items-center gap-0.5 text-[9px] leading-none text-muted-foreground"
-                title={`Driven by “${focusedTemplate?.name ?? 'this palette'}”`}
+                title={`Driven by “${focusedPalette?.name ?? 'this palette'}”`}
               >
                 <AudioWaveform className="size-2.5" />
-                {effectDivision}
+                {fxDivision}
               </span>
             )}
             <PropertyCell
@@ -1128,7 +1128,7 @@ const RowView = React.memo(function RowView({
                 nothing (`CellFxLens`). */}
             <CellFxLens
               keys={cell.keys}
-              selection={() => templateTargetsOf(batchFor(row, col).targets ?? [])}
+              selection={() => paletteTargetsOf(batchFor(row, col).targets ?? [])}
               fallback={
                 <>
                   {/* The held-back dot (D19): an amber corner dot in the top-right, inside the
@@ -1146,7 +1146,7 @@ const RowView = React.memo(function RowView({
                       corner from the Layers glyph, so a cell that is both (a Look layer's effect)
                       shows both. A badge and not a louder ring, because the ring vocabulary is six
                       colours already and a seventh weight would not have said *effect*. */}
-                  {owned?.source === 'effect' && (
+                  {owned?.source === 'fx' && (
                     <span
                       data-testid="effect-badge"
                       className="pointer-events-none absolute right-1 top-0.5 flex size-3.5 items-center justify-center rounded-sm bg-violet-500/90 text-white"

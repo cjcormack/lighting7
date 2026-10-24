@@ -20,10 +20,10 @@ import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.LookEffectDto
+import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -49,10 +49,10 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.palette(name: String, value: String = "#ff0000", propertyName: String = "rgbColour"): Int {
         val resp = post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", propertyName, value))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", propertyName, value))))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
-        return resp.body<TemplateDto>().id
+        return resp.body<PaletteDto>().id
     }
 
     /** A Look of [keys]' dimmer and colour, and with [effect] a Pulse on the first of them. */
@@ -63,11 +63,11 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = name,
                     rows = keys.flatMap { listOf(LookRowDto("fixture", it, "dimmer", "200"), LookRowDto("fixture", it, "rgbColour", "#00ff00")) },
-                    effects = if (!effect) emptyList() else listOf(
-                        LookEffectDto(
+                    fx = if (!effect) emptyList() else listOf(
+                        LookFxDto(
                             targetType = "fixture", targetKey = keys.first(),
-                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
+                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
                 ),
@@ -100,12 +100,12 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
 
     private suspend fun HttpClient.press(
         cueId: Int,
-        templateId: Int? = null,
+        paletteId: Int? = null,
         lookId: Int? = null,
         vararg keys: String,
         families: List<String>? = null,
     ): CueLayerPressResponse {
-        val resp = pressRaw(cueId, CueLayerPressRequest(templateId, lookId, keys.map { CueTargetDto("fixture", it) }, families))
+        val resp = pressRaw(cueId, CueLayerPressRequest(paletteId, lookId, keys.map { CueTargetDto("fixture", it) }, families))
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         return resp.body()
     }
@@ -125,19 +125,19 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val blue = client.palette("Blue", "#0000ff")
         val q = client.cue("Q")
 
-        val on = client.press(q, templateId = red, keys = arrayOf("hex-1", "hex-2"))
+        val on = client.press(q, paletteId = red, keys = arrayOf("hex-1", "hex-2"))
         assertEquals("applied", on.action)
         assertEquals("COLOUR", on.propertyMask)
         assertEquals(listOf("Red: hex-1,hex-2"), on.cue.layers.map { "${it.source?.name}: ${it.targets.joinToString(",") { t -> t.key }}" })
         val redId = on.cue.layers.single().id
 
-        val replaced = client.press(q, templateId = blue, keys = arrayOf("hex-1"))
+        val replaced = client.press(q, paletteId = blue, keys = arrayOf("hex-1"))
         assertEquals(1, replaced.released)
         assertEquals(listOf("Red: hex-2", "Blue: hex-1"), client.layers(q))
         assertEquals(redId, replaced.cue.layers.first().id, "a narrowed layer keeps its row")
 
         // Red pressed back on hex-1 takes Blue's only head, which leaves Red's layer the top: it widens.
-        client.press(q, templateId = red, keys = arrayOf("hex-1"))
+        client.press(q, paletteId = red, keys = arrayOf("hex-1"))
         assertEquals(listOf("Red: hex-2,hex-1"), client.layers(q))
     }
 
@@ -149,14 +149,14 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val red = client.palette("Red")
         val q = client.cue("Q")
 
-        client.press(q, templateId = red, keys = arrayOf("hex-1"))
-        client.press(q, templateId = red, keys = arrayOf("hex-2"))
+        client.press(q, paletteId = red, keys = arrayOf("hex-1"))
+        client.press(q, paletteId = red, keys = arrayOf("hex-2"))
         assertEquals(listOf("Red: hex-1,hex-2"), client.layers(q), "the top layer widens")
 
-        val off = client.press(q, templateId = red, keys = arrayOf("hex-1"))
+        val off = client.press(q, paletteId = red, keys = arrayOf("hex-1"))
         assertEquals("removed", off.action)
         assertEquals(listOf("Red: hex-2"), client.layers(q))
-        assertEquals("removed", client.press(q, templateId = red, keys = arrayOf("hex-2")).action)
+        assertEquals("removed", client.press(q, paletteId = red, keys = arrayOf("hex-2")).action)
         assertTrue(client.layers(q).isEmpty())
     }
 
@@ -168,17 +168,17 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val red = client.palette("Red")
         val q = client.cue("Q")
 
-        val refused = client.pressRaw(q, CueLayerPressRequest(templateId = red, targets = listOf(CueTargetDto("fixture", "hex-1")), families = listOf("INTENSITY")))
+        val refused = client.pressRaw(q, CueLayerPressRequest(paletteId = red, targets = listOf(CueTargetDto("fixture", "hex-1")), families = listOf("INTENSITY")))
         assertEquals(HttpStatusCode.BadRequest, refused.status)
-        assertTrue(refused.bodyAsText().contains(CODE_TEMPLATE_OUTSIDE_MASK))
+        assertTrue(refused.bodyAsText().contains(CODE_PALETTE_OUTSIDE_MASK))
 
-        client.press(q, templateId = red, keys = arrayOf("hex-1"))
-        val off = client.press(q, templateId = red, keys = arrayOf("hex-1"), families = listOf("INTENSITY"))
+        client.press(q, paletteId = red, keys = arrayOf("hex-1"))
+        val off = client.press(q, paletteId = red, keys = arrayOf("hex-1"), families = listOf("INTENSITY"))
         assertEquals("removed", off.action, "an off press comes off under any mask")
 
-        val none = client.pressRaw(q, CueLayerPressRequest(templateId = red))
+        val none = client.pressRaw(q, CueLayerPressRequest(paletteId = red))
         assertEquals(HttpStatusCode.BadRequest, none.status)
-        assertTrue(none.bodyAsText().contains(CODE_TEMPLATE_NEEDS_SELECTION))
+        assertTrue(none.bodyAsText().contains(CODE_PALETTE_NEEDS_SELECTION))
     }
 
     @Test
@@ -240,7 +240,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.OK, masked.status, masked.bodyAsText())
 
-        client.press(q, templateId = red, keys = arrayOf("hex-2"))
+        client.press(q, paletteId = red, keys = arrayOf("hex-2"))
         assertEquals("COLOUR", client.get("$base/cues/$q").body<CueDetails>().layers.single { it.lookId == warm }.propertyMask)
     }
 
@@ -282,7 +282,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                     name = "Q",
                     layers = listOf(
                         CueLayerDto(lookId = warm, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("selection", "[]")), sortOrder = 0),
-                        CueLayerDto(templateId = red, targets = listOf(CueTargetDto("fixture", "hex-2")), sortOrder = 1),
+                        CueLayerDto(paletteId = red, targets = listOf(CueTargetDto("fixture", "hex-2")), sortOrder = 1),
                     ),
                 ),
             )
@@ -299,7 +299,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val red = client.palette("Red")
         val q = client.cue("Q")
 
-        val refused = client.pressRaw(q, CueLayerPressRequest(templateId = red, targets = listOf(CueTargetDto("selection", "[]"))))
+        val refused = client.pressRaw(q, CueLayerPressRequest(paletteId = red, targets = listOf(CueTargetDto("selection", "[]"))))
         assertEquals(HttpStatusCode.BadRequest, refused.status)
         assertTrue(client.layers(q).isEmpty())
     }
@@ -320,7 +320,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val before = controller.currentValues.toMap()
 
-        client.press(q, templateId = half, keys = arrayOf("hex-1", "hex-2"))
+        client.press(q, paletteId = half, keys = arrayOf("hex-1", "hex-2"))
 
         assertEquals(before, controller.currentValues.toMap(), "the stage did not move")
         assertTrue(state.show.programmerStore.layers.isEmpty(), "the programmer was not touched")

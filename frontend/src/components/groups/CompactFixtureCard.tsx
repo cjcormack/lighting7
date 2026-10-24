@@ -14,7 +14,7 @@ import {
   type ElementDescriptor,
 } from '../../store/fixtures'
 import type { GroupSliderPropertyDescriptor, GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import { useFixtureEffectsQuery } from '@/store/fixtureFx'
+import { useFixtureFxQuery } from '@/store/fixtureFx'
 import { AudioWaveform } from 'lucide-react'
 import {
   useSliderValue,
@@ -119,10 +119,10 @@ export const CompactFixtureCard = memo(function CompactFixtureCard({
     () => (fixture && fixtureTypes ? fixtureTypes.find((t) => t.typeKey === fixture.typeKey) : undefined),
     [fixture, fixtureTypes]
   )
-  const { data: effects } = useFixtureEffectsQuery(fixtureKey)
-  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
-  const hasActiveFx = allEffects.length > 0
-  const anyRunning = allEffects.some((e) => e.isRunning)
+  const { data: effects } = useFixtureFxQuery(fixtureKey)
+  const allFx = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allFx.length > 0
+  const anyRunning = allFx.some((e) => e.isRunning)
   const gels = useGelIndex()
 
   if (!fixture) {
@@ -545,10 +545,10 @@ export const MultiElementCompactCard = memo(function MultiElementCompactCard({
 }: MultiElementCompactCardProps) {
   const { data: fixtureList } = useFixtureListQuery(undefined, { skip: !!fixtureProp })
   const fixture = fixtureProp ?? fixtureList?.find((f) => f.key === parentKey)
-  const { data: effects } = useFixtureEffectsQuery(parentKey)
-  const allEffects = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
-  const hasActiveFx = allEffects.length > 0
-  const anyRunning = allEffects.some((e) => e.isRunning)
+  const { data: effects } = useFixtureFxQuery(parentKey)
+  const allFx = [...(effects?.direct ?? []), ...(effects?.indirect ?? [])]
+  const hasActiveFx = allFx.length > 0
+  const anyRunning = allFx.some((e) => e.isRunning)
 
   // Check if any elements have colour
   const hasColour = useMemo(() => {

@@ -1,12 +1,12 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.models.timingOf
-import uk.me.cormack.lighting7.models.stepTimingOf
+import uk.me.cormack.lighting7.models.storedTiming
 import java.time.Duration
 
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.FxRegistry
-import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -14,7 +14,7 @@ import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.republishCueLayer
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
@@ -24,11 +24,11 @@ import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.withStoredTargets
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.models.toDto
 import uk.me.cormack.lighting7.state.State
@@ -73,7 +73,7 @@ data class ProgrammerPreservedCounts(
      * layer, and Record has never touched a timed child of either kind — see the invariants above.
      */
     val timedLayers: Int = 0,
-    val timedAdHocEffects: Int = 0,
+    val timedAdHocFx: Int = 0,
     val outOfMaskAssignments: Int = 0,
     /** Rows left alone because they name a fixture outside the request's `targets` selection. */
     val outOfScopeAssignments: Int = 0,
@@ -94,7 +94,7 @@ data class CueWriteOutcome(
 )
 
 /** A child with timing belongs to `CueTriggerManager`, not to Record. */
-private val DaoCueAdHocEffect.isTimed: Boolean get() = delay != null || interval != null
+private val DaoCueAdHocFxEntity.isTimed: Boolean get() = delay != null || interval != null
 
 /** Match key for a property assignment: target plus canonical property name. */
 private fun assignmentKey(targetType: String, targetKey: String, propertyName: String) =
@@ -127,7 +127,7 @@ internal fun createCueFromRecording(
         this.project = project
     }
     writeCueChildren(
-        cue, recording.adHocEffects, recording.rows,
+        cue, recording.adHocFx, recording.rows,
         layers = recording.layers,
         created = true,
         registry = registry,
@@ -142,7 +142,7 @@ internal fun createCueFromRecording(
         assignmentsWritten = recording.rows.size,
         assignmentsRemoved = 0,
         groupRowsEmitted = recording.groupRowsEmitted,
-        fxWritten = recording.adHocEffects.size,
+        fxWritten = recording.adHocFx.size,
         preserved = ProgrammerPreservedCounts(),
         warnings = emptyList(),
     )
@@ -174,7 +174,7 @@ internal fun writeRecordingIntoCue(
     // Timed children of either kind are never touched by Record; counted so the response can say
     // so rather than leaving the operator to wonder why a delayed layer survived a REMOVE.
     val timedLayerCount = cue.layers.count { it.isTimed }
-    val timedAdHoc = cue.adHocEffects.count { it.isTimed }
+    val timedAdHoc = cue.adHocFx.count { it.isTimed }
     val triggerCount = cue.triggers.count().toInt()
 
     var written = 0
@@ -308,7 +308,7 @@ internal fun writeRecordingIntoCue(
         preserved = ProgrammerPreservedCounts(
             triggers = triggerCount,
             timedLayers = timedLayerCount,
-            timedAdHocEffects = timedAdHoc,
+            timedAdHocFx = timedAdHoc,
             outOfMaskAssignments = outOfMask,
             outOfScopeAssignments = outOfScope,
         ),
@@ -342,7 +342,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
         DaoCueLayer.new {
             this.cue = cue
             this.look = resolved.look
-            this.palette = resolved.template
+            this.palette = resolved.palette
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
             this.targets = layer.withStoredTargets().targets
@@ -359,9 +359,9 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     // A preset-application merge loop stood here, beside the layer one above. It was already
     // unreachable: `recording.presetApplications` had been `emptyList()` since `captureCurrentState`
     // moved to keying on `lookId`, so it iterated nothing. Gone with `cue_preset_applications`.
-    val existingAdHoc = cue.adHocEffects.toList()
-    for (effect in recording.adHocEffects) {
-        // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which*
+    val existingAdHoc = cue.adHocFx.toList()
+    for (effect in recording.adHocFx) {
+        // Upsert, not skip-if-present. `(target, fxType, property)` identifies *which*
         // effect this is; everything else about it — parameters, blend, phase, distribution —
         // is what the operator may have just changed in the programmer. Skipping on a match
         // would make Update silently unable to persist an FX edit: Include a cue, retune the
@@ -371,7 +371,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
             !it.isTimed &&
                 it.targetType == effect.targetType &&
                 it.targetKey == effect.targetKey &&
-                it.fxType == effect.effectType &&
+                it.fxType == effect.fxType &&
                 it.attribute == effect.propertyName
         }
         if (match != null) {
@@ -408,55 +408,55 @@ private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
 }
 
 /** True when the stored child already says exactly what [dto] says (ignoring cue-owned timing). */
-private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
-    family == dto.category &&
-        cycle == dto.beatDivision &&
+private fun DaoCueAdHocFxEntity.matches(dto: CueAdHocFxDto): Boolean =
+    family == dto.family &&
+        cycle == dto.cycle &&
         blendMode == dto.blendMode &&
-        order == dto.distribution &&
+        order == dto.order &&
         phaseOffset == dto.phaseOffset &&
         elementMode == dto.elementMode &&
         elementFilter == dto.elementFilter &&
-        stepTimingOf(timing) == dto.stepTiming &&
+        timingOf(timing) == dto.timing &&
         parameters == dto.parameters &&
         speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid) &&
         rateSpeedMasterUuid == speedMasterUuidOrNull(dto.rateSpeedMasterUuid) &&
         seconds == dto.seconds &&
-        amount == dto.size &&
+        amount == dto.amount &&
         direction == dto.direction &&
-        runs == dto.nShot
+        runs == dto.runs
 
 /** Copy [dto]'s tunable fields over the stored child, leaving identity and timing alone. */
-private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
-    family = dto.category
-    cycle = dto.beatDivision
+private fun DaoCueAdHocFxEntity.applyFrom(dto: CueAdHocFxDto) {
+    family = dto.family
+    cycle = dto.cycle
     blendMode = dto.blendMode
-    order = dto.distribution
+    order = dto.order
     phaseOffset = dto.phaseOffset
     elementMode = dto.elementMode
     elementFilter = dto.elementFilter
-    timing = timingOf(dto.stepTiming)
+    timing = storedTiming(dto.timing)
     parameters = dto.parameters
     speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
     rateSpeedMasterUuid = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
     seconds = dto.seconds
-    amount = dto.size
-    direction = EffectSpecCoercion.Names.canonicalDirection(dto.direction)
-    runs = dto.nShot
+    amount = dto.amount
+    direction = FxSpecCoercion.Names.canonicalDirection(dto.direction)
+    runs = dto.runs
     this.spread = dto.spread
     this.wings = dto.wings
-    this.segments = dto.blocks
-    this.parts = dto.groups
+    this.segments = dto.segments
+    this.parts = dto.parts
 }
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
 private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     var removed = 0
-    for (effect in recording.adHocEffects) {
-        val match = cue.adHocEffects.firstOrNull {
+    for (effect in recording.adHocFx) {
+        val match = cue.adHocFx.firstOrNull {
             !it.isTimed &&
                 it.targetType == effect.targetType &&
                 it.targetKey == effect.targetKey &&
-                it.fxType == effect.effectType &&
+                it.fxType == effect.fxType &&
                 it.attribute == effect.propertyName
         } ?: continue
         match.delete()
@@ -482,9 +482,9 @@ private fun replaceImmediateFxChildren(
     var written = 0
     // What the recording replaces. A replaced child the recording names again is written over,
     // keeping its uuid (show-cue-editing plan P3); the rest are deleted once the recording is in.
-    val replacedEffects = cue.adHocEffectsInOrder().filter { effect ->
+    val replacedFx = cue.adHocFxInOrder().filter { effect ->
         !effect.isTimed &&
-            effectTargetInScope(state.show.fixtures, effect.target, scope) &&
+            fxTargetInScope(state.show.fixtures, effect.target, scope) &&
             (mask == null || maskAllows(mask, maskGroupForAdHocChild(state, effect)))
     }
     // Layers, same rule as preset applications had and for the same reason: a Look can span
@@ -528,7 +528,7 @@ private fun replaceImmediateFxChildren(
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = source.look
-                    this.palette = source.template
+                    this.palette = source.palette
                     take(layer)
                 }
             }
@@ -539,29 +539,29 @@ private fun replaceImmediateFxChildren(
     // Two more preset-application blocks stood here — an unmasked-only replace sweep, and an
     // insert loop with the same group-shadow warning the ad-hoc one below still emits. Both had
     // layer equivalents beside them already, and both iterated an always-empty list.
-    val queues = replacedEffects.groupByTo(LinkedHashMap()) { it.effectKey }.mapValues { ArrayDeque(it.value) }
+    val queues = replacedFx.groupByTo(LinkedHashMap()) { it.fxKey }.mapValues { ArrayDeque(it.value) }
     // Replaced effects not yet written over: gone as far as the shadow check is concerned, exactly
     // as if they had been deleted before the recording went in.
-    val pending = replacedEffects.mapTo(HashSet()) { it.id.value }
-    for (effect in recording.adHocEffects) {
-        // Same hazard, same rule — an ad-hoc child is identified by (effectType, property).
+    val pending = replacedFx.mapTo(HashSet()) { it.id.value }
+    for (effect in recording.adHocFx) {
+        // Same hazard, same rule — an ad-hoc child is identified by (fxType, property).
         val shadowed = shadowingCoverage(
             state, scope,
             expandTargetsToFixtureKeys(state, listOf(CueTargetDto(effect.targetType, effect.targetKey))),
-            cue.adHocEffects
+            cue.adHocFx
                 .filter {
-                    it.id.value !in pending && !it.isTimed && it.fxType == effect.effectType &&
+                    it.id.value !in pending && !it.isTimed && it.fxType == effect.fxType &&
                         it.attribute == effect.propertyName
                 }
                 .map { listOf(CueTargetDto(it.targetType, it.targetKey)) },
         )
         if (shadowed.isNotEmpty()) {
-            warnings += "${effect.effectType} already covers ${shadowed.joinToString()} via a " +
+            warnings += "${effect.fxType} already covers ${shadowed.joinToString()} via a " +
                 "group row the selection only partly covers — narrow the selection to the whole " +
                 "group, or remove that row"
             continue
         }
-        val stored = queues[effect.effectKey]?.removeFirstOrNull()
+        val stored = queues[effect.fxKey]?.removeFirstOrNull()
         if (stored != null) {
             pending -= stored.id.value
             stored.take(effect)
@@ -570,7 +570,7 @@ private fun replaceImmediateFxChildren(
         }
         written++
     }
-    replacedEffects.filter { it.id.value in pending }.forEach { it.delete() }
+    replacedFx.filter { it.id.value in pending }.forEach { it.delete() }
     return written
 }
 
@@ -592,14 +592,14 @@ private fun shadowingCoverage(
     return wanted intersect covered
 }
 
-private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocEffect): PropertyMaskGroup? {
+private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocFxEntity): PropertyMaskGroup? {
     val propertyName = effect.attribute ?: return null
     val fixture = state.show.fixtures.referenceFixtureFor(effect.target) ?: return null
     return uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
 }
 
-private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
-    DaoCueAdHocEffect.new {
+private fun newAdHocChild(cue: DaoCue, effect: CueAdHocFxDto) {
+    DaoCueAdHocFxEntity.new {
         this.cue = cue
         targetType = effect.targetType
         targetKey = effect.targetKey

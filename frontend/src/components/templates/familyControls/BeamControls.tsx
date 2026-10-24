@@ -1,16 +1,16 @@
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { TEMPLATE_EXCLUSIONS, type TemplateIntent } from '@/lib/templateIntent'
+import { PALETTE_EXCLUSIONS, type PaletteIntent } from '@/lib/paletteIntent'
 import { PercentControl } from './PercentControl'
-import type { TemplateValues } from './templateRows'
+import type { PaletteValues } from './paletteRows'
 
 /** The beam family: four continuous roles as percentages, the prism in three states, and the exclusions named. */
 export function BeamControls({
   values,
   onChange,
 }: {
-  values: TemplateValues
-  onChange: (propertyName: string, intent: TemplateIntent | null) => void
+  values: PaletteValues
+  onChange: (propertyName: string, intent: PaletteIntent | null) => void
 }) {
   const prism = values.prism?.kind === 'switch' ? values.prism.on : null
 
@@ -59,7 +59,7 @@ export function BeamControls({
           head has — not conclude the desk cannot do it. */}
       <div className="space-y-1.5 rounded-md border border-dashed p-2.5">
         <p className="text-[11px] font-medium text-muted-foreground">Not available on a palette</p>
-        {TEMPLATE_EXCLUSIONS.map((exclusion) => (
+        {PALETTE_EXCLUSIONS.map((exclusion) => (
           <div key={exclusion.label} className="flex items-start gap-2 opacity-60">
             <span className="text-xs font-medium shrink-0 w-28 truncate">{exclusion.label}</span>
             <span className="text-[11px] text-muted-foreground">{exclusion.reason}</span>

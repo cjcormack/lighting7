@@ -19,7 +19,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
@@ -234,7 +234,7 @@ class CueHoldsTest : RouteIntegrationTest() {
         mountTestApp(state)
         val rig = seed(cFadeMs = 2_000, a3Follows = true)
         transaction(state.database) {
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = DaoCue[rig.c]
                 targetType = "fixture"; targetKey = "hex-2"
                 fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
@@ -243,14 +243,14 @@ class CueHoldsTest : RouteIntegrationTest() {
             }
         }
         manager.activateEntry(state, rig.stackA, rig.a1)
-        val effects = state.show.fxEngine.getActiveEffects().filter { it.cueId == rig.c }.map { it.id }.toSet()
+        val effects = state.show.fxEngine.getActiveFx().filter { it.cueId == rig.c }.map { it.id }.toSet()
         assertEquals(1, effects.size, "C's effect is running")
 
         // a1 to a3: both name C. C has a 2 s fade, and there is an outgoing entry — yet nothing fades.
         manager.goToEntry(state, rig.stackA, rig.a3)
 
         assertEquals(listOf(CueHold.Stack(rig.stackA, rig.a3)), holds.holdsOf(rig.c))
-        assertEquals(effects, state.show.fxEngine.getActiveEffects().filter { it.cueId == rig.c }.map { it.id }.toSet(), "no respawn")
+        assertEquals(effects, state.show.fxEngine.getActiveFx().filter { it.cueId == rig.c }.map { it.id }.toSet(), "no respawn")
         val run = manager.runState.runStateFor(state, rig.stackA)
         assertNull(run.fadeElapsedMs, "no crossfade ran")
         assertEquals(rig.a3, run.activeEntryId)

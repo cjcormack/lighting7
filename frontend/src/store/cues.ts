@@ -69,7 +69,7 @@ export const cuesApi = restApi.injectEndpoints({
      * - **This client's own writes** — a PATCH or PUT to the cue, `recordProgrammer`, and
      *   `recordLook` (which invalidates each id in the response's `cuesRepublished`).
      * - **Another client's Look or template CRUD** — `lookListChanged` / `paletteListChanged`
-     *   carry `Cue` through the two bridges in `looks.ts` / `templates.ts`. Load-bearing on the
+     *   carry `Cue` through the two bridges in `looks.ts` / `palettes.ts`. Load-bearing on the
      *   delete path in particular: deleting a Look changes what every cue layering it composes to,
      *   and a delete that took no cue layers fires only the list signal. One that took some also
      *   republishes and fires `cuesRecomposed`, `cueListChanged` and `cueStackListChanged`.
@@ -211,7 +211,7 @@ export const cuesApi = restApi.injectEndpoints({
               'CueList',
               { type: 'CueStackList', id: projectId },
               'LookList',
-              'TemplateList',
+              'PaletteList',
             ],
     }),
 
@@ -224,8 +224,8 @@ export const cuesApi = restApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 
@@ -238,8 +238,8 @@ export const cuesApi = restApi.injectEndpoints({
         method: 'POST',
       }),
       invalidatesTags: () => [
-        'FixtureEffects',
-        'GroupActiveEffects',
+        'FixtureFx',
+        'GroupActiveFxList',
       ],
     }),
 

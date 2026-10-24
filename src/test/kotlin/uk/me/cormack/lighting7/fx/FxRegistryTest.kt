@@ -12,11 +12,11 @@ class FxRegistryTest {
 
     private fun createTestRegistry(): FxRegistry {
         val registry = FxRegistry()
-        registry.register(EffectRegistration(
+        registry.register(FxRegistration(
             id = "TestEffect",
             aliases = setOf("test_effect", "test"),
             name = "Test Effect",
-            category = "intensity",
+            family = "intensity",
             outputType = FxOutputType.SLIDER,
             parameters = listOf(ParameterInfo("min", "ubyte", "0", "Min value")),
             compatibleProperties = listOf("dimmer"),
@@ -56,29 +56,29 @@ class FxRegistryTest {
     }
 
     @Test
-    fun `createEffect returns correct type with parameters`() {
+    fun `createFx returns correct type with parameters`() {
         val registry = createTestRegistry()
-        val effect = registry.createEffect("test", mapOf("min" to "50"))
+        val effect = registry.createFx("test", mapOf("min" to "50"))
         assertTrue(effect is SineSlider)
         assertEquals(50.toUByte(), effect.min)
     }
 
     @Test
-    fun `createEffect throws for unknown type`() {
+    fun `createFx throws for unknown type`() {
         val registry = createTestRegistry()
         assertFailsWith<IllegalArgumentException> {
-            registry.createEffect("nonexistent")
+            registry.createFx("nonexistent")
         }
     }
 
     @Test
-    fun `createEffect passes the colour source through to the factory`() {
+    fun `createFx passes the colour source through to the factory`() {
         val registry = FxRegistry()
         var received: ((String) -> ExtendedColour?)? = null
-        registry.register(EffectRegistration(
+        registry.register(FxRegistration(
             id = "ColourSourceTest",
             name = "Colour Source Test",
-            category = "colour",
+            family = "colour",
             outputType = FxOutputType.COLOUR,
             compatibleProperties = listOf("rgbColour"),
             factory = { _, resolveColourSource, _ ->
@@ -88,7 +88,7 @@ class FxRegistryTest {
         ))
 
         val source: (String) -> ExtendedColour? = { ExtendedColour.BLACK }
-        registry.createEffect("ColourSourceTest", resolveColourSource = source, colourSourceVersion = { 1L })
+        registry.createFx("ColourSourceTest", resolveColourSource = source, colourSourceVersion = { 1L })
         assertEquals(source, received)
     }
 
@@ -109,16 +109,16 @@ class FxRegistryTest {
         val library = registry.getLibrary()
         assertEquals(1, library.size)
         assertEquals("TestEffect", library[0].name)
-        assertEquals("intensity", library[0].category)
+        assertEquals("intensity", library[0].family)
         assertEquals("SLIDER", library[0].outputType)
     }
 
     @Test
-    fun `loadBuiltInEffects loads effects from fx kts resource files`() {
+    fun `loadBuiltInFx loads effects from fx kts resource files`() {
         val registry = FxRegistry()
         val compiler = FxScriptCompiler()
         val loader = FxFileLoader(compiler)
-        val loaded = loader.loadBuiltInEffects(registry)
+        val loaded = loader.loadBuiltInFx(registry)
 
         // Two independent assertions, because either alone has a blind spot. The exact check
         // catches effects that silently fail to compile (the old `>= 25` passed with six
@@ -153,7 +153,7 @@ class FxRegistryTest {
 
         // Verify source is BUILT_IN
         val sineWave = registry.getRegistration("SineWave")!!
-        assertEquals(EffectSource.BUILT_IN, sineWave.source)
+        assertEquals(FxSource.BUILT_IN, sineWave.source)
     }
 
     @Test

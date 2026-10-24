@@ -128,7 +128,7 @@ export function CueLibrarySheet({
         width: '64px',
         value: () => undefined,
         display: (row) => (
-          <CountReadOut count={row.cue.adHocEffects.length} icon={<Sparkles className="size-3" />} title="The cue’s own FX" />
+          <CountReadOut count={row.cue.adHocFx.length} icon={<Sparkles className="size-3" />} title="The cue’s own FX" />
         ),
       },
       {

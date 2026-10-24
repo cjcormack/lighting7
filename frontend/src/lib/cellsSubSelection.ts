@@ -18,7 +18,7 @@ import { inGroupOrder } from './memberOrder'
  *
  * **Pinned against the server's own fixture.** `cellsSubSelection.test.ts` imports the backend's
  * `src/test/resources/busk/subselect.fixture.json`, which `DeskSelectionSubselectTest` pins
- * `DeskSelection.subselect` against — the `templateIntent.test.ts` way of keeping a mirror honest.
+ * `DeskSelection.subselect` against — the `paletteIntent.test.ts` way of keeping a mirror honest.
  *
  * Three things this side has to derive that the desk reads off its live registers, each a place
  * the two could disagree and each recorded here so the disagreement is a known one:

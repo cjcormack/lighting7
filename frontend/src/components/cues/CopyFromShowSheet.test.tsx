@@ -30,7 +30,7 @@ const listArgs = vi.fn()
 
 function cue(id: number, name: string, entries: Cue['entries'] = []): Cue {
   return {
-    id, name, layers: [], adHocEffects: [], propertyAssignments: [], triggers: [],
+    id, name, layers: [], adHocFx: [], propertyAssignments: [], triggers: [],
     cueStackId: null, cueStackName: null, sortOrder: 0, autoAdvance: false, autoAdvanceDelayMs: null,
     fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: null, cueNumberAuto: false, entries,
     notes: null, cueType: 'STANDARD', canEdit: true, canDelete: true,

@@ -13,8 +13,8 @@ import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncState
 import uk.me.cormack.lighting7.models.DaoSyncStates
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplates
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPalettes
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
@@ -87,7 +87,7 @@ class PreV38BaseSyncTest {
         assertEquals(SyncOutcome.MERGED, result.outcome, result.message)
         assertNull(result.sessionId, "no conflict session")
         transaction(state.database) {
-            assertEquals("amber-key, peer's", DaoTemplate.find { DaoTemplates.uuid eq amberKey }.single().name)
+            assertEquals("amber-key, peer's", DaoPalette.find { DaoPalettes.uuid eq amberKey }.single().name)
             assertEquals("Warm Amber, ours", DaoLook.find { DaoLooks.uuid eq warmAmber }.single().name)
         }
     }

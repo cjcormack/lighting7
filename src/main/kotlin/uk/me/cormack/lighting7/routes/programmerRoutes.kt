@@ -354,7 +354,7 @@ internal data class ProgrammerLookUpdateResult(
     /** Rows deleted because the operator cleared the value Include staged from them. */
     val rowsRemoved: Int = 0,
     /** The Look's included effects the operator changed, written back onto them. */
-    val effectsWritten: Int = 0,
+    val fxWritten: Int = 0,
     /** Scenery rows written back into the Look. */
     val sceneryWritten: Int = 0,
     /** What the re-resolve moved: live consumers of the Look. */
@@ -362,7 +362,7 @@ internal data class ProgrammerLookUpdateResult(
     val cuesRepublished: List<Int>,
 ) {
     /** Whether the Update changed the Look at all. Derived, so not on the wire. */
-    val wroteAnything: Boolean get() = rowsWritten + rowsRemoved + effectsWritten + sceneryWritten > 0
+    val wroteAnything: Boolean get() = rowsWritten + rowsRemoved + fxWritten + sceneryWritten > 0
 }
 
 @Serializable

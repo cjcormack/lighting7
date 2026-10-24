@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent } from '@/components/ui/sheet'
 import { useCurrentProjectQuery, useProjectQuery } from '../store/projects'
-import { useEffectLibraryQuery, type EffectLibraryEntry } from '../store/fixtureFx'
+import { useFxLibraryQuery, type FxLibraryEntry } from '../store/fixtureFx'
 import { useCreateFxDefinitionMutation, useFxDefinitionListQuery } from '../store/fxDefinitions'
 import { Breadcrumbs } from '@/components/Breadcrumbs'
 import { CurrentProjectRedirect } from '../components/CurrentProjectRedirect'
@@ -13,22 +13,22 @@ import { SheetPage } from '../components/sheet/SheetPage'
 import { groupRows } from '../components/sheet/groupRows'
 import { usePartitionView } from '../components/sheet/usePartitionView'
 import { FxLibrarySheet, fxRowId, type FxMemberRow, type FxSheetRow } from '../components/fxLibrary/FxLibrarySheet'
-import { EffectDetailSheet } from '../components/fxLibrary/EffectDetailSheet'
+import { FxDetailSheet } from '../components/fxLibrary/FxDetailSheet'
 import { EditFxDefinitionSheet } from '../components/fxLibrary/EditFxDefinitionSheet'
 import { NewFxDefinitionSheet } from '../components/fxLibrary/NewFxDefinitionSheet'
 import { useFxDefinitionDelete } from '../components/fxLibrary/useFxDefinitionDelete'
 import {
-  FX_CATEGORY_LABELS,
-  FX_CATEGORY_ORDER,
-  definitionsByEffectId,
+  FX_FAMILY_LABELS,
+  FX_FAMILY_ORDER,
+  definitionsByFxId,
   displayName,
   entryName,
   forkRefusal,
   forkRequest,
   fxSourceOf,
   isFxCategory,
-  takenEffectIds,
-  type FxCategory,
+  takenFxIds,
+  type FxFamily,
   type FxSource,
 } from '../components/fxLibrary/fxLibraryModel'
 
@@ -39,17 +39,17 @@ export function FxLibraryRedirect() {
 /** What the right-hand sheet is showing. */
 type SheetMode =
   | { type: 'closed' }
-  | { type: 'view'; entry: EffectLibraryEntry; source: FxSource }
+  | { type: 'view'; entry: FxLibraryEntry; source: FxSource }
   | { type: 'edit'; definitionId: number; forkedFrom?: string }
   | { type: 'new' }
 
 /** The URL and the remembered value spell a category as the registry does — `colour`. */
-function parseCategory(raw: string): FxCategory | null {
+function parseCategory(raw: string): FxFamily | null {
   const lower = raw.toLowerCase()
   return isFxCategory(lower) ? lower : null
 }
 
-function categorySlug(category: FxCategory): string {
+function categorySlug(category: FxFamily): string {
   return category
 }
 
@@ -62,7 +62,7 @@ function categorySlug(category: FxCategory): string {
  * **Chips filter, dividers group** (D3): *All* and the categories (six since Palette Steps added
  * *Palette*, effects plan session 7), `?category=` deep-links and
  * the choice is remembered under `fxLibrary.category`; under *All* the rows are grouped by category
- * divider in `FX_CATEGORY_ORDER`, and the categories no longer collapse — the chips are how you
+ * divider in `FX_FAMILY_ORDER`, and the categories no longer collapse — the chips are how you
  * narrow.
  *
  * **The library is the running show's, whatever the URL's project.** `GET fx/library` and
@@ -76,12 +76,12 @@ export function ProjectFxLibrary() {
   const navigate = useNavigate()
   const { data: currentProject, isLoading: currentLoading } = useCurrentProjectQuery()
   const { data: project, isLoading: projectLoading } = useProjectQuery(projectIdNum)
-  const { data: libraryData, isLoading: libraryLoading } = useEffectLibraryQuery()
+  const { data: libraryData, isLoading: libraryLoading } = useFxLibraryQuery()
   const { data: definitionData, isLoading: definitionsLoading } = useFxDefinitionListQuery()
   const [createDefinition, { isLoading: forking }] = useCreateFxDefinitionMutation()
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const [category, changeCategory] = usePartitionView<FxCategory>({
+  const [category, changeCategory] = usePartitionView<FxFamily>({
     param: 'category',
     storageKey: 'fxLibrary.category',
     parse: parseCategory,
@@ -93,7 +93,7 @@ export function ProjectFxLibrary() {
   const isCurrentProject = currentProject?.id === projectIdNum
   const library = useMemo(() => libraryData ?? [], [libraryData])
   const definitions = useMemo(() => definitionData ?? [], [definitionData])
-  const byEffectId = useMemo(() => definitionsByEffectId(definitions), [definitions])
+  const byFxId = useMemo(() => definitionsByFxId(definitions), [definitions])
 
   // `?action=new` opens the create sheet and strips the param — the command-palette entry point.
   useEffect(() => {
@@ -109,21 +109,21 @@ export function ProjectFxLibrary() {
   const members = useMemo<FxMemberRow[]>(
     () =>
       library.map((entry) => {
-        const definition = byEffectId.get(entry.name)
+        const definition = byFxId.get(entry.name)
         return {
           id: fxRowId(entry.name),
           entry,
-          source: fxSourceOf(entry, byEffectId),
+          source: fxSourceOf(entry, byFxId),
           definition,
           name: entryName(entry, definition),
         }
       }),
-    [byEffectId, library],
+    [byFxId, library],
   )
 
   const categoryCounts = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const row of members) counts.set(row.entry.category, (counts.get(row.entry.category) ?? 0) + 1)
+    for (const row of members) counts.set(row.entry.family, (counts.get(row.entry.family) ?? 0) + 1)
     return counts
   }, [members])
 
@@ -133,7 +133,7 @@ export function ProjectFxLibrary() {
     const shown = members
       .filter(
         (row) =>
-          (category === 'ALL' || row.entry.category === category) &&
+          (category === 'ALL' || row.entry.family === category) &&
           (needle === '' ||
             row.name.toLowerCase().includes(needle) ||
             row.entry.name.toLowerCase().includes(needle) ||
@@ -142,13 +142,13 @@ export function ProjectFxLibrary() {
       .sort((a, b) => a.name.localeCompare(b.name))
     if (category !== 'ALL') return shown
     const perCategory = new Map<string, number>()
-    for (const row of shown) perCategory.set(row.entry.category, (perCategory.get(row.entry.category) ?? 0) + 1)
-    return groupRows<FxSheetRow, FxCategory>(shown, {
-      partition: (row) => row.entry?.category ?? '',
-      order: FX_CATEGORY_ORDER,
+    for (const row of shown) perCategory.set(row.entry.family, (perCategory.get(row.entry.family) ?? 0) + 1)
+    return groupRows<FxSheetRow, FxFamily>(shown, {
+      partition: (row) => row.entry?.family ?? '',
+      order: FX_FAMILY_ORDER,
       divider: (key) => ({
         id: `category:${key || 'other'}`,
-        divider: `${isFxCategory(key) ? FX_CATEGORY_LABELS[key] : 'Other'} · ${perCategory.get(key) ?? 0}`,
+        divider: `${isFxCategory(key) ? FX_FAMILY_LABELS[key] : 'Other'} · ${perCategory.get(key) ?? 0}`,
       }),
       unlisted: 'other',
     })
@@ -173,7 +173,7 @@ export function ProjectFxLibrary() {
   )
 
   const fork = useCallback(
-    async (entry: EffectLibraryEntry) => {
+    async (entry: FxLibraryEntry) => {
       if (!isCurrentProject || forking) return
       try {
         const created = await createDefinition(forkRequest(entry, library, definitions)).unwrap()
@@ -219,15 +219,15 @@ export function ProjectFxLibrary() {
         onFilterChange={setFilter}
         filterLabel="Filter by name or what it drives"
         chips={
-          <PartitionChips<FxCategory>
+          <PartitionChips<FxFamily>
             label="Category"
             fold={640}
             value={category}
             onChange={changeCategory}
             allCount={library.length}
-            options={FX_CATEGORY_ORDER.map((c) => ({
+            options={FX_FAMILY_ORDER.map((c) => ({
               value: c,
-              label: FX_CATEGORY_LABELS[c],
+              label: FX_FAMILY_LABELS[c],
               count: categoryCounts.get(c) ?? 0,
             }))}
           />
@@ -277,7 +277,7 @@ export function ProjectFxLibrary() {
       >
         {sheetMode.type === 'view' && (
           <SheetContent side="right" className="flex flex-col sm:max-w-lg">
-            <EffectDetailSheet
+            <FxDetailSheet
               effect={sheetMode.entry}
               source={sheetMode.source}
               onFork={
@@ -308,7 +308,7 @@ export function ProjectFxLibrary() {
         {sheetMode.type === 'new' && (
           <SheetContent side="right" className="flex flex-col sm:max-w-lg">
             <NewFxDefinitionSheet
-              takenIds={takenEffectIds(library, definitions)}
+              takenIds={takenFxIds(library, definitions)}
               onCreated={(id) => setSheetMode({ type: 'edit', definitionId: id })}
             />
           </SheetContent>

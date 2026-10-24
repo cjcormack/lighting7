@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.RigScope
 import uk.me.cormack.lighting7.show.Fixtures
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 
 /**
  * A write that names a one-shot trigger, or its arm, refused by name (stage-view plan session 9,
@@ -61,8 +61,8 @@ class TriggerIndex private constructor(
                 reserved.matching(name)?.let { message(where, it, "a member of group '$targetKey'") }
             }
             // An effect over a selection (effects plan D3): refused for the first item that would be.
-            EffectTargetRef.Selection.TYPE ->
-                EffectTargetRef.Selection.parseKey(targetKey.orEmpty())
+            FxTargetsRef.Selection.TYPE ->
+                FxTargetsRef.Selection.parseKey(targetKey.orEmpty())
                     ?.firstNotNullOfOrNull { refusal(it.discriminator, it.key, name, where) }
             else -> FixtureTriggers.allReservedNames.matching(name)?.let {
                 "$where: '$it' is a one-shot trigger's name, and a row with no target of its own lands on " +

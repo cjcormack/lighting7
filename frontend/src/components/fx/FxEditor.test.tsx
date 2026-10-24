@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
-import { chan, makeActiveEffect, makeFixture, sliderProp } from '@/test/fixtureFactories'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
+import { chan, makeActiveFx, makeFixture, sliderProp } from '@/test/fixtureFactories'
 
 /**
  * Radix's slider computes a value from the pointer against its track's box, which jsdom lays out at
@@ -51,20 +51,20 @@ vi.mock('@/api/lightingApi', async () => {
   return { lightingApi: new Proxy(base, { get: (target, prop: string) => (prop === 'fx' ? fx : target[prop]) }) }
 })
 
-const library = vi.hoisted(() => ({ entries: [] as EffectLibraryEntry[] }))
+const library = vi.hoisted(() => ({ entries: [] as FxLibraryEntry[] }))
 const pauseFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve() })))
 const resetFx = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve(arm.resetAnswer) })))
-const saveTemplate = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({}) })))
-/** What `useSpawningTemplate` answers — null for an effect no pad spawned. */
+const savePalette = vi.hoisted(() => vi.fn((_req: unknown) => ({ unwrap: () => Promise.resolve({}) })))
+/** What `useSpawningPalette` answers — null for an effect no pad spawned. */
 const arm = vi.hoisted(() => ({ spawning: null as unknown, resetAnswer: null as unknown }))
 vi.mock('@/store/fixtureFx', () => ({
-  useEffectLibraryQuery: () => ({ data: library.entries }),
+  useFxLibraryQuery: () => ({ data: library.entries }),
   usePauseFxMutation: () => [pauseFx],
   useResumeFxMutation: () => [vi.fn()],
-  useResetFxToTemplateMutation: () => [resetFx, { isLoading: false }],
+  useResetFxToPaletteMutation: () => [resetFx, { isLoading: false }],
 }))
-vi.mock('@/store/templates', () => ({ useSaveTemplateMutation: () => [saveTemplate, { isLoading: false }] }))
-vi.mock('./useSpawningTemplate', () => ({ useSpawningTemplate: () => arm.spawning }))
+vi.mock('@/store/palettes', () => ({ useSavePaletteMutation: () => [savePalette, { isLoading: false }] }))
+vi.mock('./useSpawningPalette', () => ({ useSpawningPalette: () => arm.spawning }))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock('@/store/groups', () => ({
   usePauseGroupFxMutation: () => [vi.fn()],
@@ -87,11 +87,11 @@ vi.mock('./FxColourListPicker', () => ({ FxColourListPicker: () => null }))
 
 import { FxEditor } from './FxEditor'
 
-const CIRCLE: EffectLibraryEntry = {
+const CIRCLE: FxLibraryEntry = {
   name: 'Circle',
-  category: 'position',
+  family: 'position',
   outputType: 'POSITION',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   timingSource: 'BEAT',
   compatibleProperties: ['position'],
   parameters: [
@@ -102,11 +102,11 @@ const CIRCLE: EffectLibraryEntry = {
   ],
 }
 
-const PULSE: EffectLibraryEntry = {
+const PULSE: FxLibraryEntry = {
   name: 'Pulse',
-  category: 'intensity',
+  family: 'intensity',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   timingSource: 'BEAT',
   compatibleProperties: ['dimmer', 'uv'],
   parameters: [
@@ -125,9 +125,9 @@ const SPOT = makeFixture('spot-3', [
 ])
 
 const aroundCircle = () =>
-  makeActiveEffect({
+  makeActiveFx({
     id: 21,
-    effectType: 'Circle',
+    fxType: 'Circle',
     targetKey: 'spot-3',
     propertyName: 'position',
     blendMode: 'ADDITIVE',
@@ -141,7 +141,7 @@ beforeEach(() => {
   lookup.fixtures = [SPOT]
   updateFx.mockClear()
   resetFx.mockClear()
-  saveTemplate.mockClear()
+  savePalette.mockClear()
   arm.spawning = null
   arm.resetAnswer = null
 })
@@ -200,14 +200,14 @@ describe('FxEditor', () => {
     expect(updateFx).toHaveBeenCalledTimes(1)
     expect(lastFrame()).toEqual({
       parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
-      beatDivision: 1,
+      cycle: 1,
       blendMode: 'ADDITIVE',
       phaseOffset: 0,
     })
   })
 
   it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
-    render(<FxEditor effect={makeActiveEffect({ effectType: 'Pulse', propertyName: 'dimmer', beatDivision: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
+    render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', propertyName: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Timing: Seconds' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(screen.getByRole('menuitemradio', { name: /M1 · Main/ }))
     expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
@@ -216,7 +216,7 @@ describe('FxEditor', () => {
     const revert = screen.getByRole('button', { name: 'Revert' })
     fireEvent.click(revert)
     expect(updateFx).toHaveBeenCalledTimes(1)
-    expect(lastFrame()).toMatchObject({ seconds: true, beatDivision: 2 })
+    expect(lastFrame()).toMatchObject({ seconds: true, cycle: 2 })
     expect(lastFrame()).not.toHaveProperty('speedMasterUuid')
     expect(screen.getByRole('button', { name: 'Timing: Seconds' })).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Revert' }) as HTMLButtonElement).disabled).toBe(true)
@@ -232,9 +232,9 @@ describe('FxEditor', () => {
   })
 
   it('sends Around as Additive with the centre at 128 and hides the centre; Absolute is Override with it shown', () => {
-    const absolute = makeActiveEffect({
+    const absolute = makeActiveFx({
       id: 22,
-      effectType: 'Circle',
+      fxType: 'Circle',
       targetKey: 'spot-3',
       propertyName: 'position',
       blendMode: 'OVERRIDE',
@@ -259,9 +259,9 @@ describe('FxEditor', () => {
   })
 
   it('sends Within as Multiply, and Replace as Override', () => {
-    const pulse = makeActiveEffect({
+    const pulse = makeActiveFx({
       id: 31,
-      effectType: 'Pulse',
+      fxType: 'Pulse',
       targetKey: 'spot-3',
       propertyName: 'dimmer',
       parameters: { min: '0', max: '255', attackRatio: '0.1', curve: 'QUAD_OUT' },
@@ -277,9 +277,9 @@ describe('FxEditor', () => {
   })
 
   it('keeps the shape behind a disclosure that says what is in it', () => {
-    const pulse = makeActiveEffect({
+    const pulse = makeActiveFx({
       id: 31,
-      effectType: 'Pulse',
+      fxType: 'Pulse',
       targetKey: 'spot-3',
       propertyName: 'dimmer',
       parameters: { min: '0', max: '255', attackRatio: '0.1', curve: 'QUAD_OUT' },
@@ -308,7 +308,7 @@ describe('FxEditor', () => {
   })
 
   it('reads a stored Additive Circle with no centres spelled as Around — the defaults are 128', () => {
-    const bare = makeActiveEffect({ id: 23, effectType: 'Circle', targetKey: 'spot-3', propertyName: 'position', blendMode: 'ADDITIVE', parameters: {} })
+    const bare = makeActiveFx({ id: 23, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position', blendMode: 'ADDITIVE', parameters: {} })
     render(<FxEditor effect={bare} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Around current position' }).getAttribute('aria-checked')).toBe('true')
   })
@@ -324,7 +324,7 @@ describe('FxEditor', () => {
     const field = screen.getByRole('spinbutton', { name: 'Beats a cycle' })
     fireEvent.change(field, { target: { value: '0.333' } })
     fireEvent.keyDown(field, { key: 'Enter' })
-    expect(lastFrame()).toMatchObject({ beatDivision: 0.333 })
+    expect(lastFrame()).toMatchObject({ cycle: 0.333 })
   })
 
   it('× stops the effect and Done goes back', () => {
@@ -344,23 +344,23 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
   const BIG_CIRCLE = {
     id: 7,
     name: 'Big circle',
-    kind: 'effect',
-    effect: {
-      effectType: 'Circle',
-      category: 'position',
-      beatDivision: 1,
+    kind: 'fx',
+    fx: {
+      fxType: 'Circle',
+      family: 'position',
+      cycle: 1,
       blendMode: 'ADDITIVE',
-      distribution: 'NORMAL',
+      order: 'NORMAL',
       phaseOffset: 0,
       parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
       speedMasterUuid: null,
       rateSpeedMasterUuid: null,
     },
   }
-  const padCircle = () => ({ ...aroundCircle(), templateId: 7, programmerLayerId: 3, cueId: null, programmerOwned: true })
+  const padCircle = () => ({ ...aroundCircle(), paletteId: 7, programmerLayerId: 3, cueId: null, programmerOwned: true })
 
   beforeEach(() => {
-    arm.spawning = { template: BIG_CIRCLE, projectId: 1 }
+    arm.spawning = { palette: BIG_CIRCLE, projectId: 1 }
   })
 
   it('is marked edited while it differs from its palette, and Reset to palette calls W5 in place of Revert', async () => {
@@ -377,7 +377,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     expect(screen.getByText('edited')).toBeTruthy()
     // The edit is the instance's alone: it went to the instance and nowhere near the template.
     expect(updateFx.mock.calls.at(-1)?.[0]).toBe(21)
-    expect(saveTemplate).not.toHaveBeenCalled()
+    expect(savePalette).not.toHaveBeenCalled()
 
     updateFx.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Reset to palette' }))
@@ -388,7 +388,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
   })
 
   it("Update palette PUTs the instance's settings as the palette's effect, then re-keys the instance", async () => {
-    arm.resetAnswer = { ...padCircle(), parameters: { ...padCircle().parameters, panRadius: '120' }, beatDivision: 2 }
+    arm.resetAnswer = { ...padCircle(), parameters: { ...padCircle().parameters, panRadius: '120' }, cycle: 2 }
     render(<FxEditor effect={padCircle()} onDone={() => {}} onStop={() => {}} />)
     const size = screen.getByRole('slider', { name: 'Pan size' })
     fireEvent.change(size, { target: { value: '120' } })
@@ -396,13 +396,13 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
     fireEvent.click(screen.getByRole('radio', { name: '2 beats a cycle' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Update palette' }))
-    await waitFor(() => expect(saveTemplate).toHaveBeenCalledTimes(1))
-    expect(saveTemplate.mock.calls[0][0]).toEqual({
+    await waitFor(() => expect(savePalette).toHaveBeenCalledTimes(1))
+    expect(savePalette.mock.calls[0][0]).toEqual({
       projectId: 1,
-      templateId: 7,
-      effect: {
-        ...BIG_CIRCLE.effect,
-        beatDivision: 2,
+      paletteId: 7,
+      fx: {
+        ...BIG_CIRCLE.fx,
+        cycle: 2,
         parameters: { panCenter: '128', tiltCenter: '128', panRadius: '120', tiltRadius: '64' },
       },
     })

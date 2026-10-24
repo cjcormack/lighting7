@@ -22,9 +22,9 @@ import uk.me.cormack.lighting7.fx.ProgrammerLayerStack
 import uk.me.cormack.lighting7.fx.ProgrammerStore
 import uk.me.cormack.lighting7.fx.SpeedMasterBank
 import uk.me.cormack.lighting7.fx.SpeedMasterSnapshot
-import uk.me.cormack.lighting7.fx.TemplateRegistry
-import uk.me.cormack.lighting7.fx.TemplateRowEntry
-import uk.me.cormack.lighting7.fx.TemplateSnapshot
+import uk.me.cormack.lighting7.fx.PaletteRegistry
+import uk.me.cormack.lighting7.fx.PaletteRowEntry
+import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.BindingTakeoverPolicy
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -94,7 +94,7 @@ class SurfaceFeedbackPublisherTest {
         val flashTracker = FlashStateTracker()
         val scaler: GlobalScalerState
         val speedMasters = SpeedMasterBank()
-        val stackSizes = uk.me.cormack.lighting7.fx.StackEffectSizes()
+        val stackFxAmounts = uk.me.cormack.lighting7.fx.StackFxAmounts()
         val fan = FakeFanRing()
         val selection = DeskSelection { fixtures }
         val matcher: DeviceMatcher
@@ -108,7 +108,7 @@ class SurfaceFeedbackPublisherTest {
         )
         val publisher: SurfaceFeedbackPublisher
         val looks = HashMap<UUID, LookSnapshot>()
-        val palettes = HashMap<UUID, TemplateSnapshot>()
+        val palettes = HashMap<UUID, PaletteSnapshot>()
         val layers: ProgrammerLayerStack
 
         init {
@@ -128,7 +128,7 @@ class SurfaceFeedbackPublisherTest {
 
             val store = ProgrammerStore()
             val lookRegistry = LookRegistry(fixtures = { fixtures }, loader = { looks[it] })
-            val templateRegistry = TemplateRegistry(loader = { palettes[it] })
+            val paletteRegistry = PaletteRegistry(loader = { palettes[it] })
             val engine = FxEngine(
                 fixtures = fixtures,
                 speedMasters = speedMasters,
@@ -138,7 +138,7 @@ class SurfaceFeedbackPublisherTest {
             layers = ProgrammerLayerStack(
                 fixtures = { fixtures },
                 lookRegistry = { lookRegistry },
-                templateRegistry = { templateRegistry },
+                paletteRegistry = { paletteRegistry },
                 engine = { engine },
                 store = store,
                 state = { null },
@@ -158,7 +158,7 @@ class SurfaceFeedbackPublisherTest {
                 globalScalerStateProvider = { scaler },
                 speedMasterBankProvider = { speedMasters },
                 deskSelection = selection,
-                stackEffectSizesProvider = { stackSizes },
+                stackFxAmountsProvider = { stackFxAmounts },
                 stackIdResolver = { uuid -> if (uuid == stackUuid) 7 else null },
                 selectionFan = fan,
                 programmerLayerStackProvider = { layers },
@@ -362,8 +362,8 @@ class SurfaceFeedbackPublisherTest {
     @Test
     fun `a stack effect-size fader follows its stack's size and arms takeover`() = runBlocking {
         val h = Harness(listOf(
-            binding(1, "fader-1", BindingTarget.StackEffectSize(stackId = 99, stackUuid = stackUuid)),
-            binding(2, "enc-1", BindingTarget.StackEffectSize(stackId = 99, stackUuid = stackUuid), policy = BindingTakeoverPolicy.PICKUP),
+            binding(1, "fader-1", BindingTarget.StackFxAmount(stackId = 99, stackUuid = stackUuid)),
+            binding(2, "enc-1", BindingTarget.StackFxAmount(stackId = 99, stackUuid = stackUuid), policy = BindingTakeoverPolicy.PICKUP),
         ))
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -374,7 +374,7 @@ class SurfaceFeedbackPublisherTest {
                 .filterIsInstance<MidiFeedbackMessage.ControlChangeFeedback>().filter { it.cc == 1 }
             assertEquals(127u.toUByte(), motor().last().value, "attach: a stack's size starts at full")
 
-            h.stackSizes.set(7, 0.5)
+            h.stackFxAmounts.set(7, 0.5)
             yield()
             assertEquals(64u.toUByte(), motor().last().value)
             assertFalse(
@@ -383,7 +383,7 @@ class SurfaceFeedbackPublisherTest {
             )
 
             h.recordingController.feedback.clear()
-            h.stackSizes.set(8, 0.1)
+            h.stackFxAmounts.set(8, 0.1)
             yield()
             assertTrue(motor().all { it.value == 64u.toUByte() }, "another stack's size is not this fader's: ${motor()}")
         } finally {
@@ -533,7 +533,7 @@ class SurfaceFeedbackPublisherTest {
                 ) {}
                 override fun tapSpeedMaster(masterUuid: String?) {}
                 override fun applyLook(lookUuid: String) {}
-                override fun pressTemplate(templateUuid: String) {}
+                override fun pressPalette(paletteUuid: String) {}
                 override fun pressPad(padUuid: String) {}
                 override fun pickUpPad(padUuid: String) {}
                 override fun handPlaceInBank(bankUuid: String) {}
@@ -1154,7 +1154,7 @@ class SurfaceFeedbackPublisherTest {
             listOf(
                 binding(1, "btn-1", BindingTarget.ApplyLook(lookUuid.toString())),
                 binding(2, "btn-2", BindingTarget.PressPad(lookPadUuid.toString())),
-                binding(3, "btn-3", BindingTarget.PressTemplate(paletteUuid.toString())),
+                binding(3, "btn-3", BindingTarget.PressPalette(paletteUuid.toString())),
             ),
             buskRefs = BuskRefs(pads = mapOf(lookPadUuid to PadRef.Layer(lookUuid, isLook = true)), pageIds = emptyMap()),
         )
@@ -1164,9 +1164,9 @@ class SurfaceFeedbackPublisherTest {
             rows = listOf(LookRowEntry(TargetRef.Fixture("hex-1"), "dimmer", "200")),
             effects = emptyList(),
         )
-        h.palettes[paletteUuid] = TemplateSnapshot(
-            templateId = 2, templateUuid = paletteUuid, name = "Red", fadeDurationMs = null,
-            rows = listOf(TemplateRowEntry(target = null, propertyName = "uv", value = "dmx:200")),
+        h.palettes[paletteUuid] = PaletteSnapshot(
+            paletteId = 2, paletteUuid = paletteUuid, name = "Red", fadeDurationMs = null,
+            rows = listOf(PaletteRowEntry(target = null, propertyName = "uv", value = "dmx:200")),
         )
         val scope = CoroutineScope(Dispatchers.Unconfined + SupervisorJob())
         try {
@@ -1178,7 +1178,7 @@ class SurfaceFeedbackPublisherTest {
             assertEquals(listOf(LedState.OFF, LedState.OFF, LedState.OFF), listOf(led("btn-1"), led("btn-2"), led("btn-3")))
 
             h.layers.add(source = LayerSource.look(1, lookUuid, "Warm"), targets = emptyList())
-            h.layers.add(source = LayerSource.template(2, paletteUuid, "Red"), targets = listOf(hex1))
+            h.layers.add(source = LayerSource.palette(2, paletteUuid, "Red"), targets = listOf(hex1))
             yield()
             assertEquals(LedState.ON, led("btn-1"), "a Look's button: lit with nothing selected")
             assertEquals(LedState.ON, led("btn-2"), "and a Look pad's")

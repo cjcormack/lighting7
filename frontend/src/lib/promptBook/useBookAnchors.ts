@@ -240,7 +240,7 @@ export function useBookAnchors({
           cueNumber,
           notes,
           layers: [],
-          adHocEffects: [],
+          adHocFx: [],
           triggers: [],
           fadeDurationMs: 3000,
           fadeCurve: 'LINEAR',

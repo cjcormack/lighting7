@@ -32,7 +32,7 @@ import { SideSheetFold } from './SideSheetFold'
 import { BLIND_NAME_SUFFIX, BlindDot } from './BlindMarks'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { SpreadSheet, type SpreadSeed } from './SpreadSheet'
-import { EffectsSheet } from './EffectsSheet'
+import { FxSheet } from './FxSheet'
 import { BeamSheet, LevelSheet, PositionSheet } from './FamilySheets'
 import type { BuskingTarget } from './buskingTypes'
 
@@ -50,7 +50,7 @@ import type { BuskingTarget } from './buskingTypes'
  * day, the rig being the preview. **Show is `ShowTab`** (busk-chrome plan D1): the phone runner
  * mounted in the sheet over the transport `routes/Busk.tsx` holds, which is what let the `ShowBar`
  * leave this view — its strip, two cards collapsed by default, BACK · GO as the tab's static footer
- * the way Colour and Spread keep their verbs. **Effects is `EffectsSheet`** (fixture-fx-sheets plan
+ * the way Colour and Spread keep their verbs. **Effects is `FxSheet`** (fixture-fx-sheets plan
  * D20), between Spread and Show: what runs on the selection, edited live, a pad's effect as the
  * running instance only, with *+ Effect…* and the split edit. **Level, Position and Beam are
  * `FamilySheets.tsx`'s**: the family's Palettes band, the
@@ -111,7 +111,7 @@ export const SIDE_SHEET_TABS: readonly TabSpec[] = [
   { id: 'position', label: 'Position', icon: Move },
   { id: 'beam', label: 'Beam', icon: Aperture },
   { id: 'spread', label: 'Fan', icon: Waves },
-  { id: 'effects', label: 'FX', icon: AudioWaveform },
+  { id: 'fx', label: 'FX', icon: AudioWaveform },
   { id: 'speed', label: 'Speed', icon: Gauge },
   { id: 'show', label: 'Show', icon: Play },
 ]
@@ -267,7 +267,7 @@ export function SideSheet({ projectId, selectedTargets, families, show }: SideSh
             onSeedConsumed={onSeedConsumed}
           />
         )}
-        {open.id === 'effects' && <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
+        {open.id === 'fx' && <FxSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />}
         {open.id === 'show' && <ShowTab projectId={projectId} show={show} />}
       </div>
     </DockedSideSheet>
@@ -476,9 +476,9 @@ export function SideSheetOverlay({ projectId, selectedTargets, families, show }:
             />
           </div>
         )}
-        {open?.id === 'effects' && (
+        {open?.id === 'fx' && (
           <div role="tabpanel" className="flex min-h-0 flex-1 flex-col *:min-h-0 *:flex-1 *:border-l-0">
-            <EffectsSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
+            <FxSheet projectId={projectId} selectedTargets={selectedTargets} families={families} />
           </div>
         )}
         {open?.id === 'show' && (

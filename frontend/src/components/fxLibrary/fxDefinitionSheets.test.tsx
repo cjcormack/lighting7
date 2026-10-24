@@ -9,15 +9,15 @@ const updateDefinition = vi.fn((_body: unknown): Promise<unknown> => Promise.res
 
 const DEFINITION: FxDefinition = {
   id: 5,
-  effectId: 'PulseCustom',
+  fxId: 'PulseCustom',
   name: 'Pulse (Custom)',
-  category: 'intensity',
+  family: 'intensity',
   outputType: 'SLIDER',
-  effectMode: 'STANDARD',
+  fxMode: 'STANDARD',
   parameters: [],
   compatibleProperties: ['dimmer'],
   script: 'FxOutput.Slider(0u)',
-  defaultStepTiming: false,
+  defaultTiming: 'CYCLE',
   timingSource: 'BEAT',
 }
 
@@ -63,7 +63,7 @@ describe('NewFxDefinitionSheet', () => {
     fireEvent.change(name, { target: { value: ' Pulse ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create' }))
     await waitFor(() => expect(createDefinition).toHaveBeenCalledTimes(1))
-    expect(createDefinition.mock.calls[0][0]).toMatchObject({ effectId: 'Pulse2', name: 'Pulse' })
+    expect(createDefinition.mock.calls[0][0]).toMatchObject({ fxId: 'Pulse2', name: 'Pulse' })
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith(5))
   })
 
@@ -90,7 +90,7 @@ describe('EditFxDefinitionSheet', () => {
       id: 5,
       name: 'Pulse (Custom)',
       script: 'FxOutput.Slider(0u)',
-      defaultStepTiming: true,
+      defaultTiming: 'HEAD',
     })
   })
 

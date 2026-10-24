@@ -6,7 +6,7 @@ import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -139,8 +139,8 @@ class CueComposerTest {
         layers = layers,
         localRows = localRows,
         resolveLook = registry::snapshot,
-        // No template layer in this file — `CueComposerTemplateLayerTest` owns that arm.
-        resolveTemplate = { null },
+        // No template layer in this file — `CueComposerPaletteLayerTest` owns that arm.
+        resolvePalette = { null },
     )
 
     /** The cooked winner for one key, as `sourceName@index`, or null when a local row won. */
@@ -611,7 +611,7 @@ class CueComposerTest {
 
     @Test
     fun `an amount-0 layer spawns no effects`() {
-        // `cook` drops an amount-0 layer outright, so `cookEffects` must agree — otherwise pulling
+        // `cook` drops an amount-0 layer outright, so `cookFx` must agree — otherwise pulling
         // Amount to zero mutes a layer's values while leaving its effects running.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val withEffect = LookSnapshot(
@@ -620,19 +620,19 @@ class CueComposerTest {
             name = "Muted",
             rows = emptyList(),
             effects = listOf(
-                EffectEntry(
-                    target = EffectTargetRef.Single(TargetRef.Fixture("hex-1")),
-                    effect = StoredEffect(
-                        effectType = "SineWave",
-                        category = "intensity",
+                FxEntry(
+                    target = FxTargetsRef.Single(TargetRef.Fixture("hex-1")),
+                    effect = StoredFx(
+                        fxType = "SineWave",
+                        family = "intensity",
                         propertyName = "dimmer",
-                        beatDivision = 1.0,
+                        cycle = 1.0,
                         blendMode = "OVERRIDE",
-                        distribution = "NORMAL",
+                        order = "NORMAL",
                         phaseOffset = 0.0,
                         elementMode = null,
                         elementFilter = null,
-                        stepTiming = null,
+                        timing = null,
                         parameters = emptyMap(),
                         speedMasterUuid = null,
                         rateSpeedMasterUuid = null,
@@ -645,15 +645,15 @@ class CueComposerTest {
 
         assertEquals(
             1,
-            CueComposer.cookEffects(
+            CueComposer.cookFx(
                 fixtures, cueId, listOf(layer(withEffect, 0, targets = target)),
-                registry::snapshot, resolveTemplate = { null },
+                registry::snapshot, resolvePalette = { null },
             ).size,
         )
         assertTrue(
-            CueComposer.cookEffects(
+            CueComposer.cookFx(
                 fixtures, cueId, listOf(layer(withEffect, 0, targets = target, amount = 0.0)),
-                registry::snapshot, resolveTemplate = { null },
+                registry::snapshot, resolvePalette = { null },
             ).isEmpty(),
         )
     }
@@ -991,14 +991,14 @@ class CueComposerTest {
         // rank whether it contributes rows or one effect, and if it did not, every layer above it
         // would renumber and their programmer-band priorities would shift.
         val look = look("Any", lookRow(propertyName = "dimmer", value = "100"))
-        val templateLayer = CookLayer(
-            source = LayerSource.template(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),
+        val paletteLayer = CookLayer(
+            source = LayerSource.palette(99, UUID.nameUUIDFromBytes("t".toByteArray()), "Amber"),
             sortOrder = 0,
             layerId = 99,
         )
         assertEquals(
             listOf(99, 1),
-            CueComposer.contributingLayers(listOf(templateLayer, layer(look, sortOrder = 1, layerId = 1)))
+            CueComposer.contributingLayers(listOf(paletteLayer, layer(look, sortOrder = 1, layerId = 1)))
                 .map { it.layerId },
         )
     }

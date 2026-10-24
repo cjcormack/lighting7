@@ -82,8 +82,8 @@ class McpPatchEditToolsTest : RouteIntegrationTest() {
         val cue = DaoCue.new { this.project = project; name = "Opening" }.inStack(stack, cueNumber = "1")
         DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "foh-2"; attribute = "dimmer"; value = "255" }
         // A palette's layer: a Look's names no targets, so only a palette's can name the rig.
-        val amber = DaoTemplate.new { this.project = project; name = "Amber" }
-        DaoTemplateRow.new { palette = amber; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
+        val amber = DaoPalette.new { this.project = project; name = "Amber" }
+        DaoPaletteRow.new { palette = amber; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
         DaoCueLayer.new { this.cue = cue; this.palette = amber; targets = listOf(CueTargetDto("fixture", "foh-1"), CueTargetDto("group", "FOH")) }
         val binding = DaoControlSurfaceBinding.new {
             this.project = project

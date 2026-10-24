@@ -222,7 +222,7 @@ describe('the request', () => {
       to: 'pct:60',
       curve: 'LINE',
       order: 'NORMAL',
-      parts: 1,
+      runs: 1,
       over: 'HEADS',
       seed: 0,
     })
@@ -269,7 +269,7 @@ describe('the request', () => {
     expect(within(screen.getByRole('radiogroup', { name: 'Order' })).queryByRole('radio', { name: 'Stage L→R' })).toBeNull()
     expect(document.querySelector('[data-spread-order-unavailable="Stage L→R"]')).toHaveTextContent('not on the desk yet')
     apply()
-    expect(lastBody()).toMatchObject({ curve: 'WINGS', order: 'CENTRE_OUT', parts: 3, over: 'CELLS' })
+    expect(lastBody()).toMatchObject({ curve: 'MIRROR_OUT', order: 'CENTRE_OUT', runs: 3, over: 'CELLS' })
     fireEvent.click(radio('Order', 'Random'))
     apply()
     expect(lastBody()).toMatchObject({ order: 'RANDOM', seed: 0 })
@@ -371,7 +371,7 @@ describe('the chosen plan', () => {
     const plan = intentPlan({
       families: ['COLOUR'],
       initial: { family: 'COLOUR' },
-      colourTemplates: [
+      colourPalettes: [
         { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] } as never,
       ],
     })
@@ -567,7 +567,7 @@ describe('Fan (venue-visit plan S12)', () => {
     expect(screen.getByRole('slider', { name: 'Tilt fan' })).toBeTruthy()
     // The curve pictures read against the midline, each head's own position.
     expect(document.querySelector('[data-curve-picture="LINE"] [data-curve-midline]')).not.toBeNull()
-    expect(getSpreadFanPrefs()).toEqual({ mode: 'FAN', axes: 'BOTH' })
+    expect(getSpreadFanPrefs()).toEqual({ mode: 'ABOUT', axes: 'BOTH' })
     cleanup()
     render(<SpreadPanel host="docked" plans={[intentPlan({ initial: { family: 'INTENSITY' } })]} />)
     expect(screen.queryByRole('radiogroup', { name: 'Fan mode' })).toBeNull()
@@ -588,7 +588,7 @@ describe('Fan (venue-visit plan S12)', () => {
     toFan()
     fireEvent.change(amount('Pan'), { target: { value: '20' } })
     apply()
-    expect(lastBody()).toMatchObject({ property: 'position', mode: 'FAN', fan: { pan: 20 } })
+    expect(lastBody()).toMatchObject({ property: 'position', mode: 'ABOUT', fan: { pan: 20 } })
     expect(lastBody()).not.toHaveProperty('from')
     expect(lastBody()).not.toHaveProperty('to')
     expect(lastBody()).not.toHaveProperty('base')
@@ -617,7 +617,7 @@ describe('Fan (venue-visit plan S12)', () => {
     expect(radio('Over', 'Elements')).toBeDisabled()
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Across amount' }), { target: { value: '1.5' } })
     apply()
-    expect(lastBody()).toMatchObject({ mode: 'FAN', fan: { x: 1.5 }, over: 'HEADS' })
+    expect(lastBody()).toMatchObject({ mode: 'ABOUT', fan: { x: 1.5 }, over: 'HEADS' })
     expect(lastBody()).not.toHaveProperty('near')
     const fine = { ...base('spot-1', '128,128'), panFine: 7, tiltFine: 9 }
     const near = [{ target: { type: 'fixture' as const, key: 'spot-1' }, panDeg: 250, tiltDeg: 60 }]
@@ -789,7 +789,7 @@ describe('what it reaches', () => {
 
   it('draws Wings as two fans meeting at the centre, so it is not Mirror’s V', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan()]} />)
-    const wings = document.querySelector('[data-curve-picture="WINGS"]')!
+    const wings = document.querySelector('[data-curve-picture="MIRROR_OUT"]')!
     const mirror = document.querySelector('[data-curve-picture="MIRROR"]')!
     expect(wings.querySelectorAll('polyline')).toHaveLength(2)
     expect(wings.querySelector('line')).not.toBeNull()

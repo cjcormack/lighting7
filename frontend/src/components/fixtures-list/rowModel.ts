@@ -1,4 +1,4 @@
-import type { TemplateTarget } from '../../api/templatesApi'
+import type { PaletteTarget } from '../../api/palettesApi'
 import { resolveCell } from './columns'
 import { filterTerms, fixtureMatchesTerms } from '../../lib/fixtureSearch'
 import type { CellResolution, ColumnKey } from './columns'
@@ -7,7 +7,7 @@ import type { GroupSummary } from '../../api/groupsApi'
 import type { LocateTarget } from '../../store/locate'
 import { targetKey } from '../../lib/targetKey'
 import { ATTRIBUTE_FAMILIES, familyForCategory, type AttributeFamily } from '../../lib/attributeFamily'
-import { EMITTER_PROPERTIES, templatePropertyFor, type TemplateProperty } from '../../lib/templateIntent'
+import { EMITTER_PROPERTIES, palettePropertyFor, type PaletteProperty } from '../../lib/paletteIntent'
 import { spreadPropertiesFor } from '../../lib/spreadIntent'
 import { centreToDmx } from '../../lib/positionScale'
 import { readColour, splitColourTerms, type FixtureColour } from '../../lib/fixtureColours'
@@ -419,7 +419,7 @@ export function selectedRowTargets(
  * them by the desk, so a fixture row still reaches every cell. Two names for one walk because the
  * two presses are different questions that happen to share an answer.
  */
-export function templateTargetsFor(
+export function paletteTargetsFor(
   rows: readonly Row[],
   selectedIds: ReadonlySet<RowId>,
 ): LocateTarget[] {
@@ -435,7 +435,7 @@ export function templateTargetsFor(
  *
  * It is [expandSelectionToTargets]'s walk — the same dedupe, the same drop of an element row under
  * a covered parent — read as cue targets, through [spreadTargetsOf], so the container's per-column
- * targets and this answer cannot name different heads for one marquee. [templateTargetsFor] is this
+ * targets and this answer cannot name different heads for one marquee. [paletteTargetsFor] is this
  * walk too since venue-visit plan S1, when it stopped folding a cell onto its fixture.
  */
 export function spreadTargetsFor(
@@ -472,26 +472,26 @@ export function spreadTargetsOf(targets: readonly WriteTarget[]): LocateTarget[]
 }
 
 /**
- * The template property a grid column spreads as — the column → `TemplateProperty` map of
+ * The template property a grid column spreads as — the column → `PaletteProperty` map of
  * editor-kit plan D4. Null for a column outside the vocabulary: Speed spreads as **raw** bytes
  * (D15), and Gobo and Prism do not spread at all (a wheel slot is per-model; a prism is a switch).
  */
-export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null {
+export function spreadPropertyForColumn(col: ColumnKey): PaletteProperty | null {
   switch (col) {
     case 'dimmer':
-      return templatePropertyFor('dimmer')
+      return palettePropertyFor('dimmer')
     case 'strobe':
-      return templatePropertyFor('strobe')
+      return palettePropertyFor('strobe')
     case 'colour':
-      return templatePropertyFor('rgbColour')
+      return palettePropertyFor('rgbColour')
     case 'position':
-      return templatePropertyFor('position')
+      return palettePropertyFor('position')
     case 'zoom':
-      return templatePropertyFor('zoom')
+      return palettePropertyFor('zoom')
     case 'focus':
-      return templatePropertyFor('focus')
+      return palettePropertyFor('focus')
     case 'iris':
-      return templatePropertyFor('iris')
+      return palettePropertyFor('iris')
     case 'gobo':
     case 'prism':
     case 'speed':
@@ -500,7 +500,7 @@ export function spreadPropertyForColumn(col: ColumnKey): TemplateProperty | null
 }
 
 /** Whether one head — a fixture or an element — has something this template property resolves against. */
-function headTakesProperty(properties: readonly PropertyDescriptor[], property: TemplateProperty): boolean {
+function headTakesProperty(properties: readonly PropertyDescriptor[], property: PaletteProperty): boolean {
   switch (property.propertyName) {
     case 'rgbColour':
       return properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
@@ -529,7 +529,7 @@ function headTakesProperty(properties: readonly PropertyDescriptor[], property: 
  * alone; a Dimmer marquee over heads with a strobe offers Level · Strobe. An element's properties
  * count for its fixture, as [targetFamilies] counts them.
  */
-export function spreadPropertiesOffered(targets: readonly WriteTarget[], family: AttributeFamily): TemplateProperty[] {
+export function spreadPropertiesOffered(targets: readonly WriteTarget[], family: AttributeFamily): PaletteProperty[] {
   return spreadPropertiesFor(family).filter((property) =>
     targets.some(
       (target) =>
@@ -944,7 +944,7 @@ export function parseSelectParam(raw: string): SelectParam | null {
  * Where a template press or record lands for these targets: each target by its own key — a whole
  * fixture as itself, a **cell as its element key** (`{type: 'fixture', key: element.key}`, the
  * cells contract the desk resolves) — deduped, and a cell dropped where its parent is in the batch
- * too, since the parent covers it (`templateTargetsFor`'s rule, over the batch's targets rather than
+ * too, since the parent covers it (`paletteTargetsFor`'s rule, over the batch's targets rather than
  * the rows, which a cell never sees).
  *
  * A cell used to be folded onto its parent, on the belief that the template route would drop an
@@ -953,10 +953,10 @@ export function parseSelectParam(raw: string): SelectParam | null {
  * whose colour lives on its cells out to those cells itself, so a whole-fixture target still means
  * every cell.
  */
-export function templateTargetsOf(targets: readonly WriteTarget[]): TemplateTarget[] {
+export function paletteTargetsOf(targets: readonly WriteTarget[]): PaletteTarget[] {
   const parents = new Set(targets.filter((target) => target.fixtureKey == null).map((target) => target.key))
   const seen = new Set<string>()
-  const out: TemplateTarget[] = []
+  const out: PaletteTarget[] = []
   for (const target of targets) {
     if (target.fixtureKey != null && parents.has(target.fixtureKey)) continue
     if (seen.has(target.key)) continue

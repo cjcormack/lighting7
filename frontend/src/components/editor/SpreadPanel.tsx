@@ -2,13 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, 
 import { ArrowLeftRight, Waves } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CueTarget } from '@/api/cuesApi'
-import type { TemplateSummary } from '@/api/templatesApi'
+import type { PaletteSummary } from '@/api/palettesApi'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { hexToRgb } from '@/components/fx/colourUtils'
-import { templateSwatch } from '@/components/busking/padFace'
+import { paletteSwatch } from '@/components/busking/padFace'
 import { WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss } from '@/lib/colourMath'
@@ -18,7 +18,7 @@ import { getSpreadFanPrefs, setSpreadFanPrefs, useSpreadFanPrefs, type FanAxes, 
 import {
   SPREAD_CURVES,
   SPREAD_ORDERS,
-  SPREAD_PARTS_PRESETS,
+  SPREAD_RUNS_PRESETS,
   colourEndpointOf,
   defaultSpreadEndpoints,
   isCompleteSpreadEndpoint,
@@ -27,7 +27,7 @@ import {
   spreadPropertiesFor,
   type SpreadEndpoint,
 } from '@/lib/spreadIntent'
-import { WHITE_POLICIES, WHITE_POLICY_LABELS, type TemplateProperty, type WhitePolicy } from '@/lib/templateIntent'
+import { WHITE_POLICIES, WHITE_POLICY_LABELS, type PaletteProperty, type WhitePolicy } from '@/lib/paletteIntent'
 import { cn } from '@/lib/utils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import type { AimNear, SpreadBase, SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
@@ -53,14 +53,14 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * with plans of their own. The kinds:
  *
  * - **`intent`** — desk-resolved, the template vocabulary: two intents of one property's shape, a
- *   curve, an order, parts and an over-switch go to `POST /programmer/spread`, and the desk
+ *   curve, an order, runs and an over-switch go to `POST /programmer/fan`, and the desk
  *   interpolates in the intent's own space, resolves one literal per head through the same
- *   `TemplateResolver` *Apply as values* uses, and answers what it wrote. **The client never
+ *   `PaletteResolver` *Apply as values* uses, and answers what it wrote. **The client never
  *   interpolates an intent** — only the desk knows a group's member order, each head's range, which
  *   cells a fixture has and what a colour means on a head with amber — and `spreadIntent.test.ts`
  *   pins that this file reaches `spreadPlans.ts` only for the raw arm below.
  * - **`raw`** — bytes on a column outside that vocabulary, Speed today (D15): the client's own walk,
- *   under the same Curve · Order · Parts · Over controls.
+ *   under the same Curve · Order · Runs · Over controls.
  * - **`address`** — From · Step in visible order, the patch list's walk and its landing line.
  * - **`duration`** — From · To with the curve row, the cue sheet's fade times.
  *
@@ -79,7 +79,7 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * — the one un-deduped resend after a write the desk refused (D7). Only the **latest** request's
  * answer is reported: Live keeps several in flight and their answers can land out of order, so a
  * property or selection change disowns whatever is in flight. Under an empty selection nothing is
- * sent and the panel's own sentence is toasted; the desk would answer `SPREAD_NEEDS_SELECTION`
+ * sent and the panel's own sentence is toasted; the desk would answer `FAN_NEEDS_SELECTION`
  * otherwise, which `errorToastMiddleware` renders, and the panel must not say it twice.
  *
  * **The mask is honoured by the desk, not pre-refused here.** A property outside the selection's
@@ -90,7 +90,7 @@ import { getPositionPadMode, setPositionPadMode, usePositionPadMode, type Positi
  * *Between two values*: one
  * amount per axis (*Pan · Tilt · Both*, the outer heads' offset in centre steps) about **each
  * head's own position**, symmetric about the middle of the order, under the same Curve · Order ·
- * Parts · Over. The desk does the arithmetic (`mode: FAN` on the same route) and reads where each
+ * Runs · Over. The desk does the arithmetic (`mode: ABOUT` on the same route) and reads where each
  * head starts — Local's value, else the stage — or takes the row being edited, which a
  * `write: false` host hands in as [IntentSpreadPlan.fanBases]. **The panel holds the gesture's
  * anchor**: the first send's answer says where each head started (`base`), and every later send in
@@ -157,22 +157,22 @@ export interface IntentSpreadPlan extends SpreadPlanBase {
   offered?: readonly AttributeFamily[]
   familyRefusal?: string
   /** The properties the row offers per family; absent, `spreadPropertiesFor`. The first is the default. */
-  propertiesFor?: (family: AttributeFamily) => TemplateProperty[]
+  propertiesFor?: (family: AttributeFamily) => PaletteProperty[]
   /**
    * The family and property the panel opens on — the programmer's marquee column. Absent, the
    * panel lands on the first family [mask] names that the heads can take, and re-derives that as
    * the heads arrive (the busk tab's rule).
    */
-  initial?: { family: AttributeFamily; property?: TemplateProperty }
+  initial?: { family: AttributeFamily; property?: PaletteProperty }
   /** The selection's attribute mask, sent as `families`. Null is every attribute. */
   mask: readonly AttributeFamily[] | null
   /**
    * The colour templates an endpoint may name, already filtered by the host through
-   * `isSpreadColourTemplate` (`fx/FxColourTemplates.tsx`). Absent, none are offered. The host reads
+   * `isSpreadColourPalette` (`fx/FxColourPalettes.tsx`). Absent, none are offered. The host reads
    * the library because this panel is store-free: the patch list, the cue sheet and the DMX sheet
    * mount it without a store, and a query here would reach one on their behalf.
    */
-  colourTemplates?: readonly TemplateSummary[]
+  colourPalettes?: readonly PaletteSummary[]
   /** `write: false` on every request — a focused Look layer (D6). Absent, the key is omitted. */
   write?: false
   /**
@@ -227,15 +227,15 @@ export type SpreadPlan = IntentSpreadPlan | RawSpreadPlan | AddressSpreadPlan | 
 
 export interface SpreadForm {
   family: AttributeFamily
-  property: TemplateProperty
+  property: PaletteProperty
   from: SpreadEndpoint
   to: SpreadEndpoint
   curve: SpreadCurve
   order: SpreadOrder
-  parts: number
+  runs: number
   over: SpreadOver
   seed: number
-  /** Position only: *Ends* or *Fan*. */
+  /** Position only: *Between* two values or *About* each position. */
   mode: SpreadMode
   axes: FanAxes
   /** Fan only: in pan and tilt, or across the stage — the position pad's mode (`lib/positionPadMode.ts`). */
@@ -336,7 +336,7 @@ function initialFamily(available: readonly AttributeFamily[], mask: readonly Att
   return mask?.find((family) => available.includes(family)) ?? available[0] ?? 'INTENSITY'
 }
 
-function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
+function formFor(property: PaletteProperty, base?: SpreadForm): SpreadForm {
   const prefs = getSpreadFanPrefs()
   return {
     family: property.family,
@@ -344,7 +344,7 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
     ...defaultSpreadEndpoints(property),
     curve: base?.curve ?? 'LINE',
     order: base?.order ?? 'NORMAL',
-    parts: base?.parts ?? 1,
+    runs: base?.runs ?? 1,
     over: base?.over ?? 'HEADS',
     seed: base?.seed ?? 0,
     mode: base?.mode ?? prefs.mode,
@@ -359,7 +359,7 @@ function formFor(property: TemplateProperty, base?: SpreadForm): SpreadForm {
 
 /** Whether a form spreads as a fan — Fan chosen, on a position property. */
 export function isFanForm(form: SpreadForm): boolean {
-  return form.mode === 'FAN' && spreadEditorKind(form.property) === 'position'
+  return form.mode === 'ABOUT' && spreadEditorKind(form.property) === 'position'
 }
 
 /** Whether a fan form fans across the stage, in metres, rather than in pan and tilt. */
@@ -388,7 +388,7 @@ function fanAmountsOf(form: SpreadForm): NonNullable<SpreadRequestBody['fan']> {
  * The Over a spread is actually made over. Cells with no cells to split is Heads — the operator's
  * choice is kept (`lib/spreadOver.ts`) and drawn, but a request never says Cells for a selection
  * where the plan counts none. One rule for both kinds: the raw arm steps by it, and the desk is sent
- * it rather than trusted to make the same substitution (it would: `programmerSpread.kt` makes each
+ * it rather than trusted to make the same substitution (it would: `programmerFan.kt` makes each
  * fixture without elements its own unit, and a plan counts 0 only when no target has elements).
  */
 export function effectiveSpreadOver(over: SpreadOver, cellCount: number): SpreadOver {
@@ -412,10 +412,10 @@ export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): Sprea
     families: plan.mask == null ? undefined : [...plan.mask],
     property: form.property.propertyName,
     // A fan's base is not part of the form: the panel adds the gesture's anchor at send time.
-    ...(fan ? { mode: 'FAN' as const, fan: fanAmountsOf(form) } : { from: serializeSpreadEndpoint(form.from), to: serializeSpreadEndpoint(form.to) }),
+    ...(fan ? { mode: 'ABOUT' as const, fan: fanAmountsOf(form) } : { from: serializeSpreadEndpoint(form.from), to: serializeSpreadEndpoint(form.to) }),
     curve: form.curve,
     order: form.order,
-    parts: form.parts,
+    runs: form.runs,
     // A stage fan aims heads, and a cell has no placement of its own.
     over: isStageFanForm(form) ? 'HEADS' : effectiveSpreadOver(form.over, plan.cellCount),
     seed: form.seed,
@@ -453,7 +453,7 @@ interface FanReadout {
 /** One live write: a desk request, or the raw kind's values. */
 type Send = { kind: 'intent'; body: SpreadRequestBody } | { kind: 'raw'; values: number[]; over: SpreadOver }
 
-const NO_TEMPLATES: readonly TemplateSummary[] = []
+const NO_PALETTES: readonly PaletteSummary[] = []
 
 export function SpreadPanel({
   plans,
@@ -493,7 +493,7 @@ export function SpreadPanel({
   /** What the segment draws: the heads' families, or all four while nothing has answered. */
   const available = headFamilies.length > 0 ? headFamilies : ATTRIBUTE_FAMILIES
   const propertiesFor = useCallback(
-    (family: AttributeFamily): TemplateProperty[] => {
+    (family: AttributeFamily): PaletteProperty[] => {
       const offered = intentPlan?.propertiesFor?.(family) ?? spreadPropertiesFor(family)
       return offered.length > 0 ? offered : spreadPropertiesFor(family)
     },
@@ -528,16 +528,16 @@ export function SpreadPanel({
   const activePlanRef = useRef(activePlan)
   activePlanRef.current = activePlan
 
-  const colourTemplates = intentPlan?.colourTemplates ?? NO_TEMPLATES
+  const colourPalettes = intentPlan?.colourPalettes ?? NO_PALETTES
 
-  const colourTemplatesRef = useRef(colourTemplates)
-  colourTemplatesRef.current = colourTemplates
+  const colourPalettesRef = useRef(colourPalettes)
+  colourPalettesRef.current = colourPalettes
   // A template endpoint is drawn at the template's own colour (its swatch): the knob and the
   // R/G/B fields say what the desk will interpolate from, and a nudge converts the endpoint to a
   // literal built from that colour rather than from 0/0/0 (session 3 review, finding 4 — the busk
   // tab's body had it since it was written).
   const reseedPicker = useCallback((endpoint: SpreadEndpoint) => {
-    const hex = endpointHex(endpoint, colourTemplatesRef.current)
+    const hex = endpointHex(endpoint, colourPalettesRef.current)
     if (hex == null) return
     const rgb = hexToRgb(hex)
     setPickerSeed((prev) => ({ css: computeCombinedCss(rgb.r, rgb.g, rgb.b, 0, 0, 0), key: prev.key + 1 }))
@@ -554,7 +554,7 @@ export function SpreadPanel({
 
   const sendIntent = useCallback((plan: IntentSpreadPlan, outgoing: SpreadRequestBody, gesture: FanGesture) => {
     let body = outgoing
-    const fan = body.mode === 'FAN'
+    const fan = body.mode === 'ABOUT'
     let given: ReadonlySet<string> | null = null
     if (fan) {
       if (gesture.anchor != null) {
@@ -660,7 +660,7 @@ export function SpreadPanel({
       // The plan is handed the over its values were built for.
       const over = effectiveSpreadOver(next.over, plan.cellCount)
       const steps = over === 'CELLS' ? plan.cellCount : plan.count
-      const values = rawValues(ends.from, ends.to, spreadFractions(steps, next.curve, next.order, next.parts, next.seed))
+      const values = rawValues(ends.from, ends.to, spreadFractions(steps, next.curve, next.order, next.runs, next.seed))
       return { kind: 'raw', values, over }
     }
     if (plan?.kind !== 'intent') return null
@@ -744,7 +744,7 @@ export function SpreadPanel({
 
   /** Change the property (and family): fresh endpoints, and an answer in flight no longer describes this property. */
   const chooseProperty = useCallback(
-    (property: TemplateProperty) => {
+    (property: PaletteProperty) => {
       const next = formFor(property, formRef.current)
       formRef.current = next
       setForm(next)
@@ -839,8 +839,8 @@ export function SpreadPanel({
       chosenRef.current = true
       const property = propertiesForRef.current('POSITION').find((p) => p.intent === 'position') ?? spreadPropertiesFor('POSITION')[0]
       if (property.propertyName !== formRef.current.property.propertyName) chooseProperty(property)
-      setSpreadFanPrefs({ mode: 'FAN', axes: formRef.current.axes })
-      const next = { ...formRef.current, mode: 'FAN' as const }
+      setSpreadFanPrefs({ mode: 'ABOUT', axes: formRef.current.axes })
+      const next = { ...formRef.current, mode: 'ABOUT' as const }
       formRef.current = next
       setForm(next)
       resetFan()
@@ -1013,7 +1013,7 @@ export function SpreadPanel({
   const properties = intentPlan == null ? [] : propertiesFor(form.family)
   const offeredFamilies = intentPlan?.offered ?? available
   const editingEndpoint = editing === 'from' ? form.from : form.to
-  const editingRgb = hexToRgb(endpointHex(editingEndpoint, colourTemplates) ?? '#000000')
+  const editingRgb = hexToRgb(endpointHex(editingEndpoint, colourPalettes) ?? '#000000')
   const setEndpoint = (which: 'from' | 'to', endpoint: SpreadEndpoint) => commit({ [which]: endpoint })
 
   const curveRow = (
@@ -1096,16 +1096,16 @@ export function SpreadPanel({
               type="single"
               size="sm"
               aria-label="Runs"
-              value={SPREAD_PARTS_PRESETS.includes(form.parts) ? String(form.parts) : ''}
-              onValueChange={(next) => next && commit({ parts: Number(next) })}
+              value={SPREAD_RUNS_PRESETS.includes(form.runs) ? String(form.runs) : ''}
+              onValueChange={(next) => next && commit({ runs: Number(next) })}
             >
-              {SPREAD_PARTS_PRESETS.map((n) => (
+              {SPREAD_RUNS_PRESETS.map((n) => (
                 <ToggleGroupItem key={n} value={String(n)} className="text-xs">
                   {n}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <EditorField label="Runs, N" value={form.parts} min={1} onCommit={(n) => commit({ parts: Math.max(1, Math.round(n)) })} className="w-14" />
+            <EditorField label="Runs, N" value={form.runs} min={1} onCommit={(n) => commit({ runs: Math.max(1, Math.round(n)) })} className="w-14" />
           </div>
         </div>
         <div>
@@ -1224,10 +1224,10 @@ export function SpreadPanel({
               }}
               className="h-auto w-full"
             >
-              <ToggleGroupItem value="ENDS" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="From one position to another across the heads">
+              <ToggleGroupItem value="BETWEEN" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="From one position to another across the heads">
                 Between two values
               </ToggleGroupItem>
-              <ToggleGroupItem value="FAN" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="An amount around each head’s own position — fan out, fan in">
+              <ToggleGroupItem value="ABOUT" className="h-auto min-h-6 min-w-0 flex-1 py-0.5 text-xs leading-tight whitespace-normal" title="An amount around each head’s own position — fan out, fan in">
                 About each position
               </ToggleGroupItem>
             </ToggleGroup>
@@ -1284,15 +1284,15 @@ export function SpreadPanel({
                 reseedPicker(which === 'from' ? formRef.current.from : formRef.current.to)
               }}
               onSwap={swap}
-              templates={colourTemplates}
-              onTemplate={(uuid) => {
+              palettes={colourPalettes}
+              onPalette={(uuid) => {
                 // Back to a colour is back to the default for that end; the knob follows it.
-                const endpoint: SpreadEndpoint = uuid == null ? defaultSpreadEndpoints(form.property)[editing] : { kind: 'template', uuid }
+                const endpoint: SpreadEndpoint = uuid == null ? defaultSpreadEndpoints(form.property)[editing] : { kind: 'palette', uuid }
                 setEndpoint(editing, endpoint)
                 reseedPicker(endpoint)
               }}
               policy={form.from.kind === 'colour' ? form.from.policy : 'extract'}
-              policyFromTemplate={form.from.kind === 'template'}
+              policyFromPalette={form.from.kind === 'palette'}
               onPolicy={(policy) =>
                 commit({
                   from: form.from.kind === 'colour' ? { ...form.from, policy } : form.from,
@@ -1569,31 +1569,31 @@ export function SpreadPanel({
 // ─── The endpoint editors ───────────────────────────────────────────────────
 
 /** A colour endpoint's hex, or a template endpoint's swatch — what the picker is seeded from and what a nudge builds on. Null for the numeric shapes. */
-function endpointHex(endpoint: SpreadEndpoint, templates: readonly TemplateSummary[]): string | null {
+function endpointHex(endpoint: SpreadEndpoint, templates: readonly PaletteSummary[]): string | null {
   if (endpoint.kind === 'colour') return endpoint.hex
-  if (endpoint.kind === 'template') {
+  if (endpoint.kind === 'palette') {
     const template = templates.find((t) => t.uuid === endpoint.uuid)
-    const swatch = template == null ? null : templateSwatch(template)
+    const swatch = template == null ? null : paletteSwatch(template)
     return swatch != null && /^#[0-9a-fA-F]{6}$/.test(swatch) ? swatch : null
   }
   return null
 }
 
-function endpointSwatch(endpoint: SpreadEndpoint, templates: readonly TemplateSummary[]): string | null {
+function endpointSwatch(endpoint: SpreadEndpoint, templates: readonly PaletteSummary[]): string | null {
   if (endpoint.kind === 'colour') return endpoint.hex
-  if (endpoint.kind === 'template') {
+  if (endpoint.kind === 'palette') {
     const template = templates.find((t) => t.uuid === endpoint.uuid)
-    return template == null ? null : templateSwatch(template)
+    return template == null ? null : paletteSwatch(template)
   }
   return null
 }
 
-function endpointLabel(endpoint: SpreadEndpoint, templates: readonly TemplateSummary[]): string {
+function endpointLabel(endpoint: SpreadEndpoint, templates: readonly PaletteSummary[]): string {
   switch (endpoint.kind) {
     case 'colour':
       return endpoint.hex.toUpperCase()
-    case 'template':
-      return templates.find((t) => t.uuid === endpoint.uuid)?.name ?? 'template'
+    case 'palette':
+      return templates.find((t) => t.uuid === endpoint.uuid)?.name ?? 'palette'
     case 'percent':
       return `${endpoint.value}%`
     case 'level':
@@ -1609,10 +1609,10 @@ function ColourEndpoints({
   editing,
   onEdit,
   onSwap,
-  templates,
-  onTemplate,
+  palettes: templates,
+  onPalette,
   policy,
-  policyFromTemplate,
+  policyFromPalette,
   onPolicy,
   children,
 }: {
@@ -1621,11 +1621,11 @@ function ColourEndpoints({
   editing: 'from' | 'to'
   onEdit: (which: 'from' | 'to') => void
   onSwap: () => void
-  templates: readonly TemplateSummary[]
-  onTemplate: (uuid: string | null) => void
+  palettes: readonly PaletteSummary[]
+  onPalette: (uuid: string | null) => void
   policy: WhitePolicy
   /** From is a `pal:` reference: the desk reads the policy off the template's own row, so the control is inert and says so. */
-  policyFromTemplate: boolean
+  policyFromPalette: boolean
   onPolicy: (policy: WhitePolicy) => void
   children: ReactNode
 }) {
@@ -1633,11 +1633,11 @@ function ColourEndpoints({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-1.5">
-        <EndpointButton which="from" endpoint={from} active={editing === 'from'} templates={templates} onClick={() => onEdit('from')} />
+        <EndpointButton which="from" endpoint={from} active={editing === 'from'} palettes={templates} onClick={() => onEdit('from')} />
         <Button type="button" variant="ghost" size="sm" className="h-7 px-1.5" onClick={onSwap} aria-label="Swap From and To" title="Swap From and To">
           <ArrowLeftRight className="size-3.5" />
         </Button>
-        <EndpointButton which="to" endpoint={to} active={editing === 'to'} templates={templates} onClick={() => onEdit('to')} />
+        <EndpointButton which="to" endpoint={to} active={editing === 'to'} palettes={templates} onClick={() => onEdit('to')} />
       </div>
       {children}
       <div className="flex flex-wrap items-center gap-2">
@@ -1648,8 +1648,8 @@ function ColourEndpoints({
             <select
               aria-label={`${editing === 'from' ? 'From' : 'To'} palette`}
               className="h-6 min-w-0 flex-1 rounded-md border bg-background px-1 text-xs text-foreground"
-              value={current.kind === 'template' ? current.uuid : ''}
-              onChange={(e) => onTemplate(e.target.value === '' ? null : e.target.value)}
+              value={current.kind === 'palette' ? current.uuid : ''}
+              onChange={(e) => onPalette(e.target.value === '' ? null : e.target.value)}
             >
               <option value="">— a colour —</option>
               {templates.map((template) => (
@@ -1667,9 +1667,9 @@ function ColourEndpoints({
           type="single"
           size="sm"
           aria-label="White policy"
-          value={policyFromTemplate ? '' : policy}
-          disabled={policyFromTemplate}
-          title={policyFromTemplate ? 'From is a palette: the desk takes the white policy from the palette’s own colour row' : 'How From’s colour uses a head’s white and amber emitters — the desk interpolates with this policy'}
+          value={policyFromPalette ? '' : policy}
+          disabled={policyFromPalette}
+          title={policyFromPalette ? 'From is a palette: the desk takes the white policy from the palette’s own colour row' : 'How From’s colour uses a head’s white and amber emitters — the desk interpolates with this policy'}
           onValueChange={(next) => next && onPolicy(next as WhitePolicy)}
         >
           {WHITE_POLICIES.map((p) => (
@@ -1687,13 +1687,13 @@ function EndpointButton({
   which,
   endpoint,
   active,
-  templates,
+  palettes: templates,
   onClick,
 }: {
   which: 'from' | 'to'
   endpoint: SpreadEndpoint
   active: boolean
-  templates: readonly TemplateSummary[]
+  palettes: readonly PaletteSummary[]
   onClick: () => void
 }) {
   const swatch = endpointSwatch(endpoint, templates)
@@ -2009,10 +2009,10 @@ function FanAmountStrip({ axis, scale, value, onChange }: { axis: FanAxisLabel; 
 /**
  * The four shapes drawn as the panel draws them: eight heads, From at the baseline, To at the top.
  *
- * **Wings is two lines, not a V** (2026-09-21). Its fractions are Mirror's over eight heads — To
+ * **Mirror out is two lines, not a V** (2026-09-21). Its fractions are Mirror's over eight heads — To
  * at each outer end, From at the centre — so one polyline through them *is* Mirror's V, and the
- * two pictures were told apart by nothing. What differs is the mechanism (`SpreadPlan.wings`): two
- * fans, each from the centre to its own outer end, an odd run's centre head in both. So Wings is
+ * two pictures were told apart by nothing. What differs is the mechanism (`FanPlan.wings`): two
+ * fans, each from the centre to its own outer end, an odd run's centre head in both. So Mirror out is
  * drawn as its two wings — two strokes meeting at a marked centre, each fanning outward — where
  * Mirror stays one stroke reflected about the middle.
  */
@@ -2024,13 +2024,13 @@ function CurvePicture({ curve, fan = false }: { curve: SpreadCurve; fan?: boolea
   const midline = fan ? (
     <line data-curve-midline x1={1} y1={y(0.5)} x2={31} y2={y(0.5)} stroke="currentColor" strokeWidth="0.75" strokeDasharray="1.5 2" opacity={0.6} />
   ) : null
-  if (curve === 'WINGS') {
+  if (curve === 'MIRROR_OUT') {
     const half = heads / 2
     const left = Array.from({ length: half }, (_, i) => `${x(i)},${y(1 - i / (half - 1))}`).join(' ')
     const right = Array.from({ length: half }, (_, i) => `${x(half + i)},${y(i / (half - 1))}`).join(' ')
     const centre = (x(half - 1) + x(half)) / 2
     return (
-      <svg aria-hidden data-curve-picture="WINGS" viewBox="0 0 32 14" className="h-3.5 w-8">
+      <svg aria-hidden data-curve-picture="MIRROR_OUT" viewBox="0 0 32 14" className="h-3.5 w-8">
         {midline}
         <polyline points={left} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
         <polyline points={right} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />

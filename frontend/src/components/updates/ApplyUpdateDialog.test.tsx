@@ -33,7 +33,7 @@ function status(live: Partial<UpdateStatus['live']> = {}): UpdateStatus {
     autoCheckEnabled: true,
     downloadedBytes: 100,
     totalBytes: 100,
-    live: { showReady: true, activeEffectCount: 0, ...live },
+    live: { showReady: true, activeFxCount: 0, ...live },
     throttled: false,
   }
 }
@@ -74,7 +74,7 @@ describe('ApplyUpdateDialog', () => {
 
   it('demands the desk name when effects are running', () => {
     render(
-      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 3 })} />,
+      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeFxCount: 3 })} />,
     )
 
     expect(screen.getByText(/3 FX are running right now/i)).toBeTruthy()
@@ -92,7 +92,7 @@ describe('ApplyUpdateDialog', () => {
       <ApplyUpdateDialog
         open
         onOpenChange={() => {}}
-        status={status({ activeEffectCount: 0, activeStackName: 'Act One' })}
+        status={status({ activeFxCount: 0, activeStackName: 'Act One' })}
       />,
     )
 
@@ -102,7 +102,7 @@ describe('ApplyUpdateDialog', () => {
 
   it('keeps the button disabled while the typed name is wrong', () => {
     render(
-      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 1 })} />,
+      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeFxCount: 1 })} />,
     )
 
     fireEvent.change(screen.getByLabelText(/to confirm/i), { target: { value: 'Front of Hous' } })
@@ -134,7 +134,7 @@ describe('ApplyUpdateDialog', () => {
   it('does not let an unloaded desk name satisfy the gate', () => {
     mocks.install = { data: undefined }
     render(
-      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 2 })} />,
+      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeFxCount: 2 })} />,
     )
 
     expect(confirmButton().hasAttribute('disabled')).toBe(true)
@@ -155,7 +155,7 @@ describe('ApplyUpdateDialog', () => {
 
   it('singularises the effect count', () => {
     render(
-      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeEffectCount: 1 })} />,
+      <ApplyUpdateDialog open onOpenChange={() => {}} status={status({ activeFxCount: 1 })} />,
     )
     expect(screen.getByText(/1 FX is running right now/i)).toBeTruthy()
   })

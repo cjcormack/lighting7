@@ -234,7 +234,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "ghost-1"; attribute = "dimmer"; value = "200"
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "group"; targetKey = "phantoms"
                 fxType = "Pulse"; family = "intensity"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap(); attribute = "dimmer"
@@ -252,7 +252,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         val row = details.propertyAssignments.single()
         assertEquals("ghost-1", row.targetKey)
         assertEquals(AssignmentHealth.MissingFixture("ghost-1"), row.health)
-        assertEquals("phantoms", details.adHocEffects.single().targetKey)
+        assertEquals("phantoms", details.adHocFx.single().targetKey)
     }
 
     @Test
@@ -265,23 +265,23 @@ class CueCopyFromTest : RouteIntegrationTest() {
             val project = DaoProject[source]
             val warm = DaoLook.new { this.project = project; name = "Warm" }
             val cool = DaoLook.new { this.project = project; name = "Cool"; notes = "blue wash" }
-            val amber = DaoTemplate.new { this.project = project; name = "Amber" }
-            val blue = DaoTemplate.new { this.project = project; name = "Blue" }
-            DaoTemplateRow.new { palette = blue; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "rgbColour"; value = "#0000ff" }
+            val amber = DaoPalette.new { this.project = project; name = "Amber" }
+            val blue = DaoPalette.new { this.project = project; name = "Blue" }
+            DaoPaletteRow.new { palette = blue; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "rgbColour"; value = "#0000ff" }
             DaoLook.new { this.project = DaoProject[projectId]; name = "Warm" }
-            DaoTemplate.new { this.project = DaoProject[projectId]; name = "Amber" }
+            DaoPalette.new { this.project = DaoProject[projectId]; name = "Amber" }
             val master3 = speedMastersOf(project).single { it.masterIndex == 3 }.uuid
             val cue = DaoCue.new {
                 this.project = project; name = "busk"
                 speedMasters = listOf(CueSpeedMasterDto(master3.toString(), 140.0))
             }
-            for ((i, layer) in listOf<Pair<DaoLook?, DaoTemplate?>>(warm to null, cool to null, null to amber, null to blue).withIndex()) {
+            for ((i, layer) in listOf<Pair<DaoLook?, DaoPalette?>>(warm to null, cool to null, null to amber, null to blue).withIndex()) {
                 DaoCueLayer.new {
                     this.cue = cue; look = layer.first; palette = layer.second; targets = emptyList(); sortOrder = i
                     speedMasterUuid = master3
                 }
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "PaletteSteps"; family = "colour"; cycle = 1.0
                 blendMode = "OVERRIDE"; order = "NORMAL"; attribute = "rgbColour"
@@ -300,7 +300,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         transaction(state.database) {
             val target = DaoProject[projectId]
             val looks = DaoLook.find { DaoLooks.project eq target.id }.associateBy { it.name }
-            val templates = DaoTemplate.find { DaoTemplates.project eq target.id }.associateBy { it.name }
+            val templates = DaoPalette.find { DaoPalettes.project eq target.id }.associateBy { it.name }
             assertEquals(setOf("Warm", "Cool"), looks.keys)
             assertEquals("blue wash", looks.getValue("Cool").notes)
             assertEquals("#0000ff", templates.getValue("Blue").rows.single().value)
@@ -317,7 +317,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             val master3 = speedMastersOf(target).single { it.masterIndex == 3 }.uuid
             assertTrue(layers.all { it.speedMasterUuid == master3 })
             assertEquals(listOf(master3.toString() to 140.0), copy.speedMasters.map { it.speedMasterUuid to it.bpm })
-            val params = copy.adHocEffects.single().parameters
+            val params = copy.adHocFx.single().parameters
             val amber = templates.getValue("Amber").uuid
             val blue = templates.getValue("Blue").uuid
             assertEquals("pal:$amber,pal:$blue", params["palettes"])
@@ -410,7 +410,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             }
             val cues = listOf("a", "b", "c").mapIndexed { i, name ->
                 DaoCue.new { project = DaoProject[source]; this.name = name }.inStack(stack, sortOrder = i).also { cue ->
-                    DaoCueAdHocEffect.new {
+                    DaoCueAdHocFxEntity.new {
                         this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                         fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 1.0
                         blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
@@ -423,7 +423,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         /** Each of the project's cues not in [seen]: its name and its one effect's run key. */
         fun copies(seen: Set<Int>): Map<String, UUID?> = transaction(state.database) {
             DaoCue.find { DaoCues.project eq projectId }.filter { it.id.value !in seen }
-                .associate { it.name to it.adHocEffects.single().runUuid }
+                .associate { it.name to it.adHocFx.single().runUuid }
         }
 
         val copied = client.copyFrom(CopyCuesFromRequest(fromProjectId = source, cueIds = cues))
@@ -450,7 +450,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         transaction(state.database) {
             assertEquals(
                 listOf(run, run, null),
-                cues.map { DaoCue[it].adHocEffects.single().runUuid },
+                cues.map { DaoCue[it].adHocFx.single().runUuid },
                 "the source keeps its own",
             )
         }

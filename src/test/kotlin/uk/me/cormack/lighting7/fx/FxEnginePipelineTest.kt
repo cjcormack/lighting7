@@ -140,7 +140,7 @@ class FxEnginePipelineTest {
         FxInstance(
             effect = WindowedSlider(value),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = blendMode,
         ).also { it.priority = priority }
 
@@ -158,10 +158,10 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         // Pump a handful of ticks so the sine wave evaluates at several phases — park must win
         // for every one of them.
@@ -185,7 +185,7 @@ class FxEnginePipelineTest {
         // The programmer sits above effects: a manual (priority 0) effect on the same
         // property is suppressed — the reset pass paints 180 and the apply is skipped.
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.ADDITIVE)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         rig.engine.processBeatTick(tick(0))
 
@@ -205,7 +205,7 @@ class FxEnginePipelineTest {
         val effect = makeStaticDimmer(
             value = 30u, blendMode = BlendMode.ADDITIVE, priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         rig.engine.processBeatTick(tick(0))
 
@@ -221,11 +221,11 @@ class FxEnginePipelineTest {
         rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
 
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.ADDITIVE)
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppressed while running")
 
-        rig.engine.removeEffect(id)
+        rig.engine.removeFx(id)
         assertEquals(
             180u.toUByte(), rig.controller.currentValues[1],
             "effect removal must reset to the programmer sticky value, not to zero",
@@ -241,13 +241,13 @@ class FxEnginePipelineTest {
             CueAssignmentResolver.PropertyValue.Slider(180u),
         )
 
-        val whiteEffect = FxInstance(
+        val whiteFx = FxInstance(
             effect = WindowedSlider(value = 90u),
             target = SliderTarget("hex-a", "white"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         )
-        rig.engine.addEffect(whiteEffect)
+        rig.engine.addFx(whiteFx)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "dimmer holds the programmer value")
@@ -263,7 +263,7 @@ class FxEnginePipelineTest {
         )
 
         val effect = makeStaticDimmer(value = 30u, blendMode = BlendMode.OVERRIDE)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "suppressed under the programmer")
 
@@ -286,7 +286,7 @@ class FxEnginePipelineTest {
         // With no effect running, Layer 4 publish is enough. Pump a tick to confirm the effect
         // reset path (when it runs) doesn't stomp Layer 4.
         val harmless = makeStaticDimmer(value = 50u, blendMode = BlendMode.MAX)
-        rig.engine.addEffect(harmless)
+        rig.engine.addFx(harmless)
         rig.engine.processBeatTick(tick(0))
 
         // Layer 4 HTP: max(100, 180) = 180. MAX-blend effect at 50 keeps 180.
@@ -377,17 +377,17 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         // Drive several ticks. Under OVERRIDE the effect replaces the baseline each tick —
         // the guarantee here is that removing the effect falls back to 180 (programmer
         // sticky), i.e. the effect reset path observes the manual write, not zero.
         for (n in 0L..4L) rig.engine.processBeatTick(tick(n))
 
-        rig.engine.removeEffect(effect.id)
+        rig.engine.removeFx(effect.id)
         assertEquals(
             180u.toUByte(), rig.controller.currentValues[1],
             "post-removal reset must fall through the cue layer (empty) → programmer (180)",
@@ -401,19 +401,19 @@ class FxEnginePipelineTest {
         val low = FxInstance(
             effect = WindowedSlider(value = 80u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         ).also { it.priority = 1 }
 
         val high = FxInstance(
             effect = WindowedSlider(value = 220u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         ).also { it.priority = 5 }
 
-        rig.engine.addEffect(low)
-        rig.engine.addEffect(high)
+        rig.engine.addFx(low)
+        rig.engine.addFx(high)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(
@@ -428,7 +428,7 @@ class FxEnginePipelineTest {
         rig.parkSource.park(universe.universe, 1, 200u)
 
         val effect = makeStaticDimmer(value = 80u, blendMode = BlendMode.OVERRIDE)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         // Raw write from effect is 80 (no ParkManager short-circuit in the engine path).
@@ -446,12 +446,12 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = WindowedSlider(value = 111u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = 1.0),
+            timing = FxTiming(cycle = 1.0),
             blendMode = BlendMode.OVERRIDE,
         ).apply {
             timingSource = TimingSource.WALL_CLOCK
         }
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         // A beat-woken pass with no beat effect running is skipped, so the controller stays
         // untouched. (Beside a running beat effect it would paint this one too: FxComposePassTest.)
@@ -473,10 +473,10 @@ class FxEnginePipelineTest {
      *
      * The wall-clock pass has no beat position, so it builds a synthetic [MasterClock.ClockTick]
      * — and `tickNumber` on it used to be pinned at 0 forever. That reaches every
-     * [StatefulEffect] on the path, and the built-in `CandleFlicker` is exactly one: it re-picks
+     * [StatefulFx] on the path, and the built-in `CandleFlicker` is exactly one: it re-picks
      * its target from `sin(tickNumber * 127.0) * cos(tickNumber * 311.0)`, which is identically
      * 0 when the argument never moves, so the candle held dead-steady at `baseLevel` on a real
-     * desk. `BuiltInEffectBehaviourTest` could not catch it — it calls `calculateStateful`
+     * desk. `BuiltInFxBehaviourTest` could not catch it — it calls `calculateStateful`
      * with its own advancing tick, which is not what the engine was handing it — so the contract
      * gets pinned here, at the engine end, driving the real pass.
      */
@@ -485,11 +485,11 @@ class FxEnginePipelineTest {
         val rig = newRig(firstChannel = 1)
 
         val recorder = TickRecordingSlider()
-        rig.engine.addEffect(
+        rig.engine.addFx(
             FxInstance(
                 effect = recorder,
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = 1.0),
+                timing = FxTiming(cycle = 1.0),
                 blendMode = BlendMode.OVERRIDE,
             ).apply { timingSource = TimingSource.WALL_CLOCK },
         )
@@ -507,10 +507,10 @@ class FxEnginePipelineTest {
     }
 
     /**
-     * Records the ticks the engine hands it. Local to this test rather than in `TestEffects`:
+     * Records the ticks the engine hands it. Local to this test rather than in `TestFx`:
      * that file is frozen for [FxEngineBenchmark]'s comparability and its effects are stateless.
      */
-    private class TickRecordingSlider : StatefulEffect {
+    private class TickRecordingSlider : StatefulFx {
         val tickNumbers = mutableListOf<Long>()
         val timestamps = mutableListOf<Long>()
 
@@ -520,7 +520,7 @@ class FxEnginePipelineTest {
         override fun calculateStateful(
             tick: MasterClock.ClockTick,
             deltaMs: Long,
-            context: EffectContext,
+            context: FxContext,
         ): FxOutput {
             tickNumbers += tick.tickNumber
             timestamps += tick.timestampMs
@@ -537,13 +537,13 @@ class FxEnginePipelineTest {
 
         // MAX-blend effect at 50 should NOT lower the Layer 4 baseline of 200.
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.MAX)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(200u.toUByte(), rig.controller.currentValues[1], "max(200, 50) = 200")
 
         // MAX-blend effect at 220 should lift above Layer 4.
         val lifter = makeStaticDimmer(value = 220u, blendMode = BlendMode.MAX)
-        rig.engine.addEffect(lifter)
+        rig.engine.addFx(lifter)
         rig.engine.processBeatTick(tick(1))
         assertEquals(220u.toUByte(), rig.controller.currentValues[1], "max(200, 220) = 220")
     }
@@ -554,11 +554,11 @@ class FxEnginePipelineTest {
         rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 120u)))
 
         val effect = makeStaticDimmer(value = 255u, blendMode = BlendMode.OVERRIDE)
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(255u.toUByte(), rig.controller.currentValues[1], "effect OVERRIDES Layer 4")
 
-        rig.engine.removeEffect(id)
+        rig.engine.removeFx(id)
         assertEquals(
             120u.toUByte(), rig.controller.currentValues[1],
             "removal falls back to Layer 4 composed value (120)",
@@ -572,7 +572,7 @@ class FxEnginePipelineTest {
 
         // Effect running, Layer 4 asserted: max(180, 40) = 180.
         val effect = makeStaticDimmer(value = 40u, blendMode = BlendMode.MAX)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
@@ -698,7 +698,7 @@ class FxEnginePipelineTest {
         rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(cueId = 10, value = 100u)))
 
         val effect = makeStaticDimmer(value = 50u, blendMode = BlendMode.ADDITIVE)
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         // Run 50 ticks; the output must be stable: 100 (layer 4) + 50 (additive) = 150.
         for (n in 0L..49L) {
@@ -768,18 +768,18 @@ class FxEnginePipelineTest {
         val onMaster1 = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
         val onMaster2 = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "uv"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         ).also { it.speedMasterUuid = u2 }
 
-        rig.engine.addEffect(onMaster1)
-        rig.engine.addEffect(onMaster2)
+        rig.engine.addFx(onMaster1)
+        rig.engine.addFx(onMaster2)
         assertEquals(0, onMaster1.speedMasterSlot)
-        assertEquals(1, onMaster2.speedMasterSlot, "addEffect binds the uuid to its runtime slot")
+        assertEquals(1, onMaster2.speedMasterSlot, "addFx binds the uuid to its runtime slot")
 
         runBlocking { rig.engine.processBeatTickSuspend(frameOf(tick(0), tick(12))) }
 
@@ -802,9 +802,9 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         ).also { it.speedMasterUuid = u2 }
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         assertEquals(1, effect.speedMasterSlot)
 
         // Master 2's row is deleted; the bank reloads without it.
@@ -818,7 +818,7 @@ class FxEnginePipelineTest {
     }
 
     @Test
-    fun `updateEffect's atomic swap preserves the master assignment`() {
+    fun `updateFx's atomic swap preserves the master assignment`() {
         val rig = newRig(firstChannel = 1)
         val u1 = UUID.randomUUID()
         val u2 = UUID.randomUUID()
@@ -832,21 +832,21 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         ).also { it.speedMasterUuid = u2 }
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
 
         // A beat-division edit takes the atomic-swap branch (newTiming != null) — the
         // hand-enumerated field copy must carry the master or the edit silently resets
         // the effect to master 1.
-        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = BeatDivision.HALF))
+        val updated = rig.engine.updateFx(id, newTiming = FxTiming(cycle = CycleLength.TWO_BEATS))
 
         assertEquals(u2, updated?.speedMasterUuid, "the swap must carry speedMasterUuid")
         assertEquals(1, updated?.speedMasterSlot, "and the bound runtime slot")
     }
 
     @Test
-    fun `updateEffect's atomic swap preserves the rate-master assignment`() {
+    fun `updateFx's atomic swap preserves the rate-master assignment`() {
         val rig = newRig(firstChannel = 1)
         val u1 = UUID.randomUUID()
         val u2 = UUID.randomUUID()
@@ -860,11 +860,11 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         ).also { it.rateSpeedMasterUuid = u2 }
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
 
-        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = BeatDivision.HALF))
+        val updated = rig.engine.updateFx(id, newTiming = FxTiming(cycle = CycleLength.TWO_BEATS))
 
         assertEquals(u2, updated?.rateSpeedMasterUuid, "the swap must carry rateSpeedMasterUuid too")
         assertEquals(1, updated?.rateMasterSlot, "and its bound runtime slot")
@@ -877,20 +877,20 @@ class FxEnginePipelineTest {
      * exists to prevent.
      */
     @Test
-    fun `updateEffect's atomic swap preserves accumulated wall-clock time`() {
+    fun `updateFx's atomic swap preserves accumulated wall-clock time`() {
         val rig = newRig(firstChannel = 1)
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = 4.0),
+            timing = FxTiming(cycle = 4.0),
         ).also { it.timingSource = TimingSource.WALL_CLOCK }
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
 
         // Three seconds into a four second cycle.
         effect.advanceWallClock(3_000, 1.0)
         assertEquals(0.75, effect.calculateWallClockPhase(), 1e-9)
 
-        val updated = rig.engine.updateEffect(id, newTiming = FxTiming(beatDivision = 4.0))
+        val updated = rig.engine.updateFx(id, newTiming = FxTiming(cycle = 4.0))
 
         assertEquals(3_000.0, updated?.accumulatedScaledMs ?: -1.0, 1e-9, "the swap must carry the accumulator")
         assertEquals(0.75, updated?.calculateWallClockPhase() ?: -1.0, 1e-9, "so the phase does not snap to 0")
@@ -914,13 +914,13 @@ class FxEnginePipelineTest {
         fun wallClock(property: String) = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", property),
-            timing = FxTiming(beatDivision = 4.0),
+            timing = FxTiming(cycle = 4.0),
         ).apply { timingSource = TimingSource.WALL_CLOCK }
 
         val unscaled = wallClock("dimmer")
         val onMaster1 = wallClock("uv").apply { rateSpeedMasterUuid = u1 }
-        rig.engine.addEffect(unscaled)
-        rig.engine.addEffect(onMaster1)
+        rig.engine.addFx(unscaled)
+        rig.engine.addFx(onMaster1)
 
         assertEquals(FxInstance.NO_RATE_MASTER, unscaled.rateMasterSlot, "no uuid, no rate master")
         assertEquals(0, onMaster1.rateMasterSlot, "master 1's uuid still resolves to slot 0")
@@ -942,11 +942,11 @@ class FxEnginePipelineTest {
 
     /**
      * Until this landed the rate master could be *preserved* but never *changed* —
-     * `updateEffect` had no parameter for it, so an effect's rate assignment was fixed at
+     * `updateFx` had no parameter for it, so an effect's rate assignment was fixed at
      * creation.
      */
     @Test
-    fun `updateEffect can reassign the rate master, on both branches`() {
+    fun `updateFx can reassign the rate master, on both branches`() {
         val rig = newRig(firstChannel = 1)
         val u1 = UUID.randomUUID()
         val u2 = UUID.randomUUID()
@@ -960,19 +960,19 @@ class FxEnginePipelineTest {
         val effect = FxInstance(
             effect = SineSlider(),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
         )
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
 
         // In-place branch: nothing immutable changed.
-        val inPlace = rig.engine.updateEffect(id, newRateSpeedMasterUuid = u2)
+        val inPlace = rig.engine.updateFx(id, newRateSpeedMasterUuid = u2)
         assertEquals(u2, inPlace?.rateSpeedMasterUuid)
         assertEquals(1, inPlace?.rateMasterSlot)
 
         // Swap branch: a timing edit alongside the reassignment.
-        val swapped = rig.engine.updateEffect(
+        val swapped = rig.engine.updateFx(
             id,
-            newTiming = FxTiming(beatDivision = BeatDivision.HALF),
+            newTiming = FxTiming(cycle = CycleLength.TWO_BEATS),
             newRateSpeedMasterUuid = u1,
         )
         assertEquals(u1, swapped?.rateSpeedMasterUuid)
@@ -996,7 +996,7 @@ class FxEnginePipelineTest {
             it.cueId = 1
             it.cueLayerId = 7
         }
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(
@@ -1004,7 +1004,7 @@ class FxEnginePipelineTest {
             "the stomped layer's effect must not paint over the cooked value",
         )
         assertTrue(
-            rig.engine.getActiveEffects().any { it.id == id },
+            rig.engine.getActiveFx().any { it.id == id },
             "suppression, not removal — the instance keeps running so clearing the stomp can undo it",
         )
     }
@@ -1024,7 +1024,7 @@ class FxEnginePipelineTest {
             it.cueId = 1
             it.cueLayerId = 7
         }
-        val id = rig.engine.addEffect(effect)
+        val id = rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped")
 
@@ -1036,7 +1036,7 @@ class FxEnginePipelineTest {
         rig.engine.processBeatTick(tick(1))
 
         assertEquals(30u.toUByte(), rig.controller.currentValues[1], "the effect paints again")
-        assertTrue(rig.engine.getActiveEffects().any { it.id == id }, "and it is the same instance")
+        assertTrue(rig.engine.getActiveFx().any { it.id == id }, "and it is the same instance")
     }
 
     @Test
@@ -1055,7 +1055,7 @@ class FxEnginePipelineTest {
             it.cueId = 1
             // cueLayerId deliberately left null — this is the cue's own effect, not a layer's.
         }
-        rig.engine.addEffect(adHoc)
+        rig.engine.addFx(adHoc)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(30u.toUByte(), rig.controller.currentValues[1])
@@ -1073,10 +1073,10 @@ class FxEnginePipelineTest {
         val onWhite = FxInstance(
             effect = WindowedSlider(90u),
             target = SliderTarget("hex-a", "white"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         ).also { it.cueId = 1; it.cueLayerId = 7 }
-        rig.engine.addEffect(onWhite)
+        rig.engine.addFx(onWhite)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(
@@ -1103,19 +1103,19 @@ class FxEnginePipelineTest {
         ).also {
             // The stomp lookup reads the layer id off the band key; the entry and target halves
             // are irrelevant to suppression, so any stamped values do.
-            it.programmerLayerEffectKey = ProgrammerLayerEffectKey(
+            it.programmerLayerFxKey = ProgrammerLayerFxKey(
                 layerId = 3,
-                effect = StoredEffect(
-                    effectType = "Pulse", category = "intensity",
-                    propertyName = "dimmer", beatDivision = 1.0, blendMode = "ADDITIVE",
-                    distribution = "NORMAL", phaseOffset = 0.0, elementMode = null,
-                    elementFilter = null, stepTiming = null, parameters = emptyMap(),
+                effect = StoredFx(
+                    fxType = "Pulse", family = "intensity",
+                    propertyName = "dimmer", cycle = 1.0, blendMode = "ADDITIVE",
+                    order = "NORMAL", phaseOffset = 0.0, elementMode = null,
+                    elementFilter = null, timing = null, parameters = emptyMap(),
                     speedMasterUuid = null, rateSpeedMasterUuid = null,
                 ),
-                target = uk.me.cormack.lighting7.models.EffectTargetRef.Single(uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-a")),
+                target = uk.me.cormack.lighting7.models.FxTargetsRef.Single(uk.me.cormack.lighting7.models.TargetRef.Fixture("hex-a")),
             )
         }
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
 
         assertEquals(
@@ -1139,7 +1139,7 @@ class FxEnginePipelineTest {
             it.cueId = 1
             it.cueLayerId = 7
         }
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(100u.toUByte(), rig.controller.currentValues[1], "stomped while the cue is live")
 

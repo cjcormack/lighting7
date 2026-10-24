@@ -9,7 +9,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fx.BeatDivision
+import uk.me.cormack.lighting7.fx.CycleLength
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.fx.FxTiming
@@ -110,14 +110,14 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
         // Every channel locate would assert on a hex: dimmer, R/G/B, amber, white, uv, strobe.
         runBlocking { (1..8).forEach { state.show.parkManager.park(0, it, 40u) } }
 
-        val effectId = state.show.fxEngine.addEffect(dimmerEffect("hex-masked"))
+        val fxId = state.show.fxEngine.addFx(dimmerEffect("hex-masked"))
 
         val on: ToggleLocateResponse = toggle(client, "fixture", "hex-masked").body()
         assertFalse(on.active, "nothing locate writes could be seen under park")
         assertEquals(0, on.writeCount)
         assertTrue(on.parkMasked, "the response says park is why, not 'nothing to write'")
         assertTrue(
-            state.show.fxEngine.getActiveEffects().any { it.id == effectId },
+            state.show.fxEngine.getActiveFx().any { it.id == fxId },
             "the operator's effect survives a park-masked locate",
         )
         assertNull(programmerChannel(state, 0, 1), "no programmer assertion landed")
@@ -135,8 +135,8 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
 
         runBlocking { state.show.parkManager.park(0, 1, 40u) }  // dimmer only
 
-        val maskedEffect = state.show.fxEngine.addEffect(dimmerEffect("hex-partial"))
-        val liveEffect = state.show.fxEngine.addEffect(sliderEffect("hex-partial", "strobe"))
+        val maskedFx = state.show.fxEngine.addFx(dimmerEffect("hex-partial"))
+        val liveFx = state.show.fxEngine.addFx(sliderEffect("hex-partial", "strobe"))
 
         val on: ToggleLocateResponse = toggle(client, "fixture", "hex-partial").body()
         assertTrue(on.active, "colour and strobe are unparked, so the locate is real")
@@ -146,13 +146,13 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
 
         // "Locate wins" is non-destructive now: both effects survive; the strobe effect is
         // suppressed by the programmer entry for as long as the locate holds.
-        val remaining = state.show.fxEngine.getActiveEffects().map { it.id }.toSet()
-        assertTrue(maskedEffect in remaining, "park-masked effect untouched")
-        assertTrue(liveEffect in remaining, "covering effect suppressed, not removed")
+        val remaining = state.show.fxEngine.getActiveFx().map { it.id }.toSet()
+        assertTrue(maskedFx in remaining, "park-masked effect untouched")
+        assertTrue(liveFx in remaining, "covering effect suppressed, not removed")
 
         // Releasing the locate lets the strobe effect resume painting on the next tick.
         assertFalse(toggle(client, "fixture", "hex-partial").body<ToggleLocateResponse>().active)
-        assertTrue(liveEffect in state.show.fxEngine.getActiveEffects().map { it.id }.toSet())
+        assertTrue(liveFx in state.show.fxEngine.getActiveFx().map { it.id }.toSet())
     }
 
     @Test
@@ -183,7 +183,7 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
     private fun sliderEffect(fixtureKey: String, propertyName: String): FxInstance = FxInstance(
         effect = SineSlider(),
         target = SliderTarget(FxTargetRef.fixture(fixtureKey), propertyName),
-        timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+        timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     )
 
     private suspend fun toggle(client: HttpClient, type: String, key: String): HttpResponse =

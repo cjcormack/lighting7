@@ -2,11 +2,11 @@ import { useEffect, useMemo, useReducer } from 'react'
 import { lightingApi } from '@/api/lightingApi'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useIsDeskConnected } from '@/store/status'
 import type { Fixture } from '@/store/fixtures'
-import { useCueLabel, useEffectDetail } from './effectLabels'
-import { effectsReaching, mergeRowSources, rowSourceOf } from './rowSource'
+import { useCueLabel, useFxDetail } from './fxLabels'
+import { fxReaching, mergeRowSources, rowSourceOf } from './rowSource'
 import { SourceChip } from './SourceChip'
 
 /** A cell's `(head, property)` keys — the grid's `RowCell.keys`. */
@@ -28,12 +28,12 @@ export interface CellKey {
  * sheet's context would carry read here.
  */
 export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; label: string }) {
-  const { data: effects } = useActiveEffectsQuery()
+  const { data: effects } = useActiveFxQuery()
   const { fixtures } = useFixtureLookup()
   const blind = useProgrammerBlind()
   const connected = useIsDeskConnected()
   const cueLabel = useCueLabel()
-  const effectDetail = useEffectDetail()
+  const fxDetail = useFxDetail()
   const [version, bump] = useReducer((n: number) => n + 1, 0)
 
   const signature = keys.map((k) => `${k.targetKey}\u0001${k.propertyName}`).join('\u0000')
@@ -75,16 +75,16 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
           source: rowSourceOf({
             headKey: head,
             states: properties.map((key) => ({ key, state: lightingApi.programmer.getKeyState(head, key) })),
-            effects: effectsReaching(effects, reach.keys, reach.groups),
+            effects: fxReaching(effects, reach.keys, reach.groups),
             blind,
             cueLabel,
-            effectDetail,
+            fxDetail,
           }),
         }
       }),
     )
     // `version` is the subscription's tick: the states are read from the client's store.
-  }, [version, heads, lookup, effects, blind, cueLabel, effectDetail])
+  }, [version, heads, lookup, effects, blind, cueLabel, fxDetail])
 
   if (source == null) return null
   return (

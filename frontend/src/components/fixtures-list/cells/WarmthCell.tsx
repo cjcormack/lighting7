@@ -1,8 +1,8 @@
 import { memo, useCallback, useState } from 'react'
 import { Save, Waves } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import type { TemplateTarget } from '@/api/templatesApi'
-import { NewTemplateFromSelectionSheet } from '@/components/programmer/NewTemplateFromSelectionSheet'
+import type { PaletteTarget } from '@/api/palettesApi'
+import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import type { WhiteMixPropertyDescriptor } from '../../../store/fixtures'
 import type { Rgb } from '../../../lib/whiteMix'
 import type { CellResolution } from '../columns'
@@ -28,7 +28,7 @@ export interface WarmthCellProps extends CellClickBehaviour {
   /** The programmer's project, for *Save as palette…*; absent, Save is drawn inert. */
   projectId?: number
   /** Where *Save as palette…* records: the batch's heads, as `ColourCell` names them. */
-  templateTargets?: readonly TemplateTarget[]
+  paletteTargets?: readonly PaletteTarget[]
   /** *Spread…*, handed the colour the mix makes; absent, the button is drawn inert. */
   onSpread?: (from: { r: number; g: number; b: number }) => void
   placeholder?: boolean
@@ -55,7 +55,7 @@ export function firstWhiteMix(resolutions: readonly NonNullable<CellResolution>[
 }
 
 const COLOUR_FAMILY = ['COLOUR'] as const
-const NO_TEMPLATE_TARGETS: readonly TemplateTarget[] = []
+const NO_PALETTE_TARGETS: readonly PaletteTarget[] = []
 
 /**
  * The Colour column's editor for heads whose colour is a warm/cold white pair (venue-visit plan
@@ -75,7 +75,7 @@ export const WarmthCell = memo(function WarmthCell({
   batch,
   scopeLabel = 'Local',
   projectId,
-  templateTargets = NO_TEMPLATE_TARGETS,
+  paletteTargets = NO_PALETTE_TARGETS,
   onSpread,
   placeholder,
   disabled = false,
@@ -160,7 +160,7 @@ export const WarmthCell = memo(function WarmthCell({
                   variant="outline"
                   size="sm"
                   className="h-7 min-w-0 text-xs"
-                  disabled={projectId == null || templateTargets.length === 0}
+                  disabled={projectId == null || paletteTargets.length === 0}
                   title="Record the selection’s colour as a palette — the route to something a layer can track"
                   onClick={() => {
                     setSaveMounted(true)
@@ -191,12 +191,12 @@ export const WarmthCell = memo(function WarmthCell({
         </div>
       </EditorSurface>
       {saveMounted && projectId != null && (
-        <NewTemplateFromSelectionSheet
+        <NewPaletteFromSelectionSheet
           open={saving}
           onOpenChange={setSaving}
           projectId={projectId}
           families={COLOUR_FAMILY}
-          targets={[...templateTargets]}
+          targets={[...paletteTargets]}
         />
       )}
     </>

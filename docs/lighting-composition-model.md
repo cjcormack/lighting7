@@ -96,25 +96,25 @@ Across granularities, **recency arbitrates**: a property entry and a sideband sl
 
 A property with an active programmer entry (blind off) suppresses **every** effect on it — cue-owned and manual alike. The tick's reset pass paints the programmer value; the effect's apply is skipped for that (fixture, property) only, so a group effect keeps painting its other members. Clearing the entry lets the effect resume on the next tick — this is what makes Locate non-destructive (it used to remove covering effects; now they freeze under the locate and resume on release).
 
-Exempt: effects in the reserved **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every cue-derived priority). These are programmer-owned FX — the busking pad creates them by passing `programmerOwned: true` on the FX add routes — and they modulate *on top of* programmer values rather than being suppressed by them. They are also exempt from the cue auto-tag in `addEffect`, so a busk started while an FX_APPLICATION script runs isn't swept by that cue's teardown. Sideband channel slots do not suppress effects — only property entries do. And an entry suppresses effects on **its own key** alone: a `pan` entry does not hold back a Circle keyed `position`, though both paint the pan channel. The rule is one pure function, `fx/EffectSuppression.kt`, which the tick, provenance and the property-stack read all ask (fx-engineering §"Programmer suppression and the priority band").
+Exempt: effects in the reserved **programmer priority band** (`FxEngine.PROGRAMMER_FX_PRIORITY_BASE`, strictly above every cue-derived priority). These are programmer-owned FX — the busking pad creates them by passing `programmerOwned: true` on the FX add routes — and they modulate *on top of* programmer values rather than being suppressed by them. They are also exempt from the cue auto-tag in `addFx`, so a busk started while an FX_APPLICATION script runs isn't swept by that cue's teardown. Sideband channel slots do not suppress effects — only property entries do. And an entry suppresses effects on **its own key** alone: a `pan` entry does not hold back a Circle keyed `position`, though both paint the pan channel. The rule is one pure function, `fx/FxSuppression.kt`, which the tick, provenance and the property-stack read all ask (fx-engineering §"Programmer suppression and the priority band").
 
 ### Blind
 
 `programmer.setBlind { blind, fadeMs? }` gates the programmer's contribution out of the merge without touching the stored state: entering blind releases programmer-held properties to the layers below (cues → baseline), the effects they were holding back resume painting, and writes made while blind stage silently. Exiting restores exactly what was staged. `touched` flags survive the round trip.
 
-**Blind holds the programmer's effects too** (show-cue-editing plan D7, §3.6). While blind, every instance in the programmer priority band is held — a `programmerOwned` add, the effects Include spawns, and every instance a programmer layer spawned — so a Blind edit of a cue with an effect puts nothing on the rig, as a Blind edit of its values never did. Cue, Look-in-cue and script effects are not the programmer's and keep painting. Held is not stopped: the tick keeps the instance's phase (a beat effect's is its master's tick; a wall-clock one's clock — a beat effect on *Seconds* included — advances every pass; a stateful one is still computed) and skips its apply, the reset pass putting the layer below on the key as it does for a suppressed effect. So leaving Blind lands it mid-phase, in step with the effects it was started beside, and **grows it from nothing over the Blind fade**, like a press (effects plan §3.5, D13): its envelope runs 0 → 1 over that fade, so a 0 s Blind fade paints it on the next tick at full — except an effect over a value the programmer holds, which lands at full at once, by §Fades' rule. Entering Blind holds it at once. A held effect is still a running one, so its key stays effect-covered while it is held: the reset pass writes the cooked value there every tick, and a cue GO under Blind lands on that key at the next tick rather than over its fade, as it would under any running effect. The rule is `fx/BlindHold.kt`, read by the tick, provenance (a held effect is never credited with a key) and the property stack (`heldBack`, reason `BLIND`); `EffectSuppression`'s rule is unchanged, its programmer half still empty while blind. Record and Update read the band from the engine's effect list, so Record under Blind still captures the programmer's effects. The Stage view's programmer sources do not draw a held effect — an effect exists only as output — `FU-BLIND-FX-DRAWN`.
+**Blind holds the programmer's effects too** (show-cue-editing plan D7, §3.6). While blind, every instance in the programmer priority band is held — a `programmerOwned` add, the effects Include spawns, and every instance a programmer layer spawned — so a Blind edit of a cue with an effect puts nothing on the rig, as a Blind edit of its values never did. Cue, Look-in-cue and script effects are not the programmer's and keep painting. Held is not stopped: the tick keeps the instance's phase (a beat effect's is its master's tick; a wall-clock one's clock — a beat effect on *Seconds* included — advances every pass; a stateful one is still computed) and skips its apply, the reset pass putting the layer below on the key as it does for a suppressed effect. So leaving Blind lands it mid-phase, in step with the effects it was started beside, and **grows it from nothing over the Blind fade**, like a press (effects plan §3.5, D13): its envelope runs 0 → 1 over that fade, so a 0 s Blind fade paints it on the next tick at full — except an effect over a value the programmer holds, which lands at full at once, by §Fades' rule. Entering Blind holds it at once. A held effect is still a running one, so its key stays effect-covered while it is held: the reset pass writes the cooked value there every tick, and a cue GO under Blind lands on that key at the next tick rather than over its fade, as it would under any running effect. The rule is `fx/BlindHold.kt`, read by the tick, provenance (a held effect is never credited with a key) and the property stack (`heldBack`, reason `BLIND`); `FxSuppression`'s rule is unchanged, its programmer half still empty while blind. Record and Update read the band from the engine's effect list, so Record under Blind still captures the programmer's effects. The Stage view's programmer sources do not draw a held effect — an effect exists only as output — `FU-BLIND-FX-DRAWN`.
 
 ### Fades
 
 Clears, blind transitions, and sets accept an optional `fadeMs`, driving the per-channel `DmxController` ramp (`TickerState`). **Fades apply only to properties no running effect covers; effect-covered properties settle on the next tick and snap** — the 50 Hz tick writes covered channels every frame with fade 0 through the conflated channel changer, which would kill any ramp mid-flight. Settings (discrete wheels) always snap regardless of `fadeMs`.
 
-The programmer's **effects** take the same `fadeMs` (effects plan D13): a layer added or taken off — a press (`/busk/pads/{id}/press`, `/palettes/{id}/toggle` and `/looks/{id}/toggle` take an optional `fadeMs`), `programmer.removeLayer`, a cue Include's layers — grows its effects from nothing or shrinks them to nothing over it, and so do `programmer.clearTarget`'s local effects, Clear's band and leaving Blind. One rule splits them: an effect over a programmer value the same gesture moves is stopped (or lands) at once so that value ramps — a key an effect covers never fades, and the value under a shrinking effect would snap — and only the rest grow or shrink over the fade (`FxEngine.releaseEffects`, Chris's call; a value fading under a fading effect is `FU-FX-VALUE-FADE-UNDER-EFFECT`). A shrinking effect is `leaving` — nobody's, removed at 0. A press with no `fadeMs` is the press as before: each row's own fade on, a snap off, effects at once. Include's own effects — a Look's, a cue's ad-hoc children — land at full, as before.
+The programmer's **effects** take the same `fadeMs` (effects plan D13): a layer added or taken off — a press (`/busk/pads/{id}/press`, `/palettes/{id}/toggle` and `/looks/{id}/toggle` take an optional `fadeMs`), `programmer.removeLayer`, a cue Include's layers — grows its effects from nothing or shrinks them to nothing over it, and so do `programmer.clearTarget`'s local effects, Clear's band and leaving Blind. One rule splits them: an effect over a programmer value the same gesture moves is stopped (or lands) at once so that value ramps — a key an effect covers never fades, and the value under a shrinking effect would snap — and only the rest grow or shrink over the fade (`FxEngine.releaseFx`, Chris's call; a value fading under a fading effect is `FU-FX-VALUE-FADE-UNDER-EFFECT`). A shrinking effect is `leaving` — nobody's, removed at 0. A press with no `fadeMs` is the press as before: each row's own fade on, a snap off, effects at once. Include's own effects — a Look's, a cue's ad-hoc children — land at full, as before.
 
 ### Clearing
 
 - `programmer.clearEntry { target, propertyName, fadeMs? }` — releases every owner's slot on one property.
-- `programmer.clearTarget { target, fadeMs? }` — a fixture's or group's *Release* (fixture-fx-sheets plan W2): every owner's slot but a layer's, on every property of the fixture and its heads (or every member of the group, and theirs), the sideband on their channels, and the **local** effects on it (`FxInstance.isLocalEffect`: programmer band, owned by no Look, palette, layer or cue). The effects are let go first — one over a value this Release takes stopped, the rest shrinking to nothing over `fadeMs` (§Fades) — and the values then released in one sweep with one republish at `fadeMs` — `clearAll`'s order, so a key a stopped effect was painting fades rather than snapping. A local effect that also drives heads outside the target is left running and named (`partial`) — there is no "stop it on these heads only". Locate's bookkeeping is pruned as `clearEntry` prunes it.
-- `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the operator's Clear: sweeps every owner's entries (property + sideband) **and lets go of every effect in the programmer priority band** (at `fadeMs`, by §Fades' rule: one over a programmer value stopped, the rest shrinking), then republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them). Both counts come back — `cleared` (entries) and `effectsCleared` (band FX). Band effects are let go *before* the store sweep so the single cascade republish that follows covers both.
+- `programmer.clearTarget { target, fadeMs? }` — a fixture's or group's *Release* (fixture-fx-sheets plan W2): every owner's slot but a layer's, on every property of the fixture and its heads (or every member of the group, and theirs), the sideband on their channels, and the **local** effects on it (`FxInstance.isLocalFx`: programmer band, owned by no Look, palette, layer or cue). The effects are let go first — one over a value this Release takes stopped, the rest shrinking to nothing over `fadeMs` (§Fades) — and the values then released in one sweep with one republish at `fadeMs` — `clearAll`'s order, so a key a stopped effect was painting fades rather than snapping. A local effect that also drives heads outside the target is left running and named (`partial`) — there is no "stop it on these heads only". Locate's bookkeeping is pruned as `clearEntry` prunes it.
+- `programmer.clearAll { fadeMs? }` / `POST /api/rest/programmer/clear-all` — the operator's Clear: sweeps every owner's entries (property + sideband) **and lets go of every effect in the programmer priority band** (at `fadeMs`, by §Fades' rule: one over a programmer value stopped, the rest shrinking), then republishes everything in one pass. Also resets locate and preset-toggle bookkeeping so the toggles stay consistent with the swept store. Sideband channels with no backing property release to DMX 0 (nothing sits below them). Both counts come back — `cleared` (entries) and `fxCleared` (band FX). Band effects are let go *before* the store sweep so the single cascade republish that follows covers both.
 
 Deterministic release: clearing a programmer entry re-resolves the cascade below it — the property lands on the surviving owner, the cue layer, or baseline, never on a stale snapshot.
 
@@ -134,13 +134,13 @@ It reaches the client two ways: on `programmer.state` as `lastIncluded`, and as 
 
 ### Provenance
 
-The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `EFFECT` (with `effectId`/`cueId`), or `CUE` (with the winning `cueId` **and** `cueStackId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet. Note that Update's Mode B checklist does *not* read provenance: provenance correctly names the programmer as the winner, which is precisely the answer "what am I sitting on top of?" cannot use. `FxEngine.underlyingSources` answers that from the programmer-independent Layer 4 winner map instead. Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab. Each frame carries `programmerRevision`, which crossfade weight ticks (winner maps carried forward unchanged — they cannot move the programmer) do not bump, and the client refetches only when the revision moved — so a running fade no longer drives a refetch per frame.
+The engine maintains, per (target, property), the identity of the winning contributor — `PARKED`, `PROGRAMMER`, `FX` (with `fxId`/`cueId`), or `CUE` (with the winning `cueId` **and** `cueStackId`); baseline keys are omitted. Recomputed on layer events only (programmer mutation, cue republish, effect lifecycle, park change) — never per frame — and broadcast as a full-state `provenanceState` WS message. This powers ownership colouring in the programmer sheet. Note that Update's Mode B checklist does *not* read provenance: provenance correctly names the programmer as the winner, which is precisely the answer "what am I sitting on top of?" cannot use. `FxEngine.underlyingSources` answers that from the programmer-independent Layer 4 winner map instead. Because programmer mutations reply only to the connection that made them, `provenanceState` is also the frontend's signal to re-read `programmer.state` — it is the one broadcast that fires for a write made by a MIDI surface, a locate, or another browser tab. Each frame carries `programmerRevision`, which crossfade weight ticks (winner maps carried forward unchanged — they cannot move the programmer) do not bump, and the client refetches only when the revision moved — so a running fade no longer drives a refetch per frame.
 
-**Provenance names the programmer only where the engine holds the effect back** (fixture-fx-sheets plan W4). Two holds suppress nothing — a sideband slot, and an entry on a key the effect does not paint under (a `pan` entry beside a Circle on `position`) — and under a running effect that paints every channel of the held key, provenance names the effect. It asks `EffectSuppression` over the engine's own snapshot, of the key the effect paints; a key it cannot attribute that way keeps its old answer.
+**Provenance names the programmer only where the engine holds the effect back** (fixture-fx-sheets plan W4). Two holds suppress nothing — a sideband slot, and an entry on a key the effect does not paint under (a `pan` entry beside a Circle on `position`) — and under a running effect that paints every channel of the held key, provenance names the effect. It asks `FxSuppression` over the engine's own snapshot, of the key the effect paints; a key it cannot attribute that way keeps its old answer.
 
 ### Reading one property's stack
 
-Provenance names a winner; `programmer.keyStack` (W1, `ProvenanceService.keyStack`) names everything under it, top first, for one (target, property) — a group target answering per member. **Park** with its channels; the **programmer-band effects**; each **programmer slot**, owner by owner, with its value and age (a layer slot naming its layer, a sideband slot naming its channel); the **other effects**, each with `heldBack`; the **cue contributor** — value, cue, stack and Look layer from `underlyingSources` and the one Layer 4 snapshot the read takes, so a cue apply mid-read cannot pair one cue's value with another's attribution; and the **base**, `LayerResolver.baselineFor`. Every layer says whether it is on stage, walking the output order: park, effects by priority, the programmer, the cue, the base, with an on-stage full-weight Override effect, a programmer value, a cue value or a full park covering what lies below — an effect weighted to nothing (a 0 % size, a spent N-shot) is not on stage, and one under full size is on stage beside what it mixes with (effects plan P3). `heldBack` is `EffectSuppression`'s answer against the engine's snapshot and `BlindHold`'s against one read of blind — the tick's own — so Blind empties the programmer's half exactly as it does on the rig and holds the band instead; `heldBackReason` (`STOMP | PROGRAMMER | BLIND`) says which held it. An effect painting every channel of the key under a sibling key is on the stack too, as provenance credits it. It is a request answered to the asking socket, never broadcast: a stack is open on one sheet, and that sheet re-asks when provenance moves.
+Provenance names a winner; `programmer.keyStack` (W1, `ProvenanceService.keyStack`) names everything under it, top first, for one (target, property) — a group target answering per member. **Park** with its channels; the **programmer-band effects**; each **programmer slot**, owner by owner, with its value and age (a layer slot naming its layer, a sideband slot naming its channel); the **other effects**, each with `heldBack`; the **cue contributor** — value, cue, stack and Look layer from `underlyingSources` and the one Layer 4 snapshot the read takes, so a cue apply mid-read cannot pair one cue's value with another's attribution; and the **base**, `LayerResolver.baselineFor`. Every layer says whether it is on stage, walking the output order: park, effects by priority, the programmer, the cue, the base, with an on-stage full-weight Override effect, a programmer value, a cue value or a full park covering what lies below — an effect weighted to nothing (a 0 % size, a spent N-shot) is not on stage, and one under full size is on stage beside what it mixes with (effects plan P3). `heldBack` is `FxSuppression`'s answer against the engine's snapshot and `BlindHold`'s against one read of blind — the tick's own — so Blind empties the programmer's half exactly as it does on the rig and holds the band instead; `heldBackReason` (`STOMP | PROGRAMMER | BLIND`) says which held it. An effect painting every channel of the key under a sibling key is on the stack too, as provenance credits it. It is a request answered to the asking socket, never broadcast: a stack is open on one sheet, and that sheet re-asks when provenance moves.
 
 ### Record / Include / Update
 
@@ -201,7 +201,7 @@ silently miss heads. Omitting the mask, or naming all four groups, means "everyt
 `INCLUDE`-owned slots and programmer-band effects, and returns the fixture keys for the sheet to
 select (MagicQ's "Select Heads on Include"). Two details earn their keep: an FX child the cue is
 already running is *not* re-spawned (there is no FX-vs-FX suppression, so a band duplicate would
-double-apply), and spawned instances leave `cueId` null so `removeCueEffects` can't sweep the
+double-apply), and spawned instances leave `cueId` null so `removeCueFx` can't sweep the
 operator's programmer out from under them when the cue stops. A cue's or Look's **own scenery
 rows** go into the programmer's scenery overlay with them (D8), each replacing what the overlay held
 on that element, a cue row's `transitionMs` kept beside the held state so Update writes it back on
@@ -210,7 +210,7 @@ scenery is something to include: it sets the include target.
 
 **A Look's effects are included too** (`includeFx`, default true; `routes/programmerLookInclude.kt`):
 each runs as a programmer-band effect stamped with the stored effect it realises
-(`FxInstance.includedLookEffect`, the Look effect's row id and the instance's settings as spawned).
+(`FxInstance.includedLookFx`, the Look effect's row id and the instance's settings as spawned).
 Each runs on its own target, since a Look effect always names one (absolute-looks plan D2). The cue
 rule holds: an effect the Look is already running where it is live (a programmer or cue layer, or an
 earlier Include of it) is not run again, and says so. They are local effects, so Clear and Release
@@ -262,7 +262,7 @@ seen nor changed.
   `changedSinceInclude` against it, so the source strip's Update is enabled by a moved tab as by a
   moved value.
 - **A Look's included effects** go back in Mode A only, onto the effect each came from
-  (`writeIncludedEffectsBack`) — and only one changed since Include, judged against the settings the
+  (`writeIncludedFxBack`) — and only one changed since Include, judged against the settings the
   instance was spawned with rather than the stored row, because a running effect reports its whole
   parameter set, defaults filled in. The effect keeps its target: what was edited is how it runs, not
   where. An effect the operator stopped stays in the
@@ -318,13 +318,13 @@ Each `FxInstance` carries a `blendMode` applied against the accumulated output a
 - `MAX` — `max(accumulator, effect)`.
 - `MIN` — `min(accumulator, effect)`.
 
-Multi-effect composition on the same property: start from the reset baseline, iterate effects in sorted order, fold `accumulator = blend(accumulator, effectOutput, effectMode)`.
+Multi-effect composition on the same property: start from the reset baseline, iterate effects in sorted order, fold `accumulator = blend(accumulator, effectOutput, fxMode)`.
 
 ### Fade envelopes
 
 Each `FxInstance` carries a **size** (0–1, stored on every effect home — effects plan D2) and an **envelope**, `intensityMultiplier` (0–1, runtime), and its cue stack has an **effect size** (0–1, runtime, effects plan D10 — the stack of the cue's highest hold; 100 % for anything no stack holds). Their product is the effect's **weight**, applied **after** the blend, per channel: `out = before + (blended − before) × weight`, where `before` is the accumulator the blend folded over. A Replace dimmer at 50 % sits halfway between the level underneath and the effect; an Around movement's offset is scaled, so its radius shrinks about the position underneath; a setting takes the effect from half weight up. The raw output is never scaled (that was what dropped an `OVERRIDE` to 0). See `docs/fx-engineering.md` §"Size, direction and N-shot", which also covers direction and N-shot.
 
-**An effect fades by size with its cue** (effects plan D1, §3.5). On a crossfading GO the outgoing cue's effects shrink to nothing and are removed, the incoming cue's grow from nothing, and an effect both cues run — the same stored Look or palette effect on the same target with the same settings — runs on untouched, id and phase kept (P4). The envelope is an immutable ramp on the clock (`fx/EffectEnvelope.kt`) set by the hold registry as holds move, so it follows the holds: a cue held elsewhere moves no envelope, a loose hold and a stack stop snap. Because the envelope weighs the contribution after the blend, an `OVERRIDE` effect fading out fades into what is underneath — never through 0, the artefact that once came from scaling the raw output. The programmer's gestures fade effects the same way over the programmer fade (D13, §Fades). See `docs/cue-stacks-engineering.md` §"Holds" and §"Crossfade".
+**An effect fades by size with its cue** (effects plan D1, §3.5). On a crossfading GO the outgoing cue's effects shrink to nothing and are removed, the incoming cue's grow from nothing, and an effect both cues run — the same stored Look or palette effect on the same target with the same settings — runs on untouched, id and phase kept (P4). The envelope is an immutable ramp on the clock (`fx/FxEnvelope.kt`) set by the hold registry as holds move, so it follows the holds: a cue held elsewhere moves no envelope, a loose hold and a stack stop snap. Because the envelope weighs the contribution after the blend, an `OVERRIDE` effect fading out fades into what is underneath — never through 0, the artefact that once came from scaling the raw output. The programmer's gestures fade effects the same way over the programmer fade (D13, §Fades). See `docs/cue-stacks-engineering.md` §"Holds" and §"Crossfade".
 
 ## Layer 4 — Cue Property Assignments
 
@@ -509,7 +509,7 @@ Terminology plan session 4 renamed the storage: the tables (`palettes`, `palette
 `palette_fx`, `cue_layers.palette_id`), the sync archive's `palettes/` folder and its DTO fields,
 `pal:` references and the stored `pressPalette` binding (database step 5, `formatVersion` 38). JSON
 field names and the Kotlin and TypeScript identifiers keep the old word until session 5, so
-`TemplateResolver` resolving a palette is the arrangement, not drift.
+`PaletteResolver` resolving a palette is the arrangement, not drift.
 
 These were one entity until session 3, distinguished by the row's targeting mode: a **bound** row
 named its own fixture, a **deferred** one took its targets from the applying layer, and one entity
@@ -519,12 +519,12 @@ bound and `hasDeferredRows` could not tell it from a recorded Look.
 
 **A Look row is now always bound**, and `validateLookRows` refuses `deferred`. So is a Look
 **effect** (absolute-looks plan D2): it names a fixture, a group or a selection, and
-`validateLookEffects` refuses `deferred`, every problem at once. An effect to point at a selection is
+`validateLookFx` refuses `deferred`, every problem at once. An effect to point at a selection is
 an effect palette. A deferred Look effect an older desk wrote is dropped by `loadLookSnapshot` (with a
 warning), by the importer, and was deleted from each database once
-(`state/DeferredLookEffectsMigration.kt`, `PRAGMA user_version` 2). In the cook, `EffectEntry` is a
-Look effect, its target non-null; a palette's effect is a bare `StoredEffect`, which
-`CueComposer.effectsForLayer` runs on each of the layer's targets.
+(`state/DeferredLookEffectsMigration.kt`, `PRAGMA user_version` 2). In the cook, `FxEntry` is a
+Look effect, its target non-null; a palette's effect is a bare `StoredFx`, which
+`CueComposer.fxForLayer` runs on each of the layer's targets.
 
 Sweep item B6 removed the row-side plumbing that outlived the rule, and absolute-looks session 2 the
 effect side's: there is no `isDeferred` on a Look row or a Look effect at any layer any more,
@@ -539,9 +539,9 @@ coarse DMX `-128..127` with 0 at the centre of travel (DMX 128), the same fracti
 every head (venue-visit plan D3). A position row stored before D3 holds `deg:` travel degrees, and
 it still resolves as angles through each head's annotated range — there are no migrations, so the
 resolver takes both units (P3), and only an edit makes an old row `pos:`. Record into a palette and
-`aim_fixtures`' `saveAsPalette` write `pos:` (`TemplateResolver.centreIntentOf`, the exact inverse),
+`aim_fixtures`' `saveAsPalette` write `pos:` (`PaletteResolver.centreIntentOf`, the exact inverse),
 so recording no longer needs a degree annotation, and heads at the same bytes whose degree ranges
-differ now agree and record one generic row. `fx/TemplateIntent.kt` owns the grammar; `fx/TemplateResolver.kt` is the **single** implementation that turns one into
+differ now agree and record one generic row. `fx/PaletteIntent.kt` owns the grammar; `fx/PaletteResolver.kt` is the **single** implementation that turns one into
 channels, and it is asked by all three consumers — `CueComposer.applyLayer` at cook,
 `POST /palettes/{id}/apply` for *Apply as values*, and `POST /palettes/resolve` for the editor's
 resolves-to panel. Two of those exist server-side *because* it must be one implementation: an editor
@@ -564,16 +564,16 @@ halves from fighting over one byte: an explicit `white` or `amber` row **forces 
 `rgbonly`**, refused by name at the write boundary, and UV is exempt because no policy touches it.
 
 **A colour palette refuses as a whole.** If any of its colour rows is `Unsupported` on a head, that
-head takes *none* of them — `TemplateResolver.unmetColourRequirement`, folded in by cook, apply and
+head takes *none* of them — `PaletteResolver.unmetColourRequirement`, folded in by cook, apply and
 the resolves-to panel alike. The rows are facets of one output: an explicit amber is in the palette
 because the hex alone did not get where the operator wanted, so a head without amber taking just the
 hex would put a *different* colour on stage under that palette's name. Scoped to colour on purpose
-— zoom and frost are independent roles and keep their per-row skip. `TemplateDto.requiredEmitters`
+— zoom and frost are independent roles and keep their per-row skip. `PaletteDto.requiredEmitters`
 is the derived form of the same fact, and what the client filters its offers on; a palette naming
 no emitter requires none, so the type-agnostic degradation across an RGBWA hex, a white-only head
 and a colour wheel is untouched.
 
-A palette's property vocabulary is **closed** (`TemplateProperty`), which is where "a palette
+A palette's property vocabulary is **closed** (`PaletteProperty`), which is where "a palette
 cannot carry a gobo" lives: slotted roles are per-model, so they are refused by name and live in a
 recorded Look, which names a head and can hold anything that head has. The three bundled emitters
 are *in* that vocabulary — they are not slotted, they mean the same thing on every head that has
@@ -583,7 +583,7 @@ parameter names a colour palette rather than indexing a list, so a palette *is* 
 instead of being one more scope that holds several.
 
 **Both records copy through one route shape**: `POST /projects/{id}/looks/{lookId}/copy` and
-`POST /projects/{id}/palettes/{templateId}/copy`, each `{targetProjectId, newName?}` — the same
+`POST /projects/{id}/palettes/{paletteId}/copy`, each `{targetProjectId, newName?}` — the same
 project under a new name is *Duplicate*, another project is *Copy to…*, and a name taken in the
 target is a 409. The source is `withProject`, so a library that is not the live show can be copied
 out of. A copy is a new entity (fresh uuids on the record and every child row; a palette's
@@ -607,7 +607,7 @@ two disagree on — the keys it wins, and those a higher layer blends over it �
 the sideband). A Look's scenery passes into the programmer's own scenery, under what that already
 holds and where no higher Look layer sets it (`ProgrammerScenery.holdUnder`). Its effects lose their
 layer key and source and run on, phase kept, as Local effects at the bottom of the Local FX
-(`FxEngine.detachProgrammerLayerEffects`; a spent N-shot is removed, since only a layer keeps one),
+(`FxEngine.detachProgrammerLayerFx`; a spent N-shot is removed, since only a layer keeps one),
 in the same step as the layer comes off, so no concurrent recook retracts them. The recook that
 follows moves nothing the `WEB` slots hold, and nothing is republished for them: each already
 showed its value. Two things do move: a stomping layer's suppression of the effects under it ends
@@ -626,25 +626,25 @@ row names (`sourceGroup`), else the group a palette layer names it through.
 `POST /palettes/{id}/apply` with `write: false` is the focused-Look arm (D7): the same resolve and
 fan-out, answered as `values` — each head's literal in the Look row grammar, a cell by its element
 key, Spread's `write: false` shape — and nothing written, nor logged as a press. An effect palette
-answers none; its effect joins a Look through `absorb-effects`.
+answers none; its effect joins a Look through `absorb-fx`.
 
 ### A press is recorded, so the desk knows what you reach for
 
-`DaoTemplates.last_pressed_at` is stamped on every press that **applies** a palette, and the
+`DaoPalettes.last_pressed_at` is stamped on every press that **applies** a palette, and the
 programmer's row of palette chips is "the palettes that fit the selection and have a stamp,
 newest first, up to eight". One nullable column and no second table: the family is already derived
 from the rows, so a list filtered by family is a history filtered by family; a delete takes the
 stamp with it; and nothing needs sweeping.
 
-**Four doors, one recorder** — `routes/templatePress.kt`'s `TemplatePressLog.record`. They are four
+**Four doors, one recorder** — `routes/palettePress.kt`'s `PalettePressLog.record`. They are four
 because the gestures genuinely differ, and they share a recorder because "was that a press?" must
 not get four answers:
 
-1. `applyTemplateToProgrammer` — *Apply as values* (a chip's ⌥click or its menu), both the value and
+1. `applyPaletteToProgrammer` — *Apply as values* (a chip's ⌥click or its menu), both the value and
    the effect arm; not its `write: false` arm, which only resolves.
 2. The **toggle-on** arm of `POST /palettes/{id}/toggle` — a chip's tap, the press.
 3. `BuskPressService.apply`, for a palette pad that ended **on**.
-4. `SurfaceActions.pressTemplate`, from a MIDI button.
+4. `SurfaceActions.pressPalette`, from a MIDI button.
 
 Two rules run through all four. **A release is not a press**: both toggle doors stamp only on the
 arm that puts the layer on, because what you reached for is not undone by putting it down. And **a
@@ -653,9 +653,9 @@ this project's, and an *Apply as values* that reached no head all leave the stam
 those being the one door that cannot say so with a status code, since it answers 200 with
 `written = 0` and a skip per head.
 
-The frame is **`palettePressed { templateId, lastPressedAt }`**, and it is keyed rather than a
+The frame is **`palettePressed { paletteId, lastPressedAt }`**, and it is keyed rather than a
 reuse of `paletteListChanged` for `cuesRecomposed`'s reason: that signal's client bridge drops the
-`TemplateList`, `Cue` and `CueList` caches, and a press happens at busking rate. This one carries
+`PaletteList`, `Cue` and `CueList` caches, and a press happens at busking rate. This one carries
 the whole of what moved, so a client patches its cached list and makes no request at all. It is
 fired to **every** socket including the acting one, which is what makes the server's stamp the value
 every client ends up holding — two clients reading their own clocks would order a burst of presses
@@ -663,7 +663,7 @@ differently from each other and from the next refetch. Flat rather than dotted, 
 messages take the dotted form" rule in `docs/websocket-engineering.md`, because the failure that
 rule prevents is a *mixed* family and `paletteListChanged` beside it is flat.
 
-The column is deliberately **absent from the sync export** (`TemplateJson` names every field it
+The column is deliberately **absent from the sync export** (`PaletteJson` names every field it
 carries and this is not one): a desk's press history is not show content, and carrying it would hand
 a cloned project someone else's habits.
 
@@ -702,7 +702,7 @@ on Red's heads leaves Red on the rest, Red pressed back does the same to Blue, a
 over Red rather than replacing it. Looks replace nothing and are replaced by nothing: two Looks on
 one head stack (`FU-PRESS-REPLACE-LOOKS`). The replaced set is found from each palette's snapshot
 (`LayerPressRules.familyReplacements`, `fx/LayerPressRules.kt`), and `ProgrammerLayerStack.toggle`
-asks it on every press, so every door — the toggle routes, a busk pad, the MIDI `PressTemplate`,
+asks it on every press, so every door — the toggle routes, a busk pad, the MIDI `PressPalette`,
 `apply_palette` — gets it without asking, and a solo bank's
 siblings run beside it, never instead (P4). Both count in the answer's `released`. A replacement
 takes off only the heads the palette lands on: a per-fixture palette pressed over heads its rows do
@@ -718,7 +718,7 @@ what it is handed — the replaced set, the per-fixture heads, the press's targe
 `fx/LayerPressRules.kt`, read from the palettes and never from a store, so the programmer and a
 **stored cue** find them one way: the cue editor's press (`POST /cues/{id}/layers/press`, apply-model
 §3.6) is `LayerPress` over the cue's layers, written to the cue and sent nowhere. Its effect-side twin is the bare effect
-press's **Local replacement** (apply-model session 2, `POST /programmer/effects`): a library effect
+press's **Local replacement** (apply-model session 2, `POST /programmer/fx`): a library effect
 takes the pressed heads off every other Local effect of its family — read from the property it
 drives, not the library category a palette's family reads — never off a layer's;
 `fx-engineering.md` §"Local effects follow the selection".
@@ -762,21 +762,21 @@ applied state and carries no copy of it.
 row's property lives only on a multi-head fixture's cells — the Shehds in 24-channel mode, whose
 colour is RGBW on three `Zone` elements while the parent holds pan, tilt, dimmer, strobe and zoom —
 a target naming the parent, or a group whose member it is, lands that row on the cells that carry
-it, each resolving on its own emitters. `fx/TemplateFanOut.kt` is the one statement of it, asked by
-every consumer that resolves a palette row onto a selection: *Apply as values* (`applyTemplateToProgrammer`),
+it, each resolving on its own emitters. `fx/PaletteFanOut.kt` is the one statement of it, asked by
+every consumer that resolves a palette row onto a selection: *Apply as values* (`applyPaletteToProgrammer`),
 the cook (`CueComposer.applyLayer`, so a chip's tap and a busk pad alike), Spread over heads (the
 parent stays **one step** on the curve and its value lands on every carrying cell — a pixel bar over
 HEADS too, which used to be skipped by name) and the editor's resolves-to panel (one row per cell,
 `<fixture> · Cell n`). Four rules keep it narrow. **A parent that has the property keeps it**:
 only the rows its cells alone can serve fan, so a beam palette's zoom stays on the Shehds' parent
 while a colour palette reaches the zones — and *having* is presence, not resolution
-(`TemplateResolver.hasProperty`), so a parent with a pan keeps a position row — and, for a stored
+(`PaletteResolver.hasProperty`), so a parent with a pan keeps a position row — and, for a stored
 degree row with no annotated range, says why — rather than handing it to its cells. **Colour is decided as a family** — a colour-family row
 fans when the parent has no colour at all, the `NotACandidate` question; a parent with colour but
 missing an emitter the palette names stays put and is refused there as a whole, since fanning would
 put a different colour on the cells under the palette's name. **Nothing carries it → the parent**,
 so the skip names the head the operator selected rather than a skip per cell. **A cell resolves
-against its parent's fitted media** (`TemplateFanOut.mediaOf`): media is loaded per patch, and
+against its parent's fitted media** (`PaletteFanOut.mediaOf`): media is loaded per patch, and
 `Fixtures.fittedMediaFor` answers nothing for an element key. A layer, an apply or a spread naming a
 bar *and* one of its cells writes that cell once, and a fanned cell's programmer entry takes the
 group its parent arrived through as its `sourceGroup` (Record still writes such entries as cell rows:
@@ -785,7 +785,7 @@ own expansion (`docs/groups-engineering.md` §"Automatic FX Expansion to Element
 effect palette on a parent never needed it. Before it, a colour palette on a Shehds wrote 0 on
 every arm — the parent asked "have you colour?" and said no — and the client folded a cell selection
 back onto that parent besides; the client now sends a cell by its element key
-(`templateTargetsOf`, `templateTargetsFor`), offers a cell selection the palettes the cell can take,
+(`paletteTargetsOf`, `paletteTargetsFor`), offers a cell selection the palettes the cell can take,
 and a whole-fixture target still means every cell. An **effect** palette on a mixed group is the
 one gap left in this family, and it is the FX engine's rather than the fan-out's
 (`FU-TMPL-CLICK-GROUP-PARTIAL`).
@@ -794,7 +794,7 @@ one gap left in this family, and it is the FX engine's rather than the fan-out's
 `propertyMask`** (multi-screen plan D4, D5). The desk selection is targets *and* families — a
 marquee over three Colour cells is `{targets, families: [COLOUR]}` — and every press door takes
 the pair beside its targets (`families` on `POST /busk/pads/{id}/press`, `/palettes/{id}/apply`,
-`/palettes/{id}/toggle`, `/looks/{id}/toggle` and `/looks/{id}/apply`; the MIDI `PressPad` and `PressTemplate` doors
+`/palettes/{id}/toggle`, `/looks/{id}/toggle` and `/looks/{id}/apply`; the MIDI `PressPad` and `PressPalette` doors
 pass the desk's — `ApplyLook` reads no selection at all). Null is every attribute. Under a mask, by
 kind: a **palette** is one family, so it either lands whole or not at all — family ∉ mask is refused
 by name, `PALETTE_OUTSIDE_MASK`, on every door, the same dead-pad reading as
@@ -849,8 +849,8 @@ deletes its pads inside the same transaction — the record's route sweeps them 
 enforces no cascade — and the palette and Look delete guards do not count pads as a use. Sync
 reads a pad whose record the archive lacks as absent, with a warning, for the same reason.
 
-That is why the **"on *n* pages" count** on `TemplateDto` and `LookDto` is a *hint* and nothing
-more. It rides in the batched `TemplateUsage` / `LookUsage` the library list already reads, is
+That is why the **"on *n* pages" count** on `PaletteDto` and `LookDto` is a *hint* and nothing
+more. It rides in the batched `PaletteUsage` / `LookUsage` the library list already reads, is
 deliberately absent from their `describe()` — that string is the delete guard's message — and
 produces no 409 and no `?force=true`. It counts **pages**, not pads: two pads for one record in one
 bank is still one place to go and look. The library row shows it and the delete confirm mentions it,
@@ -966,7 +966,7 @@ is the **rig order** (`state/BuskRigOrder.kt`): rows in order, tiles in order, a
 that places its members in member order, a multi-head tile as one step (`PIPS` / `WHOLE`), one step
 per cell (`PER_CELL`) or `cellSplit` contiguous runs (`HALVES`), a cell tile as that cell — and with
 no rig, every group then every fixture. It is what `selection.subselect`'s *Next* / *Prev* walk and
-what a spread's `LINEAR` order means — except a spread whose one target is a group, which runs in
+what a spread's `NORMAL` order means — except a spread whose one target is a group, which runs in
 that group's own member order (venue-visit plan S7, `docs/groups-engineering.md` §"Member order") —
 and `BuskRigOrderTest`'s fixture (`src/test/resources/busk/rigOrder.fixture.json`) is the file the
 client's mirror is pinned against.
@@ -998,13 +998,13 @@ cells are selected, wrapping. A MIDI `SelectionCells` / `SelectionNext` / `Selec
 reaches the same `DeskSelection.subselect`, so the chip and the surface cannot disagree
 (`DeskSelectionSubselectTest`'s fixture is the client's pin).
 
-**A spread resolves on the desk** (D9, D10). `POST /programmer/spread` takes two intents, a curve
-(`LINE` · `MIRROR` · `ARROW` · `WINGS` — the last two mirrored fans meeting at the centre, *to* at
-each outer end), an order (a `DistributionStrategy` name, `LINEAR` being rig
-order), `parts` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
+**A spread resolves on the desk** (D9, D10). `POST /programmer/fan` takes two intents, a curve
+(`LINE` · `MIRROR` · `ARROW` · `MIRROR_OUT` — the last two mirrored fans meeting at the centre, *to* at
+each outer end), an order (a `SpreadOrder` name, `NORMAL` being rig
+order), `runs` (that many contiguous fans) and `over` (`HEADS` or `CELLS`); interpolates in the
 intent's own space — Lab for a colour, centre-relative steps for a position (both ends one unit;
-a `pos:` and a `deg:` end is `SPREAD_INVALID`), percent for a level — and resolves
-each head's literal through the same `TemplateResolver` *Apply as values* uses, writing one batched
+a `pos:` and a `deg:` end is `FAN_INVALID`), percent for a level — and resolves
+each head's literal through the same `PaletteResolver` *Apply as values* uses, writing one batched
 programmer write with owner `WEB`. So Record captures it, Blind previews it and Clear releases it:
 a spread is a result, not a palette — *Save as Look…* is `record-look` over the selection.
 Since the editor-kit plan's session 3 the request carries `write` (default true): `false` runs the
@@ -1022,10 +1022,10 @@ cell that carries it (venue-visit plan S1, §"A press is per target"): `written[
 a cell's element key the request never named, and the fixture no longer appears in `skipped`. A cell
 named beside its parent is dropped, the parent covering it.
 
-**A fan is a spread about each head's own position** (venue-visit plan S12). `mode: FAN`, Position
+**A fan is a spread about each head's own position** (venue-visit plan S12). `mode: ABOUT` (the default is `BETWEEN`, from → to), Position
 only, takes no endpoints but an amount per axis (`fan: {pan?, tilt?}`, the outer heads' offset in
 centre steps, an absent axis not fanned) and moves each head from where it starts by the amount
-times `2t − 1` (`SpreadPlan.fanWeights`), `t` the same fraction under the same curve, order, parts
+times `2t − 1` (`FanPlan.fanWeights`), `t` the same fraction under the same curve, order, runs
 and over — so under `LINE` the fan is symmetric about the middle of the order, a lone group's member
 order included, and a run of one head stays put. A head starts from the request's `base` (a
 `pan,tilt` literal per head: the row a `write: false` host is editing, or the anchor an earlier
@@ -1035,7 +1035,7 @@ in flight, a position effect or Blind leave the output short of, else from what 
 now. A `write: false` request skips Local: its rows are another context's, so a head they lack starts
 from the stage. The answer's `base` says where each head started, so a client holds the gesture's anchor and a
 Live drag never fans a fan; `clamped` names the heads held at the end of travel. The sum goes
-through the same `TemplateResolver`, an axis not fanned resolving to its base exactly. The surface's
+through the same `PaletteResolver`, an axis not fanned resolving to its base exactly. The surface's
 `SelectionFan` encoder is the same resolve over the desk selection, owner `surface`, with the desk
 holding its anchor and the rig order for the gesture (`docs/midi-control-surface-engineering.md`).
 
@@ -1094,38 +1094,38 @@ Three rules keep the reversal narrow, and each removes a way for it to complicat
 
 - **A value *or* an effect, never both** (`palette_fx` has a unique `palette_id`, and the
   write boundary refuses a mix). A colour *and* a chase is a Look, which already holds rows plus
-  effects. Which one a palette holds is its identity, like its family: `validateTemplateContents`
+  effects. Which one a palette holds is its identity, like its family: `validatePaletteContents`
   refuses a PUT that would flip it, so the cook's palette arm never needs both halves.
 - **One effect.** Several together is, again, what a Look with effects already is.
 - **Always generic** — no `target_type` / `target_key`, unlike `look_fx`, every one of which
   names its own target (absolute-looks plan D2). A palette's effect fans over whatever the layer
-  names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
+  names, full stop. This is load-bearing beyond tidiness: `PaletteRegistry` caches
   snapshots on the argument that nothing patch-shaped is in the cache, so a repatch cannot make an
   entry stale — and a bound, group-targeted palette effect would be exactly that.
 
-The family is then **derived from the effect's library `category`**, through the same
-`familyForEffectCategory` map a Look's derived families use (`dimmer` → Intensity, `colour` →
-Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `palette` (the Steps FX)
+The family is then **derived from the effect's library `family`**, through the same
+`maskGroupForFxFamily` map a Look's derived families use (`intensity` → Intensity, `colour` →
+Colour, `position` → Position, `beam` → Beam). `controls` has no tempo and `steps` (the Steps FX)
 steps another family, so both answer null and are refused by name. A Beam effect palette holds one of the beam
 built-ins (effects plan D6, `fx-engineering.md` §"Beam Effects"); its stored effect names no
 property, and a press lands it on the one property the effect declares, skipping a head without it —
 but for Slot Steps, which names the setting it steps as its `propertyName`. Palette Steps is the one
-effect whose family is not its library category's (`palette`, which names none): it is its palettes'
-family, and the write boundary checks the stored category against that (`fx-engineering.md` §"Step
+effect whose family is not its library family (`steps`, which names none): it is its palettes'
+family, and the write boundary checks the stored `family` against that (`fx-engineering.md` §"Step
 Effects").
 
 Two things about the effect are the **registry's** answer rather than the author's, and both are
-checked or filled at the boundary rather than trusted. `category` is stored, and the write boundary
+checked or filled at the boundary rather than trusted. `family` is stored, and the write boundary
 refuses a row whose registration disagrees with it. `timingSource` is not stored at all and is
-resolved into `TemplateEffectDto` on every read — an effect's timing source belongs to the effect
+resolved into `PaletteFxDto` on every read — an effect's timing source belongs to the effect
 *type*, so a column would be a second copy that a re-registered script could contradict. It is on
-the DTO because without it `beatDivision` cannot be read: the field is beats for a `BEAT` effect and
+the DTO because without it `cycle` cannot be read: the field is beats for a `BEAT` effect and
 *seconds* for a `WALL_CLOCK` one — or for a beat effect on *Seconds* (`seconds`, venue-visit plan D7), and a client would otherwise have to fetch the whole FX library to
 tell a two-beat pulse from a two-second one.
 
-**The cook gained no new path.** `CueComposer.effectsForLayer` is the single fan-out shared by
-`cookEffects` and `cookAll`, and it reads the effects off the layer's content: a Look's on their own
-targets, a palette's one `StoredEffect` on each of the layer's. Layer numbering is untouched: a
+**The cook gained no new path.** `CueComposer.fxForLayer` is the single fan-out shared by
+`cookFx` and `cookAll`, and it reads the effects off the layer's content: a Look's on their own
+targets, a palette's one `StoredFx` on each of the layer's. Layer numbering is untouched: a
 palette layer takes a rank whether it contributes rows or an effect.
 
 The two **gestures** are the value palette's two, unchanged in meaning. A tap (and the busk pad)
@@ -1133,22 +1133,22 @@ posts to `toggle`, which adds a programmer layer that *tracks* the palette: the 
 the cook, carries the palette as its `LayerSource`, and Record files it as a palette layer.
 *Apply as values* (⌥click) posts to `apply`, whose effect arm mints one detached programmer-band copy
 per target the press names — the effect twin of the value arm's literals. That copy deliberately carries **no**
-`LayerSource` and no `programmerLayerEffectKey`: without the key no recook can retract or retime it,
+`LayerSource` and no `programmerLayerFxKey`: without the key no recook can retract or retime it,
 so retuning the palette afterwards cannot move it, and without the source both Record paths file it
-as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `templateApply.kt` holds the
+as an ad-hoc cue child rather than rebuilding it as a layer that tracks. `paletteApply.kt` holds the
 four-point version of that reasoning.
 
 **An edit to a pad's running effect is the instance's alone** (fixture-fx-sheets plan D20, sessions
 1 and 5). The busk view's Effects tab, the fixture sheet's tray and the programmer's FX table's *Edit…* all edit the
-**instance** the layer spawned, through `updateFx` (`FxEngine.updateEffect`: id and phase kept), and
-never the palette. The layer stack keys that instance by the `StoredEffect` it was spawned from
-(`ProgrammerLayerEffectKey`), and `updateEffect` carries the key across its swap, so the edit
+**instance** the layer spawned, through `updateFx` (`FxEngine.updateFx`: id and phase kept), and
+never the palette. The layer stack keys that instance by the `StoredFx` it was spawned from
+(`ProgrammerLayerFxKey`), and `updateFx` carries the key across its swap, so the edit
 **survives** every recook that leaves the palette alone — a patch, a move, an unrelated add — and
 goes when the pad goes: pressing it off and on spawns the palette's settings again. The client marks
 such an instance ***edited*** by comparing it with the palette's effect, and offers two ways back
 to agreement. **Reset to palette** is `POST /fx/{id}/reset` (W5): the palette's current effect
 re-applied to the instance in place, phase kept, and the instance **re-keyed** to the palette's
-current entry under the stack's effects lock. **Update palette** is the palette's `PUT {effect}`
+current entry under the stack's effects lock. **Update palette** is the palette's `PUT {fx}`
 from the instance's settings **then** W5 on that instance — the PUT alone recooks values only and
 leaves applied instances, but the next recook for any reason reads the edited palette, finds the
 instance's key stale and respawns it, phase restarted; the reset re-keys it first, so it keeps
@@ -1158,7 +1158,7 @@ hand (`FU-TMPL-FX-EDIT-NO-RETIME`). A **cue's** palette-layer instance is refuse
 (`FX_NOT_FROM_PALETTE`, 409) — the next GO respawns it — and the fixture sheet's tray shows a cue's
 effect read-only.
 
-Fan-out is the same on both gestures: `CueComposer.effectsForLayer` spawns over a layer's targets *as
+Fan-out is the same on both gestures: `CueComposer.fxForLayer` spawns over a layer's targets *as
 authored*, and the apply arm matches it, so a group selection stays one group-targeted effect with
 its distribution intact rather than becoming one instance per member. The apply arm does have to test
 capability itself — `FxTargetFactory` never fails by design, so `"rgbColour"` resolves to a
@@ -1174,7 +1174,7 @@ group and says so, while a tap spawns one group-targeted effect that the capable
 The strict all-members rule is the one the group FX route already applies, so relaxing it is a
 behaviour decision rather than a repair; `FU-TMPL-CLICK-GROUP-PARTIAL` holds the reasoning.
 
-`POST /looks/{id}/absorb-effects` remains the way a *running* effect joins a Look.
+`POST /looks/{id}/absorb-fx` remains the way a *running* effect joins a Look.
 
 A Look's rows hold **literals only**. A row holding a `ref:`-shaped value is rejected at the write
 boundary, so **Looks do not nest** and resolution can never recurse. The `ref:` *value grammar* itself
@@ -1251,7 +1251,7 @@ of scope.
 ### Effects, and the constraint that cannot be layered away
 
 Effects do not cook — they spawn `FxInstance`s. Spawning them in layer order is sufficient:
-`FxEngine.sortedEffectsComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
+`FxEngine.sortedFxComparator` is `compareBy(priority, composeOrder, id)` with `composeOrder`
 the monotonic creation counter, and per-tick composition is a genuine sequential fold through `FxTarget.applyValue`. So
 same-priority effects already resolve last-created-wins, and layer order becomes effect order for
 free — no priority arithmetic, and the uniform per-cue priority stays.
@@ -1283,7 +1283,7 @@ together, so a timed layer below a static one has to lose to it, and `CookWinner
 stomp suppression are derived from that same shared rank. Overlaying would invert all three.
 
 The memo's one hazard is staleness, and it is closed by a stamp rather than a listener: the patch
-register's `Fixtures.structureVersion`, `LookRegistry.version`, and `TemplateRegistry.versionFor`
+register's `Fixtures.structureVersion`, `LookRegistry.version`, and `PaletteRegistry.versionFor`
 scoped to the palettes the cue actually names. A Look edit republishes the cue *and* bumps that
 version, so the next fire re-cooks instead of replaying a pre-edit result over the operator's save.
 That is also why `LookRegistry` bumps its counter on *both* sides of an eviction: between a
@@ -1315,7 +1315,7 @@ rather than describing a look, and Looks, cues and stacks each
 carried a column for it.
 
 **It is gone**, and what replaced it inverts the arrangement. An effect's colour parameter names a
-**colour palette** by uuid — `pal:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
+**colour palette** by uuid — `pal:{uuid}`, `fx/PaletteColourSource.kt` — so the colour has an
 identity and a name instead of a slot number, and retuning the palette moves every running effect
 that follows it. There is no cascade, because there is nothing left to scope: a reference has one
 answer wherever it is read.
@@ -1327,23 +1327,23 @@ Two rules that fall out of that, both enforced rather than conventional:
   `parseAssignmentValue` returns null for a `pal:`-shaped value and `validateLookRows` rejects one,
   beside its `ref:` rejection.
 - **Only a generic colour palette can be named.** An effect's output is one colour applied to every
-  head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
+  head it targets, so `PaletteResolver.resolveColourGeneric` resolves the intent without a fixture —
   as though the head were RGBW, which makes it identical to the same palette applied as a layer on
   any RGBW/RGBWA head. A per-fixture palette holds no single colour and is refused, and so is an
   **effect** palette, which has no rows at all. The generic test is **per row** — no row naming a
   head — and not "exactly one row": a colour palette may hold a hex *and* explicit emitters, and
   both halves fold the whole colour-family row set into one colour (`resolveColourGeneric` over the
-  set on the desk, `templateRowsSwatch` in the client), so it means something exact rather than "one
+  set on the desk, `paletteRowsSwatch` in the client), so it means something exact rather than "one
   of these". An explicit emitter row overwrites what the policy derived, which cannot collide while
   the write boundary refuses that pair but is stated rather than left to argument order. A palette
   of emitters alone resolves against **black**, which is the honest reading of what an effect output
   can express: one colour per frame, and no way to say "leave RGB alone" — the layer path keeps that
   distinction, a reference cannot. The write boundary also refuses a palette's effect naming *its
-  own* uuid, the one shape that would recurse in `createEffectWithTemplates`.
+  own* uuid, the one shape that would recurse in `createFxWithPalettes`.
 
   The other direction is allowed and useful: an **effect palette's** colour parameter may name a
   *value* colour palette, which is how "Amber Breathe" follows "Amber Key". `palette_fx` is
-  therefore the third table `templateFxReferenceCount` scans, or that value palette would stay
+  therefore the third table `paletteFxReferenceCount` scans, or that value palette would stay
   deletable out from under a running effect — the exact failure the delete guard exists to prevent.
 
   **The cost lands on heads with no white emitter, and it is sharper than "one emitter short".**
@@ -1507,7 +1507,7 @@ The mechanism: `CueComposer.cook` returns `CookResult.stompSuppression`, a
 asserted — the rows keep the winner per key, and a layer that asserted and then lost still asserted.
 It is published in the same locked mutation as the rows (`CueAssignmentLayer.setAssignments` /
 `replaceAssignments` take it as a parameter for exactly that reason), and read per tick by
-`EffectSuppression.isSuppressed` (the engine's tick, provenance and `programmer.keyStack` all ask it) against `FxInstance.cueLayerId` / `programmerLayerId`. The reset pass has
+`FxSuppression.isSuppressed` (the engine's tick, provenance and `programmer.keyStack` all ask it) against `FxInstance.cueLayerId` / `programmerLayerId`. The reset pass has
 already painted the cooked value on the property, so a skipped apply *shows* that value rather than
 freezing the effect's last frame.
 
@@ -1516,10 +1516,10 @@ Three details worth knowing:
 - The check runs **before** the programmer-band exemption. Programmer-layer effects live in that
   band by construction, so exempting the band would make programmer stomp a no-op.
 - The **programmer stack honours it too**, published from `ProgrammerLayerStack.materialise` rather
-  than from `syncEffects` beside the instances: `syncEffects` deliberately does not rebuild on a
+  than from `syncFx` beside the instances: `syncFx` deliberately does not rebuild on a
   mask, amount or order change, and all three move the suppression set.
 - **Provenance is stomp-aware**, through the same `isLayerStomped` helper the tick loops use.
-  `highestPriorityEffectByKey` skips a stomped effect *for the stomped key only*, so a
+  `highestPriorityFxByKey` skips a stomped effect *for the stomped key only*, so a
   lower-priority effect on that key can still be reported — and `ProvenanceService.compute` /
   `underlyingSources` therefore name the cue rather than an effect nobody can see. Keeping one
   helper is the point: "what is painting" and "what provenance reports" have no business

@@ -19,13 +19,13 @@ import { LibraryPalette } from './LibraryPalette'
 /** The library as a palette: one search, two filters, and a row per placeable record. */
 
 const templates = [
-  { id: 1, uuid: 't1', name: 'Amber Key', notes: null, sortOrder: 0, fadeDurationMs: null, groupId: null, family: 'COLOUR', isGeneric: true, kind: 'value', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'colour', value: '#FF9D4A' }], effect: null, layerCount: 0 },
-  { id: 2, uuid: 't2', name: 'Downstage Centre', notes: null, sortOrder: 1, fadeDurationMs: null, groupId: null, family: 'POSITION', isGeneric: true, kind: 'value', rows: [], effect: null, layerCount: 0 },
+  { id: 1, uuid: 't1', name: 'Amber Key', notes: null, sortOrder: 0, fadeDurationMs: null, groupId: null, family: 'COLOUR', isGeneric: true, kind: 'value', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'colour', value: '#FF9D4A' }], fx: null, layerCount: 0 },
+  { id: 2, uuid: 't2', name: 'Downstage Centre', notes: null, sortOrder: 1, fadeDurationMs: null, groupId: null, family: 'POSITION', isGeneric: true, kind: 'value', rows: [], fx: null, layerCount: 0 },
 ]
 
 const looks = [
-  { id: 5, uuid: 'l5', name: 'Ballyhoo', notes: null, sortOrder: 0, families: ['POSITION'], rowCount: 0, effectCount: 2, targetCount: 8, hasDeferredEffects: true, preview: [], layerCount: 0 },
-  { id: 6, uuid: 'l6', name: 'Storm Wash', notes: null, sortOrder: 1, families: ['COLOUR'], rowCount: 3, effectCount: 0, targetCount: 10, hasDeferredEffects: false, preview: [], layerCount: 0 },
+  { id: 5, uuid: 'l5', name: 'Ballyhoo', notes: null, sortOrder: 0, families: ['POSITION'], rowCount: 0, fxCount: 2, targetCount: 8, hasDeferredFx: true, preview: [], layerCount: 0 },
+  { id: 6, uuid: 'l6', name: 'Storm Wash', notes: null, sortOrder: 1, families: ['COLOUR'], rowCount: 3, fxCount: 0, targetCount: 10, hasDeferredFx: false, preview: [], layerCount: 0 },
 ]
 
 const stacks = [
@@ -41,8 +41,8 @@ const stacks = [
     canEdit: true,
     canDelete: true,
     cues: [
-      { id: 20, name: 'Blackout', sortOrder: 0, layerCount: 0, adHocEffectCount: 0, autoAdvance: false, autoAdvanceDelayMs: null, fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: '20', cueNumberAuto: false, notes: null, cueType: 'CUE' },
-      { id: 21, name: 'Act 2', sortOrder: 1, layerCount: 0, adHocEffectCount: 0, autoAdvance: false, autoAdvanceDelayMs: null, fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: null, cueNumberAuto: false, notes: null, cueType: 'MARKER' },
+      { id: 20, name: 'Blackout', sortOrder: 0, layerCount: 0, adHocFxCount: 0, autoAdvance: false, autoAdvanceDelayMs: null, fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: '20', cueNumberAuto: false, notes: null, cueType: 'CUE' },
+      { id: 21, name: 'Act 2', sortOrder: 1, layerCount: 0, adHocFxCount: 0, autoAdvance: false, autoAdvanceDelayMs: null, fadeDurationMs: null, fadeCurve: 'LINEAR', cueNumber: null, cueNumberAuto: false, notes: null, cueType: 'MARKER' },
     ],
   },
 ]

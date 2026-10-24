@@ -9,8 +9,8 @@ import java.util.UUID
  * for a deferred row); null for an effect palette, an empty one, or one with any deferred row.
  * Read off the registry's snapshot by the press and off the stored rows by the timeline.
  */
-internal fun perFixtureRowTargetsOf(hasEffect: Boolean, rowTargets: List<TargetRef?>): List<CueTargetDto>? {
-    if (hasEffect || rowTargets.isEmpty() || rowTargets.any { it == null }) return null
+internal fun perFixtureRowTargetsOf(hasFx: Boolean, rowTargets: List<TargetRef?>): List<CueTargetDto>? {
+    if (hasFx || rowTargets.isEmpty() || rowTargets.any { it == null }) return null
     return rowTargets.filterNotNull().distinct().map(::CueTargetDto)
 }
 
@@ -23,7 +23,7 @@ internal fun perFixtureRowTargetsOf(hasEffect: Boolean, rowTargets: List<TargetR
  * A palette snapshot can open a transaction, so a caller reads these before it takes any lock.
  */
 internal class LayerPressRules(
-    private val templateRegistry: () -> TemplateRegistry,
+    private val paletteRegistry: () -> PaletteRegistry,
     private val coverage: TargetCoverage,
 ) {
     /**
@@ -36,17 +36,17 @@ internal class LayerPressRules(
 
     /** A per-fixture value palette's row targets, distinct; null for any other record. */
     fun perFixtureRowTargets(uuid: UUID): List<CueTargetDto>? {
-        val snapshot = templateRegistry().snapshot(uuid) ?: return null
+        val snapshot = paletteRegistry().snapshot(uuid) ?: return null
         return perFixtureRowTargetsOf(snapshot.effect != null, snapshot.rows.map { it.target })
     }
 
     /**
      * The palettes among [stack] an *on* press of [sourceUuid] replaces (apply-model D2, D6): every
      * other palette of its family and kind. [stack] is the uuids of the palette layers on the list;
-     * empty for a Look ([isTemplate] false) and for a palette with no family.
+     * empty for a Look ([isPalette] false) and for a palette with no family.
      */
-    fun familyReplacements(isTemplate: Boolean, sourceUuid: UUID, stack: Collection<UUID>): Set<UUID> {
-        if (!isTemplate) return emptySet()
+    fun familyReplacements(isPalette: Boolean, sourceUuid: UUID, stack: Collection<UUID>): Set<UUID> {
+        if (!isPalette) return emptySet()
         val kind = paletteKind(sourceUuid) ?: return emptySet()
         return stack.filterTo(HashSet()) { it != sourceUuid && paletteKind(it) == kind }
     }
@@ -74,5 +74,5 @@ internal class LayerPressRules(
 
     /** A palette's family, and whether it holds an effect rather than values. */
     private fun paletteKind(uuid: UUID): Pair<PropertyMaskGroup, Boolean>? =
-        templateRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }
+        paletteRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }
 }

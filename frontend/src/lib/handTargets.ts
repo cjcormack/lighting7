@@ -58,7 +58,7 @@ export interface HandCandidate {
    * Ignored for the other two kinds, and `undefined` is read as "no" — the honest default, since
    * every other kind has no deferred effects by construction.
    */
-  hasDeferredEffects?: boolean
+  hasDeferredFx?: boolean
 }
 
 /** Can this record be placed here? */
@@ -68,10 +68,10 @@ export function canHandLand(candidate: HandCandidate, target: HandTargetKind): b
       return true
     case 'slot':
       if (candidate.kind === 'CUE') return true
-      return candidate.kind === 'LOOK' && candidate.hasDeferredEffects !== true
+      return candidate.kind === 'LOOK' && candidate.hasDeferredFx !== true
     case 'layer-stack':
     case 'cue-stack':
-      return candidate.kind === 'LOOK' || candidate.kind === 'TEMPLATE'
+      return candidate.kind === 'LOOK' || candidate.kind === 'PALETTE'
     case 'rig-row':
       // No held kind is a rig target; see the type's note.
       return false
@@ -91,7 +91,7 @@ export function handRefusalReason(
 ): string | null {
   if (canHandLand(candidate, target)) return null
   if (target === 'slot') {
-    if (candidate.kind === 'TEMPLATE') return 'A slot has no selection, and a palette needs one'
+    if (candidate.kind === 'PALETTE') return 'A slot has no selection, and a palette needs one'
     return 'This Look has a deferred FX, so it needs a selection — a slot has none to give'
   }
   if (target === 'rig-row') return 'A rig row takes a group, a fixture or an element, and the hand cannot hold one yet'

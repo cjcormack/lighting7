@@ -12,7 +12,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.testsupport.EffectTestSupport
+import uk.me.cormack.lighting7.testsupport.FxTestSupport
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitOfType
@@ -117,13 +117,13 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `local effects on the fixture stop, and an effect that belongs to something stays`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val local = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
-        val cue = EffectTestSupport.start(state, "SineWave", "hex-1", "uv", priority = 1_000_001, cueId = 9)
-        val manual = EffectTestSupport.start(state, "SineWave", "hex-1", "strobe")
+        val local = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val cue = FxTestSupport.start(state, "SineWave", "hex-1", "uv", priority = 1_000_001, cueId = 9)
+        val manual = FxTestSupport.start(state, "SineWave", "hex-1", "strobe")
 
         val answer = release("fixture", "hex-1")
-        assertEquals(1, answer.effects)
-        val live = engine.getActiveEffects().map { it.id }.toSet()
+        assertEquals(1, answer.fx)
+        val live = engine.getActiveFx().map { it.id }.toSet()
         assertTrue(local.id !in live)
         assertTrue(cue.id in live, "a cue's effect is the cue's")
         assertTrue(manual.id in live, "a priority-0 manual effect is not the programmer's")
@@ -135,20 +135,20 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-2", 20)
         LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
-        val groupEffect = EffectTestSupport.start(state, "Pulse", "front", "dimmer", group = true, programmerBand = true)
+        val groupFx = FxTestSupport.start(state, "Pulse", "front", "dimmer", group = true, programmerBand = true)
 
         val member = release("fixture", "hex-1")
-        assertEquals(0, member.effects)
+        assertEquals(0, member.fx)
         val partial = member.partial.single()
-        assertEquals(groupEffect.id, partial.effectId)
+        assertEquals(groupFx.id, partial.fxId)
         assertEquals("front", partial.targetKey)
         assertTrue(partial.isGroupTarget)
-        assertNotNull(engine.getEffect(groupEffect.id), "left running: there is no stopping it on one head")
+        assertNotNull(engine.getFx(groupFx.id), "left running: there is no stopping it on one head")
 
         val group = release("group", "front")
-        assertEquals(1, group.effects)
+        assertEquals(1, group.fx)
         assertTrue(group.partial.isEmpty())
-        assertNull(engine.getEffect(groupEffect.id))
+        assertNull(engine.getFx(groupFx.id))
     }
 
     @Test
@@ -172,14 +172,14 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
-        val effect = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
         val before = controller().changesTo(1).size
 
         release("fixture", "hex-1", fadeMs = 1_500)
         // Over a value the Release takes, the effect is stopped first (effects plan D13, split by
         // what is under it), so it no longer covers the dimmer when the values publish and the
         // release reaches it as a ramp.
-        assertNull(engine.getEffect(effect.id))
+        assertNull(engine.getFx(effect.id))
         val changes = controller().changesTo(1).drop(before)
         assertTrue(
             changes.any { it.newValue == 0u.toUByte() && it.fadeMs == 1_500L },
@@ -192,16 +192,16 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         engine.sweepsLeaving = false
-        val effect = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
 
         val answer = release("fixture", "hex-1", fadeMs = 1_500)
         // Effects plan D13: nothing the Release takes is under it, so it shrinks to nothing over the
         // programmer fade and the engine removes it at 0.
-        assertEquals(1, answer.effects)
+        assertEquals(1, answer.fx)
         assertTrue(effect.leaving, "let go, not stopped")
         assertEquals(1_500L, effect.envelope.durationMs)
         assertEquals(1, engine.retireFinishedLeaving(effect.envelope.startMs + 1_500))
-        assertNull(engine.getEffect(effect.id), "and removed at 0")
+        assertNull(engine.getFx(effect.id), "and removed at 0")
     }
 
     @Test
@@ -209,11 +209,11 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
-        val effectId = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true).id
+        val fxId = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true).id
 
         release("fixture", "hex-1")
 
-        assertNull(state.show.fxEngine.getEffect(effectId))
+        assertNull(state.show.fxEngine.getFx(fxId))
     }
 
     @Test

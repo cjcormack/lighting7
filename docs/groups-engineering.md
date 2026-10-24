@@ -24,7 +24,7 @@ fixture/group/
 └── MultiElementFixture.kt   # Multi-element fixture support
 
 fx/group/
-├── DistributionStrategy.kt  # Phase distribution strategies
+├── SpreadOrder.kt  # Phase distribution strategies
 └── GroupFxExtensions.kt     # Extension functions for group effects
 ```
 
@@ -65,7 +65,7 @@ val levels = group.dimmer.memberValues  // [255, 255, ...]
 val dimmerGroup: FixtureGroup<WithDimmer>? = group.asCapable()
 
 // FxTargetable allows querying effects
-val effects = fxEngine.getEffectsForGroup(group.name)
+val effects = fxEngine.getFxForGroup(group.name)
 ```
 
 ## Group Members
@@ -146,7 +146,7 @@ than group members because symmetric pairs share the same offset. This is expose
 **Strategy interface:**
 
 ```kotlin
-sealed interface DistributionStrategy {
+sealed interface SpreadOrder {
     val hasSpread: Boolean              // false only for UNIFIED
     val usesTrianglePhase: Boolean      // true only for PING_PONG
     fun distinctSlots(groupSize: Int): Int
@@ -163,21 +163,21 @@ val group = fixtures.group<HexFixture>("front-wash")
 group.applyDimmerFx(
     fxEngine,
     Pulse(),
-    distribution = DistributionStrategy.NORMAL
+    order = SpreadOrder.NORMAL
 )
 
 // Synchronized colour - all same
 group.applyColourFx(
     fxEngine,
     RainbowCycle(),
-    distribution = DistributionStrategy.UNIFIED
+    order = SpreadOrder.UNIFIED
 )
 
 // Center-out dimmer effect
 group.applyDimmerFx(
     fxEngine,
     SineWave(),
-    distribution = DistributionStrategy.CENTRE_OUT
+    order = SpreadOrder.CENTRE_OUT
 )
 ```
 
@@ -192,7 +192,7 @@ too (cells in element order) — a busk group tile, and a list selection that is
 with every member listed and none filtered out, which the client sends as the group
 (`wholeGroupOf`). Any other selection spreads in rig order (`state/BuskRigOrder.kt`),
 which places a fixture at its first appearance on the rig, so an earlier group or tile holding it can
-put it anywhere (`routes/programmerSpread.kt`).
+put it anywhere (`routes/programmerFan.kt`).
 
 **Writing it.** The patch-group PUT's `memberOrder` (patch ids) and the `edit_groups` tool's
 `members` both go through `reorderGroupMembers` (`models/fixtureGroups.kt`). The members named fill,
@@ -203,8 +203,8 @@ in an old stored order break by row id, the order members were added in. A venue
 show is the venue's to order (409 `VENUE_OWNED`, like every write to it).
 
 **Reading it.** `GET /groups` answers each group's `memberKeys` in order, and the Groups list draws
-member rows in that order with their place. `GET /groups/{name}` adds `distributionSteps`, each
-strategy's step per member by `index` (`DistributionStrategy.stepsBySize`; `steps` is a member's place
+member rows in that order with their place. `GET /groups/{name}` adds `orderSteps`, each
+strategy's step per member by `index` (`SpreadOrder.stepsBySize`; `steps` is a member's place
 in the order the strategy brings members round, 1 first, shared offsets sharing a step). It is a
 function of the group's size alone, so the group sheet shows it without mirroring a formula, and
 moves with an optimistic reorder. `RANDOM` is seed 0, the seed a group effect gets by name. The
@@ -242,12 +242,12 @@ The key architectural decision is that group effects create a single `FxInstance
 
 ```kotlin
 // This creates ONE effect that targets the group
-val effectId = group.applyDimmerFx(fxEngine, Pulse(),
-    distribution = DistributionStrategy.NORMAL)
+val fxId = group.applyDimmerFx(fxEngine, Pulse(),
+    order = SpreadOrder.NORMAL)
 
 // The FxInstance stores:
 // - target: FxTargetRef.GroupRef("front-wash")
-// - distributionStrategy: NORMAL
+// - order: NORMAL
 
 // At processing time, FxEngine:
 // 1. Looks up the group by name
@@ -258,8 +258,8 @@ val effectId = group.applyDimmerFx(fxEngine, Pulse(),
 This enables querying effects by group:
 
 ```kotlin
-val activeEffects = fxEngine.getEffectsForGroup("front-wash")
-fxEngine.removeEffectsForGroup("front-wash")
+val activeFx = fxEngine.getFxForGroup("front-wash")
+fxEngine.removeFxForGroup("front-wash")
 ```
 
 ### DSL Builder for Multiple Effects
@@ -268,13 +268,13 @@ fxEngine.removeEffectsForGroup("front-wash")
 group.fx(fxEngine) {
     dimmer<HexFixture>(
         Pulse(),
-        beatDivision = BeatDivision.QUARTER,
-        distribution = DistributionStrategy.NORMAL
+        cycle = CycleLength.ONE_BEAT,
+        order = SpreadOrder.NORMAL
     )
     colour<HexFixture>(
         RainbowCycle(),
-        beatDivision = BeatDivision.ONE_BAR,
-        distribution = DistributionStrategy.UNIFIED
+        cycle = CycleLength.ONE_BAR,
+        order = SpreadOrder.UNIFIED
     )
 }
 ```
@@ -353,12 +353,12 @@ For example, `QuadMoverBarFixture` has `WithDimmer` (master dimmer) but not `Wit
 
 ```kotlin
 // This automatically expands to all 4 heads with distribution
-fxEngine.addEffect(FxInstance(
+fxEngine.addFx(FxInstance(
     effect = RainbowCycle(),
     target = ColourTarget("quad-mover-1"),
-    timing = FxTiming(BeatDivision.ONE_BAR),
+    timing = FxTiming(CycleLength.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.NORMAL
+    order = SpreadOrder.NORMAL
 })
 ```
 
@@ -366,10 +366,10 @@ Via the REST API:
 ```json
 POST /api/rest/fx/add
 {
-  "effectType": "RainbowCycle",
+  "fxType": "RainbowCycle",
   "fixtureKey": "quad-mover-1",
   "propertyName": "rgbColour",
-  "distributionStrategy": "NORMAL"
+  "order": "NORMAL"
 }
 ```
 
@@ -391,22 +391,22 @@ When a group contains multi-element fixtures and the effect targets an element-l
 val group = fixtures.group<QuadMoverBarFixture>("all-movers")
 
 // PER_FIXTURE: each fixture's heads run the same rainbow
-fxEngine.addEffect(FxInstance(
+fxEngine.addFx(FxInstance(
     effect = RainbowCycle(),
     target = ColourTarget.forGroup("all-movers"),
-    timing = FxTiming(BeatDivision.ONE_BAR),
+    timing = FxTiming(CycleLength.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.NORMAL
+    order = SpreadOrder.NORMAL
     elementMode = ElementMode.PER_FIXTURE
 })
 
 // FLAT: rainbow sweeps across all 8 heads sequentially
-fxEngine.addEffect(FxInstance(
+fxEngine.addFx(FxInstance(
     effect = RainbowCycle(),
     target = ColourTarget.forGroup("all-movers"),
-    timing = FxTiming(BeatDivision.ONE_BAR),
+    timing = FxTiming(CycleLength.ONE_BAR),
 ).apply {
-    distributionStrategy = DistributionStrategy.NORMAL
+    order = SpreadOrder.NORMAL
     elementMode = ElementMode.FLAT
 })
 ```
@@ -415,9 +415,9 @@ fxEngine.addEffect(FxInstance(
 ```json
 POST /api/rest/groups/all-movers/fx
 {
-  "effectType": "RainbowCycle",
+  "fxType": "RainbowCycle",
   "propertyName": "colour",
-  "distribution": "NORMAL",
+  "order": "NORMAL",
   "elementMode": "FLAT"
 }
 ```
@@ -436,7 +436,7 @@ createGroup<WithPosition>("all-heads") {
 fixtures.group<WithPosition>("all-heads").applyPositionFx(
     fxEngine,
     Circle(),
-    distribution = DistributionStrategy.NORMAL
+    order = SpreadOrder.NORMAL
 )
 ```
 
@@ -482,12 +482,12 @@ This is simpler than creating a named group via `addElements()` when you just ne
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/rest/groups` | List all groups, each with its `memberKeys` in order |
-| GET | `/api/rest/groups/{name}` | Get group details, with each strategy's `distributionSteps` |
+| GET | `/api/rest/groups/{name}` | Get group details, with each strategy's `orderSteps` |
 | GET | `/api/rest/groups/{name}/properties` | Get aggregated property descriptors |
 | GET | `/api/rest/groups/{name}/fx` | Get active effects for group |
 | POST | `/api/rest/groups/{name}/fx` | Apply effect to group |
 | DELETE | `/api/rest/groups/{name}/fx` | Clear group effects |
-| GET | `/api/rest/groups/distribution-strategies` | List strategies |
+| GET | `/api/rest/spread-orders` | List the spread Orders |
 
 ### Request/Response Examples
 
@@ -501,7 +501,7 @@ GET /api/rest/groups
     "memberCount": 4,
     "capabilities": ["dimmer", "colour", "uv"],
     "symmetricMode": "MIRROR",
-    "defaultDistribution": "NORMAL"
+    "defaultOrder": "NORMAL"
   }
 ]
 ```
@@ -513,11 +513,11 @@ GET /api/rest/groups/front-wash/fx
 [
   {
     "id": 1001,
-    "effectType": "Pulse",
+    "fxType": "Pulse",
     "propertyName": "dimmer",
-    "beatDivision": 1.0,
+    "cycle": 1.0,
     "blendMode": "OVERRIDE",
-    "distribution": "NORMAL",
+    "order": "NORMAL",
     "elementMode": null,
     "isRunning": true
   }
@@ -530,11 +530,11 @@ The `elementMode` field is `null` when the effect targets properties that member
 ```json
 POST /api/rest/groups/front-wash/fx
 {
-  "effectType": "pulse",
+  "fxType": "pulse",
   "propertyName": "dimmer",
-  "beatDivision": 1.0,
+  "cycle": 1.0,
   "blendMode": "OVERRIDE",
-  "distribution": "NORMAL",
+  "order": "NORMAL",
   "elementMode": "PER_FIXTURE",
   "parameters": {
     "min": "0",
@@ -544,13 +544,13 @@ POST /api/rest/groups/front-wash/fx
 
 Response:
 {
-  "effectId": 1001
+  "fxId": 1001
 }
 ```
 
 The `elementMode` field defaults to `"PER_FIXTURE"` and controls how effects distribute across multi-element fixture elements. See [Group FX Element Mode](#group-fx-element-mode).
 
-Note: The response returns a single `effectId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
+Note: The response returns a single `fxId` because one `FxInstance` is created that targets the entire group. The engine expands this to group members at processing time.
 
 ## Group Properties
 

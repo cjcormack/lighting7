@@ -37,10 +37,10 @@ class TimeColumnsTest {
         runCatching { state.shutdown() }
     }
 
-    private fun newTemplate(name: String, block: DaoTemplate.() -> Unit): Int {
+    private fun newPalette(name: String, block: DaoPalette.() -> Unit): Int {
         val projectId = seedMinimalProject(state)
         return transaction(state.database) {
-            DaoTemplate.new {
+            DaoPalette.new {
                 this.project = DaoProject.findById(projectId)!!
                 this.name = name
                 block()
@@ -63,7 +63,7 @@ class TimeColumnsTest {
      */
     @Test
     fun `duration columns store nanoseconds, not milliseconds`() {
-        val id = newTemplate("fade-unit-guard") { fadeDuration = Duration.ofMillis(250) }
+        val id = newPalette("fade-unit-guard") { fadeDuration = Duration.ofMillis(250) }
 
         assertEquals(
             250_000_000L,
@@ -72,7 +72,7 @@ class TimeColumnsTest {
         )
         assertEquals(
             250L,
-            transaction(state.database) { DaoTemplate.findById(id)!!.fadeDuration }!!.toMillis(),
+            transaction(state.database) { DaoPalette.findById(id)!!.fadeDuration }!!.toMillis(),
             "and must read back as 250 ms",
         )
     }
@@ -105,7 +105,7 @@ class TimeColumnsTest {
         TimeZone.setDefault(TimeZone.getTimeZone("America/New_York"))
         try {
             val instant = Instant.parse("2026-09-14T10:00:00.123Z")
-            val id = newTemplate("instant-utc-guard") { lastPressedAt = instant }
+            val id = newPalette("instant-utc-guard") { lastPressedAt = instant }
 
             assertEquals(
                 "2026-09-14 10:00:00.123Z",
@@ -114,7 +114,7 @@ class TimeColumnsTest {
             )
             assertEquals(
                 instant,
-                transaction(state.database) { DaoTemplate.findById(id)!!.lastPressedAt },
+                transaction(state.database) { DaoPalette.findById(id)!!.lastPressedAt },
                 "and the same instant must come back out",
             )
         } finally {

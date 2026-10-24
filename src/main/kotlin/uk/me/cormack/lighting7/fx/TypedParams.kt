@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap
  * resolved lazily with colour-source version caching — they only re-resolve
  * when a referenced template is edited.
  *
- * Where `EffectParamUtils.kt` already owns a parser, this class caches it rather than restating
+ * Where `FxParamUtils.kt` already owns a parser, this class caches it rather than restating
  * it: [ubyte] and [easingCurve] call [toUByteParam] / [toEasingCurveParam], which an FX calc
  * script can equally apply to `params.string(…)` itself. They used to reimplement those bodies
  * inline — identically, but with nothing keeping them so.
@@ -33,7 +33,7 @@ class TypedParams(
     private val schema: List<ParameterInfo>,
     /**
      * Resolves a colour string that names something rather than stating it — today a `pal:`
-     * template reference; see [templateColourSource]. Answers null for a literal, and for a
+     * template reference; see [paletteColourSource]. Answers null for a literal, and for a
      * reference it cannot honour, so a caller always has its own parser to fall back to.
      */
     private val resolveColourSource: ((String) -> ExtendedColour?)? = null,
@@ -150,7 +150,7 @@ class TypedParams(
                 value.split(",").mapNotNull { str ->
                     val trimmed = str.trim()
                     when {
-                        trimmed.isEmpty() || isTemplateColourRef(trimmed) -> null
+                        trimmed.isEmpty() || isPaletteColourRef(trimmed) -> null
                         else -> parseExtendedColour(trimmed)
                     }
                 }
@@ -164,14 +164,14 @@ class TypedParams(
      * the target. Cached against the colour source's version, as a colour list is, so retuning a
      * palette moves the running steps without rebuilding the effect.
      *
-     * The palettes are read through the colour source when it is a [TemplateSource] — the one every
-     * spawn site passes (`createEffectWithTemplates`). Without one (a bare `createEffect`, a test)
+     * The palettes are read through the colour source when it is a [PaletteSource] — the one every
+     * spawn site passes (`createFxWithPalettes`). Without one (a bare `createFx`, a test)
      * there is nothing to read them from, and the list is empty. An entry that cannot be a step is
      * **dropped**, as a colour list drops a reference it cannot honour.
      */
     fun paletteSteps(name: String): StepList {
         return currentColourCaches().paletteSteps.getOrPut(name) {
-            val source = resolveColourSource as? TemplateSource
+            val source = resolveColourSource as? PaletteSource
             val value = raw(name)
             if (source == null || value.isBlank()) {
                 StepList.EMPTY

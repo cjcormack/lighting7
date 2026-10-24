@@ -54,13 +54,13 @@ vi.mock('@/store/cueStacks', () => ({ useProjectCueStackListQuery: () => ({ data
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
     data: [
-      { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredEffects: false },
-      { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredEffects: true },
+      { id: 1, uuid: 'look-warm', name: 'Warm wash', hasDeferredFx: false },
+      { id: 2, uuid: 'look-pulse', name: 'Pulse', hasDeferredFx: true },
     ],
   }),
 }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }] }),
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [{ id: 5, uuid: 'tmpl-red', name: 'Red', family: 'COLOUR' }] }),
 }))
 vi.mock('@/store/busk', () => ({
   useBuskPagesQuery: () => ({

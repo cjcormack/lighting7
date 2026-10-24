@@ -14,7 +14,7 @@ export interface LookNameBadgeProps {
    * `/palettes` — but they occupy the same position in the same list, so a differently-sized or
    * differently-coloured chip would make one look more important than the other.
    */
-  isTemplate?: boolean
+  isPalette?: boolean
   /**
    * True when that template holds an **effect** rather than values (fx-templates D1).
    *
@@ -24,7 +24,7 @@ export interface LookNameBadgeProps {
    * effect. Undefined is a legal answer — a surface that has not loaded the template library cannot
    * know, and draws the plain template chip.
    */
-  isEffect?: boolean
+  isFx?: boolean
   className?: string
 }
 
@@ -50,14 +50,14 @@ export interface LookNameBadgeProps {
 export function LookNameBadge({
   name,
   missing,
-  isTemplate,
-  isEffect,
+  isPalette,
+  isFx,
   className,
 }: LookNameBadgeProps) {
-  const effectTemplate = isTemplate === true && isEffect === true
-  const noun = effectTemplate ? 'FX palette' : isTemplate === true ? 'palette' : 'look'
-  const Noun = effectTemplate ? 'FX palette' : isTemplate === true ? 'Palette' : 'Look'
-  const Glyph = isTemplate === true ? Palette : Layers
+  const fxPalette = isPalette === true && isFx === true
+  const noun = fxPalette ? 'FX palette' : isPalette === true ? 'palette' : 'look'
+  const Noun = fxPalette ? 'FX palette' : isPalette === true ? 'Palette' : 'Look'
+  const Glyph = isPalette === true ? Palette : Layers
   // `missing` alone, not `name == null`: a caller can legitimately know a layer names a Look while
   // not yet knowing which one (the list is still loading). Painting that destructive-red would
   // claim a healthy layer is broken for as long as the fetch takes.
@@ -86,7 +86,7 @@ export function LookNameBadge({
           swapped `Link2` for `Link2Off`, which read as "the link is severed"; a layer naming a
           deleted Look is not a severed link, it is a layer pointing at nothing. */}
       <Glyph className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')} />
-      {effectTemplate && (
+      {fxPalette && (
         <AudioWaveform
           className={cn('size-3 shrink-0', broken ? undefined : 'text-muted-foreground')}
         />

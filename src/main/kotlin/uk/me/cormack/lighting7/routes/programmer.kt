@@ -37,7 +37,7 @@ internal fun Route.routeApiRestProgrammer(state: State) {
 }
 
 /** What a full programmer clear swept: stored entries, and programmer-band FX instances. */
-internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsCleared: Int)
+internal data class ProgrammerClearOutcome(val entryCount: Int, val fxCleared: Int)
 
 /**
  * The full programmer clear: reset the toggle bookkeeping that tracks programmer entries
@@ -62,7 +62,7 @@ internal data class ProgrammerClearOutcome(val entryCount: Int, val effectsClear
 internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): ProgrammerClearOutcome {
     state.show.locateManager.reset()
     state.show.programmerLayerStack.reset()
-    val effectsCleared = state.show.fxEngine.fadeOutProgrammerBandEffects(fadeMs)
+    val fxCleared = state.show.fxEngine.fadeOutProgrammerBandFx(fadeMs)
     val entryCount = state.show.fxEngine.programmer.clearAll(fadeMs)
     // The programmer's scenery goes with its values, flying home on the same fade (scenery-programmer
     // plan D1). Here rather than in `ProgrammerStore.clearAll`, which takes no fade and which
@@ -76,5 +76,5 @@ internal fun clearProgrammerCompletely(state: State, fadeMs: Long = 0): Programm
     state.show.programmerStore.includedLayerSnapshot = emptyList()
     state.show.programmerStore.includedKeys = null
     state.show.programmerStore.recordedValues = null
-    return ProgrammerClearOutcome(entryCount, effectsCleared)
+    return ProgrammerClearOutcome(entryCount, fxCleared)
 }

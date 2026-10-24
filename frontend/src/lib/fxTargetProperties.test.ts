@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { EffectLibraryEntry } from '@/store/fixtureFx'
+import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { Fixture, PropertyDescriptor } from '@/store/fixtures'
 import {
-  compatibleEffectsFor,
-  effectsByCategory,
+  compatibleFxFor,
+  fxByFamily,
   extraSliderPropertiesFor,
   groupMemberFixtures,
   propertyNamesFor,
-  resolveEffectProperty,
+  resolveFxProperty,
   settingPropertiesFor,
   type FxPropertyTarget,
 } from './fxTargetProperties'
@@ -80,12 +80,12 @@ function fixture(over: Partial<Fixture> = {}): Fixture {
   }
 }
 
-function effect(over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
+function effect(over: Partial<FxLibraryEntry> = {}): FxLibraryEntry {
   return {
     name: 'SineWave',
-    category: 'intensity',
+    family: 'intensity',
     outputType: 'SLIDER',
-    effectMode: 'PHASE',
+    fxMode: 'PHASE',
     parameters: [],
     compatibleProperties: ['dimmer'],
     ...over,
@@ -94,15 +94,15 @@ function effect(over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
 
 const SETTING_STEP = effect({
   name: 'SettingStep',
-  category: 'controls',
+  family: 'controls',
   compatibleProperties: ['setting'],
 })
 const SLIDER_LEVEL = effect({
   name: 'SliderLevel',
-  category: 'controls',
+  family: 'controls',
   compatibleProperties: ['slider'],
 })
-const RAINBOW = effect({ name: 'RainbowCycle', category: 'colour', compatibleProperties: ['rgbColour'] })
+const RAINBOW = effect({ name: 'RainbowCycle', family: 'colour', compatibleProperties: ['rgbColour'] })
 
 describe('propertyNamesFor', () => {
   it('mints the setting sentinel for a fixture with a setting property', () => {
@@ -170,7 +170,7 @@ describe('propertyNamesFor', () => {
   })
 })
 
-describe('compatibleEffectsFor', () => {
+describe('compatibleFxFor', () => {
   it('offers a sentinel effect exactly when the target minted the sentinel', () => {
     const library = [RAINBOW, SETTING_STEP, SLIDER_LEVEL]
     const goboHead: FxPropertyTarget = {
@@ -182,30 +182,30 @@ describe('compatibleEffectsFor', () => {
       fixture: fixture({ properties: [slider('dimmer', 'dimmer')] }),
     }
 
-    expect(compatibleEffectsFor(library, propertyNamesFor([goboHead])).map((e) => e.name)).toEqual([
+    expect(compatibleFxFor(library, propertyNamesFor([goboHead])).map((e) => e.name)).toEqual([
       'SettingStep',
     ])
-    expect(compatibleEffectsFor(library, propertyNamesFor([dimmerOnly]))).toEqual([])
+    expect(compatibleFxFor(library, propertyNamesFor([dimmerOnly]))).toEqual([])
   })
 
   it('is empty while the library is still arriving', () => {
-    expect(compatibleEffectsFor(undefined, new Set(['dimmer']))).toEqual([])
+    expect(compatibleFxFor(undefined, new Set(['dimmer']))).toEqual([])
   })
 })
 
-describe('effectsByCategory', () => {
+describe('fxByFamily', () => {
   it('groups in library order and honours the exclusion list', () => {
-    const grouped = effectsByCategory([RAINBOW, SETTING_STEP, SLIDER_LEVEL])
+    const grouped = fxByFamily([RAINBOW, SETTING_STEP, SLIDER_LEVEL])
     expect(Object.keys(grouped)).toEqual(['colour', 'controls'])
     expect(grouped.controls.map((e) => e.name)).toEqual(['SettingStep', 'SliderLevel'])
 
-    expect(Object.keys(effectsByCategory([RAINBOW, SETTING_STEP], { exclude: ['controls'] }))).toEqual([
+    expect(Object.keys(fxByFamily([RAINBOW, SETTING_STEP], { exclude: ['controls'] }))).toEqual([
       'colour',
     ])
   })
 })
 
-describe('resolveEffectProperty', () => {
+describe('resolveFxProperty', () => {
   const goboAndColourWheel: FxPropertyTarget = {
     type: 'fixture',
     fixture: fixture({ properties: [setting('gobo'), setting('colourWheel')] }),
@@ -216,21 +216,21 @@ describe('resolveEffectProperty', () => {
       type: 'fixture',
       fixture: fixture({ properties: [colour('rgbColour')] }),
     }
-    expect(resolveEffectProperty(target, RAINBOW)).toBe('rgbColour')
+    expect(resolveFxProperty(target, RAINBOW)).toBe('rgbColour')
   })
 
   it('spends the setting sentinel on the first setting property', () => {
-    expect(resolveEffectProperty(goboAndColourWheel, SETTING_STEP)).toBe('gobo')
+    expect(resolveFxProperty(goboAndColourWheel, SETTING_STEP)).toBe('gobo')
   })
 
   it('honours an explicit setting pick', () => {
     expect(
-      resolveEffectProperty(goboAndColourWheel, SETTING_STEP, { setting: 'colourWheel' }),
+      resolveFxProperty(goboAndColourWheel, SETTING_STEP, { setting: 'colourWheel' }),
     ).toBe('colourWheel')
   })
 
   it('falls back to the first when the explicit pick is not on this target', () => {
-    expect(resolveEffectProperty(goboAndColourWheel, SETTING_STEP, { setting: 'prism' })).toBe(
+    expect(resolveFxProperty(goboAndColourWheel, SETTING_STEP, { setting: 'prism' })).toBe(
       'gobo',
     )
   })
@@ -242,7 +242,7 @@ describe('resolveEffectProperty', () => {
         properties: [slider('dimmer', 'dimmer'), slider('uv', 'uv'), slider('zoom', 'beam')],
       }),
     }
-    expect(resolveEffectProperty(target, SLIDER_LEVEL)).toBe('zoom')
+    expect(resolveFxProperty(target, SLIDER_LEVEL)).toBe('zoom')
   })
 
   it('returns null when the effect fits nothing on the target', () => {
@@ -250,7 +250,7 @@ describe('resolveEffectProperty', () => {
       type: 'fixture',
       fixture: fixture({ properties: [slider('dimmer', 'dimmer')] }),
     }
-    expect(resolveEffectProperty(target, RAINBOW)).toBeNull()
+    expect(resolveFxProperty(target, RAINBOW)).toBeNull()
   })
 
   it('resolves a group sentinel from its members', () => {
@@ -259,7 +259,7 @@ describe('resolveEffectProperty', () => {
       capabilities: ['dimmer'],
       members: [fixture({ properties: [] }), fixture({ key: 'spot-2', properties: [setting('gobo')] })],
     }
-    expect(resolveEffectProperty(target, SETTING_STEP)).toBe('gobo')
+    expect(resolveFxProperty(target, SETTING_STEP)).toBe('gobo')
   })
 })
 

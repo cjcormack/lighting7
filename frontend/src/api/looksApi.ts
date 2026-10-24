@@ -1,14 +1,14 @@
 import type { SceneryChange, SceneryState } from './sceneryApi'
 import type { AttributeFamily } from '@/lib/attributeFamily'
 import type { AssignmentHealth } from './cuesApi'
-import type { EffectDirection } from './fxApi'
+import type { FxDirection, Timing } from './fxApi'
 
 /**
  * The `targetType` discriminator marking an **effect** as deferred: it names no target of its own and
  * takes its targets from the layer referencing the Look.
  *
  * A *row* can no longer carry it — the write boundary refuses one, because a value you point at a
- * selection is a template now (`templatesApi.ts`). Effects keep it, because fanning an effect over
+ * selection is a template now (`palettesApi.ts`). Effects keep it, because fanning an effect over
  * the layer's targets is a different thing from holding a value for nobody.
  *
  * Deliberately a magic string rather than an arm of the fixture/group union, mirroring the
@@ -51,23 +51,23 @@ export interface LookRow {
  * The `delayMs` / `intervalMs` / `randomWindowMs` triple is deliberately absent: timing belongs to
  * the layer applying the Look, not to the Look itself.
  */
-export interface LookEffect {
+export interface LookFx {
   /**
    * A row's vocabulary, or `selection` (effects plan D3): one effect over an ordered list of
    * fixtures and groups, its [targetKey] the list's canonical JSON. Only an effect may name one.
    */
   targetType: LookTargetType | typeof SELECTION_TARGET_TYPE
   targetKey: string
-  effectType: string
-  category: string
+  fxType: string
+  family: string
   propertyName?: string | null
-  beatDivision: number
+  cycle: number
   blendMode: string
-  distribution: string
+  order: string
   phaseOffset?: number
   elementMode?: string | null
   elementFilter?: string | null
-  stepTiming?: boolean | null
+  timing?: Timing | null
   parameters: Record<string, string>
   /** Speed master this effect subscribes to, as the master's uuid (null → master 1). */
   speedMasterUuid?: string | null
@@ -75,21 +75,21 @@ export interface LookEffect {
   rateSpeedMasterUuid?: string | null
   /**
    * On *Seconds* (venue-visit plan D7): the effect follows no master, and a beat effect's
-   * `beatDivision` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
-   * master, flag or not — read it through `isOnSeconds` (`lib/effectTiming.ts`). Absent = false.
+   * `cycle` is its cycle in seconds. A wall-clock effect is on Seconds whenever it has no rate
+   * master, flag or not — read it through `isOnSeconds` (`lib/fxTiming.ts`). Absent = false.
    */
   seconds?: boolean
-  /** Size (effects plan D2), 0–1; absent at 1. */
-  size?: number
+  /** Amount (effects plan D2), 0–1; absent at 1. */
+  amount?: number
   /** Direction (D5); absent when forward. */
-  direction?: EffectDirection
+  direction?: FxDirection
   /** Runs (D9); absent or null runs forever. */
-  nShot?: number | null
+  runs?: number | null
   /** The spread's shape (effects plan D4) — `lib/spreadShape.ts`; each absent at its default. */
   spread?: number
   wings?: number
-  blocks?: number
-  groups?: number
+  segments?: number
+  parts?: number
   sortOrder?: number
 }
 
@@ -115,7 +115,7 @@ export interface LookSummary {
    */
   families: AttributeFamily[]
   rowCount: number
-  effectCount: number
+  fxCount: number
   targetCount: number
   /**
    * True when any **effect** takes its targets from the layer applying this Look rather than naming
@@ -130,11 +130,11 @@ export interface LookSummary {
    * fixture from. It went with the deferred rows, and with it the compatibility gate that refused
    * "Amber Key" to every head it was not authored against (D6).
    */
-  hasDeferredEffects: boolean
+  hasDeferredFx: boolean
   /** Up to 8 distinct literals, most-frequent first, so a row can preview without a detail fetch. */
   preview: string[]
   /** The effects it runs, by type, each once in the Look's order. Absent from an older desk. */
-  effectTypes?: string[]
+  fxTypes?: string[]
   /**
    * How many cue layers reference this Look. Gates delete.
    *
@@ -179,7 +179,7 @@ export interface LookDetails {
   notes: string | null
   families: AttributeFamily[]
   rows: LookRow[]
-  effects: LookEffect[]
+  fx: LookFx[]
   layerCount: number
   usedByCueIds: number[]
   usedByCueNames: string[]
@@ -198,7 +198,7 @@ export interface LookInput {
   name?: string
   notes?: string | null
   rows?: LookRow[]
-  effects?: LookEffect[]
+  fx?: LookFx[]
 }
 
 export interface CopyLookRequest {
@@ -237,7 +237,7 @@ export interface ToggleLookRequest {
    * Tested on the **on** arm only — an off press comes off under any mask.
    */
   families?: AttributeFamily[]
-  beatDivision?: number
+  cycle?: number
 }
 
 /**
@@ -256,14 +256,14 @@ export interface ApplyLookResponse {
   /** Programmer values written into Local. */
   written: number
   /** The Local effects started, one per effect and target. */
-  effectIds: number[]
+  fxIds: number[]
   /** The Look's families the mask left out, as on [ToggleLookResponse]. */
   skippedFamilies: string[]
 }
 
 export interface ToggleLookResponse {
   action: 'applied' | 'removed'
-  effectCount: number
+  fxCount: number
   /**
    * The Look's families the mask left out, in declaration order — the pressing window's toast
    * (D6). Empty for an unmasked press and on the off arm. Says *rows* when toasted: the layer's

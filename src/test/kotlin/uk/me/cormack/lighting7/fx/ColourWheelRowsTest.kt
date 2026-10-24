@@ -39,7 +39,7 @@ class ColourWheelRowsTest {
         val out = buildCueAssignmentsForCue(fixtures, CueApplyData(
             cueId = 7,
             cueName = "test",
-            adHocEffects = emptyList(),
+            adHocFx = emptyList(),
             propertyAssignments = listOf(
                 CuePropertyAssignmentDto(
                     targetType = "fixture",
@@ -84,7 +84,7 @@ class ColourWheelRowsTest {
             ),
             localRows = emptyList(),
             resolveLook = { if (it == look.lookUuid) look else null },
-            resolveTemplate = { null },
+            resolvePalette = { null },
         )
         val row = result.rows.single()
         assertEquals("mac-1", row.targetKey)

@@ -89,7 +89,7 @@ Manages the runtime lifecycle of both timed effects and script hooks using corou
 ### Runtime State
 
 - `activeTriggerJobs: ConcurrentHashMap<Int, MutableList<Job>>` — running coroutines per cueId (both timed effects and script hooks)
-- `triggerEffectIds: ConcurrentHashMap<Int, MutableList<Long>>` — effect IDs created by timed/script actions per cueId
+- `triggerFxIds: ConcurrentHashMap<Int, MutableList<Long>>` — effect IDs created by timed/script actions per cueId
 - `cueToStack: ConcurrentHashMap<Int, Int>` — cueId → stackId mapping for stack-level cleanup
 - `deactivationTriggers: ConcurrentHashMap<Int, List<CueTriggerDto>>` — stored DEACTIVATION script hooks
 
@@ -97,7 +97,7 @@ Manages the runtime lifecycle of both timed effects and script hooks using corou
 
 After the cue's immediate effects have been applied:
 
-1. **Timed effects** (`activateTimedEffectsForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing. Timed preset fires also contribute their property assignments to the cue layer (Layer 4) at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
+1. **Timed effects** (`activateTimedFxForCue`): For each preset/ad-hoc effect with `delayMs` or `intervalMs`, launch a coroutine that applies the effect at the configured timing. Timed preset fires also contribute their property assignments to the cue layer (Layer 4) at fire time (`FxEngine.appendCueAssignments`), retracting the prior fire's rows (`FxEngine.removeCueAssignmentSubset`) on each recurring tick so the cue's assignment list does not accumulate duplicates.
 2. **Script hooks** (`activateTriggersForCue`): For each script trigger, execute by type:
    - **ACTIVATION** with no timing: run the script immediately
    - **ACTIVATION** with `delayMs`: launch `delay(delayMs) → runScript()`
@@ -131,7 +131,7 @@ Each iteration computes a fresh random interval for organic variation.
 
 **File:** `fx/FxEngine.kt`
 
-When running FX_APPLICATION scripts (from script hooks), `CueTriggerManager` sets `fxEngine.currentCueContext` before execution. The `FxEngine.addEffect()` method auto-tags effects:
+When running FX_APPLICATION scripts (from script hooks), `CueTriggerManager` sets `fxEngine.currentCueContext` before execution. The `FxEngine.addFx()` method auto-tags effects:
 
 ```kotlin
 currentCueContext?.let { ctx ->

@@ -20,7 +20,7 @@ export interface SpeedMasterLiveState {
    * Carried on `speedMasters.state` only — `.changed` is the tempo push and says nothing about
    * routing, so anything reading this must be fed by a state frame, not a change frame.
    */
-  usage?: string | null
+  family?: string | null
   /** Follow ratio over {@link followTargetUuid} (`bpm = leader x num/den`); both null = manual. `.state` only. */
   followNum?: number | null
   followDen?: number | null

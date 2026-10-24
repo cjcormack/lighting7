@@ -26,7 +26,7 @@ import {
   useProgrammerTableCounts,
   type ProgrammerTablesChoice,
 } from './ProgrammerTableTabs'
-import { ProgrammerAddEffectDoor } from './ProgrammerAddEffect'
+import { ProgrammerAddFxDoor } from './ProgrammerAddFx'
 import { ReplacementNotesProvider } from './useReplacementNotes'
 
 /**
@@ -111,7 +111,7 @@ export function ProgrammerTables({ projectId, values }: { projectId: number; val
             something that can become a layer is held — and ⌘K's *+ Effect*, which draws nothing until
             asked. Both outlive a tab switch. */}
         <HandProgrammerLayerStrip className="mx-3 my-1.5 w-auto shrink-0" />
-        <ProgrammerAddEffectDoor projectId={projectId} />
+        <ProgrammerAddFxDoor projectId={projectId} />
       </ReplacementNotesProvider>
     </ProgrammerTablesContext.Provider>
   )

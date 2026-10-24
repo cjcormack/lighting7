@@ -9,7 +9,7 @@
  *
  * The literal on the wire is unchanged: a programmer entry, a cue row and a Look row still hold
  * `"pan,tilt"` bytes, and only the display moves. A palette's position intent is `pos:pan,tilt` in
- * this scale (`templateIntent.ts`), which the desk resolves as the same fraction of each head's own
+ * this scale (`paletteIntent.ts`), which the desk resolves as the same fraction of each head's own
  * travel.
  *
  * `lib/axisDegrees.ts` is no longer for display or entry (`positionOnScale` reads a stored degree
@@ -40,7 +40,7 @@ export function clampCentre(value: number): number {
 
 /**
  * A raw DMX value to the scale: exactly `dmx - 128` on a 0–255 axis. A narrower axis maps its own
- * range onto the scale, the same fraction of travel the desk's `TemplateResolver` resolves.
+ * range onto the scale, the same fraction of travel the desk's `PaletteResolver` resolves.
  */
 export function dmxToCentre(dmx: number, range: AxisRange = FULL): number {
   const span = range.max - range.min

@@ -235,7 +235,7 @@ describe('the sections', () => {
     expect(count('program')).toBe('2 stacks')
     expect(count('cues')).toBe('35')
     expect(count('patches')).toBe('60')
-    expect(count('templates')).toBe('31')
+    expect(count('palettes')).toBe('31')
     expect(count('surfaces')).toBe('0')
     expect(count('programmer')).toBeUndefined()
     fireEvent.click(document.querySelector('[data-home-card="looks"]')!)

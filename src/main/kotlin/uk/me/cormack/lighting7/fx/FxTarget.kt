@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 import uk.me.cormack.lighting7.fixture.trait.WithWhite
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
@@ -52,7 +52,7 @@ sealed class FxTargetRef {
      * group's members are. [targetKey] is the selection's canonical key, never a fixture's or a
      * group's, so a lookup by fixture or group key never matches one.
      */
-    data class SelectionRef(val selection: EffectTargetRef.Selection) : FxTargetRef() {
+    data class SelectionRef(val selection: FxTargetsRef.Selection) : FxTargetRef() {
         override val targetKey: String get() = selection.key
         override val isGroup: Boolean = false
         val items: List<TargetRef> get() = selection.items
@@ -66,7 +66,7 @@ sealed class FxTargetRef {
         get() = when (this) {
             is FixtureRef -> TargetRef.Fixture.TYPE
             is GroupRef -> TargetRef.Group.TYPE
-            is SelectionRef -> EffectTargetRef.Selection.TYPE
+            is SelectionRef -> FxTargetsRef.Selection.TYPE
         }
 
     companion object {
@@ -101,7 +101,7 @@ sealed class FxTarget {
      * `rgbColour`, and the seven position effects advertising `pan`/`tilt`.
      *
      * Consequences, in the two places that matter:
-     * - An `EffectRegistration.compatibleProperties` entry must name a property that
+     * - An `FxRegistration.compatibleProperties` entry must name a property that
      *   [FxTargetFactory] maps to a target with this same accepted type. `FxRegistrationTargetCompatibilityTest`
      *   holds every built-in to it.
      * - [FxInstance] warns when its effect and target disagree, and the FX-add routes reject it
@@ -278,8 +278,8 @@ data class SliderTarget(
         val slider = getSlider(fixture) ?: return
 
         val baseValue = slider.value ?: 0u
-        val effectValue = outputByte(fixture, output) { baseValue } ?: return
-        slider.value = FxBlend.slider(baseValue, effectValue, blendMode, weight)
+        val fxValue = outputByte(fixture, output) { baseValue } ?: return
+        slider.value = FxBlend.slider(baseValue, fxValue, blendMode, weight)
     }
 
     /**
@@ -418,13 +418,13 @@ data class ColourTarget(
         // Apply RGB channels — each weighted on its own (P3's "per channel")
         val colour = (fixture as? WithColour)?.rgbColour ?: return
         val baseColour = colour.value ?: Color.BLACK
-        val effectColour = outputColour(fixture, output) { currentExtended(fixture, baseColour) } ?: return
-        colour.value = FxBlend.rgb(baseColour, effectColour.color, blendMode, weight)
+        val fxColour = outputColour(fixture, output) { currentExtended(fixture, baseColour) } ?: return
+        colour.value = FxBlend.rgb(baseColour, fxColour.color, blendMode, weight)
 
         // Apply extended channels (W/A/UV) to bundled slider properties — on a fixture *or* an
         // element: the bundle comes from the class catalogue, which both carry
         // (`FU-FX-ELEMENT-BUNDLED-COLOUR`).
-        val ext = effectColour
+        val ext = fxColour
         applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode, weight)
         applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode, weight)
         applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode, weight)
@@ -680,9 +680,9 @@ data class PositionTarget(
 
         val basePan = positionFixture.pan.value ?: 128u
         val baseTilt = positionFixture.tilt.value ?: 128u
-        val effectPosition = outputPosition(fixture, output, basePan, baseTilt) ?: return
-        positionFixture.pan.value = FxBlend.positionAxis(basePan, effectPosition.pan, blendMode, weight)
-        positionFixture.tilt.value = FxBlend.positionAxis(baseTilt, effectPosition.tilt, blendMode, weight)
+        val fxPosition = outputPosition(fixture, output, basePan, baseTilt) ?: return
+        positionFixture.pan.value = FxBlend.positionAxis(basePan, fxPosition.pan, blendMode, weight)
+        positionFixture.tilt.value = FxBlend.positionAxis(baseTilt, fxPosition.tilt, blendMode, weight)
     }
 
     /**

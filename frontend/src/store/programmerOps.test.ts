@@ -22,7 +22,7 @@ describe('programmerOps endpoints', () => {
   beforeEach(() => {
     installRelativeUrlRequest()
     fetchMock = installRecordingFetch({
-      'projects/6/programmer/spread': {
+      'projects/6/programmer/fan': {
         written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: 'pct:0' }],
         skipped: [],
         skippedFamilies: [],
@@ -46,14 +46,14 @@ describe('programmerOps endpoints', () => {
         to: 'pct:100',
         curve: 'LINE',
         order: 'NORMAL',
-        parts: 1,
+        runs: 1,
         over: 'HEADS',
         fadeMs: 250,
         seed: 0,
       }),
     )
     const request = fetchMock.mock.calls.at(-1)![0] as Request
-    expect(request.url).toMatch(/\/api\/rest\/projects\/6\/programmer\/spread$/)
+    expect(request.url).toMatch(/\/api\/rest\/projects\/6\/programmer\/fan$/)
     expect(request.method).toBe('POST')
     const body = JSON.parse(await request.clone().text())
     expect(body).toEqual({
@@ -64,7 +64,7 @@ describe('programmerOps endpoints', () => {
       to: 'pct:100',
       curve: 'LINE',
       order: 'NORMAL',
-      parts: 1,
+      runs: 1,
       over: 'HEADS',
       fadeMs: 250,
       seed: 0,
@@ -73,8 +73,8 @@ describe('programmerOps endpoints', () => {
   })
 
   it('is not silent: its 400s reach errorToastMiddleware once, under the endpoint’s id', () => {
-    // `SPREAD_NEEDS_SELECTION` is pre-empted by the tab (it never sends under an empty selection);
-    // `SPREAD_INVALID` is the middleware's to say, keyed so a Live burst replaces one toast.
+    // `FAN_NEEDS_SELECTION` is pre-empted by the tab (it never sends under an empty selection);
+    // `FAN_INVALID` is the middleware's to say, keyed so a Live burst replaces one toast.
     expect(SILENT_ENDPOINTS.has('spread')).toBe(false)
   })
 })

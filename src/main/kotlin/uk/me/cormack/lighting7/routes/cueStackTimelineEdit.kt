@@ -20,7 +20,7 @@ import kotlinx.serialization.json.longOrNull
 import org.jetbrains.exposed.v1.jdbc.transactions.TransactionManager
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxRegistry
-import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
 import uk.me.cormack.lighting7.fx.TargetCoverage
@@ -111,7 +111,7 @@ internal sealed interface TimelineEditOutcome {
 internal fun editTimeline(state: State, project: DaoProject, stackId: Int, request: TimelineEditRequest): TimelineEditOutcome {
     val fixtures = state.show.fixtures
     val coverage = TargetCoverage { fixtures }
-    val rules = LayerPressRules({ state.show.templateRegistry }, coverage)
+    val rules = LayerPressRules({ state.show.paletteRegistry }, coverage)
     val holds = state.show.cueStackManager.holds
     return transaction(state.database) {
         val stack = DaoCueStack.findById(stackId)?.takeIf { it.project.id == project.id }
@@ -269,7 +269,7 @@ private class TimelineBatch(
         // A palette's mask is its family; a Look keeps the cell's mask only where the cell was a Look's.
         val mask = when {
             to is PressedRecord.Palette -> to.family?.name
-            from.source.isTemplate -> null
+            from.source.isPalette -> null
             else -> fromLayer.propertyMask
         }
         val on = decide(to, listOfNotNull(toTarget), afterOff, fromLayer.copy(propertyMask = mask), problem) ?: return
@@ -318,7 +318,7 @@ private class TimelineBatch(
         touch(cue)
         writeCueChildren(
             cue,
-            adHocEffects = inOrder(op.adHocEffects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
+            adHocFx = inOrder(op.adHocFx, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) },
             layers = inOrder(op.layers, { it.sortOrder }) { layer, i -> layer.copy(sortOrder = i) },
             restore = true,
             registry = registry,
@@ -377,8 +377,8 @@ private class TimelineBatch(
     private fun recordOf(source: TimelineSourceRef, problem: (String) -> Unit): PressedRecord.Found? {
         val read = when (source.kind.uppercase()) {
             "LOOK" -> readPressedRecord(project, null, source.id)
-            "TEMPLATE" -> readPressedRecord(project, source.id, null)
-            else -> return null.also { problem("source.kind must be LOOK or TEMPLATE, not '${source.kind}'") }
+            "PALETTE" -> readPressedRecord(project, source.id, null)
+            else -> return null.also { problem("source.kind must be LOOK or PALETTE, not '${source.kind}'") }
         }
         return when (read) {
             is PressedRecord.Missing -> null.also { problem(read.message) }
@@ -448,7 +448,7 @@ private class TimelineBatch(
                 }
                 "blendMode" -> {
                     val blend = primitive?.takeIf { it.isString }?.contentOrNull
-                    val refusal = blend?.let { EffectSpecCoercion.Strict.problem(blendMode = it) }
+                    val refusal = blend?.let { FxSpecCoercion.Strict.problem(blendMode = it) }
                     when {
                         blend == null -> found += "fields.blendMode must be a blend mode"
                         refusal != null -> found += "fields.blendMode: $refusal"
@@ -504,7 +504,7 @@ private class TimelineBatch(
 private fun snapshotOf(cue: DaoCue) = TimelineCueSnapshotDto(
     cueId = cue.id.value,
     layers = cue.layersInOrder().mapNotNull { it.toDto() },
-    adHocEffects = cue.adHocEffectsInOrder().map { it.toDto() },
+    adHocFx = cue.adHocFxInOrder().map { it.toDto() },
     scenery = cueSceneryOf(cue.id).map { it.toDto() },
 )
 
@@ -549,7 +549,7 @@ internal data class CueStackTimelineEditResource(val parent: CueStackTimelineRes
 @Serializable
 internal data class TimelineEditRequest(val ops: List<JsonObject>, val dryRun: Boolean = false)
 
-/** A Look or a palette, as the Timeline names one: `LOOK` or `TEMPLATE`, and its id. */
+/** A Look or a palette, as the Timeline names one: `LOOK` or `PALETTE`, and its id. */
 @Serializable
 internal data class TimelineSourceRef(val kind: String, val id: Int)
 
@@ -579,7 +579,7 @@ internal data class SceneryClearOp(val cueId: Int, val elementUuid: String)
 internal data class RestoreOp(
     val cueId: Int,
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<JsonObject>,
 )
 
@@ -612,6 +612,6 @@ internal data class TimelineReleasedDto(val cueId: Int, val source: LayerSourceD
 internal data class TimelineCueSnapshotDto(
     val cueId: Int,
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val scenery: List<SceneryChangeDto>,
 )

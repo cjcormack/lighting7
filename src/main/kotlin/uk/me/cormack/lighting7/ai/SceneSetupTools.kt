@@ -964,12 +964,7 @@ internal class SceneSetupTools(private val state: State) {
         val ELEMENT_NUMBERS = listOf("x", "y", "z", "yawDeg", "widthM", "depthM", "heightM")
         val ELEMENT_FIELDS = ELEMENT_NUMBERS + listOf("name", "kind", "layer", "finish", "params", "hidden")
         val VIEWPOINT_FIELDS = listOf("name", "kind", "eye", "target", "fovDeg", "seating", "seat")
-        /**
-         * What `get_scene` answers beside a row's fields and `set_scene` ignores, so a row read back
-         * can be corrected and resent as it stands: a seating's seat count, a seat view's resolved
-         * eye, a note that its seating has gone, a painted face's image size, a model's own size.
-         */
-        val READ_ONLY_FIELDS = listOf("seats", "seatedEye", "note", "paintImages", "owner", "modelSize")
+        val READ_ONLY_FIELDS = SCENE_READ_ONLY_FIELDS
 
         /** Appended to a refusal of a venue element's row: what a show can do instead. */
         const val VENUE_ELEMENT_HINT =

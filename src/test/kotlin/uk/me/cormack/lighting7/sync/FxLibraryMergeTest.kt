@@ -9,7 +9,7 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DaoInstall
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLooks
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoSyncConfig
@@ -82,7 +82,7 @@ class FxLibraryMergeTest {
 
         transaction(state.database) {
             val look = DaoLook.new { project = DaoProject[projectId]; name = "Ours" }
-            DaoLookEffect.new {
+            DaoLookFxEntity.new {
                 this.look = look; targetType = "group"; targetKey = "front"
                 fxType = "Sweep"; family = "position"; cycle = 2.0; blendMode = "OVERRIDE"
                 order = "NORMAL"; direction = "BOUNCE"; parameters = emptyMap(); sortOrder = 0

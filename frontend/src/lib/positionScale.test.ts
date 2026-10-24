@@ -12,7 +12,7 @@ import {
 
 /**
  * The operator's position scale (venue-visit plan D3): centre-relative coarse DMX, `-128..127`,
- * 0 at DMX 128, one unit a step. The numbers are the Kotlin resolver's (`TemplateResolver`'s
+ * 0 at DMX 128, one unit a step. The numbers are the Kotlin resolver's (`PaletteResolver`'s
  * centre arm and `centreIntentOf`), so a value typed here and a palette resolved there agree.
  */
 describe('positionScale', () => {

@@ -20,7 +20,7 @@ describe('describeStackLayer', () => {
       value: '204',
     })
     expect(
-      describeStackLayer(layer({ kind: 'EFFECT', effectType: 'Pulse', cueId: 12, beatDivision: 0.25, heldBack: true }), cueLabel).detail,
+      describeStackLayer(layer({ kind: 'FX', fxType: 'Pulse', cueId: 12, cycle: 0.25, heldBack: true }), cueLabel).detail,
     ).toContain("Q12's FX")
     expect(describeStackLayer(layer({ kind: 'CUE', cueId: 12, value: '153', layerSource: { kind: 'LOOK', id: 1, name: 'Warm' } as never }), cueLabel)).toEqual({
       title: 'Q12',
@@ -31,15 +31,15 @@ describe('describeStackLayer', () => {
   })
 
   it('says why an effect is held back, by the desk’s reason — Blind, a stomp, your value (D7)', () => {
-    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', ...over })
+    const layer = (over: Partial<KeyStackLayer>): KeyStackLayer => ({ kind: 'PROGRAMMER_FX', onStage: false, fxType: 'Pulse', ...over })
     expect(describeStackLayer(layer({ heldBack: true, heldBackReason: 'BLIND' }), cueLabel).detail).toBe(
       'programmer FX · Blind holds it; it is still running and paints in phase when Blind goes off',
     )
-    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
+    expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true, heldBackReason: 'STOMP' }), cueLabel).detail).toContain(
       'a layer above stomps it',
     )
     // An older desk sends no reason: what it held back, your value held back.
-    expect(describeStackLayer(layer({ kind: 'EFFECT', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
+    expect(describeStackLayer(layer({ kind: 'FX', cueId: 12, heldBack: true }), cueLabel).detail).toContain('your value holds it back')
     expect(describeStackLayer(layer({ heldBack: false }), cueLabel).detail).toBe('programmer FX')
   })
 
@@ -64,7 +64,7 @@ describe('LayerStack', () => {
           targetKey: 'wash-2',
           layers: [
             { kind: 'PROGRAMMER', onStage: true, owner: 'web', value: '204', ageMs: 0 },
-            { kind: 'EFFECT', onStage: false, effectType: 'Pulse', cueId: 12, heldBack: true },
+            { kind: 'FX', onStage: false, fxType: 'Pulse', cueId: 12, heldBack: true },
             { kind: 'BASE', onStage: false, value: '0' },
           ],
         },
@@ -102,7 +102,7 @@ describe('LayerStack', () => {
         {
           targetKey: 'wash-2',
           layers: [
-            { kind: 'PROGRAMMER_EFFECT', onStage: false, effectType: 'Pulse', heldBack: true, heldBackReason: 'BLIND' },
+            { kind: 'PROGRAMMER_FX', onStage: false, fxType: 'Pulse', heldBack: true, heldBackReason: 'BLIND' },
             { kind: 'PROGRAMMER', onStage: false, owner: 'web', value: '204', ageMs: 0 },
             { kind: 'BASE', onStage: true, value: '0' },
           ],

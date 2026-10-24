@@ -155,13 +155,13 @@ describe('the FX cue-slot overlay', () => {
     const tile = await screen.findByLabelText('Storm Wash')
     expect(tile.getAttribute('aria-pressed')).toBe('false')
 
-    // A TEMPLATE layer carrying the same int PK must not light a Look's tile: the two id spaces
+    // A palette layer carrying the same int PK must not light a Look's tile: the two id spaces
     // are different tables.
     act(() => {
       programmerWs.push({
         applied: [
           {
-            source: { kind: 'TEMPLATE', id: 6, uuid: 't6', name: 'Amber Key' },
+            source: { kind: 'PALETTE', id: 6, uuid: 't6', name: 'Amber Key' },
             targets: [{ type: 'fixture', key: 'hex-1', state: 'all' }],
           },
         ],

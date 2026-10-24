@@ -28,16 +28,16 @@ fun stripTriggerRows(project: DaoProject): Int {
         DaoLookRow.find { DaoLookRows.look inList looks }
             .filter { refused(it.targetType, it.elementKey?.let { e -> "${it.targetKey}.$e" } ?: it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoLookEffect.find { DaoLookEffects.look inList looks }
+        DaoLookFxEntity.find { DaoLookFx.look inList looks }
             .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
-    val templates = DaoTemplate.find { DaoTemplates.project eq project.id }.map { it.id }
+    val templates = DaoPalette.find { DaoPalettes.project eq project.id }.map { it.id }
     if (templates.isNotEmpty()) {
-        DaoTemplateRow.find { DaoTemplateRows.palette inList templates }
+        DaoPaletteRow.find { DaoPaletteRows.palette inList templates }
             .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoTemplateEffect.find { DaoTemplateEffects.palette inList templates }
+        DaoPaletteFxEntity.find { DaoPaletteFx.palette inList templates }
             .filter { refused(null, null, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }
@@ -46,7 +46,7 @@ fun stripTriggerRows(project: DaoProject): Int {
         DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
             .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue inList cues }
+        DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cues }
             .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
     }

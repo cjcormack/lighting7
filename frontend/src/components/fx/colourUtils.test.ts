@@ -1,48 +1,48 @@
 import { describe, expect, it } from 'vitest'
-import { isTemplateRef, parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
+import { isPaletteRef, parsePaletteRefUuid, serializePaletteRef } from './colourUtils'
 
 /**
- * The `pal:` grammar, pinned against `fx/TemplateColourSource.kt`, which owns it.
+ * The `pal:` grammar, pinned against `fx/PaletteColourSource.kt`, which owns it.
  *
  * The file this sits beside did not exist until the positional palette went, and
  * `lib/programmerValue.test.ts` had been claiming for a while that it did. This half of the mirror
  * **serialises and parses only** — resolving a reference to a colour is per-head arithmetic that
- * `TemplateResolver` must be the single answer to — so these are the only three behaviours to pin.
+ * `PaletteResolver` must be the single answer to — so these are the only three behaviours to pin.
  */
 describe('palette colour references', () => {
   const uuid = '2f1c8a3e-0000-4000-8000-000000000001'
 
   it('recognises a reference regardless of case or surrounding space', () => {
-    expect(isTemplateRef(`pal:${uuid}`)).toBe(true)
-    expect(isTemplateRef(`  PAL:${uuid}  `)).toBe(true)
-    expect(parseTemplateRefUuid(`  pal:${uuid} `)).toBe(uuid)
+    expect(isPaletteRef(`pal:${uuid}`)).toBe(true)
+    expect(isPaletteRef(`  PAL:${uuid}  `)).toBe(true)
+    expect(parsePaletteRefUuid(`  pal:${uuid} `)).toBe(uuid)
   })
 
   it('round-trips through serialize', () => {
-    expect(serializeTemplateRef(uuid)).toBe(`pal:${uuid}`)
-    expect(parseTemplateRefUuid(serializeTemplateRef(uuid))).toBe(uuid)
+    expect(serializePaletteRef(uuid)).toBe(`pal:${uuid}`)
+    expect(parsePaletteRefUuid(serializePaletteRef(uuid))).toBe(uuid)
   })
 
   it('treats a literal as a literal', () => {
     for (const literal of ['#ff0000', 'red', '#ff0000;w128;a64', 'P1', '']) {
-      expect(isTemplateRef(literal)).toBe(false)
-      expect(parseTemplateRefUuid(literal)).toBeNull()
+      expect(isPaletteRef(literal)).toBe(false)
+      expect(parsePaletteRefUuid(literal)).toBeNull()
     }
   })
 
   it('does not answer to `ref:`', () => {
     // `ref:{uuid}` is retired *and* still refused at the Look write boundary as the no-nesting
     // guarantee. The two grammars must stay unconfusable in both directions.
-    expect(isTemplateRef(`ref:${uuid}`)).toBe(false)
-    expect(parseTemplateRefUuid(`ref:${uuid}`)).toBeNull()
+    expect(isPaletteRef(`ref:${uuid}`)).toBe(false)
+    expect(parsePaletteRefUuid(`ref:${uuid}`)).toBeNull()
   })
 
   it('reports a malformed uuid as a reference with a bad target, not as a literal', () => {
     // The caller's question is "which template is this pointing at". Answering null here would make
     // a broken reference render as a colour, which is how a dangling one gets missed.
-    expect(isTemplateRef('pal:oops')).toBe(true)
-    expect(parseTemplateRefUuid('pal:oops')).toBe('oops')
+    expect(isPaletteRef('pal:oops')).toBe(true)
+    expect(parsePaletteRefUuid('pal:oops')).toBe('oops')
     // Nothing after the prefix is not a target at all.
-    expect(parseTemplateRefUuid('pal:')).toBeNull()
+    expect(parsePaletteRefUuid('pal:')).toBeNull()
   })
 })

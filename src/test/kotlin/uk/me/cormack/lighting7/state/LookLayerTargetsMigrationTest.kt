@@ -11,7 +11,7 @@ import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
+import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.captureLogs
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -81,7 +81,7 @@ class LookLayerTargetsMigrationTest {
                 this.project = project
                 name = "Act 1, Scene 1 — Set"
             }
-            val amber = DaoTemplate.new {
+            val amber = DaoPalette.new {
                 this.project = project
                 name = "Amber"
             }

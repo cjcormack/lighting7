@@ -78,10 +78,10 @@ describe('buildCueInput', () => {
     const layer = input.layers[0]
 
     expect(layer.lookId).toBe(7)
-    // Session 3: a layer applies a Look **or** a template, so `templateId` is a field too. Missing
+    // Session 3: a layer applies a Look **or** a template, so `paletteId` is a field too. Missing
     // from the rebuild it would be dropped on every inline cue edit — and because both ids are
     // optional, the compiler would not have said a word.
-    expect('templateId' in layer).toBe(true)
+    expect('paletteId' in layer).toBe(true)
     expect(layer.sortOrder).toBe(3)
     expect(layer.enabled).toBe(false)
     expect(layer.targets).toEqual([{ type: 'group', key: 'front-wash' }])
@@ -121,7 +121,7 @@ describe('buildCueInput', () => {
 
   it('strips the response-only source, which is why the rebuild exists at all', () => {
     // `source` is what the server resolved the layer's referent to — kind, id, uuid and name. It is
-    // read-only: `lookId` / `templateId` are the write fields, and echoing the resolved object back
+    // read-only: `lookId` / `paletteId` are the write fields, and echoing the resolved object back
     // would invite the server to trust a client's idea of a record's identity.
     const input = buildCueInput(cueWithOneLayer())
     expect('source' in input.layers[0]).toBe(false)
@@ -135,28 +135,28 @@ describe('buildCueInput', () => {
 
   it('strips the response-only uuid from an effect and keeps the rest', () => {
     const cue = cueWithOneLayer()
-    const withEffect: Cue = {
+    const withFx: Cue = {
       ...cue,
-      adHocEffects: [
+      adHocFx: [
         {
           targetType: 'fixture',
           targetKey: 'hex-1',
-          effectType: 'Pulse',
-          category: 'intensity',
+          fxType: 'Pulse',
+          family: 'intensity',
           propertyName: 'dimmer',
-          beatDivision: 0.5,
+          cycle: 0.5,
           blendMode: 'OVERRIDE',
-          distribution: 'NORMAL',
+          order: 'NORMAL',
           phaseOffset: 0.25,
           elementMode: null,
           elementFilter: null,
-          stepTiming: null,
+          timing: null,
           parameters: { min: '40' },
           uuid: 'effect-uuid',
         },
       ],
     }
-    const effect = buildCueInput(withEffect).adHocEffects[0]
+    const effect = buildCueInput(withFx).adHocFx[0]
     expect('uuid' in effect).toBe(false)
     expect(effect.phaseOffset).toBe(0.25)
     expect(effect.parameters).toEqual({ min: '40' })
@@ -168,10 +168,10 @@ describe('buildCueInput', () => {
     const cue = cueWithOneLayer()
     const templated = {
       ...cue,
-      layers: [{ ...cue.layers[0], lookId: undefined, templateId: 11 }],
+      layers: [{ ...cue.layers[0], lookId: undefined, paletteId: 11 }],
     }
     const layer = buildCueInput(templated).layers[0]
-    expect(layer.templateId).toBe(11)
+    expect(layer.paletteId).toBe(11)
     expect(layer.lookId).toBeUndefined()
   })
 
@@ -227,7 +227,7 @@ function cueWithOneLayer(): Cue {
         randomWindowMs: 250,
       },
     ],
-    adHocEffects: [],
+    adHocFx: [],
     propertyAssignments: [],
     triggers: [
       {

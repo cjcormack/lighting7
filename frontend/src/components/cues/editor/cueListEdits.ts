@@ -45,7 +45,7 @@ export function appendItem<T extends Ordered>(list: readonly T[], item: T): T[] 
 export type IdOf<T> = (item: T) => string | number | undefined
 
 export const layerId: IdOf<{ id?: number }> = (layer) => layer.id
-export const effectId: IdOf<{ uuid?: string }> = (effect) => effect.uuid
+export const fxId: IdOf<{ uuid?: string }> = (effect) => effect.uuid
 
 /**
  * Where the child the tab drew at [index] sits in [stored] — the cue as the desk holds it, which

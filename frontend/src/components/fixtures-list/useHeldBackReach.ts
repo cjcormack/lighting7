@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { skipToken } from '@reduxjs/toolkit/query'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { heldBackReach } from '@/lib/heldBack'
-import { useActiveEffectsQuery } from '@/store/fixtureFx'
+import { useActiveFxQuery } from '@/store/fixtureFx'
 
 const NONE: ReadonlySet<string> = new Set()
 
@@ -13,7 +13,7 @@ const NONE: ReadonlySet<string> = new Set()
  * keys. Off (an empty set, no subscription) where the grid draws no ownership.
  */
 export function useHeldBackReach(enabled: boolean): ReadonlySet<string> {
-  const { data: effects } = useActiveEffectsQuery(enabled ? undefined : skipToken)
+  const { data: effects } = useActiveFxQuery(enabled ? undefined : skipToken)
   const { fixtures } = useFixtureLookup()
   return useMemo(() => (enabled ? heldBackReach(effects, fixtures ?? []) : NONE), [enabled, effects, fixtures])
 }

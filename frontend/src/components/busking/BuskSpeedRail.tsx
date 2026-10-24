@@ -41,7 +41,7 @@ import type { SpeedMasterLiveState } from '@/api/speedMastersWsApi'
  * The rail is what makes the routing sessions 1-2 built *visible*: every master says what it is
  * for, in a badge, on a performance surface. The rule that badge names — an effect with no explicit
  * master is stamped with the usage-matching one — has a caller again since fx-templates session 3:
- * `TemplateEditor` stamps an effect template when its effect is chosen. **Nothing on this page does
+ * `PaletteEditor` stamps an effect template when its effect is chosen. **Nothing on this page does
  * that**, though, so the caption still states what a badge *means* rather than promising what a
  * press here does; don't restore its old wording, which claimed the pads stamped.
  *
@@ -219,7 +219,7 @@ function MasterCard({
         leaderNameOf(bank, leaderTarget),
       )
     : null
-  const usage = usageLabel(master.usage)
+  const usage = usageLabel(master.family)
 
   const cardRef = useRef<HTMLDivElement>(null)
   /** The tempo under the finger while a drag runs; null when one is not. */
@@ -348,7 +348,7 @@ function MasterCard({
             <span
               className="shrink-0 rounded-full bg-muted px-1.5 py-px text-[9px] font-bold tracking-[0.06em]"
               // The rail's old caption, on the badge it was about: what a usage *means*, not what a
-              // press here does — nothing on this page stamps a master; `TemplateEditor` does.
+              // press here does — nothing on this page stamps a master; `PaletteEditor` does.
               title="Usage: FX palettes of this family default to this master"
             >
               {usage}

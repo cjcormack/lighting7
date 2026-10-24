@@ -246,7 +246,7 @@ export interface AttachOverride {
   dormant?: boolean
 }
 
-/** Who names a key: `CUE | LOOK | TEMPLATE | BINDING | SCRIPT`. */
+/** Who names a key: `CUE | LOOK | PALETTE | BINDING | SCRIPT`. */
 export interface AttachUsedBy {
   kind: string
   id: number

@@ -318,7 +318,7 @@ venue's at `venueValue` standing again). In a venue both are admin-only, as ever
 always is. The model states an intent — the palette grammar (`pct:`, `#rrggbb`, `pos:` — a
 centre-relative position, `-128..127` with 0 the centre of travel — or a stored `deg:`, `dmx:`,
 `on`/`off`), or a setting's option name for a gobo or a wheel slot — and each is resolved per head
-through `TemplateResolver`, the resolver a palette press uses, into the literal a Look row stores;
+through `PaletteResolver`, the resolver a palette press uses, into the literal a Look row stores;
 `pct:` and `dmx:` reach any single channel (a hazer's `fanSpeed`), not only the palette vocabulary. A
 group stays one group row while its members agree on the literal, and becomes a row per head when they
 do not (a wheel head and an RGB head given one colour). A head that cannot take a value is reported
@@ -335,7 +335,7 @@ gap a model hit: the Shehds' fixture-level colour was refused and nothing said a
 target and `create_look` descriptions say how to name one. The rows then go through the
 REST write path (`validateLookRows`, `writeLookChildren`), so a trigger or command name is refused as
 it is there. **A Look's effects name their own targets** (absolute-looks plan D2), taken as
-`create_cue`'s ad-hoc effects take one (`parseAdHocEffectTarget`): `targetType` and `targetKey`, or
+`create_cue`'s ad-hoc effects take one (`parseAdHocFxTarget`): `targetType` and `targetKey`, or
 `targets` for one effect over a selection; `update_look` takes them the same way, and one naming no
 target is refused before anything is written. `apply_look` puts a Look on whole, wherever its own
 values and effects land, and a cue layer of a Look names no targets — any given are dropped; its
@@ -346,17 +346,17 @@ the same press. There is no static
 effect: `StaticValue` was removed once a Look could hold a value, and `StaticSetting`, `StaticColour` and
 `StaticPosition` once `set_programmer` could set any property, so a fixed state is always a value on the
 fixture's own property. A stored effect naming a type the registry no longer has is skipped with a warn
-wherever a cue or Include spawns it (`EffectSpawner.createEffectInstanceOrNull`), not left to abort the GO.
+wherever a cue or Include spawns it (`FxSpawner.createFxInstanceOrNull`), not left to abort the GO.
 A colour value may carry the head's own emitter levels as the desk's colour literal does —
 `#ff0000;w128;a64;uv32`, each token at most once, any other token refused rather than dropped — laid over
 the resolved mix only where the head bundles that emitter with its colour (`bundleWithColour`). A
-`;policy=extract|additive|rgbonly` token is the palette grammar's white policy (`TemplateResolver.mixColour`),
+`;policy=extract|additive|rgbonly` token is the palette grammar's white policy (`PaletteResolver.mixColour`),
 absent reading as `rgbonly`, so a colour with neither sets W/A/UV to zero; a named level wins over the
 policy's; a `position` takes `pos:` (or a stored `deg:`), which reaches every DMX-backed head,
 annotated or not, and pan and tilt also take `pct:` / `dmx:` each on its own.
 
 `update_look` edits a Look as the REST `PUT /looks/{id}` does: a new name (refused when another
-Look holds it) and notes, and each of `values`, `effects` and `scenery` given replaces that part
+Look holds it) and notes, and each of `values`, `fx` and `scenery` given replaces that part
 whole while one left out is kept — the same resolve and checks as `create_look`, every part checked
 before anything is written. A values or effects change goes through `republishForLookEdit`, so every
 live cue layering the Look moves without a re-fire; a rename, notes or scenery fire
@@ -381,7 +381,7 @@ the code the desk's own gesture goes through, on the current project:
 
 - `set_programmer` `{targets, values: [{propertyName, value}], fadeSeconds?}` — plain values in
   `create_look`'s grammar, resolved per head by `resolveProgrammerValues` (the same parse and
-  `TemplateResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
+  `PaletteResolver` per-head resolution as a Look's values, answering each head's `PropertyValue`
   rather than Look rows), written as `ProgrammerOwner.WEB` in one `writeProperties` batch with each
   head's `sourceGroup` from `groupHintsForTargets` — *Apply as values*' value arm — so Record
   collapses a group's agreeing heads back to one group row. A head that cannot take a value, or whose
@@ -398,13 +398,13 @@ the code the desk's own gesture goes through, on the current project:
 - `apply_palette` `{paletteId | paletteName, targets?, asValues?, mask?, fadeSeconds?}` — by default
   the desk's press (apply-model plan D9): the toggle route's `programmerLayerStack.toggle`, with its
   family replacement and widening, answering `released` when it took heads off another palette.
-  `asValues: true` is `applyTemplateToProgrammer`, the values *Apply as values* writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
+  `asValues: true` is `applyPaletteToProgrammer`, the values *Apply as values* writes. A generic palette with no targets is `PALETTE_NEEDS_SELECTION`;
   a per-fixture one with none lands on its own heads, as its pad press does. `mask` refuses a palette
   outside it (`PALETTE_OUTSIDE_MASK`), on the layer's on arm only (`pressWouldRelease`). Both press-log
   as the desk's doors do.
 - `record_look` — `performProgrammerRecordLook`, which `POST …/programmer/record-look` now calls too
   (extracted from the route as Record into a cue's `performProgrammerRecord` was), with record_cue's
-  modes, source and mask, `effectIds` to move programmer effects into the Look, and the Look's rows in
+  modes, source and mask, `fxIds` to move programmer effects into the Look, and the Look's rows in
   the answer.
 
 Every fade on these is `fadeSeconds`, 0–600.
@@ -416,7 +416,21 @@ Every fade on these is `fadeSeconds`, 0–600.
 stores none of them. A client connected before the rename holds a stale `tools/list` and must
 reconnect to see the new names; a call to an old name is refused as an unknown tool. The stored side
 moved too, in terminology plan session 4: the `palettes` tables, `pal:` references and the
-`palettes/` archive folder.
+`palettes/` archive folder. A connected MCP client must reconnect to see the tools and fields
+terminology plan session 5 renamed (`clear_fx`, `active_fx`, a Look's and a palette's `fx`, the FX
+schema's `family`, `order`, `amount`, `segments`, `parts` and `timing`), because a client caches the
+tool list it was given at connect. Until it does, an old argument is refused by name, not dropped:
+both tool sets check every call's arguments against the tool's input schema before running it
+(`ai/ToolArguments.kt`, into object properties and array items, a map's keys aside) and answer
+`'fx[0].size' is not an argument of create_look; it takes …`, naming the arguments it does take and
+suggesting a reconnect, where the tool would have read the fields it knows and reported success. An
+argument a tool once took and retired (`add_cue_to_stack`'s `sortOrder`, a `cueId` where an entry is
+meant, `apply_palette`'s `mode`, `apply_look`'s `targets`) is answered with what replaced it instead.
+The tools that already refuse an unknown argument themselves, beside every other problem of the call
+(`set_stage`, `set_scene`, the patch-edit and venue tools, `render_view`, `move_scenery`:
+`CHECKS_OWN_ARGUMENTS`), keep their own check, which a test holds them to. A field `get_scene` answers
+and `set_scene` takes back unread is declared in its schema as read-only, so a row still goes back as
+it stands.
 
 `aim_fixtures` points moving heads at a stage coordinate — the same
 `aimIntoProgrammer` as `POST …/programmer/aim`, writing pan/tilt into the programmer, with a
@@ -520,7 +534,7 @@ piece the cue would not show anyway, a row the cue already has replaced — answ
 scenery rows in the programmer (`sceneryIncluded`), a cue row's transition kept, and
 `update_from_programmer` with no targets writes them back (`sceneryWritten`). It runs a Look's
 **effects** in the programmer as well (`fxSpawned`, each on its own target), and `update_from_programmer` writes an operator's edit back onto the effect it came from
-(`effectsWritten`) — `docs/lighting-composition-model.md` §"Record / Include / Update". Their descriptions say
+(`fxWritten`) — `docs/lighting-composition-model.md` §"Record / Include / Update". Their descriptions say
 so, and that neither the mask nor `targets` narrows scenery. **It needs no remote-access gate**, unlike arming, firing and fixture
 commands: scenery is drawn and never output, so moving it reaches nothing physical — no channel, no
 motor, nothing in a room the model cannot see.
@@ -565,7 +579,7 @@ Three decisions shape them:
   the gel (`Fixtures.setPatchMetadata`, which `GET /fixtures` reads).
   A rename (`rename_fixtures`, `edit_groups`' `newName`) also fires the list signal of every kind it
   rewrote, `cuesRecomposed` for the cues, and invalidates the surface bindings; on the current project
-  it republishes each rewritten Look and palette (`republishForLookEdit` / `republishForTemplateEdit`)
+  it republishes each rewritten Look and palette (`republishForLookEdit` / `republishForPaletteEdit`)
   and each live cue (`republishCueIfLive`) after the reload, so what is on stage keeps its fixtures.
   The programmer's own slots and effects already running are runtime state keyed by the old key, and
   are left to the operator.

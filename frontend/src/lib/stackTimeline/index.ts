@@ -3,7 +3,7 @@
  * columns, cells, runs and the filtered list out. Pure; the per-window stores are `columnOrder.ts`.
  */
 export * from './model'
-export { columns, applyColumnOrder, moveColumn, layerColumnId, effectColumnId, sceneryColumnId, recordColumnId, withExtraColumns, type TimelineNames } from './columns'
+export { columns, applyColumnOrder, moveColumn, layerColumnId, fxColumnId, sceneryColumnId, recordColumnId, withExtraColumns, type TimelineNames } from './columns'
 export { cells, cellAt, layerGlyphs, type TimelineCells } from './cells'
 export { runs, joins, runMarkAt, markerMarkAt, sameSettings, type TimelineRuns } from './runs'
 export { filter, kindCounts, type TimelineFilter } from './filter'

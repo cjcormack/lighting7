@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { ProgrammerAppliedSource } from '@/api/programmerWsApi'
 import { appliedSignature, describeHeads, replacementNotes } from './replacementNotes'
 
-const RED = { kind: 'TEMPLATE' as const, id: 3, uuid: 'u3', name: 'Red' }
-const AMBER = { kind: 'TEMPLATE' as const, id: 4, uuid: 'u4', name: 'Amber' }
-const BLUE = { kind: 'TEMPLATE' as const, id: 5, uuid: 'u5', name: 'Blue' }
+const RED = { kind: 'PALETTE' as const, id: 3, uuid: 'u3', name: 'Red' }
+const AMBER = { kind: 'PALETTE' as const, id: 4, uuid: 'u4', name: 'Amber' }
+const BLUE = { kind: 'PALETTE' as const, id: 5, uuid: 'u5', name: 'Blue' }
 
 function on(source: typeof RED, ...keys: string[]): ProgrammerAppliedSource {
   return { source, targets: keys.map((key) => ({ type: 'fixture', key, state: 'all' as const })) }
@@ -18,8 +18,8 @@ describe('replacementNotes', () => {
       [on(RED, 'hex-1', 'hex-2'), on(AMBER, 'hex-3', 'hex-4')],
       name,
     )
-    expect(notes.get('TEMPLATE:3')).toBe('lost Hex 3–4 to Amber')
-    expect(notes.has('TEMPLATE:4')).toBe(false)
+    expect(notes.get('PALETTE:3')).toBe('lost Hex 3–4 to Amber')
+    expect(notes.has('PALETTE:4')).toBe(false)
   })
 
   it('names each taker where two took heads in one frame', () => {
@@ -28,7 +28,7 @@ describe('replacementNotes', () => {
       [on(AMBER, 'hex-1'), on(BLUE, 'hex-2')],
       name,
     )
-    expect(notes.get('TEMPLATE:3')).toBe('lost Hex 1 to Amber, Hex 2 to Blue')
+    expect(notes.get('PALETTE:3')).toBe('lost Hex 1 to Amber, Hex 2 to Blue')
   })
 
   it('says nothing for heads nobody gained — an off press, a removal', () => {
@@ -47,7 +47,7 @@ describe('replacementNotes', () => {
       { source: RED, targets: [{ type: 'group', key: 'wash', state: 'some' }] },
       on(AMBER, 'hex-1'),
     ]
-    expect(replacementNotes(before, after, name).get('TEMPLATE:3')).toBe('lost Hex 1 to Amber')
+    expect(replacementNotes(before, after, name).get('PALETTE:3')).toBe('lost Hex 1 to Amber')
   })
 })
 
@@ -57,7 +57,7 @@ describe('replacementNotes over a multi-head fixture', () => {
     const bar = (source: typeof RED, ...bars: string[]) =>
       on(source, ...bars.flatMap((b) => [b, `${b}:c1`, `${b}:c2`]))
     const notes = replacementNotes([bar(RED, 'bar-1', 'bar-2')], [on(RED), bar(BLUE, 'bar-1', 'bar-2')], (k) => k.replace('bar-', 'Bar '), cells)
-    expect(notes.get('TEMPLATE:3')).toBe('lost Bar 1–2 to Blue')
+    expect(notes.get('PALETTE:3')).toBe('lost Bar 1–2 to Blue')
   })
 })
 

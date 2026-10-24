@@ -15,7 +15,7 @@ import { createSyncStore, sessionStorageArea } from './syncStore'
  * tab, the rail tab and the popover are one panel, and a Spread that said Cells on one surface and
  * Heads on the next would be two answers to one question. A host with nothing to split — the kit
  * sheets, any selection of single-head fixtures — draws Cells chosen and spreads as Heads
- * (`SpreadPanel`'s `sendFor`, and the desk's `programmerSpread.kt`).
+ * (`SpreadPanel`'s `sendFor`, and the desk's `programmerFan.kt`).
  *
  * **Per tab, in `sessionStorage`**, like every other fact about how this window is being worked:
  * two desk screens are two windows of one profile.

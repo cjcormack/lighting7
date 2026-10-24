@@ -52,7 +52,7 @@ class MetricsReporterTest {
     fun `nothing is sent while the sink is disabled, and what was recorded then is not sent later`() {
         val metrics = DeskMetrics()
         val sink = CapturingSink(enabled = false)
-        val reporter = MetricsReporter(metrics, activeEffects = { 3 }, sink = sink)
+        val reporter = MetricsReporter(metrics, activeFx = { 3 }, sink = sink)
         exercise(metrics)
         reporter.flush()
         assertTrue(sink.sent.isEmpty())
@@ -100,7 +100,7 @@ class MetricsReporterTest {
         val metrics = DeskMetrics()
         exercise(metrics)
         val names = withTestSentry { captured ->
-            MetricsReporter(metrics, midi = { midiWith(1_000_000) }, activeEffects = { 4 }).flush()
+            MetricsReporter(metrics, midi = { midiWith(1_000_000) }, activeFx = { 4 }).flush()
             captured.metrics.toList()
         }.groupBy { it.name }
 
@@ -127,7 +127,7 @@ class MetricsReporterTest {
         exercise(metrics)
         metrics.wsDropped(wireType(ProvenanceStateOutMessage(programmerRevision = 0, entries = emptyList())), DeskMetrics.WsDrop.CLOSED)
         val sink = CapturingSink()
-        MetricsReporter(metrics, midi = { midiWith(1_000_000) }, activeEffects = { 1 }, sink = sink).flush()
+        MetricsReporter(metrics, midi = { midiWith(1_000_000) }, activeFx = { 1 }, sink = sink).flush()
 
         val allowed = setOf("universe", "loop", "type", "reason", "stage", "stat", "gc", "cache", "result", "outcome", "trigger")
         val uuid = Regex("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-")

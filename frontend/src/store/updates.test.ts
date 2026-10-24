@@ -28,7 +28,7 @@ const STATUS: UpdateStatus = {
   autoCheckEnabled: true,
   downloadedBytes: 0,
   totalBytes: null,
-  live: { showReady: true, activeEffectCount: 0 },
+  live: { showReady: true, activeFxCount: 0 },
   throttled: false,
 }
 

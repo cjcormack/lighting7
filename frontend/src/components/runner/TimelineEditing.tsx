@@ -21,7 +21,7 @@ import type {
 } from '@/api/stackTimelineApi'
 import { useEditCueStackTimelineMutation } from '@/store/cueStacks'
 import { useLookListQuery } from '@/store/looks'
-import { useTemplateListQuery } from '@/store/templates'
+import { usePaletteListQuery } from '@/store/palettes'
 import { useSpeedMasterListQuery } from '@/store/speedMasters'
 import { parsePropertyMask, serializePropertyMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
@@ -223,7 +223,7 @@ export function TimelineVerbs({
 
 // ── Replace with… ─────────────────────────────────────────────────────────────────────────────────
 
-type RecordChoice = { kind: 'LOOK' | 'TEMPLATE'; id: number; name: string; generic: boolean }
+type RecordChoice = { kind: 'LOOK' | 'PALETTE'; id: number; name: string; generic: boolean }
 
 /** *Replace with…* (D11): the selected column's record swapped for another over the selected cues. */
 export function TimelineReplacePopover({
@@ -249,10 +249,10 @@ export function TimelineReplacePopover({
 }) {
   const [open, setOpen] = useState(false)
   const { data: looks } = useLookListQuery({ projectId }, { skip: !open })
-  const { data: palettes } = useTemplateListQuery({ projectId }, { skip: !open })
+  const { data: palettes } = usePaletteListQuery({ projectId }, { skip: !open })
   const records = useMemo<RecordChoice[]>(
     () => [
-      ...(palettes ?? []).map((p) => ({ kind: 'TEMPLATE' as const, id: p.id, name: p.name, generic: p.isGeneric })),
+      ...(palettes ?? []).map((p) => ({ kind: 'PALETTE' as const, id: p.id, name: p.name, generic: p.isGeneric })),
       ...(looks ?? []).map((l) => ({ kind: 'LOOK' as const, id: l.id, name: l.name, generic: false })),
     ],
     [looks, palettes],
@@ -272,7 +272,7 @@ export function TimelineReplacePopover({
   const defaultTarget = deskTargets[0] ?? column.target
   const keyed = targetKey ?? (defaultTarget ? `${defaultTarget.type}:${defaultTarget.key}` : '*')
   const chosenTargetKey = needsTarget && keyed === '*' ? ([...targets.keys()].find((k) => k !== '*') ?? '*') : keyed
-  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'TEMPLATE', id: column.sourceId! }, target: column.target }
+  const from: TimelineCellRef = { source: { kind: column.kind === 'look' ? 'LOOK' : 'PALETTE', id: column.sourceId! }, target: column.target }
   const to: TimelineCellRef | null = chosen ? { source: { kind: chosen.kind, id: chosen.id }, target: targets.get(chosenTargetKey) ?? null } : null
   const plan = to ? replacePlan(timeline.entries, cueIds, from, to) : null
   const same = to != null && to.source.kind === from.source.kind && to.source.id === from.source.id && (to.target?.key ?? null) === (from.target?.key ?? null)
@@ -297,8 +297,8 @@ export function TimelineReplacePopover({
           >
             <option value="">Choose…</option>
             <optgroup label="Palettes">
-              {records.filter((r) => r.kind === 'TEMPLATE').map((r) => (
-                <option key={`TEMPLATE:${r.id}`} value={`TEMPLATE:${r.id}`}>{r.name}</option>
+              {records.filter((r) => r.kind === 'PALETTE').map((r) => (
+                <option key={`PALETTE:${r.id}`} value={`PALETTE:${r.id}`}>{r.name}</option>
               ))}
             </optgroup>
             <optgroup label="Looks">
@@ -719,7 +719,7 @@ export function TimelineAddColumn({
   const [query, setQuery] = useState('')
   const [targetKey, setTargetKey] = useState<string | null>(null)
   const { data: looks } = useLookListQuery({ projectId }, { skip: !open })
-  const { data: palettes } = useTemplateListQuery({ projectId }, { skip: !open })
+  const { data: palettes } = usePaletteListQuery({ projectId }, { skip: !open })
   const targets = useMemo(() => new Map<string, CueTarget>(deskTargets.map((t) => [`${t.type}:${t.key}`, t])), [deskTargets])
   const q = query.trim().toLowerCase()
   const matches = (name: string) => q === '' || name.toLowerCase().includes(q)

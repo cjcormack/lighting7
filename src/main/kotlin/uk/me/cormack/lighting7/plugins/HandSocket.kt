@@ -30,7 +30,7 @@ sealed class HandInMessage : InMessage()
 /**
  * Take a record into the desk's hand.
  *
- * [kind] is `TEMPLATE`, `LOOK` or `CUE` and [id] is that record's id **in the current project** —
+ * [kind] is `PALETTE`, `LOOK` or `CUE` and [id] is that record's id **in the current project** —
  * the handler resolves it there and nowhere else, so a stale id from another project picks nothing
  * up rather than putting another show's row in the hand. A record that does not resolve is dropped
  * with a log line and no reply: like every write in this family it has no error channel, and the

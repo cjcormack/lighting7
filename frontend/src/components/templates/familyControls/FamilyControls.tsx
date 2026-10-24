@@ -1,10 +1,10 @@
 import type { AttributeFamily } from '@/lib/attributeFamily'
-import type { TemplateIntent } from '@/lib/templateIntent'
+import type { PaletteIntent } from '@/lib/paletteIntent'
 import { BeamControls } from './BeamControls'
 import { ColourControl } from './ColourControl'
 import { PercentControl } from './PercentControl'
 import { PositionControl } from './PositionControl'
-import type { TemplateValues } from './templateRows'
+import type { PaletteValues } from './paletteRows'
 
 /** The family-native control set. One per family, and nothing descriptor-driven. */
 export function FamilyControls({
@@ -13,8 +13,8 @@ export function FamilyControls({
   onChange,
 }: {
   family: AttributeFamily
-  values: TemplateValues
-  onChange: (propertyName: string, intent: TemplateIntent | null) => void
+  values: PaletteValues
+  onChange: (propertyName: string, intent: PaletteIntent | null) => void
 }) {
   switch (family) {
     case 'COLOUR':

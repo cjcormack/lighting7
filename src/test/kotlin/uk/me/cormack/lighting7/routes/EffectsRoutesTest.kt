@@ -212,7 +212,7 @@ class EffectsRoutesTest : RouteIntegrationTest() {
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"effectType":"Pulse","fixtureKey":"cannon","propertyName":"output1","beatDivision":1.0}""")
+            setBody("""{"fxType":"Pulse","fixtureKey":"cannon","propertyName":"output1","cycle":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("one-shot trigger" in effect.bodyAsText(), effect.bodyAsText())
@@ -464,8 +464,8 @@ class EffectsRoutesTest : RouteIntegrationTest() {
         val looksBefore = transaction(state.database) { DaoLook.all().count() }
         val look = ai.executeTool("create_look", buildJsonObject {
             put("name", "Bang")
-            put("effects", Json.parseToJsonElement(
-                """[{"targetType":"fixture","targetKey":"cannon","effectType":"Pulse","category":"intensity","propertyName":"master","beatDivision":1.0,"blendMode":"OVERRIDE"}]""",
+            put("fx", Json.parseToJsonElement(
+                """[{"targetType":"fixture","targetKey":"cannon","fxType":"Pulse","family":"intensity","propertyName":"master","cycle":1.0,"blendMode":"OVERRIDE"}]""",
             ))
         })
         assertFalse(look.success, look.description)

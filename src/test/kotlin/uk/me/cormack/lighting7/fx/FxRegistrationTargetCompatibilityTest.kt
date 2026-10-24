@@ -64,7 +64,7 @@ class FxRegistrationTargetCompatibilityTest {
         val path: String,
         val id: String,
         val category: String,
-        val effectMode: String,
+        val fxMode: String,
         val outputType: FxOutputType,
         val compatibleProperties: List<String>,
     )
@@ -82,8 +82,8 @@ class FxRegistrationTargetCompatibilityTest {
             BuiltIn(
                 path = path,
                 id = metadata.id,
-                category = metadata.category,
-                effectMode = metadata.effectMode,
+                category = metadata.family,
+                fxMode = metadata.fxMode,
                 outputType = FxOutputType.valueOf(metadata.outputType),
                 compatibleProperties = metadata.compatibleProperties,
             )
@@ -113,7 +113,7 @@ class FxRegistrationTargetCompatibilityTest {
                 // outputType = null withholds FxTargetFactory's pan/tilt coercion on purpose.
                 // That coercion exists to repair rows *already persisted* with propertyName
                 // "pan"; it is not a licence for dishonest metadata. The frontend resolves a
-                // property name with no such help — `ConfigureEffectSheet` takes
+                // property name with no such help — `ConfigureFxSheet` takes
                 // compatibleProperties[0] outright — so the name must stand on its own.
                 val target = FxTargetFactory.forFixture(
                     fixture.key, prop, outputType = null, fixture = fixture,
@@ -150,7 +150,7 @@ class FxRegistrationTargetCompatibilityTest {
             ),
             byFamily,
         )
-        assertTrue(builtIns().all { it.effectMode == "STANDARD" || it.effectMode == "STATEFUL" }, "the composite mode is gone")
+        assertTrue(builtIns().all { it.fxMode == "STANDARD" || it.fxMode == "STATEFUL" }, "the composite mode is gone")
     }
 
     // ─── The coercion itself ────────────────────────────────────────────────

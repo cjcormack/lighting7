@@ -161,7 +161,7 @@ describe('aggregateCellOwnership', () => {
     const cases: Array<[ProvenanceSource, string]> = [
       ['PARKED', 'parked'],
       ['PROGRAMMER', 'programmer'],
-      ['EFFECT', 'effect'],
+      ['FX', 'fx'],
       ['CUE', 'cue'],
     ]
     for (const [wire, expected] of cases) {
@@ -244,7 +244,7 @@ describe('aggregateCellOwnership', () => {
       aggregateCellOwnership(
         keys,
         false,
-        lookupFrom({ 'f1|dimmer': provenance('EFFECT'), 'f2|dimmer': provenance('PROGRAMMER') }),
+        lookupFrom({ 'f1|dimmer': provenance('FX'), 'f2|dimmer': provenance('PROGRAMMER') }),
       )?.source,
     ).toBe('programmer')
   })

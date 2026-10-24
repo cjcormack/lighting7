@@ -129,10 +129,10 @@ class ProgrammerLayerTest {
         val effect = FxInstance(
             effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
 
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1], "effect suppressed under programmer")
@@ -183,10 +183,10 @@ class ProgrammerLayerTest {
         val effect = FxInstance(
             effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         )
-        rig.engine.addEffect(effect)
+        rig.engine.addFx(effect)
         rig.engine.processBeatTick(tick(0))
         assertEquals(180u.toUByte(), rig.controller.currentValues[1])
 
@@ -221,18 +221,18 @@ class ProgrammerLayerTest {
             "the winning cue is named",
         )
 
-        val effectId = rig.engine.addEffect(
+        val fxId = rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.OVERRIDE,
             )
         )
-        assertEquals(ProvenanceSource.EFFECT, sourceOf())
+        assertEquals(ProvenanceSource.FX, sourceOf())
         assertEquals(
-            effectId,
-            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.effectId,
+            fxId,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.fxId,
         )
 
         rig.engine.programmer.writeProperty(
@@ -244,10 +244,10 @@ class ProgrammerLayerTest {
         )
 
         rig.engine.programmer.setBlind(true)
-        assertEquals(ProvenanceSource.EFFECT, sourceOf(), "blind hands the win back")
+        assertEquals(ProvenanceSource.FX, sourceOf(), "blind hands the win back")
         rig.engine.programmer.setBlind(false)
 
-        rig.engine.removeEffect(effectId)
+        rig.engine.removeFx(fxId)
         rig.engine.programmer.clearProperty(ProgrammerOwner.WEB, rig.hex(), "dimmer")
         assertEquals(ProvenanceSource.CUE, sourceOf(), "back to the cue after both release")
 
@@ -261,18 +261,18 @@ class ProgrammerLayerTest {
         // Left apart, a stomped effect would still be named the winner, and the operator asking
         // "why is this fixture this colour?" would be pointed at an effect nobody can see.
         val rig = newRig()
-        val effectId = rig.engine.addEffect(
+        val fxId = rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.OVERRIDE,
             ).also { it.cueId = 10; it.cueLayerId = 4 }
         )
 
         rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
         assertEquals(
-            ProvenanceSource.EFFECT,
+            ProvenanceSource.FX,
             rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.source,
             "unstomped, the effect sits above the cue's value and owns it",
         )
@@ -283,13 +283,13 @@ class ProgrammerLayerTest {
         )
         val stomped = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
         assertEquals(ProvenanceSource.CUE, stomped.source)
-        assertNull(stomped.effectId, "and it does not name the effect it stopped reporting")
+        assertNull(stomped.fxId, "and it does not name the effect it stopped reporting")
 
         // Still running, so clearing the stomp hands provenance straight back.
         rig.engine.cueLayer.setAssignments(10, listOf(dimmerAssignment(10, 100u)))
         assertEquals(
-            effectId,
-            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.effectId,
+            fxId,
+            rig.engine.provenance.compute().first { it.propertyName == "dimmer" }.fxId,
         )
     }
 
@@ -299,16 +299,16 @@ class ProgrammerLayerTest {
         rig.engine.programmer.writeProperty(
             ProgrammerOwner.WEB, rig.hex(), "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u),
         )
-        rig.engine.addEffect(
+        rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.ADDITIVE,
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE }
         )
         val entry = rig.engine.provenance.compute().first { it.propertyName == "dimmer" }
-        assertEquals(ProvenanceSource.EFFECT, entry.source, "band effects modulate on top")
+        assertEquals(ProvenanceSource.FX, entry.source, "band effects modulate on top")
     }
 
     @Test
@@ -426,7 +426,7 @@ class ProgrammerLayerTest {
         val source = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertEquals(10, source.cueId, "the cue underneath, not the programmer on top")
         assertEquals(7, source.cueStackId)
-        assertNull(source.viaEffectId)
+        assertNull(source.viaFxId)
     }
 
     @Test
@@ -437,22 +437,22 @@ class ProgrammerLayerTest {
         val cueEffect = FxInstance(
             effect = WindowedSlider(60u),
             target = SliderTarget("hex-a", "dimmer"),
-            timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+            timing = FxTiming(cycle = CycleLength.ONE_BEAT),
             blendMode = BlendMode.OVERRIDE,
         ).also { it.cueId = 42; it.cueStackId = 5 }
-        val cueEffectId = rig.engine.addEffect(cueEffect)
+        val cueFxId = rig.engine.addFx(cueEffect)
 
-        val viaEffect = rig.engine.provenance.underlyingSources(listOf(key)).single()
-        assertEquals(42, viaEffect.cueId, "a cue driving the property through an FX still counts")
-        assertEquals(5, viaEffect.cueStackId)
-        assertEquals(cueEffectId, viaEffect.viaEffectId)
+        val viaFx = rig.engine.provenance.underlyingSources(listOf(key)).single()
+        assertEquals(42, viaFx.cueId, "a cue driving the property through an FX still counts")
+        assertEquals(5, viaFx.cueStackId)
+        assertEquals(cueFxId, viaFx.viaFxId)
 
-        rig.engine.removeEffect(cueEffectId)
-        rig.engine.addEffect(
+        rig.engine.removeFx(cueFxId)
+        rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.OVERRIDE,
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
         )
@@ -471,19 +471,19 @@ class ProgrammerLayerTest {
         val rig = newRig()
         val key = CueAssignmentResolver.Key.fixture("hex-a", "dimmer")
 
-        val cueEffectId = rig.engine.addEffect(
+        val cueFxId = rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(60u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.OVERRIDE,
             ).also { it.cueId = 42; it.cueStackId = 5 },
         )
-        rig.engine.addEffect(
+        rig.engine.addFx(
             FxInstance(
                 effect = WindowedSlider(30u),
                 target = SliderTarget("hex-a", "dimmer"),
-                timing = FxTiming(beatDivision = BeatDivision.QUARTER),
+                timing = FxTiming(cycle = CycleLength.ONE_BEAT),
                 blendMode = BlendMode.ADDITIVE,
             ).also { it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE },
         )
@@ -491,6 +491,6 @@ class ProgrammerLayerTest {
         val source = rig.engine.provenance.underlyingSources(listOf(key)).single()
         assertEquals(42, source.cueId, "the cue's own effect is still what's underneath")
         assertEquals(5, source.cueStackId)
-        assertEquals(cueEffectId, source.viaEffectId)
+        assertEquals(cueFxId, source.viaFxId)
     }
 }

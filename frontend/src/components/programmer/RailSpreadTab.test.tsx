@@ -36,12 +36,12 @@ const scopeState = vi.hoisted(() => ({
   look: null as null | { lookName: string; setValue: () => void },
 }))
 vi.mock('./ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.scope }))
-vi.mock('./FocusedTemplateLayer', () => ({ useFocusedTemplateLayer: () => scopeState.template }))
+vi.mock('./FocusedPaletteLayer', () => ({ useFocusedPaletteLayer: () => scopeState.template }))
 vi.mock('./LookRowStore', () => ({ useLookRowStore: () => scopeState.look }))
 vi.mock('@/components/fixtures-list/useCellWriters', () => ({ useCellWriters: () => ({}), applyPlannedWrite: () => {} }))
 vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
 vi.mock('@/store/programmerOps', () => ({ useSpreadMutation: () => [vi.fn()] }))
-vi.mock('@/store/templates', () => ({ useTemplateListQuery: () => ({ data: [] }) }))
+vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: [] }) }))
 
 const arm = vi.hoisted(() => ({ value: {} as Partial<RailArm> }))
 vi.mock('./ProgrammerWorkspace', () => ({ useRailArm: () => arm.value }))

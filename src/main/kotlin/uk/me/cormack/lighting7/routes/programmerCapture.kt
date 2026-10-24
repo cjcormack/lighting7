@@ -22,11 +22,11 @@ import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.maskGroupForProperty
 import uk.me.cormack.lighting7.fx.storedPhaseOffset
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -142,7 +142,7 @@ data class ProgrammerRecording(
      * `collectProgrammerRecording`.
      */
     val layers: List<CueLayerDto>,
-    val adHocEffects: List<CueAdHocEffectDto>,
+    val adHocFx: List<CueAdHocFxDto>,
     val groupRowsEmitted: Int,
     val skipped: List<RecordSkip>,
 )
@@ -353,8 +353,8 @@ private fun reconcileBundledEmitterEntries(
  */
 internal fun ProgrammerLayer.toCueLayerDto() = CueLayerDto(
     // Exactly one, from the source's own kind — the DTO's write contract.
-    lookId = source.id.takeUnless { source.isTemplate },
-    templateId = source.id.takeIf { source.isTemplate },
+    lookId = source.id.takeUnless { source.isPalette },
+    paletteId = source.id.takeIf { source.isPalette },
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
@@ -399,7 +399,7 @@ internal fun targetInScope(fixtures: Fixtures, target: TargetRef, scope: Set<Str
 }
 
 /** [targetInScope] for an effect's target: a selection is in scope when every item it names is. */
-internal fun effectTargetInScope(fixtures: Fixtures, target: EffectTargetRef, scope: Set<String>?): Boolean =
+internal fun fxTargetInScope(fixtures: Fixtures, target: FxTargetsRef, scope: Set<String>?): Boolean =
     target.items.all { targetInScope(fixtures, it, scope) }
 
 /**
@@ -448,10 +448,10 @@ internal fun collectProgrammerRecording(
         }
         return ProgrammerRecording(
             rows = renumber(rows),
-            adHocEffects = if (includeFx) {
-                captured.adHocEffects.filter {
+            adHocFx = if (includeFx) {
+                captured.adHocFx.filter {
                     maskAllows(mask, maskGroupForAdHoc(fixtures, it)) &&
-                        effectTargetInScope(fixtures, it.target, scope)
+                        fxTargetInScope(fixtures, it.target, scope)
                 }
             } else emptyList(),
             groupRowsEmitted = rows.count { it.targetType == TargetRef.Group.TYPE },
@@ -468,12 +468,12 @@ internal fun collectProgrammerRecording(
     val (entries, entrySkips) = collectProgrammerEntries(state, source, mask, scope, allowElements = true)
     val collapsed = collapseRecordingToAssignments(entries, fixtures)
 
-    val bandEffects = if (includeFx) {
+    val bandFx = if (includeFx) {
         // A leaving instance is a release fading out, not something the programmer holds.
-        state.show.fxEngine.getActiveEffects()
+        state.show.fxEngine.getActiveFx()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
+    val adHoc = fxInstancesToCueChildren(bandFx, mask, fixtures, scope)
 
     // **`ALL` means flatten; `TOUCHED` means save the structure.** The distinction is not a
     // convenience — emitting layers *and* the rows they cook to would put both representations of
@@ -494,7 +494,7 @@ internal fun collectProgrammerRecording(
     return ProgrammerRecording(
         rows = collapsed.rows,
         layers = layers,
-        adHocEffects = adHoc,
+        adHocFx = adHoc,
         groupRowsEmitted = collapsed.groupRows,
         skipped = entrySkips + collapsed.skipped,
     )
@@ -513,7 +513,7 @@ internal fun maskGroupForRow(fixtures: Fixtures, row: CuePropertyAssignmentDto):
     return maskGroupForProperty(fixture, row.propertyName)
 }
 
-private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): PropertyMaskGroup? {
+private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocFxDto): PropertyMaskGroup? {
     val propertyName = effect.propertyName ?: return null
     val fixture = fixtures.referenceFixtureFor(effect.target) ?: return null
     return maskGroupForProperty(fixture, propertyName)
@@ -542,9 +542,9 @@ internal fun fxInstancesToCueChildren(
      * chase into the cue would be a worse surprise than dropping the chase and saying so.
      */
     scope: Set<String>? = null,
-): List<CueAdHocEffectDto> {
+): List<CueAdHocFxDto> {
     if (instances.isEmpty()) return emptyList()
-    val adHocEffects = ArrayList<CueAdHocEffectDto>()
+    val adHocFx = ArrayList<CueAdHocFxDto>()
 
     for (effect in instances) {
         // Owned by a layer: recorded as part of that layer, not as a loose child.
@@ -552,9 +552,9 @@ internal fun fxInstancesToCueChildren(
 
         val targetType = effect.target.targetRef.discriminator
         val targetKey = effect.target.targetKey
-        val target = EffectTargetRef.of(targetType, targetKey)
+        val target = FxTargetsRef.of(targetType, targetKey)
 
-        if (!effectTargetInScope(fixtures, target, scope)) continue
+        if (!fxTargetInScope(fixtures, target, scope)) continue
 
         // An FX is masked by the property it drives, so "record only the colours" doesn't drag
         // a position wave along with them.
@@ -568,43 +568,43 @@ internal fun fxInstancesToCueChildren(
         // straddling a concurrent edit would record an explicit value equal to the default
         // instead of the track-the-default null.
         val dyn = effect.dynamics
-        adHocEffects.add(
-                CueAdHocEffectDto(
+        adHocFx.add(
+                CueAdHocFxDto(
                     targetType = targetType,
                     targetKey = targetKey,
-                    effectType = effect.effectTypeId,
-                    category = recordedEffectCategory(effect),
+                    fxType = effect.fxTypeId,
+                    family = recordedFxFamily(effect),
                     propertyName = effect.target.propertyName,
-                    beatDivision = effect.timing.beatDivision,
+                    cycle = effect.timing.cycle,
                     blendMode = effect.blendMode.name,
-                    distribution = dyn.distributionStrategy.javaClass.simpleName,
+                    order = dyn.order.javaClass.simpleName,
                     phaseOffset = effect.storedPhaseOffset(dyn),
                     elementMode = if (effect.spreadsOverMembers) dyn.elementMode.name else null,
                     elementFilter = if (dyn.elementFilter != uk.me.cormack.lighting7.fx.ElementFilter.ALL) {
                         dyn.elementFilter.name
                     } else null,
-                    stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) {
-                        dyn.stepTiming
+                    timing = if (dyn.timing != effect.effect.defaultTiming) {
+                        dyn.timing
                     } else null,
                     parameters = effect.effect.parameters,
-                    sortOrder = adHocEffects.size,
+                    sortOrder = adHocFx.size,
                     // The effect's timing (venue-visit plan S15, D7) — its master, or Seconds. The
                     // masters were left behind here before S15, so a recorded busk fell back to master 1.
                     speedMasterUuid = effect.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                     seconds = effect.seconds,
-                    size = dyn.size,
+                    amount = dyn.amount,
                     direction = dyn.direction.name,
-                    nShot = dyn.nShot,
+                    runs = dyn.runs,
                     spread = dyn.spread,
                     wings = dyn.wings,
-                    blocks = dyn.blocks,
-                    groups = dyn.groups,
+                    segments = dyn.segments,
+                    parts = dyn.parts,
                 )
         )
     }
 
-    return adHocEffects
+    return adHocFx
 }
 
 /**

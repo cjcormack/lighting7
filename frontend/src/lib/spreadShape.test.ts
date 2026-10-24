@@ -23,8 +23,8 @@ describe('spreadOffsets', () => {
       heads: number
       spread?: number
       wings?: number
-      blocks?: number
-      groups?: number
+      segments?: number
+      parts?: number
       offsets: number[]
       slots: number
     }>) {
@@ -37,8 +37,8 @@ describe('spreadOffsets', () => {
     }
   })
 
-  it('gives blocks of 3 over 12 heads 4 slots', () => {
-    const { offsets, slots } = spreadOffsets('NORMAL', 12, { ...DEFAULT_SPREAD_SHAPE, blocks: 3 })
+  it('gives segments of 3 over 12 heads 4 slots', () => {
+    const { offsets, slots } = spreadOffsets('NORMAL', 12, { ...DEFAULT_SPREAD_SHAPE, segments: 3 })
     expect(slots).toBe(4)
     expect([...new Set(offsets)]).toEqual([0, 0.25, 0.5, 0.75])
   })
@@ -62,14 +62,14 @@ describe('spreadOffsets', () => {
 describe('spreadSummary', () => {
   it('says every non-default field, the order apart', () => {
     expect(spreadSummary('NORMAL', DEFAULT_SPREAD_SHAPE)).toEqual([])
-    expect(spreadSummary('NORMAL', { spread: 0.5, wings: 2, blocks: 1, groups: 0 })).toEqual(['50 %', '2 wings'])
-    expect(spreadSummary('REVERSE', { spread: 1, wings: 1, blocks: 3, groups: 2 })).toEqual([
+    expect(spreadSummary('NORMAL', { spread: 0.5, wings: 2, segments: 1, parts: 0 })).toEqual(['50 %', '2 wings'])
+    expect(spreadSummary('REVERSE', { spread: 1, wings: 1, segments: 3, parts: 2 })).toEqual([
       'segments of 3',
       'parts of 2',
     ])
   })
 
   it('leaves wings under a mirrored order unsaid', () => {
-    expect(spreadSummary('CENTRE_OUT', { spread: 1, wings: 2, blocks: 1, groups: 0 })).toEqual([])
+    expect(spreadSummary('CENTRE_OUT', { spread: 1, wings: 2, segments: 1, parts: 0 })).toEqual([])
   })
 })

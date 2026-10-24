@@ -67,11 +67,11 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  */
 export function cellKeyboardPermission(
   scope: ProgrammerScope | null,
-  focusedTemplate: boolean,
+  focusedPalette: boolean,
 ): CellKeyboardPermission {
   if (scope == null || scope.kind === 'local') return { entry: true, clear: true }
   if (scope.kind === 'output') return { entry: false, clear: false }
-  return focusedTemplate ? { entry: false, clear: false } : { entry: true, clear: false }
+  return focusedPalette ? { entry: false, clear: false } : { entry: true, clear: false }
 }
 
 /**
@@ -87,7 +87,7 @@ export function cellKeyboardPermission(
  */
 export function cellActionCopy(
   scope: ProgrammerScope | null,
-  focusedTemplate: boolean,
+  focusedPalette: boolean,
   cellCount: number,
 ): CellActionCopy {
   const cells = `${cellCount} selected cell${cellCount === 1 ? '' : 's'}`
@@ -96,7 +96,7 @@ export function cellActionCopy(
     return { setTitle: reason, clearTitle: reason }
   }
   if (scope?.kind === 'layer') {
-    if (focusedTemplate) {
+    if (focusedPalette) {
       const reason = 'This layer applies a palette — switch to Local to set these cells'
       return { setTitle: reason, clearTitle: reason }
     }

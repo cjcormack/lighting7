@@ -1,5 +1,5 @@
 import type { StackTimeline, TimelineLayer } from '@/api/stackTimelineApi'
-import { effectColumnId, layerColumnId, layerTargets, sceneryColumnId } from './columns'
+import { fxColumnId, layerColumnId, layerTargets, sceneryColumnId } from './columns'
 import type { TimelineCell, TimelineColumn } from './model'
 
 /** A mask family as one letter: `C` a Colour-only layer, `IP` Intensity and Position. */
@@ -61,9 +61,9 @@ export function cells(timeline: StackTimeline, columns: readonly TimelineColumn[
         row.set(id, { filled: { kind: 'layer', layer, rank: layer.rank ?? index + 1, glyphs: layerGlyphs(layer) }, tracked: null })
       }
     })
-    for (const effect of entry.effects) {
-      const id = effectColumnId(effect)
-      if (wanted.has(id) && !row.has(id)) row.set(id, { filled: { kind: 'effect', effect }, tracked: null })
+    for (const effect of entry.fx) {
+      const id = fxColumnId(effect)
+      if (wanted.has(id) && !row.has(id)) row.set(id, { filled: { kind: 'fx', effect }, tracked: null })
     }
     for (const change of entry.scenery) {
       const id = sceneryColumnId(change.elementUuid)

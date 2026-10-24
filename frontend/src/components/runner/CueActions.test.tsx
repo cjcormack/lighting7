@@ -85,7 +85,7 @@ function openMenu(trigger: HTMLElement) {
 beforeEach(() => {
   running = false
   edited = false
-  updateStage.mockReturnValue(landed({ rows: 3, effects: { edited: 1, stopped: 1, started: 0 }, fadeMs: 2000, curve: 'LINEAR' }))
+  updateStage.mockReturnValue(landed({ rows: 3, fx: { edited: 1, stopped: 1, started: 0 }, fadeMs: 2000, curve: 'LINEAR' }))
   preview = undefined
   duplicateCue.mockImplementation(({ cueId, stackId }) =>
     landed({ cueId: cueId + 50, name: 'copy', stackId, entryId: cueId + 150 }),

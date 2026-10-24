@@ -1,9 +1,9 @@
 /*---
 id: LightningStrike
 name: Lightning Strike
-category: intensity
+family: intensity
 outputType: SLIDER
-effectMode: STANDARD
+fxMode: STANDARD
 compatibleProperties: [dimmer]
 parameters:
   - name: maxBrightness

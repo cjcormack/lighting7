@@ -6,9 +6,9 @@ import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.BlendMode
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.EffectSuppression
+import uk.me.cormack.lighting7.fx.FxSuppression
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.testsupport.EffectTestSupport
+import uk.me.cormack.lighting7.testsupport.FxTestSupport
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.awaitOfType
@@ -23,7 +23,7 @@ import kotlin.test.assertTrue
 /**
  * `programmer.keyStack` (fixture-fx-sheets plan W1): what sits under one property, top first, with
  * each layer's `onStage` and each effect's `heldBack` — the latter asked of the engine's own
- * suppression rule ([EffectSuppression]) over its own snapshot, never a second copy of it.
+ * suppression rule ([FxSuppression]) over its own snapshot, never a second copy of it.
  *
  * The five cases the plan names: a held position under a band Circle, a cue Pulse held back by a
  * programmer dimmer, a parked key, a group answered per member, and Blind emptying the held-back set.
@@ -50,7 +50,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("spot-1"), "position",
             CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
         )
-        val circle = EffectTestSupport.start(
+        val circle = FxTestSupport.start(
             state, "Circle", "spot-1", "position", programmerBand = true, blendMode = BlendMode.ADDITIVE,
         )
 
@@ -58,10 +58,10 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         assertNull(answer.error)
         assertEquals("r1", answer.requestId, "the request id is echoed so a promise can be matched")
         val stack = answer.stacks.single()
-        assertEquals(listOf("PROGRAMMER_EFFECT", "PROGRAMMER", "BASE"), kinds(stack))
+        assertEquals(listOf("PROGRAMMER_FX", "PROGRAMMER", "BASE"), kinds(stack))
 
         val band = stack.layers[0]
-        assertEquals(circle.id, band.effectId)
+        assertEquals(circle.id, band.fxId)
         assertEquals(false, band.heldBack, "a band effect modulates on top of the programmer")
         assertTrue(band.onStage)
         assertEquals("ADDITIVE", band.blendMode)
@@ -82,7 +82,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             state, TargetRef.Fixture("spot-1"), "position",
             CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
         )
-        EffectTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+        FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
 
         val layers = ask("fixture", "spot-1", "position").stacks.single().layers
         assertTrue(layers[0].onStage)
@@ -98,18 +98,18 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
                 state, TargetRef.Fixture("spot-1"), "position",
                 CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
             )
-            val circle = EffectTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
+            val circle = FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
 
             // Effects plan P3: at 0 % the effect weighs nothing, so what is underneath is all the rig shows.
-            circle.updateDynamics { it.copy(size = 0.0) }
+            circle.updateDynamics { it.copy(amount = 0.0) }
             var layers = ask("fixture", "spot-1", "position").stacks.single().layers
             val band = layers[0]
             assertFalse(band.onStage, "a 0 % effect puts nothing on stage")
-            assertEquals(0.0, band.size)
+            assertEquals(0.0, band.amount)
             assertTrue(layers.single { it.kind == "PROGRAMMER" }.onStage, "the held value is what the rig shows")
 
             // Under full size an Override is a mix with what is underneath, so both are on stage.
-            circle.updateDynamics { it.copy(size = 0.5) }
+            circle.updateDynamics { it.copy(amount = 0.5) }
             layers = ask("fixture", "spot-1", "position").stacks.single().layers
             assertTrue(layers[0].onStage)
             assertTrue(layers.single { it.kind == "PROGRAMMER" }.onStage, "a 50 % Override sits halfway over the value")
@@ -119,13 +119,13 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `a cue Pulse under a programmer dimmer is listed below it and held back`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
 
         val stack = ask("fixture", "hex-1", "dimmer").stacks.single()
-        assertEquals(listOf("PROGRAMMER", "EFFECT", "BASE"), kinds(stack))
+        assertEquals(listOf("PROGRAMMER", "FX", "BASE"), kinds(stack))
         val effect = stack.layers[1]
-        assertEquals(pulse.id, effect.effectId)
+        assertEquals(pulse.id, effect.fxId)
         assertEquals(42, effect.cueId)
         assertEquals(true, effect.heldBack)
         assertEquals("PROGRAMMER", effect.heldBackReason, "the programmer's value is the reason")
@@ -135,7 +135,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         // One rule: the read's answer is the tick's, asked of the same snapshot.
         val engine = state.show.fxEngine
         assertTrue(
-            EffectSuppression.isSuppressed(
+            FxSuppression.isSuppressed(
                 engine.programmerSuppression(), "hex-1", "dimmer", pulse, engine.cueLayer::isLayerStomped,
             ),
         )
@@ -145,7 +145,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     fun `blind empties the held-back set and takes the programmer off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
+        FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", priority = 1_000_001, cueId = 42)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 
@@ -154,23 +154,23 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         val layers = answer.stacks.single().layers
         assertTrue(layers.none { it.heldBack == true }, "blind's values hold nothing back")
         assertFalse(layers.single { it.kind == "PROGRAMMER" }.onStage, "blind: listed, not on stage")
-        assertTrue(layers.single { it.kind == "EFFECT" }.onStage, "the Pulse paints again")
+        assertTrue(layers.single { it.kind == "FX" }.onStage, "the Pulse paints again")
     }
 
     @Test
     fun `blind holds a band effect, listed as held back by Blind and off stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val pulse = EffectTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
+        val pulse = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
         setDimmer("hex-1", 200)
         state.show.fxEngine.programmer.setBlind(true)
 
         val answer = ask("fixture", "hex-1", "dimmer")
         assertTrue(answer.blind)
         val stack = answer.stacks.single()
-        assertEquals(listOf("PROGRAMMER_EFFECT", "PROGRAMMER", "BASE"), kinds(stack))
+        assertEquals(listOf("PROGRAMMER_FX", "PROGRAMMER", "BASE"), kinds(stack))
         val band = stack.layers[0]
-        assertEquals(pulse.id, band.effectId)
+        assertEquals(pulse.id, band.fxId)
         assertEquals(true, band.heldBack)
         assertEquals("BLIND", band.heldBackReason)
         assertFalse(band.onStage, "held: the Override Pulse covers nothing")

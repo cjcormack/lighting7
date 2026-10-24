@@ -8,7 +8,7 @@ internal data class AxisDmx(val coarse: UByte, val fine: UByte?)
 
 /**
  * A travel-degree position to its axis's DMX: the same mapping as the position template's
- * (`TemplateResolver.degreesToDmx`, and the Stage view's `degreesToDmx`) — the fraction along the
+ * (`PaletteResolver.degreesToDmx`, and the Stage view's `degreesToDmx`) — the fraction along the
  * annotated range, flipped for an inverted axis, laid over the coarse slider's own `min..max` —
  * carried to 16 bits when [fine] is given, as the Stage view reads it back (`coarse + fine / 256`).
  */

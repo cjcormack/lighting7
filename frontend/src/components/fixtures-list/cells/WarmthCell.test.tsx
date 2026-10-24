@@ -14,10 +14,10 @@ import { resetEditorSurfaceMedia } from '../../editor/EditorSurface'
  */
 
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), info: vi.fn(), warning: vi.fn(), success: vi.fn() } }))
-vi.mock('@/store/templates', () => ({
-  useTemplateListQuery: () => ({ data: [] }),
-  useApplyTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
-  useToggleTemplateMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+vi.mock('@/store/palettes', () => ({
+  usePaletteListQuery: () => ({ data: [] }),
+  useApplyPaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
+  useTogglePaletteMutation: () => [vi.fn(() => ({ unwrap: () => Promise.resolve({}) }))],
 }))
 vi.mock('@/store/selection', () => ({ usePressFamilies: (local: unknown) => local }))
 vi.mock('@/store/patches', () => ({ usePatchListQuery: () => ({ data: [] }) }))

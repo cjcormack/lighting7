@@ -51,7 +51,7 @@ export interface ScrollEdgesOptions {
  * State is written only when one of the three flags actually flips, so a scroll listener at frame
  * rate costs no renders.
  *
- * It replaced three near-identical hand-rolled copies — `TemplateStrip`'s `useScrollerOverflows`,
+ * It replaced three near-identical hand-rolled copies — `PaletteStrip`'s `useScrollerOverflows`,
  * `StackTabStrip`'s inline `{left, right}` and `FixturesTable`'s own — which shared all of that
  * mechanism and differed only in which of the three answers they wanted. Hence three fields rather
  * than a derivation: `overflows` is **not** `left || right` at the edges (a scroller overflowing by

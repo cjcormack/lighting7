@@ -365,7 +365,7 @@ palette FX this database held, each named in the log:
 What keeps the maps by field is that nothing written today holds an old name: every boundary that
 writes or starts an FX refuses a retired id and a `pingPong` on the five FX that bounce
 (`LegacyNames.writeProblem`, through `routes/storedFxRules.kt`), no FX definition may take a retired
-id (`fxDefinitions.kt`, `registerEffect`), and every field and value the v38 rename moved is written
+id (`fxDefinitions.kt`, `registerFx`), and every field and value the v38 rename moved is written
 only under its new name.
 
 **An absent `pingPong` is the one rewrite not by name.** Before session 3 a bouncing FX naming none
@@ -451,7 +451,7 @@ conflict. `PreV38BaseSyncTest` is that case.
 ### Version 37 — effect runs
 
 Stack-timeline plan session 1 (D7, §3.4; `docs/cues-engineering.md` §"Effect runs"):
-`CueAdHocEffectJson` gains `runUuid`, the run key ad-hoc effects of neighbouring cues share, omitted
+`CueAdHocFxJson` gains `runUuid`, the run key ad-hoc effects of neighbouring cues share, omitted
 when null, so a show with no runs exports byte-for-byte as at v36 (only `formatVersion.json` says 37).
 `SUPPORTED_FORMAT_VERSION = 37`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — a missing key is no run,
 so a v36 archive imports with none (C5: nothing joins its effects for it). The writer's number moves by
@@ -505,10 +505,10 @@ on `cues` (`speed_masters`), not a table, so `SyncCoverageTest` gained no row. `
 
 Effects plan session 3 (venue-visit R4.3; `docs/fx-engineering.md` §"Over a selection"): an effect's
 target may be a **selection**, an ordered list of fixtures and groups. No field moved and no column was
-added — `LookEffectJson` and `CueAdHocEffectJson` carry it in the `targetType` / `targetKey` they
+added — `LookFxJson` and `CueAdHocFxJson` carry it in the `targetType` / `targetKey` they
 always had, as `targetType: "selection"` and a `targetKey` holding the list's canonical JSON,
 `[{"key":"par-1","type":"fixture"},{"key":"Front wash","type":"group"}]` (keys alphabetical, no
-whitespace, in selection order — `EffectTargetRef.Selection.key`). `SUPPORTED_FORMAT_VERSION = 34`;
+whitespace, in selection order — `FxTargetsRef.Selection.key`). `SUPPORTED_FORMAT_VERSION = 34`;
 `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, since nothing older uses the value. The writer's number
 moves by the sharp-edge rule: a v33 reader stores a target it cannot spawn, so every cue and Look
 holding one would skip that effect. Imported as stored; a key that does not parse is refused where
@@ -522,7 +522,7 @@ at v33 (only `formatVersion.json` says 34).
 ### Version 33 — the spread's shape
 
 Effects plan session 2 (venue-visit R4.2; `docs/fx-engineering.md` §"The spread's shape"):
-`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `spread` (default 1.0), `wings`
+`LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `spread` (default 1.0), `wings`
 and `blocks` (default 1) and `groups` (default 0, off), each omitted at its default, and the three
 tables gain the columns `spread`, `spread_wings`, `spread_blocks` and `spread_groups` with the same
 defaults (prefixed because `GROUPS` is an SQLite keyword). `SUPPORTED_FORMAT_VERSION = 33`;
@@ -631,7 +631,7 @@ venue patch's locate is part of its **Focus** facet, so a show's override of it 
 ### Version 30 — Size, direction and N-shot
 
 Effects plan session 1 (venue-visit R4.1; `docs/fx-engineering.md` §"Size, direction and N-shot"):
-`LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain `size` (default 1.0), `direction`
+`LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain `size` (default 1.0), `direction`
 (default `FORWARD`) and `nShot` (default null), each omitted at its default, and the three tables
 (`look_effects`, `template_effects`, `cue_ad_hoc_effects`) gain the columns `size`, `direction` and
 `n_shot` with the same defaults. `SUPPORTED_FORMAT_VERSION = 30`; `MIN_SUPPORTED_FORMAT_VERSION`
@@ -645,7 +645,7 @@ on every stored shape. A project that uses none exports byte-for-byte as at v29 
 ### Version 29 — Seconds
 
 An effect may run on *Seconds* (venue-visit plan D7, S15; `docs/fx-engineering.md` §"Seconds"): its
-own cycle, with no speed master. `LookEffectJson`, `TemplateEffectJson` and `CueAdHocEffectJson` gain
+own cycle, with no speed master. `LookFxJson`, `PaletteFxJson` and `CueAdHocFxJson` gain
 `seconds` (default false, so omitted), and a beat effect's `beatDivision` is then its cycle in
 **seconds**. `SUPPORTED_FORMAT_VERSION = 29`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5** — the field
 defaults to false, so every older archive decodes as before. The writer's number moves by the
@@ -662,13 +662,13 @@ says 29).
 A palette's position row gains a second unit (venue-visit plan D3, P3): `pos:<pan>,<tilt>`,
 centre-relative coarse DMX — `-128..127` on each axis, 0 the centre of travel (DMX 128), the same
 fraction of travel on every head — beside the `deg:` travel degrees every earlier row holds. **No
-field moved**: `TemplateRowJson.value` is a string the importer stores verbatim, and a `deg:` row
+field moved**: `PaletteRowJson.value` is a string the importer stores verbatim, and a `deg:` row
 exports byte-for-byte as before. What moved is the value's meaning, which is the sharp-edge rule's
 semantic-change arm: a v27 reader parses a `pos:` row as no intent, so `CueComposer`, a press and
 the resolves-to panel skip it with a warn — it would run every new position palette, and every aim
 saved as one, as nothing — while its next push wrote the row back unchanged. `SUPPORTED_FORMAT_VERSION
 = 28` so a v27 install refuses the repo instead; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**, because
-a `deg:` row still resolves as angles (`TemplateResolver.resolvePosition` takes both units) and there
+a `deg:` row still resolves as angles (`PaletteResolver.resolvePosition` takes both units) and there
 are no migrations — a stored row becomes `pos:` only when an editor saves a moved position.
 `RichProjectFixture`'s per-fixture position palette holds one row in each unit, so a round trip that
 rewrote either would show.
@@ -1195,7 +1195,7 @@ position omitted for being zero would read as a document with holes. Only the th
 default.
 
 **Session 3 of the same plan removed, under this same number**: `templateGroups/`,
-`TemplateJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
+`PaletteJson.groupUuid` and `sortOrder`, `LookJson.sortOrder`, `CueJson.pinnedToBusk` and
 `CueSlotJson.cueStackUuid`. No v11, because nothing but the dev desk wrote v10 between the two
 sessions, so no peer could hold a repo the later reader would import wrong and push back.
 
@@ -1212,7 +1212,7 @@ slot, and it is why the arity check splits: two arms aborts, none warns.
 > folder and the key.
 
 **v9 was a second instance of the v6 shape**: a new folder, `templateGroups/{uuid}.json` (name and
-top-level `sortOrder` only), plus one optional reference on the palette, `TemplateJson.groupUuid`.
+top-level `sortOrder` only), plus one optional reference on the palette, `PaletteJson.groupUuid`.
 Membership lives on the palette rather than in a member list on the group, so a group document
 never changes when a palette joins or leaves it — one record moves per drag, not two.
 
@@ -1237,7 +1237,7 @@ uuid string, so a clone's palettes point at the clone's groups by construction.
 ### Version 8 — a palette may hold an effect
 
 **v8 is the worked example of an optional field that still needs a bump.** `template_effects`
-travels inline as `TemplateJson.effect: TemplateEffectJson? = null` — one new optional field with a
+travels inline as `TemplateJson.effect: TemplateEffectJson? = null` (now `PaletteJson.fx`) — one new optional field with a
 null default, which the rule of thumb above would wave through.
 
 It bumps anyway, because that field is the *record's whole content* rather than an enrichment. A

@@ -1,30 +1,30 @@
 import type { SpreadCurve, SpreadOrder } from '@/store/programmerOps'
-import { rgbToHex, serializeTemplateRef } from '@/components/fx/colourUtils'
+import { rgbToHex, serializePaletteRef } from '@/components/fx/colourUtils'
 import type { AttributeFamily } from './attributeFamily'
 import { orderLabel } from './orderLabels'
 import {
-  serializeTemplateIntent,
-  templatePropertiesForFamily,
-  type TemplateProperty,
+  serializePaletteIntent,
+  palettePropertiesForFamily,
+  type PaletteProperty,
   type WhitePolicy,
-} from './templateIntent'
+} from './paletteIntent'
 
 /**
  * The Fan tab's endpoints — **serialise only** (busk-further plan D9).
  *
- * A spread is two intents of one property's shape, a curve, an order, parts and an over-switch,
- * sent to `POST /programmer/spread`; the desk interpolates in the intent's own space and resolves
- * one literal per head through the same `TemplateResolver` *Apply as values* uses. This module is
+ * A spread is two intents of one property's shape, a curve, an order, runs and an over-switch,
+ * sent to `POST /programmer/fan`; the desk interpolates in the intent's own space and resolves
+ * one literal per head through the same `PaletteResolver` *Apply as values* uses. This module is
  * the client's half of that grammar and nothing more: which properties a family offers, what an
  * endpoint of each shape looks like in the editor, and the string it goes out as. It **never
- * interpolates** — no lerp, no colour space, no per-head range — for `templateIntent.ts`'s reason:
+ * interpolates** — no lerp, no colour space, no per-head range — for `paletteIntent.ts`'s reason:
  * only the desk knows a group's member order, each head's range, which cells a fixture has and what
  * a colour means on a head with amber. `spreadIntent.test.ts` pins the serialisation against
- * `templateIntent.ts` and asserts this file imports no resolver.
+ * `paletteIntent.ts` and asserts this file imports no resolver.
  */
 
 /**
- * One end of a spread. Four are `TemplateIntent`s of the four shapes a spread can carry; the fifth
+ * One end of a spread. Four are `PaletteIntent`s of the four shapes a spread can carry; the fifth
  * names a colour **template** (`pal:{uuid}`), which the desk resolves to the template's generic
  * colour the way an FX colour reference is resolved — so a spread can run from one library colour
  * to another. A switch (prism in / out) is not offered: the desk would flip it at the midpoint,
@@ -32,7 +32,7 @@ import {
  */
 export type SpreadEndpoint =
   | { kind: 'colour'; hex: string; policy: WhitePolicy }
-  | { kind: 'template'; uuid: string }
+  | { kind: 'palette'; uuid: string }
   | { kind: 'percent'; value: number }
   | { kind: 'position'; pan: number; tilt: number; unit: 'centre' }
   | { kind: 'level'; value: number }
@@ -47,12 +47,12 @@ export const POSITION_DEFAULT_SWING = 16
 export type SpreadEditorKind = 'colour' | 'percent' | 'position' | 'level'
 
 /** The properties of a family a spread can carry: the template vocabulary, minus the switch. */
-export function spreadPropertiesFor(family: AttributeFamily): TemplateProperty[] {
-  return templatePropertiesForFamily(family).filter((property) => property.intent !== 'switch')
+export function spreadPropertiesFor(family: AttributeFamily): PaletteProperty[] {
+  return palettePropertiesForFamily(family).filter((property) => property.intent !== 'switch')
 }
 
 /** The editor for a property's endpoints. Callers hand in a property from [spreadPropertiesFor]. */
-export function spreadEditorKind(property: TemplateProperty): SpreadEditorKind {
+export function spreadEditorKind(property: PaletteProperty): SpreadEditorKind {
   switch (property.intent) {
     case 'colour':
       return 'colour'
@@ -75,7 +75,7 @@ export function spreadEditorKind(property: TemplateProperty): SpreadEditorKind {
  * travel — centre-relative (`pos:`, D3), 0 the centre on every head, so it never sits against a
  * hard stop the way an absolute degree about a guessed centre could.
  */
-export function defaultSpreadEndpoints(property: TemplateProperty): { from: SpreadEndpoint; to: SpreadEndpoint } {
+export function defaultSpreadEndpoints(property: PaletteProperty): { from: SpreadEndpoint; to: SpreadEndpoint } {
   switch (spreadEditorKind(property)) {
     case 'colour':
       return {
@@ -100,13 +100,13 @@ export function colourEndpointOf(rgb: { r: number; g: number; b: number }, polic
 }
 
 /**
- * The wire form: a serialised `TemplateIntent` through `templateIntent.ts`'s own serialiser, or a
+ * The wire form: a serialised `PaletteIntent` through `paletteIntent.ts`'s own serialiser, or a
  * `pal:` reference through `colourUtils`'. Nothing is spelled here that either does not already
  * spell, which is what keeps the grammar in one place per kind.
  */
 export function serializeSpreadEndpoint(endpoint: SpreadEndpoint): string {
-  if (endpoint.kind === 'template') return serializeTemplateRef(endpoint.uuid)
-  return serializeTemplateIntent(endpoint)
+  if (endpoint.kind === 'palette') return serializePaletteRef(endpoint.uuid)
+  return serializePaletteIntent(endpoint)
 }
 
 /** Whether an endpoint is one the desk can take: finite numbers, a real hex, a uuid. */
@@ -114,7 +114,7 @@ export function isCompleteSpreadEndpoint(endpoint: SpreadEndpoint): boolean {
   switch (endpoint.kind) {
     case 'colour':
       return /^#[0-9a-fA-F]{6}$/.test(endpoint.hex)
-    case 'template':
+    case 'palette':
       return endpoint.uuid.trim() !== ''
     case 'percent':
     case 'level':
@@ -129,11 +129,11 @@ export const SPREAD_CURVES: readonly { id: SpreadCurve; label: string; hint: str
   { id: 'LINE', label: 'Line', hint: 'From at the first head, To at the last' },
   { id: 'MIRROR', label: 'Mirror', hint: 'From at the centre, To at both ends' },
   { id: 'ARROW', label: 'Arrow', hint: 'From at both ends, To at the centre' },
-  { id: 'WINGS', label: 'Mirror out', hint: 'Two fans meeting at the centre — To at each outer end, From in the middle' },
+  { id: 'MIRROR_OUT', label: 'Mirror out', hint: 'Two fans meeting at the centre — To at each outer end, From in the middle' },
 ]
 
 /**
- * The orders the tab offers, each a `DistributionStrategy` name the desk resolves, worded as the
+ * The orders the tab offers, each a `SpreadOrder` name the desk resolves, worded as the
  * FX editor's Order (`lib/orderLabels.ts`) — and the one
  * the design draws that the desk has no order for. `Stage L→R` would be `POSITIONAL`, but
  * `SpreadPlan` feeds that strategy a head's *index* as its position, so it is rig order under
@@ -153,4 +153,4 @@ export const SPREAD_ORDERS: readonly {
 ]
 
 /** The Runs presets; `N…` beyond them is a typed number. */
-export const SPREAD_PARTS_PRESETS: readonly number[] = [1, 2, 3, 4]
+export const SPREAD_RUNS_PRESETS: readonly number[] = [1, 2, 3, 4]

@@ -972,7 +972,7 @@ class ProgrammerStore {
      *
      * **This is the programmer's one "holds and suppresses" predicate** (fixture-fx-sheets plan
      * W4). A key here is one the programmer holds *and* one on which it holds every non-band
-     * effect back ([EffectSuppression.heldBackByProgrammer]) — on **that key**, and no other: a
+     * effect back ([FxSuppression.heldBackByProgrammer]) — on **that key**, and no other: a
      * `pan` entry holds back an effect on `pan`, not a Circle on `position` painting the same
      * channel. The raw-channel sideband is absent altogether: a sideband slot holds a value —
      * provenance attributes it to the property covering its channel — but the engine suppresses

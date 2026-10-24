@@ -6,13 +6,13 @@ import org.junit.Before
 import org.junit.Test
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoProject
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
 import uk.me.cormack.lighting7.testsupport.captureLogs
 import uk.me.cormack.lighting7.testsupport.seedMinimalProject
@@ -73,8 +73,8 @@ class FxLibraryMigrationTest {
         val projectId = seedMinimalProject(desk, projectName = "Experiment")
         transaction(desk.database) {
             val project = DaoProject[projectId]
-            fun colourPalette(name: String, hex: String) = DaoTemplate.new { this.project = project; this.name = name }.also {
-                DaoTemplateRow.new {
+            fun colourPalette(name: String, hex: String) = DaoPalette.new { this.project = project; this.name = name }.also {
+                DaoPaletteRow.new {
                     palette = it; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
                     attribute = "rgbColour"; value = "$hex;policy=rgbonly"
                 }
@@ -83,36 +83,36 @@ class FxLibraryMigrationTest {
             blue = colourPalette("Blue", "#0000ff").uuid.toString()
 
             val look = DaoLook.new { this.project = project; name = "S3 Old FX" }
-            fun lookFx(effectType: String, category: String, parameters: Map<String, String>, sort: Int, nShot: Int? = null, spread: Double = 1.0) =
-                DaoLookEffect.new {
+            fun lookFx(fxType: String, category: String, parameters: Map<String, String>, sort: Int, runs: Int? = null, spread: Double = 1.0) =
+                DaoLookFxEntity.new {
                     this.look = look; targetType = "group"; targetKey = "front"
-                    this.fxType = effectType; this.family = category; attribute = null
+                    this.fxType = fxType; this.family = category; attribute = null
                     cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"; phaseOffset = 0.25
-                    this.parameters = parameters; sortOrder = sort; this.runs = nShot; this.spread = spread
+                    this.parameters = parameters; sortOrder = sort; this.runs = runs; this.spread = spread
                 }
             lookFx("Breathe", "dimmer", mapOf("min" to "0", "max" to "255"), 0)
-            lookFx("Sweep", "position", emptyMap(), 1, nShot = 2, spread = 0.75)
+            lookFx("Sweep", "position", emptyMap(), 1, runs = 2, spread = 0.75)
             lookFx("ColourCycle", "colour", mapOf("colours" to "pal:$red,pal:$blue"), 2)
 
             val cue = DaoCue.new { this.project = project; name = "Cue 1" }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "Triangle"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "SPLIT"; parameters = emptyMap(); sortOrder = 0
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "ColourCycle"; family = "colour"; attribute = "rgbColour"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = mapOf("colours" to "pal:$red,#00ff00"); sortOrder = 1
             }
-            DaoCueAdHocEffect.new {
+            DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
                 fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
                 cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap(); sortOrder = 2
             }
-            val strike = DaoTemplate.new { this.project = project; name = "Strike" }
-            DaoTemplateEffect.new {
+            val strike = DaoPalette.new { this.project = project; name = "Strike" }
+            DaoPaletteFxEntity.new {
                 palette = strike; fxType = "LightningStrike"; family = "composite"; attribute = "dimmer"
                 cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = mapOf("maxBrightness" to "200", "flashColour" to "#ffffff")

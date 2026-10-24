@@ -137,7 +137,7 @@ export const venuesApi = restApi.injectEndpoints({
         method: 'POST',
         body: { venueId, ...(to != null ? { to } : {}), decisions },
       }),
-      invalidatesTags: (_result, error) => (error ? [] : [...SHOW_RIG_TAGS, 'TemplateList', 'SurfaceBinding']),
+      invalidatesTags: (_result, error) => (error ? [] : [...SHOW_RIG_TAGS, 'PaletteList', 'SurfaceBinding']),
     }),
 
     /** What a venue offers to seat from (its installed version), or a show (its pinned one), and the show's own. */

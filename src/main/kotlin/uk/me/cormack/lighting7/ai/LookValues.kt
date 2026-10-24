@@ -13,19 +13,19 @@ import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue
 import uk.me.cormack.lighting7.fx.PropertyChannelWriter
-import uk.me.cormack.lighting7.fx.TemplateIntent
-import uk.me.cormack.lighting7.fx.TemplateProperty
-import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.PaletteIntent
+import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.parseTemplateIntent
+import uk.me.cormack.lighting7.fx.parsePaletteIntent
 import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /**
- * `create_look`'s values: intents resolved per head through [TemplateResolver] into the literal
+ * `create_look`'s values: intents resolved per head through [PaletteResolver] into the literal
  * rows a Look stores. A group keeps one row while its members agree, else one row per head.
  */
 internal class ResolvedLookValues(
@@ -174,7 +174,7 @@ private fun row(ref: TargetRef, head: GroupableFixture?, propertyName: String, l
 
 private sealed interface LookValue {
     /** [emitters] is a colour's own white, amber and UV, laid over the mix where the head has them. */
-    data class Intent(val intent: TemplateIntent, val emitters: Emitters? = null) : LookValue
+    data class Intent(val intent: PaletteIntent, val emitters: Emitters? = null) : LookValue
     data class Option(val name: String) : LookValue
 }
 
@@ -182,16 +182,16 @@ private sealed interface LookValue {
 private data class Emitters(val white: UByte?, val amber: UByte?, val uv: UByte?)
 
 /**
- * A hex only for a colour and `pos:` / `deg:` only for `position`, so [TemplateResolver]'s colour fallback
+ * A hex only for a colour and `pos:` / `deg:` only for `position`, so [PaletteResolver]'s colour fallback
  * cannot land a hex on some other property. Anything that is not an intent is an option name.
  */
 private fun parseLookValue(propertyName: String, raw: String): LookValue? {
-    val vocabulary = TemplateProperty.ofOrNull(propertyName)
-    if (vocabulary == TemplateProperty.COLOUR) return parseColourValue(raw)
-    val intent = parseTemplateIntent(raw)
+    val vocabulary = PaletteProperty.ofOrNull(propertyName)
+    if (vocabulary == PaletteProperty.COLOUR) return parseColourValue(raw)
+    val intent = parsePaletteIntent(raw)
     return when {
-        vocabulary == TemplateProperty.POSITION -> (intent as? TemplateIntent.Position)?.let { LookValue.Intent(it) }
-        intent is TemplateIntent.Colour || intent is TemplateIntent.Position -> null
+        vocabulary == PaletteProperty.POSITION -> (intent as? PaletteIntent.Position)?.let { LookValue.Intent(it) }
+        intent is PaletteIntent.Colour || intent is PaletteIntent.Position -> null
         intent != null -> LookValue.Intent(intent)
         else -> LookValue.Option(raw)
     }
@@ -223,7 +223,7 @@ private fun parseColourValue(raw: String): LookValue? {
         }
     }
     val hex = parts.first() + (policy?.let { ";policy=$it" } ?: "")
-    val intent = parseTemplateIntent(hex) as? TemplateIntent.Colour ?: return null
+    val intent = parsePaletteIntent(hex) as? PaletteIntent.Colour ?: return null
     val emitters = if (white == null && amber == null && uv == null) null else Emitters(white, amber, uv)
     return LookValue.Intent(intent, emitters)
 }
@@ -288,13 +288,13 @@ private fun resolveOnHead(fixtures: Fixtures, head: GroupableFixture, propertyNa
         )
         is LookValue.Intent -> {
             val intent = value.intent
-            if (intent is TemplateIntent.Level && setting != null) {
+            if (intent is PaletteIntent.Level && setting != null) {
                 return HeadValue.Landed(propertyName, PropertyValue.Setting(intent.value.toUByte()))
             }
             val owner = (head as? FixtureElement<*>)?.parentFixture ?: head as? Fixture
-            val resolution = TemplateResolver.resolve(head, propertyName, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
+            val resolution = PaletteResolver.resolve(head, propertyName, intent, owner?.let { fixtures.fittedMediaFor(it.key) })
             val resolved = resolution.value
-                ?: return HeadValue.Missed((resolution.note as? TemplateResolver.Note.Unsupported)?.reason ?: "unsupported")
+                ?: return HeadValue.Missed((resolution.note as? PaletteResolver.Note.Unsupported)?.reason ?: "unsupported")
             HeadValue.Landed(resolution.propertyName, withEmitters(head, resolved, value.emitters))
         }
     }

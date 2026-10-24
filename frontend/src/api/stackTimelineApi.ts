@@ -20,14 +20,14 @@ export interface TimelineEntry {
   cueId?: number | null
   /** In layer order, bottom first; each layer carries its rank, which counts a layer whose source is gone. */
   layers: TimelineLayer[]
-  effects: TimelineEffect[]
+  fx: TimelineFx[]
   scenery: TimelineScenery[]
   trackedScenery: TimelineTrackedScenery[]
 }
 
 export interface TimelineLayer {
   id: number
-  source: { kind: 'LOOK' | 'TEMPLATE'; id: number; uuid: string; name: string; families: string[] }
+  source: { kind: 'LOOK' | 'PALETTE'; id: number; uuid: string; name: string; families: string[] }
   targets: CueTarget[]
   /** The fixture keys the layer reaches: its targets with groups expanded, else its source's own. */
   heads: string[]
@@ -48,12 +48,12 @@ export interface TimelineLayer {
   rateSpeedMasterUuid: string | null
 }
 
-export interface TimelineEffect {
+export interface TimelineFx {
   id: number
   uuid: string
   /** The run key: rows of neighbouring cues that share one draw as one run (D7). */
   runUuid: string | null
-  effectType: string
+  fxType: string
   propertyName: string | null
   targetType: string
   targetKey: string
@@ -78,7 +78,7 @@ export interface TimelineTrackedScenery {
 
 /** A Look or a palette, as a timeline edit names one. */
 export interface TimelineSourceRef {
-  kind: 'LOOK' | 'TEMPLATE'
+  kind: 'LOOK' | 'PALETTE'
   id: number
 }
 
@@ -107,7 +107,7 @@ export interface TimelineLayerFields {
 export interface TimelineCueSnapshot {
   cueId: number
   layers: Record<string, unknown>[]
-  adHocEffects: Record<string, unknown>[]
+  adHocFx: Record<string, unknown>[]
   scenery: Record<string, unknown>[]
 }
 

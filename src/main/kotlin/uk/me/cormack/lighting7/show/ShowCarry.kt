@@ -28,8 +28,8 @@ class ShowCarry internal constructor(
     val liveEntries: List<Pair<Int, Int>>,
     /** Each armed standby, stack → entry, to arm again after the GOs (which consume it). */
     val standbys: Map<Int, Int>,
-    /** Each stack's effect size below full (effects plan D10), set before the GOs so their effects arrive weighed. */
-    val stackEffectSizes: Map<Int, Double>,
+    /** Each stack's FX amount below full (effects plan D10), set before the GOs so their effects arrive weighed. */
+    val stackFxAmounts: Map<Int, Double>,
     /** The loosely held cues, oldest press first, to take again in that order (cue model plan §3.4). */
     val looseCues: List<Int>,
     /** The programmer itself — values, layers, sideband, Blind — handed over whole. */
@@ -58,13 +58,13 @@ class ShowCarry internal constructor(
                 show.cueStackManager.getActiveEntryId(stackId)?.let { stackId to it }
             },
             standbys = show.cueStackManager.runState.armedStandbys(),
-            stackEffectSizes = show.cueStackManager.effectSizes.snapshot(),
+            stackFxAmounts = show.cueStackManager.fxAmounts.snapshot(),
             looseCues = show.cueStackManager.holds.looseCueIdsInPressOrder(),
             programmerStore = show.programmerStore,
             locateManager = show.locateManager,
             // A leaving instance is on its way out, and the successor has no fade to finish it.
-            effects = show.fxEngine.getActiveEffects().filter {
-                it.cueId == null && it.cueStackId == null && it.programmerLayerEffectKey == null && !it.leaving
+            effects = show.fxEngine.getActiveFx().filter {
+                it.cueId == null && it.cueStackId == null && it.programmerLayerFxKey == null && !it.leaving
             },
         )
     }

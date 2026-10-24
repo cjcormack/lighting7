@@ -31,12 +31,12 @@ import kotlin.script.experimental.jvm.jvmTarget
  * val movers = group<MovingHead>("movers")
  *
  * wash.fx {
- *     dimmer(effect("SineWave", "min" to "40"), BeatDivision.HALF)
- *     colour(effect("ColourCycle"), BeatDivision.ONE_BAR)
+ *     dimmer(effect("SineWave", "min" to "40"), CycleLength.TWO_BEATS)
+ *     colour(effect("ColourCycle"), CycleLength.ONE_BAR)
  * }
  *
  * movers.fx {
- *     dimmer(effect("Pulse"), BeatDivision.QUARTER, distribution = DistributionStrategy.CENTRE_OUT)
+ *     dimmer(effect("Pulse"), CycleLength.ONE_BEAT, order = SpreadOrder.CENTRE_OUT)
  * }
  *
  * // Run one effect off speed master 2 rather than the global tempo
@@ -100,21 +100,21 @@ abstract class FxApplicationScript(
      *
      * @throws IllegalArgumentException if no effect is registered under [id]
      */
-    fun effect(id: String, params: Map<String, String>): Effect =
-        show.fxRegistry.createEffectWithTemplates(show.templateRegistry, id, params)
+    fun effect(id: String, params: Map<String, String>): Fx =
+        show.fxRegistry.createFxWithPalettes(show.paletteRegistry, id, params)
 
     /**
      * [effect] with parameters as pairs: `effect("Pulse", "min" to "0", "max" to "200")`, and the
      * no-parameter form `effect("Pulse")`. Deliberately not a default on the [Map] overload —
      * that would make the bare `effect("Pulse")` call ambiguous between the two.
      */
-    fun effect(id: String, vararg params: Pair<String, String>): Effect =
+    fun effect(id: String, vararg params: Pair<String, String>): Fx =
         effect(id, params.toMap())
 
     // --- Fixture FX Extensions (implicit engine) ---
 
     fun <T> T.dimmerFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
         speedMasterUuid: java.util.UUID? = null,
@@ -123,7 +123,7 @@ abstract class FxApplicationScript(
         this.applyDimmerFx(fxEngine, effect, timing, blendMode, speedMasterUuid, rateSpeedMasterUuid)
 
     fun <T> T.uvFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
         speedMasterUuid: java.util.UUID? = null,
@@ -132,7 +132,7 @@ abstract class FxApplicationScript(
         this.applyUvFx(fxEngine, effect, timing, blendMode, speedMasterUuid, rateSpeedMasterUuid)
 
     fun <T> T.colourFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
         speedMasterUuid: java.util.UUID? = null,
@@ -141,7 +141,7 @@ abstract class FxApplicationScript(
         this.applyColourFx(fxEngine, effect, timing, blendMode, speedMasterUuid, rateSpeedMasterUuid)
 
     fun <T> T.positionFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
         speedMasterUuid: java.util.UUID? = null,
@@ -154,56 +154,56 @@ abstract class FxApplicationScript(
     }
 
     fun FixtureTarget.clearFx(): Int =
-        fxEngine.removeEffectsForFixture(this.targetKey)
+        fxEngine.removeFxForFixture(this.targetKey)
 
     // --- Group FX Extensions (implicit engine) ---
 
     fun <T> FixtureGroup<T>.dimmerFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+        order: SpreadOrder = SpreadOrder.fromName(metadata.defaultOrderName),
         speedMasterUuid: java.util.UUID? = null,
         rateSpeedMasterUuid: java.util.UUID? = null,
     ): Long where T : GroupableFixture, T : WithDimmer =
         this.applyDimmerFx(
-            fxEngine, effect, timing, blendMode, distribution, speedMasterUuid, rateSpeedMasterUuid,
+            fxEngine, effect, timing, blendMode, order, speedMasterUuid, rateSpeedMasterUuid,
         )
 
     fun <T> FixtureGroup<T>.uvFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+        order: SpreadOrder = SpreadOrder.fromName(metadata.defaultOrderName),
         speedMasterUuid: java.util.UUID? = null,
         rateSpeedMasterUuid: java.util.UUID? = null,
     ): Long where T : GroupableFixture, T : WithUv =
         this.applyUvFx(
-            fxEngine, effect, timing, blendMode, distribution, speedMasterUuid, rateSpeedMasterUuid,
+            fxEngine, effect, timing, blendMode, order, speedMasterUuid, rateSpeedMasterUuid,
         )
 
     fun <T> FixtureGroup<T>.colourFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+        order: SpreadOrder = SpreadOrder.fromName(metadata.defaultOrderName),
         speedMasterUuid: java.util.UUID? = null,
         rateSpeedMasterUuid: java.util.UUID? = null,
     ): Long where T : GroupableFixture, T : WithColour =
         this.applyColourFx(
-            fxEngine, effect, timing, blendMode, distribution, speedMasterUuid, rateSpeedMasterUuid,
+            fxEngine, effect, timing, blendMode, order, speedMasterUuid, rateSpeedMasterUuid,
         )
 
     fun <T> FixtureGroup<T>.positionFx(
-        effect: Effect,
+        effect: Fx,
         timing: FxTiming = FxTiming(),
         blendMode: BlendMode = BlendMode.OVERRIDE,
-        distribution: DistributionStrategy = DistributionStrategy.fromName(metadata.defaultDistributionName),
+        order: SpreadOrder = SpreadOrder.fromName(metadata.defaultOrderName),
         speedMasterUuid: java.util.UUID? = null,
         rateSpeedMasterUuid: java.util.UUID? = null,
     ): Long where T : GroupableFixture, T : WithPosition =
         this.applyPositionFx(
-            fxEngine, effect, timing, blendMode, distribution, speedMasterUuid, rateSpeedMasterUuid,
+            fxEngine, effect, timing, blendMode, order, speedMasterUuid, rateSpeedMasterUuid,
         )
 
     inline fun <reified T : GroupableFixture> FixtureGroup<T>.fx(
@@ -211,12 +211,12 @@ abstract class FxApplicationScript(
     ): List<Long> {
         val builder = GroupFxBuilder(fxEngine, this)
         builder.block()
-        return builder.effectIds()
+        return builder.fxIds()
     }
 
     fun FixtureGroup<*>.clearFx(): Int {
-        val groupRemoved = fxEngine.removeEffectsForGroup(name)
-        val fixtureRemoved = allMembers.sumOf { fxEngine.removeEffectsForFixture(it.key) }
+        val groupRemoved = fxEngine.removeFxForGroup(name)
+        val fixtureRemoved = allMembers.sumOf { fxEngine.removeFxForFixture(it.key) }
         return groupRemoved + fixtureRemoved
     }
 }
@@ -228,6 +228,7 @@ object FxApplicationScriptConfiguration : ScriptCompilationConfiguration(
             "uk.me.cormack.lighting7.fixture.group.*",
             "uk.me.cormack.lighting7.fixture.trait.*",
             "uk.me.cormack.lighting7.fx.*",
+            "uk.me.cormack.lighting7.models.Timing",
             "uk.me.cormack.lighting7.fx.group.*",
             "java.awt.Color",
         )

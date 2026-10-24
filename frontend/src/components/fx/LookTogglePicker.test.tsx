@@ -10,21 +10,21 @@ const toggleLook = vi.hoisted(() => vi.fn())
 vi.mock('@/store/projects', () => ({ useCurrentProjectQuery: () => ({ data: { id: 1 } }) }))
 vi.mock('@/store/looks', () => ({
   useLookListQuery: () => ({
-    data: [{ id: 7, name: 'Warm', effectCount: 0 }],
+    data: [{ id: 7, name: 'Warm', fxCount: 0 }],
     isLoading: false,
   }),
   useToggleLookMutation: () => [
     (args: unknown) => {
       toggleLook(args)
-      return { unwrap: () => Promise.resolve({ action: 'applied', effectCount: 0, skippedFamilies: [] }) }
+      return { unwrap: () => Promise.resolve({ action: 'applied', fxCount: 0, skippedFamilies: [] }) }
     },
   ],
   useApplyLookMutation: () => [vi.fn()],
-  useAbsorbLookEffectsMutation: () => [vi.fn()],
+  useAbsorbLookFxMutation: () => [vi.fn()],
 }))
-vi.mock('@/store/templates', () => ({
-  useApplyTemplateMutation: () => [vi.fn()],
-  useToggleTemplateMutation: () => [vi.fn()],
+vi.mock('@/store/palettes', () => ({
+  useApplyPaletteMutation: () => [vi.fn()],
+  useTogglePaletteMutation: () => [vi.fn()],
 }))
 vi.mock('@/store/fixtureFx', () => ({ useRemoveFxMutation: () => [vi.fn()] }))
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), warning: vi.fn(), success: vi.fn() } }))

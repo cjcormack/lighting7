@@ -10,7 +10,7 @@ import {createFxApi, FxApi} from "./fxApi";
 import {createLooksWsApi, LooksWsApi} from "./looksWsApi";
 import {createScriptsWsApi, ScriptsWsApi} from "./scriptsWsApi";
 import {createFxDefinitionsWsApi, FxDefinitionsWsApi} from "./fxDefinitionsWsApi";
-import {createTemplatesWsApi, TemplatesWsApi} from "./templatesWsApi";
+import {createPalettesWsApi, PalettesWsApi} from "./palettesWsApi";
 import {createCuesWsApi, CuesWsApi} from "./cuesWsApi";
 import {createCueStacksWsApi, CueStacksWsApi} from "./cueStacksWsApi";
 import {createCueSlotsWsApi, CueSlotsWsApi} from "./cueSlotsWsApi";
@@ -41,7 +41,7 @@ import {createEffectsWsApi, EffectsWsApi} from "./effectsApi";
 import {createVenueHoldWsApi, VenueHoldWsApi} from "./venueHoldApi";
 import {createCueHoldsWsApi, CueHoldsWsApi} from "./cueHoldsApi";
 import {createGrandMasterWsApi, GrandMasterWsApi} from "./grandMasterApi";
-import {createStackEffectSizeWsApi, StackEffectSizeWsApi} from "./stackEffectSizeApi";
+import {createStackFxAmountWsApi, StackFxAmountWsApi} from "./stackFxAmountApi";
 import {createRigSafetyWsApi, RigSafetyWsApi} from "./rigSafetyApi";
 import {createStageRenderWsApi, StageRenderWsApi} from "./stageRenderApi";
 
@@ -62,7 +62,7 @@ interface LightingApi {
   fxDefinitions: FxDefinitionsWsApi
   scripts: ScriptsWsApi
   looks: LooksWsApi
-  templates: TemplatesWsApi
+  palettes: PalettesWsApi
   speedMasters: SpeedMastersWsApi
   cues: CuesWsApi
   cueStacks: CueStacksWsApi
@@ -85,7 +85,7 @@ interface LightingApi {
   venueHold: VenueHoldWsApi
   cueHolds: CueHoldsWsApi
   grandMaster: GrandMasterWsApi
-  stackEffectSize: StackEffectSizeWsApi
+  stackFxAmount: StackFxAmountWsApi
   rigSafety: RigSafetyWsApi
   stageRender: StageRenderWsApi
   cloudSync: CloudSyncWsApi
@@ -134,7 +134,7 @@ function createLightingApi(): LightingApi {
   const fxDefinitionsWsApi = createFxDefinitionsWsApi(connection)
   const scriptsWsApi = createScriptsWsApi(connection)
   const looksWsApi = createLooksWsApi(connection)
-  const templatesWsApi = createTemplatesWsApi(connection)
+  const palettesWsApi = createPalettesWsApi(connection)
   const cuesWsApi = createCuesWsApi(connection)
   const cueStacksWsApi = createCueStacksWsApi(connection)
   const cueSlotsWsApi = createCueSlotsWsApi(connection)
@@ -157,7 +157,7 @@ function createLightingApi(): LightingApi {
   const venueHoldWsApi = createVenueHoldWsApi(connection)
   const cueHoldsWsApi = createCueHoldsWsApi(connection)
   const grandMasterWsApi = createGrandMasterWsApi(connection)
-  const stackEffectSizeWsApi = createStackEffectSizeWsApi(connection)
+  const stackFxAmountWsApi = createStackFxAmountWsApi(connection)
   const rigSafetyWsApi = createRigSafetyWsApi(connection)
   const stageRenderWsApi = createStageRenderWsApi(connection)
   const bootStatusWsApi = createBootStatusWsApi(connection)
@@ -181,7 +181,7 @@ function createLightingApi(): LightingApi {
     fxDefinitions: fxDefinitionsWsApi,
     scripts: scriptsWsApi,
     looks: looksWsApi,
-    templates: templatesWsApi,
+    palettes: palettesWsApi,
     speedMasters: speedMastersWsApi,
     cues: cuesWsApi,
     cueStacks: cueStacksWsApi,
@@ -204,7 +204,7 @@ function createLightingApi(): LightingApi {
     venueHold: venueHoldWsApi,
     cueHolds: cueHoldsWsApi,
     grandMaster: grandMasterWsApi,
-    stackEffectSize: stackEffectSizeWsApi,
+    stackFxAmount: stackFxAmountWsApi,
     rigSafety: rigSafetyWsApi,
     stageRender: stageRenderWsApi,
     cloudSync: cloudSyncWsApi,

@@ -49,12 +49,12 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `palette domain — the list and press frames and the stored binding say palette`() {
-        assertTrue(json.encodeToString<OutMessage>(TemplateListChangedOutMessage).contains(""""type":"paletteListChanged""""))
-        val pressed = json.encodeToString<OutMessage>(TemplatePressedOutMessage(templateId = 3, lastPressedAt = "2026-10-15T10:00:00.000Z"))
+        assertTrue(json.encodeToString<OutMessage>(PaletteListChangedOutMessage).contains(""""type":"paletteListChanged""""))
+        val pressed = json.encodeToString<OutMessage>(PalettePressedOutMessage(paletteId = 3, lastPressedAt = "2026-10-15T10:00:00.000Z"))
         assertTrue(pressed.contains(""""type":"palettePressed""""), pressed)
-        assertTrue(pressed.contains(""""templateId":3"""), "field names keep the stored word: $pressed")
+        assertTrue(pressed.contains(""""paletteId":3"""), "field names keep the stored word: $pressed")
         // Stored in control_surface_bindings: a rename needs a database step and a LegacyNames entry.
-        val binding = json.encodeToString<BindingTarget>(BindingTarget.PressTemplate("u"))
+        val binding = json.encodeToString<BindingTarget>(BindingTarget.PressPalette("u"))
         assertTrue(binding.contains(""""type":"pressPalette""""), binding)
     }
 
@@ -203,17 +203,17 @@ class SocketMessageWireFormatTest {
                 """"bpm":120.0,"isRunning":false,"source":"MANUAL"}]}"""
         )
         val bare = assertIs<SpeedMastersStateOutMessage>(without).masters.single()
-        assertEquals(null, bare.usage)
+        assertEquals(null, bare.family)
         assertEquals(null, bare.followNum)
         assertEquals(null, bare.followDen)
 
         val with = json.decodeFromString<OutMessage>(
             """{"type":"speedMasters.state","masters":[{"uuid":null,"index":2,"name":"Movement",""" +
-                """"bpm":60.0,"isRunning":true,"source":"MANUAL","usage":"position",""" +
+                """"bpm":60.0,"isRunning":true,"source":"MANUAL","family":"position",""" +
                 """"followNum":1,"followDen":2}]}"""
         )
         val follower = assertIs<SpeedMastersStateOutMessage>(with).masters.single()
-        assertEquals("position", follower.usage)
+        assertEquals("position", follower.family)
         assertEquals(1, follower.followNum)
         assertEquals(2, follower.followDen)
     }
@@ -280,15 +280,15 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `FxChangedOutMessage encodes enum as kebab string`() {
-        val encoded = json.encodeToString<OutMessage>(FxChangedOutMessage(FxChangeType.REMOVED, effectId = 7L))
+        val encoded = json.encodeToString<OutMessage>(FxChangedOutMessage(FxChangeType.REMOVED, fxId = 7L))
         assertTrue(encoded.contains(""""changeType":"removed""""), "got: $encoded")
-        assertTrue(encoded.contains(""""effectId":7"""))
+        assertTrue(encoded.contains(""""fxId":7"""))
     }
 
     @Test
     fun `FxChangedOutMessage round-trips every FxChangeType case`() {
         for (case in FxChangeType.entries) {
-            val out = FxChangedOutMessage(case, effectId = if (case == FxChangeType.CLEARED) null else 1L)
+            val out = FxChangedOutMessage(case, fxId = if (case == FxChangeType.CLEARED) null else 1L)
             val encoded = json.encodeToString<OutMessage>(out)
             val decoded = assertIs<FxChangedOutMessage>(json.decodeFromString<OutMessage>(encoded))
             assertEquals(case, decoded.changeType)

@@ -112,8 +112,8 @@ describe('readWindowFrame', () => {
 describe('edgeDragRef — which drags carry a record', () => {
   it('reads all three kinds off a library palette row', () => {
     expect(
-      edgeDragRef({ type: 'busk-palette', record: { kind: 'TEMPLATE', template: { id: 7 } } }),
-    ).toEqual({ kind: 'TEMPLATE', id: 7 })
+      edgeDragRef({ type: 'busk-palette', record: { kind: 'PALETTE', palette: { id: 7 } } }),
+    ).toEqual({ kind: 'PALETTE', id: 7 })
     expect(
       edgeDragRef({ type: 'busk-palette', record: { kind: 'LOOK', look: { id: 8 } } }),
     ).toEqual({ kind: 'LOOK', id: 8 })
@@ -184,7 +184,7 @@ describe('handTargetAt — the element under a posted point', () => {
 })
 
 describe('isEdgeDragRelease', () => {
-  const record = { kind: 'TEMPLATE', id: 7 }
+  const record = { kind: 'PALETTE', id: 7 }
   const screen = { x: 1, y: 2 }
 
   it('accepts a release that names its point and its record', () => {

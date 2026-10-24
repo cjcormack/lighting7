@@ -12,7 +12,7 @@ import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.buskPadKind
 import uk.me.cormack.lighting7.routes.BuskCueDto
 import uk.me.cormack.lighting7.routes.LookDto
-import uk.me.cormack.lighting7.routes.TemplateDto
+import uk.me.cormack.lighting7.routes.PaletteDto
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
 
@@ -72,7 +72,7 @@ internal class HandState(
     /**
      * What the desk is holding.
      *
-     * Exactly one of [template] / [look] / [cue] is set, matching [kind] — the `BuskPadDto` shape,
+     * Exactly one of [palette] / [look] / [cue] is set, matching [kind] — the `BuskPadDto` shape,
      * and for the same reason: the client already derives a record's face from the summary it holds
      * for the library row, and a name-and-swatch flattened here would freeze the parts of that face
      * which are live. The rule is **asserted**, through the same `buskPadKind` that decides it for a
@@ -100,7 +100,7 @@ internal class HandState(
         val kind: BuskPadKind,
         val id: Int,
         val uuid: String,
-        val template: TemplateDto? = null,
+        val palette: PaletteDto? = null,
         val look: LookDto? = null,
         val cue: BuskCueDto? = null,
         val pickedUpOn: SelectionSource? = null,
@@ -109,7 +109,7 @@ internal class HandState(
         val expiresAtMs: Long = 0,
     ) {
         init {
-            require(buskPadKind(template, look, cue) == kind) {
+            require(buskPadKind(palette, look, cue) == kind) {
                 "a held record must carry exactly one summary, matching its kind ($kind)"
             }
         }
@@ -200,7 +200,7 @@ internal class HandState(
 
     /**
      * Drop the hand when what it holds no longer exists — run from the `lookListChanged` /
-     * `templateListChanged` / `cueListChanged` listeners, which is to say from every delete.
+     * `paletteListChanged` / `cueListChanged` listeners, which is to say from every delete.
      *
      * [kind] is the list that changed. A hold of another kind cannot be affected by it, so it
      * returns without a database read: these listeners fire on every create and edit too, and the

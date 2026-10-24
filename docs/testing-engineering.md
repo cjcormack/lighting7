@@ -252,18 +252,18 @@ name-match fast path. Point the layers at fixtures instead and every one of thos
 quiet while the numbers stay plausible.
 
 The **effects** the harness applies are load-bearing for the same reason the rigs are, and they
-live in `testsupport/TestEffects.kt` rather than coming from the `FxRegistry`. Effect maths runs
+live in `testsupport/TestFx.kt` rather than coming from the `FxRegistry`. Effect maths runs
 inside the measured loop, so a baseline is only comparable while that maths stays put — and the
 registry's 30 built-ins are `.fx.kts` resources that are expected to evolve. `SineSlider`,
 `WindowedSlider`, `HueSweepColour` and `SteppedColour` are frozen copies of the retired
 `fx.effects` classes the 2026-04-22 baseline was taken against (backend-sweep item D7). Don't
 "improve" their maths, and don't repoint the harness at the registry: either silently moves every
 number. Behaviour of the real built-ins is covered separately, against the real registry, in
-`fx/BuiltInEffectBehaviourTest`.
+`fx/BuiltInFxBehaviourTest`.
 
 The chase rig's fixture choice is load-bearing, not incidental. `Mode48Ch` implements
 `MultiElementFixture` and deliberately does *not* implement `WithColour` itself, which is what
-pushes `processGroupEffect` down the element-expansion branch; its `RgbwPixel` elements are
+pushes `processGroupFx` down the element-expansion branch; its `RgbwPixel` elements are
 `WithColour, WithWhite` with `bundleWithColour = true`, which is what makes each element's write
 pay `ColourTarget.extendedComponent`'s `fixtureProperties.find {}` + `KProperty1.call`. Swap in a
 cheaper fixture and the harness still runs, still passes, and measures none of that — so each
@@ -347,7 +347,7 @@ move. If C3 wants an allocation signal out of this scenario it needs a quieter m
 
 `[chase-beat]` moving ~6 % is the honest size of C1 on its own, not a disappointment. That
 scenario's cost is dominated by two things C1 deliberately did not touch:
-`DistributionStrategy.RANDOM` allocating a `java.util.Random` plus a boxed permutation **per
+`SpreadOrder.RANDOM` allocating a `java.util.Random` plus a boxed permutation **per
 member per call, twice per member** (~2.4 MB of the 3.35 MB/tick, C6), and the reflective
 property resolution on the colour write path (C2). C1 removed the register lookups and the
 per-tick list rebuilds around those, which is what `[chase-wall]` — no RANDOM effect — shows at
@@ -356,7 +356,7 @@ per-tick list rebuilds around those, which is what `[chase-wall]` — no RANDOM 
 Two knock-ons for later items. C1 also cut `fixtureHasProperty` from twice per effect per tick to
 twice per rebuild, so **C2's measured win will read smaller than its sweep entry predicts** — part
 of it has already been taken here. And C3's entry cites the per-crossfade-frame
-`resolveEffectFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
+`resolveFxFixtureKeys` walk as part of the cost; that walk is now cached, so C3 should be
 re-measured rather than implemented against the old premise.
 
 *(The first of those two predictions was wrong, and instructively so — see the C2 block below.)*
@@ -446,12 +446,12 @@ provenance *synchronously inside every measured frame* rather than coalescing as
 **2026-08-26 — sweep item C4 (palette colour-cache versioning): no comparison taken, and why.**
 C4's cost lives on the *invalidation* path — a palette edit re-resolving `pal:` colour parameters,
 and the DB read that resolve opens — and none of the five scenarios has a `pal:` parameter in it.
-The harness's effects are the frozen `testsupport/TestEffects.kt` copies, which do not go through
+The harness's effects are the frozen `testsupport/TestFx.kt` copies, which do not go through
 `TypedParams` at all, so nothing here calls `colourSourceVersion` once, let alone 50×/s. A
 before/after pair would have measured run-to-run noise and then sat in this section looking like
 evidence. What C4 would need is a sixth scenario — effects with palette-referencing colour
 parameters, ticking across a palette edit — which nobody has needed enough to build; its unit
-coverage is the load-count assertions in `TemplateColourSourceTest`, and its rig behaviour is
+coverage is the load-count assertions in `PaletteColourSourceTest`, and its rig behaviour is
 `FU-MANUAL-FX-TEMPLATE-COLOUR` step 4.
 
 **2026-08-26 — sweep item C5 (timed-layer fires, `CueApplyData` builders, Look-edit republish): no
@@ -481,7 +481,7 @@ same commit rather than a stash, so the working tree was never disturbed.
 
 `[chase-beat]` is the headline: its per-tick allocation drops by well over half, because that
 scenario is the one with 240 elements per group and it was building a synthetic
-`DistributionMemberInfo` *and* an `EffectContext` for every one of them on every tick. Caching
+`DistributionMemberInfo` *and* an `FxContext` for every one of them on every tick. Caching
 both per (expansion, strategy) removes essentially all of it. `[crossfade]`'s 160 kB is the row
 copies and the re-cook a weight tick no longer pays.
 
@@ -489,7 +489,7 @@ copies and the re-cook a weight tick no longer pays.
 medians at 274 → 329 µs while its allocation falls 11%, and the two sides' ranges (264–327 before,
 255–459 after) overlap heavily. It is the least trustworthy window in the suite — 500 ticks rather
 than 1200, so the least JIT-warmed, and its p99 swings 20× run to run. The obvious hypothesis, that
-the now-long-lived `EffectContext` array is read from old-gen memory instead of a hot TLAB, does
+the now-long-lived `FxContext` array is read from old-gen memory instead of a hot TLAB, does
 not survive `[chase-beat]` improving 44% on the same structure over twice as many elements. Left
 recorded rather than explained; if it matters it needs the quieter measurement `FU-TEST-FX-BENCH-CI-GATE`
 is waiting on anyway.
@@ -509,14 +509,14 @@ Both sides in one run of the new `cue spawn cost` scenario: 168 effects put up o
 ```
 
 ~80× on p50 and ~45× on allocation, for the 168-effect case. The shape is the point rather than
-the multiplier: `[spawn-each]` is quadratic, so the factor grows with the cue — every `addEffect`
+the multiplier: `[spawn-each]` is quadratic, so the factor grows with the cue — every `addFx`
 re-sorted the snapshots *and* rebuilt an `FxInstanceState` for every effect already up, each with
 a group / multi-element lookup. A batched add pays that once.
 
 The five tick scenarios are structurally blind to this and were confirmed flat; their numbers from
 this session are not recorded, because `--rerun-tasks` compile load was running alongside them and
 their p99s (`[chase-wall]` 19.8 ms) measured the machine. C7 does not touch a tick path — `insert`
-does exactly what `addEffect`'s body did, and the one rebuild still lands before anything the
+does exactly what `addFx`'s body did, and the one rebuild still lands before anything the
 calling flow publishes.
 
 **2026-08-27, selwyn.local, JDK 25** — sweep item C8 (cook-internal repeated work), on the new
@@ -535,7 +535,7 @@ before/after on the existing five.
 Two separate wins, and the table separates them deliberately. **`[cook-split]` before → after** is
 the per-row and per-head hoisting *inside* `applyLayer`, which both arms share — the allowed-set
 and target expansion off the row loop and onto a per-layer `LayerTargets`, the palette intent
-parsed per row rather than per head, and `TemplateResolver` walking the head's property catalogue
+parsed per row rather than per head, and `PaletteResolver` walking the head's property catalogue
 once instead of twice. That is ~32 % of the cook and ~35 % of its allocation. **`[cook-split]` →
 `[cook-once]`** is the consolidation: one pass over the stack, one `contributingLayers` sort
 instead of three, each Look snapshot read once, and the layer's targets expanded once for both

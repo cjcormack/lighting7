@@ -3,21 +3,21 @@ import { useParams } from 'react-router'
 import { ArrowLeft, X } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { useTemplateListQuery } from '@/store/templates'
-import type { TemplateSummary } from '@/api/templatesApi'
+import { usePaletteListQuery } from '@/store/palettes'
+import type { PaletteSummary } from '@/api/palettesApi'
 import type { SettingPropertyDescriptor } from '@/store/fixtures'
 import { FAMILY_LABELS, type AttributeFamily } from '@/lib/attributeFamily'
-import { templatePropertyFor, templateRowsSwatch } from '@/lib/templateIntent'
+import { palettePropertyFor, paletteRowsSwatch } from '@/lib/paletteIntent'
 import {
   isSteppablePalette,
   parseStepList,
   serializeStepList,
   slotOption,
   stepPalettesFor,
-} from '@/lib/stepEffects'
+} from '@/lib/stepFx'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
-import { parseTemplateRefUuid, serializeTemplateRef } from './colourUtils'
+import { parsePaletteRefUuid, serializePaletteRef } from './colourUtils'
 
 /**
  * The effect editor's two list parameters (effects plan session 7, §3.6): Palette Steps' palettes
@@ -117,18 +117,18 @@ export function FxPaletteListPicker({
 }) {
   const { projectId } = useParams<{ projectId: string }>()
   const projectIdNum = projectId ? Number(projectId) : NaN
-  const { data, isLoading } = useTemplateListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
+  const { data, isLoading } = usePaletteListQuery({ projectId: projectIdNum }, { skip: !Number.isFinite(projectIdNum) })
   const templates = useMemo(() => data ?? [], [data])
   const byUuid = useMemo(() => new Map(templates.map((t) => [t.uuid, t] as const)), [templates])
 
   const entries = parseStepList(value)
   const resolved = entries.map((entry) => {
-    const uuid = parseTemplateRefUuid(entry)
+    const uuid = parsePaletteRefUuid(entry)
     return uuid != null ? byUuid.get(uuid) : undefined
   })
-  const property = propertyName != null ? templatePropertyFor(propertyName) : null
+  const property = propertyName != null ? palettePropertyFor(propertyName) : null
   const family = paletteFamily ?? resolved.find((t) => t != null)?.family ?? property?.family ?? null
-  const offered: TemplateSummary[] =
+  const offered: PaletteSummary[] =
     family == null
       ? templates.filter(isSteppablePalette)
       : property != null
@@ -150,7 +150,7 @@ export function FxPaletteListPicker({
                 key={`${entry}-${i}`}
                 index={i}
                 label={name}
-                swatch={palette?.family === 'COLOUR' ? templateRowsSwatch(palette.rows) : null}
+                swatch={palette?.family === 'COLOUR' ? paletteRowsSwatch(palette.rows) : null}
                 missing={palette == null && !isLoading}
                 readOnly={readOnly}
                 onEarlier={i > 0 ? () => write(moveEarlier(entries, i)) : null}
@@ -163,7 +163,7 @@ export function FxPaletteListPicker({
       <Select
         value=""
         disabled={readOnly || offered.length === 0}
-        onValueChange={(uuid) => uuid && write([...entries, serializeTemplateRef(uuid)])}
+        onValueChange={(uuid) => uuid && write([...entries, serializePaletteRef(uuid)])}
       >
         <SelectTrigger aria-label={`Add to ${label}`} className="h-7 w-full text-xs">
           <SelectValue placeholder={offered.length === 0 ? 'No palettes to step' : 'Add a palette…'} />

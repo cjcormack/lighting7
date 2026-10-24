@@ -1,4 +1,4 @@
-import type { EffectLibraryEntry, EffectParameterDef } from '@/store/fixtureFx'
+import type { FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx'
 
 /**
  * D12's centre rules (fixture-fx-sheets plan D12, D16), pure and free of any store, so a pad face
@@ -14,7 +14,7 @@ export type CentreMode = 'around' | 'absolute'
 
 export const CENTRE_PARAMS = ['panCenter', 'tiltCenter'] as const
 
-function paramNamed(entry: Pick<EffectLibraryEntry, 'parameters'>, name: string): EffectParameterDef | undefined {
+function paramNamed(entry: Pick<FxLibraryEntry, 'parameters'>, name: string): FxParameterDef | undefined {
   return entry.parameters.find((p) => p.name === name)
 }
 
@@ -24,8 +24,8 @@ function paramNamed(entry: Pick<EffectLibraryEntry, 'parameters'>, name: string)
  * whatever holds the position underneath, which is the only way a Circle orbits a set position. A
  * sweep has no centre to pin, so it asks nothing and keeps its blend under Advanced.
  */
-export function hasCentre(entry: Pick<EffectLibraryEntry, 'category' | 'parameters'>): boolean {
-  return entry.category === 'position' && CENTRE_PARAMS.every((name) => paramNamed(entry, name) != null)
+export function hasCentre(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>): boolean {
+  return entry.family === 'position' && CENTRE_PARAMS.every((name) => paramNamed(entry, name) != null)
 }
 
 /**
@@ -53,7 +53,7 @@ export function withCentreMode(
 }
 
 /** Every parameter at its declared default. */
-export function defaultParameters(entry: Pick<EffectLibraryEntry, 'parameters'>): Record<string, string> {
+export function defaultParameters(entry: Pick<FxLibraryEntry, 'parameters'>): Record<string, string> {
   return Object.fromEntries(entry.parameters.map((p) => [p.name, p.defaultValue]))
 }
 
@@ -65,7 +65,7 @@ export function defaultParameters(entry: Pick<EffectLibraryEntry, 'parameters'>)
  */
 export function storedCentreMode(
   effect: { blendMode: string; parameters: Record<string, string> },
-  entry: Pick<EffectLibraryEntry, 'category' | 'parameters'> | undefined,
+  entry: Pick<FxLibraryEntry, 'family' | 'parameters'> | undefined,
 ): CentreMode | null {
   if (entry == null || !hasCentre(entry)) return null
   return centreModeOf(effect.blendMode, { ...defaultParameters(entry), ...effect.parameters })
@@ -77,8 +77,8 @@ export function storedCentreMode(
  * read the library: a template's effect carries every parameter its editor seeded, so the centres
  * are present on any movement template it made; one stored without them says nothing.
  */
-export function isAroundSpelling(effect: { category: string; blendMode: string; parameters: Record<string, string> }): boolean {
-  if (effect.category.toLowerCase() !== 'position') return false
+export function isAroundSpelling(effect: { family: string; blendMode: string; parameters: Record<string, string> }): boolean {
+  if (effect.family.toLowerCase() !== 'position') return false
   if (!CENTRE_PARAMS.every((name) => effect.parameters[name] != null)) return false
   return centreModeOf(effect.blendMode, effect.parameters) === 'around'
 }

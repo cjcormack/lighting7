@@ -62,7 +62,7 @@ object SentryMetricSink : MetricSink {
 class MetricsReporter(
     private val metrics: DeskMetrics = DeskMetrics.global,
     private val midi: () -> MidiLatencyTracker? = { null },
-    private val activeEffects: () -> Int? = { null },
+    private val activeFx: () -> Int? = { null },
     private val sink: MetricSink = SentryMetricSink,
     private val intervalMs: Long = INTERVAL_MS,
 ) {
@@ -123,7 +123,7 @@ class MetricsReporter(
             count("artnet.frame.overrun", frames.overruns.getAndSet(0), universe)
         }
         for (loop in DeskMetrics.FxLoop.entries) summary("fx.tick.duration", metrics.fxTick(loop), mapOf("loop" to loop.tag))
-        activeEffects()?.let { add(Metric(Metric.Kind.GAUGE, "fx.active_effects", it.toDouble())) }
+        activeFx()?.let { add(Metric(Metric.Kind.GAUGE, "fx.active_effects", it.toDouble())) }
         add(Metric(Metric.Kind.GAUGE, "ws.clients", metrics.wsClients.get().toDouble()))
         for ((key, n) in metrics.drainWsDropped()) {
             count("ws.outbound.dropped", n, mapOf("type" to key.first, "reason" to key.second.tag))

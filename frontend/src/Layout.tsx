@@ -401,7 +401,7 @@ function ApplyFxPicker({ pair, onClose }: { pair: PressPair; onClose: () => void
       projectId={current.id}
       open
       onOpenChange={(next) => { if (!next) onClose() }}
-      library="effects"
+      library="fx"
       pair={pair}
       fit={EVERY_FIT}
       offerNew={false}

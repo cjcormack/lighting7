@@ -25,7 +25,7 @@ describe('looks endpoints', () => {
     installRelativeUrlRequest()
     // Keys are matched by substring, most-specific first.
     fetchMock = installRecordingFetch({
-      'projects/1/looks/4/toggle': { action: 'applied', effectCount: 2 },
+      'projects/1/looks/4/toggle': { action: 'applied', fxCount: 2 },
       'projects/1/looks/4/copy': {
         lookId: 9,
         lookName: 'Warm (Copy)',
@@ -175,7 +175,7 @@ describe('looks endpoints', () => {
     expect(countRequestsTo('fixtures')).toBe(before)
 
     await store.dispatch(
-      looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, effects: [] }),
+      looksApi.endpoints.saveLook.initiate({ projectId: 1, lookId: 4, fx: [] }),
     )
     await vi.waitFor(() => expect(countRequestsTo('fixtures')).toBeGreaterThan(before))
 

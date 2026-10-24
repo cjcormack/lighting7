@@ -7,20 +7,20 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoFxDefinition
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.DaoScript
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.scripts.ScriptType
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.testsupport.IntegrationTestDb
@@ -61,8 +61,8 @@ class LegacyFxArchiveImportTest {
 
     private fun seedOldNames(projectId: Int): Ids = transaction(state.database) {
         val project = DaoProject[projectId]
-        fun colourPalette(name: String, hex: String) = DaoTemplate.new { this.project = project; this.name = name }.also {
-            DaoTemplateRow.new {
+        fun colourPalette(name: String, hex: String) = DaoPalette.new { this.project = project; this.name = name }.also {
+            DaoPaletteRow.new {
                 palette = it; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
                 attribute = "rgbColour"; value = "$hex;policy=rgbonly"
             }
@@ -72,35 +72,35 @@ class LegacyFxArchiveImportTest {
 
         val look = DaoLook.new { this.project = project; name = "Old FX" }
         fun lookFx(
-            effectType: String, category: String, propertyName: String, parameters: Map<String, String>, sort: Int,
-            nShot: Int? = null, spread: Double = 1.0,
-        ) = DaoLookEffect.new {
+            fxType: String, category: String, propertyName: String, parameters: Map<String, String>, sort: Int,
+            runs: Int? = null, spread: Double = 1.0,
+        ) = DaoLookFxEntity.new {
             this.look = look; targetType = "fixture"; targetKey = "hex-1"
-            this.fxType = effectType; this.family = category; this.attribute = propertyName
+            this.fxType = fxType; this.family = category; this.attribute = propertyName
             cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"; phaseOffset = 0.5
-            this.parameters = parameters; sortOrder = sort; this.runs = nShot; this.spread = spread
+            this.parameters = parameters; sortOrder = sort; this.runs = runs; this.spread = spread
         }
         lookFx("Breathe", "dimmer", "dimmer", mapOf("min" to "0", "max" to "255"), 0)
         lookFx("Triangle", "dimmer", "dimmer", emptyMap(), 1)
-        lookFx("Sweep", "position", "position", mapOf("pingPong" to "true"), 2, nShot = 2, spread = 0.75)
+        lookFx("Sweep", "position", "position", mapOf("pingPong" to "true"), 2, runs = 2, spread = 0.75)
         lookFx("PanSweep", "position", "position", emptyMap(), 3)
         lookFx("ColourCycle", "colour", "rgbColour", mapOf("colours" to "pal:$red,pal:$blue", "fadeRatio" to "0.25"), 4)
 
         val cue = DaoCue.new { this.project = project; name = "Old cue" }
-        DaoCueAdHocEffect.new {
+        DaoCueAdHocFxEntity.new {
             this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
             fxType = "ColourPulse"; family = "colour"; attribute = "rgbColour"
             cycle = 1.0; blendMode = "OVERRIDE"; order = "SPLIT"; parameters = emptyMap()
         }
-        val strike = DaoTemplate.new { this.project = project; name = "Strike" }
-        DaoTemplateEffect.new {
+        val strike = DaoPalette.new { this.project = project; name = "Strike" }
+        DaoPaletteFxEntity.new {
             palette = strike; fxType = "LightningStrike"; family = "composite"; attribute = "dimmer"
             cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
             parameters = mapOf("maxBrightness" to "200", "flashColour" to "#ffffff")
         }
         DaoFxDefinition.new {
             this.project = project; fxId = "my-strike"; name = "My Strike"; family = "intensity"
-            outputType = FxOutputType.SLIDER; fxMode = EffectMode.STANDARD; script = "mapOf()"
+            outputType = FxOutputType.SLIDER; fxMode = FxMode.STANDARD; script = "mapOf()"
             timingSource = TimingSource.BEAT
         }
         DaoScript.new { this.project = project; name = "composite calc"; script = "mapOf()"; scriptType = ScriptType.FX_CALC }
@@ -131,7 +131,7 @@ class LegacyFxArchiveImportTest {
 
     private fun importedLookFx(projectId: Int) = transaction(state.database) {
         val look = DaoLook.all().single { it.project.id.value == projectId && it.name == "Old FX" }
-        DaoLookEffect.all().filter { it.look.id == look.id }.sortedBy { it.sortOrder }
+        DaoLookFxEntity.all().filter { it.look.id == look.id }.sortedBy { it.sortOrder }
             .map { listOf(it.fxType, it.cycle, it.direction) }
     }
 
@@ -157,7 +157,7 @@ class LegacyFxArchiveImportTest {
         transaction(state.database) {
             val project = DaoProject[importedId]
             val look = DaoLook.all().single { it.project.id == project.id && it.name == "Old FX" }
-            val effects = DaoLookEffect.all().filter { it.look.id == look.id }.sortedBy { it.sortOrder }
+            val effects = DaoLookFxEntity.all().filter { it.look.id == look.id }.sortedBy { it.sortOrder }
 
             val (sine, ramp, sweep, panSweep, steps) = effects
             assertEquals("SineWave", sine.fxType)
@@ -173,15 +173,15 @@ class LegacyFxArchiveImportTest {
             assertEquals("PaletteSteps", steps.fxType)
             assertEquals(mapOf("palettes" to "pal:${ids.red},pal:${ids.blue}", "fadeRatio" to "0.25"), steps.parameters)
 
-            val cueFx = DaoCueAdHocEffect.all().single { it.cue.project.id == project.id }
+            val cueFx = DaoCueAdHocFxEntity.all().single { it.cue.project.id == project.id }
             assertEquals(listOf("ColourWave", "CENTRE_IN"), listOf(cueFx.fxType, cueFx.order))
 
-            val strike = DaoTemplateEffect.all().single { it.palette.project.id == project.id }
+            val strike = DaoPaletteFxEntity.all().single { it.palette.project.id == project.id }
             assertEquals("intensity", strike.family)
             assertEquals(mapOf("maxBrightness" to "200"), strike.parameters)
 
             val definition = DaoFxDefinition.all().single { it.project.id == project.id }
-            assertEquals(EffectMode.STANDARD, definition.fxMode)
+            assertEquals(FxMode.STANDARD, definition.fxMode)
             assertEquals("intensity", definition.family)
             assertEquals(ScriptType.FX_CALC, DaoScript.all().single { it.project.id == project.id }.scriptType)
         }

@@ -49,7 +49,7 @@ object ScriptSourceWrapper {
         ScriptType.FX_DEFINITION, ScriptType.FX_APPLICATION -> WrappedScriptSource(userScript, 0)
 
         ScriptType.FX_CALC -> calcLambda(
-            "(Double, uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams) " +
+            "(Double, uk.me.cormack.lighting7.fx.FxContext, uk.me.cormack.lighting7.fx.TypedParams) " +
                 "-> uk.me.cormack.lighting7.fx.FxOutput",
             "phase, context, params",
             userScript,
@@ -57,7 +57,7 @@ object ScriptSourceWrapper {
 
         ScriptType.FX_CALC_STATEFUL -> calcLambda(
             "(uk.me.cormack.lighting7.fx.MasterClock.ClockTick, Long, " +
-                "uk.me.cormack.lighting7.fx.EffectContext, uk.me.cormack.lighting7.fx.TypedParams, " +
+                "uk.me.cormack.lighting7.fx.FxContext, uk.me.cormack.lighting7.fx.TypedParams, " +
                 "MutableMap<String, Any>) -> uk.me.cormack.lighting7.fx.FxOutput",
             "tick, deltaMs, context, params, state",
             userScript,

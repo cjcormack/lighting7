@@ -15,9 +15,10 @@ import kotlinx.serialization.Serializable
  * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingProperty]; the
  * binding-specific variants are produced only by the surface evaluator.
  *
- * Two reference variants, `MissingPalette` and `MissingPaletteEntry`, retired with the `ref:` value
- * grammar in session 4 of the looks-and-layers plan, along with the `PaletteTypeMismatch` arm that
- * had already gone in session 2. A row can no longer *hold* a reference, so a reference that
+ * Two reference variants for the old `ref:` value grammar (a named palette, which became a Look)
+ * retired with it in session 4 of the looks-and-layers plan, along with the type-mismatch arm that
+ * had already gone in session 2. Today's [MissingPalette] is unrelated: a binding naming a deleted
+ * palette. A row can no longer *hold* a reference, so a reference that
  * resolves to nothing is not a state this ADT has to describe: a layer naming a deleted Look simply
  * contributes nothing, and the Look-delete guard is an indexed FK query rather than a health
  * diagnosis.
@@ -97,10 +98,10 @@ sealed class AssignmentHealth {
     @SerialName("missingLook")
     data class MissingLook(val lookUuid: String) : AssignmentHealth()
 
-    /** A `pressPalette` binding names a template that no longer exists. Control-surface-only. */
+    /** A `pressPalette` binding names a palette that no longer exists. Control-surface-only. */
     @Serializable
-    @SerialName("missingTemplate")
-    data class MissingTemplate(val templateUuid: String) : AssignmentHealth()
+    @SerialName("missingPalette")
+    data class MissingPalette(val paletteUuid: String) : AssignmentHealth()
 
     /**
      * A `pressPad` binding names a busk pad that no longer exists — the page was deleted, the pad
@@ -167,7 +168,7 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.UnknownProperty -> "no patched fixture has property '${health.propertyName}'"
     is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
     is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
-    is AssignmentHealth.MissingTemplate -> "missing template ${health.templateUuid}"
+    is AssignmentHealth.MissingPalette -> "missing palette ${health.paletteUuid}"
     is AssignmentHealth.MissingPad -> "missing busk pad ${health.padUuid}"
     is AssignmentHealth.MissingBank -> "missing busk bank ${health.bankUuid}"
     is AssignmentHealth.MissingPage -> "missing busk page ${health.pageUuid}"

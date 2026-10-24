@@ -24,7 +24,7 @@ A **Cue** is a named, project-scoped entity that captures a complete lighting lo
 A cue used to carry a **positional colour list** too (`palette` + `updateGlobalPalette`), which its
 effects indexed as `P1` / `P2` / `P*` and which cascaded global → stack → cue. That whole grammar is
 gone: an effect parameter names a **colour palette** instead (`pal:{uuid}`, see
-`fx/TemplateColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
+`fx/PaletteColourSource.kt`), which has one meaning wherever it is read and needs no per-cue scope.
 
 Key behaviours:
 - **Multiple concurrent cues**: Applying a cue adds it alongside other running cues (not replace).
@@ -140,12 +140,12 @@ the list onto entries (`state/CueModelMigration.kt`).
   `create_cue` and `build_cue_stack` — goes through `writeCueChildren` (`routes/projectCuesHelpers.kt`),
   which reconciles each child list against what is stored rather than deleting it and creating it
   again: a row is matched by `(targetType, targetKey, canonical property)`, a layer by the record it
-  applies (`lookId | templateId`), an effect by `(targetType, targetKey, canonical property,
-  effectType)` and a hook by `(triggerType, scriptId)`. `pairByKey` pairs the n-th incoming item of
+  applies (`lookId | paletteId`), an effect by `(targetType, targetKey, canonical property,
+  fxType)` and a hook by `(triggerType, scriptId)`. `pairByKey` pairs the n-th incoming item of
   a key with the n-th stored one in `sortOrder` order, so a key held twice — a Look layered twice at
   two delays — pairs deterministically. A survivor is updated in place and keeps its `uuid`;
   everything else about it is the incoming item's, and the rest are inserted or deleted. So a
-  one-value edit is one changed record in the sync diff, and `CueAdHocEffectDto.uuid` (read only,
+  one-value edit is one changed record in the sync diff, and `CueAdHocFxDto.uuid` (read only,
   ignored on write) names one effect across writes. An effect swapped for another type on the same
   property is a removal and an addition, as on a Look (`writeLookChildren`, its twin). A `PATCH`
   replaces only the lists it carries. Record's `UPDATE_EXISTING` pairs the recording against the
@@ -156,11 +156,11 @@ the list onto entries (`state/CueModelMigration.kt`).
 - **Effect runs** (stack-timeline plan D7, P2–P4). `cue_ad_hoc_fx.run_uuid` is an ad-hoc
   effect's **run key**: rows of neighbouring cues that share one are one run, for the stack's Timeline
   to draw as one bar and a GO to hand the effect on (stack-timeline plan sessions 2 and 3). It is the
-  timeline's to write. `CueAdHocEffectDto.runUuid` is read only, like `uuid`, and `take()` leaves it
+  timeline's to write. `CueAdHocFxDto.runUuid` is read only, like `uuid`, and `take()` leaves it
   alone, so every other write — a `PUT` or `PATCH`, Record, Update, `create_cue` — keeps a matched
   row's key and gives a new row none. A write that changes an effect's target, property or type
   replaces its row, so the new one is in no run. A key is not stage content (`stageContent` leaves it out), so breaking or joining a
-  run does not mark a live cue edited since GO. It syncs as `CueAdHocEffectJson.runUuid`
+  run does not mark a live cue edited since GO. It syncs as `CueAdHocFxJson.runUuid`
   (`formatVersion` 37), and a clone keeps it as it is; a copy gets fresh keys (§"Copying"). Effects
   stored before the key have none, and no migration gives them one (C5).
 
@@ -180,8 +180,8 @@ All endpoints are scoped under `/api/rest/projects/{projectId}/cues`.
 | POST | `/{projectId}/cues/copy-from` | `{fromProjectId, cueIds, stackId?, after?, dryRun?}` — cues of any other project copied into this one (current project only), loose or each a new unnumbered entry in `stackId` (after `after`, else at the end). Answers `{copied: [{fromCueId, cueId, entryId?}], unresolved: [{problem, in}], stackId?, looksCopied, looksLinked, palettesCopied, palettesLinked}`, 201, or 200 for a `dryRun`, the same run rolled back. 400 for no cues, this project as the source, a separator, or an `after` not in the stack; 404 for an unknown project, cue or stack (§"Copying") |
 | POST | `/{projectId}/cues/{cueId}/apply` | Take a **loose hold** on the cue (current project only) — live above every stack, newest press on top. Query param: `replaceAll=true` lets every other loose hold go first. |
 | POST | `/{projectId}/cues/{cueId}/stop` | Let the cue's loose hold go; it comes off stage unless a stack still holds it |
-| POST | `/{projectId}/cues/{cueId}/update-stage` | `{dryRun?}` — *Update stage*: a live cue's stored rows and untimed effects to the stage over the cue's own fade (current project only, both roles). Answers `{rows, effects: {edited, stopped, started}, fadeMs, curve}`; 409 `CUE_NOT_LIVE` for a cue nothing holds. See [cue stacks](cue-stacks-engineering.md#edited-since-go-and-update-stage) |
-| POST | `/{projectId}/cues/{cueId}/layers/press` | `{templateId \| lookId, targets, families?}` — a palette or a Look **pressed into the stored cue** (apply-model plan §3.6, current project only, both roles): the programmer's press rule (`fx/LayerPress.kt`, its replacement set and per-fixture heads from `fx/LayerPressRules.kt`) applied to the cue's layers and written, sending nothing to the stage. A palette goes on as a layer on `targets`, taking those heads off the cue's other palettes of its family and kind; the record's newest layer widens when it is the top; a press covering heads it already holds takes them off. The mask (`families`) is tested on the on arm only: a palette outside it is 400 `PALETTE_OUTSIDE_MASK`. A generic palette with no targets is 400 `PALETTE_NEEDS_SELECTION`. A **Look** is pressed whole (absolute-looks plan P1): `targets` and `families` are ignored, on is one layer naming no targets and no mask, off takes every layer of it off, and a Look none of whose fixtures is patched still goes on. A palette's target that is neither a fixture nor a group is 400; an unknown cue, palette or Look 404. A live cue is marked edited since GO. Answers `{action, released, propertyMask, skippedFamilies, cue}` (`skippedFamilies` always empty, kept while the client reads it); 409 `CUE_LAYERS_MOVED` if other writes kept moving the layers under it. The cue editor's bands and picker send it (apply-model plan §3.6; the rule is §"A press is per target" in [the composition model](lighting-composition-model.md#a-press-is-per-target)) |
+| POST | `/{projectId}/cues/{cueId}/update-stage` | `{dryRun?}` — *Update stage*: a live cue's stored rows and untimed effects to the stage over the cue's own fade (current project only, both roles). Answers `{rows, fx: {edited, stopped, started}, fadeMs, curve}`; 409 `CUE_NOT_LIVE` for a cue nothing holds. See [cue stacks](cue-stacks-engineering.md#edited-since-go-and-update-stage) |
+| POST | `/{projectId}/cues/{cueId}/layers/press` | `{paletteId \| lookId, targets, families?}` — a palette or a Look **pressed into the stored cue** (apply-model plan §3.6, current project only, both roles): the programmer's press rule (`fx/LayerPress.kt`, its replacement set and per-fixture heads from `fx/LayerPressRules.kt`) applied to the cue's layers and written, sending nothing to the stage. A palette goes on as a layer on `targets`, taking those heads off the cue's other palettes of its family and kind; the record's newest layer widens when it is the top; a press covering heads it already holds takes them off. The mask (`families`) is tested on the on arm only: a palette outside it is 400 `PALETTE_OUTSIDE_MASK`. A generic palette with no targets is 400 `PALETTE_NEEDS_SELECTION`. A **Look** is pressed whole (absolute-looks plan P1): `targets` and `families` are ignored, on is one layer naming no targets and no mask, off takes every layer of it off, and a Look none of whose fixtures is patched still goes on. A palette's target that is neither a fixture nor a group is 400; an unknown cue, palette or Look 404. A live cue is marked edited since GO. Answers `{action, released, propertyMask, skippedFamilies, cue}` (`skippedFamilies` always empty, kept while the client reads it); 409 `CUE_LAYERS_MOVED` if other writes kept moving the layers under it. The cue editor's bands and picker send it (apply-model plan §3.6; the rule is §"A press is per target" in [the composition model](lighting-composition-model.md#a-press-is-per-target)) |
 | POST | `/{projectId}/cues/from-state` | Create cue from the current FX state |
 
 Writing the *programmer* into a cue lives outside this namespace, under
@@ -257,25 +257,25 @@ effect of removing an entry or deleting a stack.
 Every effect, wherever it is spawned from, gets the **same** colour source:
 
 ```kotlin
-resolveColourSource = templateColourSource(state.show.templateRegistry)
-colourSourceVersion = { state.show.templateRegistry.versionFor(refs) }
+resolveColourSource = paletteColourSource(state.show.paletteRegistry)
+colourSourceVersion = { state.show.paletteRegistry.versionFor(refs) }
 ```
 
 `refs` is the set of palette uuids *this* effect's parameters name (including its registration's
-declared defaults) — `createEffectWithTemplates` computes it once and uses it for both the pre-warm
+declared defaults) — `createFxWithPalettes` computes it once and uses it for both the pre-warm
 and the version. Scoping it is what keeps an edit to one palette from re-resolving every colour
 parameter on the desk, and an effect naming no palette from re-resolving at all. A palette *list*
 change (create / rename / delete) still moves every scoped version by one, because an effect is
 allowed to name a uuid that has no palette yet.
 
-There were two `createEffectInstance` variants until the positional list went — a cue-scoped one
+There were two `createFxInstance` variants until the positional list went — a cue-scoped one
 resolving `P1` against `getCuePalette(cueId) ?: getPalette()`, and a second one Include needed
 because that fallback silently reached the *global* list when the cue was not live. A `pal:`
 reference has one answer wherever it is read, so the fork had nothing left to be about and the two
 collapsed into one.
 
-**One invariant when adding a spawn site**: call `prewarmTemplateColours` on the request thread
-first. `TemplateRegistry.snapshot` falls back to a DB read, and the tick loop must never take one.
+**One invariant when adding a spawn site**: call `prewarmPaletteColours` on the request thread
+first. `PaletteRegistry.snapshot` falls back to a DB read, and the tick loop must never take one.
 
 ### From-State Capture
 
@@ -283,7 +283,7 @@ The `from-state` endpoint and `programmer/record { source: "STAGE_SNAPSHOT" }` s
 `captureCurrentState`, which captures the current FxEngine state:
 - Effects from a Look or a palette are grouped by that record into layer entries — a palette's
   deduplicating its targets, a Look's naming none, since it lands whole
-- Effects belonging to no Look (ad-hoc) are captured as full `CueAdHocEffectDto` entries with all fields
+- Effects belonging to no Look (ad-hoc) are captured as full `CueAdHocFxDto` entries with all fields
 
 ### Look Delete Blocking
 
@@ -367,7 +367,7 @@ Two kinds of **hold** put a cue on stage, and both go through the hold registry 
 The `FxInstance` class has a `cueId: Int?` field (alongside `lookId`, `cueLayerId` and
 `programmerLayerId`, which name what spawned it). When a cue is applied, all created FxInstances are tagged with the cue's ID. This allows:
 - The hold registry to remove a cue's own effects when its last hold goes (not all cues)
-- The effect list (`EffectDto`, `get_current_state`) to name the cue an effect belongs to
+- The effect list (`FxDto`, `get_current_state`) to name the cue an effect belongs to
 
 ### Priority
 
@@ -568,7 +568,7 @@ When cues are created, updated, or deleted, a `cueListChanged` message is broadc
 
 The frontend subscribes to this message and invalidates the `CueList` RTK Query tag, triggering a re-fetch of the cue list.
 
-The `fxState` WebSocket message now includes `cueId` on each effect in `activeEffects`, enabling the frontend to track which cues are running.
+The `fxState` WebSocket message now includes `cueId` on each effect in `activeFx`, enabling the frontend to track which cues are running.
 
 ## Frontend Integration
 
@@ -576,7 +576,7 @@ The `fxState` WebSocket message now includes `cueId` on each effect in `activeEf
 - `src/api/cuesApi.ts` — Type definitions for Cue, CueInput, StopCueResponse, etc.
 - `src/api/cuesWsApi.ts` — WebSocket subscription for `cueListChanged`
 - `src/api/lightingApi.ts` — Registers `cues` WS API
-- `src/api/fxApi.ts` — `FxEffectState` includes `cueId`
+- `src/api/fxApi.ts` — `ActiveFxState` includes `cueId`
 
 ### State Management
 - `src/store/cues.ts` — RTK Query endpoints with `CueList` tag, `stopCue` mutation; liveness is `store/cueHolds.ts`'s `useCueRings()`, which replaced `useActiveCueIds()`

@@ -27,17 +27,17 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffects
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
+import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.SceneryChangeDto
-import uk.me.cormack.lighting7.models.TemplateRowDto
+import uk.me.cormack.lighting7.models.PaletteRowDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
 import uk.me.cormack.lighting7.testsupport.jsonClient
@@ -66,8 +66,8 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.palette(name: String, value: String = "#8f7bff", property: String = "rgbColour"): Int =
         post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = name, rows = listOf(TemplateRowDto(DEFERRED_TARGET_TYPE, "", property, value))))
-        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<TemplateDto>().id
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", property, value))))
+        }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<PaletteDto>().id
 
     private suspend fun HttpClient.look(name: String): Int =
         post("$base/looks") {
@@ -85,10 +85,10 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         stackId: Int?,
         name: String,
         layers: List<CueLayerDto> = emptyList(),
-        effects: List<CueAdHocEffectDto> = emptyList(),
+        effects: List<CueAdHocFxDto> = emptyList(),
     ): Int = post("$base/cues") {
         contentType(ContentType.Application.Json)
-        setBody(NewCue(name = name, cueStackId = stackId, layers = layers, adHocEffects = effects))
+        setBody(NewCue(name = name, cueStackId = stackId, layers = layers, adHocFx = effects))
     }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<CueDetails>().id
 
     private suspend fun HttpClient.drape(name: String): String =
@@ -145,12 +145,12 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val warm = client.look("Warm")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", layers = listOf(
-            CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
         ))
         val q2 = client.cue(act, "Q2", layers = listOf(CueLayerDto(lookId = warm)))
         val from = client.details(q1).layers.single().id!!
 
-        val answer = client.edit(act, layerOn(q2, "TEMPLATE", lavender, "hex-1", settingsFrom = from))
+        val answer = client.edit(act, layerOn(q2, "PALETTE", lavender, "hex-1", settingsFrom = from))
 
         assertEquals(listOf(q2), answer.changed)
         assertEquals(listOf("Warm: ", "Lavender: hex-1"), client.layers(q2), "on top")
@@ -159,7 +159,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         assertEquals(listOf("Warm"), answer.before.single().layers.map { it.source?.name })
 
         // Without settingsFrom, a fresh press's defaults.
-        client.edit(act, layerOn(q2, "TEMPLATE", lavender, "hex-2"))
+        client.edit(act, layerOn(q2, "PALETTE", lavender, "hex-2"))
         assertEquals(listOf("Warm: ", "Lavender: hex-1", "Lavender: hex-2"), client.layers(q2), "0.6 is not a fresh press's: no widening")
         assertEquals(1.0, client.details(q2).layers.last().amount)
     }
@@ -172,11 +172,11 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val lavender = client.palette("Lavender")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", layers = listOf(
-            CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
         ))
         val stored = client.details(q1).layers.single()
 
-        client.edit(act, layerOn(q1, "TEMPLATE", lavender, "hex-2", settingsFrom = stored.id))
+        client.edit(act, layerOn(q1, "PALETTE", lavender, "hex-2", settingsFrom = stored.id))
 
         val widened = client.details(q1).layers.single()
         assertEquals(stored.uuid, widened.uuid)
@@ -193,10 +193,10 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val amber = client.palette("Amber", "#ffb000")
         val act = client.stack("Act 1")
         val q5 = client.cue(act, "Q5", layers = listOf(
-            CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))),
         ))
 
-        val answer = client.edit(act, layerOn(q5, "TEMPLATE", amber, "hex-1"))
+        val answer = client.edit(act, layerOn(q5, "PALETTE", amber, "hex-1"))
 
         assertEquals(listOf("Lavender: hex-2", "Amber: hex-1"), client.layers(q5))
         val released = answer.released.single()
@@ -215,11 +215,11 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", layers = listOf(
             CueLayerDto(lookId = warm),
-            CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2"))),
         ))
 
-        assertEquals(emptyList(), client.edit(act, layerOn(q1, "TEMPLATE", lavender, "hex-1")).changed, "already on")
-        client.edit(act, layerOff(q1, "TEMPLATE", lavender, "hex-1"))
+        assertEquals(emptyList(), client.edit(act, layerOn(q1, "PALETTE", lavender, "hex-1")).changed, "already on")
+        client.edit(act, layerOff(q1, "PALETTE", lavender, "hex-1"))
         assertEquals(listOf("Warm: ", "Lavender: hex-2"), client.layers(q1))
         client.edit(act, layerOff(q1, "LOOK", warm, null))
         assertEquals(listOf("Lavender: hex-2"), client.layers(q1))
@@ -238,7 +238,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
         client.edit(act, layerOn(q1, "LOOK", warm, "hex-2"))
         assertEquals(listOf("Warm: "), client.layers(q1), "a Look layer names no target")
-        client.edit(act, layerOn(q1, "TEMPLATE", lavender, "hex-2"))
+        client.edit(act, layerOn(q1, "PALETTE", lavender, "hex-2"))
         client.edit(act, layerOn(q1, "LOOK", warm, null))
         assertEquals(listOf("Warm: ", "Lavender: hex-2"), client.layers(q1), "the Look was on already: no second layer")
 
@@ -299,18 +299,18 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val amber = client.palette("Amber", "#ffb000")
         val warm = client.look("Warm")
         val act = client.stack("Act 1")
-        val lavenderOnHex1 = CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR")
+        val lavenderOnHex1 = CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR")
         val q2 = client.cue(act, "Q2", layers = listOf(lavenderOnHex1, CueLayerDto(lookId = warm)))
         val q5 = client.cue(act, "Q5", layers = listOf(
-            CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"))),
-            CueLayerDto(templateId = amber, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"))),
+            CueLayerDto(paletteId = amber, targets = listOf(CueTargetDto("fixture", "hex-1"))),
         ))
 
         val answer = client.edit(act, buildJsonObject {
             put("op", "replace")
             putJsonArray("cueIds") { add(JsonPrimitive(q2)); add(JsonPrimitive(q5)) }
-            putJsonObject("from") { put("source", source("TEMPLATE", lavender)); put("target", target("hex-1")) }
-            putJsonObject("to") { put("source", source("TEMPLATE", amber)); put("target", target("hex-1")) }
+            putJsonObject("from") { put("source", source("PALETTE", lavender)); put("target", target("hex-1")) }
+            putJsonObject("to") { put("source", source("PALETTE", amber)); put("target", target("hex-1")) }
             put("keepSettings", true)
         })
 
@@ -359,9 +359,9 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val elsewhere = client.cue(other, "Q9")
 
         val refused = client.editRaw(act, listOf(
-            layerOn(q1, "TEMPLATE", lavender, "hex-1"),
-            layerOn(elsewhere, "TEMPLATE", lavender, "hex-1"),
-            layerOn(q1, "TEMPLATE", 99999, "hex-1"),
+            layerOn(q1, "PALETTE", lavender, "hex-1"),
+            layerOn(elsewhere, "PALETTE", lavender, "hex-1"),
+            layerOn(q1, "PALETTE", 99999, "hex-1"),
         ))
 
         assertEquals(HttpStatusCode.BadRequest, refused.status)
@@ -378,7 +378,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1")
 
-        val answer = client.edit(act, layerOn(q1, "TEMPLATE", lavender, "hex-1"), dryRun = true)
+        val answer = client.edit(act, layerOn(q1, "PALETTE", lavender, "hex-1"), dryRun = true)
 
         assertEquals(listOf(q1), answer.changed)
         assertTrue(client.layers(q1).isEmpty())
@@ -398,17 +398,17 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
             act, "Q1",
             layers = listOf(
                 CueLayerDto(lookId = warm, amount = 0.8, sortOrder = 0),
-                CueLayerDto(templateId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), propertyMask = "COLOUR", sortOrder = 1),
+                CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), propertyMask = "COLOUR", sortOrder = 1),
             ),
             effects = listOf(
-                CueAdHocEffectDto(
-                    targetType = "group", targetKey = "wash", effectType = "Pulse", category = "intensity", propertyName = "dimmer",
-                    beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
+                CueAdHocFxDto(
+                    targetType = "group", targetKey = "wash", fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                    cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                 ),
             ),
         )
         val run = UUID.randomUUID()
-        transaction(state.database) { DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue eq q1 }.single().runUuid = run }
+        transaction(state.database) { DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue eq q1 }.single().runUuid = run }
         client.edit(act, buildJsonObject {
             put("op", "scenerySet"); put("cueId", q1); put("elementUuid", tabs); putJsonObject("state") { put("open", 0.0) }
         })
@@ -416,7 +416,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
         val answer = client.edit(
             act,
-            layerOn(q1, "TEMPLATE", amber, "hex-1"),
+            layerOn(q1, "PALETTE", amber, "hex-1"),
             layerOff(q1, "LOOK", warm, null),
             buildJsonObject { put("op", "sceneryClear"); put("cueId", q1); put("elementUuid", tabs) },
         )
@@ -427,8 +427,8 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
         val restored = client.details(q1)
         assertEquals(found.layers.map { it.copy(id = null) }, restored.layers.map { it.copy(id = null) })
-        assertEquals(found.adHocEffects, restored.adHocEffects)
-        assertEquals(run.toString(), restored.adHocEffects.single().runUuid)
+        assertEquals(found.adHocFx, restored.adHocFx)
+        assertEquals(run.toString(), restored.adHocFx.single().runUuid)
         assertEquals(found.scenery.map(SceneryChangeDto::uuid), restored.scenery.map(SceneryChangeDto::uuid))
         assertEquals(found.scenery.map { it.state }, restored.scenery.map { it.state })
     }
@@ -445,15 +445,15 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         state.show.cueStackManager.activateEntry(state, act, entry)
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val before = controller.currentValues.toMap()
-        val effectsBefore = state.show.fxEngine.getActiveEffects().map { it.id }
+        val effectsBefore = state.show.fxEngine.getActiveFx().map { it.id }
 
-        val answer = client.edit(act, layerOn(q1, "TEMPLATE", half, "hex-1"))
+        val answer = client.edit(act, layerOn(q1, "PALETTE", half, "hex-1"))
 
         assertEquals(listOf(q1), answer.edited)
         assertTrue(state.show.cueStackManager.holds.isEdited(q1))
         assertEquals(before, controller.currentValues.toMap(), "no channel moved")
         assertTrue(state.show.programmerStore.layers.isEmpty(), "the programmer was not touched")
-        assertEquals(effectsBefore, state.show.fxEngine.getActiveEffects().map { it.id }, "no effect started or stopped")
+        assertEquals(effectsBefore, state.show.fxEngine.getActiveFx().map { it.id }, "no effect started or stopped")
     }
 
     @Test
@@ -466,7 +466,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val q1 = client.cue(act, "Q1")
         state.show.cueStackManager.activateEntry(state, act, client.details(q1).entries.single().entryId)
 
-        assertEquals(listOf(q1), client.edit(act, layerOn(q1, "TEMPLATE", half, "hex-1"), dryRun = true).edited)
+        assertEquals(listOf(q1), client.edit(act, layerOn(q1, "PALETTE", half, "hex-1"), dryRun = true).edited)
         assertFalse(state.show.cueStackManager.holds.isEdited(q1))
     }
 

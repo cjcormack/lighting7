@@ -38,7 +38,7 @@ class BindingHealthEvaluatorTest {
     private val liveStack: UUID = UUID.fromString("66666666-7777-8888-9999-000000000000")
 
     private val liveLook: UUID = UUID.fromString("aaaaaaaa-0000-4000-8000-000000000001")
-    private val liveTemplate: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
+    private val livePalette: UUID = UUID.fromString("bbbbbbbb-0000-4000-8000-000000000001")
     private val livePad: UUID = UUID.fromString("cccccccc-0000-4000-8000-000000000001")
     private val livePage: UUID = UUID.fromString("dddddddd-0000-4000-8000-000000000001")
     private val liveBank: UUID = UUID.fromString("ffffffff-0000-4000-8000-000000000001")
@@ -60,7 +60,7 @@ class BindingHealthEvaluatorTest {
         selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
         colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
         validLookUuids = setOf(liveLook),
-        validTemplateUuids = setOf(liveTemplate),
+        validPaletteUuids = setOf(livePalette),
         validPadUuids = setOf(livePad),
         validBankUuids = setOf(liveBank),
         validPageUuids = setOf(livePage),
@@ -72,12 +72,12 @@ class BindingHealthEvaluatorTest {
     fun `a record binding is healthy when its uuid resolves and dead when it does not`() {
         val ctx = context()
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$liveLook"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressTemplate("$liveTemplate"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressPalette("$livePalette"), ctx))
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$livePad"), ctx))
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$livePage"), ctx))
 
         assertIs<AssignmentHealth.MissingLook>(BindingHealthEvaluator.evaluate(BindingTarget.ApplyLook("$gone"), ctx))
-        assertIs<AssignmentHealth.MissingTemplate>(BindingHealthEvaluator.evaluate(BindingTarget.PressTemplate("$gone"), ctx))
+        assertIs<AssignmentHealth.MissingPalette>(BindingHealthEvaluator.evaluate(BindingTarget.PressPalette("$gone"), ctx))
         assertIs<AssignmentHealth.MissingPad>(BindingHealthEvaluator.evaluate(BindingTarget.PressPad("$gone"), ctx))
         assertIs<AssignmentHealth.MissingPage>(BindingHealthEvaluator.evaluate(BindingTarget.BuskPageSet("$gone"), ctx))
     }
@@ -163,10 +163,10 @@ class BindingHealthEvaluatorTest {
         // A stack's effect-size fader is judged by its stack, as the stack buttons are.
         assertEquals(
             AssignmentHealth.Ok,
-            BindingHealthEvaluator.evaluate(BindingTarget.StackEffectSize(stackId = 999, stackUuid = liveStack.toString()), ctx),
+            BindingHealthEvaluator.evaluate(BindingTarget.StackFxAmount(stackId = 999, stackUuid = liveStack.toString()), ctx),
         )
         assertIs<AssignmentHealth.MissingStack>(
-            BindingHealthEvaluator.evaluate(BindingTarget.StackEffectSize(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
+            BindingHealthEvaluator.evaluate(BindingTarget.StackFxAmount(stackId = 1, stackUuid = UUID.randomUUID().toString()), ctx),
         )
     }
 

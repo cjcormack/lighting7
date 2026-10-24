@@ -44,7 +44,7 @@ import {
 export type ProgrammerTargetType = 'fixture' | 'group'
 
 /** Which layer produced the current winning value for a (targetKey, propertyName). */
-export type ProvenanceSource = 'PARKED' | 'PROGRAMMER' | 'EFFECT' | 'CUE'
+export type ProvenanceSource = 'PARKED' | 'PROGRAMMER' | 'FX' | 'CUE'
 
 export interface ProgrammerEntry {
   targetKey: string
@@ -97,7 +97,7 @@ export interface ProvenanceEntry {
   source: ProvenanceSource
   cueId?: number
   cueStackId?: number
-  effectId?: number
+  fxId?: number
   /**
    * The Look layer that won this key, when one did.
    *
@@ -249,7 +249,7 @@ export interface ProgrammerKeyState {
 }
 
 /** Which layer of a property's stack a `programmer.keyStack` entry is. */
-export type KeyStackLayerKind = 'PARK' | 'PROGRAMMER_EFFECT' | 'PROGRAMMER' | 'EFFECT' | 'CUE' | 'BASE'
+export type KeyStackLayerKind = 'PARK' | 'PROGRAMMER_FX' | 'PROGRAMMER' | 'FX' | 'CUE' | 'BASE'
 
 /**
  * One layer under a property, as `programmer.keyStack` reports it (lighting7's `KeyStackLayerDto`,
@@ -271,10 +271,10 @@ export interface KeyStackLayer {
   universe?: number | null
   channel?: number | null
   /** The two effect kinds. */
-  effectId?: number | null
-  effectType?: string | null
-  effectName?: string | null
-  beatDivision?: number | null
+  fxId?: number | null
+  fxType?: string | null
+  fxName?: string | null
+  cycle?: number | null
   blendMode?: string | null
   running?: boolean | null
   speedMasterUuid?: string | null
@@ -283,7 +283,7 @@ export interface KeyStackLayer {
   timingSource?: string | null
   seconds?: boolean | null
   /** The two effect kinds: Size (effects plan D2, 0–1) and Direction (D5) — what `onStage` already weighs. */
-  size?: number | null
+  amount?: number | null
   direction?: string | null
   /** The two effect kinds: running, but not painting this key — the desk's own suppression answer. */
   heldBack?: boolean | null
@@ -320,8 +320,8 @@ export interface KeyStackAnswer {
 
 /** A local effect a release left running, because it also drives heads outside the target. */
 export interface TargetClearedPartial {
-  effectId: number
-  effectType: string
+  fxId: number
+  fxType: string
   targetKey: string
   isGroupTarget: boolean
   propertyName: string
@@ -334,7 +334,7 @@ export interface TargetCleared {
   /** Property entries and raw channels released. */
   values: number
   /** Local effects stopped. */
-  effects: number
+  fx: number
   partial: TargetClearedPartial[]
 }
 
@@ -416,7 +416,7 @@ interface ProgrammerAddLayerOutgoing {
   type: 'programmer.addLayer'
   /** Exactly one of these. The server refuses both and neither. */
   lookId?: number
-  templateId?: number
+  paletteId?: number
   targets: CueTarget[]
   propertyMask?: string
   blendMode?: string
@@ -566,7 +566,7 @@ interface ProgrammerClearedIncoming {
   type: 'programmer.cleared'
   cleared: number
   /** Programmer-band FX swept alongside the values. Omitted by the server when 0. */
-  effectsCleared?: number
+  fxCleared?: number
 }
 
 interface ProgrammerBlindStateIncoming {
@@ -614,7 +614,7 @@ interface ProgrammerTargetClearedIncoming {
   targetType: ProgrammerTargetType
   targetKey: string
   values: number
-  effects: number
+  fx: number
   partial?: TargetClearedPartial[]
   error?: string | null
 }
@@ -714,7 +714,7 @@ export interface ProgrammerApi {
   addLayer(input: {
     /** Exactly one of these — a layer applies a Look or a template. */
     lookId?: number
-    templateId?: number
+    paletteId?: number
     targets?: CueTarget[]
     propertyMask?: string
     blendMode?: string
@@ -814,7 +814,7 @@ const provenanceSignature = (p: ProvenanceEntry) =>
     p.source,
     p.cueId ?? null,
     p.cueStackId ?? null,
-    p.effectId ?? null,
+    p.fxId ?? null,
     p.layerId ?? null,
     // The whole source object, not just its id: a key can move between a Look layer and a
     // template layer that happen to share an int PK, and the cell would keep naming the old one.
@@ -1128,7 +1128,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
           targetType: message.targetType,
           targetKey: message.targetKey,
           values: message.values,
-          effects: message.effects,
+          fx: message.fx,
           partial: message.partial ?? [],
         } satisfies TargetCleared)
         break
@@ -1280,11 +1280,11 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       send({ type: 'programmer.clearScenery', elementUuid, fadeMs })
     },
 
-    addLayer({ lookId, templateId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
+    addLayer({ lookId, paletteId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
       return send({
         type: 'programmer.addLayer',
         lookId,
-        templateId,
+        paletteId,
         targets: targets ?? [],
         propertyMask,
         blendMode,

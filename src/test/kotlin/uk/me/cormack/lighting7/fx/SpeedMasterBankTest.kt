@@ -423,9 +423,9 @@ class SpeedMasterBankTest {
         )
 
         val states = bank.masterStates()
-        assertEquals("intensity", states[0].usage)
+        assertEquals("intensity", states[0].family)
         assertNull(states[0].followNum)
-        assertEquals("position", states[1].usage)
+        assertEquals("position", states[1].family)
         assertEquals(1, states[1].followNum)
         assertEquals(2, states[1].followDen)
         assertEquals(

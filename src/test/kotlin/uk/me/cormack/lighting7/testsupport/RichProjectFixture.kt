@@ -10,7 +10,7 @@ import uk.me.cormack.lighting7.fixture.media.fittedMedia
 import uk.me.cormack.lighting7.fixture.lantern.LanternFocus
 import uk.me.cormack.lighting7.fixture.lantern.ShutterBlade
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.fx.EffectMode
+import uk.me.cormack.lighting7.fx.FxMode
 import uk.me.cormack.lighting7.fx.FxOutputType
 import uk.me.cormack.lighting7.fx.ParameterInfo
 import uk.me.cormack.lighting7.fx.TimingSource
@@ -61,14 +61,14 @@ import uk.me.cormack.lighting7.models.DaoBuskPage
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.CueTargetDto
-import uk.me.cormack.lighting7.models.DaoCueAdHocEffect
+import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoTemplate
-import uk.me.cormack.lighting7.models.DaoTemplateEffect
-import uk.me.cormack.lighting7.models.DaoTemplateRow
+import uk.me.cormack.lighting7.models.DaoPalette
+import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
+import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.DaoLookEffect
+import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
@@ -91,9 +91,9 @@ import uk.me.cormack.lighting7.models.DaoSpeedMaster
 import uk.me.cormack.lighting7.models.SpeedMasterSource
 import uk.me.cormack.lighting7.models.DaoStageRegion
 import uk.me.cormack.lighting7.models.DaoUniverseConfig
-import uk.me.cormack.lighting7.models.LookEffectSpec
+import uk.me.cormack.lighting7.models.LookFxSpec
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.models.EffectTargetRef
+import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.PromptBookRectDto
 import uk.me.cormack.lighting7.models.TriggerType
 import uk.me.cormack.lighting7.scripts.ScriptType
@@ -540,7 +540,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         fxId = "custom-flicker"; name = "Custom Flicker"
         family = "intensity"; outputType = FxOutputType.SLIDER
-        fxMode = EffectMode.STANDARD
+        fxMode = FxMode.STANDARD
         script = "// effect"
         timingSource = TimingSource.BEAT
         defaultTiming = TIMING_HEAD
@@ -616,9 +616,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     // One effect over a selection (effects plan session 3, formatVersion 34): a fixture, then a
     // group, in that order — the order the effect spreads in.
-    DaoLookEffect.new {
-        look = boundLook; targetType = EffectTargetRef.Selection.TYPE
-        targetKey = EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
+    DaoLookFxEntity.new {
+        look = boundLook; targetType = FxTargetsRef.Selection.TYPE
+        targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
         fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
         cycle = 2.0; blendMode = "OVERRIDE"; order = "REVERSE"
         parameters = mapOf("min" to "40")
@@ -632,7 +632,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         name = "warm-pulse"
         notes = "warm pulse"
     }
-    DaoLookEffect.new {
+    DaoLookFxEntity.new {
         look = effectsLook; targetType = "group"; targetKey = "front-wash"
         fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
         cycle = 0.5; blendMode = "OVERRIDE"; order = "NORMAL"
@@ -664,14 +664,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
 
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
     // the half of the old deferred look that is not a look at all.
-    val colourTemplate = DaoTemplate.new {
+    val colourPalette = DaoPalette.new {
         this.project = project
         name = "amber-key"
         notes = "warm key light"
         fadeDuration = Duration.ofMillis(1_500L)
     }
-    DaoTemplateRow.new {
-        palette = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+    DaoPaletteRow.new {
+        palette = colourPalette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
         attribute = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
     }
 
@@ -680,10 +680,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // left at its default is invisible to the round-trip and clone tests, so a copier that drops it
     // would look correct.
     //
-    // Its colour parameter names `colourTemplate` as `pal:{uuid}` (D12's allowed direction), which
+    // Its colour parameter names `colourPalette` as `pal:{uuid}` (D12's allowed direction), which
     // is what proves `ExportUuidRemapper` rewrites a reference *inside a parameters map* on clone —
     // the analogue of the retired `ref:{boundLook.uuid}` case.
-    val effectTemplate = DaoTemplate.new {
+    val fxPalette = DaoPalette.new {
         this.project = project
         name = "amber-breathe"
         notes = "slow warm breathe on the selection"
@@ -691,15 +691,15 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         // the one default here so a copier inventing a fade for it is caught.
         fadeDuration = null
     }
-    DaoTemplateEffect.new {
-        palette = effectTemplate
+    DaoPaletteFxEntity.new {
+        palette = fxPalette
         fxType = "ColourWave"; family = "colour"; attribute = "rgbColour"
         cycle = 2.0; blendMode = "MAX"; order = "REVERSE"
         phaseOffset = 0.125
         elementMode = "FLAT"
         elementFilter = "EVEN"
         timing = TIMING_CYCLE
-        parameters = mapOf("colours" to "pal:${colourTemplate.uuid}", "depth" to "0.6")
+        parameters = mapOf("colours" to "pal:${colourPalette.uuid}", "depth" to "0.6")
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
         // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
@@ -722,16 +722,16 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // *Generic* / *Per fixture*, and a copier that handles one and not the other must be caught.
     // One row in each position unit (venue-visit plan P3): a `deg:` row stored before v28 and a
     // centre-relative `pos:` one, so a round trip that rewrote either unit would show.
-    val positionTemplate = DaoTemplate.new {
+    val positionPalette = DaoPalette.new {
         this.project = project
         name = "downstage-centre"
     }
-    DaoTemplateRow.new {
-        palette = positionTemplate; targetType = "fixture"; targetKey = "hex-1"
+    DaoPaletteRow.new {
+        palette = positionPalette; targetType = "fixture"; targetKey = "hex-1"
         attribute = "position"; value = "deg:12,-8"; sortOrder = 0
     }
-    DaoTemplateRow.new {
-        palette = positionTemplate; targetType = "fixture"; targetKey = "hex-2"
+    DaoPaletteRow.new {
+        palette = positionPalette; targetType = "fixture"; targetKey = "hex-2"
         attribute = "position"; value = "pos:-14,-8"; sortOrder = 1
     }
 
@@ -810,7 +810,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // a cue depends on a Look through a `DaoCueLayer` FK now, and the two layers below are what
     // exercise the clone path.
     // v37: the Pulse runs on into "build", show-1's next cue, so two rows share a run key.
-    DaoCueAdHocEffect.new {
+    DaoCueAdHocFxEntity.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
         fxType = "Pulse"; family = "intensity"; cycle = 0.5
         blendMode = "OVERRIDE"; order = "NORMAL"
@@ -843,9 +843,9 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     // An ad-hoc effect over a selection (formatVersion 34), the shape Record writes for a Local effect
     // started on a marquee.
-    DaoCueAdHocEffect.new {
-        cue = cue1; targetType = EffectTargetRef.Selection.TYPE
-        targetKey = EffectTargetRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
+    DaoCueAdHocFxEntity.new {
+        cue = cue1; targetType = FxTargetsRef.Selection.TYPE
+        targetKey = FxTargetsRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
         fxType = "Pulse"; family = "intensity"; cycle = 1.0
         blendMode = "OVERRIDE"; order = "CENTRE_OUT"
         parameters = mapOf("depth" to "0.5")
@@ -869,7 +869,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // A layer applying a **template** rather than a look, so the polymorphic referent is exercised
     // on both arms — an export or clone that carried only `look_id` would lose this one silently.
     DaoCueLayer.new {
-        cue = cue1; palette = colourTemplate
+        cue = cue1; palette = colourPalette
         targets = listOf(CueTargetDto("fixture", "hex-2"))
         sortOrder = 4
         attributeMask = "COLOUR"
@@ -897,7 +897,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project; name = "build"
     }
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
-    DaoCueAdHocEffect.new {
+    DaoCueAdHocFxEntity.new {
         cue = build; targetType = "fixture"; targetKey = "hex-1"
         fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
         blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("depth" to "0.8")
@@ -963,7 +963,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val keysBank = DaoBuskBank.new {
         column = keysColumn; sortOrder = 0; name = "keys"; solo = true; flow = BuskFlow.WRAP.name
     }
-    DaoBuskPad.new { bank = keysBank; sortOrder = 0; palette = colourTemplate }
+    DaoBuskPad.new { bank = keysBank; sortOrder = 0; palette = colourPalette }
     DaoBuskPad.new { bank = keysBank; sortOrder = 1; look = boundLook }
     val cuePad = DaoBuskPad.new { bank = keysBank; sortOrder = 2; cue = cue1 }
     val sideColumn = DaoBuskColumn.new {
@@ -972,7 +972,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val movesBank = DaoBuskBank.new {
         column = sideColumn; sortOrder = 0; name = "moves"; solo = false; flow = BuskFlow.COLUMN.name
     }
-    DaoBuskPad.new { bank = movesBank; sortOrder = 0; palette = positionTemplate }
+    DaoBuskPad.new { bank = movesBank; sortOrder = 0; palette = positionPalette }
     // A loose cue (no stack) on a pad: held loose when pressed (cue model plan §3.2, D6).
     DaoBuskPad.new { bank = movesBank; sortOrder = 1; cue = looseCue }
     DaoBuskBank.new {
@@ -984,10 +984,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val fxBank = DaoBuskBank.new {
         column = fxColumn; sortOrder = 0; name = "fx"; solo = true; flow = BuskFlow.WRAP.name
     }
-    DaoBuskPad.new { bank = fxBank; sortOrder = 0; palette = effectTemplate }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 0; palette = fxPalette }
     DaoBuskPad.new { bank = fxBank; sortOrder = 1; look = effectsLook }
     // The same template on a second pad — one record, two places.
-    DaoBuskPad.new { bank = fxBank; sortOrder = 2; palette = colourTemplate }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 2; palette = colourPalette }
 
     // The **busk rig** (v12): two rows, every tile shape — a group tile with a label, a WHOLE
     // fixture tile, a HALVES tile with its split, a PER_CELL tile and a single-cell tile — and
@@ -1126,7 +1126,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "button-8"
         targetType = "pressPalette"
-        targetPayload = """{"type":"pressPalette","paletteUuid":"${colourTemplate.uuid}"}"""
+        targetPayload = """{"type":"pressPalette","paletteUuid":"${colourPalette.uuid}"}"""
         sortOrder = 10
     }
     DaoControlSurfaceBinding.new {

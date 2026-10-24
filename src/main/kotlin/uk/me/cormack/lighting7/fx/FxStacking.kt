@@ -10,7 +10,7 @@ object FxStacking {
     /** One family's stacking start. [parameters] are set only where the press names them not. */
     data class Start(
         val blendMode: BlendMode,
-        val size: Double,
+        val amount: Double,
         val parameters: Map<String, String> = emptyMap(),
     )
 

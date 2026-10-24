@@ -1,20 +1,21 @@
 package uk.me.cormack.lighting7.sync
 
-import uk.me.cormack.lighting7.fx.EffectDirection
-import uk.me.cormack.lighting7.fx.TEMPLATE_COLOUR_REF_PREFIX
-import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.fx.FxDirection
+import uk.me.cormack.lighting7.fx.PALETTE_COLOUR_REF_PREFIX
+import uk.me.cormack.lighting7.models.TIMING_CYCLE
+import uk.me.cormack.lighting7.models.TIMING_HEAD
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.PALETTE_STEPS_ID
 import uk.me.cormack.lighting7.fx.PaletteStep
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.SpreadShape
-import uk.me.cormack.lighting7.fx.TemplateResolver
+import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.genericColourRows
-import uk.me.cormack.lighting7.fx.isTemplateColourRef
-import uk.me.cormack.lighting7.fx.normalizeEffectType
+import uk.me.cormack.lighting7.fx.isPaletteColourRef
+import uk.me.cormack.lighting7.fx.normalizeFxType
 import uk.me.cormack.lighting7.fx.paletteStepsShape
-import uk.me.cormack.lighting7.fx.parseTemplateColourRefUuid
-import uk.me.cormack.lighting7.fx.parseTemplateIntent
+import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
+import uk.me.cormack.lighting7.fx.parsePaletteIntent
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -83,7 +84,7 @@ object LegacyNames {
     /** A surface binding's `type` (§4.3). */
     private val BINDINGS = mapOf("pressTemplate" to "pressPalette", "stackEffectSize" to "stackFxAmount")
 
-    /** A palette reference's old prefix, `tmpl:{uuid}`, today [TEMPLATE_COLOUR_REF_PREFIX]. */
+    /** A palette reference's old prefix, `tmpl:{uuid}`, today [PALETTE_COLOUR_REF_PREFIX]. */
     private val OLD_PALETTE_REF = Regex("(?<![A-Za-z0-9_])tmpl:", RegexOption.IGNORE_CASE)
 
     /** Archive folders renamed at [GLOSSARY_FORMAT_VERSION], by their old name. */
@@ -154,8 +155,8 @@ object LegacyNames {
     /** Every FX id the registry no longer knows: a script may still name one, and no FX definition may take one. */
     val retiredFxIds: Set<String> get() = FX_IDS.keys + BREATHE
 
-    /** Whether [effectId] is a retired FX id, matched as the registry matches one. */
-    fun isRetiredFxId(effectId: String): Boolean = retiredFxIds.any { same(it, effectId) }
+    /** Whether [fxId] is a retired FX id, matched as the registry matches one. */
+    fun isRetiredFxId(fxId: String): Boolean = retiredFxIds.any { same(it, fxId) }
 
     /**
      * Why an FX being written names an old name, or null: a retired id, a `pingPong` on an FX that
@@ -163,11 +164,11 @@ object LegacyNames {
      * Every write boundary refuses one, so no row written today holds a name the importer would
      * rewrite (P3).
      */
-    fun writeProblem(effectType: String, parameters: Map<String, String>, family: String? = null): String? = when {
-        same(effectType, BREATHE) -> "'$effectType' is gone: Sine Wave a quarter-cycle on (phase offset + 0.75) draws it"
-        isRetiredFxId(effectType) -> "'$effectType' is now '${fxId(effectType)}'"
-        bouncedFxIds.any { same(it, effectType) } && PING_PONG in parameters ->
-            "'$effectType' takes no pingPong: it bounces by Direction (BOUNCE)"
+    fun writeProblem(fxType: String, parameters: Map<String, String>, family: String? = null): String? = when {
+        same(fxType, BREATHE) -> "'$fxType' is gone: Sine Wave a quarter-cycle on (phase offset + 0.75) draws it"
+        isRetiredFxId(fxType) -> "'$fxType' is now '${fxId(fxType)}'"
+        bouncedFxIds.any { same(it, fxType) } && PING_PONG in parameters ->
+            "'$fxType' takes no pingPong: it bounces by Direction (BOUNCE)"
         else -> parameters.entries.firstOrNull { OLD_PALETTE_REF.containsMatchIn(it.value) }
             ?.let { "'${it.key}' names a palette as tmpl:{uuid}; a palette reference is pal:{uuid}" }
             ?: familyProblem(family)
@@ -204,7 +205,7 @@ object LegacyNames {
 
     /** [value] with every palette reference's old prefix at today's, `tmpl:{uuid}` as `pal:{uuid}`. */
     fun paletteRefs(value: String): String =
-        if (value.contains("tmpl:", ignoreCase = true)) OLD_PALETTE_REF.replace(value, TEMPLATE_COLOUR_REF_PREFIX) else value
+        if (value.contains("tmpl:", ignoreCase = true)) OLD_PALETTE_REF.replace(value, PALETTE_COLOUR_REF_PREFIX) else value
 
     /** Today's name for a stored surface binding `type`. */
     fun bindingType(stored: String): String = BINDINGS[stored] ?: stored
@@ -331,7 +332,7 @@ object LegacyNames {
         val value = this[key] as? JsonPrimitive ?: return this
         if (value.isString) return this
         val stepTiming = value.booleanOrNull ?: return JsonObject(this - key)
-        return JsonObject(this + (key to JsonPrimitive(timingOf(stepTiming))))
+        return JsonObject(this + (key to JsonPrimitive(if (stepTiming) TIMING_HEAD else TIMING_CYCLE)))
     }
 
     /** Today's script type for a stored `scriptType`, by name. */
@@ -426,7 +427,7 @@ object LegacyNames {
                 out = out.copy(
                     fxType = SINE_WAVE,
                     phaseOffset = mod(out.phaseOffset + 0.75, 1.0),
-                    direction = EffectDirection.FORWARD.name,
+                    direction = FxDirection.FORWARD.name,
                 )
                 changes += "Breathe is now Sine Wave a quarter-cycle on"
             }
@@ -464,16 +465,16 @@ object LegacyNames {
             phaseOffset = mod(fx.phaseOffset * 2.0, 2.0),
             spread = doubled.coerceAtMost(SpreadShape.MAX_SPREAD),
             runs = fx.runs?.let { it * 2 },
-            direction = EffectDirection.BOUNCE.name,
+            direction = FxDirection.BOUNCE.name,
         )
     }
 
     /** [fx], a Colour Cycle, on literal colours or as Palette Steps: see [rewriteFx]. */
     private fun literalCycle(fx: StoredFx, context: Context, changes: MutableList<String>, notes: MutableList<String>): StoredFx {
         val entries = entriesOf(fx.parameters[COLOURS])
-        if (entries.size >= 2 && entries.all { isTemplateColourRef(it) }) {
+        if (entries.size >= 2 && entries.all { isPaletteColourRef(it) }) {
             val steps = entries.mapNotNull { entry ->
-                parseTemplateColourRefUuid(entry)?.let { uuid -> context.palettes(uuid)?.let { step(uuid, it) } }
+                parsePaletteColourRefUuid(entry)?.let { uuid -> context.palettes(uuid)?.let { step(uuid, it) } }
             }
             val shape = steps.takeIf { it.size == entries.size }?.let { paletteStepsShape(it).getOrNull() }
             if (shape?.family == PropertyMaskGroup.COLOUR) {
@@ -481,7 +482,7 @@ object LegacyNames {
                 notes += "each palette now lands on each head for itself"
                 return fx.copy(
                     fxType = PALETTE_STEPS_ID,
-                    family = shape.category,
+                    family = shape.fxFamily,
                     parameters = buildMap {
                         put(PALETTES, entries.joinToString(","))
                         fx.parameters[FADE_RATIO]?.let { put(FADE_RATIO, it) }
@@ -501,10 +502,10 @@ object LegacyNames {
         notes: MutableList<String>,
     ): StoredFx {
         val entries = entriesOf(fx.parameters[name])
-        if (entries.none { isTemplateColourRef(it) }) return fx
+        if (entries.none { isPaletteColourRef(it) }) return fx
         val literal = entries.mapNotNull { entry ->
-            if (!isTemplateColourRef(entry)) return@mapNotNull entry
-            val colour = parseTemplateColourRefUuid(entry)?.let { uuid -> context.palettes(uuid)?.let(::colourOf) }
+            if (!isPaletteColourRef(entry)) return@mapNotNull entry
+            val colour = parsePaletteColourRefUuid(entry)?.let { uuid -> context.palettes(uuid)?.let(::colourOf) }
             if (colour == null) notes += "$entry names no colour, so it is dropped"
             colour?.toSerializedString()
         }
@@ -518,15 +519,15 @@ object LegacyNames {
     /** A palette as one Palette Steps step, or null where Palette Steps would drop it (`TemplateSource.paletteStep`). */
     private fun step(uuid: UUID, palette: Palette): PaletteStep? {
         if (palette.holdsFx || palette.rows.isEmpty() || palette.rows.any { !it.deferred }) return null
-        val rows = palette.rows.map { row -> row.attribute to (parseTemplateIntent(row.value) ?: return null) }
+        val rows = palette.rows.map { row -> row.attribute to (parsePaletteIntent(row.value) ?: return null) }
         return PaletteStep(uuid, palette.name, rows)
     }
 
     /** The one colour a palette reference resolved to in a colour FX (`TemplateColourSource`'s resolver), or null. */
     private fun colourOf(palette: Palette): ExtendedColour? =
         genericColourRows(palette.rows, { it.attribute }, { it.deferred })
-            ?.map { row -> row.attribute to (parseTemplateIntent(row.value) ?: return null) }
-            ?.let { TemplateResolver.resolveColourGeneric(it) }
+            ?.map { row -> row.attribute to (parsePaletteIntent(row.value) ?: return null) }
+            ?.let { PaletteResolver.resolveColourGeneric(it) }
 
     /**
      * [json], a record file written before [FX_LIBRARY], with every built-in bouncing FX that names no
@@ -562,7 +563,7 @@ object LegacyNames {
         runCatching { (canonicalJson.parseToJsonElement(it) as JsonObject).let { d -> d["fxId"] ?: d["effectId"] }?.jsonPrimitive?.content }.getOrNull()
     }.toSet()
 
-    private fun same(a: String, b: String) = normalizeEffectType(a) == normalizeEffectType(b)
+    private fun same(a: String, b: String) = normalizeFxType(a) == normalizeFxType(b)
 
     private fun mod(value: Double, by: Double) = ((value % by) + by) % by
 
