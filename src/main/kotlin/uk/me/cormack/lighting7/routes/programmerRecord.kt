@@ -453,7 +453,11 @@ private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
         seconds == dto.seconds &&
         amount == dto.size &&
         direction == dto.direction &&
-        runs == dto.nShot
+        runs == dto.nShot &&
+        spread == dto.spread &&
+        wings == dto.wings &&
+        segments == dto.blocks &&
+        parts == dto.groups
 
 /**
  * Copy [dto]'s tunable fields over the stored child, leaving its target, property and timing alone.
