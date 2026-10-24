@@ -24,7 +24,7 @@ import {
 } from './rowModel'
 import { resolveCell } from './columns'
 import type { ColumnKey } from './columns'
-import type { CommandPropertyDescriptor } from '../../store/fixtures'
+import type { CommandAttributeDescriptor } from '../../store/fixtures'
 import { cellKey, cellsByColumn } from '../sheet/cellSelectionModel'
 import {
   chan,
@@ -519,7 +519,7 @@ describe('batch write planning', () => {
 
   it('commitMatchesResolution rejects nulls and cross-kind pairs', () => {
     expect(commitMatchesResolution({ kind: 'slider', value: 1 }, null)).toBe(false)
-    const wheelRes = resolveCell(wheelFixture.properties, 'colour')
+    const wheelRes = resolveCell(wheelFixture.attributes, 'colour')
     expect(commitMatchesResolution({ kind: 'colour', r: 0, g: 0, b: 0 }, wheelRes)).toBe(false)
     expect(commitMatchesResolution({ kind: 'setting', level: 0 }, wheelRes)).toBe(true)
     // A warm/cold white pair takes a colour, which the desk lands as its nearest mix.
@@ -538,7 +538,7 @@ describe('batch write planning', () => {
     const planned = planBatchWrites([narrowStrobe], 'strobe', { kind: 'slider', value: 255 })
     expect(planned[0].commit).toEqual({ kind: 'slider', value: 200 })
 
-    const posRes = resolveCell(widePan.properties, 'position')
+    const posRes = resolveCell(widePan.attributes, 'position')
     expect(posRes).not.toBeNull()
     expect(clampCommitToResolution({ kind: 'position', pan: 600 }, posRes!)).toEqual({
       kind: 'position',
@@ -808,7 +808,7 @@ describe('targetFamilies', () => {
   })
 
   it('counts no family for a trigger or a command, which no palette can hold', () => {
-    const reset: CommandPropertyDescriptor = {
+    const reset: CommandAttributeDescriptor = {
       type: 'command', name: 'reset', displayName: 'Reset', category: 'command', description: 'Resets.',
       holdMs: 3000, confirm: true, channel: chan(12), dedicated: true,
     }
@@ -983,8 +983,8 @@ describe('paletteTargetsOf', () => {
   it('keeps each cell by its element key rather than folding it onto the parent (venue-visit plan S1)', () => {
     expect(
       paletteTargetsOf([
-        { key: 'shehds-1.zone-1', properties: [], fixtureKey: 'shehds-1', cellIndex: 0 },
-        { key: 'shehds-1.zone-3', properties: [], fixtureKey: 'shehds-1', cellIndex: 2 },
+        { key: 'shehds-1.zone-1', attributes: [], fixtureKey: 'shehds-1', cellIndex: 0 },
+        { key: 'shehds-1.zone-3', attributes: [], fixtureKey: 'shehds-1', cellIndex: 2 },
       ]),
     ).toEqual([
       { type: 'fixture', key: 'shehds-1.zone-1' },
@@ -993,7 +993,7 @@ describe('paletteTargetsOf', () => {
   })
 
   it('names a whole fixture by its own key — the desk fans it to the cells that carry the property', () => {
-    expect(paletteTargetsOf([{ key: 'shehds-1', properties: [] }, { key: 'par-1', properties: [] }])).toEqual([
+    expect(paletteTargetsOf([{ key: 'shehds-1', attributes: [] }, { key: 'par-1', attributes: [] }])).toEqual([
       { type: 'fixture', key: 'shehds-1' },
       { type: 'fixture', key: 'par-1' },
     ])
@@ -1002,9 +1002,9 @@ describe('paletteTargetsOf', () => {
   it('drops a cell whose parent is in the batch too, since the parent covers it', () => {
     expect(
       paletteTargetsOf([
-        { key: 'shehds-1.zone-2', properties: [], fixtureKey: 'shehds-1', cellIndex: 1 },
-        { key: 'shehds-1', properties: [] },
-        { key: 'shehds-2.zone-1', properties: [], fixtureKey: 'shehds-2', cellIndex: 0 },
+        { key: 'shehds-1.zone-2', attributes: [], fixtureKey: 'shehds-1', cellIndex: 1 },
+        { key: 'shehds-1', attributes: [] },
+        { key: 'shehds-2.zone-1', attributes: [], fixtureKey: 'shehds-2', cellIndex: 0 },
       ]),
     ).toEqual([
       { type: 'fixture', key: 'shehds-1' },
@@ -1015,8 +1015,8 @@ describe('paletteTargetsOf', () => {
   it('dedupes a target named twice', () => {
     expect(
       paletteTargetsOf([
-        { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
-        { key: 'bar.c1', properties: [], fixtureKey: 'bar' },
+        { key: 'bar.c1', attributes: [], fixtureKey: 'bar' },
+        { key: 'bar.c1', attributes: [], fixtureKey: 'bar' },
       ]),
     ).toEqual([{ type: 'fixture', key: 'bar.c1' }])
   })

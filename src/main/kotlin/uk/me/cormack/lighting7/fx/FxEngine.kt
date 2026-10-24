@@ -157,7 +157,7 @@ class FxEngine(
 
     /** Stable throttle key for a fault attributable to [effect] — see [FxLogThrottle]. */
     private fun faultKey(prefix: String, effect: FxInstance): String =
-        "$prefix-${effect.fxTypeId}-${effect.target.targetKey}.${effect.target.propertyName}"
+        "$prefix-${effect.fxTypeId}-${effect.target.targetKey}.${effect.target.attribute}"
 
     /**
      * Record that [effect] threw out of its pass, and auto-pause it once it has thrown out of
@@ -188,7 +188,7 @@ class FxEngine(
         counts: Boolean,
     ) {
         val describe = "$what ${effect.id} ('${effect.effect.name}' on " +
-            "${effect.target.targetKey}.${effect.target.propertyName})"
+            "${effect.target.targetKey}.${effect.target.attribute})"
 
         if (counts && ++effect.consecutiveTickFailures >= MAX_CONSECUTIVE_TICK_FAILURES) {
             val failures = effect.consecutiveTickFailures
@@ -199,7 +199,7 @@ class FxEngine(
 
             // An effect can throw part-way through its own targets — a group effect that dies on
             // member 7 has already painted 0..6 this pass. From the next pass on, a paused effect
-            // is skipped by [resetActiveProperties], so whatever it managed to write would stay
+            // is skipped by [resetActiveAttributes], so whatever it managed to write would stay
             // frozen on those channels with nothing left to move it. Put the layer below back
             // now, into this pass's open transaction, so the property lands somewhere defined.
             // (A manual pause deliberately freezes instead: that frame is one the operator chose.)
@@ -263,14 +263,14 @@ class FxEngine(
         val epoch = programmerStore.coverageEpoch
         var cached = suppressionCache
         if (epoch != cached.epoch) {
-            cached = SuppressionSnapshot(programmerStore.activePropertiesByFixture(), epoch)
+            cached = SuppressionSnapshot(programmerStore.activeAttributesByFixture(), epoch)
             suppressionCache = cached
         }
         return cached.byFixture
     }
 
     /**
-     * The (fixtureKey, propertyName) set running effects cover, and the stamps it was built
+     * The (fixtureKey, attribute) set running effects cover, and the stamps it was built
      * from, published as ONE reference — the same single-snapshot reasoning as
      * [SuppressionSnapshot].
      */
@@ -294,7 +294,7 @@ class FxEngine(
         FxCoverageSnapshot(emptySet(), fxListEpoch = -1L, structureVersion = -1L)
     private val fxListEpoch = java.util.concurrent.atomic.AtomicLong(0L)
 
-    /** The (fixtureKey, propertyName) pairs running effects cover — see [fxCoverageCache]. */
+    /** The (fixtureKey, attribute) pairs running effects cover — see [fxCoverageCache]. */
     private fun coveredByRunningFx(): Set<Pair<String, String>> {
         // Read the stamps BEFORE the scan they cover, so a mutation landing mid-scan leaves
         // this rebuild carrying the older stamp and the next read rebuilds.
@@ -309,9 +309,9 @@ class FxEngine(
         } else buildSet {
             for (effect in activeFx.values) {
                 if (!effect.isRunning) continue
-                val propertyName = effect.target.propertyName
+                val attribute = effect.target.attribute
                 for (fixtureKey in resolveFxFixtureKeys(effect)) {
-                    add(fixtureKey to propertyName)
+                    add(fixtureKey to attribute)
                 }
             }
         }
@@ -320,7 +320,7 @@ class FxEngine(
     }
 
     /**
-     * Should [effect] skip painting `(fixtureKey, propertyName)` this tick? Held by Blind ([BlindHold] —
+     * Should [effect] skip painting `(fixtureKey, attribute)` this tick? Held by Blind ([BlindHold] —
      * the programmer band while blind), or [FxSuppression]'s rule; provenance and the
      * `programmer.keyStack` read ask both too — see each for its reasons.
      */
@@ -328,10 +328,10 @@ class FxEngine(
         suppression: Map<String, Set<String>>,
         blind: Boolean,
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         effect: FxInstance,
     ): Boolean = BlindHold.holds(blind, effect) || FxSuppression.isSuppressed(
-        suppression, fixtureKey, propertyName, effect, isLayerStomped,
+        suppression, fixtureKey, attribute, effect, isLayerStomped,
     )
 
     private fun rebuildSortedSnapshots() {
@@ -597,9 +597,9 @@ class FxEngine(
      * Whether [effect] paints a key [valueMoves] names — a (fixture, property) where the programmer
      * value under it is about to move.
      */
-    fun paintsMovingValue(effect: FxInstance, valueMoves: (fixtureKey: String, propertyName: String) -> Boolean): Boolean {
-        val property = effect.target.propertyName
-        return fixtureKeysCoveredBy(effect).any { valueMoves(it, property) }
+    fun paintsMovingValue(effect: FxInstance, valueMoves: (fixtureKey: String, attribute: String) -> Boolean): Boolean {
+        val attribute = effect.target.attribute
+        return fixtureKeysCoveredBy(effect).any { valueMoves(it, attribute) }
     }
 
     /**
@@ -612,7 +612,7 @@ class FxEngine(
     fun releaseFx(
         effects: Collection<FxInstance>,
         fadeMs: Long,
-        valueMoves: (fixtureKey: String, propertyName: String) -> Boolean,
+        valueMoves: (fixtureKey: String, attribute: String) -> Boolean,
     ): Int {
         if (fadeMs <= 0) return fadeOutFx(effects, 0)
         val (stop, shrink) = effects.partition { paintsMovingValue(it, valueMoves) }
@@ -654,7 +654,7 @@ class FxEngine(
         if (fadeMs <= 0) return
         for (effect in activeFx.values) {
             if (!isProgrammerFxPriority(effect.priority) || effect.leaving) continue
-            if (paintsMovingValue(effect) { key, property -> programmerStore.get(key, property) != null }) continue
+            if (paintsMovingValue(effect) { key, attribute -> programmerStore.get(key, attribute) != null }) continue
             effect.updateEnvelope { if (it.leaving) it else FxEnvelope.ramp(0.0, 1.0, fadeMs, EasingCurve.LINEAR, nowMs) }
         }
     }
@@ -666,8 +666,8 @@ class FxEngine(
      */
     fun fadeOutProgrammerBandFx(fadeMs: Long): Int =
         if (fadeMs <= 0) removeProgrammerBandFx()
-        else releaseFx(activeFx.values.filter { isProgrammerFxPriority(it.priority) && !it.leaving }, fadeMs) { key, property ->
-            programmerStore.get(key, property) != null
+        else releaseFx(activeFx.values.filter { isProgrammerFxPriority(it.priority) && !it.leaving }, fadeMs) { key, attribute ->
+            programmerStore.get(key, attribute) != null
         }
 
     /**
@@ -735,7 +735,7 @@ class FxEngine(
         val removed = effects.filter { activeFx.remove(it.id, it) }
         if (removed.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(removed)
+            resetUncoveredAttributes(removed)
             emitStateUpdate()
         }
         return removed.size
@@ -751,7 +751,7 @@ class FxEngine(
             // against their old targets — one of the reasons a cue's effects would "refuse to
             // die" after a cue transition.
             rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
+            resetUncoveredAttributes(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -853,7 +853,7 @@ class FxEngine(
         activeFx.clear()
         rebuildSortedSnapshots()
         cueLayer.clearAll()
-        resetUncoveredProperties(allFx)
+        resetUncoveredAttributes(allFx)
         emitStateUpdate()
     }
 
@@ -951,7 +951,7 @@ class FxEngine(
         val removed = activeFx.remove(fxId)
         if (removed != null) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(listOf(removed))
+            resetUncoveredAttributes(listOf(removed))
             emitStateUpdate()
         }
         return removed != null
@@ -966,7 +966,7 @@ class FxEngine(
         val removed = fxIds.mapNotNull { activeFx.remove(it) }
         if (removed.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(removed)
+            resetUncoveredAttributes(removed)
             emitStateUpdate()
         }
         return removed.size
@@ -1002,7 +1002,7 @@ class FxEngine(
         }
         if (removed.isEmpty() && fresh.isEmpty()) return emptySet()
         rebuildSortedSnapshots()
-        resetUncoveredProperties(removed)
+        resetUncoveredAttributes(removed)
         emitStateUpdate()
         return removed.mapTo(HashSet()) { it.id }
     }
@@ -1037,7 +1037,7 @@ class FxEngine(
                 val plan = plansFor(effect, expansion, dyn).members
                 expansion.members.mapIndexedNotNull { i, member ->
                     val fixture = runCatching { fixtures.untypedGroupableFixture(member.key) }.getOrNull()
-                    if (fixture == null || !effect.target.fixtureHasProperty(fixture)) return@mapIndexedNotNull null
+                    if (fixture == null || !effect.target.fixtureHasAttribute(fixture)) return@mapIndexedNotNull null
                     PaintedHead(member.key, plan.offsets[i], expansion.members.size, plan.contexts[i])
                 }
             }
@@ -1065,7 +1065,7 @@ class FxEngine(
     fun headCopies(effect: FxInstance, drop: Set<String> = emptySet()): List<FxInstance> =
         paintedHeads(effect).filter { it.key !in drop }.map { head ->
             val target = FxTargetFactory.forFixture(
-                head.key, effect.target.propertyName, effect.effect.outputType,
+                head.key, effect.target.attribute, effect.effect.outputType,
                 runCatching { fixtures.untypedGroupableFixture(head.key) }.getOrNull(),
             )
             FxInstance(
@@ -1130,7 +1130,7 @@ class FxEngine(
             .sortedWith(compareBy({ it.place.second }, { it.place.third }))
             .toMutableList()
         fun shareKey(a: Placed, b: Placed) =
-            a.effect.target.propertyName == b.effect.target.propertyName && a.keys.any { it in b.keys }
+            a.effect.target.attribute == b.effect.target.attribute && a.keys.any { it in b.keys }
         val ordered = ArrayList<FxInstance>(left.size)
         while (left.isNotEmpty()) {
             val next = left.first { candidate ->
@@ -1590,7 +1590,7 @@ class FxEngine(
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
+            resetUncoveredAttributes(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -1609,7 +1609,7 @@ class FxEngine(
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
+            resetUncoveredAttributes(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -1630,7 +1630,7 @@ class FxEngine(
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
+            resetUncoveredAttributes(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -1743,11 +1743,11 @@ class FxEngine(
         effect: FxInstance,
         keysOf: (FxInstance) -> List<String> = ::resolveFxFixtureKeys,
     ): Int {
-        val propertyName = effect.target.propertyName
+        val attribute = effect.target.attribute
         val keys = keysOf(effect).toHashSet()
         var highest = -1
         for (other in activeFx.values) {
-            if (other === effect || other.target.propertyName != propertyName) continue
+            if (other === effect || other.target.attribute != attribute) continue
             val rank = localRankOf(other.priority)
             if (rank <= highest) continue
             if (keysOf(other).any { it in keys }) highest = rank
@@ -1795,7 +1795,7 @@ class FxEngine(
         toRemove.forEach { activeFx.remove(it.id) }
         if (toRemove.isNotEmpty()) {
             rebuildSortedSnapshots()
-            resetUncoveredProperties(toRemove)
+            resetUncoveredAttributes(toRemove)
             emitStateUpdate()
         }
         return toRemove.size
@@ -1804,7 +1804,7 @@ class FxEngine(
     /**
      * Identifies a single (fixture, property) pair for stomp overlap checks.
      */
-    data class PropertyKey(val targetKey: String, val propertyName: String)
+    data class TargetAttribute(val targetKey: String, val attribute: String)
 
     /**
      * Remove ad-hoc effects owned by *other* cues that target properties in the [overlap]
@@ -1812,24 +1812,24 @@ class FxEngine(
      * Layer 4 assertions. Manual (uncued) effects are not stomped either.
      *
      * @param stompingCueId the cue whose apply triggered the stomp.
-     * @param overlap the set of (targetKey, propertyName) pairs the stomping cue covers.
+     * @param overlap the set of (targetKey, attribute) pairs the stomping cue covers.
      * @return number of effects removed.
      */
-    fun stompForCue(stompingCueId: Int, overlap: Set<PropertyKey>): Int {
+    fun stompForCue(stompingCueId: Int, overlap: Set<TargetAttribute>): Int {
         if (overlap.isEmpty()) return 0
         val toRemove = activeFx.values.filter { effect ->
             val owner = effect.cueId ?: return@filter false
             if (owner == stompingCueId) return@filter false
-            val property = effect.target.propertyName
+            val attribute = effect.target.attribute
             // A selection goes only where the cue asserts every item, as a group goes only where the
             // cue asserts the group: one member asserted leaves the rest running.
-            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.all { PropertyKey(it.key, property) in overlap }
-                ?: (PropertyKey(effect.target.targetKey, property) in overlap)
+            (effect.target.targetRef as? FxTargetRef.SelectionRef)?.items?.all { TargetAttribute(it.key, attribute) in overlap }
+                ?: (TargetAttribute(effect.target.targetKey, attribute) in overlap)
         }
         if (toRemove.isEmpty()) return 0
         for (effect in toRemove) activeFx.remove(effect.id)
         rebuildSortedSnapshots()
-        resetUncoveredProperties(toRemove)
+        resetUncoveredAttributes(toRemove)
         emitStateUpdate()
         return toRemove.size
     }
@@ -1842,7 +1842,7 @@ class FxEngine(
         activeFx.clear()
         rebuildSortedSnapshots()
         cueLayer.clearAll()
-        resetUncoveredProperties(allFx)
+        resetUncoveredAttributes(allFx)
         emitStateUpdate()
     }
 
@@ -2006,7 +2006,7 @@ class FxEngine(
         // Reset every key a running effect covers to the layer below (Layer 2 → Layer 4 → Layer 5
         // baseline), once, before applying. This prevents accumulative blend modes from ratcheting
         // across passes and keeps direct writes + cue state visible under effects.
-        resetActiveProperties(fixturesWithTx, effects, resetSeen)
+        resetActiveAttributes(fixturesWithTx, effects, resetSeen)
 
         // Programmer suppression: any non-band effect skips its apply on (fixture,
         // property) pairs the programmer holds — the reset pass has already painted the
@@ -2166,7 +2166,7 @@ class FxEngine(
      * pre-sorted effect list (priority, then compose order, then id); ordering only
      * matters downstream for effect composition, not for the reset pass.
      */
-    private fun resetActiveProperties(
+    private fun resetActiveAttributes(
         fixturesWithTx: Fixtures.FixturesWithTransaction,
         effects: List<FxInstance>,
         seen: ResetSeen,
@@ -2180,7 +2180,7 @@ class FxEngine(
             val target = effect.target
 
             for (key in keys) {
-                if (seen.add(key, target.propertyName)) {
+                if (seen.add(key, target.attribute)) {
                     resetOne(fixturesWithTx, key, target)
                 }
             }
@@ -2188,7 +2188,7 @@ class FxEngine(
     }
 
     /**
-     * The (fixture, property) dedupe scratch for [resetActiveProperties], reused across passes
+     * The (fixture, property) dedupe scratch for [resetActiveAttributes], reused across passes
      * rather than rebuilt per pass.
      *
      * Two-level rather than a compound key so there is no key object per tuple — on a
@@ -2209,16 +2209,16 @@ class FxEngine(
                 byKey.clear()
                 structureVersion = version
             } else {
-                for (properties in byKey.values) properties.clear()
+                for (attributes in byKey.values) attributes.clear()
             }
         }
 
-        /** True when this is the first time [property] has been seen on [key] this pass. */
-        fun add(key: String, property: String): Boolean =
-            byKey.getOrPut(key) { HashSet() }.add(property)
+        /** True when this is the first time [attribute] has been seen on [key] this pass. */
+        fun add(key: String, attribute: String): Boolean =
+            byKey.getOrPut(key) { HashSet() }.add(attribute)
     }
 
-    /** [resetActiveProperties] scratch owned by [composePass]. */
+    /** [resetActiveAttributes] scratch owned by [composePass]. */
     private val resetSeen = ResetSeen()
 
     private fun resetOne(
@@ -2237,8 +2237,8 @@ class FxEngine(
             // next line and report it at warn (and eventually pause the effect). Logging both
             // at warn would double every line for one fault. Throttled all the same — this
             // runs once per (fixture, property) per tick.
-            throttle.log("reset-$fixtureKey.${target.propertyName}", debug = true) {
-                "FX engine: reset to fallback failed for $fixtureKey.${target.propertyName}: ${e.message}"
+            throttle.log("reset-$fixtureKey.${target.attribute}", debug = true) {
+                "FX engine: reset to fallback failed for $fixtureKey.${target.attribute}: ${e.message}"
             }
         }
     }
@@ -2326,7 +2326,7 @@ class FxEngine(
                 // A copy split off a spread effect is the member it was (apply-model plan §3.4).
                 val context = effect.splitMember?.context ?: FxContext.SINGLE
                 val output = calculateFxOutput(effect, fixtureKey, tick, deltaMs, step, fxPhase, context)
-                if (!isSuppressed(suppression, blind, fixtureKey, effect.target.propertyName, effect)) {
+                if (!isSuppressed(suppression, blind, fixtureKey, effect.target.attribute, effect)) {
                     effect.target.applyValue(fixturesWithTx, fixtureKey, output, effect.blendMode, weightOf(effect, dyn))
                 }
             }
@@ -2382,7 +2382,7 @@ class FxEngine(
             val output = calculateFxOutput(
                 effect, elementKey, tick, deltaMs, step, memberPhase, plan.contexts[distributionIdx],
             )
-            if (!isSuppressed(suppression, blind, elementKey, effect.target.propertyName, effect)) {
+            if (!isSuppressed(suppression, blind, elementKey, effect.target.attribute, effect)) {
                 effect.target.applyValue(fixturesWithTx, elementKey, output, effect.blendMode, weight)
             }
         }
@@ -2430,7 +2430,7 @@ class FxEngine(
                     val output = calculateFxOutput(
                         effect, member.key, tick, deltaMs, step, memberPhase, plan.contexts[memberIdx],
                     )
-                    if (!isSuppressed(suppression, blind, member.key, effect.target.propertyName, effect)) {
+                    if (!isSuppressed(suppression, blind, member.key, effect.target.attribute, effect)) {
                         effect.target.applyValue(fixturesWithTx, member.key, output, effect.blendMode, weight)
                     }
                 }
@@ -2488,26 +2488,26 @@ class FxEngine(
      * active effect still covers the same property, and writes the neutral
      * value for uncovered properties.
      */
-    private fun resetUncoveredProperties(removedFx: List<FxInstance>) {
+    private fun resetUncoveredAttributes(removedFx: List<FxInstance>) {
         uncoveredResetTransaction(removedFx)?.apply()
     }
 
-    /** [resetUncoveredProperties]'s writes, staged and not yet applied; null when there are none. */
+    /** [resetUncoveredAttributes]'s writes, staged and not yet applied; null when there are none. */
     private fun uncoveredResetTransaction(removedFx: List<FxInstance>): ControllerTransaction? {
         if (removedFx.isEmpty()) return null
 
-        data class AffectedProperty(val fixtureKey: String, val target: FxTarget)
+        data class AffectedAttribute(val fixtureKey: String, val target: FxTarget)
 
-        val affectedProperties = mutableSetOf<AffectedProperty>()
+        val affectedAttributes = mutableSetOf<AffectedAttribute>()
         for (removed in removedFx) {
             for (key in resolveFxFixtureKeys(removed)) {
-                affectedProperties.add(AffectedProperty(key, removed.target))
+                affectedAttributes.add(AffectedAttribute(key, removed.target))
             }
         }
 
         val remainingFx = activeFx.values.toList()
-        val uncovered = affectedProperties.filter { affected ->
-            !isPropertyCoveredByAny(affected.fixtureKey, affected.target.propertyName, remainingFx)
+        val uncovered = affectedAttributes.filter { affected ->
+            !isAttributeCoveredByAny(affected.fixtureKey, affected.target.attribute, remainingFx)
         }
 
         if (uncovered.isEmpty()) return null
@@ -2522,8 +2522,8 @@ class FxEngine(
                 val fallback = layerResolver.fallbackFor(affected.target, fixture, affected.fixtureKey)
                 affected.target.resetToFallback(fixture, fallback)
             } catch (e: Exception) {
-                throttle.log("reset-uncovered-${affected.fixtureKey}.${affected.target.propertyName}", e) {
-                    "FX engine: failed to reset ${affected.target.propertyName} " +
+                throttle.log("reset-uncovered-${affected.fixtureKey}.${affected.target.attribute}", e) {
+                    "FX engine: failed to reset ${affected.target.attribute} " +
                         "on '${affected.fixtureKey}'"
                 }
             }
@@ -2673,7 +2673,7 @@ class FxEngine(
             null
         }
 
-        override fun coveredByRunning(key: String, property: String): Boolean = (key to property) in coveredByRunningFx()
+        override fun coveredByRunning(key: String, attribute: String): Boolean = (key to attribute) in coveredByRunningFx()
 
         override fun parked(target: FxTarget, fixture: GroupableFixture): Boolean = cascade.allChannelsParked(target, fixture)
 
@@ -2684,7 +2684,7 @@ class FxEngine(
         override fun heldBack(): (FxInstance, String, String) -> KeyStackLayer.HeldBackReason? {
             val blind = programmerStore.blind
             val held = programmerSuppression(blind)
-            return { effect, key, property -> FxSuppression.heldBackReason(held, blind, key, property, effect, isLayerStomped) }
+            return { effect, key, attribute -> FxSuppression.heldBackReason(held, blind, key, attribute, effect, isLayerStomped) }
         }
 
         override fun stackAmount(effect: FxInstance): Double = stackFxAmounts?.weightOf(effect) ?: StackFxAmounts.FULL
@@ -2745,7 +2745,7 @@ class FxEngine(
 
             // The first member stands for the group, as it always has. A heterogeneous group
             // takes the branch its first member implies.
-            if (effect.target.fixtureHasProperty(firstMemberFixture)) {
+            if (effect.target.fixtureHasAttribute(firstMemberFixture)) {
                 return FxTargetExpansion(
                     structureVersion = version,
                     elementFilter = filter,
@@ -2762,7 +2762,7 @@ class FxEngine(
 
             if (firstMemberFixture !is MultiElementFixture<*>) return none()
             val firstElements = firstMemberFixture.elements
-            if (firstElements.isEmpty() || !effect.target.fixtureHasProperty(firstElements.first())) {
+            if (firstElements.isEmpty() || !effect.target.fixtureHasAttribute(firstElements.first())) {
                 return none()
             }
 
@@ -2809,7 +2809,7 @@ class FxEngine(
             return none()
         }
 
-        if (effect.target.fixtureHasProperty(fixture)) {
+        if (effect.target.fixtureHasAttribute(fixture)) {
             val single = listOf(fixtureKey)
             return FxTargetExpansion(
                 structureVersion = version,
@@ -2825,7 +2825,7 @@ class FxEngine(
         // Multi-element expansion for fixture
         if (fixture is MultiElementFixture<*>) {
             val elements = fixture.elements
-            if (elements.isNotEmpty() && effect.target.fixtureHasProperty(elements.first())) {
+            if (elements.isNotEmpty() && effect.target.fixtureHasAttribute(elements.first())) {
                 val elementKeys = elements.map { it.elementKey }
                 return FxTargetExpansion(
                     structureVersion = version,
@@ -2868,12 +2868,12 @@ class FxEngine(
             val unit = try {
                 fixtures.untypedGroupableFixture(unitKey)
             } catch (_: Exception) { continue }
-            if (target.fixtureHasProperty(unit)) {
+            if (target.fixtureHasAttribute(unit)) {
                 if (seen.add(unitKey)) perUnit.add(listOf(unitKey))
                 continue
             }
             if (unit !is MultiElementFixture<*>) continue
-            val heads = unit.elements.filter { target.fixtureHasProperty(it) }.map { it.elementKey }.filter { seen.add(it) }
+            val heads = unit.elements.filter { target.fixtureHasAttribute(it) }.map { it.elementKey }.filter { seen.add(it) }
             if (heads.isNotEmpty()) {
                 perUnit.add(heads)
                 anyElements = true
@@ -2934,7 +2934,7 @@ class FxEngine(
     }
 
     /**
-     * Check if any effect in the list covers a (fixtureKey, propertyName) pair.
+     * Check if any effect in the list covers a (fixtureKey, attribute) pair.
      *
      * Handles direct fixture effects, group effects whose members include the
      * fixture, and multi-element expansion at both levels. Paused effects still
@@ -2946,13 +2946,13 @@ class FxEngine(
      * cached list would narrow it and start resetting parents that a removed effect never
      * painted. Two questions, two answers — not one cache.
      */
-    private fun isPropertyCoveredByAny(
+    private fun isAttributeCoveredByAny(
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         remainingFx: List<FxInstance>
     ): Boolean {
         for (effect in remainingFx) {
-            if (effect.target.propertyName != propertyName) continue
+            if (effect.target.attribute != attribute) continue
 
             val selection = effect.target.targetRef as? FxTargetRef.SelectionRef
             if (selection != null) {
@@ -2966,7 +2966,7 @@ class FxEngine(
                 val fixture = try {
                     fixtures.untypedFixture(effect.target.targetKey)
                 } catch (_: Exception) { continue }
-                if (fixture is MultiElementFixture<*> && !effect.target.fixtureHasProperty(fixture)) {
+                if (fixture is MultiElementFixture<*> && !effect.target.fixtureHasAttribute(fixture)) {
                     if (fixture.elements.any { it.elementKey == fixtureKey }) return true
                 }
             } else {

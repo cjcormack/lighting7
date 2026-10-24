@@ -22,8 +22,8 @@ import {
   clampCommitToResolution,
   commitMatchesResolution,
   spreadCellCount,
-  spreadPropertiesOffered,
-  spreadPropertyForColumn,
+  spreadAttributesOffered,
+  spreadAttributeForColumn,
   spreadTargetsOf,
   targetFamilies,
   type WriteTarget,
@@ -169,7 +169,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         : null
 
   const intentColumns = useMemo(
-    () => columns.filter(({ col }) => spreadPropertyForColumn(col) != null),
+    () => columns.filter(({ col }) => spreadAttributeForColumn(col) != null),
     [columns],
   )
   const marqueeFamilies = useMemo(() => cellFamilies(intentColumns), [intentColumns])
@@ -180,7 +180,7 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
   const lookName = layerStore?.lookName
 
   const landInCue = useCallback(
-    (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
+    (answer: { written?: { target: { key: string }; attribute: string; value: string }[] }) => {
       if (cueStore == null) return
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
@@ -188,13 +188,13 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         toast.error(`The desk answered “${intent.value}” rather than a value — update lighting7 to fan into a cue`, { id: INTENT_TOAST })
         return
       }
-      for (const write of written) cueStore.setValue('fixture', write.target.key, write.propertyName, write.value)
+      for (const write of written) cueStore.setValue('fixture', write.target.key, write.attribute, write.value)
     },
     [cueStore],
   )
 
   const landInLayer = useCallback(
-    (answer: { written?: { target: { key: string }; propertyName: string; value: string }[] }) => {
+    (answer: { written?: { target: { key: string }; attribute: string; value: string }[] }) => {
       if (layerStore == null) return
       const written = answer.written ?? []
       const intent = written.find((write) => isIntentString(write.value) || parseProgrammerValue(write.value) == null)
@@ -240,8 +240,8 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
         families: targetFamilies(heads),
         offered: marqueeFamilies,
         familyRefusal: 'Not in the selection — select cells in that column to fan it',
-        propertiesFor: (family: AttributeFamily) => spreadPropertiesOffered(heads, family),
-        initial: { family: columnFamily(first.col), property: spreadPropertyForColumn(first.col) ?? undefined },
+        attributesFor: (family: AttributeFamily) => spreadAttributesOffered(heads, family),
+        initial: { family: columnFamily(first.col), attribute: spreadAttributeForColumn(first.col) ?? undefined },
         mask,
         colourPalettes,
         send: (body) => spread({ ...body, projectId, fadeMs: getProgrammerFadeMs() }).unwrap(),
@@ -269,10 +269,10 @@ export function useMarqueeSpreadPlans({ columns, projectId, desk = false, scopeL
       const probe = { kind: 'slider' as const, value: 0 }
       const headsOfWrites = speed.targets
         .map((outer) => {
-          const own = resolveCell(outer.properties, 'speed')
+          const own = resolveCell(outer.attributes, 'speed')
           if (own && commitMatchesResolution(probe, own)) return [{ target: outer, resolution: own }]
           return (outer.elements ?? []).flatMap((element) => {
-            const resolution = resolveCell(element.properties, 'speed')
+            const resolution = resolveCell(element.attributes, 'speed')
             return resolution && commitMatchesResolution(probe, resolution) ? [{ target: element, resolution }] : []
           })
         })

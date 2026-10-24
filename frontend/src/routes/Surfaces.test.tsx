@@ -31,7 +31,7 @@ vi.mock('@/store/surfaces', async (importOriginal) => {
     ...actual,
     useSurfaceDevices: () => devices,
     useActiveBanks: () => activeBanks,
-    useEncoderBanks: () => ({ xtc: { propertyName: 'colour' } }),
+    useEncoderBanks: () => ({ xtc: { attribute: 'colour' } }),
     useSurfaceControls: () => controls,
     usePickupStates: () => ({}),
     useControlSurfaceTypeListQuery: () => ({ data: [profile] }),
@@ -51,7 +51,7 @@ vi.mock('@/store/selection', () => ({
 // this file takes.
 vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({ data: [] }),
-  useGroupPropertiesQuery: () => ({ data: [] }),
+  useGroupAttributesQuery: () => ({ data: [] }),
 }))
 vi.mock('@/store/fixtures', () => ({
   useFixtureListQuery: () => ({ data: [] }),
@@ -358,7 +358,7 @@ describe('Surfaces', () => {
         ...binding(8, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
         bank: 'layer-b',
       },
-      binding(9, 'fader-1', { type: 'groupProperty', groupName: 'Hexes', propertyName: 'dimmer' }),
+      binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Hexes', attribute: 'dimmer' }),
     ]
     activeBanks = { xtc: 'layer-a' }
     renderPage()

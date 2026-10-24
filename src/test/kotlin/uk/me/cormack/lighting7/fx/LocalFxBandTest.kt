@@ -57,8 +57,8 @@ class LocalFxBandTest {
     }
 
     /** A Local FX: in the band, owned by no layer, Look or cue. [FxEngine.addFx] ranks it. */
-    private fun local(effect: Fx, key: String = "hex-a", property: String = "dimmer") =
-        FxInstance(effect, SliderTarget(key, property), FxTiming(cycle = 1.0), BlendMode.OVERRIDE).also {
+    private fun local(effect: Fx, key: String = "hex-a", attribute: String = "dimmer") =
+        FxInstance(effect, SliderTarget(key, attribute), FxTiming(cycle = 1.0), BlendMode.OVERRIDE).also {
             it.priority = FxEngine.PROGRAMMER_FX_PRIORITY_BASE
         }
 
@@ -69,7 +69,7 @@ class LocalFxBandTest {
             it.programmerLayerFxKey = ProgrammerLayerFxKey(
                 layerId,
                 StoredFx(
-                    fxType = effect.name, family = "intensity", propertyName = "dimmer", cycle = 1.0,
+                    fxType = effect.name, family = "intensity", attribute = "dimmer", cycle = 1.0,
                     blendMode = "OVERRIDE", order = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, timing = null, parameters = emptyMap(), speedMasterUuid = null,
                     rateSpeedMasterUuid = null,
@@ -118,7 +118,7 @@ class LocalFxBandTest {
         val rig = newRig()
         val first = local(Level(50u)).also { rig.engine.addFx(it) }
         val second = local(Level(200u)).also { rig.engine.addFx(it) }
-        val uv = local(Level(10u), property = "uv").also { rig.engine.addFx(it) }
+        val uv = local(Level(10u), attribute = "uv").also { rig.engine.addFx(it) }
         val otherHead = local(Level(10u), key = "hex-b").also { rig.engine.addFx(it) }
 
         assertEquals(0, rig.rankOf(first))

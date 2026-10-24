@@ -55,7 +55,7 @@ import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.PaletteFxJson
 import uk.me.cormack.lighting7.sync.dto.PaletteRowJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
-import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueAttributeAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskBankJson
 import uk.me.cormack.lighting7.sync.dto.BuskColumnJson
 import uk.me.cormack.lighting7.sync.dto.BuskPadJson
@@ -830,12 +830,12 @@ class ProjectExporter(private val state: State) {
         cues.forEach { c ->
             val cueUuid = c.uuid.toString()
 
-            c.propertyAssignments.forEach { a ->
+            c.attributeAssignments.forEach { a ->
                 Files.createDirectories(propAssignDir)
                 writeJson(
                     propAssignDir.resolve("${a.uuid}.json"),
-                    CuePropertyAssignmentJson.serializer(),
-                    CuePropertyAssignmentJson(
+                    CueAttributeAssignmentJson.serializer(),
+                    CueAttributeAssignmentJson(
                         uuid = a.uuid.toString(),
                         cueUuid = cueUuid,
                         targetType = a.targetType,

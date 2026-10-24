@@ -115,7 +115,7 @@ export default [
       "src/store/fixtures.ts",
       "src/store/patches.ts",
       "src/hooks/useFixtureLookup.ts",
-      "src/hooks/useTargetProperties.ts",
+      "src/hooks/useTargetAttributes.ts",
       "src/components/busking/RigBand.tsx",
       "src/components/busking/RigPalette.tsx",
       "src/components/busking/SideSheetFold.tsx",

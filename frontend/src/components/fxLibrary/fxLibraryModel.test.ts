@@ -20,7 +20,7 @@ function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     source: 'BUILT_IN',
     sourceDefinitionId: null,
     script: null,
@@ -37,7 +37,7 @@ function definition(id: number, fxId: string, name = fxId): FxDefinition {
     outputType: 'SLIDER',
     fxMode: 'STANDARD',
     parameters: [],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     script: 'FxOutput.Slider(0u)',
     defaultTiming: 'CYCLE',
     timingSource: 'BEAT',
@@ -117,7 +117,7 @@ describe('forkRequest', () => {
     fxMode: 'STATEFUL',
     timingSource: 'WALL_CLOCK',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: 'Floor' }],
-    compatibleProperties: ['dimmer', 'uv'],
+    compatibleAttributes: ['dimmer', 'uv'],
     script: 'val x = 1',
   })
 
@@ -130,14 +130,14 @@ describe('forkRequest', () => {
       outputType: 'SLIDER',
       fxMode: 'STATEFUL',
       parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: 'Floor' }],
-      compatibleProperties: ['dimmer', 'uv'],
+      compatibleAttributes: ['dimmer', 'uv'],
       script: 'val x = 1',
       timingSource: 'WALL_CLOCK',
       defaultTiming: 'CYCLE',
     })
     // Copies, not the entry's own arrays — the form may edit them.
     expect(body.parameters).not.toBe(pulse.parameters)
-    expect(body.compatibleProperties).not.toBe(pulse.compatibleProperties)
+    expect(body.compatibleAttributes).not.toBe(pulse.compatibleAttributes)
   })
 
   it('mints against the library and the definitions both, and numbers the name to match', () => {

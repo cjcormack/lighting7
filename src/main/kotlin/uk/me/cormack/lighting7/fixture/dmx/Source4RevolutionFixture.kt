@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 
@@ -28,7 +28,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithPosition
  * wheel (ch 16–19) stay live (plan P3). The wheels ship empty — their slots hold the user's M-size
  * gobos or dichroics — so the front wheel's slots name no pattern.
  *
- * Two channels are not exposed as `@FixtureProperty`. **Reset (ch 12)** is five fixture commands
+ * Two channels are not exposed as `@FixtureAttribute`. **Reset (ch 12)** is five fixture commands
  * (fixture optics plan session 7), not a value: hold a band for three seconds, then snap to 0 (p15).
  * No property covers it, so the desk owns it and holds it at 0 between commands; a reset recorded
  * into a Look would fire on every playback. **Ch 20–23** are reserved with the shutter module fitted.
@@ -204,24 +204,24 @@ sealed class Source4RevolutionFixture(
         override fun withTransaction(transaction: ControllerTransaction): BaseFrame31Ch =
             BaseFrame31Ch(this, transaction)
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Media frame (out / in)", category = PropertyCategory.SETTING, media = MediaSlot.GEL)
+        @FixtureAttribute("Media frame (out / in)", category = AttributeCategory.SETTING, media = MediaSlot.GEL)
         val mediaFrame = DmxFixtureSetting(
             transaction, universe, firstChannel + 5, MediaFrame.entries.toTypedArray(),
         )
@@ -229,27 +229,27 @@ sealed class Source4RevolutionFixture(
         // Estimate: ETC publishes no focus range or direction ("soft to crisp focus for gobos",
         // Rev E manual 7160A1002). 2 m to infinity covers the 4.9–18.2 m throws its photometrics
         // tabulate; infinity is the Stage view's 40 m longest throw.
-        @FixtureProperty("Focus", category = PropertyCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
+        @FixtureAttribute("Focus", category = AttributeCategory.FOCUS, focusNearM = 2.0, focusFarM = 40.0)
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
         // The manual's 15°–35° zoom (p4; field angles 15.3°–34.3°, p47).
         // Estimate: the manual does not say which end is wide; DMX 0 wide is ChamSys's range names.
-        @FixtureProperty("Zoom (wide → narrow)", category = PropertyCategory.ZOOM, degMin = 35.0, degMax = 15.0)
+        @FixtureAttribute("Zoom (wide → narrow)", category = AttributeCategory.ZOOM, degMin = 35.0, degMax = 15.0)
         val zoom: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
         // The timing channels (p14–16 [10–12]): "Each step of DMX equals one second of time … The maximum timing
         // value is 4 minutes 15 seconds", the duration of the move sent with it. 0 runs the move at the
         // fixture's own speed (`travel` above). Focus Timing at 100 % is "more responsive manual
         // control" rather than 255 s, so from 255 it is the fixture's own speed again.
-        @FixtureProperty("Focus timing (pan/tilt)", category = PropertyCategory.SPEED,
+        @FixtureAttribute("Focus timing (pan/tilt)", category = AttributeCategory.SPEED,
             timing = TimingRole.POSITION, timingSecondsPerStep = 1.0, timingFastFrom = 255)
         val focusTime: Slider = DmxSlider(transaction, universe, firstChannel + 8)
 
-        @FixtureProperty("Colour timing (scroller)", category = PropertyCategory.SPEED,
+        @FixtureAttribute("Colour timing (scroller)", category = AttributeCategory.SPEED,
             timing = TimingRole.COLOUR, timingSecondsPerStep = 1.0)
         val colTime: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
-        @FixtureProperty("Beam timing", category = PropertyCategory.SPEED,
+        @FixtureAttribute("Beam timing", category = AttributeCategory.SPEED,
             timing = TimingRole.BEAM, timingSecondsPerStep = 1.0)
         val beamTime: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
@@ -296,23 +296,23 @@ sealed class Source4RevolutionFixture(
         )
         val resetRearModule = DmxCommand(universe, firstChannel + 11, 74u, bandMin = 72u, bandMax = 77u)
 
-        @FixtureProperty("Gel scroller", category = PropertyCategory.COLOUR, media = MediaSlot.GEL)
+        @FixtureAttribute("Gel scroller", category = AttributeCategory.COLOUR, media = MediaSlot.GEL)
         val gelScroller = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, GelFrame.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Fan speed (full → off)", category = PropertyCategory.OTHER)
+        @FixtureAttribute("Fan speed (full → off)", category = AttributeCategory.OTHER)
         val fanSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
-        @FixtureProperty("Iris (open → closed)", category = PropertyCategory.IRIS)
+        @FixtureAttribute("Iris (open → closed)", category = AttributeCategory.IRIS)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Front wheel position", category = PropertyCategory.GOBO, media = MediaSlot.GOBO_OR_GEL)
+        @FixtureAttribute("Front wheel position", category = AttributeCategory.GOBO, media = MediaSlot.GOBO_OR_GEL)
         val fbWheelPos = DmxFixtureSetting(
             transaction, universe, firstChannel + 15, WheelPosition.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Front wheel function", category = PropertyCategory.GOBO_ROTATION_MODE)
+        @FixtureAttribute("Front wheel function", category = AttributeCategory.GOBO_ROTATION_MODE)
         val fbWheelFunc = DmxFixtureSetting(
             transaction, universe, firstChannel + 16, WheelFunction.entries.toTypedArray(),
         )
@@ -321,11 +321,11 @@ sealed class Source4RevolutionFixture(
         // Estimate: index is taken to sweep one full turn over the 16-bit range, and speed to rise
         // linearly with DMX; which way ROTATE_FWD turns is not stated, and the Stage view takes it
         // as its positive direction.
-        @FixtureProperty("Front wheel index / rotation (coarse)", category = PropertyCategory.GOBO_ROTATION,
+        @FixtureAttribute("Front wheel index / rotation (coarse)", category = AttributeCategory.GOBO_ROTATION,
             rpmMax = 30.0, indexDegMax = 360.0)
         val fbWheelRot: Slider = DmxSlider(transaction, universe, firstChannel + 17)
 
-        @FixtureProperty("Front wheel index / rotation (fine)", category = PropertyCategory.GOBO_ROTATION,
+        @FixtureAttribute("Front wheel index / rotation (fine)", category = AttributeCategory.GOBO_ROTATION,
             fineOf = "fbWheelRot")
         val fbWheelRotFine: Slider = DmxSlider(transaction, universe, firstChannel + 18)
 
@@ -339,35 +339,35 @@ sealed class Source4RevolutionFixture(
         // (depthMax 0.5), that depth rises linearly with DMX, and that rotation runs −45° at DMX 0 to
         // +45° at 255, square at 128 (where ChamSys locates it), positive turning the blade
         // clockwise as seen from behind the head looking along its beam.
-        @FixtureProperty("Frame 1 position", category = PropertyCategory.SHUTTER,
+        @FixtureAttribute("Frame 1 position", category = AttributeCategory.SHUTTER,
             blade = Blade.TOP, depthMax = 0.5)
         val frame1Pos: Slider = DmxSlider(transaction, universe, firstChannel + 23)
 
-        @FixtureProperty("Frame 1 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+        @FixtureAttribute("Frame 1 rotation", category = AttributeCategory.SHUTTER_ROTATION,
             blade = Blade.TOP, degMin = -45.0, degMax = 45.0)
         val frame1Rot: Slider = DmxSlider(transaction, universe, firstChannel + 24)
 
-        @FixtureProperty("Frame 2 position", category = PropertyCategory.SHUTTER,
+        @FixtureAttribute("Frame 2 position", category = AttributeCategory.SHUTTER,
             blade = Blade.BOTTOM, depthMax = 0.5)
         val frame2Pos: Slider = DmxSlider(transaction, universe, firstChannel + 25)
 
-        @FixtureProperty("Frame 2 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+        @FixtureAttribute("Frame 2 rotation", category = AttributeCategory.SHUTTER_ROTATION,
             blade = Blade.BOTTOM, degMin = -45.0, degMax = 45.0)
         val frame2Rot: Slider = DmxSlider(transaction, universe, firstChannel + 26)
 
-        @FixtureProperty("Frame 3 position", category = PropertyCategory.SHUTTER,
+        @FixtureAttribute("Frame 3 position", category = AttributeCategory.SHUTTER,
             blade = Blade.LEFT, depthMax = 0.5)
         val frame3Pos: Slider = DmxSlider(transaction, universe, firstChannel + 27)
 
-        @FixtureProperty("Frame 3 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+        @FixtureAttribute("Frame 3 rotation", category = AttributeCategory.SHUTTER_ROTATION,
             blade = Blade.LEFT, degMin = -45.0, degMax = 45.0)
         val frame3Rot: Slider = DmxSlider(transaction, universe, firstChannel + 28)
 
-        @FixtureProperty("Frame 4 position", category = PropertyCategory.SHUTTER,
+        @FixtureAttribute("Frame 4 position", category = AttributeCategory.SHUTTER,
             blade = Blade.RIGHT, depthMax = 0.5)
         val frame4Pos: Slider = DmxSlider(transaction, universe, firstChannel + 29)
 
-        @FixtureProperty("Frame 4 rotation", category = PropertyCategory.SHUTTER_ROTATION,
+        @FixtureAttribute("Frame 4 rotation", category = AttributeCategory.SHUTTER_ROTATION,
             blade = Blade.RIGHT, degMin = -45.0, degMax = 45.0)
         val frame4Rot: Slider = DmxSlider(transaction, universe, firstChannel + 30)
 

@@ -4,7 +4,7 @@ name: Zoom Wave
 family: beam
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [zoom]
+compatibleAttributes: [zoom]
 parameters:
   - name: min
     type: ubyte

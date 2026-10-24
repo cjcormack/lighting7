@@ -30,7 +30,7 @@ export function layerTargets(layer: TimelineLayer): (CueTarget | null)[] {
 }
 
 export function fxColumnId(effect: TimelineFx): string {
-  return `fx:${effect.fxType}:${effect.propertyName ?? ''}:${effect.targetType}:${effect.targetKey}`
+  return `fx:${effect.fxType}:${effect.attribute ?? ''}:${effect.targetType}:${effect.targetKey}`
 }
 
 export function sceneryColumnId(elementUuid: string): string {
@@ -52,8 +52,8 @@ function targetHeads(layer: TimelineLayer, target: CueTarget | null, names: Time
 }
 
 function fxLabel(effect: TimelineFx): string {
-  const property = effect.propertyName
-  return property ? `${effect.fxType} · ${property.charAt(0).toUpperCase()}${property.slice(1)}` : effect.fxType
+  const attribute = effect.attribute
+  return attribute ? `${effect.fxType} · ${attribute.charAt(0).toUpperCase()}${attribute.slice(1)}` : effect.fxType
 }
 
 /** A selection target's key as the timeline names it: each item's key, joined. */
@@ -117,7 +117,7 @@ export function columns(timeline: StackTimeline, names: TimelineNames, order: re
           sub: fxSub(effect, names),
           sourceId: null,
           target: null,
-          effect: { fxType: effect.fxType, propertyName: effect.propertyName, targetType: effect.targetType, targetKey: effect.targetKey },
+          effect: { fxType: effect.fxType, attribute: effect.attribute, targetType: effect.targetType, targetKey: effect.targetKey },
         },
         effect.heads,
         effect.family ? [effect.family] : [],

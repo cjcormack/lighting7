@@ -14,7 +14,7 @@ import { rigHeadOrder } from '@/lib/liveAppearance'
 import { getProgrammerFadeMs } from '@/lib/programmerFade'
 import { useBuskRigQuery } from '@/store/busk'
 import { useGroupListQuery } from '@/store/groups'
-import type { Fixture, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '@/store/fixtures'
+import type { Fixture, ColourAttributeDescriptor, WhiteMixAttributeDescriptor } from '@/store/fixtures'
 import { lookLayerTarget, type BuskingTarget } from './buskingTypes'
 
 /**
@@ -71,7 +71,7 @@ export interface ColourSheetProps {
 export interface ColourWrite {
   targetType: 'fixture' | 'group'
   targetKey: string
-  propertyName: string
+  attribute: string
   colour: { r: number; g: number; b: number; w?: number; a?: number; uv?: number }
   /** Names the group a per-member write came from — a fan-out that could not be a group write. */
   sourceGroup?: string
@@ -89,17 +89,17 @@ const NEUTRAL: ColourChannels = { r: 255, g: 255, b: 255, w: 0, a: 0, uv: 0 }
 const NEUTRAL_CSS = computeCombinedCss(NEUTRAL.r, NEUTRAL.g, NEUTRAL.b, 0, 0, 0)
 
 /** A head's colour as the sheet writes it: RGB, or a warm/cold white pair the desk lands it on. */
-type ColourDescriptor = ColourPropertyDescriptor | WhiteMixPropertyDescriptor
+type ColourDescriptor = ColourAttributeDescriptor | WhiteMixAttributeDescriptor
 
-function colourDescriptorOf(properties: readonly { type: string }[]): ColourDescriptor | null {
-  return (properties.find((p) => p.type === 'colour' || p.type === 'whiteMix') as ColourDescriptor | undefined) ?? null
+function colourDescriptorOf(attributes: readonly { type: string }[]): ColourDescriptor | null {
+  return (attributes.find((p) => p.type === 'colour' || p.type === 'whiteMix') as ColourDescriptor | undefined) ?? null
 }
 
 /** Every colour descriptor a head writes through: its own, or its cells'. */
 function colourDescriptorsOf(fixture: Fixture): ColourDescriptor[] {
-  const own = colourDescriptorOf(fixture.properties)
+  const own = colourDescriptorOf(fixture.attributes)
   if (own != null) return [own]
-  return (fixture.elements ?? []).map((element) => colourDescriptorOf(element.properties)).filter((d): d is ColourDescriptor => d != null)
+  return (fixture.elements ?? []).map((element) => colourDescriptorOf(element.attributes)).filter((d): d is ColourDescriptor => d != null)
 }
 
 /** Which emitters a descriptor can take, as a comparable key. A white pair takes RGB alone. */
@@ -132,15 +132,15 @@ function colourFor(channels: ColourChannels, descriptor: ColourDescriptor): Colo
 
 /** A whole fixture's writes: one on its own colour, or one per cell for a bar whose colour lives on its cells. */
 function fixtureWrites(fixture: Fixture, channels: ColourChannels, sourceGroup?: string): ColourWrite[] {
-  const own = colourDescriptorOf(fixture.properties)
+  const own = colourDescriptorOf(fixture.attributes)
   if (own != null) {
-    return [{ targetType: 'fixture', targetKey: fixture.key, propertyName: own.name, colour: colourFor(channels, own), sourceGroup }]
+    return [{ targetType: 'fixture', targetKey: fixture.key, attribute: own.name, colour: colourFor(channels, own), sourceGroup }]
   }
   const writes: ColourWrite[] = []
   for (const element of fixture.elements ?? []) {
-    const descriptor = colourDescriptorOf(element.properties)
+    const descriptor = colourDescriptorOf(element.attributes)
     if (descriptor != null) {
-      writes.push({ targetType: 'fixture', targetKey: element.key, propertyName: descriptor.name, colour: colourFor(channels, descriptor), sourceGroup })
+      writes.push({ targetType: 'fixture', targetKey: element.key, attribute: descriptor.name, colour: colourFor(channels, descriptor), sourceGroup })
     }
   }
   return writes
@@ -152,7 +152,7 @@ function fixtureWrites(fixture: Fixture, channels: ColourChannels, sourceGroup?:
  * as **one group write where its members agree on emitters** — otherwise one write per member,
  * each carrying `sourceGroup`. A head with no colour at all contributes nothing.
  *
- * The group rule is forced by the desk: `writeGroupProperty` fans one colour to every member and
+ * The group rule is forced by the desk: `writeGroupAttribute` fans one colour to every member and
  * `resolveColour` writes R/G/B verbatim, adding white only on a head that has one — it can fold an
  * undeliverable white into RGB for none of them. So pure white (`0,0,0,w255`, which the picker emits
  * because the emitter rows are a union) sent as a group write to a group holding an RGBW and an
@@ -175,7 +175,7 @@ export function planColourWrites(
         writes.push({
           targetType: 'group',
           targetKey: target.name,
-          propertyName: descriptors[0].name,
+          attribute: descriptors[0].name,
           colour: colourFor(channels, descriptors[0]),
         })
       } else {
@@ -184,9 +184,9 @@ export function planColourWrites(
       continue
     }
     if (target.element != null) {
-      const descriptor = colourDescriptorOf(target.element.properties)
+      const descriptor = colourDescriptorOf(target.element.attributes)
       if (descriptor != null) {
-        writes.push({ targetType: 'fixture', targetKey: target.element.key, propertyName: descriptor.name, colour: colourFor(channels, descriptor) })
+        writes.push({ targetType: 'fixture', targetKey: target.element.key, attribute: descriptor.name, colour: colourFor(channels, descriptor) })
       }
       continue
     }
@@ -207,19 +207,19 @@ export function writeTargetsOf(selected: readonly BuskingTarget[], fixtures: rea
   for (const target of selected) {
     if (target.type === 'group') {
       for (const fixture of fixtures ?? []) {
-        if (fixture.groups.includes(target.name)) out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+        if (fixture.groups.includes(target.name)) out.push({ key: fixture.key, attributes: fixture.attributes, elements: fixture.elements })
       }
     } else if (target.element != null) {
       const elementKey = target.element.key
       const cellIndex = (target.fixture.elements ?? []).findIndex((element) => element.key === elementKey)
       out.push({
         key: elementKey,
-        properties: target.element.properties,
+        attributes: target.element.attributes,
         fixtureKey: target.fixture.key,
         cellIndex: cellIndex < 0 ? undefined : cellIndex,
       })
     } else {
-      out.push({ key: target.fixture.key, properties: target.fixture.properties, elements: target.fixture.elements })
+      out.push({ key: target.fixture.key, attributes: target.fixture.attributes, elements: target.fixture.elements })
     }
   }
   return out
@@ -256,7 +256,7 @@ export function ColourSheet({ projectId, selectedTargets, families, onSpread, co
     (value) => {
       const fadeMs = getProgrammerFadeMs()
       for (const write of planColourWrites(selected, value, fixtures)) {
-        lightingApi.programmer.setColour(write.targetType, write.targetKey, write.propertyName, write.colour, fadeMs, write.sourceGroup)
+        lightingApi.programmer.setColour(write.targetType, write.targetKey, write.attribute, write.colour, fadeMs, write.sourceGroup)
       }
     },
     { equals: sameChannels },

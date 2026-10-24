@@ -16,7 +16,7 @@ import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoBuskBank
 import uk.me.cormack.lighting7.models.DaoBuskColumn
@@ -108,7 +108,7 @@ class BuskLayoutRoutesTest : RouteIntegrationTest() {
             setBody(
                 NewCue(
                     name = name, cueStackId = stackId,
-                    propertyAssignments = listOf(CuePropertyAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
+                    attributeAssignments = listOf(CueAttributeAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
                 ),
             )
         }

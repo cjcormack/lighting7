@@ -28,7 +28,7 @@ import uk.me.cormack.lighting7.models.AssignmentHealth
  */
 data class LookRowEntry(
     val target: TargetRef,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val elementKey: String? = null,
@@ -51,7 +51,7 @@ data class LookRowEntry(
 data class StoredFx(
     val fxType: String,
     val family: String,
-    val propertyName: String?,
+    val attribute: String?,
     val cycle: Double,
     val blendMode: String,
     val order: String,
@@ -105,7 +105,7 @@ data class LookSnapshot(
 )
 
 /**
- * A snapshot flattened for per-target lookup: `targetKey → canonicalPropertyName → literal`.
+ * A snapshot flattened for per-target lookup: `targetKey → canonicalAttributeName → literal`.
  *
  * An element row lives under its **element key**, beside its parent's entry — a cell is a target of
  * its own, and every reader resolves a key through `Fixtures.untypedGroupableFixture`. Group rows
@@ -122,13 +122,13 @@ class ExpandedLook(
     val byFixture: Map<String, Map<String, String>>,
 ) {
     /**
-     * [propertyName] is canonicalised here rather than trusted from the caller. Both sides of the
+     * [attribute] is canonicalised here rather than trusted from the caller. Both sides of the
      * lookup have to agree, and a silent miss on `colour` vs `rgbColour` is indistinguishable from
      * "this Look doesn't cover the fixture" — so the cheap normalisation (this is a human-rate
      * path, not the tick loop) buys an API that can't be held wrong.
      */
-    fun literalFor(fixtureKey: String, propertyName: String): String? =
-        byFixture[fixtureKey]?.get(canonicalPropertyName(propertyName))
+    fun literalFor(fixtureKey: String, attribute: String): String? =
+        byFixture[fixtureKey]?.get(canonicalAttributeName(attribute))
 }
 
 /**
@@ -226,8 +226,8 @@ class LookRegistry(
     fun snapshot(lookUuid: UUID): LookSnapshot? = expanded(lookUuid)?.snapshot
 
     /** The literal this Look holds for one fixture and property, or null when uncovered. */
-    fun literalFor(lookUuid: UUID, fixtureKey: String, propertyName: String): String? =
-        expanded(lookUuid)?.literalFor(fixtureKey, propertyName)
+    fun literalFor(lookUuid: UUID, fixtureKey: String, attribute: String): String? =
+        expanded(lookUuid)?.literalFor(fixtureKey, attribute)
 
     fun invalidate(lookUuid: UUID) {
         // Bump, evict, bump. Neither bump is redundant and they are not interchangeable — see
@@ -264,8 +264,8 @@ class LookRegistry(
         internal fun expand(snapshot: LookSnapshot, fixtures: Fixtures): ExpandedLook {
             val byFixture = HashMap<String, MutableMap<String, String>>()
 
-            fun put(fixtureKey: String, propertyName: String, value: String) {
-                byFixture.getOrPut(fixtureKey) { HashMap() }[canonicalPropertyName(propertyName)] = value
+            fun put(fixtureKey: String, attribute: String, value: String) {
+                byFixture.getOrPut(fixtureKey) { HashMap() }[canonicalAttributeName(attribute)] = value
             }
 
             for (entry in snapshot.rows) {
@@ -275,11 +275,11 @@ class LookRegistry(
                     ?.fixtures
                     ?.filterIsInstance<Fixture>()
                     ?: continue
-                for (member in members) put(member.key, entry.propertyName, entry.value)
+                for (member in members) put(member.key, entry.attribute, entry.value)
             }
             for (entry in snapshot.rows) {
                 val key = entry.elementKey ?: (entry.target as? TargetRef.Fixture ?: continue).key
-                put(key, entry.propertyName, entry.value)
+                put(key, entry.attribute, entry.value)
             }
 
             return ExpandedLook(snapshot, byFixture)
@@ -310,7 +310,7 @@ internal fun loadLookSnapshot(database: Database, lookUuid: UUID): LookSnapshot?
                         ?: return@mapNotNull null
                     LookRowEntry(
                         target = target,
-                        propertyName = row.attribute,
+                        attribute = row.attribute,
                         value = row.value,
                         fadeDurationMs = row.fadeDuration?.toMillis(),
                         elementKey = row.elementKey,
@@ -348,7 +348,7 @@ private fun DaoLookFxEntity.toStoredFx(): StoredFx =
     StoredFx(
         fxType = fxType,
         family = family,
-        propertyName = attribute,
+        attribute = attribute,
         cycle = cycle,
         blendMode = blendMode,
         order = order,
@@ -383,7 +383,7 @@ private fun DaoLookFxEntity.toStoredFx(): StoredFx =
 internal fun StoredFx.toFxSpec() = uk.me.cormack.lighting7.models.LookFxSpec(
     fxType = fxType,
     family = family,
-    propertyName = propertyName,
+    attribute = attribute,
     cycle = cycle,
     blendMode = blendMode,
     order = order,

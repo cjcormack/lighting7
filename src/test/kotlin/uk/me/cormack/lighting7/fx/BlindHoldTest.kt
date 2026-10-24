@@ -115,7 +115,7 @@ class BlindHoldTest {
     @Test
     fun `Blind holds the band only — a manual effect paints, and the programmer's values stop holding it back`() {
         val rig = newRig()
-        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.PropertyValue.Slider(180u))
+        rig.programmerStore.put(ProgrammerOwner.WEB, "hex-a", "dimmer", CueAssignmentResolver.AttributeValue.Slider(180u))
         rig.engine.addFx(dimmerEffect("hex-a", priority = 0))
 
         rig.engine.processBeatTick(tick(5))

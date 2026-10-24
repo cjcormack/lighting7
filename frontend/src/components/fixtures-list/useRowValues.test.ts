@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 
-// useRowValues imports hooks/usePropertyValues, which opens a WebSocket at
+// useRowValues imports hooks/useAttributeValues, which opens a WebSocket at
 // import time — replace it before anything imports it.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -104,7 +104,7 @@ describe('buildRowCells targetKeys', () => {
     // rather than being derived from `keys`.
     expect(cell.resolutions).toHaveLength(1)
     expect(cell.targetKeys).toEqual(['m'])
-    expect(cell.keys.map((k) => k.propertyName)).toEqual(['pan', 'tilt'])
+    expect(cell.keys.map((k) => k.attribute)).toEqual(['pan', 'tilt'])
   })
 })
 

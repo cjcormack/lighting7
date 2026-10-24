@@ -19,8 +19,8 @@ import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
@@ -184,8 +184,8 @@ internal object RigKeyReferences {
                 User("CUE", id, if (where.isEmpty()) cue.name else "${cue.name} ($where)")
             }
             fun touch(id: Int) { touched.cues += id }
-            DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList ids }.forEach { row ->
-                val cueId = row.readValues[DaoCuePropertyAssignments.cue].value
+            DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue inList ids }.forEach { row ->
+                val cueId = row.readValues[DaoCueAttributeAssignments.cue].value
                 visit(cueUser(cueId), row.targetType, row.targetKey)?.let { row.targetKey = it; touch(cueId) }
             }
             DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList ids }.forEach { row ->
@@ -246,9 +246,9 @@ internal object RigKeyReferences {
 
     /** This target with every fixture or group it names passed through [rename]; null when nothing changed. */
     private fun BindingTarget.renamed(rename: (String, String) -> String?): BindingTarget? = when (this) {
-        is BindingTarget.FixtureProperty -> rename(TargetRef.Fixture.TYPE, fixtureKey)?.let { copy(fixtureKey = it) }
+        is BindingTarget.FixtureAttribute -> rename(TargetRef.Fixture.TYPE, fixtureKey)?.let { copy(fixtureKey = it) }
         is BindingTarget.FireTrigger -> rename(TargetRef.Fixture.TYPE, fixtureKey)?.let { copy(fixtureKey = it) }
-        is BindingTarget.GroupProperty -> rename(TargetRef.Group.TYPE, groupName)?.let { copy(groupName = it) }
+        is BindingTarget.GroupAttribute -> rename(TargetRef.Group.TYPE, groupName)?.let { copy(groupName = it) }
         is BindingTarget.Flash -> target.renamed(rename)?.let { copy(target = it) }
         is BindingTarget.SelectTarget -> rename(target.type, target.key)?.let { copy(target = target.copy(key = it)) }
         is BindingTarget.Strip -> rename(target.type, target.key)?.let { copy(target = target.copy(key = it)) }

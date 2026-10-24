@@ -66,7 +66,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
 
     /** One level whatever the phase: a wave whose min and max agree. */
     private fun level(fxType: String, value: Int, blendMode: String, stack: Boolean) = ProgrammerFxRequest(
-        fxType = fxType, propertyName = "dimmer", targets = hex,
+        fxType = fxType, attribute = "dimmer", targets = hex,
         parameters = mapOf("min" to "$value", "max" to "$value"), blendMode = blendMode, stack = stack,
     )
 
@@ -266,7 +266,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val uv = client.press(
-            ProgrammerFxRequest(fxType = "Pulse", propertyName = "uv", targets = hex),
+            ProgrammerFxRequest(fxType = "Pulse", attribute = "uv", targets = hex),
         )
         val cueId = client.record("CREATE", name = "Stacked").cue.id
         fx.removeFx(uv.id)
@@ -314,7 +314,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
     private val twoLanes = listOf(
         lookFx("SineWave", 200, "OVERRIDE").copy(sortOrder = 0),
         lookFx("SquareWave", 128, "MULTIPLY").copy(sortOrder = 5),
-        lookFx("Pulse", 0, "OVERRIDE").copy(propertyName = "uv", parameters = emptyMap(), sortOrder = 9),
+        lookFx("Pulse", 0, "OVERRIDE").copy(attribute = "uv", parameters = emptyMap(), sortOrder = 9),
     )
 
     @Test
@@ -346,8 +346,8 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
             CueAdHocFxDto(
                 // The family Record infers, so the round trip changes nothing but what the test is about.
                 targetType = it.targetType, targetKey = it.targetKey, fxType = it.fxType,
-                family = categoryFromPropertyName(it.propertyName!!),
-                propertyName = it.propertyName, cycle = it.cycle, blendMode = it.blendMode,
+                family = categoryFromAttributeName(it.attribute!!),
+                attribute = it.attribute, cycle = it.cycle, blendMode = it.blendMode,
                 order = it.order, parameters = it.parameters, sortOrder = it.sortOrder,
             )
         }
@@ -370,7 +370,7 @@ class FxApplyOrderKeptTest : RouteIntegrationTest() {
 
     private fun lookFx(fxType: String, value: Int, blendMode: String) = LookFxDto(
         targetType = TargetRef.Fixture.TYPE, targetKey = "hex-1", fxType = fxType, family = "intensity",
-        propertyName = "dimmer", cycle = 4.0, blendMode = blendMode, order = "NORMAL",
+        attribute = "dimmer", cycle = 4.0, blendMode = blendMode, order = "NORMAL",
         parameters = mapOf("min" to "$value", "max" to "$value"),
     )
 

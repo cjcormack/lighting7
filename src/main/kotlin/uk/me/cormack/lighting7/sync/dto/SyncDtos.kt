@@ -34,6 +34,13 @@ import uk.me.cormack.lighting7.scripts.ScriptType
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class FormatVersionJson(
+    // v39: a surface binding's attribute targets are `fixtureAttribute`, `groupAttribute` and
+    // `selectionAttribute`, and theirs and `encoderBankSet`'s `propertyName` is `attribute`, a
+    // flash's nested target too; Circle's, Figure 8's and Random Position's `panCenter` and
+    // `tiltCenter` are `panCentre` and `tiltCentre` (terminology plan session 6). Read through
+    // `sync/LegacyNames.kt`. `minReader` moves to **39**: a v38 reader would hold every such binding
+    // as one it does not know and run each centre at its default. See `docs/sync-engineering.md`
+    // §"Version 39 — attributes and centres".
     // v38: the archive in the glossary's words (terminology plan session 4). `templates/` is
     // `palettes/`, `cueAdHocEffects/` `cueAdHocFx/` and `cuePropertyAssignments/`
     // `cueAttributeAssignments/`; a stored FX's fields are `fxType`, `family`, `attribute`, `cycle`,
@@ -316,9 +323,9 @@ data class FormatVersionJson(
     // the writer's version and never rejects a too-new repo. Forcing the value is what
     // makes a pre-v4 install actually refuse a v4 repo (and stop it wiping the PDFs).
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val formatVersion: Int = 38,
+    val formatVersion: Int = 39,
     @EncodeDefault(EncodeDefault.Mode.ALWAYS)
-    val minReader: Int = 38,
+    val minReader: Int = 39,
 )
 
 /**
@@ -928,7 +935,7 @@ data class SceneryChangeJson(
 )
 
 @Serializable
-data class CuePropertyAssignmentJson(
+data class CueAttributeAssignmentJson(
     val uuid: String,
     val cueUuid: String,
     val targetType: String,
@@ -958,7 +965,7 @@ data class CueLayerJson(
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    /** Comma-separated `PropertyMaskGroup` names; null = every property. */
+    /** Comma-separated `AttributeFamily` names; null = every property. */
     val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,

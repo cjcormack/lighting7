@@ -23,7 +23,7 @@ describe('programmerOps endpoints', () => {
     installRelativeUrlRequest()
     fetchMock = installRecordingFetch({
       'projects/6/programmer/fan': {
-        written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: 'pct:0' }],
+        written: [{ target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: 'pct:0' }],
         skipped: [],
         skippedFamilies: [],
       },
@@ -41,7 +41,7 @@ describe('programmerOps endpoints', () => {
         projectId: 6,
         targets: [{ type: 'fixture', key: 'par-1' }],
         families: ['INTENSITY'],
-        property: 'dimmer',
+        attribute: 'dimmer',
         from: 'pct:0',
         to: 'pct:100',
         curve: 'LINE',
@@ -59,7 +59,7 @@ describe('programmerOps endpoints', () => {
     expect(body).toEqual({
       targets: [{ type: 'fixture', key: 'par-1' }],
       families: ['INTENSITY'],
-      property: 'dimmer',
+      attribute: 'dimmer',
       from: 'pct:0',
       to: 'pct:100',
       curve: 'LINE',

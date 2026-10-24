@@ -58,17 +58,17 @@ import { PressCueContext, type PressCue } from '@/components/press/pressCue'
 
 const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
 const rgbw = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: chan(4) })
-const RGB: NonNullable<CellResolution> = { kind: 'colour', property: rgb }
-const RGBW: NonNullable<CellResolution> = { kind: 'colour', property: rgbw }
+const RGB: NonNullable<CellResolution> = { kind: 'colour', attribute: rgb }
+const RGBW: NonNullable<CellResolution> = { kind: 'colour', attribute: rgbw }
 /** Three heads: a par, an RGBW par, and one cell of a bar (named by its parent, as `rowWriteTargets` does). */
 const batch: CellBatch = {
   count: 3,
   skipped: 0,
   resolutions: [RGB, RGBW, RGB],
   targets: [
-    { key: 'par-1', properties: [rgb] },
-    { key: 'par-2', properties: [rgbw] },
-    { key: 'bar.c2', properties: [rgb], fixtureKey: 'bar', cellIndex: 1 },
+    { key: 'par-1', attributes: [rgb] },
+    { key: 'par-2', attributes: [rgbw] },
+    { key: 'bar.c2', attributes: [rgb], fixtureKey: 'bar', cellIndex: 1 },
   ],
 }
 
@@ -125,7 +125,7 @@ beforeEach(() => {
       family: 'COLOUR',
       isGeneric: true,
       kind: 'value',
-      rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
+      rows: [{ attribute: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
       fx: null,
       requiredEmitters: [],
       lastPressedAt: '2026-09-18T10:00:00Z',
@@ -171,7 +171,7 @@ describe('ColourCell', () => {
   it('offers a Shehds zone the colour palettes its zone takes, and presses onto the zones under Colour (S1)', async () => {
     // Two zones of a Shehds, whose colour lives on its cells: the band reads the zones' own emitters
     // (RGBW), so a palette naming white is offered, and a press names each zone by its element key.
-    const zone = (n: number) => ({ key: `shehds-1.zone-${n}`, properties: [rgbw], fixtureKey: 'shehds-1', cellIndex: n - 1 })
+    const zone = (n: number) => ({ key: `shehds-1.zone-${n}`, attributes: [rgbw], fixtureKey: 'shehds-1', cellIndex: n - 1 })
     templates = [
       ...templates,
       { ...(templates[0] as object), id: 3, uuid: 't3', name: 'White Key', requiredEmitters: ['white'] },
@@ -189,7 +189,7 @@ describe('ColourCell', () => {
         { type: 'fixture', key: 'shehds-1.zone-1' },
         { type: 'fixture', key: 'shehds-1.zone-2' },
       ],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
       families: ['COLOUR'],
     })
   })
@@ -241,20 +241,20 @@ describe('ColourCell', () => {
     const rgba = colourProp('rgbColour', chan(1), chan(2), chan(3), { amberChannel: chan(5) })
     const bar = {
       key: 'bar',
-      properties: [],
+      attributes: [],
       elements: [
-        { index: 0, key: 'bar.c1', displayName: 'Cell 1', properties: [rgb] },
-        { index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [rgba] },
+        { index: 0, key: 'bar.c1', displayName: 'Cell 1', attributes: [rgb] },
+        { index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [rgba] },
       ],
     }
-    const dim = { key: 'dim', properties: [] }
-    expect(colourTargetsOf([{ key: 'par-1', properties: [rgb] }, bar, dim])).toEqual([
-      { key: 'par-1', properties: [rgb] },
-      { key: 'bar.c1', properties: [rgb], fixtureKey: 'bar', cellIndex: 0 },
-      { key: 'bar.c2', properties: [rgba], fixtureKey: 'bar', cellIndex: 1 },
+    const dim = { key: 'dim', attributes: [] }
+    expect(colourTargetsOf([{ key: 'par-1', attributes: [rgb] }, bar, dim])).toEqual([
+      { key: 'par-1', attributes: [rgb] },
+      { key: 'bar.c1', attributes: [rgb], fixtureKey: 'bar', cellIndex: 0 },
+      { key: 'bar.c2', attributes: [rgba], fixtureKey: 'bar', cellIndex: 1 },
     ])
     // One collapsed bar and a par: the column resolves three cells, and both lines say three.
-    draw({ batch: { count: 3, skipped: 1, resolutions: [RGB, RGB, { kind: 'colour', property: rgba }], targets: [{ key: 'par-1', properties: [rgb] }, bar, dim] } })
+    draw({ batch: { count: 3, skipped: 1, resolutions: [RGB, RGB, { kind: 'colour', attribute: rgba }], targets: [{ key: 'par-1', attributes: [rgb] }, bar, dim] } })
     expect(document.querySelector('[data-editor-label-line]')).toHaveTextContent('3 heads · Local')
     expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 1 of 3 heads · the rest take RGB only')
   })
@@ -264,10 +264,10 @@ describe('ColourCell', () => {
     // its `colour-setting` cell (it is not skipped — it resolved one cell), but the commit lands on
     // the par alone, and the label line must not promise two heads over a read-out of one.
     const wheel = settingProp('colourWheel', 'colour', chan(7), [{ name: 'open', level: 0, displayName: 'Open' }])
-    const mac = { key: 'mac', properties: [wheel] }
-    expect(colourTargetsOf([{ key: 'par-2', properties: [rgbw] }, mac])).toEqual([{ key: 'par-2', properties: [rgbw] }])
+    const mac = { key: 'mac', attributes: [wheel] }
+    expect(colourTargetsOf([{ key: 'par-2', attributes: [rgbw] }, mac])).toEqual([{ key: 'par-2', attributes: [rgbw] }])
     cleanup()
-    draw({ batch: { count: 2, skipped: 0, resolutions: [RGBW, { kind: 'colour-setting', property: wheel }], targets: [{ key: 'par-2', properties: [rgbw] }, mac] } })
+    draw({ batch: { count: 2, skipped: 0, resolutions: [RGBW, { kind: 'colour-setting', attribute: wheel }], targets: [{ key: 'par-2', attributes: [rgbw] }, mac] } })
     expect(document.querySelector('[data-editor-label-line]')).toHaveTextContent('1 head · Local')
     expect(document.querySelector('[data-colour-emitters]')).toHaveTextContent('Emitters on 1 of 1 head')
     expect(document.querySelector('[data-colour-emitters]')).not.toHaveTextContent('the rest')

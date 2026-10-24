@@ -307,20 +307,20 @@ describe('SpeedMasterDetailSheet', () => {
 
     await waitFor(() => expect(saveMaster).toHaveBeenCalledTimes(1))
     expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('followNum')
-    expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('usage')
+    expect(saveMaster.mock.calls[0][0]).not.toHaveProperty('family')
   })
 
-  it('seeds the usage select from the master', () => {
+  it('seeds the family select from the master', () => {
     // Routing is a fact about the bank, so the sheet has to show the one already set before it
     // can be changed — and "Not routed" is a real value, not an empty state.
     renderSheet(master({ family: 'position' }))
-    expect(screen.getByRole('combobox', { name: 'Default usage' })).toHaveTextContent(
+    expect(screen.getByRole('combobox', { name: 'Default family' })).toHaveTextContent(
       /movement/i,
     )
 
     cleanup()
     renderSheet(master())
-    expect(screen.getByRole('combobox', { name: 'Default usage' })).toHaveTextContent(
+    expect(screen.getByRole('combobox', { name: 'Default family' })).toHaveTextContent(
       'Not routed',
     )
   })

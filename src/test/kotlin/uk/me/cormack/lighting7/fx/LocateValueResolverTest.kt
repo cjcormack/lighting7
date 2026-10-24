@@ -4,9 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Blade
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.TestStrobeShutterHead
 import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
@@ -33,7 +33,7 @@ import kotlin.test.assertTrue
 /**
  * Unit tests for [LocateValueResolver]. The resolver reads only the static DMX patch off
  * each fixture (channel numbers, slider ranges, setting tables), so bare fixtures without
- * a controller transaction suffice — same setup as [PropertyChannelWriterTest].
+ * a controller transaction suffice — same setup as [AttributeChannelWriterTest].
  */
 class LocateValueResolverTest {
 
@@ -48,26 +48,26 @@ class LocateValueResolverTest {
 
         assertTrue(assignments.all { it.target === fixture }, "single fixture — no element targets")
 
-        val byName = assignments.associate { it.propertyName to it.value }
+        val byName = assignments.associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Position(128u, 128u), byName["position"],
+            CueAssignmentResolver.AttributeValue.Position(128u, 128u), byName["position"],
             "pan/tilt via the synthetic position property, centred",
         )
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["panFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["tiltFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), byName["dimmer"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), byName["panFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), byName["tiltFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), byName["dimmer"])
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(246u), byName["strobe"],
+            CueAssignmentResolver.AttributeValue.Slider(246u), byName["strobe"],
             "BandedStrobeChannel fullOnValue — the 246-255 'LED on' band, not 255 blindly",
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(0u), byName["colourWheel"],
+            CueAssignmentResolver.AttributeValue.Setting(0u), byName["colourWheel"],
             "colour wheel OPEN_WHITE (#FFFFFF preview)",
         )
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(0u), byName["gobo"], "gobo wheel OPEN_WHITE")
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(0u), byName["prism"], "prism OPEN (facets == null)")
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(0u), byName["gobo"], "gobo wheel OPEN_WHITE")
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(0u), byName["prism"], "prism OPEN (facets == null)")
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(243u), byName["focus"],
+            CueAssignmentResolver.AttributeValue.Slider(243u), byName["focus"],
             "focus to the middle distance of its declared 2–40 m (21 m), not mid-DMX (3.8 m)",
         )
         assertEquals(9, assignments.size, "speed, rotation and macro channels are left alone")
@@ -81,16 +81,16 @@ class LocateValueResolverTest {
     @Test
     fun `RGB par locates to full white with shutter open`() {
         val fixture = HexFixture(universe, key = "hex-1", fixtureName = "Hex 1", firstChannel = 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
 
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), byName["dimmer"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), byName["dimmer"])
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color.WHITE, white = 255u)),
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color.WHITE, white = 255u)),
             byName["rgbColour"],
             "full RGB and full white — the colour fan-out also zeroes amber/uv",
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(0u), byName["strobe"],
+            CueAssignmentResolver.AttributeValue.Slider(0u), byName["strobe"],
             "Hex shutter open is 0 (strobe band starts at 10)",
         )
         assertEquals(
@@ -104,8 +104,8 @@ class LocateValueResolverTest {
         val fixture = GenericDimmerFixture(universe, key = "dim-1", fixtureName = "Dim 1", firstChannel = 1)
         val assignments = LocateValueResolver.resolve(fixture)
         assertEquals(1, assignments.size)
-        assertEquals("dimmer", assignments.single().propertyName)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), assignments.single().value)
+        assertEquals("dimmer", assignments.single().attribute)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), assignments.single().value)
     }
 
     // ─── Multi-element: parent masters plus per-head writes ─────────────────
@@ -116,21 +116,21 @@ class LocateValueResolverTest {
         val assignments = LocateValueResolver.resolve(fixture)
 
         val parent = assignments.filter { it.target === fixture }
-        val parentByName = parent.associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), parentByName["dimmer"], "master dimmer")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), parentByName["strobe"], "master shutter open at 0")
+        val parentByName = parent.associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), parentByName["dimmer"], "master dimmer")
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), parentByName["strobe"], "master shutter open at 0")
         assertEquals(2, parent.size)
 
         for (idx in 0 until 4) {
             val headKey = "bar-1.head-$idx"
             val head = assignments.filter { it.target.targetKey == headKey }
-            val headByName = head.associate { it.propertyName to it.value }
+            val headByName = head.associate { it.attribute to it.value }
             assertEquals(
-                CueAssignmentResolver.PropertyValue.Position(128u, 128u), headByName["position"],
+                CueAssignmentResolver.AttributeValue.Position(128u, 128u), headByName["position"],
                 "$headKey centred",
             )
             assertEquals(
-                CueAssignmentResolver.PropertyValue.Setting(58u), headByName["colourWheel"],
+                CueAssignmentResolver.AttributeValue.Setting(58u), headByName["colourWheel"],
                 "$headKey colour preset WHITE (#FFFFFF), not the level-0 BLACKOUT slot",
             )
             assertEquals(2, head.size)
@@ -144,12 +144,12 @@ class LocateValueResolverTest {
         val assignments = LocateValueResolver.resolve(fixture.head(0))
 
         val parent = assignments.filter { it.target === fixture }
-        val parentByName = parent.associate { it.propertyName to it.value }
+        val parentByName = parent.associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(255u), parentByName["dimmer"],
+            CueAssignmentResolver.AttributeValue.Slider(255u), parentByName["dimmer"],
             "a centred head behind a closed master dimmer would stay dark",
         )
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), parentByName["strobe"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), parentByName["strobe"])
         assertEquals(2, parent.size, "only the masters — not the other heads")
 
         val head = assignments.filter { it.target.targetKey == "bar-1.head-0" }
@@ -159,16 +159,16 @@ class LocateValueResolverTest {
     // ─── Stored locate (venue-visit plan D6, D17) ────────────────────────────
 
     @Test
-    fun `a stored locate points the unit at its own pan and tilt and leaves every other property alone`() {
+    fun `a stored locate points the unit at its own pan and tilt and leaves every other attribute alone`() {
         val fixture = Fusion100SpotMkIIFixture.Mode15Ch(universe, "spot-1", "Spot 1", 1)
-        val centred = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val centred = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         val stored = LocateValueResolver.resolve(
             fixture, locate = listOf(UnitLocate(head = null, pan = 40, tilt = 200, panFine = 17, tiltFine = 230)),
-        ).associate { it.propertyName to it.value }
+        ).associate { it.attribute to it.value }
 
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(40u, 200u), stored["position"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(17u), stored["panFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(230u), stored["tiltFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(40u, 200u), stored["position"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(17u), stored["panFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(230u), stored["tiltFine"])
         // D17: pan and tilt only — the rest is the category default, exactly as without one.
         assertEquals(
             centred - setOf("position", "panFine", "tiltFine"),
@@ -180,15 +180,15 @@ class LocateValueResolverTest {
     fun `a head whose pan declares its front locates facing it, and a stored locate still wins`() {
         // The Shehds' front is 180° of its 0–540° pan: a third of the way along, not DMX centre.
         val fixture = ShehdsLed19RgbwFixture.Mode24Ch(universe, "shehds-1", "Shehds 1", 1)
-        val front = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(85u, 128u), front["position"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), front["panFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), front["tiltFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), front["dimmer"])
+        val front = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(85u, 128u), front["position"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), front["panFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), front["tiltFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), front["dimmer"])
 
         val stored = LocateValueResolver.resolve(fixture, locate = listOf(UnitLocate(pan = 128, tilt = 40)))
-            .associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 40u), stored["position"])
+            .associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(128u, 40u), stored["position"])
         assertEquals(front - "position", stored - "position")
     }
 
@@ -196,13 +196,13 @@ class LocateValueResolverTest {
     fun `a stored locate with no fine bytes writes the fine channels 0, and a head's entry is not the fixture's`() {
         val fixture = Fusion100SpotMkIIFixture.Mode15Ch(universe, "spot-1", "Spot 1", 1)
         val coarseOnly = LocateValueResolver.resolve(fixture, locate = listOf(UnitLocate(pan = 10, tilt = 20)))
-            .associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(10u, 20u), coarseOnly["position"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), coarseOnly["panFine"])
+            .associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(10u, 20u), coarseOnly["position"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), coarseOnly["panFine"])
 
         val headOnly = LocateValueResolver.resolve(fixture, locate = listOf(UnitLocate(head = 0, pan = 10, tilt = 20)))
-            .associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 128u), headOnly["position"], "head 0's entry is not the fixture's own")
+            .associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(128u, 128u), headOnly["position"], "head 0's entry is not the fixture's own")
     }
 
     @Test
@@ -212,16 +212,16 @@ class LocateValueResolverTest {
 
         val whole = LocateValueResolver.resolve(fixture, locate = locate)
         fun positionOf(assignments: List<LocateValueResolver.LocateAssignment>, key: String) =
-            assignments.single { it.target.targetKey == key && it.propertyName == "position" }.value
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 128u), positionOf(whole, "bar-1.head-0"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(60u, 70u), positionOf(whole, "bar-1.head-1"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(200u, 10u), positionOf(whole, "bar-1.head-3"))
-        val head1Fine = whole.filter { it.target.targetKey == "bar-1.head-1" }.associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(5u), head1Fine["panFine"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(6u), head1Fine["tiltFine"])
+            assignments.single { it.target.targetKey == key && it.attribute == "position" }.value
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(128u, 128u), positionOf(whole, "bar-1.head-0"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(60u, 70u), positionOf(whole, "bar-1.head-1"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(200u, 10u), positionOf(whole, "bar-1.head-3"))
+        val head1Fine = whole.filter { it.target.targetKey == "bar-1.head-1" }.associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(5u), head1Fine["panFine"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(6u), head1Fine["tiltFine"])
 
         val oneHead = LocateValueResolver.resolve(fixture.head(1), locate = locate)
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(60u, 70u), positionOf(oneHead, "bar-1.head-1"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(60u, 70u), positionOf(oneHead, "bar-1.head-1"))
     }
 
     @Test
@@ -277,8 +277,8 @@ class LocateValueResolverTest {
         val fixture = UVFixture(universe, key = "uv-1", fixtureName = "UV 1", firstChannel = 1)
         val assignments = LocateValueResolver.resolve(fixture)
         assertEquals(1, assignments.size, "its one channel is its dimmer, the fixture's whole output")
-        assertEquals("dimmer", assignments.single().propertyName)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), assignments.single().value)
+        assertEquals("dimmer", assignments.single().attribute)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), assignments.single().value)
     }
 
     @Test
@@ -288,12 +288,12 @@ class LocateValueResolverTest {
 
         for (cell in listOf("blinder-1.cell-1", "blinder-1.cell-2")) {
             val byName = assignments.filter { it.target.targetKey == cell }
-                .associate { it.propertyName to it.value }
+                .associate { it.attribute to it.value }
             assertEquals(
-                CueAssignmentResolver.PropertyValue.Slider(255u), byName["warmWhite"],
+                CueAssignmentResolver.AttributeValue.Slider(255u), byName["warmWhite"],
                 "$cell warm white — no RGB engine exists to fan out from",
             )
-            assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), byName["coldWhite"])
+            assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), byName["coldWhite"])
         }
     }
 
@@ -302,9 +302,9 @@ class LocateValueResolverTest {
     @Test
     fun `plain DmxSlider strobe still opens the shutter`() {
         val fixture = WhexFixture(universe, key = "whex-1", fixtureName = "Whex 1", firstChannel = 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(0u), byName["strobe"],
+            CueAssignmentResolver.AttributeValue.Slider(0u), byName["strobe"],
             "Whex's DmxStrobe opens at 0 — a running strobe must not survive locate",
         )
     }
@@ -312,9 +312,9 @@ class LocateValueResolverTest {
     @Test
     fun `a setting-backed strobe opens at its OPEN position`() {
         val fixture = TestStrobeShutterHead(universe, "shutter-1", 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(64u), byName["shutter"],
+            CueAssignmentResolver.AttributeValue.Setting(64u), byName["shutter"],
             "a closed shutter must not survive locate, whichever form its channel takes",
         )
     }
@@ -326,9 +326,9 @@ class LocateValueResolverTest {
         // Mode13Ch models one channel (firstChannel + 5) as both dimmer (0-134) and
         // strobe (full-on band 240-255, which overrides the dimmer).
         val fixture = ImgStageLineWash42LedFixture.Mode13Ch(universe, "wash-1", "Wash 1", 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(240u), byName["strobe"],
+            CueAssignmentResolver.AttributeValue.Slider(240u), byName["strobe"],
             "the 240-255 band is max steady brightness on this fixture",
         )
         assertNull(byName["dimmer"], "the dimmer write would fight the full-on band on the same channel")
@@ -339,13 +339,13 @@ class LocateValueResolverTest {
     @Test
     fun `colour macro wheel is disengaged so the RGB white wins`() {
         val fixture = LedLightbar12PixelFixture.Mode12Ch(universe, "bar12-1", "Bar12 1", 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(0u), byName["colorPreset"],
+            CueAssignmentResolver.AttributeValue.Setting(0u), byName["colorPreset"],
             "the OFF slot — a 'white' preset level would override the RGB engine",
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color.WHITE, white = 255u)),
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color.WHITE, white = 255u)),
             byName["rgbColour"],
         )
         assertNull(byName["white"], "the white slider rides along with the colour fan-out")
@@ -357,15 +357,15 @@ class LocateValueResolverTest {
     fun `a scroller locates to the frame that is open on this unit`() {
         val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_LEADER.level),
-            LocateValueResolver.resolve(fixture).single { it.propertyName == "gelScroller" }.value,
+            CueAssignmentResolver.AttributeValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_LEADER.level),
+            LocateValueResolver.resolve(fixture).single { it.attribute == "gelScroller" }.value,
             "stock: the open leader",
         )
         // A venue string with a gel in the leader: the trailer is the unit's open frame.
         val leaderGelled = FittedMedia(mapOf("gelScroller" to mapOf("OPEN_LEADER" to FittedSlot(gel = "R02"))))
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_TRAILER.level),
-            LocateValueResolver.resolve(fixture, leaderGelled).single { it.propertyName == "gelScroller" }.value,
+            CueAssignmentResolver.AttributeValue.Setting(Source4RevolutionFixture.GelFrame.OPEN_TRAILER.level),
+            LocateValueResolver.resolve(fixture, leaderGelled).single { it.attribute == "gelScroller" }.value,
         )
         // And an empty frame fitted mid-string is open too.
         val bothGelled = FittedMedia(
@@ -378,8 +378,8 @@ class LocateValueResolverTest {
             ),
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Setting(Source4RevolutionFixture.GelFrame.R54_SPECIAL_LAVENDER.level),
-            LocateValueResolver.resolve(fixture, bothGelled).single { it.propertyName == "gelScroller" }.value,
+            CueAssignmentResolver.AttributeValue.Setting(Source4RevolutionFixture.GelFrame.R54_SPECIAL_LAVENDER.level),
+            LocateValueResolver.resolve(fixture, bothGelled).single { it.attribute == "gelScroller" }.value,
         )
     }
 
@@ -388,11 +388,11 @@ class LocateValueResolverTest {
     @Test
     fun `framing shutters are taken out and squared`() {
         val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
         for (n in 1..4) {
-            assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["frame${n}Pos"], "frame $n out")
+            assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), byName["frame${n}Pos"], "frame $n out")
             assertEquals(
-                CueAssignmentResolver.PropertyValue.Slider(128u), byName["frame${n}Rot"],
+                CueAssignmentResolver.AttributeValue.Slider(128u), byName["frame${n}Rot"],
                 "frame $n square: 0° on −45°…+45° is DMX 127.5, rounded up as ChamSys locates it",
             )
         }
@@ -401,14 +401,14 @@ class LocateValueResolverTest {
     @Test
     fun `an inverted shutter is out at DMX max, and a rotation is squared through its own range`() {
         val fixture = TestShutterHead(universe, "shutters-1", 1)
-        val byName = LocateValueResolver.resolve(fixture).associate { it.propertyName to it.value }
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(255u), byName["inverted"], "inverted: depth 0 at DMX max")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["plain"])
+        val byName = LocateValueResolver.resolve(fixture).associate { it.attribute to it.value }
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(255u), byName["inverted"], "inverted: depth 0 at DMX max")
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), byName["plain"])
         // −30°…+60°: 0° is a third of the way along — DMX 85 — and two thirds when inverted, DMX 170.
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(85u), byName["lopsided"])
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(170u), byName["invertedRotation"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(85u), byName["lopsided"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(170u), byName["invertedRotation"])
         // A range that never reaches 0° parks at its nearer end.
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), byName["offSquare"])
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), byName["offSquare"])
     }
 }
 
@@ -424,22 +424,22 @@ internal class TestShutterHead(
     override fun withTransaction(transaction: ControllerTransaction): TestShutterHead =
         TestShutterHead(universe, key, firstChannel, transaction)
 
-    @FixtureProperty("Plain", category = PropertyCategory.SHUTTER, blade = Blade.TOP, depthMax = 0.5)
+    @FixtureAttribute("Plain", category = AttributeCategory.SHUTTER, blade = Blade.TOP, depthMax = 0.5)
     val plain = DmxSlider(transaction, universe, firstChannel)
 
-    @FixtureProperty("Inverted", category = PropertyCategory.SHUTTER, blade = Blade.BOTTOM, depthMax = 0.5,
+    @FixtureAttribute("Inverted", category = AttributeCategory.SHUTTER, blade = Blade.BOTTOM, depthMax = 0.5,
         inverted = true)
     val inverted = DmxSlider(transaction, universe, firstChannel + 1)
 
-    @FixtureProperty("Lopsided", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.TOP,
+    @FixtureAttribute("Lopsided", category = AttributeCategory.SHUTTER_ROTATION, blade = Blade.TOP,
         degMin = -30.0, degMax = 60.0)
     val lopsided = DmxSlider(transaction, universe, firstChannel + 2)
 
-    @FixtureProperty("Inverted rotation", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.BOTTOM,
+    @FixtureAttribute("Inverted rotation", category = AttributeCategory.SHUTTER_ROTATION, blade = Blade.BOTTOM,
         degMin = -30.0, degMax = 60.0, inverted = true)
     val invertedRotation = DmxSlider(transaction, universe, firstChannel + 3)
 
-    @FixtureProperty("Off square", category = PropertyCategory.SHUTTER_ROTATION, blade = Blade.LEFT,
+    @FixtureAttribute("Off square", category = AttributeCategory.SHUTTER_ROTATION, blade = Blade.LEFT,
         degMin = 10.0, degMax = 40.0)
     val offSquare = DmxSlider(transaction, universe, firstChannel + 4)
 }

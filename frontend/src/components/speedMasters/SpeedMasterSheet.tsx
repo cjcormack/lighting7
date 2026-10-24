@@ -29,7 +29,7 @@ import {
   formatFollowRatio,
   leaderLabelOf,
   leaderNameOf,
-  usageLabel,
+  masterFamilyLabel,
 } from '../../lib/speedMasterModel'
 import { setSpeedMasterBpm, tapSpeedMaster, useSaveSpeedMasterMutation, useSpeedMasterLiveQuery } from '../../store/speedMasters'
 import type { SpeedMaster, UpdateSpeedMasterRequest } from '../../api/speedMastersApi'
@@ -43,7 +43,7 @@ export type SpeedMasterColumnKey =
   | 'start'
   | 'follows'
   | 'ratio'
-  | 'usage'
+  | 'family'
   | 'usedBy'
   | 'notes'
 
@@ -63,12 +63,12 @@ const MAX_BPM = 300
 
 /** The Follows column's first option — the value a manual master holds, and what Clear writes. */
 const MANUAL = 'manual'
-/** The Usage column's "routes nothing". Never on the wire: the PUT wants `family: null`. */
-const USAGE_NONE = 'none'
+/** The Family column's "routes nothing". Never on the wire: the PUT wants `family: null`. */
+const FAMILY_NONE = 'none'
 
-const USAGE_OPTIONS: SheetOption[] = [
-  { value: USAGE_NONE, label: 'None' },
-  ...SPEED_MASTER_FAMILIES.map((u) => ({ value: u, label: usageLabel(u) ?? u })),
+const FAMILY_CHOICES: SheetOption[] = [
+  { value: FAMILY_NONE, label: 'None' },
+  ...SPEED_MASTER_FAMILIES.map((u) => ({ value: u, label: masterFamilyLabel(u) ?? u })),
 ]
 
 const RATIO_OPTIONS: SheetOption[] = FOLLOW_RATIOS.map((r) => ({ value: `${r.num}/${r.den}`, label: r.label }))
@@ -431,28 +431,28 @@ export function SpeedMasterSheet({ projectId, masters, bank, isCurrentProject, o
           `${listNames(skipped.map((r) => masterShort(r.master)), 'master')} ${skipped.length === 1 ? 'runs' : 'run'} manually · skipped`,
       },
       {
-        key: 'usage',
-        label: 'Usage',
-        kind: 'usage',
+        key: 'family',
+        label: 'Family',
+        kind: 'family',
         width: '96px',
-        value: (row) => row.master.family ?? USAGE_NONE,
-        cell: (_row, props) => <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={USAGE_OPTIONS} />,
+        value: (row) => row.master.family ?? FAMILY_NONE,
+        cell: (_row, props) => <OptionCell {...(props as React.ComponentProps<typeof OptionCell>)} options={FAMILY_CHOICES} />,
         write: (batch, value) => {
-          if (typeof value !== 'string' || !USAGE_OPTIONS.some((o) => o.value === value)) return false
-          // A usage belongs to one master per project, so claiming one over several is refused
+          if (typeof value !== 'string' || !FAMILY_CHOICES.some((o) => o.value === value)) return false
+          // A family belongs to one master per project, so claiming one over several is refused
           // before anything is sent — the desk would accept the first and 409 the rest.
-          if (value !== USAGE_NONE && batch.length > 1) {
-            toast.error(`A usage belongs to one master — set ${usageLabel(value)} on one row at a time`, {
-              id: 'sheet-write:speed-masters:usage',
+          if (value !== FAMILY_NONE && batch.length > 1) {
+            toast.error(`A family belongs to one master — set ${masterFamilyLabel(value)} on one row at a time`, {
+              id: 'sheet-write:speed-masters:family',
             })
             return false
           }
-          const next = value === USAGE_NONE ? null : value
-          for (const row of batch) if ((row.master.family ?? null) !== next) put(row.master, 'usage', { family: next })
+          const next = value === FAMILY_NONE ? null : value
+          for (const row of batch) if ((row.master.family ?? null) !== next) put(row.master, 'family', { family: next })
           return true
         },
         clear: (batch) => {
-          for (const row of batch) if (row.master.family != null) put(row.master, 'usage', { family: null })
+          for (const row of batch) if (row.master.family != null) put(row.master, 'family', { family: null })
         },
       },
       {

@@ -410,8 +410,8 @@ function describePlacements(
     const target = effectiveTarget(binding.target)
     let key: string | null = null
     if (target.type === "strip" || target.type === "selectTarget") key = targetKey(target.target)
-    else if (target.type === "fixtureProperty") key = `fixture:${target.fixtureKey}`
-    else if (target.type === "groupProperty") key = `group:${target.groupName}`
+    else if (target.type === "fixtureAttribute") key = `fixture:${target.fixtureKey}`
+    else if (target.type === "groupAttribute") key = `group:${target.groupName}`
     // The record rows key by uuid, matching `SurfaceLibrary`'s own row keys. No collision with the
     // two above: a `CueTarget` type is only ever `fixture` or `group`. A pad badges the **page** it
     // sits on, which is the row the library draws it in.

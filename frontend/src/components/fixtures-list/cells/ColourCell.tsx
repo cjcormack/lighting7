@@ -90,8 +90,8 @@ const COLOUR_FAMILY = ['COLOUR'] as const
 
 const NO_TARGETS: readonly WriteTarget[] = []
 
-const hasColourDescriptor = (properties: readonly { type: string }[]) =>
-  properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
+const hasColourDescriptor = (attributes: readonly { type: string }[]) =>
+  attributes.some((p) => p.type === 'colour' || p.type === 'whiteMix')
 
 /**
  * The batch's targets as a **colour commit** lands on them, which is what the editor counts,
@@ -109,13 +109,13 @@ const hasColourDescriptor = (properties: readonly { type: string }[]) =>
 export function colourTargetsOf(targets: readonly WriteTarget[]): WriteTarget[] {
   const out: WriteTarget[] = []
   for (const target of targets) {
-    if (hasColourDescriptor(target.properties)) {
+    if (hasColourDescriptor(target.attributes)) {
       out.push(target)
       continue
     }
     ;(target.elements ?? []).forEach((element, index) => {
-      if (hasColourDescriptor(element.properties)) {
-        out.push({ key: element.key, properties: element.properties, fixtureKey: target.key, cellIndex: index })
+      if (hasColourDescriptor(element.attributes)) {
+        out.push({ key: element.key, attributes: element.attributes, fixtureKey: target.key, cellIndex: index })
       }
     })
   }
@@ -222,9 +222,9 @@ const RgbColourCell = memo(function RgbColourCell({
   // With no batch (a read-only mount) the row's own resolutions stand in.
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const targets = useMemo(() => colourTargetsOf(heads.targets ?? NO_TARGETS), [heads.targets])
-  const hasWhite = heads.resolutions.some((r) => r.kind === 'colour' && r.property.whiteChannel != null)
-  const hasAmber = heads.resolutions.some((r) => r.kind === 'colour' && r.property.amberChannel != null)
-  const hasUv = heads.resolutions.some((r) => r.kind === 'colour' && r.property.uvChannel != null)
+  const hasWhite = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.whiteChannel != null)
+  const hasAmber = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.amberChannel != null)
+  const hasUv = heads.resolutions.some((r) => r.kind === 'colour' && r.attribute.uvChannel != null)
 
   const paletteTargets = useMemo(() => paletteTargetsOf(targets), [targets])
   // A white-mix row in a batch with RGB heads opens this picker, but its face still reads as a

@@ -136,7 +136,7 @@ function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
     family: 'COLOUR',
     isGeneric: true,
     rows: [
-      { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
+      { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
     kind: 'value',
     requiredEmitters: [],
@@ -154,7 +154,7 @@ const HALF_UP = template({
   uuid: 'u2',
   name: 'Half Up',
   family: 'INTENSITY',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:50' }],
 })
 
 /** An effect template: one effect, no rows, always generic (fx-templates D1–D3). */
@@ -312,7 +312,7 @@ describe('PaletteStrip', () => {
       projectId: 1,
       paletteId: 1,
       targets: three,
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
     })
   })
 
@@ -326,7 +326,7 @@ describe('PaletteStrip', () => {
       projectId: 1,
       paletteId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
     })
     expect(applyPalette).not.toHaveBeenCalled()
   })
@@ -350,7 +350,7 @@ describe('PaletteStrip', () => {
       projectId: 1,
       paletteId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
       families: ['COLOUR'],
     })
     fireEvent.click(screen.getByText('Amber Key'), { altKey: true })
@@ -414,8 +414,8 @@ describe('PaletteStrip', () => {
         family: 'POSITION',
         isGeneric: false,
         rows: [
-          { targetType: 'fixture', targetKey: 'mover-1', propertyName: 'position', value: 'deg:12,-8' },
-          { targetType: 'fixture', targetKey: 'mover-2', propertyName: 'position', value: 'pos:-14,-8' },
+          { targetType: 'fixture', targetKey: 'mover-1', attribute: 'position', value: 'deg:12,-8' },
+          { targetType: 'fixture', targetKey: 'mover-2', attribute: 'position', value: 'pos:-14,-8' },
         ],
       }),
     ]
@@ -504,7 +504,7 @@ describe('PaletteStrip', () => {
       projectId: 1,
       paletteId: 1,
       targets: [{ type: 'fixture', key: 'hex-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
     })
   })
 
@@ -575,7 +575,7 @@ describe('PaletteStrip', () => {
       projectId: 1,
       paletteId: 3,
       targets: [{ type: 'fixture', key: 'hex-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
     })
     expect(applyPalette).not.toHaveBeenCalled()
   })

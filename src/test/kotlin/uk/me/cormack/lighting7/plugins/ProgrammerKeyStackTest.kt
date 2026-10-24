@@ -30,16 +30,16 @@ import kotlin.test.assertTrue
  */
 class ProgrammerKeyStackTest : RouteIntegrationTest() {
 
-    private fun ask(targetType: String, targetKey: String, propertyName: String) =
+    private fun ask(targetType: String, targetKey: String, attribute: String) =
         ProgrammerHandler.keyStack(
-            state, ProgrammerKeyStackInMessage(targetType, targetKey, propertyName, requestId = "r1"),
+            state, ProgrammerKeyStackInMessage(targetType, targetKey, attribute, requestId = "r1"),
         )
 
     private fun kinds(stack: KeyStackDto) = stack.layers.map { it.kind }
 
     private fun setDimmer(key: String, value: Int) = ProgrammerHandler.setTyped(
         state, TargetRef.Fixture(key), "dimmer",
-        CueAssignmentResolver.PropertyValue.Slider(value.toUByte()), fadeMs = 0,
+        CueAssignmentResolver.AttributeValue.Slider(value.toUByte()), fadeMs = 0,
     )
 
     @Test
@@ -48,7 +48,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-5ch", "spot-1", 1)
         ProgrammerHandler.setTyped(
             state, TargetRef.Fixture("spot-1"), "position",
-            CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
+            CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
         )
         val circle = FxTestSupport.start(
             state, "Circle", "spot-1", "position", programmerBand = true, blendMode = BlendMode.ADDITIVE,
@@ -80,7 +80,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
         LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-5ch", "spot-1", 1)
         ProgrammerHandler.setTyped(
             state, TargetRef.Fixture("spot-1"), "position",
-            CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
+            CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
         )
         FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
 
@@ -96,7 +96,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-5ch", "spot-1", 1)
             ProgrammerHandler.setTyped(
                 state, TargetRef.Fixture("spot-1"), "position",
-                CueAssignmentResolver.PropertyValue.Position(40u, 200u), fadeMs = 0,
+                CueAssignmentResolver.AttributeValue.Position(40u, 200u), fadeMs = 0,
             )
             val circle = FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
 
@@ -179,7 +179,7 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a sideband byte newer than the entry on a one-channel property is what is on stage`() = testApplication {
+    fun `a sideband byte newer than the entry on a one-channel attribute is what is on stage`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         setDimmer("hex-1", 200)
@@ -222,9 +222,9 @@ class ProgrammerKeyStackTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = 501, priority = 10, fadeWeight = 1.0,
-                    targetKey = "hex-1", targetIsGroup = false, propertyName = "dimmer",
-                    category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
-                    value = CueAssignmentResolver.PropertyValue.Slider(120u),
+                    targetKey = "hex-1", targetIsGroup = false, attribute = "dimmer",
+                    category = uk.me.cormack.lighting7.fixture.AttributeCategory.DIMMER,
+                    value = CueAssignmentResolver.AttributeValue.Slider(120u),
                 ),
             ),
         )

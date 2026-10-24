@@ -1,0 +1,22 @@
+{
+  "name": "show-1",
+  "scenery": [
+    {
+      "elementUuid": "6ade2700-6cb9-4d00-a9d9-ce238583b9d8",
+      "state": {
+        "visible": false
+      },
+      "uuid": "868f63cb-3d68-4cd4-91f6-19619d277c51"
+    },
+    {
+      "elementUuid": "c314887e-693b-4ba6-81b8-a18843b93e52",
+      "sortOrder": 1,
+      "state": {
+        "open": 0.25,
+        "visible": true
+      },
+      "uuid": "0904376c-4eb0-43ab-af2f-d74fbf063682"
+    }
+  ],
+  "uuid": "92488a42-4f6c-44c4-b04c-6a7acc87484e"
+}

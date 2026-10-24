@@ -1,4 +1,4 @@
-import type { SliderPropertyDescriptor } from '../store/fixtures'
+import type { SliderAttributeDescriptor } from '../store/fixtures'
 
 /**
  * A pan/tilt (or zoom) axis between its raw DMX value and the degrees its descriptor annotates.
@@ -16,7 +16,7 @@ import type { SliderPropertyDescriptor } from '../store/fixtures'
  * aiming a head want `dmxToSignedDegrees` in `stageCoords.ts`. Reused verbatim for ZOOM sliders,
  * where `degMin` / `degMax` mean "full beam angle at DMX min / max".
  */
-export function dmxToDegrees(dmx: number, slider: SliderPropertyDescriptor): number | null {
+export function dmxToDegrees(dmx: number, slider: SliderAttributeDescriptor): number | null {
   if (slider.degMin == null || slider.degMax == null) return null
   const span = slider.max - slider.min
   if (span <= 0) return null
@@ -30,7 +30,7 @@ export function dmxToDegrees(dmx: number, slider: SliderPropertyDescriptor): num
  * own range and rounded to a whole step. Null on a head that carries no annotation, so a degree
  * can never land on a head the editor never meant it for.
  */
-export function degreesToDmx(deg: number, slider: SliderPropertyDescriptor): number | null {
+export function degreesToDmx(deg: number, slider: SliderAttributeDescriptor): number | null {
   if (slider.degMin == null || slider.degMax == null) return null
   const degSpan = slider.degMax - slider.degMin
   const span = slider.max - slider.min
@@ -41,6 +41,6 @@ export function degreesToDmx(deg: number, slider: SliderPropertyDescriptor): num
 }
 
 /** Both axes annotate — the test for offering *Aim…*, which solves pan and tilt in degrees. */
-export function annotatesDegrees(slider: SliderPropertyDescriptor | undefined): slider is SliderPropertyDescriptor & { degMin: number; degMax: number } {
+export function annotatesDegrees(slider: SliderAttributeDescriptor | undefined): slider is SliderAttributeDescriptor & { degMin: number; degMax: number } {
   return slider != null && slider.degMin != null && slider.degMax != null && slider.max > slider.min
 }

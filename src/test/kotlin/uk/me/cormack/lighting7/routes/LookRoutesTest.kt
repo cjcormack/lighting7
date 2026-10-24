@@ -53,13 +53,13 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "128", fadeDurationMs = 750L,
+                            attribute = "dimmer", value = "128", fadeDurationMs = 750L,
                         ),
                     ),
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -81,7 +81,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         assertFalse(summary.hasDeferredFx, "a Look effect names its own target")
 
         val fetched = client.get("${base()}/$lookId").body<LookDetails>()
-        assertEquals("dimmer", fetched.rows.single().propertyName)
+        assertEquals("dimmer", fetched.rows.single().attribute)
 
         // Rows and effects are replaced wholesale when present.
         val putResp = client.put("${base()}/$lookId") {
@@ -92,11 +92,11 @@ class LookRoutesTest : RouteIntegrationTest() {
                     put("rows", buildJsonArray {
                         add(buildJsonObject {
                             put("targetType", "fixture"); put("targetKey", "hex-1")
-                            put("propertyName", "dimmer"); put("value", "192")
+                            put("attribute", "dimmer"); put("value", "192")
                         })
                         add(buildJsonObject {
                             put("targetType", "fixture"); put("targetKey", "hex-1")
-                            put("propertyName", "uv"); put("value", "64")
+                            put("attribute", "uv"); put("value", "64")
                         })
                     })
                 }
@@ -106,7 +106,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         val updated = putResp.body<LookDetails>()
         assertEquals("dim-75", updated.name)
         assertEquals(2, updated.rows.size)
-        val byProp = updated.rows.associateBy { it.propertyName }
+        val byProp = updated.rows.associateBy { it.attribute }
         assertEquals("192", byProp.getValue("dimmer").value)
         assertEquals("64", byProp.getValue("uv").value)
         assertEquals(
@@ -128,7 +128,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Warm",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
                     ),
                 )
             )
@@ -153,7 +153,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Warm",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
                     ),
                 )
             )
@@ -178,7 +178,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "colour",
+                            attribute = "colour",
                             value = "ref:2f1c9a54-8d3b-4f7e-9a11-6c0de5b47a02",
                         ),
                     ),
@@ -206,7 +206,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         rows = listOf(
                             LookRowDto(
                                 targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-                                propertyName = "dimmer", value = "180",
+                                attribute = "dimmer", value = "180",
                             ),
                         ),
                     )
@@ -226,7 +226,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             val client = jsonClient()
             fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookFxDto(
                 targetType = targetType, targetKey = targetKey,
-                fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                fxType = "Pulse", family = "intensity", attribute = "dimmer",
                 cycle = 0.5, blendMode = blendMode, order = "NORMAL",
             )
             val resp = client.post(base()) {
@@ -270,7 +270,7 @@ class LookRoutesTest : RouteIntegrationTest() {
             val client = jsonClient()
             val pulse = LookFxDto(
                 targetType = "group", targetKey = "front-wash", fxType = "Pulse", family = "intensity",
-                propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL", amount = 0.4,
+                attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL", amount = 0.4,
             )
             val lookId = client.post(base()) {
                 contentType(ContentType.Application.Json)
@@ -299,6 +299,17 @@ class LookRoutesTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.BadRequest, oldField.status, oldField.bodyAsText())
             assertTrue("size" in oldField.bodyAsText(), oldField.bodyAsText())
             assertEquals(0.4, client.get("${base()}/$lookId").body<LookDetails>().fx.single().amount, "the PUT wrote nothing")
+
+            val oldRow = client.put("${base()}/$lookId") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject {
+                    put("rows", kotlinx.serialization.json.Json.parseToJsonElement(
+                        """[{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}]""",
+                    ))
+                })
+            }
+            assertEquals(HttpStatusCode.BadRequest, oldRow.status, oldRow.bodyAsText())
+            assertTrue("propertyName" in oldRow.bodyAsText(), oldRow.bodyAsText())
         }
 
     @Test
@@ -318,7 +329,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         fx = listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "ADD", order = "NORMAL",
                             ),
                         ),
@@ -337,7 +348,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         fx = listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                                 elementFilter = "THIRDS",
                             ),
@@ -380,8 +391,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                 CreateLookRequest(
                     name = "Wash",
                     rows = listOf(
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "colour", value = "#ff8800"),
-                        LookRowDto(targetType = "fixture", targetKey = "hex-1", propertyName = "dimmer", value = "200"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "colour", value = "#ff8800"),
+                        LookRowDto(targetType = "fixture", targetKey = "hex-1", attribute = "dimmer", value = "200"),
                     ),
                 )
             )
@@ -453,13 +464,13 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "200",
+                            attribute = "dimmer", value = "200",
                         ),
                     ),
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -499,7 +510,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -542,7 +553,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "ColourWave", family = "colour", propertyName = "rgbColour",
+                            fxType = "ColourWave", family = "colour", attribute = "rgbColour",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -559,7 +570,7 @@ class LookRoutesTest : RouteIntegrationTest() {
         val applied = on.body<ToggleLookResponse>()
         assertEquals("applied", applied.action, "nothing of it is Position, and it goes on all the same")
         assertTrue(applied.skippedFamilies.isEmpty())
-        assertNull(state.show.programmerStore.layers.single().propertyMask, "the press gives the layer no mask (D3)")
+        assertNull(state.show.programmerStore.layers.single().attributeMask, "the press gives the layer no mask (D3)")
         assertEquals(1, applied.fxCount)
 
         // A mask name outside the vocabulary is ignored with the rest of the mask.
@@ -649,7 +660,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "180",
+                            attribute = "dimmer", value = "180",
                         ),
                     ),
                 )
@@ -689,7 +700,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         LookRowDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            propertyName = "dimmer", value = "180",
+                            attribute = "dimmer", value = "180",
                         ),
                     ),
                 )
@@ -722,7 +733,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                     fx = listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),

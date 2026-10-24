@@ -14,7 +14,7 @@ export function FamilyControls({
 }: {
   family: AttributeFamily
   values: PaletteValues
-  onChange: (propertyName: string, intent: PaletteIntent | null) => void
+  onChange: (attribute: string, intent: PaletteIntent | null) => void
 }) {
   switch (family) {
     case 'COLOUR':

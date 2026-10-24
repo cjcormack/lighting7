@@ -96,7 +96,7 @@ export function FxTray({
   target,
   pick,
   initialFamily,
-  preferredProperty,
+  preferredAttribute,
 }: {
   target: FxTrayTarget
   /** The strip's pick; absent, the tray is the whole target's. */
@@ -104,7 +104,7 @@ export function FxTray({
   /** The family of the row open on the sheet, which the picker opens on. */
   initialFamily?: PickerFamily | null
   /** That row's property, preferred over an effect's first compatible one. */
-  preferredProperty?: string | null
+  preferredAttribute?: string | null
 }) {
   const { data: all } = useActiveFxQuery()
   const effects = useMemo(
@@ -251,7 +251,7 @@ export function FxTray({
               <button
                 key={e.id}
                 type="button"
-                title={`${e.fxType} on ${e.propertyName}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueFx(e) ? ' — the cue’s' : ' — edit'}`}
+                title={`${e.fxType} on ${e.attribute}${via(e) ? ` via ${via(e)}` : ''}${isHeldByBlind(e, blind) ? ` — ${HELD_BLIND_WORDS}` : ''}${isCueFx(e) ? ' — the cue’s' : ' — edit'}`}
                 data-held-blind={isHeldByBlind(e, blind) || undefined}
                 onClick={() => (isCueFx(e) ? setOpen(true) : edit(e))}
                 className={cn(
@@ -270,7 +270,7 @@ export function FxTray({
                   )}
                 />
                 <span className="truncate">{e.fxType}</span>
-                <span className="truncate text-muted-foreground">· {e.propertyName}</span>
+                <span className="truncate text-muted-foreground">· {e.attribute}</span>
               </button>
             ))}
             {more > 0 && (
@@ -327,7 +327,7 @@ export function FxTray({
             target={addTarget}
             elementFilter={start != null && !('reason' in start) ? start.elementFilter : undefined}
             initialFamily={initialFamily}
-            preferredProperty={preferredProperty}
+            preferredAttribute={preferredAttribute}
             current={auditioned}
             onCurrent={setAuditioned}
             onEdit={() => {
@@ -412,7 +412,7 @@ export function FxTray({
                     )}
                   </div>
                   <div className="pl-[13px] text-[11px] text-muted-foreground">
-                    → {e.propertyName}
+                    → {e.attribute}
                     {onWhom(e) && ` · on ${onWhom(e)}`}
                     {e.elementFilter && e.elementFilter !== 'ALL' && ` · ${getElementFilterLabel(e.elementFilter).toLowerCase()} heads`}
                     {group && ` · via ${group}`}

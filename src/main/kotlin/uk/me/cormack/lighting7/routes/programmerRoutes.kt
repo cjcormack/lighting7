@@ -31,7 +31,7 @@ internal class ProgrammerUpdateResource
 @Serializable
 internal data class ProgrammerSkipDto(
     val targetKey: String? = null,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val universe: Int? = null,
     val channel: Int? = null,
     val reason: String,
@@ -39,7 +39,7 @@ internal data class ProgrammerSkipDto(
 
 internal fun RecordSkip.toDto() = ProgrammerSkipDto(
     targetKey = targetKey,
-    propertyName = propertyName,
+    attribute = attribute,
     universe = universe,
     channel = channel,
     reason = reason.name,
@@ -137,7 +137,7 @@ internal suspend fun RoutingContext.handleProgrammerRecord(state: State) {
         ErrorResponse("Unknown cue type '${request.cueType}'"),
     )
     val mask = try {
-        uk.me.cormack.lighting7.fx.parseMaskGroups(request.mask)
+        uk.me.cormack.lighting7.fx.parseFamilies(request.mask)
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
@@ -241,7 +241,7 @@ internal data class ProgrammerIncludeResponse(
 internal suspend fun RoutingContext.handleProgrammerInclude(state: State) {
     val request = call.receive<ProgrammerIncludeRequest>()
     val mask = try {
-        uk.me.cormack.lighting7.fx.parseMaskGroups(request.mask)
+        uk.me.cormack.lighting7.fx.parseFamilies(request.mask)
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
@@ -390,7 +390,7 @@ internal suspend fun RoutingContext.handleProgrammerUpdate(state: State) {
         ProgrammerUpdateRequest()
     }
     val mask = try {
-        uk.me.cormack.lighting7.fx.parseMaskGroups(request.mask)
+        uk.me.cormack.lighting7.fx.parseFamilies(request.mask)
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }

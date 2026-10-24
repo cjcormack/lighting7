@@ -55,7 +55,7 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
         assertEquals("true", r25["estimate"]!!.jsonPrimitive.content)
 
         val types = client.get("/api/rest/fixture-types").body<List<FixtureTypeDetails>>()
-        val settings = types.single { it.typeKey == rev }.properties.filterIsInstance<SettingPropertyDescriptor>().associateBy { it.name }
+        val settings = types.single { it.typeKey == rev }.attributes.filterIsInstance<SettingAttributeDescriptor>().associateBy { it.name }
         assertEquals("GEL", settings["gelScroller"]?.media)
         assertEquals("GOBO_OR_GEL", settings["fbWheelPos"]?.media)
         assertEquals("GEL", settings["mediaFrame"]?.media)
@@ -202,7 +202,7 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
         }.body<PaletteResolveResponse>().entries.single()
 
         val stock = resolve()
-        assertEquals("gelScroller", stock.resolvedPropertyName)
+        assertEquals("gelScroller", stock.resolvedAttributeName)
         assertTrue(stock.value != "165", "the stock string holds no R26: $stock")
 
         put(client, id, "media" to slots("gelScroller", "L201_FULL_CT_BLUE", """{"gel": "R26"}"""))
@@ -214,8 +214,8 @@ class PatchMediaRouteTest : RouteIntegrationTest() {
 
     // — helpers ————————————————————————————————————————————————————————
 
-    private fun slots(property: String, option: String, content: String): JsonElement =
-        Json.parseToJsonElement("""{"slots": {"$property": {"$option": $content}}}""")
+    private fun slots(attribute: String, option: String, content: String): JsonElement =
+        Json.parseToJsonElement("""{"slots": {"$attribute": {"$option": $content}}}""")
 
     private suspend fun put(client: HttpClient, patchId: Int, vararg fields: Pair<String, JsonElement>): HttpResponse =
         client.put("/api/rest/projects/$projectId/patches/$patchId") {

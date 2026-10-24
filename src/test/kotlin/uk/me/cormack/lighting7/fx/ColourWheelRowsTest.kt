@@ -1,9 +1,9 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.MartinMac250Fixture
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
@@ -13,7 +13,7 @@ import kotlin.test.assertEquals
 
 /**
  * A stored row on a colour wheel reaches the wheel (`FU-LOOK-COLOUR-WHEEL-ROW`). The MAC 250's wheel
- * used to be a property named `colour`, which `canonicalPropertyName` reads as the RGB alias and
+ * used to be a property named `colour`, which `canonicalAttributeName` reads as the RGB alias and
  * rewrote to `rgbColour` — a name the MAC does not have — so every cue row and Look row on it was
  * dropped. It is `colourWheel` now, and its rows hold the slot's level, which the parse reads as a
  * slot because the wheel is slot-backed (`Fixture.Property.settingBacked`).
@@ -40,11 +40,11 @@ class ColourWheelRowsTest {
             cueId = 7,
             cueName = "test",
             adHocFx = emptyList(),
-            propertyAssignments = listOf(
-                CuePropertyAssignmentDto(
+            attributeAssignments = listOf(
+                CueAttributeAssignmentDto(
                     targetType = "fixture",
                     targetKey = "mac-1",
-                    propertyName = "colourWheel",
+                    attribute = "colourWheel",
                     value = red.toString(),
                 ),
             ),
@@ -52,11 +52,11 @@ class ColourWheelRowsTest {
             sortOrder = 2,
         ))
         val row = out.single()
-        assertEquals("colourWheel", row.propertyName)
-        assertEquals(PropertyCategory.COLOUR, row.category)
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(red), row.value, "a level, read as the slot")
+        assertEquals("colourWheel", row.attribute)
+        assertEquals(AttributeCategory.COLOUR, row.category)
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(red), row.value, "a level, read as the slot")
 
-        val writes = PropertyChannelWriter.resolve(fixtures.untypedGroupableFixture("mac-1"), row.propertyName, row.value)
+        val writes = AttributeChannelWriter.resolve(fixtures.untypedGroupableFixture("mac-1"), row.attribute, row.value)
         assertEquals(listOf(42 to red.toInt()), writes.map { it.channel to it.value.toInt() })
     }
 
@@ -67,7 +67,7 @@ class ColourWheelRowsTest {
             lookId = 5,
             lookUuid = UUID.nameUUIDFromBytes("Red wheel".toByteArray()),
             name = "Red wheel",
-            rows = listOf(LookRowEntry(target = TargetRef.Fixture("mac-1"), propertyName = "colourWheel", value = red.toString())),
+            rows = listOf(LookRowEntry(target = TargetRef.Fixture("mac-1"), attribute = "colourWheel", value = red.toString())),
             effects = emptyList(),
         )
         val result = CueComposer.cook(
@@ -88,11 +88,11 @@ class ColourWheelRowsTest {
         )
         val row = result.rows.single()
         assertEquals("mac-1", row.targetKey)
-        assertEquals("colourWheel", row.propertyName)
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(red), row.value)
-        assertEquals(setOf(FxEngine.PropertyKey("mac-1", "colourWheel")), result.assertedKeys)
+        assertEquals("colourWheel", row.attribute)
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(red), row.value)
+        assertEquals(setOf(FxEngine.TargetAttribute("mac-1", "colourWheel")), result.assertedKeys)
 
-        val writes = PropertyChannelWriter.resolve(fixtures.untypedGroupableFixture("mac-1"), row.propertyName, row.value)
+        val writes = AttributeChannelWriter.resolve(fixtures.untypedGroupableFixture("mac-1"), row.attribute, row.value)
         assertEquals(listOf(42 to red.toInt()), writes.map { it.channel to it.value.toInt() })
     }
 }

@@ -177,7 +177,7 @@ private val lookFxSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
-        put("propertyName", buildJsonObject {
+        put("attribute", buildJsonObject {
             put("type", "string")
             put("description", "Target property. Usually inferred from family: intensity→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for the controls family.")
         })
@@ -235,16 +235,16 @@ internal val lookValueSchema = buildJsonObject {
     put("type", "object")
     put("properties", buildJsonObject {
         put("target", valueTargetSchema)
-        put("propertyName", buildJsonObject {
+        put("attribute", buildJsonObject {
             put("type", "string")
-            put("description", "The property, as list_fixture_types (properties: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+            put("description", "The property, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
         })
         put("value", buildJsonObject {
             put("type", "string")
             put("description", "What it is set to: $LOOK_VALUE_GRAMMAR.")
         })
     })
-    put("required", buildJsonArray { add("target"); add("propertyName"); add("value") })
+    put("required", buildJsonArray { add("target"); add("attribute"); add("value") })
 }
 
 internal val createLookTool = ToolDef(
@@ -255,7 +255,7 @@ internal val createLookTool = ToolDef(
             "A value a head cannot take skips that head and is reported; a value no head of its target can take refuses the call. " +
             "A fixture's own value beats its group's, so 'the wash at 70%, hex-1 at 20%' is two values; the same target and property twice is refused. " +
             "A multi-head fixture's cells (heads) are targets too, each by its own key as describe_rig lists them; a property only the cells have " +
-            "(the colour of a fixture whose colour is per zone — list_fixture_types' cellProperties) set on the fixture or a group of them lands on every cell, " +
+            "(the colour of a fixture whose colour is per zone — list_fixture_types' cellAttributes) set on the fixture or a group of them lands on every cell, " +
             "and a cell's own value beats it. " +
             "'fx' each name their own target too, as create_cue's ad-hoc effects do: targetType and targetKey, or targets for one effect over several fixtures and groups. " +
             "A look always lands whole — its own values, effects and scenery, never narrower and never wider — whether pressed (apply_look) or layered in a cue; " +
@@ -576,7 +576,7 @@ private val adHocFxSchema = buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
-        put("propertyName", buildJsonObject { put("type", "string") })
+        put("attribute", buildJsonObject { put("type", "string") })
         put("cycle", buildJsonObject {
             put("type", "number")
             put("description", CYCLE_DESCRIPTION)
@@ -651,7 +651,7 @@ internal val cueLayerSchema = buildJsonObject {
             put("type", "integer")
             put("description", "Position in the cue's layer stack. Later layers override earlier ones for the same fixture and property, whatever the attribute.")
         })
-        put("propertyMask", buildJsonObject {
+        put("attributeMask", buildJsonObject {
             put("type", "string")
             put("description", "Optional comma-separated attribute families to include: INTENSITY, POSITION, COLOUR, BEAM. Omit for every property.")
         })
@@ -1078,7 +1078,7 @@ internal val createPaletteTool = ToolDef(
                 put("items", buildJsonObject {
                     put("type", "object")
                     put("properties", buildJsonObject {
-                        put("propertyName", buildJsonObject {
+                        put("attribute", buildJsonObject {
                             put("type", "string")
                             put("description", "e.g. colour, dimmer, pan, tilt. Slotted properties (gobo, colour wheel, macros) belong in a look, not a palette.")
                         })
@@ -1091,7 +1091,7 @@ internal val createPaletteTool = ToolDef(
                             put("description", "Fixture key to bind this row to. Omit for a deferred row — the usual case, and the only kind an effect can reference by uuid.")
                         })
                     })
-                    put("required", buildJsonArray { add("propertyName"); add("value") })
+                    put("required", buildJsonArray { add("attribute"); add("value") })
                 })
             })
             put("fx", paletteFxSchema)
@@ -1279,16 +1279,16 @@ internal val setProgrammerTool = ToolDef(
                 put("items", buildJsonObject {
                     put("type", "object")
                     put("properties", buildJsonObject {
-                        put("propertyName", buildJsonObject {
+                        put("attribute", buildJsonObject {
                             put("type", "string")
-                            put("description", "The property, as list_fixture_types (properties: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
+                            put("description", "The property, as list_fixture_types (attributes: true) names it: dimmer, rgbColour, position, strobe, zoom, gobo, fanSpeed…")
                         })
                         put("value", buildJsonObject {
                             put("type", "string")
                             put("description", "What it is set to: $LOOK_VALUE_GRAMMAR.")
                         })
                     })
-                    put("required", buildJsonArray { add("propertyName"); add("value") })
+                    put("required", buildJsonArray { add("attribute"); add("value") })
                 })
             })
             put("fadeSeconds", fadeSecondsSchema)

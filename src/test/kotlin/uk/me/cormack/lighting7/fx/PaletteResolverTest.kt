@@ -51,7 +51,7 @@ class PaletteResolverTest {
         // #FF9D4A is (255, 157, 74), so the neutral part is 74. Extract is what makes the result
         // brighter and cleaner at the same hue, which is why it is the default for a wash.
         val r = PaletteResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.EXTRACT), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Colour>(r.value)
         assertEquals(255 - 74, value.value.color.red)
         assertEquals(157 - 74, value.value.color.green)
         assertEquals(0, value.value.color.blue)
@@ -67,7 +67,7 @@ class PaletteResolverTest {
     @Test
     fun `additive drives the emitter alongside RGB rather than instead of part of it`() {
         val r = PaletteResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.ADDITIVE), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Colour>(r.value)
         assertEquals(255, value.value.color.red, "RGB is untouched")
         assertEquals(157, value.value.color.green)
         assertEquals(74, value.value.color.blue)
@@ -77,7 +77,7 @@ class PaletteResolverTest {
     @Test
     fun `RGB only leaves every extra emitter at zero`() {
         val r = PaletteResolver.resolve(hex(), "rgbColour", colour("#FF9D4A", WhitePolicy.RGB_ONLY), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Colour>(r.value)
         assertEquals(255, value.value.color.red)
         assertEquals(74, value.value.color.blue)
         assertEquals(0u.toUByte(), value.value.white)
@@ -92,7 +92,7 @@ class PaletteResolverTest {
         // to be able to read "this is roughly amber" before saving, and only one implementation can
         // be right about it.
         val r = PaletteResolver.resolve(mac(), "rgbColour", colour("#FFA500", WhitePolicy.EXTRACT), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Setting>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Setting>(r.value)
         assertEquals(MartinMac250Fixture.Colour.ORANGE.level, value.channelValue)
         val note = assertIs<PaletteResolver.Note.Snapped>(r.note)
         assertEquals("ORANGE", note.slot)
@@ -100,7 +100,7 @@ class PaletteResolverTest {
 
         // And the value lands on the property that actually carries the colour on this head — the
         // wheel, not the `rgbColour` the template names and this head does not have.
-        assertEquals("colourWheel", r.propertyName)
+        assertEquals("colourWheel", r.attribute)
     }
 
     /** Two warm/cold cells under a master dimmer, and no RGB anywhere. */
@@ -110,13 +110,13 @@ class PaletteResolverTest {
     fun `a warm-cold cell takes a colour as its nearest mix and names the mix's temperature`() {
         val cell = blinder().cell(0)
         val r = PaletteResolver.resolve(cell, "rgbColour", colour("#FF0000", WhitePolicy.EXTRACT), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Colour>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Colour>(r.value)
         // The colour the mix makes, not the red asked for: what the cell will read back as.
         assertEquals(China2CellLedBlinderFixture.WHITE_MIX.colourOf(255u, 0u), value.value.color)
         val note = assertIs<PaletteResolver.Note.Snapped>(r.note)
         assertEquals("3000 K", note.slot)
         assertTrue(note.deltaE > 10.0, "red is far from any white: ${note.deltaE}")
-        assertEquals("rgbColour", r.propertyName)
+        assertEquals("rgbColour", r.attribute)
     }
 
     @Test
@@ -125,7 +125,7 @@ class PaletteResolverTest {
         val hex = "#%02x%02x%02x".format(made.red, made.green, made.blue)
         val r = PaletteResolver.resolve(blinder().cell(1), "rgbColour", colour(hex, WhitePolicy.EXTRACT), media = null)
         assertEquals(PaletteResolver.Note.Exact, r.note)
-        val writes = PropertyChannelWriter.resolve(blinder().cell(1), r.propertyName, assertNotNull(r.value))
+        val writes = AttributeChannelWriter.resolve(blinder().cell(1), r.attribute, assertNotNull(r.value))
         val levels = writes.map { it.channel to it.value.toInt() }
         assertEquals(126, levels[0].first)
         assertEquals(127, levels[1].first)
@@ -148,12 +148,12 @@ class PaletteResolverTest {
     @Test
     fun `a warm-cold cell's colour is its two white channels, each still covered by its own slider`() {
         val fixture = blinder()
-        val channels = PropertyChannelWriter.channelsFor(fixture.cell(0), "rgbColour").map { it.channel }
+        val channels = AttributeChannelWriter.channelsFor(fixture.cell(0), "rgbColour").map { it.channel }
         assertEquals(listOf(124, 125), channels)
-        val covering = PropertyChannelWriter.coveringKeysByChannel(listOf(fixture))
-        assertEquals("warmWhite", covering[0 to 124]?.propertyName)
-        assertEquals("coldWhite", covering[0 to 125]?.propertyName)
-        val all = PropertyChannelWriter.propertyKeysByChannel(listOf(fixture))[0 to 124].orEmpty().map { it.propertyName }
+        val covering = AttributeChannelWriter.coveringKeysByChannel(listOf(fixture))
+        assertEquals("warmWhite", covering[0 to 124]?.attribute)
+        assertEquals("coldWhite", covering[0 to 125]?.attribute)
+        val all = AttributeChannelWriter.attributeKeysByChannel(listOf(fixture))[0 to 124].orEmpty().map { it.attribute }
         assertEquals(setOf("warmWhite", "rgbColour"), all.toSet())
     }
 
@@ -164,14 +164,14 @@ class PaletteResolverTest {
         val rev = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 100)
         val red = colour("#ee5b5e", WhitePolicy.RGB_ONLY)
         val stock = PaletteResolver.resolve(rev, "rgbColour", red, media = null)
-        val stockValue = assertIs<CueAssignmentResolver.PropertyValue.Setting>(stock.value)
+        val stockValue = assertIs<CueAssignmentResolver.AttributeValue.Setting>(stock.value)
         assertTrue(stockValue.channelValue != Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level, "stock frame 9 is blue")
         assertTrue(assertIs<PaletteResolver.Note.Snapped>(stock.note).deltaE > 0.0)
 
         val fitted = FittedMedia(mapOf("gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot(gel = "R26"))))
         val r = PaletteResolver.resolve(rev, "rgbColour", red, media = fitted)
-        assertEquals("gelScroller", r.propertyName)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Setting>(r.value)
+        assertEquals("gelScroller", r.attribute)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Setting>(r.value)
         assertEquals(Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level, value.channelValue)
         val note = assertIs<PaletteResolver.Note.Snapped>(r.note)
         assertEquals("L201_FULL_CT_BLUE (R26)", note.slot)
@@ -180,7 +180,7 @@ class PaletteResolverTest {
         // A unit whose frame 9 is empty: L201's blue is no longer on it, so a request for L201 lands elsewhere.
         val empty = FittedMedia(mapOf("gelScroller" to mapOf("L201_FULL_CT_BLUE" to FittedSlot())))
         val blue = PaletteResolver.resolve(rev, "rgbColour", colour("#9bbede", WhitePolicy.RGB_ONLY), media = empty)
-        assertTrue(assertIs<CueAssignmentResolver.PropertyValue.Setting>(blue.value).channelValue != Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level)
+        assertTrue(assertIs<CueAssignmentResolver.AttributeValue.Setting>(blue.value).channelValue != Source4RevolutionFixture.GelFrame.L201_FULL_CT_BLUE.level)
     }
 
     @Test
@@ -206,13 +206,13 @@ class PaletteResolverTest {
     @Test
     fun `an emitter level is written straight at the head's own slider`() {
         // A byte, not a percentage — the one literal in the grammar. A Hex has all three.
-        for ((property, expected) in listOf("white" to 180, "amber" to 64, "uv" to 255)) {
-            val r = PaletteResolver.resolve(hex(), property, PaletteIntent.Level(expected), media = null)
-            val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value, property)
-            assertEquals(expected.toUByte(), value.value, property)
-            assertEquals(PaletteResolver.Note.Exact, r.note, property)
+        for ((attribute, expected) in listOf("white" to 180, "amber" to 64, "uv" to 255)) {
+            val r = PaletteResolver.resolve(hex(), attribute, PaletteIntent.Level(expected), media = null)
+            val value = assertIs<CueAssignmentResolver.AttributeValue.Slider>(r.value, attribute)
+            assertEquals(expected.toUByte(), value.value, attribute)
+            assertEquals(PaletteResolver.Note.Exact, r.note, attribute)
             // The resolved name is the row's: an emitter is not aliased the way colour is.
-            assertEquals(property, r.propertyName, property)
+            assertEquals(attribute, r.attribute, attribute)
         }
     }
 
@@ -369,7 +369,7 @@ class PaletteResolverTest {
     @Test
     fun `a level is a percentage of the head's own dimmer range`() {
         val r = PaletteResolver.resolve(hex(), "dimmer", PaletteIntent.Percent(75.0), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Slider>(r.value)
         assertEquals(191u.toUByte(), value.value, "75% of 0..255")
         assertEquals(PaletteResolver.Note.Exact, r.note)
     }
@@ -378,13 +378,13 @@ class PaletteResolverTest {
     fun `full and zero land exactly on the ends`() {
         assertEquals(
             255u.toUByte(),
-            assertIs<CueAssignmentResolver.PropertyValue.Slider>(
+            assertIs<CueAssignmentResolver.AttributeValue.Slider>(
                 PaletteResolver.resolve(hex(), "dimmer", PaletteIntent.Percent(100.0), media = null).value,
             ).value,
         )
         assertEquals(
             0u.toUByte(),
-            assertIs<CueAssignmentResolver.PropertyValue.Slider>(
+            assertIs<CueAssignmentResolver.AttributeValue.Slider>(
                 PaletteResolver.resolve(hex(), "dimmer", PaletteIntent.Percent(0.0), media = null).value,
             ).value,
         )
@@ -408,10 +408,10 @@ class PaletteResolverTest {
         // D3: `pos:` is coarse DMX about the centre of travel, so a generic palette lands on the
         // same bytes on two heads whose tilt ranges differ — the opposite of the degree arm below.
         val intent = PaletteIntent.Position(-20.0, 40.0)
-        val onMover = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+        val onMover = assertIs<CueAssignmentResolver.AttributeValue.Position>(
             PaletteResolver.resolve(mover(), "position", intent, media = null).value,
         )
-        val onMac = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+        val onMac = assertIs<CueAssignmentResolver.AttributeValue.Position>(
             PaletteResolver.resolve(mac(), "position", intent, media = null).value,
         )
         assertEquals(108u.toUByte(), onMover.pan, "128 - 20")
@@ -421,18 +421,18 @@ class PaletteResolverTest {
 
     @Test
     fun `the centre scale meets both ends of travel exactly`() {
-        fun on(pan: Double, tilt: Double) = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+        fun on(pan: Double, tilt: Double) = assertIs<CueAssignmentResolver.AttributeValue.Position>(
             PaletteResolver.resolve(mover(), "position", PaletteIntent.Position(pan, tilt), media = null).value,
         )
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 128u), on(0.0, 0.0), "0 is DMX 128")
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(0u, 255u), on(-128.0, 127.0))
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(1u, 129u), on(-127.0, 1.0), "one unit a step")
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(128u, 128u), on(0.0, 0.0), "0 is DMX 128")
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(0u, 255u), on(-128.0, 127.0))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(1u, 129u), on(-127.0, 1.0), "one unit a step")
     }
 
     @Test
     fun `a centre-relative value past the scale is clamped and reported in the scale`() {
         val r = PaletteResolver.resolve(mover(), "position", PaletteIntent.Position(200.0, 0.0), media = null)
-        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value).pan)
+        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Position>(r.value).pan)
         val note = assertIs<PaletteResolver.Note.Clamped>(r.note)
         assertEquals("pan +127", note.to)
     }
@@ -440,12 +440,12 @@ class PaletteResolverTest {
     @Test
     fun `centreIntentOf is the exact inverse of the centre arm`() {
         for (pan in listOf(0, 1, 64, 127, 128, 200, 255)) {
-            val bytes = CueAssignmentResolver.PropertyValue.Position(pan.toUByte(), (255 - pan).toUByte())
+            val bytes = CueAssignmentResolver.AttributeValue.Position(pan.toUByte(), (255 - pan).toUByte())
             val intent = assertNotNull(PaletteResolver.centreIntentOf(mover(), bytes))
             assertEquals("pos:${pan - 128},${127 - pan}", intent.serialize())
             assertEquals(bytes, PaletteResolver.resolve(mover(), "position", intent, media = null).value)
         }
-        assertNull(PaletteResolver.centreIntentOf(hex(), CueAssignmentResolver.PropertyValue.Position(1u, 1u)))
+        assertNull(PaletteResolver.centreIntentOf(hex(), CueAssignmentResolver.AttributeValue.Position(1u, 1u)))
     }
 
     @Test
@@ -453,10 +453,10 @@ class PaletteResolverTest {
         // Stored `deg:` rows keep resolving as angles (venue-visit plan P3). The mover's pan is
         // 0–540° and its tilt 0–270°, so the same degrees land on *different* DMX values per axis.
         val r = PaletteResolver.resolve(mover(), "position", PaletteIntent.Position(270.0, 135.0, PositionUnit.DEGREES), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Position>(r.value)
         assertEquals(128u.toUByte(), value.pan, "half of 540°")
         assertEquals(128u.toUByte(), value.tilt, "half of 270°")
-        assertEquals("position", r.propertyName)
+        assertEquals("position", r.attribute)
         assertEquals(PaletteResolver.Note.Exact, r.note)
     }
 
@@ -464,10 +464,10 @@ class PaletteResolverTest {
     fun `the same degrees land differently on two heads with different ranges`() {
         // A MAC 250 tilts 0–257°, a Shehds 0–270°. 128° is past the middle of one and short of the
         // other, and a template that stored DMX could not express the difference at all.
-        val onMover = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+        val onMover = assertIs<CueAssignmentResolver.AttributeValue.Position>(
             PaletteResolver.resolve(mover(), "position", PaletteIntent.Position(90.0, 128.0, PositionUnit.DEGREES), media = null).value,
         )
-        val onMac = assertIs<CueAssignmentResolver.PropertyValue.Position>(
+        val onMac = assertIs<CueAssignmentResolver.AttributeValue.Position>(
             PaletteResolver.resolve(mac(), "position", PaletteIntent.Position(90.0, 128.0, PositionUnit.DEGREES), media = null).value,
         )
         assertEquals(onMover.pan, onMac.pan, "both pan 0–540°, so pan agrees")
@@ -479,7 +479,7 @@ class PaletteResolverTest {
         // Reported, not silent: an operator pointing a template at a head that cannot reach the spot
         // needs to know it is aimed somewhere else, which is exactly what the panel shows.
         val r = PaletteResolver.resolve(mover(), "position", PaletteIntent.Position(700.0, 135.0, PositionUnit.DEGREES), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Position>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Position>(r.value)
         assertEquals(255u.toUByte(), value.pan)
         val note = assertIs<PaletteResolver.Note.Clamped>(r.note)
         assertTrue(note.to.contains("pan"), note.to)
@@ -499,7 +499,7 @@ class PaletteResolverTest {
     @Test
     fun `a continuous beam role is a percentage of the head's own range`() {
         val r = PaletteResolver.resolve(mac(), "focus", PaletteIntent.Percent(70.0), media = null)
-        val value = assertIs<CueAssignmentResolver.PropertyValue.Slider>(r.value)
+        val value = assertIs<CueAssignmentResolver.AttributeValue.Slider>(r.value)
         assertEquals(179u.toUByte(), value.value, "70% of 0..255")
     }
 

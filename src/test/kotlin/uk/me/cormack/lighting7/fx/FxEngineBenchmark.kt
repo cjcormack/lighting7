@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
 import uk.me.cormack.lighting7.fx.group.SpreadOrder
@@ -191,7 +191,7 @@ class FxEngineBenchmark {
         )
 
         // Populate half the fixtures with cue-level Layer 4 dimmer assignments so
-        // `resetActiveProperties` actually has Layer 4 work to do during effect reset.
+        // `resetActiveAttributes` actually has Layer 4 work to do during effect reset.
         val assignments = fixtures.fixtures.filterIndexed { i, _ -> i % 2 == 0 }.map { f ->
             CueAssignmentResolver.Assignment(
                 cueId = 1,
@@ -199,10 +199,10 @@ class FxEngineBenchmark {
                 fadeWeight = 1.0,
                 targetKey = f.key,
                 targetIsGroup = false,
-                propertyName = "dimmer",
-                category = PropertyCategory.DIMMER,
+                attribute = "dimmer",
+                category = AttributeCategory.DIMMER,
                 compositionOverride = CompositionRule.UNSET,
-                value = CueAssignmentResolver.PropertyValue.Slider(128u),
+                value = CueAssignmentResolver.AttributeValue.Slider(128u),
             )
         }
         engine.cueLayer.setAssignments(1, assignments)
@@ -292,7 +292,7 @@ class FxEngineBenchmark {
      *   direct-application branch and down the element-expansion path this scenario exists
      *   to measure (C1).
      * - `RgbwPixel` is `WithColour, WithWhite` with `bundleWithColour = true` on `white`, which
-     *   drives the element branch of [PropertyChannelWriter]'s per-class property catalogue.
+     *   drives the element branch of [AttributeChannelWriter]'s per-class property catalogue.
      *
      * This scenario does **not** measure sweep item C2, though it claimed to until 2026-08-24.
      * `RgbwPixel` is a [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement],
@@ -363,10 +363,10 @@ class FxEngineBenchmark {
                     fadeWeight = 1.0,
                     targetKey = key,
                     targetIsGroup = false,
-                    propertyName = "rgbColour",
-                    category = PropertyCategory.COLOUR,
+                    attribute = "rgbColour",
+                    category = AttributeCategory.COLOUR,
                     compositionOverride = CompositionRule.UNSET,
-                    value = CueAssignmentResolver.PropertyValue.Colour(
+                    value = CueAssignmentResolver.AttributeValue.Colour(
                         ExtendedColour(Color(40, 0, 90), white = 20u),
                     ),
                 )
@@ -596,10 +596,10 @@ class FxEngineBenchmark {
                         fadeWeight = 1.0,
                         targetKey = f.key,
                         targetIsGroup = false,
-                        propertyName = "dimmer",
-                        category = PropertyCategory.DIMMER,
+                        attribute = "dimmer",
+                        category = AttributeCategory.DIMMER,
                         compositionOverride = CompositionRule.UNSET,
-                        value = CueAssignmentResolver.PropertyValue.Slider(level),
+                        value = CueAssignmentResolver.AttributeValue.Slider(level),
                     ),
                     CueAssignmentResolver.Assignment(
                         cueId = cueId,
@@ -607,10 +607,10 @@ class FxEngineBenchmark {
                         fadeWeight = 1.0,
                         targetKey = f.key,
                         targetIsGroup = false,
-                        propertyName = "rgbColour",
-                        category = PropertyCategory.COLOUR,
+                        attribute = "rgbColour",
+                        category = AttributeCategory.COLOUR,
                         compositionOverride = CompositionRule.UNSET,
-                        value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(colour)),
+                        value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(colour)),
                     ),
                 )
             }
@@ -696,7 +696,7 @@ class FxEngineBenchmark {
 
     /**
      * [ColourTarget] over real [Fixture]s carrying bundled W/A/UV sliders — sweep item C2's
-     * `fixtureProperties.find {}` + `KProperty1.call` half.
+     * `fixtureAttributes.find {}` + `KProperty1.call` half.
      *
      * This scenario exists because **no other rig reaches that code at all**, contrary to what
      * scenario 2's docs claimed before this was written. [ColourTarget] gates all four of its
@@ -705,7 +705,7 @@ class FxEngineBenchmark {
      * park paths), and scenario 2's `RgbwPixel` is a
      * [FixtureElement][uk.me.cormack.lighting7.fixture.group.FixtureElement], which does *not*
      * extend [Fixture]. Elements resolve through
-     * [PropertyChannelWriter]'s per-class catalogue instead, so scenario 2 measures the group
+     * [AttributeChannelWriter]'s per-class catalogue instead, so scenario 2 measures the group
      * expansion (C1) and [SpreadOrder.RANDOM]'s permutation (C6) — not this.
      *
      * The fixture choice is load-bearing: [HexFixture] declares `amber`, `white` **and** `uv`
@@ -715,7 +715,7 @@ class FxEngineBenchmark {
      *
      * Three of the four bundled helpers are covered:
      * - `applyExtendedChannel` — ungated, once per fixture per tick via the effect write;
-     * - `setExtendedChannel` — via `resetToFallback`, which `resetActiveProperties` drives for
+     * - `setExtendedChannel` — via `resetToFallback`, which `resetActiveAttributes` drives for
      *   every active property every tick, so the Layer 4 colour rows below are required;
      * - `extendedComponent` — via `composeProgrammerOver`, behind the per-fixture gate at
      *   `LayerResolver.fallbackFor`. Half the rig gets a programmer colour entry so the gate is
@@ -761,10 +761,10 @@ class FxEngineBenchmark {
                     fadeWeight = 1.0,
                     targetKey = f.key,
                     targetIsGroup = false,
-                    propertyName = "rgbColour",
-                    category = PropertyCategory.COLOUR,
+                    attribute = "rgbColour",
+                    category = AttributeCategory.COLOUR,
                     compositionOverride = CompositionRule.UNSET,
-                    value = CueAssignmentResolver.PropertyValue.Colour(
+                    value = CueAssignmentResolver.AttributeValue.Colour(
                         ExtendedColour(Color(30, 10, 70), white = 25u, amber = 15u, uv = 40u),
                     ),
                 )
@@ -798,7 +798,7 @@ class FxEngineBenchmark {
                 ProgrammerOwner.WEB,
                 f.key,
                 "rgbColour",
-                CueAssignmentResolver.PropertyValue.Colour(
+                CueAssignmentResolver.AttributeValue.Colour(
                     ExtendedColour(Color(10, 200, 30), white = 70u, amber = 15u, uv = 45u),
                 ),
             )
@@ -807,8 +807,8 @@ class FxEngineBenchmark {
         // Setup guards, in scenario 2's style: every one of these has a silent-no-op failure
         // mode that still prints believable microseconds.
         val sample = fixtures.fixtures.first() as HexFixture
-        val bundled = sample.fixtureProperties.filter { it.bundleWithColour }.map { it.category }.toSet()
-        check(bundled == setOf(PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV)) {
+        val bundled = sample.fixtureAttributes.filter { it.bundleWithColour }.map { it.category }.toSet()
+        check(bundled == setOf(AttributeCategory.WHITE, AttributeCategory.AMBER, AttributeCategory.UV)) {
             "the rig fixture must declare all three bundled colour channels, got $bundled"
         }
         check(engine.getActiveFx().all { it.target is ColourTarget }) {
@@ -980,7 +980,7 @@ class FxEngineBenchmark {
             rows = (0 until COOK_LOOK_ROWS).map { i ->
                 LookRowEntry(
                     target = TargetRef.Group("everything"),
-                    propertyName = if (i % 2 == 0) "dimmer" else "rgbColour",
+                    attribute = if (i % 2 == 0) "dimmer" else "rgbColour",
                     value = if (i % 2 == 0) "${100 + i}" else "#20${"%02x".format(i * 5)}70",
                 )
             },
@@ -1000,7 +1000,7 @@ class FxEngineBenchmark {
                     effect = StoredFx(
                         fxType = "SineWave",
                         family = "intensity",
-                        propertyName = "dimmer",
+                        attribute = "dimmer",
                         cycle = CycleLength.TWO_BEATS,
                         blendMode = "OVERRIDE",
                         order = "NORMAL",
@@ -1023,8 +1023,8 @@ class FxEngineBenchmark {
             name = "Cook Template",
             fadeDurationMs = null,
             rows = listOf(
-                PaletteRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
-                PaletteRowEntry(target = null, propertyName = "dimmer", value = "pct:70"),
+                PaletteRowEntry(target = null, attribute = "rgbColour", value = "#FF9D4A;policy=extract"),
+                PaletteRowEntry(target = null, attribute = "dimmer", value = "pct:70"),
             ),
         )
 

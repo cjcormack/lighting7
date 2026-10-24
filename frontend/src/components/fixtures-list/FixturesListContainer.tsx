@@ -34,7 +34,7 @@ import {
 } from '../sheet/cellEntry'
 import { focusedByPointer, usePointerFocusTracking } from '../sheet/pointerFocus'
 import { editorIsOpen } from '../editor/EditorSurface'
-import { cellFamilies, resolutionPropertyNames } from './columns'
+import { cellFamilies, resolutionAttributeNames } from './columns'
 import { familiesKey } from '../../lib/selectionMask'
 import { headName } from '../../lib/headName'
 import { cellFxKey } from './cellFx'
@@ -877,7 +877,7 @@ export function FixturesListContainer({
    * programmer's own whole-desk Clear has always swept values and programmer-band FX together, and
    * an effect busked onto three cells was otherwise only removable one instance at a time in the
    * rail. `cellFx.ts` owns which effects qualify and why a partly-covered one is left alone;
-   * the same `fixtureKey|propertyName` pairs this loop clears are what it matches on, collected
+   * the same `fixtureKey|attribute` pairs this loop clears are what it matches on, collected
    * here rather than re-derived so the two halves cannot reach different heads.
    */
   const canClearCells = keys.clear
@@ -889,9 +889,9 @@ export function FixturesListContainer({
     for (const { col, targets } of columnTargets) {
       for (const outer of targets) {
         for (const { target, resolution } of resolveTargetCells(outer, col)) {
-          for (const propertyName of resolutionPropertyNames(resolution)) {
-            writers.clearValue(target.key, propertyName)
-            cleared.add(cellFxKey(target.key, propertyName))
+          for (const attribute of resolutionAttributeNames(resolution)) {
+            writers.clearValue(target.key, attribute)
+            cleared.add(cellFxKey(target.key, attribute))
           }
         }
       }
@@ -1655,7 +1655,7 @@ function sameTargets(a: readonly WriteTarget[], b: readonly WriteTarget[]): bool
     a.length === b.length &&
     a.every((t, i) => {
       const u = b[i]
-      return t === u || (t.key === u.key && t.properties === u.properties && t.elements === u.elements && t.fixtureKey === u.fixtureKey && t.cellIndex === u.cellIndex)
+      return t === u || (t.key === u.key && t.attributes === u.attributes && t.elements === u.elements && t.fixtureKey === u.fixtureKey && t.cellIndex === u.cellIndex)
     })
   )
 }

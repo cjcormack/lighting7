@@ -70,7 +70,7 @@ import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLookRow
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueSlot
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueTrigger
@@ -680,6 +680,17 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         cycle = 1.0; blendMode = "MULTIPLY"; order = "NORMAL"
         sortOrder = 0
     }
+    // A position FX's centre, spelled the UK way since v39 (terminology plan D20).
+    val swirlLook = DaoLook.new {
+        this.project = project
+        name = "Swirl"
+    }
+    DaoLookFxEntity.new {
+        look = swirlLook; targetType = "fixture"; targetKey = "hex-2"
+        fxType = "Circle"; family = "position"; attribute = "position"
+        parameters = mapOf("panCentre" to "100", "tiltCentre" to "140", "panRadius" to "30")
+        cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"
+    }
 
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
     // the half of the old deferred look that is not a look at all.
@@ -813,12 +824,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueEvent.new {
         cue = cue1; patch = cannon; trigger = "output2"; offset = Duration.ofMillis(750L); sortOrder = 1
     }
-    DaoCuePropertyAssignment.new {
+    DaoCueAttributeAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
         attribute = "dimmer"; value = "255"; sortOrder = 0
         fadeDuration = Duration.ofMillis(1500L)
     }
-    DaoCuePropertyAssignment.new {
+    DaoCueAttributeAssignment.new {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
         attribute = "position"; value = "120,64"; sortOrder = 1
         moveInDark = true
@@ -1068,10 +1079,24 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoControlSurfaceBinding.new {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "fader-1"; bank = "bank-a"
-        targetType = "fixtureProperty"
-        targetPayload = """{"type":"fixtureProperty","key":"hex-1","property":"dimmer"}"""
+        targetType = "fixtureAttribute"
+        targetPayload = """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}"""
         takeoverPolicy = "PICKUP"
         sortOrder = 0
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "fader-3"
+        targetType = "groupAttribute"
+        targetPayload = """{"type":"groupAttribute","groupName":"front-wash","attribute":"rgbColour","colourAxis":"saturation"}"""
+        sortOrder = 30
+    }
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "button-13"
+        targetType = "flash"
+        targetPayload = """{"type":"flash","target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"},"max":200}"""
+        sortOrder = 31
     }
     DaoControlSurfaceBinding.new {
         this.project = project
@@ -1083,8 +1108,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoControlSurfaceBinding.new {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "enc-1"
-        targetType = "selectionProperty"
-        targetPayload = """{"type":"selectionProperty","propertyName":"pan"}"""
+        targetType = "selectionAttribute"
+        targetPayload = """{"type":"selectionAttribute","attribute":"pan"}"""
         sortOrder = 2
     }
     DaoControlSurfaceBinding.new {
@@ -1128,7 +1153,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "button-6"
         targetType = "encoderBankSet"
-        targetPayload = """{"type":"encoderBankSet","propertyName":"pan"}"""
+        targetPayload = """{"type":"encoderBankSet","attribute":"pan"}"""
         sortOrder = 8
     }
     // One of each **record** variant and each busk-page variant (midi-surface plan, session 4).

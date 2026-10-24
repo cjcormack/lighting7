@@ -57,7 +57,7 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'fixture',
       targetKey: 'wash-2',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: false,
       stacks: [
         {
@@ -80,7 +80,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -96,7 +96,7 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'fixture',
       targetKey: 'wash-2',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: true,
       stacks: [
         {
@@ -115,7 +115,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={[{ key: 'wash-2', name: 'Wash 2' }]} attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -131,7 +131,7 @@ describe('LayerStack', () => {
     const answer: KeyStackAnswer = {
       targetType: 'group',
       targetKey: 'front',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       blind: false,
       stacks: [
         { targetKey: 'hex-1', layers: [programmer] },
@@ -151,7 +151,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={heads} group="front" propertyName="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={heads} group="front" attribute="dimmer" label="Dimmer" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -168,10 +168,10 @@ describe('LayerStack', () => {
   it('re-asks once for a move that touches every picked head, not once per head', async () => {
     const keyStack = vi
       .spyOn(lightingApi.programmer, 'keyStack')
-      .mockImplementation(async (targetType, targetKey, propertyName) => ({
+      .mockImplementation(async (targetType, targetKey, attribute) => ({
         targetType,
         targetKey,
-        propertyName,
+        attribute,
         blind: false,
         stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }],
       }))
@@ -185,7 +185,7 @@ describe('LayerStack', () => {
     await act(async () => {
       render(
         <FixtureSheetContext.Provider value={context}>
-          <LayerStack open onOpenChange={() => {}} heads={heads} propertyName="rgbColour" label="Colour" trigger={<button type="button">chip</button>} />
+          <LayerStack open onOpenChange={() => {}} heads={heads} attribute="rgbColour" label="Colour" trigger={<button type="button">chip</button>} />
         </FixtureSheetContext.Provider>,
       )
     })
@@ -196,9 +196,9 @@ describe('LayerStack', () => {
   })
 
   it('draws the heads the desk answered for when another head’s ask fails', async () => {
-    vi.spyOn(lightingApi.programmer, 'keyStack').mockImplementation(async (targetType, targetKey, propertyName) => {
+    vi.spyOn(lightingApi.programmer, 'keyStack').mockImplementation(async (targetType, targetKey, attribute) => {
       if (targetKey === 'p2') throw new Error('no such head')
-      return { targetType, targetKey, propertyName, blind: false, stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }] }
+      return { targetType, targetKey, attribute, blind: false, stacks: [{ targetKey, layers: [{ kind: 'BASE', onStage: true, value: '0' }] }] }
     })
     vi.spyOn(lightingApi.programmer, 'subscribeToKey').mockReturnValue({ unsubscribe: () => {} })
     const context = { cueLabel, connected: true } as unknown as FixtureSheetContextValue
@@ -212,7 +212,7 @@ describe('LayerStack', () => {
               { key: 'p1', name: 'P1' },
               { key: 'p2', name: 'P2' },
             ]}
-            propertyName="rgbColour"
+            attribute="rgbColour"
             label="Colour"
             trigger={<button type="button">chip</button>}
           />

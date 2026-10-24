@@ -216,7 +216,7 @@ sealed class LedLightbar12PixelFixture(
         private val pixelFirstChannel: Int
     ) : Pixel(elementIndex, pixelTransaction), WithColour, WithWhite {
 
-        @FixtureProperty("RGB colour", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("RGB colour", category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             pixelTransaction,
             universe,
@@ -225,7 +225,7 @@ sealed class LedLightbar12PixelFixture(
             pixelFirstChannel + 2
         )
 
-        @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute("White", category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white = DmxSlider(pixelTransaction, universe, pixelFirstChannel + 3)
 
         override fun withTransaction(transaction: ControllerTransaction): RgbwPixel =
@@ -268,20 +268,20 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode4ChProgram =
             Mode4ChProgram(this, transaction)
 
-        @FixtureProperty("Pixel program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Pixel program", category = AttributeCategory.SETTING)
         val pixelProgram = DmxFixtureSetting(transaction, universe, firstChannel, PixelProgram.entries.toTypedArray())
 
-        @FixtureProperty("Color running program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Color running program", category = AttributeCategory.SETTING)
         val colorRunningProgram = DmxFixtureSetting(transaction, universe, firstChannel + 1, ColorRunningProgram.entries.toTypedArray())
 
-        @FixtureProperty("Speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Speed", category = AttributeCategory.SPEED)
         val speed = DmxSlider(transaction, universe, firstChannel + 2)
 
         // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -320,7 +320,7 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode4ChRgbw =
             Mode4ChRgbw(this, transaction)
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction,
             universe,
@@ -329,7 +329,7 @@ sealed class LedLightbar12PixelFixture(
             firstChannel + 2
         )
 
-        @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute("White", category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white = DmxSlider(transaction, universe, firstChannel + 3)
     }
 
@@ -365,14 +365,14 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode6Ch =
             Mode6Ch(this, transaction)
 
-        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -380,7 +380,7 @@ sealed class LedLightbar12PixelFixture(
         )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction,
             universe,
@@ -389,7 +389,7 @@ sealed class LedLightbar12PixelFixture(
             firstChannel + 4
         )
 
-        @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute("White", category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white = DmxSlider(transaction, universe, firstChannel + 5)
     }
 
@@ -423,14 +423,14 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode10Ch =
             Mode10Ch(this, transaction)
 
-        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -498,14 +498,14 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode12Ch =
             Mode12Ch(this, transaction)
 
-        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -515,9 +515,9 @@ sealed class LedLightbar12PixelFixture(
 
         // Random flashes at the strobe channel's rates. Estimate: no manual to hand. Checked on the rig
         // by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Random strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.RANDOM, hzMin = 1.0, hzMax = 20.0),
@@ -525,22 +525,22 @@ sealed class LedLightbar12PixelFixture(
         )
         val randomStrobe = StrobeChannel(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Color preset", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Color preset", category = AttributeCategory.COLOUR)
         val colorPreset = DmxFixtureSetting(transaction, universe, firstChannel + 3, ColorPreset.entries.toTypedArray())
 
-        @FixtureProperty("Pixel program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Pixel program", category = AttributeCategory.SETTING)
         val pixelProgram = DmxFixtureSetting(transaction, universe, firstChannel + 4, PixelProgram.entries.toTypedArray())
 
-        @FixtureProperty("Color running program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Color running program", category = AttributeCategory.SETTING)
         val colorRunningProgram = DmxFixtureSetting(transaction, universe, firstChannel + 5, ColorRunningProgram.entries.toTypedArray())
 
-        @FixtureProperty("Speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Speed", category = AttributeCategory.SPEED)
         val speed = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Sound mode", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Sound mode", category = AttributeCategory.SETTING)
         val soundMode = DmxFixtureSetting(transaction, universe, firstChannel + 7, SoundMode.entries.toTypedArray())
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction,
             universe,
@@ -549,7 +549,7 @@ sealed class LedLightbar12PixelFixture(
             firstChannel + 10
         )
 
-        @FixtureProperty("White", category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute("White", category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white = DmxSlider(transaction, universe, firstChannel + 11)
     }
 
@@ -585,14 +585,14 @@ sealed class LedLightbar12PixelFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode18Ch =
             Mode18Ch(this, transaction)
 
-        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s, its "0–20 Hz" drawn from 1 Hz. Estimate: no manual to hand.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 1, StrobeKind.OPEN),
                 StrobeBand(2, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),

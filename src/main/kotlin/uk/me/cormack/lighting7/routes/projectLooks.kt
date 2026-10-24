@@ -29,12 +29,12 @@ import org.jetbrains.exposed.v1.jdbc.deleteWhere
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
-import uk.me.cormack.lighting7.fx.maskGroupForFxFamily
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
+import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.toMaskNames
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
@@ -81,14 +81,14 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
         withProject(state, resource.projectId) { project ->
             val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
             val parsedFamily = familyFilter?.let { raw ->
-                PropertyMaskGroup.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
+                AttributeFamily.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
             }
             if (familyFilter != null && parsedFamily == null) {
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse(
                         "Unknown family '$familyFilter' — expected one of " +
-                            PropertyMaskGroup.entries.joinToString { it.name }
+                            AttributeFamily.entries.joinToString { it.name }
                     ),
                 )
                 return@withProject
@@ -178,8 +178,16 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(problem))
                 return@withCurrentProject
             }
-            // Strict, unlike the rows: an FX field it does not know is an old name, refused rather
-            // than dropped to its default.
+            // Strict: a row or FX field it does not know is an old name (`propertyName`, `size`),
+            // refused rather than dropped to its default.
+            val rows = if ("rows" in body) {
+                try {
+                    Json.decodeFromJsonElement<List<LookRowDto>>(body["rows"]!!)
+                } catch (e: SerializationException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse("rows: ${e.message}"))
+                    return@withCurrentProject
+                }
+            } else null
             val effects = if ("fx" in body) {
                 try {
                     Json.decodeFromJsonElement<List<LookFxDto>>(body["fx"]!!)
@@ -204,9 +212,6 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                 if ("notes" in body) look.notes = body["notes"].nullableString()
                 val hasRows = "rows" in body
                 val hasFx = "fx" in body
-                val rows = if (hasRows) {
-                    lookJson.decodeFromJsonElement<List<LookRowDto>>(body["rows"]!!)
-                } else null
                 rows?.let { validateLookRows(it) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
                 effects?.let { validateLookFx(it, state.show.fxRegistry) }?.let { return@transaction LookWriteOutcome.Invalid(it) }
 
@@ -523,7 +528,7 @@ internal fun DaoLook.ownTargets(fixtures: Fixtures?): List<CueTargetDto> {
 }
 
 /** `Colour`, `Colour + Position` — the family names as an operator reads them, in declaration order. */
-internal fun describeFamilies(families: Set<PropertyMaskGroup>): String =
+internal fun describeFamilies(families: Set<AttributeFamily>): String =
     families.toMaskNames().joinToString(" + ") { it.lowercase().replaceFirstChar(Char::uppercase) }
 
 @Serializable
@@ -754,8 +759,6 @@ private sealed interface CopyLookOutcome {
 
 // ─── Usage, validation and mapping ──────────────────────────────────────
 
-private val lookJson = kotlinx.serialization.json.Json { ignoreUnknownKeys = true }
-
 /** Every field the Look PUT reads; anything else is refused by name. */
 private val LOOK_PUT_FIELDS = setOf("name", "notes", "rows", "fx")
 
@@ -853,7 +856,7 @@ internal fun validateLookRows(rows: List<LookRowDto>): String? {
         if (TargetRef.ofOrNull(row.targetType, row.targetKey) == null) {
             return "Unknown target type '${row.targetType}' — expected 'fixture' or 'group'"
         }
-        if (row.propertyName.isBlank()) return "Row property name must not be blank"
+        if (row.attribute.isBlank()) return "Row attribute must not be blank"
         if (row.value.isBlank()) return "Row value must not be blank"
         if (LOOK_ROW_REFERENCE_PREFIXES.any { row.value.trimStart().startsWith(it, ignoreCase = true) }) {
             return "A look row must hold a literal, not a reference — looks do not nest"
@@ -928,24 +931,24 @@ internal fun <E, I, K> pairByKey(
 }
 
 /** A Look row's identity within its Look: what it is on, never what it holds. */
-internal data class LookRowKey(val targetType: String, val targetKey: String, val elementKey: String?, val propertyName: String)
+internal data class LookRowKey(val targetType: String, val targetKey: String, val elementKey: String?, val attribute: String)
 
-internal fun lookRowKey(targetType: String, targetKey: String, elementKey: String?, propertyName: String) =
-    LookRowKey(targetType, targetKey, elementKey, canonicalPropertyName(propertyName))
+internal fun lookRowKey(targetType: String, targetKey: String, elementKey: String?, attribute: String) =
+    LookRowKey(targetType, targetKey, elementKey, canonicalAttributeName(attribute))
 
 internal val DaoLookRow.rowKey get() = lookRowKey(targetType, targetKey, elementKey, attribute)
 
-private val LookRowDto.rowKey get() = lookRowKey(targetType, targetKey, elementKey, propertyName)
+private val LookRowDto.rowKey get() = lookRowKey(targetType, targetKey, elementKey, attribute)
 
 /** A Look effect's identity within its Look: the effect, and what it runs on. */
-internal data class LookFxKey(val targetType: String, val targetKey: String, val propertyName: String?, val fxType: String)
+internal data class LookFxKey(val targetType: String, val targetKey: String, val attribute: String?, val fxType: String)
 
-internal fun lookFxKey(targetType: String, targetKey: String, propertyName: String?, fxType: String) =
-    LookFxKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), fxType)
+internal fun lookFxKey(targetType: String, targetKey: String, attribute: String?, fxType: String) =
+    LookFxKey(targetType, targetKey, attribute?.let(::canonicalAttributeName), fxType)
 
 internal val DaoLookFxEntity.fxKey get() = lookFxKey(targetType, targetKey, attribute, fxType)
 
-private val LookFxDto.fxKey get() = lookFxKey(targetType, targetKey, propertyName, fxType)
+private val LookFxDto.fxKey get() = lookFxKey(targetType, targetKey, attribute, fxType)
 
 /** A Look's stored rows, in their order. Sorted in memory: Exposed refuses to order a loaded referrer collection. */
 internal fun DaoLook.rowsInOrder(): List<DaoLookRow> = rows.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
@@ -974,12 +977,12 @@ internal fun writeLookChildren(
     // Nor a fixture command (fixture optics plan session 7), by the same rules and with its own code.
     val newRows = rows.orEmpty()
     val newFx = effects.orEmpty()
-    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.propertyName) } || newFx.any { TriggerIndex.mayRefuse(it.propertyName) }
+    val mayTrigger = newRows.any { TriggerIndex.mayRefuse(it.attribute) } || newFx.any { TriggerIndex.mayRefuse(it.attribute) }
     // A row is also refused for a level inside a command's band on a property that shares its channel.
-    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.propertyName) } || newFx.any { CommandIndex.mayRefuse(it.propertyName) }
+    val mayCommand = newRows.any { CommandIndex.mayRefuseRow(it.attribute) } || newFx.any { CommandIndex.mayRefuse(it.attribute) }
     if (mayTrigger || mayCommand) {
-        val refs = newRows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.propertyName, "rows[$i]", r.value) } +
-            newFx.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.propertyName, "fx[$i]") }
+        val refs = newRows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.elementKey?.let { "${r.targetKey}.$it" } ?: r.targetKey, r.attribute, "rows[$i]", r.value) } +
+            newFx.mapIndexed { i, e -> TriggerIndex.RowRef(e.targetType, e.targetKey, e.attribute, "fx[$i]") }
         if (mayTrigger) TriggerIndex.of(look.project).check(refs)
         if (mayCommand) CommandIndex.of(look.project).check(refs)
     }
@@ -1021,7 +1024,7 @@ internal fun writeLookChildren(
 
 /** [row] onto this row, but for the key fields [writeLookChildren] matched it on. */
 private fun DaoLookRow.take(row: LookRowDto) {
-    attribute = row.propertyName
+    attribute = row.attribute
     value = row.value
     fadeDuration = row.fadeDurationMs.asDuration()
     sortOrder = row.sortOrder
@@ -1030,7 +1033,7 @@ private fun DaoLookRow.take(row: LookRowDto) {
 private fun DaoLookFxEntity.take(effect: LookFxDto) {
     fxType = effect.fxType
     family = effect.family
-    attribute = effect.propertyName
+    attribute = effect.attribute
     cycle = effect.cycle
     blendMode = effect.blendMode
     order = effect.order
@@ -1065,15 +1068,15 @@ private fun DaoLook.derivedFamilies(state: State): List<String> =
 
 /**
  * Which attribute families this Look touches, in declaration order: its rows' properties resolved
- * against the live patch ([maskGroupForProperty]) and its effects' declared categories. Read by
+ * against the live patch ([familyForAttribute]) and its effects' declared categories. Read by
  * `toSummaryDto` for the library's family banking and by the Timeline. Must be called inside a
  * transaction.
  */
-internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGroup> {
-    val families = LinkedHashSet<PropertyMaskGroup>()
+internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<AttributeFamily> {
+    val families = LinkedHashSet<AttributeFamily>()
 
     for (row in rows) {
-        val canonical = canonicalPropertyName(row.attribute)
+        val canonical = canonicalAttributeName(row.attribute)
         // An element row is classified against its cell, not its parent: a pixel bar's parent may
         // declare no properties at all, and the family a cell's colour row belongs to is the cell's.
         // The same reading `lookRowInRemit` takes, so recording and banking agree about one row.
@@ -1089,14 +1092,14 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGr
             // to classify it against now that the editor hint is gone.
             null -> null
         } ?: continue
-        maskGroupForProperty(fixture, canonical)?.let { families.add(it) }
+        familyForAttribute(fixture, canonical)?.let { families.add(it) }
     }
 
     // Effects declare a category directly, so they need no fixture to classify.
     for (effect in effects) {
-        maskGroupForFxFamily(effect.family)?.let { families.add(it) }
+        attributeFamilyForFxFamily(effect.family)?.let { families.add(it) }
     }
-    return PropertyMaskGroup.entries.filterTo(LinkedHashSet()) { it in families }
+    return AttributeFamily.entries.filterTo(LinkedHashSet()) { it in families }
 }
 
 /**
@@ -1168,7 +1171,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                 LookRowDto(
                     targetType = it.targetType,
                     targetKey = it.targetKey,
-                    propertyName = it.attribute,
+                    attribute = it.attribute,
                     value = it.value,
                     fadeDurationMs = it.fadeDuration?.toMillis(),
                     elementKey = it.elementKey,
@@ -1182,7 +1185,7 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                     targetKey = it.targetKey,
                     fxType = it.fxType,
                     family = it.family,
-                    propertyName = it.attribute,
+                    attribute = it.attribute,
                     cycle = it.cycle,
                     blendMode = it.blendMode,
                     order = it.order,

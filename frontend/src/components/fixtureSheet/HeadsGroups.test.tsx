@@ -14,8 +14,8 @@ const wire = vi.hoisted(() => ({
   members: [] as { fixtureKey: string; fixtureName: string }[],
 }))
 
-vi.mock('@/hooks/usePropertyValues', async (importOriginal) => {
-  const real = await importOriginal<typeof import('@/hooks/usePropertyValues')>()
+vi.mock('@/hooks/useAttributeValues', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/hooks/useAttributeValues')>()
   const at = (ref: { universe: number; channelNo: number } | null) => (ref ? (wire.values.get(`${ref.universe}:${ref.channelNo}`) ?? 0) : 0)
   return {
     ...real,
@@ -53,9 +53,9 @@ vi.mock('@/components/ui/slider', () => ({
     />
   ),
 }))
-vi.mock('@/hooks/usePropertyParkStatus', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/hooks/usePropertyParkStatus')>()),
-  usePropertyParkStatus: () => ({ isAnyParked: false }),
+vi.mock('@/hooks/useAttributeParkStatus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/useAttributeParkStatus')>()),
+  useAttributeParkStatus: () => ({ isAnyParked: false }),
 }))
 vi.mock('@/hooks/useColourAppearance', () => ({
   useColourAppearance: () => ({ r: 0, g: 0, b: 0, combinedCss: '#000000', appearanceCss: '#000000' }),
@@ -152,7 +152,7 @@ const mouse = { button: 0, pointerId: 1, pointerType: 'mouse' }
 const addPip = (name: string) => fireEvent.click(pip(name), { metaKey: true })
 const checked = () => pips().filter((p) => p.getAttribute('aria-pressed') === 'true').map((p) => p.getAttribute('aria-label'))
 
-/** Rows over a pick of heads or members are a `PickPropertyRow`; one picked head is its own `PropertyRow`. */
+/** Rows over a pick of heads or members are a `PickAttributeRow`; one picked head is its own `AttributeRow`. */
 function typeInto(field: HTMLElement, value: string) {
   fireEvent.change(field, { target: { value } })
   fireEvent.keyDown(field, { key: 'Enter' })
@@ -160,8 +160,8 @@ function typeInto(field: HTMLElement, value: string) {
 
 function hold(entries: ProgrammerEntry[], provenance: ProvenanceEntry[]) {
   programmerWs.push({
-    entries: new Map(entries.map((e) => [`${e.targetKey}|${e.propertyName}`, e])),
-    provenance: new Map(provenance.map((p) => [`${p.targetKey}|${p.propertyName}`, p])),
+    entries: new Map(entries.map((e) => [`${e.targetKey}|${e.attribute}`, e])),
+    provenance: new Map(provenance.map((p) => [`${p.targetKey}|${p.attribute}`, p])),
   })
 }
 
@@ -324,7 +324,7 @@ describe('rows over a pick of heads', () => {
     // Head 1 at red, head 2 at half red.
     const [h1, h2] = BAR_A.elements!
     const red = (e: typeof h1, v: number) => {
-      const c = e.properties[0] as { redChannel: { universe: number; channelNo: number } }
+      const c = e.attributes[0] as { redChannel: { universe: number; channelNo: number } }
       wire.values.set(`${c.redChannel.universe}:${c.redChannel.channelNo}`, v)
     }
     red(h1, 255)
@@ -342,10 +342,10 @@ describe('rows over a pick of heads', () => {
   it('counts the heads a source holds on the chip and dashes the edge where they differ', () => {
     const [h1, h2] = BAR_A.elements!
     hold(
-      [{ targetKey: h1.key, propertyName: 'rgbColour', value: '#ff0000', owner: 'web', touched: true, owners: ['web'] }],
+      [{ targetKey: h1.key, attribute: 'rgbColour', value: '#ff0000', owner: 'web', touched: true, owners: ['web'] }],
       [
-        { targetKey: h1.key, propertyName: 'rgbColour', source: 'PROGRAMMER' },
-        { targetKey: h2.key, propertyName: 'rgbColour', source: 'CUE', cueId: 8 },
+        { targetKey: h1.key, attribute: 'rgbColour', source: 'PROGRAMMER' },
+        { targetKey: h2.key, attribute: 'rgbColour', source: 'CUE', cueId: 8 },
       ],
     )
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
@@ -358,8 +358,8 @@ describe('rows over a pick of heads', () => {
 
   it('lists what reaches the pick in the tray and starts + Effect on the picked head', () => {
     wire.effects = [
-      { id: 7, fxType: 'Pulse', targetKey: 'bar-a.pixel-2', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
-      { id: 8, fxType: 'Rainbow', targetKey: 'bar-a', propertyName: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 7, fxType: 'Pulse', targetKey: 'bar-a.pixel-2', attribute: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
+      { id: 8, fxType: 'Rainbow', targetKey: 'bar-a', attribute: 'rgbColour', isGroupTarget: false, isRunning: true, programmerOwned: true },
     ]
     render(<FixtureSheet fixture={BAR_A} host="stage" />)
     fireEvent.click(pip('Head 1'))
@@ -445,7 +445,7 @@ describe('the group sheet', () => {
     const parB = par('par-b', 211)
     wire.fixtures = [parA, parB]
     wire.members = [parA, parB].map((f) => ({ fixtureKey: f.key, fixtureName: f.name }))
-    const red = (f: Fixture) => (f.properties[0] as { redChannel: { universe: number; channelNo: number } }).redChannel
+    const red = (f: Fixture) => (f.attributes[0] as { redChannel: { universe: number; channelNo: number } }).redChannel
     for (const f of [parA, parB]) wire.values.set(`${red(f).universe}:${red(f).channelNo}`, 200)
     setProgrammerFade('0')
     const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
@@ -481,8 +481,8 @@ describe('the group sheet', () => {
   it('clears the group entry with one frame from All', () => {
     const clear = vi.spyOn(lightingApi.programmer, 'clearEntry')
     hold(
-      [{ targetKey: 'wash-2', propertyName: 'dimmer', value: '128', owner: 'web', touched: true, owners: ['web'], sourceGroup: 'front' }],
-      [{ targetKey: 'wash-2', propertyName: 'dimmer', source: 'PROGRAMMER' }],
+      [{ targetKey: 'wash-2', attribute: 'dimmer', value: '128', owner: 'web', touched: true, owners: ['web'], sourceGroup: 'front' }],
+      [{ targetKey: 'wash-2', attribute: 'dimmer', source: 'PROGRAMMER' }],
     )
     render(<FixtureSheet group={FRONT} host="popup" />)
     fireEvent.click(within(row('dimmer')).getByRole('button', { name: 'Clear your dimmer' }))

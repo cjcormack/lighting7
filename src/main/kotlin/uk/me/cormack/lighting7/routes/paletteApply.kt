@@ -2,16 +2,16 @@ package uk.me.cormack.lighting7.routes
 
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.group.fixturesSupportProperty
+import uk.me.cormack.lighting7.fixture.group.fixturesSupportAttribute
 import uk.me.cormack.lighting7.fx.StoredFx
 import uk.me.cormack.lighting7.fx.FxSpawner
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.PaletteFanOut
-import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.fx.familyOf
@@ -71,7 +71,7 @@ internal fun applyPaletteToProgrammer(
     template: PaletteSnapshot,
     targets: List<CueTargetDto>,
     fadeMs: Long,
-    families: Set<PropertyMaskGroup>? = null,
+    families: Set<AttributeFamily>? = null,
     write: Boolean = true,
 ): ApplyPaletteOutcome {
     val family = template.familyOf()
@@ -118,7 +118,7 @@ private fun applyValuePaletteToProgrammer(
     // Record can collapse back to a group row — the same hint Include stamps.
     val groupHints = groupHintsForTargets(state.show.fixtures, targets.map { it.target })
 
-    val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
+    val writes = ArrayList<ProgrammerWriter.AttributeWrite>()
     val skips = ArrayList<PaletteSkipDto>()
     val fittedMediaFor: (String) -> uk.me.cormack.lighting7.fixture.media.FittedMedia? = state.show.fixtures::fittedMediaFor
 
@@ -149,12 +149,12 @@ private fun applyValuePaletteToProgrammer(
                 state.show.fixtures.untypedGroupableFixture(fixtureKey)
             }.getOrNull()
             if (fixture == null) {
-                skips += PaletteSkipDto(fixtureKey, row.propertyName, "fixture not patched")
+                skips += PaletteSkipDto(fixtureKey, row.attribute, "fixture not patched")
                 continue
             }
-            for (head in PaletteFanOut.headsFor(fixture, row.propertyName, fittedMediaFor)) {
+            for (head in PaletteFanOut.headsFor(fixture, row.attribute, fittedMediaFor)) {
                 if (landed.add(rowIndex to head.targetKey)) {
-                    landings += Landing(row.propertyName, intent, head, selectedKey = fixtureKey)
+                    landings += Landing(row.attribute, intent, head, selectedKey = fixtureKey)
                 }
             }
         }
@@ -168,7 +168,7 @@ private fun applyValuePaletteToProgrammer(
     // the rows *land on*, so each of a fanned parent's cells answers for itself.
     val unmetColour = HashMap<String, String>()
     for ((headKey, forHead) in landings.groupBy { it.head.targetKey }) {
-        val applicable = forHead.map { it.propertyName to it.intent }
+        val applicable = forHead.map { it.attribute to it.intent }
         when (val requirement = PaletteResolver.unmetColourRequirement(
             forHead.first().head, applicable, PaletteFanOut.mediaOf(forHead.first().head, fittedMediaFor),
         )) {
@@ -177,13 +177,13 @@ private fun applyValuePaletteToProgrammer(
             // selected this head deliberately.
             is PaletteResolver.ColourRequirement.NotACandidate -> {
                 unmetColour[headKey] = requirement.reason
-                skips += PaletteSkipDto(headKey, PaletteProperty.COLOUR.propertyName, requirement.reason)
+                skips += PaletteSkipDto(headKey, PaletteAttribute.COLOUR.attribute, requirement.reason)
             }
             is PaletteResolver.ColourRequirement.Unmet -> {
                 unmetColour[headKey] = requirement.reason
                 // The row that actually failed, not `rgbColour`: a UV-only template has no colour
                 // row, so naming one would report a skip against a property the template lacks.
-                skips += PaletteSkipDto(headKey, requirement.propertyName, requirement.reason)
+                skips += PaletteSkipDto(headKey, requirement.attribute, requirement.reason)
             }
             PaletteResolver.ColourRequirement.Met -> Unit
         }
@@ -193,28 +193,28 @@ private fun applyValuePaletteToProgrammer(
         val headKey = landing.head.targetKey
         // Already reported once for this head, above. Silent here so one refusal is one skip.
         if (headKey in unmetColour &&
-            PaletteProperty.ofOrNull(landing.propertyName)?.family == PropertyMaskGroup.COLOUR
+            PaletteAttribute.ofOrNull(landing.attribute)?.family == AttributeFamily.COLOUR
         ) {
             continue
         }
         val resolution = PaletteResolver.resolve(
-            landing.head, landing.propertyName, landing.intent, PaletteFanOut.mediaOf(landing.head, fittedMediaFor),
+            landing.head, landing.attribute, landing.intent, PaletteFanOut.mediaOf(landing.head, fittedMediaFor),
         )
         val value = resolution.value
         if (value == null) {
             skips += PaletteSkipDto(
                 headKey,
-                landing.propertyName,
+                landing.attribute,
                 (resolution.note as? PaletteResolver.Note.Unsupported)?.reason ?: "unsupported",
             )
             continue
         }
-        writes += ProgrammerWriter.PropertyWrite(
+        writes += ProgrammerWriter.AttributeWrite(
             landing.head,
             // The resolved name, not the row's: on a colour wheel the value lands on
             // `colourWheel` rather than `rgbColour`, and writing the row's name would address
             // nothing.
-            resolution.propertyName,
+            resolution.attribute,
             value,
             // A fanned cell takes the group its parent arrived through, as a spread's cell does.
             sourceGroup = groupHints[headKey] ?: groupHints[landing.selectedKey],
@@ -224,10 +224,10 @@ private fun applyValuePaletteToProgrammer(
     if (write && writes.isNotEmpty()) {
         // One batched write, as Include does: a template across a whole rig is hundreds of
         // properties and per-property publishing would visibly stutter it.
-        state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+        state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
     }
     val values = writes.map {
-        FanWriteDto(CueTargetDto(TargetRef.Fixture.TYPE, it.fixture.targetKey), it.propertyName, it.value.serialize())
+        FanWriteDto(CueTargetDto(TargetRef.Fixture.TYPE, it.fixture.targetKey), it.attribute, it.value.serialize())
     }
     return ApplyPaletteResponse(writes.size, skips, values = values)
 }
@@ -238,7 +238,7 @@ private fun applyValuePaletteToProgrammer(
  * selected, which a cell takes its group hint from.
  */
 private class Landing(
-    val propertyName: String,
+    val attribute: String,
     val intent: uk.me.cormack.lighting7.fx.PaletteIntent,
     val head: GroupableFixture,
     val selectedKey: String,
@@ -287,7 +287,7 @@ private fun applyFxPaletteToProgrammer(
     val spec = effect.toFxSpec()
     // Only a label for the skip rows, for the case where no target resolved and there is no
     // resolved property name to report.
-    val specProperty = spec.propertyName ?: spec.family
+    val specAttribute = spec.attribute ?: spec.family
 
     val instances = ArrayList<FxInstance>()
     val skips = ArrayList<PaletteSkipDto>()
@@ -295,7 +295,7 @@ private fun applyFxPaletteToProgrammer(
     for (target in targets) {
         val members = membersOfTarget(state, target.target)
         if (members == null) {
-            skips += PaletteSkipDto(target.key, specProperty, "not patched")
+            skips += PaletteSkipDto(target.key, specAttribute, "not patched")
             continue
         }
         // `untypedGroup` throws for a group that has gone; the fixture arm degrades quietly. Either
@@ -309,11 +309,11 @@ private fun applyFxPaletteToProgrammer(
             null
         }
         if (fxTarget == null) {
-            skips += PaletteSkipDto(target.key, specProperty, "unsupported")
+            skips += PaletteSkipDto(target.key, specAttribute, "unsupported")
             continue
         }
-        if (!fixturesSupportProperty(members, fxTarget.propertyName)) {
-            skips += PaletteSkipDto(target.key, fxTarget.propertyName, "unsupported")
+        if (!fixturesSupportAttribute(members, fxTarget.attribute)) {
+            skips += PaletteSkipDto(target.key, fxTarget.attribute, "unsupported")
             continue
         }
         val instance = try {
@@ -325,12 +325,12 @@ private fun applyFxPaletteToProgrammer(
                 "template '{}': effect '{}' could not be created — {}",
                 paletteName, effect.fxType, e.message,
             )
-            skips += PaletteSkipDto(target.key, fxTarget.propertyName, "effect could not be created")
+            skips += PaletteSkipDto(target.key, fxTarget.attribute, "effect could not be created")
             continue
         }
         if (!fxTarget.accepts(instance.effect.outputType)) {
             // The other half of "the capability check is ours to do": `FxTargetFactory` never
-            // fails, so a spec whose `propertyName` disagrees with its effect's output type
+            // fails, so a spec whose `attribute` disagrees with its effect's output type
             // resolves to a target that discards every frame. `FxInstance`'s init warns, but the
             // apply would still report success — the FX add routes reject this up front with
             // `requireOutputTypeMatch`, and this arm reports it per target because that is the
@@ -338,9 +338,9 @@ private fun applyFxPaletteToProgrammer(
             logger.warn(
                 "template '{}': effect '{}' outputs {} but '{}' applies {} — skipping",
                 paletteName, effect.fxType, instance.effect.outputType,
-                fxTarget.propertyName, fxTarget.acceptedOutputType,
+                fxTarget.attribute, fxTarget.acceptedOutputType,
             )
-            skips += PaletteSkipDto(target.key, fxTarget.propertyName, "unsupported")
+            skips += PaletteSkipDto(target.key, fxTarget.attribute, "unsupported")
             continue
         }
         markProgrammerOwned(instance, true)

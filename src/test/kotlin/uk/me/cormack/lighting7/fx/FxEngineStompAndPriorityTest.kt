@@ -19,12 +19,12 @@ class FxEngineStompAndPriorityTest {
     private fun newEngine(): FxEngine = FxEngine(Fixtures(), SpeedMasterBank())
 
     private fun makeFx(
-        propertyName: String = "dimmer",
+        attribute: String = "dimmer",
         targetKey: String = "fx-1",
         cueId: Int? = null,
         priority: Int = 0,
     ): FxInstance {
-        val target = SliderTarget(FxTargetRef.fixture(targetKey), propertyName)
+        val target = SliderTarget(FxTargetRef.fixture(targetKey), attribute)
         return FxInstance(
             effect = SineSlider(),
             target = target,
@@ -45,7 +45,7 @@ class FxEngineStompAndPriorityTest {
         // Cue 30 stomps — overlap is (fx-1, dimmer).
         val removed = engine.stompForCue(
             stompingCueId = 30,
-            overlap = setOf(FxEngine.PropertyKey("fx-1", "dimmer")),
+            overlap = setOf(FxEngine.TargetAttribute("fx-1", "dimmer")),
         )
 
         assertEquals(2, removed, "both cue-owned effects on fx-1/dimmer stomped")
@@ -63,7 +63,7 @@ class FxEngineStompAndPriorityTest {
 
         engine.stompForCue(
             stompingCueId = 30,
-            overlap = setOf(FxEngine.PropertyKey("fx-1", "dimmer")),
+            overlap = setOf(FxEngine.TargetAttribute("fx-1", "dimmer")),
         )
 
         val remaining = engine.getActiveFx().map { it.id }.toSet()
@@ -74,12 +74,12 @@ class FxEngineStompAndPriorityTest {
     @Test
     fun `stompForCue only removes effects inside the overlap set`() {
         val engine = newEngine()
-        val onOverlap = engine.addFx(makeFx(cueId = 10, targetKey = "fx-1", propertyName = "dimmer"))
-        val offOverlap = engine.addFx(makeFx(cueId = 10, targetKey = "fx-2", propertyName = "dimmer"))
+        val onOverlap = engine.addFx(makeFx(cueId = 10, targetKey = "fx-1", attribute = "dimmer"))
+        val offOverlap = engine.addFx(makeFx(cueId = 10, targetKey = "fx-2", attribute = "dimmer"))
 
         engine.stompForCue(
             stompingCueId = 30,
-            overlap = setOf(FxEngine.PropertyKey("fx-1", "dimmer")),
+            overlap = setOf(FxEngine.TargetAttribute("fx-1", "dimmer")),
         )
 
         val remaining = engine.getActiveFx().map { it.id }.toSet()

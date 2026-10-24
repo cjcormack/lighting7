@@ -20,8 +20,8 @@ export type Timing = 'CYCLE' | 'HEAD'
  * declarations is frontend-sweep work; the fields below are the source of truth.
  *
  * Backend sweep item F8 changed three things here: `phase` is now `currentPhase`, `targetKey` is
- * the bare fixture/group key with `propertyName` alongside it (it used to be the composite
- * `"key.property"`), and `fxType` is the registry id rather than the effect's display name.
+ * the bare fixture/group key with `attribute` alongside it (it used to be the composite
+ * `"key.attribute"`), and `fxType` is the registry id rather than the effect's display name.
  */
 export interface ActiveFxState {
   id: number
@@ -29,7 +29,7 @@ export interface ActiveFxState {
   fxType: string
   /** Fixture or group key, *without* the property suffix. */
   targetKey: string
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: string
   isRunning: boolean

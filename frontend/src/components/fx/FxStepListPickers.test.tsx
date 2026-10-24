@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import type { PaletteSummary } from '@/api/palettesApi'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 
 const wire = vi.hoisted(() => ({ templates: [] as PaletteSummary[] }))
 vi.mock('@/store/palettes', () => ({ usePaletteListQuery: () => ({ data: wire.templates, isLoading: false }) }))
@@ -10,7 +10,7 @@ vi.mock('react-router', () => ({ useParams: () => ({ projectId: '1' }) }))
 
 import { FxPaletteListPicker, FxSlotListPicker } from './FxStepListPickers'
 
-const palette = (name: string, family: PaletteSummary['family'], propertyName: string, value: string) =>
+const palette = (name: string, family: PaletteSummary['family'], attribute: string, value: string) =>
   ({
     id: 1,
     uuid: `uuid-${name}`,
@@ -21,7 +21,7 @@ const palette = (name: string, family: PaletteSummary['family'], propertyName: s
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute, value }],
     fx: null,
   }) as unknown as PaletteSummary
 
@@ -35,7 +35,7 @@ const GOBO = {
     { name: 'GOBO_3', level: 30, displayName: 'Gobo 3' },
     { name: 'GOBO_5', level: 50, displayName: 'Gobo 5' },
   ],
-} as unknown as SettingPropertyDescriptor
+} as unknown as SettingAttributeDescriptor
 
 afterEach(cleanup)
 
@@ -48,7 +48,7 @@ describe('FxPaletteListPicker', () => {
     ]
     const onChange = vi.fn()
     render(
-      <FxPaletteListPicker label="Palettes" value="pal:uuid-Centre,pal:uuid-Downstage" propertyName="position" readOnly={false} onChange={onChange} />,
+      <FxPaletteListPicker label="Palettes" value="pal:uuid-Centre,pal:uuid-Downstage" attribute="position" readOnly={false} onChange={onChange} />,
     )
     const steps = within(screen.getByRole('list', { name: 'Palettes' })).getAllByRole('listitem')
     expect(steps.map((s) => s.getAttribute('data-step'))).toEqual(['Centre', 'Downstage'])

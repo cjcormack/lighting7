@@ -135,8 +135,8 @@ export function FxLibrarySheet({ rows, isCurrentProject, projectName, onOpen, on
         value: () => undefined,
         display: (row) =>
           row.entry && (
-            <span className="mx-1.5 flex min-w-0 gap-1 overflow-hidden" title={row.entry.compatibleProperties.join(', ')}>
-              {row.entry.compatibleProperties.map((prop) => (
+            <span className="mx-1.5 flex min-w-0 gap-1 overflow-hidden" title={row.entry.compatibleAttributes.join(', ')}>
+              {row.entry.compatibleAttributes.map((prop) => (
                 <span
                   key={prop}
                   className="inline-flex h-[18px] shrink-0 items-center rounded-full bg-muted px-1.5 font-mono text-[10px]"

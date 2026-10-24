@@ -72,33 +72,33 @@ const colour = (extra: Record<string, unknown> = {}) => ({
   blueChannel: { universe: 1, channelNo: 3 },
   ...extra,
 })
-const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds'], properties: [colour()] } as unknown as Fixture
+const par1 = { key: 'par-1', name: 'PAR 1', typeKey: 'par', groups: ['Front wash', 'Reds'], attributes: [colour()] } as unknown as Fixture
 /** RGB only, like par-1: with it, 'Reds' is a group whose members agree on emitters. */
-const par3 = { key: 'par-3', name: 'PAR 3', typeKey: 'par', groups: ['Reds'], properties: [colour()] } as unknown as Fixture
+const par3 = { key: 'par-3', name: 'PAR 3', typeKey: 'par', groups: ['Reds'], attributes: [colour()] } as unknown as Fixture
 /** A dimmer-only head: nothing to write, nothing to read. */
 const dim = {
   key: 'dim',
   name: 'Dimmer',
   typeKey: 'dimmer',
   groups: ['Front wash'],
-  properties: [{ type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }],
+  attributes: [{ type: 'slider', name: 'dimmer', displayName: 'Dimmer', category: 'dimmer', channel: { universe: 1, channelNo: 20 }, min: 0, max: 255 }],
 } as unknown as Fixture
 const par2 = {
   key: 'par-2',
   name: 'PAR 2',
   typeKey: 'par',
   groups: ['Front wash'],
-  properties: [colour({ whiteChannel: { universe: 1, channelNo: 4 } })],
+  attributes: [colour({ whiteChannel: { universe: 1, channelNo: 4 } })],
 } as unknown as Fixture
 const bar = {
   key: 'bar',
   name: 'Bar L',
   typeKey: 'bar',
   groups: [],
-  properties: [],
+  attributes: [],
   elements: [
-    { index: 0, key: 'bar.c1', displayName: 'Cell 1', properties: [colour({ amberChannel: { universe: 1, channelNo: 9 } })] },
-    { index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [colour({ amberChannel: { universe: 1, channelNo: 10 } })] },
+    { index: 0, key: 'bar.c1', displayName: 'Cell 1', attributes: [colour({ amberChannel: { universe: 1, channelNo: 9 } })] },
+    { index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [colour({ amberChannel: { universe: 1, channelNo: 10 } })] },
   ],
 } as unknown as Fixture
 const fixtures = [par1, par2, bar, par3, dim]
@@ -231,7 +231,7 @@ describe('writes', () => {
   it('plans a whole fixture as one write, sending only the emitters it has, and folds an undeliverable white into RGB — per member for a mixed group', () => {
     const white = { r: 0, g: 0, b: 0, w: 255, a: 0, uv: 0 }
     expect(planColourWrites([whole], white, fixtures)).toEqual([
-      { targetType: 'fixture', targetKey: 'par-2', propertyName: 'rgbColour', colour: { r: 0, g: 0, b: 0, w: 255, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'par-2', attribute: 'rgbColour', colour: { r: 0, g: 0, b: 0, w: 255, a: undefined, uv: undefined }, sourceGroup: undefined },
     ])
     const par1Only: BuskingTarget = { type: 'fixture', key: 'par-1', fixture: par1 }
     expect(planColourWrites([par1Only], white, fixtures)[0].colour).toEqual({ r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined })
@@ -247,7 +247,7 @@ describe('writes', () => {
     ])
     // Agreeing members: one group write, folded for what they share.
     expect(planColourWrites([reds], white, fixtures)).toEqual([
-      { targetType: 'group', targetKey: 'Reds', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined } },
+      { targetType: 'group', targetKey: 'Reds', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined } },
     ])
   })
 
@@ -262,8 +262,8 @@ describe('writes', () => {
     const blinder = makeFixture('blinder', [sliderProp('dimmer', 'dimmer', chan(199))], { elements: cells })
     const whole: BuskingTarget = { type: 'fixture', key: 'blinder', fixture: blinder }
     expect(planColourWrites([whole], { r: 0, g: 0, b: 0, w: 255, a: 0, uv: 0 }, [blinder])).toEqual([
-      { targetType: 'fixture', targetKey: 'blinder.cell-1', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
-      { targetType: 'fixture', targetKey: 'blinder.cell-2', propertyName: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'blinder.cell-1', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
+      { targetType: 'fixture', targetKey: 'blinder.cell-2', attribute: 'rgbColour', colour: { r: 255, g: 255, b: 255, w: undefined, a: undefined, uv: undefined }, sourceGroup: undefined },
     ])
   })
 

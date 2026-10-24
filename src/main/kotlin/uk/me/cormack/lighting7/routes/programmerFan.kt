@@ -9,10 +9,10 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
-import uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue
+import uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue
 import uk.me.cormack.lighting7.fx.POSITION_CENTRE_MAX
 import uk.me.cormack.lighting7.fx.POSITION_CENTRE_MIN
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
@@ -20,7 +20,7 @@ import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerStore
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.state.BuskRigOrder
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
 import uk.me.cormack.lighting7.fx.FanCurve
@@ -28,12 +28,12 @@ import uk.me.cormack.lighting7.fx.FanOver
 import uk.me.cormack.lighting7.fx.FanPlan
 import uk.me.cormack.lighting7.fx.PaletteFanOut
 import uk.me.cormack.lighting7.fx.PaletteIntent
-import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.parsePaletteColourRefUuid
 import uk.me.cormack.lighting7.fx.parsePaletteIntent
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -60,7 +60,7 @@ internal const val CODE_FAN_NEEDS_SELECTION = "FAN_NEEDS_SELECTION"
  * colour ([PaletteResolver.mixLab]), centre-relative steps for a position, percent for a level, a DMX byte for
  * an emitter — and each head's literal then goes through the same [PaletteResolver] a template's
  * *Apply as values* uses, so the far end of a spread is exactly what a template of that hex would have given
- * that head. The write is one batched [ProgrammerWriter.writeProperties] with owner `WEB`: one
+ * that head. The write is one batched [ProgrammerWriter.writeAttributes] with owner `WEB`: one
  * `ProgrammerStore.put` per key, so `programmer.entryChanged` carries it, Record captures it and
  * Blind previews it, and Clear releases it like any busked value (D10: a spread is a result, not a
  * template).
@@ -80,7 +80,7 @@ internal const val CODE_FAN_NEEDS_SELECTION = "FAN_NEEDS_SELECTION"
  * the desk *answers without writing*. That is the focused-Look-layer arm: the client lands each
  * answered literal in the layer's draft, which coalesces and PUTs as every layer-scope edit does;
  * the desk does not write into the Look itself, because `PUT /looks/{id}` republishes every cue
- * layering it. And `written[].value` is each head's **literal** — [CueAssignmentResolver.PropertyValue.serialize],
+ * layering it. And `written[].value` is each head's **literal** — [CueAssignmentResolver.AttributeValue.serialize],
  * the grammar Look rows and programmer entries already use (`"0".."255"`, `"#rrggbb;w128"`,
  * `"pan,tilt"`) — rather than the interpolated intent it carried before, so that arm has something
  * a Look row can hold. Nothing else read the field. A client on an older desk can tell the two
@@ -112,7 +112,7 @@ internal fun Route.routeApiRestProgrammerFan(state: State) {
         withCurrentProject(state, resource.projectId) { project ->
             val request = call.receive<FanRequest>()
             val families = try {
-                parseMaskGroups(request.families)
+                parseFamilies(request.families)
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
@@ -134,8 +134,8 @@ internal data class FanRequest(
     val targets: List<CueTargetDto> = emptyList(),
     /** The selection's attribute mask; absent is every attribute. */
     val families: List<String>? = null,
-    /** A `PaletteProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
-    val property: String,
+    /** A `PaletteAttribute` name — `rgbColour`, `dimmer`, `position`, `white` … */
+    val attribute: String,
     /** Serialised `PaletteIntent`s, or `pal:{uuid}` for a colour. `BETWEEN` only; `ABOUT` has none. */
     val from: String = "",
     val to: String = "",
@@ -204,11 +204,11 @@ internal data class FanResponse(
 
 /**
  * One head's literal: the head, the property it actually landed on, and the **value it got** —
- * [CueAssignmentResolver.PropertyValue.serialize]'s form, never the intent. The focused-Look-layer
+ * [CueAssignmentResolver.AttributeValue.serialize]'s form, never the intent. The focused-Look-layer
  * arm (`write = false`) is its reader, and a Look row holds a literal.
  */
 @Serializable
-internal data class FanWriteDto(val target: CueTargetDto, val propertyName: String, val value: String)
+internal data class FanWriteDto(val target: CueTargetDto, val attribute: String, val value: String)
 
 @Serializable
 internal data class FanSkipDto(val target: CueTargetDto, val reason: String)
@@ -227,7 +227,7 @@ private sealed interface FanShape {
         override val probe get() = from
     }
 
-    data class About(val pan: Int?, val tilt: Int?, val given: Map<String, PropertyValue.Position>) : FanShape {
+    data class About(val pan: Int?, val tilt: Int?, val given: Map<String, AttributeValue.Position>) : FanShape {
         override val probe get() = PaletteIntent.Position(0.0, 0.0)
     }
 
@@ -250,13 +250,13 @@ private sealed interface FanShape {
 internal fun fanIntoProgrammer(
     state: State,
     request: FanRequest,
-    families: Set<uk.me.cormack.lighting7.fx.PropertyMaskGroup>?,
+    families: Set<uk.me.cormack.lighting7.fx.AttributeFamily>?,
     owner: ProgrammerOwner = ProgrammerOwner.WEB,
     rigOrder: () -> BuskRigOrder? = state::buskRigOrder,
     placementsOf: (Collection<String>) -> Map<String, AimPlacement> = { aimPlacements(state, state.show.project, it) },
 ): FanOutcome {
-    val property = PaletteProperty.ofOrNull(request.property)
-        ?: return FanOutcome.Invalid("'${request.property}' is not a property a spread can carry")
+    val attribute = PaletteAttribute.ofOrNull(request.attribute)
+        ?: return FanOutcome.Invalid("'${request.attribute}' is not a property a spread can carry")
     val curve = FanCurve.byName(request.curve)
         ?: return FanOutcome.Invalid("Curve '${request.curve}' is not one of ${FanCurve.entries.map { it.name }}")
     val over = FanOver.byName(request.over)
@@ -267,10 +267,10 @@ internal fun fanIntoProgrammer(
     if (request.runs < 1) return FanOutcome.Invalid("runs must be at least 1")
     val shape = when (request.mode.trim().uppercase()) {
         "BETWEEN" -> {
-            val from = fanEndpoint(state, request.from, property)
-                ?: return FanOutcome.Invalid("'from' (${request.from}) is not a ${property.label.lowercase()} intent")
-            val to = fanEndpoint(state, request.to, property)
-                ?: return FanOutcome.Invalid("'to' (${request.to}) is not a ${property.label.lowercase()} intent")
+            val from = fanEndpoint(state, request.from, attribute)
+                ?: return FanOutcome.Invalid("'from' (${request.from}) is not a ${attribute.label.lowercase()} intent")
+            val to = fanEndpoint(state, request.to, attribute)
+                ?: return FanOutcome.Invalid("'to' (${request.to}) is not a ${attribute.label.lowercase()} intent")
             // A position spread interpolates in one unit: centre-relative steps and travel degrees mean
             // different things on a head, so a lerp between the two would be a number in neither.
             if (from is PaletteIntent.Position && to is PaletteIntent.Position && from.unit != to.unit) {
@@ -278,14 +278,14 @@ internal fun fanIntoProgrammer(
             }
             FanShape.Between(from, to)
         }
-        "ABOUT" -> fanShape(request, property, over).getOrElse { return FanOutcome.Invalid(it.message ?: "Bad fan") }
+        "ABOUT" -> fanShape(request, attribute, over).getOrElse { return FanOutcome.Invalid(it.message ?: "Bad fan") }
         else -> return FanOutcome.Invalid("Mode '${request.mode}' is not one of [BETWEEN, ABOUT]")
     }
     if (request.targets.isEmpty()) {
         return FanOutcome.Invalid("A fan needs a selection", CODE_FAN_NEEDS_SELECTION)
     }
-    if (families != null && !maskAllows(families, property.family)) {
-        return FanOutcome.Done(FanResponse(skippedFamilies = listOf(property.family.name)))
+    if (families != null && !maskAllows(families, attribute.family)) {
+        return FanOutcome.Done(FanResponse(skippedFamilies = listOf(attribute.family.name)))
     }
 
     val fixtures = state.show.fixtures
@@ -344,10 +344,10 @@ internal fun fanIntoProgrammer(
     // the property, where the parent alone resolved nothing and was skipped. Over CELLS each cell is
     // already its own step, and stands for itself.
     val ordered = rigOrdered.mapNotNull { step ->
-        val landing = PaletteFanOut.headsFor(step, property.propertyName, fittedMediaFor)
-            .filter { PaletteResolver.resolve(it, property.propertyName, shape.probe, media(it)).isSupported }
+        val landing = PaletteFanOut.headsFor(step, attribute.attribute, fittedMediaFor)
+            .filter { PaletteResolver.resolve(it, attribute.attribute, shape.probe, media(it)).isSupported }
         if (landing.isEmpty()) {
-            val probe = PaletteResolver.resolve(step, property.propertyName, shape.probe, media(step))
+            val probe = PaletteResolver.resolve(step, attribute.attribute, shape.probe, media(step))
             skipped += FanSkipDto(
                 CueTargetDto(TargetRef.Fixture.TYPE, step.targetKey),
                 (probe.note as? PaletteResolver.Note.Unsupported)?.reason ?: "unsupported",
@@ -376,7 +376,7 @@ internal fun fanIntoProgrammer(
     val weights = FanPlan.fanWeights(stepped.size, order, curve, request.runs)
     val hints = groupHintsForTargets(fixtures, request.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
 
-    val writes = ArrayList<ProgrammerWriter.PropertyWrite>()
+    val writes = ArrayList<ProgrammerWriter.AttributeWrite>()
     val written = ArrayList<FanWriteDto>()
     val bases = ArrayList<FanBaseDto>()
     val clamped = ArrayList<CueTargetDto>()
@@ -396,7 +396,7 @@ internal fun fanIntoProgrammer(
                 when (jog) {
                     is HeadJog.Skip -> skipped += FanSkipDto(target, jog.reason)
                     is HeadJog.Moved -> {
-                        writes += jog.propertyWrites(head, sourceGroup)
+                        writes += jog.attributeWrites(head, sourceGroup)
                         written += FanWriteDto(target, "position", jog.position.serialize())
                         near += AimNearDto(target, jog.panDeg, jog.tiltDeg)
                     }
@@ -421,31 +421,31 @@ internal fun fanIntoProgrammer(
                 }
                 is FanShape.StageFan -> error("a stage fan is solved above")
             }
-            val resolution = PaletteResolver.resolve(head, property.propertyName, intent, media(head))
+            val resolution = PaletteResolver.resolve(head, attribute.attribute, intent, media(head))
             val value = resolution.value
             if (value == null) {
                 skipped += FanSkipDto(target, (resolution.note as? PaletteResolver.Note.Unsupported)?.reason ?: "unsupported")
                 continue
             }
             if (shape is FanShape.About && resolution.note is PaletteResolver.Note.Clamped) clamped += target
-            // A colour-wheel head answers a wheel *slot* (`PropertyValue.Setting`) under its own
+            // A colour-wheel head answers a wheel *slot* (`AttributeValue.Setting`) under its own
             // property (`colourWheel`), and its literal is the slot's level: the cook reads a level on
             // a slot-backed COLOUR row as a slot (`Fixture.Property.settingBacked`), so both arms land
             // it — the write arm as a typed entry, the answer-only arm as a Look row.
-            writes += ProgrammerWriter.PropertyWrite(head, resolution.propertyName, value, sourceGroup)
-            written += FanWriteDto(target, resolution.propertyName, value.serialize())
+            writes += ProgrammerWriter.AttributeWrite(head, resolution.attribute, value, sourceGroup)
+            written += FanWriteDto(target, resolution.attribute, value.serialize())
         }
     }
     // `write = false` answers what *would* land and lands nothing — the Look-layer arm.
     if (request.write && writes.isNotEmpty()) {
-        state.show.fxEngine.programmer.writeProperties(owner, writes, fadeMs = request.fadeMs ?: 0)
+        state.show.fxEngine.programmer.writeAttributes(owner, writes, fadeMs = request.fadeMs ?: 0)
     }
     return FanOutcome.Done(FanResponse(written, skipped, base = bases, clamped = clamped, near = near))
 }
 
 /** An `ABOUT` request's amounts and given bases, or the reason it is not one. */
-private fun fanShape(request: FanRequest, property: PaletteProperty, over: FanOver): Result<FanShape> = runCatching {
-    require(property == PaletteProperty.POSITION) { "A fan is a position spread; '${request.property}' has no position of its own to fan from" }
+private fun fanShape(request: FanRequest, attribute: PaletteAttribute, over: FanOver): Result<FanShape> = runCatching {
+    require(attribute == PaletteAttribute.POSITION) { "A fan is a position spread; '${request.attribute}' has no position of its own to fan from" }
     val fan = request.fan
     if (fan != null && (fan.x != null || fan.y != null)) return@runCatching stageFanShape(request, fan, over).getOrThrow()
     require(fan != null && (fan.pan != null || fan.tilt != null)) { "A fan needs a pan or a tilt amount, or an x or a y" }
@@ -454,9 +454,9 @@ private fun fanShape(request: FanRequest, property: PaletteProperty, over: FanOv
             "The $axis amount must be $POSITION_CENTRE_MIN..$POSITION_CENTRE_MAX centre steps"
         }
     }
-    val given = LinkedHashMap<String, PropertyValue.Position>()
+    val given = LinkedHashMap<String, AttributeValue.Position>()
     for (entry in request.base.orEmpty()) {
-        val position = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", entry.value) as? PropertyValue.Position
+        val position = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", entry.value) as? AttributeValue.Position
         require(position != null) { "base for '${entry.target.key}' (${entry.value}) is not a pan,tilt position" }
         given[entry.target.key] = position
     }
@@ -483,16 +483,16 @@ private fun stageFanShape(request: FanRequest, fan: FanAmountDto, over: FanOver)
 private fun fanBase(
     state: State,
     head: GroupableFixture,
-    given: Map<String, PropertyValue.Position>,
+    given: Map<String, AttributeValue.Position>,
     readLocal: Boolean,
-): PropertyValue.Position? {
+): AttributeValue.Position? {
     given[head.targetKey]?.let { return it }
     val positioned = head as? WithPosition ?: return null
     val panSlider = positioned.pan as? DmxSlider ?: return null
     val tiltSlider = positioned.tilt as? DmxSlider ?: return null
     val local = if (readLocal) localPosition(state.show.programmerStore, head) else null
     fun read(slider: DmxSlider): UByte? = state.show.fixtures.controllerOrNull(slider.universe)?.getValue(slider.channelNo)
-    return PropertyValue.Position(
+    return AttributeValue.Position(
         local?.pan ?: read(panSlider) ?: return null,
         local?.tilt ?: read(tiltSlider) ?: return null,
     )
@@ -510,24 +510,24 @@ internal data class LocalPosition(val pan: UByte?, val tilt: UByte?)
 internal fun localPosition(store: ProgrammerStore, head: GroupableFixture): LocalPosition? {
     val positioned = head as? WithPosition ?: return null
     val entry = store.get(head.targetKey, "position")
-    val position = entry?.value?.resolved as? PropertyValue.Position
-    val catalogue = (head as? Fixture)?.fixtureProperties
-    fun axis(fromPosition: UByte?, slider: Slider, category: PropertyCategory, fallbackName: String): UByte? {
+    val position = entry?.value?.resolved as? AttributeValue.Position
+    val catalogue = (head as? Fixture)?.fixtureAttributes
+    fun axis(fromPosition: UByte?, slider: Slider, category: AttributeCategory, fallbackName: String): UByte? {
         val candidates = ArrayList<Pair<Long, UByte>>(3)
         if (fromPosition != null) candidates += entry!!.seq to fromPosition
         val name = catalogue?.firstOrNull { it.category == category }?.name ?: fallbackName
         store.get(head.targetKey, name)?.let { slot ->
-            (slot.value.resolved as? PropertyValue.Slider)?.let { candidates += slot.seq to it.value }
+            (slot.value.resolved as? AttributeValue.Slider)?.let { candidates += slot.seq to it.value }
         }
         (slider as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
-                (slot.value.resolved as? PropertyValue.Slider)?.let { candidates += slot.seq to it.value }
+                (slot.value.resolved as? AttributeValue.Slider)?.let { candidates += slot.seq to it.value }
             }
         }
         return candidates.maxByOrNull { it.first }?.second
     }
-    val pan = axis(position?.pan, positioned.pan, PropertyCategory.PAN, "pan")
-    val tilt = axis(position?.tilt, positioned.tilt, PropertyCategory.TILT, "tilt")
+    val pan = axis(position?.pan, positioned.pan, AttributeCategory.PAN, "pan")
+    val tilt = axis(position?.tilt, positioned.tilt, AttributeCategory.TILT, "tilt")
     return if (pan == null && tilt == null) null else LocalPosition(pan, tilt)
 }
 
@@ -536,29 +536,29 @@ internal fun localPosition(store: ProgrammerStore, head: GroupableFixture): Loca
  * head's own slider range (the resolver's own inverse), an axis not fanned left on its base exactly.
  * Null for a head whose position is not DMX-backed.
  */
-private fun fanIntent(head: GroupableFixture, base: PropertyValue.Position, fan: FanShape.About, weight: Double): PaletteIntent.Position? {
+private fun fanIntent(head: GroupableFixture, base: AttributeValue.Position, fan: FanShape.About, weight: Double): PaletteIntent.Position? {
     val centre = PaletteResolver.centreIntentOf(head, base) ?: return null
     return PaletteIntent.Position(centre.pan + (fan.pan ?: 0) * weight, centre.tilt + (fan.tilt ?: 0) * weight)
 }
 
 /**
- * One endpoint: a serialised intent of [property]'s shape, or — for a colour — a `pal:{uuid}`
+ * One endpoint: a serialised intent of [attribute]'s shape, or — for a colour — a `pal:{uuid}`
  * resolved to the template's generic colour row (its hex and policy), the way an FX colour
  * reference resolves one. Null when it is neither.
  */
-private fun fanEndpoint(state: State, raw: String, property: PaletteProperty): PaletteIntent? {
+private fun fanEndpoint(state: State, raw: String, attribute: PaletteAttribute): PaletteIntent? {
     val paletteUuid = parsePaletteColourRefUuid(raw)
     val intent = if (paletteUuid != null) {
-        if (property != PaletteProperty.COLOUR) return null
+        if (attribute != PaletteAttribute.COLOUR) return null
         val snapshot = state.show.paletteRegistry.snapshot(paletteUuid) ?: return null
-        val rows = genericColourRows(snapshot.rows, { it.propertyName }, { it.isDeferred }) ?: return null
+        val rows = genericColourRows(snapshot.rows, { it.attribute }, { it.isDeferred }) ?: return null
         rows.firstNotNullOfOrNull { row ->
-            if (PaletteProperty.ofOrNull(row.propertyName) == PaletteProperty.COLOUR) parsePaletteIntent(row.value) else null
+            if (PaletteAttribute.ofOrNull(row.attribute) == PaletteAttribute.COLOUR) parsePaletteIntent(row.value) else null
         } ?: return null
     } else {
         parsePaletteIntent(raw) ?: return null
     }
-    if (!property.accepts(intent)) return null
+    if (!attribute.accepts(intent)) return null
     if (intent is PaletteIntent.Colour && PaletteResolver.parseHexColour(intent.hex) == null) return null
     return intent
 }

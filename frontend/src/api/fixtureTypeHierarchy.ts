@@ -7,7 +7,7 @@
  * hint until session 3 deleted both. It used to
  * sit in the FX-preset DTO module, which made it look like preset machinery it never was.
  */
-import type { PropertyDescriptor } from '@/store/fixtures'
+import type { AttributeDescriptor } from '@/store/fixtures'
 
 export interface FixtureTypeMode {
   typeKey: string
@@ -15,7 +15,7 @@ export interface FixtureTypeMode {
   channelCount: number | null
   isRegistered: boolean
   capabilities: string[]
-  properties: PropertyDescriptor[]
+  attributes: AttributeDescriptor[]
 }
 
 export interface FixtureTypeModel {
@@ -40,7 +40,7 @@ interface FixtureTypeInput {
   channelCount?: number | null
   isRegistered?: boolean
   capabilities?: string[]
-  properties?: PropertyDescriptor[]
+  attributes?: AttributeDescriptor[]
   // Also accept the fixture list shape (mode as nested object)
   mode?: { modeName: string; channelCount: number } | null
 }
@@ -64,7 +64,7 @@ export function buildFixtureTypeHierarchy(
       channelCount: f.channelCount ?? f.mode?.channelCount ?? null,
       isRegistered,
       capabilities: f.capabilities ?? [],
-      properties: f.properties ?? [],
+      attributes: f.attributes ?? [],
     }
 
     if (!typeKeyToModel.has(f.typeKey)) {

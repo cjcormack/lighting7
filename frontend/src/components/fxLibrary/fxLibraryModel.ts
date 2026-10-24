@@ -151,7 +151,7 @@ export function forkRefusal(entry: FxLibraryEntry): string | null {
 
 /**
  * The `POST /fx/definitions` body that forks a built-in (D9): its script, family, output type,
- * mode, parameters, `compatibleProperties` and `timingSource`, named *<name> (Custom)*, under an id
+ * mode, parameters, `compatibleAttributes` and `timingSource`, named *<name> (Custom)*, under an id
  * [mintForkFxId] mints. The name carries the id's ordinal past the first fork, so two forks of
  * one effect can be told apart in the sheet.
  *
@@ -171,7 +171,7 @@ export function forkRequest(
     outputType: entry.outputType,
     fxMode: entry.fxMode,
     parameters: entry.parameters.map((p) => ({ ...p })),
-    compatibleProperties: [...entry.compatibleProperties],
+    compatibleAttributes: [...entry.compatibleAttributes],
     script: entry.script ?? '',
     timingSource: entry.timingSource ?? 'BEAT',
     defaultTiming: 'CYCLE',

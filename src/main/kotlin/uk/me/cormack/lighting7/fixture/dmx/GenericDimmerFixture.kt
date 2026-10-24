@@ -5,9 +5,9 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.BeamShape
 import uk.me.cormack.lighting7.fixture.CompactDisplayRole
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 
 /**
@@ -53,6 +53,6 @@ class GenericDimmerFixture(
     override fun withTransaction(transaction: ControllerTransaction): GenericDimmerFixture =
         GenericDimmerFixture(this, transaction)
 
-    @FixtureProperty(category = PropertyCategory.DIMMER)
+    @FixtureAttribute(category = AttributeCategory.DIMMER)
     override val dimmer = DmxSlider(transaction, universe, firstChannel)
 }

@@ -41,7 +41,7 @@ const rowNames = () => Array.from(document.querySelectorAll('.min-h-10 .truncate
 beforeEach(() => {
   groups = [{ name: 'Front wash', memberCount: 6, capabilities: [], symmetricMode: 'NONE', defaultOrder: 'NONE', compatibleLookIds: [] }]
   fixtures = [
-    { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })), groups: [] } as unknown as Fixture,
+    { key: 'bar-1', name: 'Bar L', typeKey: 'bar', elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] })), groups: [] } as unknown as Fixture,
     { key: 'smoke', name: 'Smoke', typeKey: 'smoke', groups: [] } as unknown as Fixture,
   ]
   patches = [

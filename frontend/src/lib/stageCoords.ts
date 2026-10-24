@@ -1,7 +1,7 @@
 import { Euler, MathUtils, Object3D, Quaternion, Vector3 } from "three"
 import type { FixturePatch } from "../api/patchApi"
 import type { RiggingDto } from "../api/riggingApi"
-import type { SliderPropertyDescriptor } from "../store/fixtures"
+import type { SliderAttributeDescriptor } from "../store/fixtures"
 
 // Lighting coords are Z-up, FOH-relative (X = stage right, Y = upstage, Z = up).
 // R3F's default scene is Y-up, with camera looking down -Z. The swizzle below
@@ -91,7 +91,7 @@ export { dmxToDegrees }
 // declared front (`forwardDeg`, the Shehds' 180° of 540°), else the axis's
 // mechanical centre, the midpoint of degMin..degMax — travel, not a signed angle,
 // so never 0 and never a fixed 270.
-export function axisZeroDeg(slider: SliderPropertyDescriptor): number | null {
+export function axisZeroDeg(slider: SliderAttributeDescriptor): number | null {
   if (slider.degMin == null || slider.degMax == null) return null
   return slider.forwardDeg ?? (slider.degMin + slider.degMax) / 2
 }
@@ -104,7 +104,7 @@ export function axisZeroDeg(slider: SliderPropertyDescriptor): number | null {
 // coarse value from `combineFine` (16-bit pan/tilt) survives untouched.
 export function dmxToSignedDegrees(
   dmx: number,
-  slider: SliderPropertyDescriptor,
+  slider: SliderAttributeDescriptor,
 ): number | null {
   const travel = dmxToDegrees(dmx, slider)
   if (travel == null) return null

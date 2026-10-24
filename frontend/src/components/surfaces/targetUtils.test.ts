@@ -4,7 +4,7 @@ import type { ControlSurfaceType } from '@/store/surfaces'
 
 describe('describeTarget', () => {
   it('describes the existing target kinds', () => {
-    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' }))
+    expect(describeTarget({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' }))
       .toBe('hex-1.dimmer')
     expect(describeTarget({ type: 'blackout' })).toBe('Blackout')
     expect(describeTarget({ type: 'setBank', deviceTypeKey: 'xtc', bank: 'layer-b' }))
@@ -46,7 +46,7 @@ describe('describeTarget', () => {
     expect(
       describeTarget({
         type: 'flash',
-        target: { type: 'groupProperty', groupName: 'front', propertyName: 'dimmer' },
+        target: { type: 'groupAttribute', groupName: 'front', attribute: 'dimmer' },
       }),
     ).toBe('Flash front.dimmer')
   })
@@ -65,7 +65,7 @@ describe('describeTarget — the busk-further plan’s five (D14)', () => {
 
 describe('describeTarget — the selection-relative arms', () => {
   it('names the selection rather than a target', () => {
-    expect(describeTarget({ type: 'selectionProperty', propertyName: 'pan' })).toBe('Sel · pan')
+    expect(describeTarget({ type: 'selectionAttribute', attribute: 'pan' })).toBe('Sel · pan')
     expect(describeTarget({ type: 'clearSelection' })).toBe('Clear selection')
     expect(describeTarget({ type: 'locateSelection' })).toBe('Locate selection')
   })
@@ -81,24 +81,24 @@ describe('describeTarget — the selection-relative arms', () => {
   it('spells out a colour axis other than hue on the four property kinds', () => {
     // Hue is the default and carries no field, so a hue binding reads exactly as it always did —
     // whether the field is absent, null, or spelled `'hue'`.
-    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' }))
+    expect(describeTarget({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' }))
       .toBe('hex-1.rgbColour')
-    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: null }))
+    expect(describeTarget({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: null }))
       .toBe('hex-1.rgbColour')
-    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'hue' }))
+    expect(describeTarget({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'hue' }))
       .toBe('hex-1.rgbColour')
-    expect(describeTarget({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation' }))
+    expect(describeTarget({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'saturation' }))
       .toBe('hex-1.rgbColour · sat')
-    expect(describeTarget({ type: 'groupProperty', groupName: 'front', propertyName: 'rgbColour', colourAxis: 'hueFine' }))
+    expect(describeTarget({ type: 'groupAttribute', groupName: 'front', attribute: 'rgbColour', colourAxis: 'hueFine' }))
       .toBe('front.rgbColour · hue fine')
-    expect(describeTarget({ type: 'selectionProperty', propertyName: 'rgbColour', colourAxis: 'brightness' }))
+    expect(describeTarget({ type: 'selectionAttribute', attribute: 'rgbColour', colourAxis: 'brightness' }))
       .toBe('Sel · rgbColour · bright')
-    expect(describeTarget({ type: 'encoderBankSet', propertyName: 'rgbColour', colourAxis: 'saturation' }))
+    expect(describeTarget({ type: 'encoderBankSet', attribute: 'rgbColour', colourAxis: 'saturation' }))
       .toBe('Encoder bank · rgbColour · sat')
     expect(
       describeTarget({
         type: 'flash',
-        target: { type: 'groupProperty', groupName: 'front', propertyName: 'rgbColour', colourAxis: 'saturation' },
+        target: { type: 'groupAttribute', groupName: 'front', attribute: 'rgbColour', colourAxis: 'saturation' },
       }),
     ).toBe('Flash front.rgbColour · sat')
   })
@@ -107,7 +107,7 @@ describe('describeTarget — the selection-relative arms', () => {
     expect(
       describeTarget({ type: 'strip', target: { type: 'group', key: 'front-wash' } }),
     ).toBe('Strip · front-wash')
-    expect(describeTarget({ type: 'encoderBankSet', propertyName: 'colour' }))
+    expect(describeTarget({ type: 'encoderBankSet', attribute: 'colour' }))
       .toBe('Encoder bank · colour')
   })
 
@@ -123,15 +123,15 @@ describe('matchesBindingTarget — a strip-bound target', () => {
     target: { type: 'group', key: 'front-wash' },
   } as const
 
-  // The regression this guards: before strips, a group's badge matched only `groupProperty`, so a
+  // The regression this guards: before strips, a group's badge matched only `groupAttribute`, so a
   // group dropped on a strip — the shape the whole view is built around — reported no binding at
   // all on the groups page.
   it('reports the dimmer, which its fader and flash always drive', () => {
     expect(
       matchesBindingTarget(strip, {
-        type: 'groupProperty',
+        type: 'groupAttribute',
         groupName: 'front-wash',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
       }),
     ).toBe(true)
   })
@@ -139,9 +139,9 @@ describe('matchesBindingTarget — a strip-bound target', () => {
   it('does not claim the encoder’s property, which moves with the bank', () => {
     expect(
       matchesBindingTarget(strip, {
-        type: 'groupProperty',
+        type: 'groupAttribute',
         groupName: 'front-wash',
-        propertyName: 'colour',
+        attribute: 'colour',
       }),
     ).toBe(false)
   })
@@ -149,16 +149,16 @@ describe('matchesBindingTarget — a strip-bound target', () => {
   it('does not match another group, or a fixture of the same key', () => {
     expect(
       matchesBindingTarget(strip, {
-        type: 'groupProperty',
+        type: 'groupAttribute',
         groupName: 'movers',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
       }),
     ).toBe(false)
     expect(
       matchesBindingTarget(strip, {
-        type: 'fixtureProperty',
+        type: 'fixtureAttribute',
         fixtureKey: 'front-wash',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
       }),
     ).toBe(false)
   })
@@ -169,14 +169,14 @@ describe('matchesBindingTarget — the colour axis', () => {
     // The fixtures-page badge asks "is this property bound", not how.
     expect(
       matchesBindingTarget(
-        { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'hueFine' },
-        { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' },
+        { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'hueFine' },
+        { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' },
       ),
     ).toBe(true)
     expect(
       matchesBindingTarget(
-        { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour', colourAxis: 'saturation' },
-        { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' },
+        { type: 'groupAttribute', groupName: 'front-wash', attribute: 'rgbColour', colourAxis: 'saturation' },
+        { type: 'groupAttribute', groupName: 'front-wash', attribute: 'rgbColour' },
       ),
     ).toBe(true)
   })

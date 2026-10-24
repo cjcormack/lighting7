@@ -7,7 +7,7 @@ import io.ktor.server.resources.post
 import io.ktor.server.response.respond
 import io.ktor.server.routing.Route
 import kotlinx.serialization.Serializable
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.State
 
@@ -65,7 +65,7 @@ internal fun Route.routeApiRestBuskPress(state: State) {
                 return@withCurrentProject
             }
             val families = try {
-                if (plan.record is PressRecord.Palette) parseMaskGroups(request.families) else null
+                if (plan.record is PressRecord.Palette) parseFamilies(request.families) else null
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
@@ -96,7 +96,7 @@ internal data class BuskPadPressResource(val projectId: String, val padId: Int)
 
 /**
  * The selection and its attribute mask, a palette pad's: both ignored, unread, for a cue or a Look
- * pad. [families] (`PropertyMaskGroup` names) absent is every attribute and an unknown name is 400;
+ * pad. [families] (`AttributeFamily` names) absent is every attribute and an unknown name is 400;
  * a palette outside it is `PALETTE_OUTSIDE_MASK` — multi-screen plan D5.
  */
 @Serializable

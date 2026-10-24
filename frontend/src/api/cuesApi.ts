@@ -12,7 +12,7 @@ export interface CueTarget {
  * One line of a cue's ordered Look composition.
  *
  * The cue's layers are cooked down — in `sortOrder`, later winning — to exactly one contributor per
- * (fixture, property) before the resolver ever sees them, and the cue's own `propertyAssignments`
+ * (fixture, property) before the resolver ever sees them, and the cue's own `attributeAssignments`
  * are the last layer and beat all of them. That holds for *every* attribute, intensity included:
  * within a cue, layering a dim look over a bright one really does dim. Across cues, HTP still
  * applies. See `lighting7/docs/lighting-composition-model.md` §"Looks and layers".
@@ -55,11 +55,11 @@ export interface CueLayer {
    */
   targets: CueTarget[]
   /**
-   * Comma-separated `PropertyMaskGroup` names; null/absent = every property. This is what replaces
+   * Comma-separated `AttributeFamily` names; null/absent = every property. This is what replaces
    * value-level references: "this cue's colour comes from Warm, everything else local" is one
    * COLOUR-masked layer rather than a separate feature.
    */
-  propertyMask?: string | null
+  attributeMask?: string | null
   /** `OVERRIDE` | `MAX` | `MIN` | `MULTIPLY` | `ADDITIVE`. */
   blendMode?: string
   /** Mix of this layer over what has accumulated beneath it, in [0, 1]. */
@@ -109,7 +109,7 @@ export interface CueAdHocFx {
   targetKey: string
   fxType: string
   family: string
-  propertyName: string | null
+  attribute: string | null
   cycle: number
   blendMode: string
   order: string
@@ -161,23 +161,23 @@ export type AssignmentHealth =
   | { type: 'ok' }
   | { type: 'missingFixture'; fixtureKey: string }
   | { type: 'missingGroup'; groupName: string }
-  | { type: 'missingProperty'; targetKey: string; propertyName: string }
+  | { type: 'missingAttribute'; targetKey: string; attribute: string }
 // Four arms, down from seven. Two described a row whose value was `ref:{uuid}` and whose Look was
 // gone or no longer covered the target, and a third before them named a wrong-type reference. All three retired with the `ref:` value grammar in
 // session 4: a row's value is always a literal, so a cue's only remaining dependency on a Look is a
 // layer — guarded by an indexed FK rather than by a health diagnosis.
 
 // Layer 3 property assignment on a cue.
-export interface CuePropertyAssignment {
+export interface CueAttributeAssignment {
   targetType: 'fixture' | 'group'
   targetKey: string
-  propertyName: string
+  attribute: string
   /** Canonical property-level form: "0".."255" for sliders/settings, extended-colour, "pan,tilt". */
   value: string
   fadeDurationMs?: number | null
   sortOrder?: number
   /**
-   * Move-in-dark: only meaningful on `propertyName === 'position'`. When true and the
+   * Move-in-dark: only meaningful on `attribute === 'position'`. When true and the
    * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies the
    * incoming pan/tilt across the whole crossfade rather than blending — the head moves
    * while dark and is already aimed when the dimmer comes up. Defaults to false.
@@ -233,7 +233,7 @@ export interface Cue {
   /** The cue's ordered Look composition, in `sortOrder`. */
   layers: CueLayerDetail[]
   adHocFx: CueAdHocFx[]
-  propertyAssignments: CuePropertyAssignment[]
+  attributeAssignments: CueAttributeAssignment[]
   triggers: CueTriggerDetail[]
   /**
    * The **context entry** (lighting7 cue model plan): the entry named by the read's `?entryId=`, else
@@ -385,7 +385,7 @@ export interface CueLayerPressResponse {
   action: 'applied' | 'removed'
   /** The other palettes' layers the press narrowed or dropped on its heads. */
   released?: number
-  propertyMask?: string | null
+  attributeMask?: string | null
   /** The Look's families the mask left out. */
   skippedFamilies?: string[]
   cue: Cue
@@ -435,7 +435,7 @@ export interface CueInput {
   name: string
   layers: CueLayer[]
   adHocFx: CueAdHocFx[]
-  propertyAssignments?: CuePropertyAssignment[]
+  attributeAssignments?: CueAttributeAssignment[]
   triggers?: CueTrigger[]
   /** POST only: the stack the new cue's entry goes in. Absent makes a loose cue. */
   cueStackId?: number
@@ -480,7 +480,7 @@ export interface StopCueResponse {
 export interface CookedRow {
   targetType: 'fixture' | 'group'
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
   /**
    * The layer that won this key, when one did. Null for the cue's **own** rows, which belong to no

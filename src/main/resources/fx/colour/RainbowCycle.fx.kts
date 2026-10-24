@@ -4,7 +4,7 @@ name: Rainbow Cycle
 family: colour
 outputType: COLOUR
 fxMode: STANDARD
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: saturation
     type: double

@@ -12,7 +12,7 @@ import { SourceChip } from './SourceChip'
 /** A cell's `(head, property)` keys — the grid's `RowCell.keys`. */
 export interface CellKey {
   targetKey: string
-  propertyName: string
+  attribute: string
 }
 
 /**
@@ -36,14 +36,14 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
   const fxDetail = useFxDetail()
   const [version, bump] = useReducer((n: number) => n + 1, 0)
 
-  const signature = keys.map((k) => `${k.targetKey}\u0001${k.propertyName}`).join('\u0000')
+  const signature = keys.map((k) => `${k.targetKey}\u0001${k.attribute}`).join('\u0000')
   useEffect(() => {
     const subs = signature
       .split('\u0000')
       .filter(Boolean)
       .map((pair) => {
-        const [head, property] = pair.split('\u0001')
-        return lightingApi.programmer.subscribeToKey(head, property, bump)
+        const [head, attribute] = pair.split('\u0001')
+        return lightingApi.programmer.subscribeToKey(head, attribute, bump)
       })
     return () => subs.forEach((s) => s.unsubscribe())
   }, [signature])
@@ -54,8 +54,8 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
     for (const k of keys) {
       const list = byHead.get(k.targetKey)
       if (list) {
-        if (!list.includes(k.propertyName)) list.push(k.propertyName)
-      } else byHead.set(k.targetKey, [k.propertyName])
+        if (!list.includes(k.attribute)) list.push(k.attribute)
+      } else byHead.set(k.targetKey, [k.attribute])
     }
     return [...byHead.entries()]
     // `signature` is `keys` spelled as text, so a fresh array of the same keys does not rebuild.
@@ -68,13 +68,13 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
     void version
     if (heads.length === 0) return null
     return mergeRowSources(
-      heads.map(([head, properties]) => {
+      heads.map(([head, attributes]) => {
         const reach = lookup.reachOf(head)
         return {
           key: head,
           source: rowSourceOf({
             headKey: head,
-            states: properties.map((key) => ({ key, state: lightingApi.programmer.getKeyState(head, key) })),
+            states: attributes.map((key) => ({ key, state: lightingApi.programmer.getKeyState(head, key) })),
             effects: fxReaching(effects, reach.keys, reach.groups),
             blind,
             cueLabel,
@@ -91,7 +91,7 @@ export function CellSourceChip({ keys, label }: { keys: readonly CellKey[]; labe
     <SourceChip
       source={source}
       heads={heads.map(([key]) => ({ key, name: lookup.nameOf(key) }))}
-      propertyName={heads[0][1][0]}
+      attribute={heads[0][1][0]}
       label={label}
       cueLabel={cueLabel}
       connected={connected}

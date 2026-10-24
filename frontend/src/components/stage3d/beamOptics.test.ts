@@ -41,9 +41,9 @@ import { beamMask, packBlade, packBlades, unpackBlade } from './beamMask'
 import { revolutionShutterProps } from '../../test/fixtureFactories'
 import type {
   SettingOption,
-  SettingPropertyDescriptor,
-  ShutterProperties,
-  SliderPropertyDescriptor,
+  SettingAttributeDescriptor,
+  ShutterAttributes,
+  SliderAttributeDescriptor,
 } from '../../store/fixtures'
 
 function opts(pairs: [string, number, Partial<SettingOption>?][]): SettingOption[] {
@@ -52,8 +52,8 @@ function opts(pairs: [string, number, Partial<SettingOption>?][]): SettingOption
 
 function setting(
   options: SettingOption[],
-  category: SettingPropertyDescriptor['category'] = 'gobo',
-): SettingPropertyDescriptor {
+  category: SettingAttributeDescriptor['category'] = 'gobo',
+): SettingAttributeDescriptor {
   return {
     type: 'setting',
     name: 'x',
@@ -65,8 +65,8 @@ function setting(
 }
 
 function slider(
-  over: Partial<SliderPropertyDescriptor> = {},
-): SliderPropertyDescriptor {
+  over: Partial<SliderAttributeDescriptor> = {},
+): SliderAttributeDescriptor {
   return {
     type: 'slider',
     name: 'x',
@@ -415,7 +415,7 @@ describe("the desk's focus inverse, against the shared vector", () => {
 })
 
 describe('resolveDeclaredFocusDistance', () => {
-  const declared = (over: Partial<SliderPropertyDescriptor> = {}) =>
+  const declared = (over: Partial<SliderAttributeDescriptor> = {}) =>
     slider({ focusNearM: 2, focusFarM: 40, ...over })
 
   it('runs near → far across DMX min → max', () => {
@@ -752,7 +752,7 @@ describe('proportional bands (activeMin / activeMax)', () => {
 describe('framing shutters from DMX', () => {
   // The Revolution's, as its descriptors carry them, in the wire's order (top, bottom, left, right).
   const props = revolutionShutterProps()
-  const shutters: ShutterProperties = {
+  const shutters: ShutterAttributes = {
     depth: props.filter((p) => p.category === 'shutter'),
     rotation: props.filter((p) => p.category === 'shutter_rotation'),
   }

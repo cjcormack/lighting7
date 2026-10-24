@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import gelsJson from '../../../../src/main/resources/gels.json'
 import { indexGels, type Gel } from '@/lib/gels'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import type { PatchPlacementInput } from '@/api/patchApi'
 import type { FittedMedia } from '@/lib/fittedMedia'
 
@@ -25,7 +25,7 @@ afterEach(cleanup)
 
 const gels = indexGels(gelsJson as Gel[])
 
-const SCROLLER: SettingPropertyDescriptor = {
+const SCROLLER: SettingAttributeDescriptor = {
   type: 'setting',
   name: 'gelScroller',
   displayName: 'Gel scroller',
@@ -38,7 +38,7 @@ const SCROLLER: SettingPropertyDescriptor = {
     { name: 'L201_FULL_CT_BLUE', level: 165, displayName: 'L201 Full Ct Blue', colourPreview: '#9bbede', loadable: true },
   ],
 }
-const WHEEL: SettingPropertyDescriptor = {
+const WHEEL: SettingAttributeDescriptor = {
   type: 'setting',
   name: 'fbWheelPos',
   displayName: 'Front wheel position',

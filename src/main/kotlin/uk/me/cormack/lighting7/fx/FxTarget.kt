@@ -3,14 +3,14 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.ParkManager
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithAmber
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
@@ -90,7 +90,7 @@ sealed class FxTarget {
     abstract val targetRef: FxTargetRef
 
     /** Name of the property being targeted */
-    abstract val propertyName: String
+    abstract val attribute: String
 
     /**
      * The one [FxOutputType] this target can apply.
@@ -101,7 +101,7 @@ sealed class FxTarget {
      * `rgbColour`, and the seven position effects advertising `pan`/`tilt`.
      *
      * Consequences, in the two places that matter:
-     * - An `FxRegistration.compatibleProperties` entry must name a property that
+     * - An `FxRegistration.compatibleAttributes` entry must name a property that
      *   [FxTargetFactory] maps to a target with this same accepted type. `FxRegistrationTargetCompatibilityTest`
      *   holds every built-in to it.
      * - [FxInstance] warns when its effect and target disagree, and the FX-add routes reject it
@@ -154,7 +154,7 @@ sealed class FxTarget {
      * @param fixture The fixture or element to check
      * @return true if the fixture supports this target's property
      */
-    abstract fun fixtureHasProperty(fixture: GroupableFixture): Boolean
+    abstract fun fixtureHasAttribute(fixture: GroupableFixture): Boolean
 
     /**
      * Apply an effect output value to this target using the fixture registry.
@@ -233,7 +233,7 @@ sealed class FxTarget {
      * [FxEngine]'s Layer 1 short-circuit. Returns false for non-DMX-backed properties so the
      * normal reset path runs. Must not allocate on the hot path.
      */
-    abstract fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean
+    abstract fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean
 
     /**
      * Resolve and write the fallback for this target to the specified fixture.
@@ -260,12 +260,12 @@ sealed class FxTarget {
  */
 data class SliderTarget(
     override val targetRef: FxTargetRef,
-    override val propertyName: String
+    override val attribute: String
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
-    constructor(fixtureKey: String, propertyName: String) :
-        this(FxTargetRef.fixture(fixtureKey), propertyName)
+    constructor(fixtureKey: String, attribute: String) :
+        this(FxTargetRef.fixture(fixtureKey), attribute)
 
     override val acceptedOutputType: FxOutputType = FxOutputType.SLIDER
 
@@ -288,11 +288,11 @@ data class SliderTarget(
      */
     internal inline fun outputByte(fixture: GroupableFixture, output: FxOutput, base: () -> UByte): UByte? = when (output) {
         is FxOutput.Slider -> output.value
-        is FxOutput.Steps -> output.blendOn(base, { stepByte(output.steps.valueFor(it, fixture, propertyName)) }, ::lerpByte)
+        is FxOutput.Steps -> output.blendOn(base, { stepByte(output.steps.valueFor(it, fixture, attribute)) }, ::lerpByte)
         else -> null
     }
 
-    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean {
         return getSlider(fixture) != null
     }
 
@@ -313,10 +313,10 @@ data class SliderTarget(
         var bestSeq = Long.MIN_VALUE
         var best: UByte? = null
 
-        store.get(fixture.targetKey, propertyName)?.let { slot ->
+        store.get(fixture.targetKey, attribute)?.let { slot ->
             when (val v = slot.value.resolved) {
-                is CueAssignmentResolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
-                is CueAssignmentResolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                is CueAssignmentResolver.AttributeValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                is CueAssignmentResolver.AttributeValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
                 else -> {}
             }
         }
@@ -326,7 +326,7 @@ data class SliderTarget(
         // Sideband lookup is only meaningful for DMX sliders (Hue-backed etc. have no channel).
         (getSlider(fixture) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }
@@ -353,43 +353,43 @@ data class SliderTarget(
         fixture: GroupableFixture,
         store: ProgrammerStore,
     ): Pair<Long, UByte>? {
-        val catalogue = FixturePropertyCatalogue.of(fixture::class)
-        val prop = catalogue.byName[propertyName] ?: return null
+        val catalogue = FixtureAttributeCatalogue.of(fixture::class)
+        val prop = catalogue.byName[attribute] ?: return null
         if (!prop.bundleWithColour) return null
         val colourProp = catalogue.colour ?: return null
         val slot = store.get(fixture.targetKey, colourProp.name) ?: return null
-        val colour = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
+        val colour = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Colour)?.value ?: return null
         val component = when (prop.category) {
-            PropertyCategory.WHITE -> colour.white
-            PropertyCategory.AMBER -> colour.amber
-            PropertyCategory.UV -> colour.uv
+            AttributeCategory.WHITE -> colour.white
+            AttributeCategory.AMBER -> colour.amber
+            AttributeCategory.UV -> colour.uv
             else -> return null
         }
         return slot.seq to component
     }
 
-    override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
+    override fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
         val dmx = getSlider(fixture) as? DmxSlider ?: return false
         return parkManager.isParked(dmx.universe.universe, dmx.channelNo)
     }
 
     private fun getSlider(fixture: GroupableFixture): Slider? {
-        return when (propertyName) {
+        return when (attribute) {
             "dimmer" -> (fixture as? WithDimmer)?.dimmer
             "uv" -> (fixture as? WithUv)?.uv
             "white" -> (fixture as? WithWhite)?.white
             "amber" -> (fixture as? WithAmber)?.amber
             else -> {
                 // Look up arbitrary slider properties by name — fixtures and elements alike
-                PropertyChannelWriter.resolveProperty(fixture, propertyName)?.value as? Slider
+                AttributeChannelWriter.resolveAttribute(fixture, attribute)?.value as? Slider
             }
         }
     }
 
     companion object {
         /** Create a slider target for a group */
-        fun forGroup(groupName: String, propertyName: String) =
-            SliderTarget(FxTargetRef.group(groupName), propertyName)
+        fun forGroup(groupName: String, attribute: String) =
+            SliderTarget(FxTargetRef.group(groupName), attribute)
     }
 }
 
@@ -401,7 +401,7 @@ data class SliderTarget(
  */
 data class ColourTarget(
     override val targetRef: FxTargetRef,
-    override val propertyName: String = "rgbColour"
+    override val attribute: String = "rgbColour"
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
@@ -425,9 +425,9 @@ data class ColourTarget(
         // element: the bundle comes from the class catalogue, which both carry
         // (`FU-FX-ELEMENT-BUNDLED-COLOUR`).
         val ext = fxColour
-        applyExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, blendMode, weight)
-        applyExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, blendMode, weight)
-        applyExtendedChannel(fixture, PropertyCategory.UV, ext.uv, blendMode, weight)
+        applyExtendedChannel(fixture, AttributeCategory.WHITE, ext.white, blendMode, weight)
+        applyExtendedChannel(fixture, AttributeCategory.AMBER, ext.amber, blendMode, weight)
+        applyExtendedChannel(fixture, AttributeCategory.UV, ext.uv, blendMode, weight)
     }
 
     /**
@@ -453,18 +453,18 @@ data class ColourTarget(
         }
 
     /** Whether [fixture] carries a bundled emitter of [category] (W, A or UV) that this target writes. */
-    internal fun hasBundled(fixture: GroupableFixture, category: PropertyCategory): Boolean =
-        bundledProperty(fixture, category)?.let { bundledSlider(fixture, it) } != null
+    internal fun hasBundled(fixture: GroupableFixture, category: AttributeCategory): Boolean =
+        bundledAttribute(fixture, category)?.let { bundledSlider(fixture, it) } != null
 
     /** The colour this head holds now, its bundled emitters included — what a step crosses from. */
     private fun currentExtended(fixture: GroupableFixture, rgb: Color): ExtendedColour {
-        fun emitter(category: PropertyCategory): UByte =
-            bundledProperty(fixture, category)?.let { bundledSlider(fixture, it)?.value } ?: 0u
+        fun emitter(category: AttributeCategory): UByte =
+            bundledAttribute(fixture, category)?.let { bundledSlider(fixture, it)?.value } ?: 0u
         return ExtendedColour(
             rgb,
-            white = emitter(PropertyCategory.WHITE),
-            amber = emitter(PropertyCategory.AMBER),
-            uv = emitter(PropertyCategory.UV),
+            white = emitter(AttributeCategory.WHITE),
+            amber = emitter(AttributeCategory.AMBER),
+            uv = emitter(AttributeCategory.UV),
         )
     }
 
@@ -475,9 +475,9 @@ data class ColourTarget(
         if (fadeMs > 0) colour.fadeToColour(ext.color, fadeMs, curve) else colour.value = ext.color
 
         // Apply extended channels (W/A/UV) to bundled slider properties using the fallback values.
-        setExtendedChannel(fixture, PropertyCategory.WHITE, ext.white, fadeMs, curve)
-        setExtendedChannel(fixture, PropertyCategory.AMBER, ext.amber, fadeMs, curve)
-        setExtendedChannel(fixture, PropertyCategory.UV, ext.uv, fadeMs, curve)
+        setExtendedChannel(fixture, AttributeCategory.WHITE, ext.white, fadeMs, curve)
+        setExtendedChannel(fixture, AttributeCategory.AMBER, ext.amber, fadeMs, curve)
+        setExtendedChannel(fixture, AttributeCategory.UV, ext.uv, fadeMs, curve)
     }
 
     override fun composeProgrammerOver(
@@ -490,8 +490,8 @@ data class ColourTarget(
         // property entries, and the raw-channel sideband. This is the same channel set the
         // old channel-level store composed; components the programmer does not cover come
         // from [below] (e.g. a raw write on just the red channel overlays a cue's colour).
-        val colourSlot = store.get(fixture.targetKey, propertyName)
-        val colourValue = (colourSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value
+        val colourSlot = store.get(fixture.targetKey, attribute)
+        val colourValue = (colourSlot?.value?.resolved as? CueAssignmentResolver.AttributeValue.Colour)?.value
         val colourSeq = if (colourValue != null) colourSlot.seq else Long.MIN_VALUE
 
         val dmxColour = (fixture as? WithColour)?.rgbColour as? DmxColour
@@ -501,7 +501,7 @@ data class ColourTarget(
             val side = if (dmxColour != null && channelNo != null) {
                 store.getChannelSlot(dmxColour.universe.universe, channelNo)
             } else null
-            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
             return when {
                 sideValue != null && side.seq > colourSeq -> sideValue
                 entryComponent != null -> entryComponent
@@ -513,9 +513,9 @@ data class ColourTarget(
         val g = component(colourValue?.color?.green?.toUByte(), dmxColour?.greenSlider?.channelNo)
         val b = component(colourValue?.color?.blue?.toUByte(), dmxColour?.blueSlider?.channelNo)
 
-        val white = extendedComponent(fixture, PropertyCategory.WHITE, colourValue?.white, colourSeq, store)
-        val amber = extendedComponent(fixture, PropertyCategory.AMBER, colourValue?.amber, colourSeq, store)
-        val uv = extendedComponent(fixture, PropertyCategory.UV, colourValue?.uv, colourSeq, store)
+        val white = extendedComponent(fixture, AttributeCategory.WHITE, colourValue?.white, colourSeq, store)
+        val amber = extendedComponent(fixture, AttributeCategory.AMBER, colourValue?.amber, colourSeq, store)
+        val uv = extendedComponent(fixture, AttributeCategory.UV, colourValue?.uv, colourSeq, store)
 
         if (r == null && g == null && b == null && white == null && amber == null && uv == null) {
             return below
@@ -557,33 +557,33 @@ data class ColourTarget(
      */
     private fun extendedComponent(
         fixture: GroupableFixture,
-        category: PropertyCategory,
+        category: AttributeCategory,
         entryComponent: UByte?,
         colourSeq: Long,
         store: ProgrammerStore,
     ): UByte? {
-        val prop = bundledProperty(fixture, category) ?: return entryComponent
+        val prop = bundledAttribute(fixture, category) ?: return entryComponent
         var bestSeq = if (entryComponent != null) colourSeq else Long.MIN_VALUE
         var best = entryComponent
 
         store.get(fixture.targetKey, prop.name)?.let { slot ->
-            val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+            val v = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
             if (v != null && slot.seq >= bestSeq) { best = v; bestSeq = slot.seq }
         }
         ((bundledSlider(fixture, prop)) as? DmxSlider)?.let { dmx ->
             store.getChannelSlot(dmx.universe.universe, dmx.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }
         return best
     }
 
-    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean {
         return fixture is WithColour
     }
 
-    override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
+    override fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
         val colour = (fixture as? WithColour)?.rgbColour
         if (colour is DmxWhiteMixColour) {
             return parkManager.isParked(colour.warm.universe.universe, colour.warm.channelNo) &&
@@ -594,31 +594,31 @@ data class ColourTarget(
         if (!parkManager.isParked(u, dmxColour.redSlider.channelNo)) return false
         if (!parkManager.isParked(u, dmxColour.greenSlider.channelNo)) return false
         if (!parkManager.isParked(u, dmxColour.blueSlider.channelNo)) return false
-        if (!bundledChannelParked(fixture, PropertyCategory.WHITE, parkManager)) return false
-        if (!bundledChannelParked(fixture, PropertyCategory.AMBER, parkManager)) return false
-        if (!bundledChannelParked(fixture, PropertyCategory.UV, parkManager)) return false
+        if (!bundledChannelParked(fixture, AttributeCategory.WHITE, parkManager)) return false
+        if (!bundledChannelParked(fixture, AttributeCategory.AMBER, parkManager)) return false
+        if (!bundledChannelParked(fixture, AttributeCategory.UV, parkManager)) return false
         return true
     }
 
     /** True if the fixture has no bundled channel in this category, or the backing DMX channel is parked. */
     private fun bundledChannelParked(
         fixture: GroupableFixture,
-        category: PropertyCategory,
+        category: AttributeCategory,
         parkManager: ParkManager,
     ): Boolean {
-        val prop = bundledProperty(fixture, category) ?: return true
+        val prop = bundledAttribute(fixture, category) ?: return true
         val dmx = bundledSlider(fixture, prop) as? DmxSlider ?: return true
         return parkManager.isParked(dmx.universe.universe, dmx.channelNo)
     }
 
     private fun applyExtendedChannel(
         fixture: GroupableFixture,
-        category: PropertyCategory,
+        category: AttributeCategory,
         value: UByte,
         blendMode: BlendMode,
         weight: Double,
     ) {
-        val prop = bundledProperty(fixture, category) ?: return
+        val prop = bundledAttribute(fixture, category) ?: return
         val slider = bundledSlider(fixture, prop) ?: return
         val base = slider.value ?: 0u
         slider.value = FxBlend.slider(base, value, blendMode, weight)
@@ -626,12 +626,12 @@ data class ColourTarget(
 
     private fun setExtendedChannel(
         fixture: GroupableFixture,
-        category: PropertyCategory,
+        category: AttributeCategory,
         value: UByte,
         fadeMs: Long = 0,
         curve: EasingCurve = EasingCurve.LINEAR,
     ) {
-        val prop = bundledProperty(fixture, category) ?: return
+        val prop = bundledAttribute(fixture, category) ?: return
         val slider = bundledSlider(fixture, prop) ?: return
         if (fadeMs > 0) slider.fadeToValue(value, fadeMs, curve) else slider.value = value
     }
@@ -639,14 +639,14 @@ data class ColourTarget(
     /**
      * The `bundleWithColour` slider for [category] on a fixture **or an element** — the class
      * catalogue carries the bundle for both, which is what closed `FU-FX-ELEMENT-BUNDLED-COLOUR`:
-     * the four helpers above used to reach for `Fixture.bundledProperty` behind a `fixture is
+     * the four helpers above used to reach for `Fixture.bundledAttribute` behind a `fixture is
      * Fixture` gate, so a pixel's white was computed and then silently dropped.
      */
-    private fun bundledProperty(fixture: GroupableFixture, category: PropertyCategory): Fixture.Property? =
-        FixturePropertyCatalogue.of(fixture::class).bundledByCategory[category]
+    private fun bundledAttribute(fixture: GroupableFixture, category: AttributeCategory): Fixture.Attribute? =
+        FixtureAttributeCatalogue.of(fixture::class).bundledByCategory[category]
 
     /** [prop] read off [fixture] as a [Slider], or null. The receiver bound is advisory — see the catalogue. */
-    private fun bundledSlider(fixture: GroupableFixture, prop: Fixture.Property): Slider? {
+    private fun bundledSlider(fixture: GroupableFixture, prop: Fixture.Attribute): Slider? {
         @Suppress("UNCHECKED_CAST")
         return runCatching { (prop.classProperty as KProperty1<Any, *>).call(fixture) }.getOrNull() as? Slider
     }
@@ -662,7 +662,7 @@ data class ColourTarget(
  */
 data class PositionTarget(
     override val targetRef: FxTargetRef,
-    override val propertyName: String = "position"
+    override val attribute: String = "position"
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
@@ -696,7 +696,7 @@ data class PositionTarget(
             is FxOutput.Steps -> output.blendOn(
                 { FxOutput.Position(basePan, baseTilt) },
                 {
-                    (output.steps.valueFor(it, fixture, propertyName) as? CueAssignmentResolver.PropertyValue.Position)
+                    (output.steps.valueFor(it, fixture, attribute) as? CueAssignmentResolver.AttributeValue.Position)
                         ?.let { p -> FxOutput.Position(p.pan, p.tilt) }
                 },
                 { a, b, t -> FxOutput.Position(lerpByte(a.pan, b.pan, t), lerpByte(a.tilt, b.tilt, t)) },
@@ -723,8 +723,8 @@ data class PositionTarget(
     ): FxOutput {
         // Per-axis recency arbitration between a Position property entry and the axis's
         // sideband channel slot (raw pan/tilt writes stay channel-shaped in the sideband).
-        val posSlot = store.get(fixture.targetKey, propertyName)
-        val posValue = posSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Position
+        val posSlot = store.get(fixture.targetKey, attribute)
+        val posValue = posSlot?.value?.resolved as? CueAssignmentResolver.AttributeValue.Position
         val posSeq = if (posValue != null) posSlot.seq else Long.MIN_VALUE
 
         val positionFixture = fixture as? WithPosition
@@ -733,7 +733,7 @@ data class PositionTarget(
         fun axis(entryValue: UByte?, slider: Slider?): UByte? {
             val dmx = slider as? DmxSlider
             val side = dmx?.let { store.getChannelSlot(it.universe.universe, it.channelNo) }
-            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+            val sideValue = (side?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
             return when {
                 sideValue != null && side.seq > posSeq -> sideValue
                 entryValue != null -> entryValue
@@ -759,11 +759,11 @@ data class PositionTarget(
         return FxOutput.Position(positionFixture.pan.value ?: 128u, positionFixture.tilt.value ?: 128u)
     }
 
-    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean {
         return fixture is WithPosition
     }
 
-    override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
+    override fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
         val positionFixture = fixture as? WithPosition ?: return false
         val pan = positionFixture.pan as? DmxSlider ?: return false
         val tilt = positionFixture.tilt as? DmxSlider ?: return false
@@ -786,12 +786,12 @@ data class PositionTarget(
  */
 data class SettingTarget(
     override val targetRef: FxTargetRef,
-    override val propertyName: String
+    override val attribute: String
 ) : FxTarget() {
 
     /** Convenience constructor for targeting a single fixture */
-    constructor(fixtureKey: String, propertyName: String) :
-        this(FxTargetRef.fixture(fixtureKey), propertyName)
+    constructor(fixtureKey: String, attribute: String) :
+        this(FxTargetRef.fixture(fixtureKey), attribute)
 
     /** A setting is one DMX channel, so it takes a slider byte like any other channel. */
     override val acceptedOutputType: FxOutputType = FxOutputType.SLIDER
@@ -826,7 +826,7 @@ data class SettingTarget(
                 val steps = output.steps
                 // Slot Steps reads this head's own setting, which is in hand here: no second walk.
                 if (steps is SlotStepList) steps.levelFor(output.snapped, setting)
-                else stepByte(steps.valueFor(output.snapped, fixture, propertyName))
+                else stepByte(steps.valueFor(output.snapped, fixture, attribute))
             }
             else -> null
         }
@@ -846,16 +846,16 @@ data class SettingTarget(
     ): FxOutput {
         var bestSeq = Long.MIN_VALUE
         var best: UByte? = null
-        store.get(fixture.targetKey, propertyName)?.let { slot ->
+        store.get(fixture.targetKey, attribute)?.let { slot ->
             when (val v = slot.value.resolved) {
-                is CueAssignmentResolver.PropertyValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
-                is CueAssignmentResolver.PropertyValue.Slider -> { best = v.value; bestSeq = slot.seq }
+                is CueAssignmentResolver.AttributeValue.Setting -> { best = v.channelValue; bestSeq = slot.seq }
+                is CueAssignmentResolver.AttributeValue.Slider -> { best = v.value; bestSeq = slot.seq }
                 else -> {}
             }
         }
         getSetting(fixture)?.let { setting ->
             store.getChannelSlot(setting.universe.universe, setting.channelNo)?.let { slot ->
-                val v = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                val v = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
                 if (v != null && slot.seq > bestSeq) { best = v; bestSeq = slot.seq }
             }
         }
@@ -869,22 +869,22 @@ data class SettingTarget(
         return setting.transaction?.getValue(setting.universe, setting.channelNo)?.let { FxOutput.Slider(it) }
     }
 
-    override fun fixtureHasProperty(fixture: GroupableFixture): Boolean {
+    override fun fixtureHasAttribute(fixture: GroupableFixture): Boolean {
         return getSetting(fixture) != null
     }
 
-    override fun isPropertyFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
+    override fun isAttributeFullyParked(fixture: GroupableFixture, parkManager: ParkManager): Boolean {
         val setting = getSetting(fixture) ?: return false
         return parkManager.isParked(setting.universe.universe, setting.channelNo)
     }
 
     internal fun getSetting(fixture: GroupableFixture): DmxFixtureSetting<*>? =
-        PropertyChannelWriter.resolveProperty(fixture, propertyName)?.value as? DmxFixtureSetting<*>
+        AttributeChannelWriter.resolveAttribute(fixture, attribute)?.value as? DmxFixtureSetting<*>
 
     companion object {
         /** Create a setting target for a group */
-        fun forGroup(groupName: String, propertyName: String) =
-            SettingTarget(FxTargetRef.group(groupName), propertyName)
+        fun forGroup(groupName: String, attribute: String) =
+            SettingTarget(FxTargetRef.group(groupName), attribute)
     }
 }
 
@@ -915,9 +915,9 @@ internal inline fun <T : Any> FxOutput.Steps.blendOn(
 internal val FxOutput.Steps.snapped: Int get() = if (blend < 0.5) from else to
 
 /** A resolved step as one channel's byte: a level, or a setting's slot level. */
-internal fun stepByte(value: CueAssignmentResolver.PropertyValue?): UByte? = when (value) {
-    is CueAssignmentResolver.PropertyValue.Slider -> value.value
-    is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue
+internal fun stepByte(value: CueAssignmentResolver.AttributeValue?): UByte? = when (value) {
+    is CueAssignmentResolver.AttributeValue.Slider -> value.value
+    is CueAssignmentResolver.AttributeValue.Setting -> value.channelValue
     else -> null
 }
 

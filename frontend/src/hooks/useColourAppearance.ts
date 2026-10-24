@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
 import type {
-  ColourPropertyDescriptor,
-  SliderPropertyDescriptor,
+  ColourAttributeDescriptor,
+  SliderAttributeDescriptor,
 } from '../store/fixtures'
-import { useColourValue } from './usePropertyValues'
+import { useColourValue } from './useAttributeValues'
 import { useNormalizedIntensity, colourFactor } from './useNormalizedIntensity'
 import { perceptualBrightness, computeAppearanceCss } from '../lib/colourMath'
 
@@ -32,8 +32,8 @@ export type ColourAppearance = {
  * picker seed.
  */
 export function useColourAppearance(
-  colourProp: ColourPropertyDescriptor,
-  dimmerProp?: SliderPropertyDescriptor,
+  colourProp: ColourAttributeDescriptor,
+  dimmerProp?: SliderAttributeDescriptor,
   floor = 0,
 ): ColourAppearance {
   const colour = useColourValue(colourProp)

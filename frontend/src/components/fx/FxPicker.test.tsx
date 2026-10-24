@@ -57,10 +57,10 @@ const position = (name: string): FxLibraryEntry => ({
   outputType: 'POSITION',
   fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['position'],
+  compatibleAttributes: ['position'],
   parameters: [
-    { name: 'panCenter', type: 'ubyte', defaultValue: '128', description: '' },
-    { name: 'tiltCenter', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '' },
     { name: 'panRadius', type: 'ubyte', defaultValue: '64', description: '' },
     { name: 'tiltRadius', type: 'ubyte', defaultValue: name === 'Figure 8' ? '32' : '64', description: '' },
   ],
@@ -70,7 +70,7 @@ const PULSE: FxLibraryEntry = {
   family: 'intensity',
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
-  compatibleProperties: ['dimmer', 'uv'],
+  compatibleAttributes: ['dimmer', 'uv'],
   parameters: [
     { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
@@ -104,7 +104,7 @@ describe('FxPicker', () => {
   it('in draft, a tap hands the host the effect with its starting spec and starts nothing; a second tap picks again', () => {
     const picks: DraftFxPick[] = []
     function Draft() {
-      const [current, setCurrent] = useState<{ fxType: string; propertyName: string } | null>(null)
+      const [current, setCurrent] = useState<{ fxType: string; attribute: string } | null>(null)
       return (
         <FxPicker
           target={TARGET}
@@ -114,7 +114,7 @@ describe('FxPicker', () => {
             current,
             onPick: (pick) => {
               picks.push(pick)
-              setCurrent({ fxType: pick.fxType, propertyName: pick.propertyName })
+              setCurrent({ fxType: pick.fxType, attribute: pick.attribute })
             },
           }}
         />
@@ -124,11 +124,11 @@ describe('FxPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     expect(picks[0]).toMatchObject({
       fxType: 'Circle',
-      propertyName: 'position',
+      attribute: 'position',
       blendMode: 'ADDITIVE',
       cycle: 4,
       speedMasterUuid: 'm-position',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
     })
     expect(screen.getByRole('button', { name: 'Circle' })).toHaveAttribute('aria-pressed', 'true')
     fireEvent.click(screen.getByRole('button', { name: 'Figure 8' }))
@@ -144,11 +144,11 @@ describe('FxPicker', () => {
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
       fxType: 'Circle',
       fixtureKey: 'spot-3',
-      propertyName: 'position',
+      attribute: 'position',
       programmerOwned: true,
       blendMode: 'ADDITIVE',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
-      // D16: one bar, on the master tagged for its family's usage.
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
+      // D16: one bar, on the master tagged with its family.
       cycle: 4,
       speedMasterUuid: 'm-position',
     })
@@ -168,7 +168,7 @@ describe('FxPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     // The desk now runs it.
-    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
     rerender(<Harness />)
     expect(screen.getByRole('button', { name: 'Circle' }).getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByRole('button', { name: 'Edit Circle' })).toBeTruthy()
@@ -181,7 +181,7 @@ describe('FxPicker', () => {
     expect(updateFx.mock.calls[0][1]).toEqual({
       fxType: 'Figure 8',
       blendMode: 'ADDITIVE',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '32' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '32' },
     })
   })
 
@@ -189,14 +189,14 @@ describe('FxPicker', () => {
     const { rerender } = render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position' })]
     rerender(<Harness />)
 
     fireEvent.click(screen.getByRole('radio', { name: 'Intensity' }))
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(2))
     expect(removeFx).toHaveBeenCalledWith({ id: 77, fixtureKey: 'spot-3' })
-    expect(addFixtureFx.mock.calls[1][0]).toMatchObject({ fxType: 'Pulse', propertyName: 'dimmer', programmerOwned: true, blendMode: 'OVERRIDE' })
+    expect(addFixtureFx.mock.calls[1][0]).toMatchObject({ fxType: 'Pulse', attribute: 'dimmer', programmerOwned: true, blendMode: 'OVERRIDE' })
     expect(updateFx).not.toHaveBeenCalled()
   })
 
@@ -207,7 +207,7 @@ describe('FxPicker', () => {
     const { rerender } = render(<Harness initialFamily="INTENSITY" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveFx({ id: 77, fxType: 'Pulse', targetKey: 'spot-3', propertyName: 'dimmer', cycle: 16, timingSource: 'BEAT' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Pulse', targetKey: 'spot-3', attribute: 'dimmer', cycle: 16, timingSource: 'BEAT' })]
     rerender(<Harness initialFamily="INTENSITY" />)
 
     fireEvent.click(screen.getByRole('button', { name: 'SineWave' }))
@@ -224,7 +224,7 @@ describe('FxPicker', () => {
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'Fade', cycle: 2, direction: 'BOUNCE' })
 
-    wire.active = [makeActiveFx({ id: 77, fxType: 'Fade', targetKey: 'spot-3', propertyName: 'dimmer', cycle: 2, direction: 'BOUNCE' })]
+    wire.active = [makeActiveFx({ id: 77, fxType: 'Fade', targetKey: 'spot-3', attribute: 'dimmer', cycle: 2, direction: 'BOUNCE' })]
     rerender(<Harness initialFamily="INTENSITY" />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     expect(updateFx.mock.calls[0][1]).toMatchObject({ fxType: 'Pulse', cycle: 4, direction: 'FORWARD' })
@@ -250,13 +250,13 @@ describe('FxPicker', () => {
 })
 
 describe('the Beam family (effects plan §4.4)', () => {
-  const beam = (name: string, property: string): FxLibraryEntry => ({
+  const beam = (name: string, attribute: string): FxLibraryEntry => ({
     name,
     family: 'beam',
     outputType: 'SLIDER',
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: [property],
+    compatibleAttributes: [attribute],
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
   })
   const PROFILE = makeFixture('profile-1', [
@@ -298,14 +298,14 @@ describe('the Beam family (effects plan §4.4)', () => {
   })
 
   it('opens a Beam row on Beam only where a beam effect drives its property', () => {
-    const withPrism = makeFixture('profile-2', [...PROFILE.properties!, sliderProp('prism', 'prism', chan(4))])
+    const withPrism = makeFixture('profile-2', [...PROFILE.attributes!, sliderProp('prism', 'prism', chan(4))])
     const props = { current: null, onCurrent: () => {}, onEdit: () => {}, initialFamily: 'BEAM' as const }
     const target = { type: 'fixture' as const, fixture: withPrism }
-    const { unmount } = render(<FxPicker target={target} preferredProperty="iris" {...props} />)
+    const { unmount } = render(<FxPicker target={target} preferredAttribute="iris" {...props} />)
     expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
     unmount()
-    wire.library = [...wire.library, { ...PULSE, name: 'Prism Sweep', family: 'controls', compatibleProperties: ['slider'] }]
-    render(<FxPicker target={target} preferredProperty="prism" {...props} />)
+    wire.library = [...wire.library, { ...PULSE, name: 'Prism Sweep', family: 'controls', compatibleAttributes: ['slider'] }]
+    render(<FxPicker target={target} preferredAttribute="prism" {...props} />)
     expect(screen.getByRole('radio', { name: 'Controls' }).getAttribute('aria-checked')).toBe('true')
   })
 
@@ -316,7 +316,7 @@ describe('the Beam family (effects plan §4.4)', () => {
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
       fxType: 'Iris Pulse',
       fixtureKey: 'profile-1',
-      propertyName: 'iris',
+      attribute: 'iris',
       cycle: 4,
       speedMasterUuid: 'm-beam',
     })
@@ -330,7 +330,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     outputType: 'STEPS',
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
+    compatibleAttributes: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
     parameters: [
       { name: 'palettes', type: 'paletteList', defaultValue: '', description: '' },
       { name: 'fadeRatio', type: 'double', defaultValue: '0.5', description: '' },
@@ -343,10 +343,10 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     outputType: 'STEPS',
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
-    compatibleProperties: ['setting'],
+    compatibleAttributes: ['setting'],
     parameters: [{ name: 'slots', type: 'slotList', defaultValue: '', description: '' }],
   }
-  const palette = (name: string, family: PaletteSummary['family'], propertyName: string, value: string, over: Partial<PaletteSummary> = {}) =>
+  const palette = (name: string, family: PaletteSummary['family'], attribute: string, value: string, over: Partial<PaletteSummary> = {}) =>
     ({
       id: name.length,
       uuid: `uuid-${name}`,
@@ -357,7 +357,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
       isGeneric: true,
       kind: 'value',
       requiredEmitters: [],
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName, value }],
+      rows: [{ targetType: 'deferred', targetKey: '', attribute, value }],
       fx: null,
       ...over,
     }) as unknown as PaletteSummary
@@ -389,11 +389,11 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
 
   function StepHarness({
     initialFamily,
-    preferredProperty,
+    preferredAttribute,
     fixture = MOVER,
   }: {
     initialFamily: 'POSITION' | 'BEAM' | 'INTENSITY'
-    preferredProperty?: string
+    preferredAttribute?: string
     fixture?: typeof MOVER
   }) {
     const [current, setCurrent] = useState<AuditionedFx | null>(null)
@@ -401,7 +401,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
       <FxPicker
         target={{ type: 'fixture', fixture }}
         initialFamily={initialFamily}
-        preferredProperty={preferredProperty}
+        preferredAttribute={preferredAttribute}
         current={current}
         onCurrent={setCurrent}
         onEdit={() => {}}
@@ -439,7 +439,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
       fxType: 'PaletteSteps',
-      propertyName: 'position',
+      attribute: 'position',
       blendMode: 'OVERRIDE',
       speedMasterUuid: 'm-position',
       parameters: { palettes: 'pal:uuid-Centre,pal:uuid-Downstage', fadeRatio: '0.5' },
@@ -447,13 +447,13 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
   })
 
   it('offers Slot Steps in Beam on a gobo row, and starts it on that setting’s first slots past open', async () => {
-    render(<StepHarness initialFamily="BEAM" preferredProperty="gobo" />)
+    render(<StepHarness initialFamily="BEAM" preferredAttribute="gobo" />)
     expect(screen.getByRole('radio', { name: 'Beam' }).getAttribute('aria-checked')).toBe('true')
     fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
     expect(addFixtureFx.mock.calls[0][0]).toMatchObject({
       fxType: 'SlotSteps',
-      propertyName: 'gobo',
+      attribute: 'gobo',
       speedMasterUuid: 'm-beam',
       parameters: { slots: 'GOBO_1,GOBO_2' },
     })
@@ -463,7 +463,7 @@ describe('the step effects (effects plan session 7, §4.4)', () => {
     render(<StepHarness initialFamily="BEAM" fixture={WHEEL_FIRST} />)
     fireEvent.click(screen.getByRole('button', { name: 'SlotSteps' }))
     await waitFor(() => expect(addFixtureFx).toHaveBeenCalledTimes(1))
-    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'SlotSteps', propertyName: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
+    expect(addFixtureFx.mock.calls[0][0]).toMatchObject({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_1,GOBO_2' } })
   })
 })
 
@@ -503,7 +503,7 @@ describe('FxPicker on the bare effect press', () => {
     expect(pressFx.mock.calls[0][0]).toMatchObject({
       projectId: 3,
       fxType: 'Pulse',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       targets: HEX.map((f) => ({ type: 'fixture', key: f.key })),
       families: ['INTENSITY'],
       cycle: 4,
@@ -519,7 +519,7 @@ describe('FxPicker on the bare effect press', () => {
     rerender(<Pressing />)
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     await waitFor(() => expect(pressFx).toHaveBeenCalledTimes(1))
-    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', propertyName: 'dimmer' })]
+    wire.active = [makeActiveFx({ id: 99, fxType: 'Pulse', targetKey: '[]', attribute: 'dimmer' })]
     rerender(<Pressing />)
     fireEvent.click(screen.getByRole('button', { name: 'Ramp' }))
     expect(pressFx).toHaveBeenCalledTimes(1)

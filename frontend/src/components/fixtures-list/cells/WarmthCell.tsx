@@ -3,7 +3,7 @@ import { Save, Waves } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { PaletteTarget } from '@/api/palettesApi'
 import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
-import type { WhiteMixPropertyDescriptor } from '../../../store/fixtures'
+import type { WhiteMixAttributeDescriptor } from '../../../store/fixtures'
 import type { Rgb } from '../../../lib/whiteMix'
 import type { CellResolution } from '../columns'
 import type { CellBatch, CellCommit } from '../rowModel'
@@ -49,8 +49,8 @@ export function isWarmthOnly(resolutions: readonly NonNullable<CellResolution>[]
 }
 
 /** The first warm/cold white pair among [resolutions], the scale a warmth is read and set on. */
-export function firstWhiteMix(resolutions: readonly NonNullable<CellResolution>[]): WhiteMixPropertyDescriptor | undefined {
-  for (const r of resolutions) if (r.kind === 'white-mix') return r.property
+export function firstWhiteMix(resolutions: readonly NonNullable<CellResolution>[]): WhiteMixAttributeDescriptor | undefined {
+  for (const r of resolutions) if (r.kind === 'white-mix') return r.attribute
   return undefined
 }
 

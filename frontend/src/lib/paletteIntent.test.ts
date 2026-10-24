@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  EMITTER_PROPERTIES,
+  EMITTER_ATTRIBUTES,
   EMITTER_TINTS,
-  PALETTE_PROPERTIES,
+  PALETTE_ATTRIBUTES,
   WHITE_POLICIES,
   describePaletteIntent,
   describePaletteRows,
@@ -10,8 +10,8 @@ import {
   serializePaletteIntent,
   paletteIntentSwatch,
   paletteRowsSwatch,
-  palettePropertiesForFamily,
-  palettePropertyFor,
+  paletteAttributesForFamily,
+  paletteAttributeFor,
   type PaletteIntent,
 } from './paletteIntent'
 import { ATTRIBUTE_FAMILIES } from './attributeFamily'
@@ -116,10 +116,10 @@ describe('paletteIntent', () => {
 
   describe('the property vocabulary', () => {
     it('matches the backend list exactly', () => {
-      // Mirrors `PaletteProperty` in `fx/PaletteIntent.kt`, in declaration order. Kept as a
+      // Mirrors `PaletteAttribute` in `fx/PaletteIntent.kt`, in declaration order. Kept as a
       // literal rather than derived: an assertion that rebuilds what it is checking passes just as
       // happily when the source is wrong. `maskPicker.test.ts` pins the family list the same way.
-      expect(PALETTE_PROPERTIES.map((p) => p.propertyName)).toEqual([
+      expect(PALETTE_ATTRIBUTES.map((p) => p.attribute)).toEqual([
         'dimmer',
         'strobe',
         'position',
@@ -139,20 +139,20 @@ describe('paletteIntent', () => {
       // Where "a template cannot carry a gobo" lives on this side. The backend refuses it too; this
       // is what stops the editor offering it in the first place.
       for (const refused of ['gobo', 'goboRotation', 'ledMacro', 'movementMacro', 'dimer', '']) {
-        expect(palettePropertyFor(refused), refused).toBeNull()
+        expect(paletteAttributeFor(refused), refused).toBeNull()
       }
     })
 
     it('collapses the three colour spellings onto one entry', () => {
       for (const spelling of ['colour', 'color', 'rgbColour', 'RGBCOLOUR']) {
-        expect(palettePropertyFor(spelling)?.propertyName, spelling).toBe('rgbColour')
+        expect(paletteAttributeFor(spelling)?.attribute, spelling).toBe('rgbColour')
       }
     })
 
     it('puts strobe in intensity, not beam', () => {
-      // Mirrors `PropertyCategory.STROBE.maskGroup()`: an intensity modulation, HTP like a dimmer.
-      expect(palettePropertyFor('strobe')?.family).toBe('INTENSITY')
-      expect(palettePropertiesForFamily('INTENSITY').map((p) => p.propertyName)).toEqual([
+      // Mirrors `AttributeCategory.STROBE.family()`: an intensity modulation, HTP like a dimmer.
+      expect(paletteAttributeFor('strobe')?.family).toBe('INTENSITY')
+      expect(paletteAttributesForFamily('INTENSITY').map((p) => p.attribute)).toEqual([
         'dimmer',
         'strobe',
       ])
@@ -160,7 +160,7 @@ describe('paletteIntent', () => {
 
     it('gives every family at least one property, so no family is unauthorable', () => {
       for (const family of ATTRIBUTE_FAMILIES) {
-        expect(palettePropertiesForFamily(family).length, family).toBeGreaterThan(0)
+        expect(paletteAttributesForFamily(family).length, family).toBeGreaterThan(0)
       }
     })
 
@@ -169,16 +169,16 @@ describe('paletteIntent', () => {
     })
 
     it('puts the three emitters in colour, taking a level', () => {
-      // Mirrors `PropertyCategory.WHITE.maskGroup()`: emitters of the same mixed colour, so a
+      // Mirrors `AttributeCategory.WHITE.family()`: emitters of the same mixed colour, so a
       // template naming a hex *and* an amber is still one family and still one named thing.
-      for (const name of EMITTER_PROPERTIES) {
-        expect(palettePropertyFor(name)?.family, name).toBe('COLOUR')
-        expect(palettePropertyFor(name)?.intent, name).toBe('level')
+      for (const name of EMITTER_ATTRIBUTES) {
+        expect(paletteAttributeFor(name)?.family, name).toBe('COLOUR')
+        expect(paletteAttributeFor(name)?.intent, name).toBe('level')
       }
     })
 
     it('gives every emitter a tint, so no surface has to invent one', () => {
-      for (const name of EMITTER_PROPERTIES) {
+      for (const name of EMITTER_ATTRIBUTES) {
         expect(EMITTER_TINTS[name], name).toMatch(/^#[0-9a-f]{6}$/i)
       }
     })
@@ -208,8 +208,8 @@ describe('paletteIntent', () => {
       expect(describePaletteIntent('dmx:180')).toBe('180')
       expect(
         describePaletteRows([
-          { propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
-          { propertyName: 'uv', value: 'dmx:255' },
+          { attribute: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
+          { attribute: 'uv', value: 'dmx:255' },
         ]),
       ).toBe('#FF9D4A · RGB only · UV 255')
     })
@@ -231,18 +231,18 @@ describe('paletteIntent', () => {
       // as purple whenever the UV row happened to sort first.
       expect(
         paletteRowsSwatch([
-          { propertyName: 'uv', value: 'dmx:255' },
-          { propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
+          { attribute: 'uv', value: 'dmx:255' },
+          { attribute: 'rgbColour', value: '#FF9D4A;policy=rgbonly' },
         ]),
       ).toBe('#FF9D4A')
     })
 
     it('falls back to an emitter tint when there is no colour row', () => {
-      expect(paletteRowsSwatch([{ propertyName: 'uv', value: 'dmx:255' }])).toBe(EMITTER_TINTS.uv)
+      expect(paletteRowsSwatch([{ attribute: 'uv', value: 'dmx:255' }])).toBe(EMITTER_TINTS.uv)
     })
 
     it('is null for rows with no colour in them at all', () => {
-      expect(paletteRowsSwatch([{ propertyName: 'dimmer', value: 'pct:50' }])).toBeNull()
+      expect(paletteRowsSwatch([{ attribute: 'dimmer', value: 'pct:50' }])).toBeNull()
       expect(paletteRowsSwatch([])).toBeNull()
     })
   })

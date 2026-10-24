@@ -13,13 +13,13 @@ import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.PaletteIntent
-import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoPalette
@@ -66,7 +66,7 @@ internal data class PaletteFromProgrammerRequest(
     val notes: String? = null,
     val fadeDurationMs: Long? = null,
     /**
-     * [PropertyMaskGroup] names to record — in practice exactly one, since a template holds one
+     * [AttributeFamily] names to record — in practice exactly one, since a template holds one
      * family. A wider mask is refused rather than silently narrowed: the caller believed something
      * about what it was recording, and that belief is wrong.
      */
@@ -103,7 +103,7 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
         HttpStatusCode.BadRequest, ErrorResponse("Unknown record source '${request.source}'"),
     )
     val mask = try {
-        parseMaskGroups(request.mask)
+        parseFamilies(request.mask)
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
@@ -145,41 +145,41 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
 
         val skipped = ArrayList<PaletteSkipDto>()
         collectSkips.forEach { skip ->
-            skipped += PaletteSkipDto(skip.targetKey ?: "", skip.propertyName ?: "", skip.reason.name)
+            skipped += PaletteSkipDto(skip.targetKey ?: "", skip.attribute ?: "", skip.reason.name)
         }
 
         // property → (fixtureKey → intent). Grouped by property first because the generic/per-fixture
         // decision is per property: a selection may agree on colour and differ on position.
-        val byProperty = LinkedHashMap<String, LinkedHashMap<String, PaletteIntent>>()
+        val byAttribute = LinkedHashMap<String, LinkedHashMap<String, PaletteIntent>>()
 
         // Which heads busked an emitter *as its own property* — a MIDI fader, or the programmer's
         // white slider — rather than only through a colour. Needed before the loop because it
         // changes how that head's colour reads back: the explicit row carries the neutral, so the
         // colour must not also fold it into the hex under an EXTRACT policy (the write boundary
         // refuses that combination, and it would double the emitter besides).
-        val emittersRecordedSeparately: Map<String, Set<PaletteProperty>> = entries
+        val emittersRecordedSeparately: Map<String, Set<PaletteAttribute>> = entries
             .mapNotNull { entry ->
-                PaletteProperty.ofOrNull(entry.propertyName)
+                PaletteAttribute.ofOrNull(entry.attribute)
                     ?.takeIf { it.isEmitter }
                     ?.let { entry.fixtureKey to it }
             }
             .groupBy({ it.first }, { it.second })
-            .mapValues { (_, properties) -> properties.toSet() }
+            .mapValues { (_, attributes) -> attributes.toSet() }
 
         // A UV component busked through a colour, per head. Held aside rather than written straight
-        // into [byProperty]: an explicit `uv` entry for the same head is the better answer and may
+        // into [byAttribute]: an explicit `uv` entry for the same head is the better answer and may
         // arrive after this one, so these are merged in at the end and only where none exists.
         val derivedUv = LinkedHashMap<String, PaletteIntent>()
 
         for (entry in entries) {
-            val vocabulary = PaletteProperty.ofOrNull(entry.propertyName)
+            val vocabulary = PaletteAttribute.ofOrNull(entry.attribute)
             if (vocabulary == null) {
                 // A slotted role, or a property no template can hold. Reported rather than dropped:
                 // an operator who selected a gobo cell and pressed this needs to know why it is not
                 // in the result.
                 skipped += PaletteSkipDto(
-                    entry.fixtureKey, entry.propertyName,
-                    "palettes hold no ${entry.propertyName} — it lives in a recorded look",
+                    entry.fixtureKey, entry.attribute,
+                    "palettes hold no ${entry.attribute} — it lives in a recorded look",
                 )
                 continue
             }
@@ -191,30 +191,30 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
                 vocabulary,
                 entry.value,
                 fixture,
-                whiteRecordedSeparately = PaletteProperty.WHITE in recordedSeparately,
-                amberRecordedSeparately = PaletteProperty.AMBER in recordedSeparately,
+                whiteRecordedSeparately = PaletteAttribute.WHITE in recordedSeparately,
+                amberRecordedSeparately = PaletteAttribute.AMBER in recordedSeparately,
             )
             if (intent == null) {
                 skipped += PaletteSkipDto(
-                    entry.fixtureKey, entry.propertyName,
+                    entry.fixtureKey, entry.attribute,
                     "could not be expressed as a palette value",
                 )
                 continue
             }
-            byProperty.getOrPut(vocabulary.propertyName) { LinkedHashMap() }[entry.fixtureKey] = intent
+            byAttribute.getOrPut(vocabulary.attribute) { LinkedHashMap() }[entry.fixtureKey] = intent
 
             // The colour inverse folds white and amber back into the hex, but **no policy has ever
             // driven UV** — so a UV busked through the colour picker had nowhere to go and was
             // silently lost. It gets a row of its own instead, which is also the one case where
             // recording concretely costs no portability: a `uv` row demands only a UV emitter, and a
             // head with UV busked on it certainly has one.
-            if (vocabulary == PaletteProperty.COLOUR) {
+            if (vocabulary == PaletteAttribute.COLOUR) {
                 // **Every head with a colour entry, zeroes included.** Recording only the non-zero
                 // ones let the generic/per-fixture collapse below read "the two heads that had UV
                 // agree" as "all the recorded heads agree", and emit one deferred row that then
                 // turned UV on for the head that never had any. The whole set is added only if some
                 // head actually had UV — see the merge below.
-                val uv = ((entry.value as? CueAssignmentResolver.PropertyValue.Colour)?.value?.uv ?: 0u).toInt()
+                val uv = ((entry.value as? CueAssignmentResolver.AttributeValue.Colour)?.value?.uv ?: 0u).toInt()
                 derivedUv[entry.fixtureKey] = PaletteIntent.Level(uv)
             }
         }
@@ -223,11 +223,11 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
         // operator never touched UV, and a template demanding a UV emitter to assert nothing would
         // narrow where it can be applied for no gain.
         if (derivedUv.values.any { (it as? PaletteIntent.Level)?.value?.let { v -> v > 0 } == true }) {
-            val explicit = byProperty.getOrPut(PaletteProperty.UV.propertyName) { LinkedHashMap() }
+            val explicit = byAttribute.getOrPut(PaletteAttribute.UV.attribute) { LinkedHashMap() }
             derivedUv.forEach { (fixtureKey, intent) -> explicit.putIfAbsent(fixtureKey, intent) }
         }
 
-        if (byProperty.isEmpty()) {
+        if (byAttribute.isEmpty()) {
             call.respond(
                 HttpStatusCode.BadRequest,
                 ErrorResponse("None of those values can be held by a palette"),
@@ -237,14 +237,14 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
 
         val rows = ArrayList<PaletteRowDto>()
         var allGeneric = true
-        for ((propertyName, byFixture) in byProperty) {
+        for ((attribute, byFixture) in byAttribute) {
             val distinct = byFixture.values.map { it.serialize() }.distinct()
             if (distinct.size == 1) {
-                rows += PaletteRowDto(DEFERRED_TARGET_TYPE, "", propertyName, distinct.single(), rows.size)
+                rows += PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, distinct.single(), rows.size)
             } else {
                 allGeneric = false
                 for ((fixtureKey, intent) in byFixture) {
-                    rows += PaletteRowDto("fixture", fixtureKey, propertyName, intent.serialize(), rows.size)
+                    rows += PaletteRowDto("fixture", fixtureKey, attribute, intent.serialize(), rows.size)
                 }
             }
         }
@@ -276,7 +276,7 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
                     this.palette = template
                     targetType = row.targetType
                     targetKey = row.targetKey
-                    attribute = row.propertyName
+                    attribute = row.attribute
                     value = row.value
                     sortOrder = row.sortOrder
                 }
@@ -304,19 +304,19 @@ private suspend fun RoutingContext.handlePaletteFromProgrammer(state: State, pro
  * value was set.
  */
 private fun intentFor(
-    property: PaletteProperty,
-    value: CueAssignmentResolver.PropertyValue,
+    attribute: PaletteAttribute,
+    value: CueAssignmentResolver.AttributeValue,
     fixture: GroupableFixture?,
     /**
      * True when this head has an explicit `white` entry in the same record, which takes that emitter
-     * over from the policy — see the [PaletteProperty.COLOUR] arm.
+     * over from the policy — see the [PaletteAttribute.COLOUR] arm.
      */
     whiteRecordedSeparately: Boolean = false,
     /** As [whiteRecordedSeparately], for amber. Tracked apart because `extra` folds only one byte. */
     amberRecordedSeparately: Boolean = false,
-): PaletteIntent? = when (property) {
-    PaletteProperty.COLOUR -> {
-        val colour = (value as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
+): PaletteIntent? = when (attribute) {
+    PaletteAttribute.COLOUR -> {
+        val colour = (value as? CueAssignmentResolver.AttributeValue.Colour)?.value ?: return null
         // Fold the extra emitters back into RGB, and let the policy say they were driven. See the
         // file's class doc: the inverse is not unique, and this is the reading that round-trips.
         //
@@ -348,10 +348,10 @@ private fun intentFor(
     // A byte straight back out — no range scaling, unlike the percent family below. The emitter's
     // slider is what the value came off and what it will be written to, and `PaletteResolver`
     // clamps it into that slider's own range on the way out.
-    PaletteProperty.WHITE, PaletteProperty.AMBER, PaletteProperty.UV -> {
+    PaletteAttribute.WHITE, PaletteAttribute.AMBER, PaletteAttribute.UV -> {
         val level = when (value) {
-            is CueAssignmentResolver.PropertyValue.Slider -> value.value.toInt()
-            is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue.toInt()
+            is CueAssignmentResolver.AttributeValue.Slider -> value.value.toInt()
+            is CueAssignmentResolver.AttributeValue.Setting -> value.channelValue.toInt()
             else -> return null
         }
         PaletteIntent.Level(level)
@@ -360,29 +360,29 @@ private fun intentFor(
     // Centre-relative, the unit every new position write takes (venue-visit plan P3): the exact
     // inverse of the resolver's own centre arm, so a recorded palette lands back on these bytes —
     // and, unlike the degrees it replaced, on a head whose travel carries no degree annotation.
-    PaletteProperty.POSITION -> {
-        val position = (value as? CueAssignmentResolver.PropertyValue.Position) ?: return null
+    PaletteAttribute.POSITION -> {
+        val position = (value as? CueAssignmentResolver.AttributeValue.Position) ?: return null
         PaletteResolver.centreIntentOf(fixture ?: return null, position) ?: return null
     }
 
-    PaletteProperty.PRISM -> {
+    PaletteAttribute.PRISM -> {
         val level = when (value) {
-            is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue.toInt()
-            is CueAssignmentResolver.PropertyValue.Slider -> value.value.toInt()
+            is CueAssignmentResolver.AttributeValue.Setting -> value.channelValue.toInt()
+            is CueAssignmentResolver.AttributeValue.Slider -> value.value.toInt()
             else -> return null
         }
         PaletteIntent.Switch(level > 0)
     }
 
-    PaletteProperty.DIMMER, PaletteProperty.STROBE, PaletteProperty.ZOOM,
-    PaletteProperty.FOCUS, PaletteProperty.IRIS, PaletteProperty.FROST -> {
+    PaletteAttribute.DIMMER, PaletteAttribute.STROBE, PaletteAttribute.ZOOM,
+    PaletteAttribute.FOCUS, PaletteAttribute.IRIS, PaletteAttribute.FROST -> {
         val level = when (value) {
-            is CueAssignmentResolver.PropertyValue.Slider -> value.value.toInt()
-            is CueAssignmentResolver.PropertyValue.Setting -> value.channelValue.toInt()
+            is CueAssignmentResolver.AttributeValue.Slider -> value.value.toInt()
+            is CueAssignmentResolver.AttributeValue.Setting -> value.channelValue.toInt()
             else -> return null
         }
         val resolved = fixture?.let {
-            PropertyChannelWriter.resolveProperty(it, property.propertyName)?.value
+            AttributeChannelWriter.resolveAttribute(it, attribute.attribute)?.value
         }
         val slider = resolved as? uk.me.cormack.lighting7.fixture.dmx.DmxSlider
         val min = slider?.min?.toInt() ?: 0

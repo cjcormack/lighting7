@@ -5,7 +5,7 @@ import uk.me.cormack.lighting7.dmx.packChannelKey
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
-import uk.me.cormack.lighting7.midi.PropertyChannelResolver
+import uk.me.cormack.lighting7.midi.AttributeChannelResolver
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
@@ -13,7 +13,7 @@ import uk.me.cormack.lighting7.show.Fixtures
  * PROGRAMMER-layer write delegation, extracted from [FxEngine] (sweep item E1).
  *
  * Sticky manual values at property granularity. Callers (web busking, MIDI faders,
- * flash, locate, preset toggles) hand a typed `PropertyValue` plus their
+ * flash, locate, preset toggles) hand a typed `AttributeValue` plus their
  * `ProgrammerOwner`; the writer stores one property-level slot in [ProgrammerStore]
  * under that owner and publishes via [LayerResolver.fallbackFor]. Clears remove only
  * the caller's own slot; the property falls back to the most recent surviving owner
@@ -36,17 +36,17 @@ class ProgrammerWriter internal constructor(
     /** Provenance hook — programmer moves change provenance winners. */
     private val onProgrammerChanged: () -> Unit,
 ) {
-    /** One entry of a [writeProperties] batch. */
-    data class PropertyWrite(
+    /** One entry of a [writeAttributes] batch. */
+    data class AttributeWrite(
         val fixture: GroupableFixture,
-        val propertyName: String,
-        val value: CueAssignmentResolver.PropertyValue,
+        val attribute: String,
+        val value: CueAssignmentResolver.AttributeValue,
         /** Group name when this entry came from a group control, else null (§7.1). */
         val sourceGroup: String? = null,
     )
 
     /**
-     * Lay a [value] onto the programmer for [propertyName] of [fixture] as [owner] and
+     * Lay a [value] onto the programmer for [attribute] of [fixture] as [owner] and
      * publish immediately. Returns the resolved channel writes so callers can record
      * whether the write landed (empty = the property didn't resolve; nothing was stored).
      *
@@ -58,42 +58,42 @@ class ProgrammerWriter internal constructor(
      * Accepts any [GroupableFixture] — a [Fixture] or a [FixtureElement]. For elements the
      * publish key is the element's own key so subsequent reads see the write.
      */
-    fun writeProperty(
+    fun writeAttribute(
         owner: ProgrammerOwner,
         fixture: GroupableFixture,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val writes = PropertyChannelWriter.resolve(fixture, propertyName, value)
+    ): List<AttributeChannelResolver.ChannelWrite> {
+        val writes = AttributeChannelWriter.resolve(fixture, attribute, value)
         if (writes.isEmpty()) return writes
         programmerStore.putValue(
-            owner, fixture.targetKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup,
+            owner, fixture.targetKey, attribute, ProgrammerValue.Hard(value), touched, sourceGroup,
         )
         if (absorbSideband) absorbSidebandUnder(writes)
         publisher.publishCascadeForKeys(
-            setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs,
+            setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)), fadeMs,
         )
         onProgrammerChanged()
         return writes
     }
 
     /** Group overload — fan out to every member, tagging slots with the group name (§7.1). */
-    fun writeGroupProperty(
+    fun writeGroupAttribute(
         owner: ProgrammerOwner,
         group: FixtureGroup<*>,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         touched: Boolean = true,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> = writeProperties(
+    ): List<AttributeChannelResolver.ChannelWrite> = writeAttributes(
         owner,
         group.fixtures.filterIsInstance<Fixture>().map {
-            PropertyWrite(it, propertyName, value, sourceGroup = group.name)
+            AttributeWrite(it, attribute, value, sourceGroup = group.name)
         },
         touched = touched,
         absorbSideband = absorbSideband,
@@ -101,40 +101,40 @@ class ProgrammerWriter internal constructor(
     ).flatten()
 
     /**
-     * Clear [owner]'s programmer entry for [propertyName] on [fixture]. The property
+     * Clear [owner]'s programmer entry for [attribute] on [fixture]. The property
      * cascades back to the most recent surviving owner, the cue layer (if a cue asserts
      * it), or baseline. Accepts any [GroupableFixture].
      */
-    fun clearProperty(
+    fun clearAttribute(
         owner: ProgrammerOwner,
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
-        programmerStore.clear(owner, fixture.targetKey, propertyName)
+    ): List<AttributeChannelResolver.ChannelWrite> {
+        val channels = AttributeChannelWriter.channelsFor(fixture, attribute)
+        programmerStore.clear(owner, fixture.targetKey, attribute)
         if (channels.isEmpty()) return channels
         publisher.publishCascadeForKeys(
-            setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)), fadeMs,
+            setOf(CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)), fadeMs,
         )
         onProgrammerChanged()
         return channels
     }
 
-    /** Group overload for [clearProperty]. */
-    fun clearGroupProperty(
+    /** Group overload for [clearAttribute]. */
+    fun clearGroupAttribute(
         owner: ProgrammerOwner,
         group: FixtureGroup<*>,
-        propertyName: String,
+        attribute: String,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> = clearProperties(
+    ): List<AttributeChannelResolver.ChannelWrite> = clearAttributes(
         owner,
-        group.fixtures.filterIsInstance<Fixture>().map { it to propertyName },
+        group.fixtures.filterIsInstance<Fixture>().map { it to attribute },
         fadeMs = fadeMs,
     )
 
     /**
-     * Batch counterpart of [writeProperty]: store every entry, then publish all
+     * Batch counterpart of [writeAttribute]: store every entry, then publish all
      * affected keys under one publish-lock acquisition and one controller
      * transaction. A locate on a large group is hundreds of property writes — issuing them
      * one-by-one would take the lock, rescan the active effects and commit a DMX transaction
@@ -151,14 +151,14 @@ class ProgrammerWriter internal constructor(
      * (`CueAssignmentResolver.reconcileBundledEmitters`), so Include of a cue or a template apply
      * leaves the programmer showing what the cue plays back, whatever order its rows were in.
      */
-    fun writeProperties(
+    fun writeAttributes(
         owner: ProgrammerOwner,
-        writes: List<PropertyWrite>,
+        writes: List<AttributeWrite>,
         touched: Boolean = true,
         absorbSideband: Boolean = true,
         fadeMs: Long = 0,
-    ): List<List<PropertyChannelResolver.ChannelWrite>> {
-        val resolved = writes.map { PropertyChannelWriter.resolve(it.fixture, it.propertyName, it.value) }
+    ): List<List<AttributeChannelResolver.ChannelWrite>> {
+        val resolved = writes.map { AttributeChannelWriter.resolve(it.fixture, it.attribute, it.value) }
         val keys = HashSet<CueAssignmentResolver.Key>()
         for (index in emittersLast(writes)) {
             val channelWrites = resolved[index]
@@ -167,13 +167,13 @@ class ProgrammerWriter internal constructor(
             programmerStore.putValue(
                 owner,
                 write.fixture.targetKey,
-                write.propertyName,
+                write.attribute,
                 ProgrammerValue.Hard(write.value),
                 touched,
                 write.sourceGroup,
             )
             if (absorbSideband) absorbSidebandUnder(channelWrites)
-            keys += CueAssignmentResolver.Key.fixture(write.fixture.targetKey, write.propertyName)
+            keys += CueAssignmentResolver.Key.fixture(write.fixture.targetKey, write.attribute)
         }
         if (keys.isNotEmpty()) {
             publisher.publishCascadeForKeys(keys, fadeMs)
@@ -185,21 +185,21 @@ class ProgrammerWriter internal constructor(
     /**
      * Store [writes] as [owner] without publishing, for a caller whose writes leave every key showing
      * what it already shows — a layer's Detach. [beneathTop] puts each **under** whatever owner holds
-     * the key ([ProgrammerStore.putBeneathTop]); otherwise each goes on top as [writeProperties] puts
+     * the key ([ProgrammerStore.putBeneathTop]); otherwise each goes on top as [writeAttributes] puts
      * it, emitters last for the same reason. The sideband is never absorbed. The programmer's own
      * readers are told, as for any write.
      */
-    fun storeUnpublished(owner: ProgrammerOwner, writes: List<PropertyWrite>, beneathTop: Boolean, touched: Boolean = true) {
+    fun storeUnpublished(owner: ProgrammerOwner, writes: List<AttributeWrite>, beneathTop: Boolean, touched: Boolean = true) {
         if (writes.isEmpty()) return
         for (index in emittersLast(writes)) {
             val write = writes[index]
             if (beneathTop) {
                 programmerStore.putBeneathTop(
-                    owner, write.fixture.targetKey, write.propertyName, write.value, touched, write.sourceGroup,
+                    owner, write.fixture.targetKey, write.attribute, write.value, touched, write.sourceGroup,
                 )
             } else {
                 programmerStore.putValue(
-                    owner, write.fixture.targetKey, write.propertyName, ProgrammerValue.Hard(write.value), touched, write.sourceGroup,
+                    owner, write.fixture.targetKey, write.attribute, ProgrammerValue.Hard(write.value), touched, write.sourceGroup,
                 )
             }
         }
@@ -207,32 +207,32 @@ class ProgrammerWriter internal constructor(
     }
 
     /**
-     * [writes]' indices with the `bundleWithColour` emitters last — see [writeProperties]. A stable
+     * [writes]' indices with the `bundleWithColour` emitters last — see [writeAttributes]. A stable
      * partition, and only when the batch holds an emitter at all: the common batch (a locate, a
      * spread) holds none and keeps its own order at the cost of one scan.
      */
-    private fun emittersLast(writes: List<PropertyWrite>): List<Int> {
-        val emitter = writes.map { bundleRoleOf(it.fixture, it.propertyName) == CueAssignmentResolver.BundleRole.EMITTER }
+    private fun emittersLast(writes: List<AttributeWrite>): List<Int> {
+        val emitter = writes.map { bundleRoleOf(it.fixture, it.attribute) == CueAssignmentResolver.BundleRole.EMITTER }
         return if (emitter.none { it }) writes.indices.toList() else writes.indices.sortedBy { if (emitter[it]) 1 else 0 }
     }
 
     /**
-     * Batch counterpart of [clearProperty]: clear [owner]'s slot for every
+     * Batch counterpart of [clearAttribute]: clear [owner]'s slot for every
      * (fixture, property) pair, then cascade all affected keys back to the surviving owner /
      * cue layer / baseline under one lock acquisition and one controller transaction.
      */
-    fun clearProperties(
+    fun clearAttributes(
         owner: ProgrammerOwner,
         clears: List<Pair<GroupableFixture, String>>,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
+    ): List<AttributeChannelResolver.ChannelWrite> {
+        val all = mutableListOf<AttributeChannelResolver.ChannelWrite>()
         val keys = HashSet<CueAssignmentResolver.Key>()
-        for ((fixture, propertyName) in clears) {
-            programmerStore.clear(owner, fixture.targetKey, propertyName)
-            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+        for ((fixture, attribute) in clears) {
+            programmerStore.clear(owner, fixture.targetKey, attribute)
+            val channels = AttributeChannelWriter.channelsFor(fixture, attribute)
             if (channels.isEmpty()) continue
-            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
+            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)
             all += channels
         }
         if (keys.isNotEmpty()) {
@@ -259,19 +259,19 @@ class ProgrammerWriter internal constructor(
     fun clearEntries(
         clears: List<Pair<GroupableFixture, String>>,
         fadeMs: Long = 0,
-    ): List<PropertyChannelResolver.ChannelWrite> {
-        val all = mutableListOf<PropertyChannelResolver.ChannelWrite>()
+    ): List<AttributeChannelResolver.ChannelWrite> {
+        val all = mutableListOf<AttributeChannelResolver.ChannelWrite>()
         val keys = HashSet<CueAssignmentResolver.Key>()
         var clearedAny = false
-        for ((fixture, propertyName) in clears) {
-            for (slot in programmerStore.slotsFor(fixture.targetKey, propertyName)) {
+        for ((fixture, attribute) in clears) {
+            for (slot in programmerStore.slotsFor(fixture.targetKey, attribute)) {
                 if (slot.owner == ProgrammerOwner.LAYERS) continue
-                programmerStore.clear(slot.owner, fixture.targetKey, propertyName)
+                programmerStore.clear(slot.owner, fixture.targetKey, attribute)
                 clearedAny = true
             }
-            val channels = PropertyChannelWriter.channelsFor(fixture, propertyName)
+            val channels = AttributeChannelWriter.channelsFor(fixture, attribute)
             if (channels.isEmpty()) continue
-            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
+            keys += CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)
             all += channels
         }
         if (keys.isNotEmpty()) {
@@ -322,14 +322,14 @@ class ProgrammerWriter internal constructor(
             var any = false
             for (slot in entry.slots) {
                 if (slot.owner == ProgrammerOwner.LAYERS) continue
-                programmerStore.clear(slot.owner, entry.fixtureKey, entry.propertyName)
-                released += Triple(entry.fixtureKey, entry.propertyName, slot.owner)
+                programmerStore.clear(slot.owner, entry.fixtureKey, entry.attribute)
+                released += Triple(entry.fixtureKey, entry.attribute, slot.owner)
                 any = true
             }
             if (!any) continue
             values++
-            if (PropertyChannelWriter.channelsFor(fixture, entry.propertyName).isNotEmpty()) {
-                keys += CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.propertyName)
+            if (AttributeChannelWriter.channelsFor(fixture, entry.attribute).isNotEmpty()) {
+                keys += CueAssignmentResolver.Key.fixture(entry.fixtureKey, entry.attribute)
             }
         }
 
@@ -456,7 +456,7 @@ class ProgrammerWriter internal constructor(
             val value = if (blind) {
                 0u.toUByte()
             } else {
-                (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
                     ?: continue
             }
             fixtures.controllerOrNull(Universe(0, entry.universe))
@@ -484,7 +484,7 @@ class ProgrammerWriter internal constructor(
         if (keys.isNotEmpty()) publisher.publishCascadeForKeys(keys)
         if (!programmerStore.blind) {
             for (entry in unbacked) {
-                val value = (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+                val value = (entry.slots.firstOrNull()?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
                     ?: continue
                 fixtures.controllerOrNull(Universe(0, entry.universe))?.setValue(entry.channel, value, 0)
             }
@@ -492,8 +492,8 @@ class ProgrammerWriter internal constructor(
         onProgrammerChanged()
     }
 
-    /** Drop all sideband slots under the given channel writes — see [writeProperty]. */
-    private fun absorbSidebandUnder(writes: List<PropertyChannelResolver.ChannelWrite>) {
+    /** Drop all sideband slots under the given channel writes — see [writeAttribute]. */
+    private fun absorbSidebandUnder(writes: List<AttributeChannelResolver.ChannelWrite>) {
         programmerStore.clearChannelsAbsorbedBy(
             writes.map { packChannelKey(it.universe.universe, it.channel) }
         )
@@ -545,16 +545,16 @@ class ProgrammerWriter internal constructor(
     }
 
     /**
-     * Would a programmer write of [propertyName] on [fixture] actually reach the wire?
+     * Would a programmer write of [attribute] on [fixture] actually reach the wire?
      *
      * This is the public, resolved-by-name form of the two guards
      * [CascadePublisher.publishCascadeForKeys] applies per key —
-     * [CascadePublisher.inferTargetForProperty] returning null, and
+     * [CascadePublisher.inferTargetForAttribute] returning null, and
      * [CascadePublisher.allChannelsParked] — *in that order and via the same helpers*, so a
      * caller that pre-filters on this can never disagree with what the publish then does.
-     * Resolving park through [FxTarget.isPropertyFullyParked] rather than enumerating channels
+     * Resolving park through [FxTarget.isAttributeFullyParked] rather than enumerating channels
      * directly matters: [ColourTarget] scopes its extended white/amber/UV channels by
-     * `bundleWithColour`, which is not the same set [PropertyChannelWriter.channelsFor]
+     * `bundleWithColour`, which is not the same set [AttributeChannelWriter.channelsFor]
      * enumerates by trait.
      *
      * Locate is the caller: it must know whether writing a property can achieve anything
@@ -563,13 +563,13 @@ class ProgrammerWriter internal constructor(
      */
     fun publishability(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
     ): Publishability {
-        val key = CueAssignmentResolver.Key.fixture(fixture.targetKey, propertyName)
-        val target = publisher.inferTargetForProperty(fixture, key) ?: return Publishability.UNRESOLVED
-        if (PropertyChannelWriter.channelsFor(fixture, propertyName).isEmpty()) {
+        val key = CueAssignmentResolver.Key.fixture(fixture.targetKey, attribute)
+        val target = publisher.inferTargetForAttribute(fixture, key) ?: return Publishability.UNRESOLVED
+        if (AttributeChannelWriter.channelsFor(fixture, attribute).isEmpty()) {
             // A property whose descriptor exists but is not DMX-backed (e.g. `position` on a
-            // Hue-backed head): `writeProperties` resolves zero channels for it.
+            // Hue-backed head): `writeAttributes` resolves zero channels for it.
             return Publishability.UNRESOLVED
         }
         return if (publisher.allChannelsParked(target, fixture)) {

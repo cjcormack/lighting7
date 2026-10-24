@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
@@ -130,27 +130,27 @@ sealed class VarytecEasymoveXl60SpotFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode11Ch =
             Mode11Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–630°)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse, 0–630°)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 630.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Tilt (coarse, 0–270°)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse, 0–270°)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Colour wheel", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour wheel", category = AttributeCategory.COLOUR)
         val colourWheel = DmxFixtureSetting(
             transaction, universe, firstChannel + 2, Colour.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Gobo wheel", category = PropertyCategory.GOBO)
+        @FixtureAttribute("Gobo wheel", category = AttributeCategory.GOBO)
         val gobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 3, Gobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Gobo spin (0 stop, 1–127 forward, 128–255 reverse)",
-            category = PropertyCategory.GOBO_ROTATION,
+            category = AttributeCategory.GOBO_ROTATION,
         )
         val goboSpin: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
@@ -161,8 +161,8 @@ sealed class VarytecEasymoveXl60SpotFixture(
          * Estimate: the rate, 1–20 Hz — the manual says only "variable electronic strobo". Checked
          * on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 0, StrobeKind.OPEN),
                 StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -173,16 +173,16 @@ sealed class VarytecEasymoveXl60SpotFixture(
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
         )
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Pan/tilt speed (fast → slow)", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed (fast → slow)", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 8)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
         // Ch 11. The manual labels the channel only "Reset", with no value bands; 255 is the level the

@@ -41,7 +41,7 @@ function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
     family: 'COLOUR',
     isGeneric: true,
     rows: [
-      { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a;policy=extract' },
+      { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff9d4a;policy=extract' },
     ],
     kind: 'value',
     requiredEmitters: [],
@@ -102,8 +102,8 @@ describe('useColourPalettes offerability', () => {
       template({
         requiredEmitters: ['uv'],
         rows: [
-          { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a' },
-          { targetType: 'deferred', targetKey: '', propertyName: 'uv', value: 'dmx:200' },
+          { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff9d4a' },
+          { targetType: 'deferred', targetKey: '', attribute: 'uv', value: 'dmx:200' },
         ],
       }),
     ]

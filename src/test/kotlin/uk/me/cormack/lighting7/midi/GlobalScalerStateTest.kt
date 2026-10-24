@@ -4,9 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.China2CellLedBlinderFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.DmxWhiteMixColour
@@ -15,7 +15,7 @@ import uk.me.cormack.lighting7.fixture.dmx.KamLiteobar252Fixture
 import uk.me.cormack.lighting7.fixture.dmx.LightstripRgbFixture
 import uk.me.cormack.lighting7.fixture.dmx.ShehdsLed19RgbwFixture
 import uk.me.cormack.lighting7.fixture.dmx.ShowSoundLedBeamRingFixture
-import uk.me.cormack.lighting7.fixture.property.WhiteMix
+import uk.me.cormack.lighting7.fixture.attribute.WhiteMix
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.models.GRAND_MASTER_FULL
 import uk.me.cormack.lighting7.models.ProjectScalerStateSnapshot
@@ -349,20 +349,20 @@ class GlobalScalerStateTest {
         key: String,
         private val transaction: ControllerTransaction? = null,
     ) : DmxFixture(universe, 1, 2, key, key), WithColour {
-        @FixtureProperty(category = PropertyCategory.WHITE)
+        @FixtureAttribute(category = AttributeCategory.WHITE)
         val warm = DmxSlider(transaction, universe, 1)
 
-        @FixtureProperty(category = PropertyCategory.WHITE)
+        @FixtureAttribute(category = AttributeCategory.WHITE)
         val cold = DmxSlider(transaction, universe, 2)
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxWhiteMixColour(warm, cold, WhiteMix(3000, 6500))
 
         override fun withTransaction(transaction: ControllerTransaction) = WhiteMixHead(universe, key, transaction)
     }
 
     @Test
-    fun `a dimmerless white-mix head is scaled once per channel, though two properties cover it`() {
+    fun `a dimmerless white-mix head is scaled once per channel, though two attributes cover it`() {
         val fixtures = Fixtures()
         val controller = MockDmxController(Universe(0, 0))
         fixtures.register(removeUnused = true) {

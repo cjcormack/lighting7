@@ -17,7 +17,7 @@ import { drivenCategoryOf } from '@/lib/stepFx'
 export interface FxSummaryData {
   fxType: string
   family: string
-  propertyName: string | null
+  attribute: string | null
   cycle: number
   blendMode: string
   order: string | null
@@ -95,7 +95,7 @@ export function fromLookFx(e: LookFx, library?: FxLibraryEntry[]): FxSummaryData
   return {
     fxType: e.fxType,
     family: e.family,
-    propertyName: e.propertyName ?? null,
+    attribute: e.attribute ?? null,
     cycle: e.cycle,
     blendMode: e.blendMode,
     order: e.order,
@@ -119,7 +119,7 @@ export function fromCueAdHocFx(
   return {
     fxType: e.fxType,
     family: e.family,
-    propertyName: e.propertyName,
+    attribute: e.attribute,
     cycle: e.cycle,
     blendMode: e.blendMode,
     order: e.order,
@@ -143,7 +143,7 @@ export function fromFixtureDirectFx(
   return {
     fxType: e.fxType,
     family: lookupCategory(e.fxType, library),
-    propertyName: e.propertyName,
+    attribute: e.attribute,
     cycle: e.cycle,
     blendMode: e.blendMode,
     order: e.order,
@@ -167,7 +167,7 @@ export function fromFixtureIndirectFx(
   return {
     fxType: e.fxType,
     family: lookupCategory(e.fxType, library),
-    propertyName: e.propertyName,
+    attribute: e.attribute,
     cycle: e.cycle,
     blendMode: e.blendMode,
     order: e.order,
@@ -191,7 +191,7 @@ export function fromGroupActiveFx(
   return {
     fxType: e.fxType,
     family: lookupCategory(e.fxType, library),
-    propertyName: e.propertyName,
+    attribute: e.attribute,
     cycle: e.cycle,
     blendMode: e.blendMode,
     order: e.order,

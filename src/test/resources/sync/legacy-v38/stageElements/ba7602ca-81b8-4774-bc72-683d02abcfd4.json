@@ -1,0 +1,25 @@
+{
+  "depthM": 0.1,
+  "heightM": 2.4,
+  "kind": "FLAT",
+  "layer": "SET",
+  "name": "Cottage flat",
+  "params": {
+    "openings": [
+      {
+        "fromM": 0.7,
+        "heightM": 2.1,
+        "kind": "DOOR",
+        "widthM": 0.9
+      }
+    ],
+    "paint": {
+      "front": "11ba061b16a467daf19da423925e64a30c61ad927c3ee87e1a12b2596ac56c7c"
+    }
+  },
+  "positionX": -3.0,
+  "positionY": 3.0,
+  "sortOrder": 4,
+  "uuid": "ba7602ca-81b8-4774-bc72-683d02abcfd4",
+  "widthM": 2.4
+}

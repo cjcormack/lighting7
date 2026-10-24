@@ -69,7 +69,7 @@ class PaletteIntentTest {
         // a DMX 75. `CueAssignmentResolver` answers null, and its callers skip the row with a warn.
         for (raw in listOf("pct:75", "pos:-12,30", "deg:45,12.5", "dmx:180", "on", "off")) {
             assertNull(
-                CueAssignmentResolver.parseAssignmentValue(PropertyCategoryForTest.DIMMER, "dimmer", raw),
+                CueAssignmentResolver.parseAssignmentValue(AttributeCategoryForTest.DIMMER, "dimmer", raw),
                 "'$raw' must not parse as a literal",
             )
         }
@@ -113,71 +113,71 @@ class PaletteIntentTest {
 
     @Test
     fun `the three emitters are colour, and take a level`() {
-        // Mirrors `PropertyCategory.WHITE.maskGroup()`: emitters of the same mixed colour, so a
+        // Mirrors `AttributeCategory.WHITE.family()`: emitters of the same mixed colour, so a
         // template naming a hex *and* an amber is still one family and still one named thing.
         assertEquals(
-            listOf(PaletteProperty.WHITE, PaletteProperty.AMBER, PaletteProperty.UV),
-            PaletteProperty.EMITTERS,
+            listOf(PaletteAttribute.WHITE, PaletteAttribute.AMBER, PaletteAttribute.UV),
+            PaletteAttribute.EMITTERS,
         )
-        for (emitter in PaletteProperty.EMITTERS) {
-            assertEquals(PropertyMaskGroup.COLOUR, emitter.family, emitter.name)
+        for (emitter in PaletteAttribute.EMITTERS) {
+            assertEquals(AttributeFamily.COLOUR, emitter.family, emitter.name)
             assertTrue(emitter.isEmitter, emitter.name)
             assertTrue(emitter.accepts(PaletteIntent.Level(1)), emitter.name)
             // Not a percentage, unlike every other continuous role — an emitter has no range of its
             // own to be a proportion of, and the operator is matching a colour by eye.
             assertTrue(!emitter.accepts(PaletteIntent.Percent(50.0)), emitter.name)
-            assertEquals(emitter, PaletteProperty.ofOrNull(emitter.propertyName), emitter.name)
+            assertEquals(emitter, PaletteAttribute.ofOrNull(emitter.attribute), emitter.name)
         }
         // The names the desk already drives them by — pinned against the rig by
         // `BundledEmitterNamesTest`, and relied on here.
         assertEquals(
             listOf("white", "amber", "uv"),
-            PaletteProperty.EMITTERS.map { it.propertyName },
+            PaletteAttribute.EMITTERS.map { it.attribute },
         )
     }
 
     @Test
-    fun `the property vocabulary is closed, and that is where slotted roles are refused`() {
-        assertEquals(PaletteProperty.COLOUR, PaletteProperty.ofOrNull("rgbColour"))
-        // `canonicalPropertyName` collapses the alias's three spellings onto `rgbColour`, so all
+    fun `the attribute vocabulary is closed, and that is where slotted roles are refused`() {
+        assertEquals(PaletteAttribute.COLOUR, PaletteAttribute.ofOrNull("rgbColour"))
+        // `canonicalAttributeName` collapses the alias's three spellings onto `rgbColour`, so all
         // three name the one vocabulary entry.
-        assertEquals(PaletteProperty.COLOUR, PaletteProperty.ofOrNull("colour"))
-        assertEquals(PaletteProperty.COLOUR, PaletteProperty.ofOrNull("color"))
-        assertEquals(PaletteProperty.POSITION, PaletteProperty.ofOrNull("position"))
-        assertEquals(PaletteProperty.DIMMER, PaletteProperty.ofOrNull("dimmer"))
+        assertEquals(PaletteAttribute.COLOUR, PaletteAttribute.ofOrNull("colour"))
+        assertEquals(PaletteAttribute.COLOUR, PaletteAttribute.ofOrNull("color"))
+        assertEquals(PaletteAttribute.POSITION, PaletteAttribute.ofOrNull("position"))
+        assertEquals(PaletteAttribute.DIMMER, PaletteAttribute.ofOrNull("dimmer"))
 
         // "Gobo 3" is a different pattern on every model, so a template cannot carry one.
-        assertNull(PaletteProperty.ofOrNull("gobo"))
-        assertNull(PaletteProperty.ofOrNull("goboRotation"))
-        assertNull(PaletteProperty.ofOrNull("ledMacro"))
+        assertNull(PaletteAttribute.ofOrNull("gobo"))
+        assertNull(PaletteAttribute.ofOrNull("goboRotation"))
+        assertNull(PaletteAttribute.ofOrNull("ledMacro"))
         // And a misspelling is refused too, rather than stored and silently resolving to nothing.
-        assertNull(PaletteProperty.ofOrNull("dimer"))
+        assertNull(PaletteAttribute.ofOrNull("dimer"))
     }
 
     @Test
     fun `strobe is intensity, not beam`() {
-        // Mirrors `PropertyCategory.STROBE.maskGroup()`. A template holding a level and a strobe is
+        // Mirrors `AttributeCategory.STROBE.family()`. A template holding a level and a strobe is
         // one family, which is what lets both live in the same template.
-        assertEquals(PropertyMaskGroup.INTENSITY, PaletteProperty.STROBE.family)
-        assertEquals(PropertyMaskGroup.INTENSITY, PaletteProperty.DIMMER.family)
+        assertEquals(AttributeFamily.INTENSITY, PaletteAttribute.STROBE.family)
+        assertEquals(AttributeFamily.INTENSITY, PaletteAttribute.DIMMER.family)
         assertEquals(
-            setOf(PaletteProperty.DIMMER, PaletteProperty.STROBE),
-            PaletteProperty.forFamily(PropertyMaskGroup.INTENSITY).toSet(),
+            setOf(PaletteAttribute.DIMMER, PaletteAttribute.STROBE),
+            PaletteAttribute.forFamily(AttributeFamily.INTENSITY).toSet(),
         )
     }
 
     @Test
-    fun `a property only accepts the intent shape it is for`() {
-        assertTrue(PaletteProperty.COLOUR.accepts(PaletteIntent.Colour("#ffffff")))
-        assertTrue(!PaletteProperty.COLOUR.accepts(PaletteIntent.Percent(50.0)))
-        assertTrue(PaletteProperty.POSITION.accepts(PaletteIntent.Position(0.0, 0.0)))
-        assertTrue(!PaletteProperty.POSITION.accepts(PaletteIntent.Percent(50.0)))
-        assertTrue(PaletteProperty.PRISM.accepts(PaletteIntent.Switch(true)))
-        assertTrue(!PaletteProperty.PRISM.accepts(PaletteIntent.Percent(50.0)))
-        assertTrue(PaletteProperty.ZOOM.accepts(PaletteIntent.Percent(14.0)))
+    fun `an attribute only accepts the intent shape it is for`() {
+        assertTrue(PaletteAttribute.COLOUR.accepts(PaletteIntent.Colour("#ffffff")))
+        assertTrue(!PaletteAttribute.COLOUR.accepts(PaletteIntent.Percent(50.0)))
+        assertTrue(PaletteAttribute.POSITION.accepts(PaletteIntent.Position(0.0, 0.0)))
+        assertTrue(!PaletteAttribute.POSITION.accepts(PaletteIntent.Percent(50.0)))
+        assertTrue(PaletteAttribute.PRISM.accepts(PaletteIntent.Switch(true)))
+        assertTrue(!PaletteAttribute.PRISM.accepts(PaletteIntent.Percent(50.0)))
+        assertTrue(PaletteAttribute.ZOOM.accepts(PaletteIntent.Percent(14.0)))
         assertIs<PaletteIntent.Percent>(parsePaletteIntent("pct:14"))
     }
 }
 
 /** Local alias so the literal-parser assertion above reads without a second import line. */
-private typealias PropertyCategoryForTest = uk.me.cormack.lighting7.fixture.PropertyCategory
+private typealias AttributeCategoryForTest = uk.me.cormack.lighting7.fixture.AttributeCategory

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { lightingApi } from '@/api/lightingApi'
 import { DESK_OFFLINE_LABEL } from '@/api/wsGesture'
-import { useChannelValue } from '@/hooks/usePropertyValues'
+import { useChannelValue } from '@/hooks/useAttributeValues'
 import { useContainerBand } from '@/hooks/useContainerBand'
 import { useUpdateChannelMutation } from '@/store/channels'
 import { useParkChannelMutation, useRestoreChannelParkMutation, useUnparkChannelMutation, type ParkState, type ReleasedPark } from '@/store/park'
@@ -22,7 +22,7 @@ import { useSheet } from '@/components/sheet/useSheet'
 import { LevelCell } from '@/components/sheet/cells/LevelCell'
 import { PHONE_FOLDED_CLASS, WORD_CLASS } from '@/components/sheet/toolbarFolds'
 import type { SheetColumn, SheetRow } from '@/components/sheet/sheetModel'
-import type { ChannelMappingEntry, ChannelPropertyKey } from '@/api/channelMappingApi'
+import type { ChannelMappingEntry, ChannelAttributeKey } from '@/api/channelMappingApi'
 import type { ProgrammerChannelEntry, ProgrammerKeyState } from '@/api/programmerWsApi'
 import { colourVar, type FixtureColour } from '@/lib/fixtureColours'
 
@@ -65,7 +65,7 @@ function rowsFor(columnCount: number): DmxRow[] {
 }
 
 /** An address no property drives — nothing to subscribe to. */
-const NO_KEYS: readonly ChannelPropertyKey[] = []
+const NO_KEYS: readonly ChannelAttributeKey[] = []
 const NO_COLOURS: ReadonlyMap<string, FixtureColour> = new Map()
 
 const PARKED_OWNERSHIP: CellOwnership = { source: 'parked', touched: false, isUniform: true, owners: [] }
@@ -73,7 +73,7 @@ const BASELINE_OWNERSHIP: CellOwnership = { source: 'baseline', touched: false, 
 
 /**
  * The programmer's key state for every property that drives an address — the desk's list, off
- * the channel-mapping frame (`ChannelMappingEntry.properties`), not a lookup rebuilt here.
+ * the channel-mapping frame (`ChannelMappingEntry.attributes`), not a lookup rebuilt here.
  *
  * It was rebuilt here once, from the fixture descriptors, and it drifted from the desk in three
  * ways at once: bundled white/amber/UV were filed under the colour property (the desk lifts an
@@ -92,10 +92,10 @@ const BASELINE_OWNERSHIP: CellOwnership = { source: 'baseline', touched: false, 
  * the fixtures list. `keys` is the frame's own array, so its identity holds until the next
  * channel-mapping frame.
  */
-function useChannelKeyStates(keys: readonly ChannelPropertyKey[]): readonly ProgrammerKeyState[] {
-  const cache = useRef<{ keys: readonly ChannelPropertyKey[]; states: readonly ProgrammerKeyState[] } | null>(null)
+function useChannelKeyStates(keys: readonly ChannelAttributeKey[]): readonly ProgrammerKeyState[] {
+  const cache = useRef<{ keys: readonly ChannelAttributeKey[]; states: readonly ProgrammerKeyState[] } | null>(null)
   const fresh = useCallback(
-    () => keys.map((key) => lightingApi.programmer.getKeyState(key.targetKey, key.propertyName)),
+    () => keys.map((key) => lightingApi.programmer.getKeyState(key.targetKey, key.attribute)),
     [keys],
   )
   const read = useCallback((): readonly ProgrammerKeyState[] => {
@@ -112,7 +112,7 @@ function useChannelKeyStates(keys: readonly ChannelPropertyKey[]): readonly Prog
       // version bump, and for the same reason.
       cache.current = { keys, states: fresh() }
       const subs = keys.map((key, index) =>
-        lightingApi.programmer.subscribeToKey(key.targetKey, key.propertyName, (state) => {
+        lightingApi.programmer.subscribeToKey(key.targetKey, key.attribute, (state) => {
           const states = cache.current?.keys === keys ? [...cache.current.states] : fresh()
           states[index] = state
           cache.current = { keys, states }
@@ -209,7 +209,7 @@ function useWsProgrammerSideband(universe: number): ReadonlyMap<number, Programm
  * so for any address the desk can name, an `effect` answer has already weighed the sideband.
  */
 function useChannelOwnership(
-  keys: readonly ChannelPropertyKey[],
+  keys: readonly ChannelAttributeKey[],
   sideband: ProgrammerChannelEntry | undefined,
   parked: boolean,
   blind: boolean,
@@ -219,8 +219,8 @@ function useChannelOwnership(
     if (parked) return PARKED_OWNERSHIP
     const fromKeys =
       states.length === keys.length
-        ? aggregateCellOwnership(keys, blind, (targetKey, propertyName) => {
-            const index = keys.findIndex((k) => k.targetKey === targetKey && k.propertyName === propertyName)
+        ? aggregateCellOwnership(keys, blind, (targetKey, attribute) => {
+            const index = keys.findIndex((k) => k.targetKey === targetKey && k.attribute === attribute)
             return states[index] ?? {}
           })
         : undefined
@@ -519,7 +519,7 @@ export function DmxSheet({
               mapping={mappings?.[channelNo]}
               runStart={runStarts.has(channelNo)}
               runColour={runStarts.get(channelNo) ?? null}
-              keys={mappings?.[channelNo]?.properties ?? NO_KEYS}
+              keys={mappings?.[channelNo]?.attributes ?? NO_KEYS}
               sideband={sideband.get(channelNo)}
               blind={blind}
               parkedValue={parkValueMap.get(channelNo)}
@@ -813,7 +813,7 @@ function DmxCellWithOwnership({
   /** The fixture's colour, which the run edge takes; null keeps the neutral edge. */
   runColour: FixtureColour | null
   /** Every property the desk says drives this address — read by the ownership hook. */
-  keys: readonly ChannelPropertyKey[]
+  keys: readonly ChannelAttributeKey[]
   sideband: ProgrammerChannelEntry | undefined
   blind: boolean
 }) {

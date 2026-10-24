@@ -59,8 +59,8 @@ vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [] }) }))
 vi.mock('@/hooks/useFixtureLookup', () => ({
   useFixtureLookup: () => ({
     fixtures: [
-      { key: 'hex-1', name: 'Hex 1', groups: [], properties: [], elements: [] },
-      { key: 'hex-2', name: 'Hex 2', groups: [], properties: [], elements: [] },
+      { key: 'hex-1', name: 'Hex 1', groups: [], attributes: [], elements: [] },
+      { key: 'hex-2', name: 'Hex 2', groups: [], attributes: [], elements: [] },
     ],
     fixtureByKey: new Map(),
   }),
@@ -71,7 +71,7 @@ vi.mock('@/components/fx/FxPicker', () => ({
   FxPicker: (props: { onCurrent: (c: unknown) => void }) => {
     fxPicker(props)
     return (
-      <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', propertyName: 'dimmer' })}>
+      <button type="button" data-fx-picker onClick={() => props.onCurrent({ fxId: 77, fxType: 'Pulse', attribute: 'dimmer' })}>
         start
       </button>
     )
@@ -141,7 +141,7 @@ function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
     kind: 'value',
     requiredEmitters: [],
     lastPressedAt: null,
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' }],
     fx: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -175,7 +175,7 @@ const PER_FIXTURE = template({
   name: 'Front Focus',
   family: 'POSITION',
   isGeneric: false,
-  rows: [{ targetType: 'fixture', targetKey: 'hex-1', propertyName: 'position', value: 'deg:12,-8' }],
+  rows: [{ targetType: 'fixture', targetKey: 'hex-1', attribute: 'position', value: 'deg:12,-8' }],
 })
 const EFFECT = template({
   id: 4,
@@ -199,21 +199,21 @@ const FULL = template({
   uuid: 'u6',
   name: 'Full',
   family: 'INTENSITY',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:100' }],
 })
 const WIDE = template({
   id: 7,
   uuid: 'u7',
   name: 'Wide',
   family: 'BEAM',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }],
 })
 const SOFT = template({
   id: 8,
   uuid: 'u8',
   name: 'Soft edge',
   family: 'BEAM',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'frost', value: 'pct:60' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'frost', value: 'pct:60' }],
 })
 
 function picker(over: Partial<React.ComponentProps<typeof ApplyPicker>> = {}) {
@@ -283,7 +283,7 @@ describe('ApplyPicker — palettes', () => {
   })
 
   it('opened on one family — a band’s All … — offers that family, and a Beam property’s palettes alone', () => {
-    render(picker({ family: 'BEAM', fit: { families: null, emitters: [], property: 'zoom' } }))
+    render(picker({ family: 'BEAM', fit: { families: null, emitters: [], attribute: 'zoom' } }))
     // A zoom cell is offered the Beam palettes with a zoom row, not every Beam palette.
     expect(sectionPads('all')).toEqual(['Wide'])
     expect(panel().querySelector('[data-slot="badge"]')).toHaveTextContent('Beam')
@@ -469,12 +469,12 @@ describe('ApplyPicker — effects', () => {
   const MASKED: PressPair = { targets: HEX_1, families: ['COLOUR'] }
 
   it('hands FxPicker the bare effect press with the door’s mask, on the cell’s property', () => {
-    render(picker({ library: 'fx', pair: MASKED, family: 'COLOUR', property: 'uv' }))
+    render(picker({ library: 'fx', pair: MASKED, family: 'COLOUR', attribute: 'uv' }))
     expect(fxPicker).toHaveBeenLastCalledWith(
       expect.objectContaining({
         press: { projectId: 1, families: ['COLOUR'] },
         initialFamily: 'COLOUR',
-        preferredProperty: 'uv',
+        preferredAttribute: 'uv',
         target: expect.objectContaining({ type: 'fixture' }),
       }),
     )
@@ -511,7 +511,7 @@ describe('ApplyPicker — effects', () => {
 
   it('stops the auditioned effect from its editor’s ×, and then absorbs nothing', () => {
     focus.look = { projectId: 1, lookId: 9, lookName: 'Warm wash' }
-    fxWire.active = [{ id: 77, fxType: 'Pulse', propertyName: 'dimmer' }]
+    fxWire.active = [{ id: 77, fxType: 'Pulse', attribute: 'dimmer' }]
     const { rerender } = render(picker({ library: 'fx', pair: MASKED }))
     fireEvent.click(panel().querySelector('[data-fx-picker]')!)
     fxPicker.mock.lastCall![0].onEdit()
@@ -530,11 +530,11 @@ describe('ApplyPicker — effects', () => {
     const first = fxPicker.mock.lastCall![0]
     expect(first.press).toBeUndefined()
     expect(first.onEdit).toBeUndefined()
-    const pick = { fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pick = { fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
     act(() => first.draft.onPick(pick))
     expect(pickFx).toHaveBeenLastCalledWith(expect.objectContaining({ targetType: 'fixture', targetKey: 'hex-1', fxType: 'Pulse' }), null)
     const second = fxPicker.mock.lastCall![0]
-    expect(second.draft.current).toEqual({ fxType: 'Pulse', propertyName: 'dimmer' })
+    expect(second.draft.current).toEqual({ fxType: 'Pulse', attribute: 'dimmer' })
     act(() => second.draft.onPick({ ...pick, fxType: 'SineWave' }))
     expect(pickFx).toHaveBeenLastCalledWith(
       expect.objectContaining({ fxType: 'SineWave' }),
@@ -553,7 +553,7 @@ describe('ApplyPicker — effects', () => {
     const pickFx = vi.fn((_effect: unknown, _replacing: unknown) => Promise.resolve(false))
     focus.cue = { cueLabel: 'Q4', layered: new Set(), pickFx }
     render(picker({ library: 'fx', pair: MASKED }))
-    const pick = { fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
+    const pick = { fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', parameters: {} }
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick(pick))
     expect(fxPicker.mock.lastCall![0].draft.current).toBeNull()
     await act(async () => fxPicker.mock.lastCall![0].draft.onPick({ ...pick, fxType: 'SineWave' }))

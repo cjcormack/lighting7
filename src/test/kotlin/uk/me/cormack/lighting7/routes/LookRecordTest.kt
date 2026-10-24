@@ -176,7 +176,7 @@ class LookRecordTest : RouteIntegrationTest() {
                 )
             ).body()
 
-            assertEquals(listOf("rgbColour"), response.look.rows.map { it.propertyName })
+            assertEquals(listOf("rgbColour"), response.look.rows.map { it.attribute })
         }
 
     @Test
@@ -593,10 +593,10 @@ class LookRecordTest : RouteIntegrationTest() {
             setBody(CreateLookRequest(name = name, rows = rows.toList()))
         }.body<LookDetails>().id
 
-    /** The Look's rows as `(targetKey, propertyName) → value`. */
+    /** The Look's rows as `(targetKey, attribute) → value`. */
     private suspend fun HttpClient.lookRows(lookId: Int): Map<Pair<String, String>, String> =
         get("/api/rest/projects/$projectId/looks/$lookId")
-            .body<LookDetails>().rows.associate { (it.targetKey to it.propertyName) to it.value }
+            .body<LookDetails>().rows.associate { (it.targetKey to it.attribute) to it.value }
 
     private fun rowUuids(lookId: Int) = transaction(state.database) {
         DaoLook[lookId].rows.associate { it.targetKey to it.uuid }
@@ -605,12 +605,12 @@ class LookRecordTest : RouteIntegrationTest() {
     private fun LookDetails.rowsByTarget(): Map<String, String> =
         rows.associate { it.targetKey to it.value }
 
-    private fun clearProgrammer(fixtureKey: String, property: String) {
-        ProgrammerHandler.clearEntry(state, TargetRef.Fixture(fixtureKey), property, 0)
+    private fun clearProgrammer(fixtureKey: String, attribute: String) {
+        ProgrammerHandler.clearEntry(state, TargetRef.Fixture(fixtureKey), attribute, 0)
     }
 
-    private fun setProgrammer(fixtureKey: String, property: String, value: String) {
-        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), property, value, 0)
+    private fun setProgrammer(fixtureKey: String, attribute: String, value: String) {
+        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), attribute, value, 0)
     }
 
     private fun seedHex(key: String, startChannel: Int) =

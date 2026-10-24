@@ -22,12 +22,12 @@ import uk.me.cormack.lighting7.fx.FxSampledHead
 import uk.me.cormack.lighting7.fx.FxSampler
 import uk.me.cormack.lighting7.fx.FxSamples
 import uk.me.cormack.lighting7.fx.MasterClock
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.SpreadShaping
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.fx.createFxWithPalettes
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.state.State
@@ -446,7 +446,7 @@ private fun soloResults(sampler: FxSampler, reads: FxSampler.Reads, solo: FxInst
     val alone = sampler.sampleAt(
         listOf(solo), FxSampleRequest.Include.ONLY, samples.rows, clock, samples.offsetsMs, samples.sampleMs, reads = reads,
     )
-    return Solo(solo, alone.attribute(solo.target.propertyName)?.rows.orEmpty().associate { it.key to it.result })
+    return Solo(solo, alone.attribute(solo.target.attribute)?.rows.orEmpty().associate { it.key to it.result })
 }
 
 private fun answer(
@@ -466,14 +466,14 @@ private fun answer(
     val fxIndex = samples.fx.withIndex().associate { (i, sampled) -> sampled.fx to i }
 
     fun fixture(key: String) = runCatching { state.show.fixtures.untypedGroupableFixture(key) }.getOrNull()
-    fun family(key: String, attribute: String): PropertyMaskGroup? = fixture(key)?.let { maskGroupForProperty(it, attribute) }
+    fun family(key: String, attribute: String): AttributeFamily? = fixture(key)?.let { familyForAttribute(it, attribute) }
 
     /** The master an FX's clock follows, or null for its own seconds. */
     fun masterSlot(effect: FxInstance): Int? =
         if (effect.timingSource == TimingSource.BEAT) reads.speedSlotOf(effect)
         else reads.rateSlotOf(effect).takeIf { it != FxInstance.NO_RATE_MASTER }
-    fun familyOf(effect: FxInstance): PropertyMaskGroup? =
-        sampler.heads(listOf(effect), reads).firstNotNullOfOrNull { family(it.key, effect.target.propertyName) }
+    fun familyOf(effect: FxInstance): AttributeFamily? =
+        sampler.heads(listOf(effect), reads).firstNotNullOfOrNull { family(it.key, effect.target.attribute) }
     val soloFamily = solo?.let { familyOf(it.fx) }
     fun uuidAt(slot: Int) = masters.getOrNull(slot)?.uuid?.toString()
 
@@ -484,7 +484,7 @@ private fun answer(
         val holding = arrayOfNulls<List<List<Int>>>(samples.rows.size)
         val rungs = arrayOfNulls<FxLadderRung>(samples.rows.size)
         var slots: Int? = null
-        var family: PropertyMaskGroup? = null
+        var family: AttributeFamily? = null
     }
     val perFx = samples.fx.indices.map { PerFx(it) }
 
@@ -495,7 +495,7 @@ private fun answer(
         // of the lane what is underneath.
         val soloRows = when {
             solo == null || family != soloFamily -> null
-            attribute == solo.fx.target.propertyName -> solo.results
+            attribute == solo.fx.target.attribute -> solo.results
             else -> emptyMap()
         }
         val rows = sampledAttribute.rows.map { row ->
@@ -537,7 +537,7 @@ private fun answer(
             entry = entry,
             fxType = effect.fxTypeId,
             family = (per.family ?: familyOf(effect))?.name,
-            attribute = effect.target.propertyName,
+            attribute = effect.target.attribute,
             running = sampled.running,
             speedMasterUuid = masterSlot(effect)?.let(::uuidAt),
             offsets = per.offsets.toList(),
@@ -582,7 +582,7 @@ private fun answer(
     )
 }
 
-private val LANE_ORDER = listOf(PropertyMaskGroup.INTENSITY, PropertyMaskGroup.COLOUR, PropertyMaskGroup.POSITION, PropertyMaskGroup.BEAM)
+private val LANE_ORDER = listOf(AttributeFamily.INTENSITY, AttributeFamily.COLOUR, AttributeFamily.POSITION, AttributeFamily.BEAM)
 
 private fun rowOf(state: State, key: String, rigIndex: Int): FxPreviewRow {
     val head = runCatching { state.show.fixtures.untypedGroupableFixture(key) }.getOrNull()

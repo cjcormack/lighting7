@@ -5,7 +5,7 @@ import { fxReaching, mergeRowSources, rowSourceOf, type RowSource, type RowSourc
 
 const entry = (over: Partial<ProgrammerEntry> = {}): ProgrammerEntry => ({
   targetKey: 'spot-3',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   value: '204',
   owner: 'web',
   touched: true,
@@ -14,7 +14,7 @@ const entry = (over: Partial<ProgrammerEntry> = {}): ProgrammerEntry => ({
 })
 const prov = (over: Partial<ProvenanceEntry>): ProvenanceEntry => ({
   targetKey: 'spot-3',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   source: 'PROGRAMMER',
   ...over,
 })
@@ -74,8 +74,8 @@ describe('rowSourceOf — one chip per source kind (D4)', () => {
     const s = rowSourceOf({
       headKey: 'spot-3',
       states: [
-        { key: 'position', state: { entry: entry({ propertyName: 'position' }), provenance: prov({ propertyName: 'position' }) } },
-        { key: 'tilt', state: { provenance: prov({ propertyName: 'tilt', source: 'PARKED' }) } },
+        { key: 'position', state: { entry: entry({ attribute: 'position' }), provenance: prov({ attribute: 'position' }) } },
+        { key: 'tilt', state: { provenance: prov({ attribute: 'tilt', source: 'PARKED' }) } },
       ],
       effects: [],
       blind: false,
@@ -88,7 +88,7 @@ describe('rowSourceOf — one chip per source kind (D4)', () => {
 })
 
 describe('rowSourceOf — the held-back dot', () => {
-  const cuePulse = makeActiveFx({ id: 9, targetKey: 'spot-3', propertyName: 'dimmer', programmerOwned: false, cueId: 12 })
+  const cuePulse = makeActiveFx({ id: 9, targetKey: 'spot-3', attribute: 'dimmer', programmerOwned: false, cueId: 12 })
 
   it('marks a row whose programmer value holds a cue effect back', () => {
     expect(source({ entry: entry(), provenance: prov({}) }, { effects: [cuePulse] }).heldBack).toBe(true)
@@ -131,13 +131,13 @@ describe('fxReaching', () => {
   })
 
   it("lets a head's row see an effect on its fixture, which the desk paints onto the heads", () => {
-    const onBar = makeActiveFx({ id: 5, targetKey: 'bar-1', propertyName: 'rgbColour', programmerOwned: false })
+    const onBar = makeActiveFx({ id: 5, targetKey: 'bar-1', attribute: 'rgbColour', programmerOwned: false })
     const reaching = fxReaching([onBar], ['bar-1.cell-2', 'bar-1'], [])
     expect(reaching.map((e) => e.id)).toEqual([5])
     // …and the head's own entry holds it back there.
     const s = rowSourceOf({
       headKey: 'bar-1.cell-2',
-      states: [{ key: 'rgbColour', state: { entry: entry({ targetKey: 'bar-1.cell-2', propertyName: 'rgbColour' }) } }],
+      states: [{ key: 'rgbColour', state: { entry: entry({ targetKey: 'bar-1.cell-2', attribute: 'rgbColour' }) } }],
       effects: reaching,
       blind: false,
       cueLabel: () => undefined,

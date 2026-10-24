@@ -1,5 +1,5 @@
 import type { CueTarget } from '@/api/cuesApi'
-import type { ElementDescriptor, Fixture, PropertyDescriptor } from '@/store/fixtures'
+import type { ElementDescriptor, Fixture, AttributeDescriptor } from '@/store/fixtures'
 
 /**
  * What a running effect targets, read off the desk's report (effects plan D3): one fixture, one
@@ -96,7 +96,7 @@ export function storedFxTargets(targetType: string, targetKey: string): CueTarge
 /** A unit of a selection: a fixture with its heads, or a cell with none. */
 export interface SelectionUnitOf {
   key: string
-  properties: readonly PropertyDescriptor[]
+  attributes: readonly AttributeDescriptor[]
   elements?: readonly ElementDescriptor[]
 }
 
@@ -129,7 +129,7 @@ export function selectionUnits(
       continue
     }
     const cell = list.flatMap((f) => f.elements ?? []).find((e) => e.key === item.key)
-    if (cell) push({ key: cell.key, properties: cell.properties })
+    if (cell) push({ key: cell.key, attributes: cell.attributes })
   }
   return out
 }

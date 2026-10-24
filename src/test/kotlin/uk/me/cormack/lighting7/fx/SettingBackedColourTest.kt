@@ -1,10 +1,10 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.Source4RevolutionFixture
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -25,34 +25,34 @@ class SettingBackedColourTest {
     private val universe = Universe(0, 0)
 
     @Test
-    fun `a slot-backed COLOUR property reads a level as a slot, and a colour as a colour`() {
+    fun `a slot-backed COLOUR attribute reads a level as a slot, and a colour as a colour`() {
         val level = assertNotNull(CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "gelScroller", "128", settingBacked = true,
+            AttributeCategory.COLOUR, "gelScroller", "128", settingBacked = true,
         ))
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(128u), level)
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(128u), level)
         // Round trip: what Record writes for a slot reads back as the same slot.
         assertEquals(level, CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "gelScroller", level.serialize(), settingBacked = true,
+            AttributeCategory.COLOUR, "gelScroller", level.serialize(), settingBacked = true,
         ))
 
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "gelScroller", "#ff8800", settingBacked = true,
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(CueAssignmentResolver.parseAssignmentValue(
+            AttributeCategory.COLOUR, "gelScroller", "#ff8800", settingBacked = true,
         ))
         // An RGB property is unchanged: a bare value still parses as a colour.
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(CueAssignmentResolver.parseAssignmentValue(
-            PropertyCategory.COLOUR, "rgbColour", "128",
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(CueAssignmentResolver.parseAssignmentValue(
+            AttributeCategory.COLOUR, "rgbColour", "128",
         ))
     }
 
     @Test
-    fun `the catalogue knows which properties are slot channels`() {
+    fun `the catalogue knows which attributes are slot channels`() {
         val rev = Source4RevolutionFixture.BaseFrame31Ch(universe, "rev-1", "Rev 1", 1)
-        assertTrue(assertNotNull(rev.fixtureProperty("gelScroller")).settingBacked)
-        assertTrue(assertNotNull(rev.fixtureProperty("fbWheelPos")).settingBacked)
-        assertFalse(assertNotNull(rev.fixtureProperty("zoom")).settingBacked)
+        assertTrue(assertNotNull(rev.fixtureAttribute("gelScroller")).settingBacked)
+        assertTrue(assertNotNull(rev.fixtureAttribute("fbWheelPos")).settingBacked)
+        assertFalse(assertNotNull(rev.fixtureAttribute("zoom")).settingBacked)
         assertTrue(isSettingBacked(rev, "gelScroller"))
         assertFalse(isSettingBacked(rev, "dimmer"))
-        assertFalse(isSettingBacked(rev, "noSuchProperty"))
+        assertFalse(isSettingBacked(rev, "noSuchAttribute"))
 
         val hex = HexFixture(universe, "hex-1", "Hex 1", firstChannel = 1)
         assertFalse(isSettingBacked(hex, "rgbColour"))
@@ -68,11 +68,11 @@ class SettingBackedColourTest {
             cueId = 7,
             cueName = "test",
             adHocFx = emptyList(),
-            propertyAssignments = listOf(
-                CuePropertyAssignmentDto(
+            attributeAssignments = listOf(
+                CueAttributeAssignmentDto(
                     targetType = "fixture",
                     targetKey = "rev-1",
-                    propertyName = "gelScroller",
+                    attribute = "gelScroller",
                     value = Source4RevolutionFixture.GelFrame.R25_ORANGE_RED.level.toString(),
                 ),
             ),
@@ -80,10 +80,10 @@ class SettingBackedColourTest {
             sortOrder = 2,
         ))
         val row = out.single()
-        assertEquals(PropertyCategory.COLOUR, row.category)
-        assertEquals(CueAssignmentResolver.PropertyValue.Setting(128u), row.value)
+        assertEquals(AttributeCategory.COLOUR, row.category)
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(128u), row.value)
 
-        val writes = PropertyChannelWriter.resolve(
+        val writes = AttributeChannelWriter.resolve(
             fixtures.untypedGroupableFixture("rev-1"), "gelScroller", row.value,
         )
         assertEquals(listOf(13 to 128), writes.map { it.channel to it.value.toInt() })

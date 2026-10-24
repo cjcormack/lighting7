@@ -239,21 +239,21 @@ function getProgrammerRevision(): number {
 export function programmerSet(
   targetType: ProgrammerTargetType,
   targetKey: string,
-  propertyName: string,
+  attribute: string,
   value: string,
   fadeMs?: number,
 ) {
-  lightingApi.programmer.set(targetType, targetKey, propertyName, value, fadeMs)
+  lightingApi.programmer.set(targetType, targetKey, attribute, value, fadeMs)
 }
 
 /** Releases **every** owner on the property — locate, presets and surface faders included. */
 export function programmerClearEntry(
   targetType: ProgrammerTargetType,
   targetKey: string,
-  propertyName: string,
+  attribute: string,
   fadeMs?: number,
 ) {
-  lightingApi.programmer.clearEntry(targetType, targetKey, propertyName, fadeMs)
+  lightingApi.programmer.clearEntry(targetType, targetKey, attribute, fadeMs)
 }
 
 export function programmerClearAll(fadeMs?: number) {
@@ -345,7 +345,7 @@ export function programmerAddLayer(input: {
   lookId?: number
   paletteId?: number
   targets?: CueTarget[]
-  propertyMask?: string
+  attributeMask?: string
   blendMode?: string
   amount?: number
   speedMasterUuid?: string
@@ -378,7 +378,7 @@ export function programmerPatchLayer(
   patch: {
     enabled?: boolean
     amount?: number
-    propertyMask?: string
+    attributeMask?: string
     blendMode?: string
     targets?: CueTarget[]
     stomp?: boolean

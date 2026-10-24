@@ -23,8 +23,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.UserRole
@@ -87,7 +87,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
 
     private fun level(channel: Int) = controller.getEffectiveValue(channel).toInt()
 
-    private fun foh1(value: String) = """{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"$value"}"""
+    private fun foh1(value: String) = """{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"$value"}"""
 
     private fun look(name: String, vararg values: String): Int =
         ok("create_look", """{"name":"$name","values":[${values.joinToString()}]}""")["lookId"]!!.jsonPrimitive.int
@@ -116,8 +116,8 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     @Test
     fun `update_look keeps the uuids of the values and effects it keeps`() {
         patchRig()
-        val foh2 = """{"target":{"type":"fixture","key":"foh-2"},"propertyName":"dimmer","value":"dmx:40"}"""
-        val hex1 = """{"target":{"type":"fixture","key":"hex-1"},"propertyName":"rgbColour","value":"#ff0000"}"""
+        val foh2 = """{"target":{"type":"fixture","key":"foh-2"},"attribute":"dimmer","value":"dmx:40"}"""
+        val hex1 = """{"target":{"type":"fixture","key":"hex-1"},"attribute":"rgbColour","value":"#ff0000"}"""
         val lookId = ok(
             "create_look",
             """{"name":"Keep","values":[${foh1("dmx:200")},$foh2],"fx":[$pulse]}""",
@@ -209,7 +209,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `a forced delete_look takes the look off a live cue and announces the cues it changed`() {
         patchRig()
         val lookId = look("FOH 1", foh1("dmx:200"))
-        val otherId = look("FOH 2", """{"target":{"type":"fixture","key":"foh-2"},"propertyName":"dimmer","value":"dmx:120"}""")
+        val otherId = look("FOH 2", """{"target":{"type":"fixture","key":"foh-2"},"attribute":"dimmer","value":"dmx:120"}""")
         val live = cue("""{"name":"Q1","layers":[{"lookId":$lookId},{"lookId":$otherId}]}""")
         val dark = cue("""{"name":"Q2","layers":[{"lookId":$lookId}]}""")
         val unrelated = cue("""{"name":"Q3","layers":[{"lookId":$otherId}]}""")
@@ -275,7 +275,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     @Test
     fun `a cue's own values beat every layer`() {
         patchRig()
-        val lookId = look("FOH", foh1("dmx:200"), """{"target":{"type":"fixture","key":"foh-2"},"propertyName":"dimmer","value":"dmx:120"}""")
+        val lookId = look("FOH", foh1("dmx:200"), """{"target":{"type":"fixture","key":"foh-2"},"attribute":"dimmer","value":"dmx:120"}""")
         val created = ok(
             "create_cue",
             """{"name":"Q1","values":[${foh1("dmx:50")}],"layers":[{"lookId":$lookId}]}""",
@@ -291,11 +291,11 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         patchRig()
         val built = ok(
             "build_cue_stack",
-            """{"stackName":"Act 1","cues":[{"number":"1","name":"Up","values":[{"target":{"type":"group","key":"FOH"},"propertyName":"dimmer","value":"pct:100"}]}]}""",
+            """{"stackName":"Act 1","cues":[{"number":"1","name":"Up","values":[{"target":{"type":"group","key":"FOH"},"attribute":"dimmer","value":"pct:100"}]}]}""",
         )
         val cueId = built["cues"]!!.jsonArray.single().jsonObject["cueId"]!!.jsonPrimitive.int
         transaction(state.database) {
-            val rows = DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue eq cueId }.map { Triple(it.targetType, it.targetKey, it.value) }
+            val rows = DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue eq cueId }.map { Triple(it.targetType, it.targetKey, it.value) }
             assertEquals(listOf(Triple("group", "FOH", "255")), rows)
         }
         ok("go_cue_stack", """{"stackId":${built["stackId"]!!.jsonPrimitive.int}}""")
@@ -316,7 +316,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
         patchRig()
         val paletteId = ok(
             "create_palette",
-            """{"name":"Low","rows":[{"propertyName":"dimmer","value":"pct:40"}]}""",
+            """{"name":"Low","rows":[{"attribute":"dimmer","value":"pct:40"}]}""",
         )["paletteId"]!!.jsonPrimitive.int
         val cueId = cue("""{"name":"Q1","layers":[{"paletteId":$paletteId,"targets":[{"type":"fixture","key":"foh-1"}]}]}""")
         transaction(state.database) {
@@ -331,7 +331,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `a template layer must say what it applies, and a generic one needs targets`() {
         patchRig()
         val lookId = look("FOH", foh1("dmx:200"))
-        val values = ok("create_palette", """{"name":"Low","rows":[{"propertyName":"dimmer","value":"pct:40"}]}""")["paletteId"]!!.jsonPrimitive.int
+        val values = ok("create_palette", """{"name":"Low","rows":[{"attribute":"dimmer","value":"pct:40"}]}""")["paletteId"]!!.jsonPrimitive.int
         val effect = ok("create_palette", """{"name":"Throb","fx":$palettePulse}""")["paletteId"]!!.jsonPrimitive.int
         val before = transaction(state.database) { DaoCue.all().count() }
 
@@ -385,7 +385,7 @@ class McpLookCueEditingTest : RouteIntegrationTest() {
     fun `create_cue takes an ad-hoc effect over a selection as one effect`() {
         patchRig()
         val targets = """[{"type":"fixture","key":"foh-2"},{"type":"group","key":"Wash"}]"""
-        val effect = """{"targets":$targets,"fxType":"Pulse","family":"intensity","propertyName":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val effect = """{"targets":$targets,"fxType":"Pulse","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
         val cueId = cue("""{"name":"Ripple","adHocFx":[$effect]}""")
         transaction(state.database) {
             val stored = DaoCue[cueId].adHocFx.single()

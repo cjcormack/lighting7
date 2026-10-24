@@ -58,7 +58,7 @@ class FxLiveEditRoutesTest : RouteIntegrationTest() {
     private val pulse = PaletteFxDto(
         fxType = "Pulse",
         family = "intensity",
-        propertyName = "dimmer",
+        attribute = "dimmer",
         cycle = 0.5,
         blendMode = "OVERRIDE",
         order = "NORMAL",

@@ -87,7 +87,7 @@ class ProgrammerLayerStackTest {
 
     private fun Rig.rowsFor(dimmer: Int, vararg fixtureKeys: String) =
         fixtureKeys.ifEmpty { fixtures.fixtures.map { it.key }.toTypedArray() }.map {
-            LookRowEntry(target = TargetRef.Fixture(it), propertyName = "dimmer", value = dimmer.toString())
+            LookRowEntry(target = TargetRef.Fixture(it), attribute = "dimmer", value = dimmer.toString())
         }
 
     private fun Rig.lookSource(name: String, dimmer: Int, vararg fixtureKeys: String) =
@@ -97,15 +97,15 @@ class ProgrammerLayerStackTest {
     private fun Rig.add(name: String, dimmer: Int, vararg fixtureKeys: String) =
         stack.add(source = lookSource(name, dimmer, *fixtureKeys), targets = emptyList()).first
 
-    /** A generic palette of one row, `property` at `value` (a [PaletteIntent] string), and its source. */
-    private fun Rig.palette(name: String, property: String, value: String): LayerSource {
+    /** A generic palette of one row, `attribute` at `value` (a [PaletteIntent] string), and its source. */
+    private fun Rig.palette(name: String, attribute: String, value: String): LayerSource {
         val uuid = UUID.nameUUIDFromBytes("palette:$name".toByteArray())
         palettes[uuid] = PaletteSnapshot(
             paletteId = name.hashCode(),
             paletteUuid = uuid,
             name = name,
             fadeDurationMs = null,
-            rows = listOf(PaletteRowEntry(target = null, propertyName = property, value = value)),
+            rows = listOf(PaletteRowEntry(target = null, attribute = attribute, value = value)),
         )
         return LayerSource.palette(name.hashCode(), uuid, name)
     }
@@ -117,9 +117,9 @@ class ProgrammerLayerStackTest {
     private fun Rig.dimmer(name: String, percent: Int) = palette(name, "dimmer", "pct:$percent")
 
     /** The programmer's winning value for a key, as an Int, or null when it holds nothing. */
-    private fun Rig.valueOf(fixtureKey: String, propertyName: String = "dimmer"): Int? {
-        val slot = store.get(fixtureKey, propertyName) ?: return null
-        return (slot.value.resolved as CueAssignmentResolver.PropertyValue.Slider).value.toInt()
+    private fun Rig.valueOf(fixtureKey: String, attribute: String = "dimmer"): Int? {
+        val slot = store.get(fixtureKey, attribute) ?: return null
+        return (slot.value.resolved as CueAssignmentResolver.AttributeValue.Slider).value.toInt()
     }
 
     private fun on(vararg keys: String) = keys.map { CueTargetDto("fixture", it) }
@@ -218,7 +218,7 @@ class ProgrammerLayerStackTest {
         val rig = newRig()
         rig.store.putValue(
             ProgrammerOwner.WEB, "hex-1", "dimmer",
-            ProgrammerValue.Hard(CueAssignmentResolver.PropertyValue.Slider(90u)),
+            ProgrammerValue.Hard(CueAssignmentResolver.AttributeValue.Slider(90u)),
         )
 
         rig.add("Warm", 200, "hex-1")
@@ -302,11 +302,11 @@ class ProgrammerLayerStackTest {
         val rig = newRig()
         val warm = rig.lookSource("Warm", 200)
 
-        val applied = rig.stack.toggle(warm, on("hex-1"), propertyMask = "COLOUR")
+        val applied = rig.stack.toggle(warm, on("hex-1"), attributeMask = "COLOUR")
         assertEquals("applied", applied.action)
         val layer = rig.store.layers.single()
         assertTrue(layer.targets.isEmpty(), "the selection is not the Look's")
-        assertNull(layer.propertyMask, "and nor is the selection's mask")
+        assertNull(layer.attributeMask, "and nor is the selection's mask")
         assertEquals(200, rig.valueOf("hex-1"))
         assertEquals(200, rig.valueOf("hex-2"))
 
@@ -334,9 +334,9 @@ class ProgrammerLayerStackTest {
         rig.stack.toggle(warm, on("hex-1"))
         val layer = rig.store.layers.single()
 
-        rig.stack.patch(layer.layerId, propertyMask = "COLOUR")
+        rig.stack.patch(layer.layerId, attributeMask = "COLOUR")
 
-        assertEquals("COLOUR", rig.store.layers.single().propertyMask)
+        assertEquals("COLOUR", rig.store.layers.single().attributeMask)
         assertNull(rig.valueOf("hex-1"), "a dimmer row is outside a colour mask")
     }
 

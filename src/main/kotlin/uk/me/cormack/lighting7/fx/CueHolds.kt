@@ -746,7 +746,7 @@ class CueHolds internal constructor(
     private fun FxInstance.continues(fresh: FxInstance): Boolean =
         layerFxUuid != null && layerFxUuid == fresh.layerFxUuid &&
             target.targetRef == fresh.target.targetRef &&
-            target.propertyName == fresh.target.propertyName &&
+            target.attribute == fresh.target.attribute &&
             fxEngine.speedMasters.master1Uuid().let { comparableFxSettings(it) == fresh.comparableFxSettings(it) }
 
     /**
@@ -765,7 +765,7 @@ class CueHolds internal constructor(
         fresh.dynamics.runs == null &&
             cueLayerId == null && runUuid != null && runUuid == fresh.runUuid &&
             target.targetRef == fresh.target.targetRef &&
-            target.propertyName == fresh.target.propertyName
+            target.attribute == fresh.target.attribute
 
     /**
      * One instance a cue took over from [fromCueId] (P4), with what it was before — its stored effect's
@@ -852,13 +852,13 @@ class CueHolds internal constructor(
      * doesn't flood the logs.
      */
     private fun warnDeadAssignments(state: State, data: CueApplyData) {
-        val dead = data.propertyAssignments.filter {
+        val dead = data.attributeAssignments.filter {
             PersistedFixtureReferenceValidator.validateTargetedReference(
-                state.show.fixtures, it.target, it.propertyName, allowElements = true,
+                state.show.fixtures, it.target, it.attribute, allowElements = true,
             ) != uk.me.cormack.lighting7.models.AssignmentHealth.Ok
         }
         if (dead.isEmpty()) return
-        val signature = dead.joinToString(";") { "${it.targetType}:${it.targetKey}.${it.propertyName}" }
+        val signature = dead.joinToString(";") { "${it.targetType}:${it.targetKey}.${it.attribute}" }
         val now = System.currentTimeMillis()
         val previous = deadWarnState[data.cueId]
         if (previous != null && previous.second == signature && (now - previous.first) < DEAD_WARN_THROTTLE_MS) return
@@ -948,7 +948,7 @@ class CueHolds internal constructor(
 internal fun CueAdHocFxDto.toLookFxSpec() = LookFxSpec(
     fxType = fxType,
     family = family,
-    propertyName = propertyName,
+    attribute = attribute,
     cycle = cycle,
     blendMode = blendMode,
     order = order,
@@ -1015,9 +1015,9 @@ internal fun CueHolds.toggleLooseCue(state: State, cueId: Int, scope: CoroutineS
     }
 
 /** One effect a cue runs: its stored effect's uuid, the layer it came through (none for an ad-hoc one), its target and property. */
-internal data class CueFxKey(val uuid: java.util.UUID?, val layerId: Int?, val target: FxTargetRef, val propertyName: String)
+internal data class CueFxKey(val uuid: java.util.UUID?, val layerId: Int?, val target: FxTargetRef, val attribute: String)
 
-internal fun FxInstance.cueFxKey() = CueFxKey(layerFxUuid, cueLayerId, target.targetRef, target.propertyName)
+internal fun FxInstance.cueFxKey() = CueFxKey(layerFxUuid, cueLayerId, target.targetRef, target.attribute)
 
 /** One layer effect a cue's cook names: its layer, its stored effect and its target. */
 internal typealias CookedLayerFx = Triple<CookLayer, StoredFx, FxTargetsRef>

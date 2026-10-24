@@ -157,7 +157,7 @@ function effect(id: number, over: Partial<ActiveFx> = {}): ActiveFx {
     id,
     fxType: `Effect ${id}`,
     targetKey: `par-${id}`,
-    propertyName: 'dimmer',
+    attribute: 'dimmer',
     cycle: 1,
     blendMode: 'OVERRIDE',
     isRunning: true,
@@ -190,7 +190,7 @@ function layer(layerId: number, kind: 'LOOK' | 'PALETTE', id: number, name: stri
     sortOrder: layerId,
     enabled: true,
     targets: [{ type: 'group', key: 'front' }],
-    propertyMask: null,
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
@@ -223,7 +223,7 @@ function template(id: number, name: string, over: Partial<PaletteSummary> = {}):
     family: 'COLOUR',
     kind: 'value',
     isGeneric: true,
-    rows: [{ targetType: null, targetKey: null, propertyName: 'colour', value: '#ff9d4a;policy=extract' }],
+    rows: [{ targetType: null, targetKey: null, attribute: 'colour', value: '#ff9d4a;policy=extract' }],
     ...over,
   } as PaletteSummary
 }
@@ -315,7 +315,7 @@ beforeEach(() => {
   ]
   mocks.effects = [
     effect(1, { fxType: 'Pulse', targetKey: 'front', isGroupTarget: true, speedMasterUuid: 'm2' }),
-    effect(2, { fxType: 'Circle', propertyName: 'position', amount: 0.6, direction: 'BOUNCE' }),
+    effect(2, { fxType: 'Circle', attribute: 'position', amount: 0.6, direction: 'BOUNCE' }),
     effect(3, { fxType: 'Lightning', programmerOwned: false, programmerLayerId: 12, runs: 3, spent: true, seconds: true, timingSource: 'WALL_CLOCK', cycle: 4 }),
     effect(4, { fxType: 'CandleFlicker', programmerOwned: false, cueId: 9, isRunning: false }),
   ]

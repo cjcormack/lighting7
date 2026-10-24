@@ -5,8 +5,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.fixture.dmx.UVFixture
-import uk.me.cormack.lighting7.fixture.property.AggregateColour
-import uk.me.cormack.lighting7.fixture.property.AggregateSlider
+import uk.me.cormack.lighting7.fixture.attribute.AggregateColour
+import uk.me.cormack.lighting7.fixture.attribute.AggregateSlider
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -233,7 +233,7 @@ class TraitExtensionsTest {
     }
 
     @Test
-    fun `uv and dimmer are different properties on UVFixture`() {
+    fun `uv and dimmer are different attributes on UVFixture`() {
         val controller = MockDmxController(testUniverse)
         val transaction = createTestTransaction(controller)
         val fixtures = (0..1).map {

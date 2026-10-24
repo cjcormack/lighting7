@@ -98,7 +98,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| The Intensity / Position / Colour / Beam split (D25) | Family | `family`, `AttributeFamily`, `PALETTE_FX_FAMILIES`; column `family` | category, usage, mask group; `category`, `usage`, `PropertyCategory`, `TEMPLATE_EFFECT_FAMILIES` | | screen, wire, code, storage | planned | |
+| The Intensity / Position / Colour / Beam split (D25) | Family | `family`, `families`, `AttributeFamily` (Kotlin and TypeScript), `familyForAttribute`, `attributeFamilyForFxFamily`, `PALETTE_FX_FAMILIES`, `masterFamilyLabel`; column `family`. `AttributeCategory` and its `category` name an attribute's role (Dimmer, Pan, Gobo), finer than its family, and keep the word | category, usage, mask group; `category`, `usage`, `PropertyMaskGroup`, `maskGroup`, `maskGroupForProperty`, `maskGroupForFxFamily`, `MASK_GROUPS`, `TEMPLATE_EFFECT_FAMILIES`, `usageLabel`, `usageOptionLabel`, `USAGE_NONE` | | screen, wire, code, storage | done | `src:components/speedMasters/SpeedMasterSheet.tsx` |
 | Family: intensity (D25) | Intensity | `intensity` | Dimmer; `dimmer` | Intensity | screen, wire, storage, archive | done | `family:intensity` `masterFamily:intensity` `FX_FAMILY_INFO.intensity` |
 | Family: colour | Colour | `colour` | | Colour | screen, wire, storage | done | `family:colour` `masterFamily:colour` `FX_FAMILY_INFO.colour` |
 | Family: position | Position | `position` | | Position | screen, wire, storage | done | `family:position` `masterFamily:position` `FX_FAMILY_INFO.position` |
@@ -106,7 +106,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Family: FX that step through a list (D23) | Steps | `steps` | Palette steps; `palette`, and Slot Steps under `beam` | | screen, wire, storage | done | `family:steps` `FX_FAMILY_INFO.steps` |
 | Family: FX on settings and sliders | Controls | `controls` | | | screen | done | `FX_FAMILY_INFO.controls` |
 | Lightning Strike's family, the composite mode removed (D27) | Intensity | Lightning Strike `STANDARD`, family `intensity` | Composite; `composite`, `effectMode: COMPOSITE`, `CompositeEffect`, `FX_CALC_COMPOSITE` | | FX library | done | `FX_FAMILY_INFO.intensity` |
-| A controllable part of a fixture (D26) | Attribute | `@FixtureAttribute`, `attribute`, `attributes`, `fixture/attribute/`; columns `attribute`, `attribute_mask`; table `cue_attribute_assignments` | Property; `@FixtureProperty`, `propertyName`, `properties`, `fixture/property/`, `property_name`, `property_mask`, `cue_property_assignments` | Attribute | screen, wire, code, storage | screen | `src:components/applied/AppliedFxTable.tsx` |
+| A controllable part of a fixture (D26) | Attribute | `@FixtureAttribute`, `attribute`, `attributes`, `attributeMask`, `attributeAssignments`, `fixture/attribute/`, `AttributeValue`, `AttributeCategory`, `*AttributeDescriptor`; MIDI `fixtureAttribute`, `groupAttribute`, `selectionAttribute`; REST `/groups/{name}/attributes`; columns `attribute`, `attribute_mask`; table `cue_attribute_assignments`. Every name for one says attribute, locals and parameters included. `Slider`, `Colour`, `Position`, `Strobe`, `WhiteMix` and `Aggregate*` are kinds of control and keep their names; Kotlin reflection (`KProperty1`, `classProperty`), JSON Schema's `properties` and other libraries' words keep theirs | Property; `@FixtureProperty`, `propertyName`, `properties`, `propertyMask`, `propertyAssignments`, `fixture/property/`, `PropertyValue`, `PropertyCategory`, `*PropertyDescriptor`, MIDI `fixtureProperty`, `groupProperty`, `selectionProperty`, `/groups/{name}/properties`, `property_name`, `property_mask`, `cue_property_assignments` | Attribute | screen, wire, code, storage, archive, MCP, MIDI | done | `src:components/applied/AppliedFxTable.tsx` |
 
 ## The FX library
 
@@ -162,7 +162,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A stored palette of values or one FX | Palette | `Palette*`, `pal:{uuid}`; tables `palettes`, `palette_rows`, `palette_fx`; column `palette_id`; archive `palettes/`, `paletteUuid`; MIDI `pressPalette`. A local, parameter or test helper holding one may keep `template` | template; `Template*`, `tmpl:{uuid}`, tables `templates`, `template_rows`, `template_effects`, `template_id`, archive `templates/`, `templateUuid`, MIDI `pressTemplate` |  | screen, wire, code, storage, archive, MIDI | done | `src:navigation.ts` `src:lib/windowViews.ts` |
 | One of the five places the output is composed from (D9) | Tier | | Layer 1–5 | | docs | planned | |
 | A part of a multi-head fixture; *head* means a fixture and its head number (D7) | Element | element keys `.head-N`, `.pixel-N`, `.cell-N` unchanged (D29) | Cell, head; the *Cells* chip | Element | screen | screen | `src:components/busking/RigBand.tsx` |
-| lighting7's own identifiers in UK spelling (D20) | Centre | `CENTRE_*`, `panCentre`, `tiltCentre` | `CENTER_*`, `panCenter`, `tiltCenter` | | wire, code | planned | |
+| lighting7's own identifiers in UK spelling (D20) | Centre | `CENTRE_*`, `panCentre`, `tiltCentre` | `CENTER_*`, `panCenter`, `tiltCenter` | | wire, code, storage, archive | done | `src:components/fx/FxFields.tsx` |
 
 ## Rules
 

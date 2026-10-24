@@ -11,7 +11,7 @@ import kotlin.math.roundToInt
  * plus this policy and lets each head answer for itself.
  *
  * This is the *derived* half of a template's emitter story. The other half is an explicit
- * [PaletteProperty.WHITE] / [PaletteProperty.AMBER] / [PaletteProperty.UV] row carrying a
+ * [PaletteAttribute.WHITE] / [PaletteAttribute.AMBER] / [PaletteAttribute.UV] row carrying a
  * [PaletteIntent.Level], and the two must not both drive one emitter: an explicit white or amber
  * row forces the colour row to [RGB_ONLY], refused by name at the write boundary. UV is exempt,
  * because no policy has ever driven it.
@@ -73,11 +73,11 @@ enum class WhitePolicy {
  * **Strobe is a percentage, not a rate**, and that is a departure from the design worth knowing.
  * `BeamColour.dc.html` promises "strobe in Hz, which is the only unit two fixtures agree on". Since
  * the fixture optics plan's session 6 every STROBE channel declares its bands and each flashing
- * band's `hzMin`/`hzMax` (`@FixtureProperty(strobe = […])`) — but almost every rate is an estimate
+ * band's `hzMin`/`hzMax` (`@FixtureAttribute(strobe = […])`) — but almost every rate is an estimate
  * (no manual but the Robe's states one), and a `hz:` intent would make the desk solve a DMX value
  * per head from them. It stays a percentage of each head's own strobe channel; the `Hertz` arm is
  * `FU-TMPL-STROBE-HZ`. (Strobe is also in the **intensity**
- * family, not beam — `PropertyCategory.STROBE.maskGroup()` is `INTENSITY`, because it is an
+ * family, not beam — `AttributeCategory.STROBE.family()` is `INTENSITY`, because it is an
  * intensity modulation operators reach for alongside level.)
  *
  * There is no arm for a **slotted** property — gobo, colour wheel, the `*_macro` channels. "Gobo 3"
@@ -268,10 +268,10 @@ private fun trimNumber(value: Double): String =
  *  - **The family is decided here**, from the property alone, with no fixture to ask — which is what
  *    lets a template's family be *derived* from its rows and still validated at write time.
  *
- * `strobe` sits under [PropertyMaskGroup.INTENSITY], not BEAM, because that is where
- * `PropertyCategory.STROBE.maskGroup()` puts it: an intensity modulation, HTP like a dimmer.
+ * `strobe` sits under [AttributeFamily.INTENSITY], not BEAM, because that is where
+ * `AttributeCategory.STROBE.family()` puts it: an intensity modulation, HTP like a dimmer.
  *
- * [WHITE], [AMBER] and [UV] are **colour**, matching `PropertyCategory.WHITE.maskGroup()` — they are
+ * [WHITE], [AMBER] and [UV] are **colour**, matching `AttributeCategory.WHITE.family()` — they are
  * emitters of the same mixed colour, so a template naming a hex and an amber is still one family and
  * still one named thing. They are rows in their own right rather than fields on [PaletteIntent.Colour]
  * so that each writes only its own channel: that is what lets a UV-only template sit *over* a colour
@@ -279,25 +279,25 @@ private fun trimNumber(value: Double): String =
  * emitters per component. It is also the only way to say "UV at 200" at all — no [WhitePolicy] has
  * ever driven UV.
  */
-enum class PaletteProperty(
+enum class PaletteAttribute(
     /** The property name as it is stored on the row and looked up on a head. */
-    val propertyName: String,
-    val family: PropertyMaskGroup,
+    val attribute: String,
+    val family: AttributeFamily,
     /** Operator-facing label, for the editor and the resolves-to panel. */
     val label: String,
 ) {
-    DIMMER("dimmer", PropertyMaskGroup.INTENSITY, "Level"),
-    STROBE("strobe", PropertyMaskGroup.INTENSITY, "Strobe"),
-    POSITION("position", PropertyMaskGroup.POSITION, "Position"),
-    COLOUR("rgbColour", PropertyMaskGroup.COLOUR, "Colour"),
-    WHITE("white", PropertyMaskGroup.COLOUR, "White"),
-    AMBER("amber", PropertyMaskGroup.COLOUR, "Amber"),
-    UV("uv", PropertyMaskGroup.COLOUR, "UV"),
-    ZOOM("zoom", PropertyMaskGroup.BEAM, "Zoom"),
-    FOCUS("focus", PropertyMaskGroup.BEAM, "Focus"),
-    IRIS("iris", PropertyMaskGroup.BEAM, "Iris"),
-    FROST("frost", PropertyMaskGroup.BEAM, "Frost"),
-    PRISM("prism", PropertyMaskGroup.BEAM, "Prism"),
+    DIMMER("dimmer", AttributeFamily.INTENSITY, "Level"),
+    STROBE("strobe", AttributeFamily.INTENSITY, "Strobe"),
+    POSITION("position", AttributeFamily.POSITION, "Position"),
+    COLOUR("rgbColour", AttributeFamily.COLOUR, "Colour"),
+    WHITE("white", AttributeFamily.COLOUR, "White"),
+    AMBER("amber", AttributeFamily.COLOUR, "Amber"),
+    UV("uv", AttributeFamily.COLOUR, "UV"),
+    ZOOM("zoom", AttributeFamily.BEAM, "Zoom"),
+    FOCUS("focus", AttributeFamily.BEAM, "Focus"),
+    IRIS("iris", AttributeFamily.BEAM, "Iris"),
+    FROST("frost", AttributeFamily.BEAM, "Frost"),
+    PRISM("prism", AttributeFamily.BEAM, "Prism"),
     ;
 
     /** Does [intent] have the right shape for this property? */
@@ -317,24 +317,24 @@ enum class PaletteProperty(
          * The bundled emitters, in the order the editor and the resolves-to panel show them.
          *
          * The property names are the categories, which is safe to rely on: `BundledEmitterNamesTest`
-         * pins every `bundledProperty(WHITE|AMBER|UV)` in the rig to exactly these spellings, and
+         * pins every `bundledAttribute(WHITE|AMBER|UV)` in the rig to exactly these spellings, and
          * `FxTarget.getSlider` already reaches them by the same names.
          */
-        val EMITTERS: List<PaletteProperty> = listOf(WHITE, AMBER, UV)
+        val EMITTERS: List<PaletteAttribute> = listOf(WHITE, AMBER, UV)
 
         /**
          * The vocabulary entry for a stored property name, or null when a template may not name it.
          *
-         * Matched through [canonicalPropertyName] so `colour` / `color` / `rgbColour` all land on
+         * Matched through [canonicalAttributeName] so `colour` / `color` / `rgbColour` all land on
          * [COLOUR] — the same collapse every other property lookup in this codebase applies.
          */
-        fun ofOrNull(propertyName: String): PaletteProperty? {
-            val canonical = canonicalPropertyName(propertyName.trim())
-            return entries.firstOrNull { it.propertyName.equals(canonical, ignoreCase = true) }
+        fun ofOrNull(attribute: String): PaletteAttribute? {
+            val canonical = canonicalAttributeName(attribute.trim())
+            return entries.firstOrNull { it.attribute.equals(canonical, ignoreCase = true) }
         }
 
         /** The vocabulary for one family, in declaration order — what the editor offers. */
-        fun forFamily(family: PropertyMaskGroup): List<PaletteProperty> =
+        fun forFamily(family: AttributeFamily): List<PaletteAttribute> =
             entries.filter { it.family == family }
     }
 }

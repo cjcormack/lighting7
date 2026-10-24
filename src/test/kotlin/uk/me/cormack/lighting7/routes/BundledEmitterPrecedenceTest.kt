@@ -17,7 +17,7 @@ import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.parseExtendedColour
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
@@ -65,17 +65,17 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
     private fun busk(channel: Int, level: Int) =
         handleUpdateChannel(state, UpdateChannelInMessage(0, channel, level.toUByte(), fadeTime = 0))
 
-    private fun program(rig: Rig, property: String, value: CueAssignmentResolver.PropertyValue) {
-        state.show.fxEngine.programmer.writeProperty(
-            ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(rig.target), property, value,
+    private fun program(rig: Rig, attribute: String, value: CueAssignmentResolver.AttributeValue) {
+        state.show.fxEngine.programmer.writeAttribute(
+            ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(rig.target), attribute, value,
         )
     }
 
-    private fun colour(serialized: String) = CueAssignmentResolver.PropertyValue.Colour(parseExtendedColour(serialized))
-    private fun slider(level: Int) = CueAssignmentResolver.PropertyValue.Slider(level.toUByte())
+    private fun colour(serialized: String) = CueAssignmentResolver.AttributeValue.Colour(parseExtendedColour(serialized))
+    private fun slider(level: Int) = CueAssignmentResolver.AttributeValue.Slider(level.toUByte())
 
-    private fun row(rig: Rig, property: String, value: String) =
-        CuePropertyAssignmentDto("fixture", rig.target, property, value)
+    private fun row(rig: Rig, attribute: String, value: String) =
+        CueAttributeAssignmentDto("fixture", rig.target, attribute, value)
 
     /** A cue holding a colour whose W disagrees with the emitter's own row — in [order]. */
     private suspend fun disagreeingCue(client: HttpClient, rig: Rig, colourFirst: Boolean): Int {
@@ -98,10 +98,10 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
             setBody(ProgrammerRecordRequest(projectId = projectId.toString(), mode = "CREATE", cueStackId = stackId))
         }.body()
 
-    private fun publish(rig: Rig, vararg properties: String) {
-        for (property in properties) {
+    private fun publish(rig: Rig, vararg attributes: String) {
+        for (attribute in attributes) {
             state.show.fxEngine.cascade.publishCascadeForKeys(
-                setOf(CueAssignmentResolver.Key.fixture(rig.target, property)),
+                setOf(CueAssignmentResolver.Key.fixture(rig.target, attribute)),
             )
         }
     }
@@ -193,7 +193,7 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
         assertEquals(200, level(rig.white), "precondition: the stage shows the newer white")
 
         val recorded = client.record(stackId)
-        val rows = recorded.cue.propertyAssignments.filter { it.targetKey == rig.target }.associateBy { it.propertyName }
+        val rows = recorded.cue.attributeAssignments.filter { it.targetKey == rig.target }.associateBy { it.attribute }
         assertEquals("200", rows["white"]?.value)
         assertEquals(
             200u.toUByte(), parseExtendedColour(rows["rgbColour"]!!.value).white,
@@ -216,7 +216,7 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
         assertEquals(30, level(rig.white), "precondition: the newer colour's W is on stage")
 
         val recorded = client.record(stackId)
-        val rows = recorded.cue.propertyAssignments.filter { it.targetKey == rig.target }.associateBy { it.propertyName }
+        val rows = recorded.cue.attributeAssignments.filter { it.targetKey == rig.target }.associateBy { it.attribute }
         assertEquals("30", rows["white"]?.value, "the emitter row takes the on-stage W")
         assertEquals(30u.toUByte(), parseExtendedColour(rows["rgbColour"]!!.value).white)
 
@@ -285,10 +285,10 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
         assertEquals(200, level(rig.white), "precondition: the emitter's row is on the channel")
 
         val entries = state.show.fxEngine.provenance.compute()
-        val colour = entries.single { it.targetKey == rig.target && it.propertyName == "rgbColour" }
+        val colour = entries.single { it.targetKey == rig.target && it.attribute == "rgbColour" }
         assertEquals(colourCue, colour.cueId, "RGB is still the colour cue's")
-        assertEquals(listOf("white" to whiteCue), colour.bundled.map { it.propertyName to it.cueId })
-        val white = entries.single { it.targetKey == rig.target && it.propertyName == "white" }
+        assertEquals(listOf("white" to whiteCue), colour.bundled.map { it.attribute to it.cueId })
+        val white = entries.single { it.targetKey == rig.target && it.attribute == "white" }
         assertEquals(whiteCue, white.cueId)
         assertEquals(emptyList(), white.bundled, "only the colour carries bundled attribution")
     }
@@ -312,35 +312,35 @@ class BundledEmitterPrecedenceTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.cueRows(cueId: Int, rig: Rig): Map<String, String> =
-        get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().propertyAssignments
+        get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().attributeAssignments
             .filter { it.targetKey == rig.target }
-            .associate { it.propertyName to it.value }
+            .associate { it.attribute to it.value }
 
     @Test fun `Hex - Update leaves an untouched disagreeing pair verbatim`() = updateUntouched(hex)
     @Test fun `head - Update leaves an untouched disagreeing pair verbatim`() = updateUntouched(head)
 
     /** The programmer reconciles the pair to the on-stage value; that must not read as an edit. */
     private fun updateUntouched(rig: Rig) = onRig(rig) { client ->
-        val (otherKey, otherProperty) = rig.other
+        val (otherKey, otherAttribute) = rig.other
         val cueId = ProgrammerRouteTestSupport.createCue(
             client, projectId, "pair",
             rows = listOf(
                 row(rig, "rgbColour", "#ff0000;w50"),
                 row(rig, "white", "200"),
-                CuePropertyAssignmentDto("fixture", otherKey, otherProperty, "70"),
+                CueAttributeAssignmentDto("fixture", otherKey, otherAttribute, "70"),
             ),
         )
         fun bundleRows(rows: Map<String, String>) = rows.filterKeys { it == "rgbColour" || it == "white" }
         val before = bundleRows(client.cueRows(cueId, rig))
         client.include(cueId)
         // Something else is edited, so Update has a row to write.
-        state.show.fxEngine.programmer.writeProperty(
-            ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(otherKey), otherProperty, slider(90),
+        state.show.fxEngine.programmer.writeAttribute(
+            ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(otherKey), otherAttribute, slider(90),
         )
         client.update()
         assertEquals(before, bundleRows(client.cueRows(cueId, rig)), "rows the operator never changed are not rewritten")
-        val other = client.get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().propertyAssignments
-            .single { it.targetKey == otherKey && it.propertyName == otherProperty }
+        val other = client.get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().attributeAssignments
+            .single { it.targetKey == otherKey && it.attribute == otherAttribute }
         assertEquals("90", other.value, "precondition: Update did write the edited row")
     }
 

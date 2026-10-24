@@ -4,7 +4,7 @@ name: Colour Cycle
 family: colour
 outputType: COLOUR
 fxMode: STANDARD
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: colours
     type: colourList

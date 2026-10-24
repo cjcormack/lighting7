@@ -4,12 +4,12 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { CueRowDraft, applyCueRowEntries, cueRowKey, restoreCueRows, sameCueValue } from './cueRowDraft'
-import type { CuePropertyAssignment } from '@/api/cuesApi'
+import type { CueAttributeAssignment } from '@/api/cuesApi'
 
-const STORED: CuePropertyAssignment[] = [
-  { targetType: 'fixture', targetKey: 'a', propertyName: 'colour', value: '#ff0000', fadeDurationMs: 1200, sortOrder: 2 },
-  { targetType: 'group', targetKey: 'Front', propertyName: 'dimmer', value: '100', sortOrder: 0 },
-  { targetType: 'fixture', targetKey: 'a', propertyName: 'position', value: '10,20', moveInDark: true, sortOrder: 5, health: { type: 'ok' } },
+const STORED: CueAttributeAssignment[] = [
+  { targetType: 'fixture', targetKey: 'a', attribute: 'colour', value: '#ff0000', fadeDurationMs: 1200, sortOrder: 2 },
+  { targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '100', sortOrder: 0 },
+  { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', moveInDark: true, sortOrder: 5, health: { type: 'ok' } },
 ]
 
 describe('applyCueRowEntries', () => {
@@ -18,9 +18,9 @@ describe('applyCueRowEntries', () => {
     // The grid writes `rgbColour`; the row is stored as `colour` — one row, not two.
     draft.set('fixture', 'a', 'rgbColour', '#00FF00')
     expect(applyCueRowEntries(STORED, draft.snapshot())).toEqual([
-      { targetType: 'fixture', targetKey: 'a', propertyName: 'colour', value: '#00FF00', fadeDurationMs: 1200, sortOrder: 2 },
-      { targetType: 'group', targetKey: 'Front', propertyName: 'dimmer', value: '100', sortOrder: 0 },
-      { targetType: 'fixture', targetKey: 'a', propertyName: 'position', value: '10,20', moveInDark: true, sortOrder: 5 },
+      { targetType: 'fixture', targetKey: 'a', attribute: 'colour', value: '#00FF00', fadeDurationMs: 1200, sortOrder: 2 },
+      { targetType: 'group', targetKey: 'Front', attribute: 'dimmer', value: '100', sortOrder: 0 },
+      { targetType: 'fixture', targetKey: 'a', attribute: 'position', value: '10,20', moveInDark: true, sortOrder: 5 },
     ])
   })
 
@@ -30,7 +30,7 @@ describe('applyCueRowEntries', () => {
     draft.set('fixture', 'b', 'dimmer', '200')
     const out = applyCueRowEntries(STORED, draft.snapshot())
     expect(out.find((r) => r.targetType === 'group')).toBeUndefined()
-    expect(out.at(-1)).toEqual({ targetType: 'fixture', targetKey: 'b', propertyName: 'dimmer', value: '200', sortOrder: 6 })
+    expect(out.at(-1)).toEqual({ targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '200', sortOrder: 6 })
   })
 
   it('keeps a group row and a fixture row of one name apart', () => {
@@ -42,7 +42,7 @@ describe('CueRowDraft.reconcile', () => {
   it('retires an entry only once the cue agrees and a cook read after its save has landed', () => {
     const draft = new CueRowDraft()
     draft.set('fixture', 'a', 'dimmer', '204')
-    const stored: CuePropertyAssignment[] = [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '204' }]
+    const stored: CueAttributeAssignment[] = [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '204' }]
     // Unsaved: the cue agreeing is another desk's edit, not ours landing — keep it.
     draft.reconcile(stored, 100)
     expect(draft.size).toBe(1)
@@ -58,7 +58,7 @@ describe('CueRowDraft.reconcile', () => {
     const draft = new CueRowDraft()
     draft.remove('fixture', 'a', 'dimmer')
     draft.markSaved(draft.snapshot(), 10)
-    draft.reconcile([{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '1' }], 20)
+    draft.reconcile([{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '1' }], 20)
     expect(draft.size).toBe(1)
     draft.reconcile([], 20)
     expect(draft.size).toBe(0)
@@ -72,16 +72,16 @@ describe('CueRowDraft.reconcile', () => {
 
 describe('restoreCueRows', () => {
   it('puts the changed rows back in their order and keeps every other row as it stands', () => {
-    const now: CuePropertyAssignment[] = [
-      { targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '1', sortOrder: 0 },
-      { targetType: 'fixture', targetKey: 'b', propertyName: 'dimmer', value: '99', sortOrder: 4 },
-      { targetType: 'fixture', targetKey: 'c', propertyName: 'dimmer', value: '7', sortOrder: 9 },
+    const now: CueAttributeAssignment[] = [
+      { targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '1', sortOrder: 0 },
+      { targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '99', sortOrder: 4 },
+      { targetType: 'fixture', targetKey: 'c', attribute: 'dimmer', value: '7', sortOrder: 9 },
     ]
     const key = cueRowKey('fixture', 'b', 'dimmer')
     const added = cueRowKey('fixture', 'd', 'dimmer')
-    const base = [{ targetType: 'fixture' as const, targetKey: 'b', propertyName: 'dimmer', value: '20', fadeDurationMs: 300, sortOrder: 4 }]
+    const base = [{ targetType: 'fixture' as const, targetKey: 'b', attribute: 'dimmer', value: '20', fadeDurationMs: 300, sortOrder: 4 }]
     // b put back to 20 with its fade; d, which the save added, gone; a and c untouched.
-    expect(restoreCueRows([...now, { targetType: 'fixture', targetKey: 'd', propertyName: 'dimmer', value: '5', sortOrder: 10 }], [key, added], base)).toEqual([
+    expect(restoreCueRows([...now, { targetType: 'fixture', targetKey: 'd', attribute: 'dimmer', value: '5', sortOrder: 10 }], [key, added], base)).toEqual([
       now[0],
       base[0],
       now[2],

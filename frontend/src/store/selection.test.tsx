@@ -31,8 +31,8 @@ import {
  * D7) — and the writes.
  *
  * Two of these are the vocabulary pins the plan asks for: `parseFamilies` against
- * `ATTRIBUTE_FAMILIES`, the way `maskPicker.test.ts` pins `MASK_GROUPS`, so a fifth family fails
- * here and in lighting7's `PropertyMaskTest` at once; and the two absences decoding to "every
+ * `ATTRIBUTE_FAMILIES`, the way `maskPicker.test.ts` pins `FAMILY_OPTIONS`, so a fifth family fails
+ * here and in lighting7's `AttributeMaskTest` at once; and the two absences decoding to "every
  * attribute" and "nobody", which is what the desk's Json means by omitting them.
  */
 

@@ -39,7 +39,7 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
 
     private fun pulse(targetType: String, targetKey: String) = CueAdHocFxDto(
         targetType = targetType, targetKey = targetKey, fxType = "Pulse",
-        family = categoryFromPropertyName("dimmer"), propertyName = "dimmer",
+        family = categoryFromAttributeName("dimmer"), attribute = "dimmer",
         cycle = 1.0, blendMode = "override", order = "normal",
     )
 
@@ -121,13 +121,13 @@ class CueFxSpellingUpdateTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an FX stored with its library category rather than its property's is not rewritten`() = testApplication {
+    fun `an FX stored with its library category rather than its attribute's is not rewritten`() = testApplication {
         mountTestApp(state)
         seedQuad()
         val client = jsonClient()
         // Capture files a Pulse on UV under `controls`; the picker stores Pulse's own `intensity`.
         val cueId = client.createCue(
-            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(propertyName = "uv", family = "intensity"),
+            pulse(TargetRef.Fixture.TYPE, "hex-1").copy(attribute = "uv", family = "intensity"),
         )
         val stored = storedFx(cueId)
 

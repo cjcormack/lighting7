@@ -20,7 +20,7 @@ class TriggerNotStorableException(message: String) : IllegalArgumentException(me
  * Which fixtures and groups carry a one-shot trigger, and the names they reserve — what every write
  * boundary checks a `(target, property)` against before it stores or applies it.
  *
- * A trigger is not a `@FixtureProperty`, so nothing resolves one by name; a row naming one would be
+ * A trigger is not a `@FixtureAttribute`, so nothing resolves one by name; a row naming one would be
  * stored as an unhealthy row today and fire nothing. That is not good enough for a value that spends
  * a cartridge: the row would come back to life the day the type grew a property of that name, and it
  * says nothing to the operator who wrote it. So each boundary refuses it, by name, here:
@@ -44,12 +44,12 @@ class TriggerIndex private constructor(
     val isEmpty: Boolean get() = fixtures.isEmpty()
 
     /**
-     * Why [propertyName] on this target may not be stored or set, or null when it may. [targetType]
+     * Why [attribute] on this target may not be stored or set, or null when it may. [targetType]
      * is the stored discriminator (`fixture`, `group`, or the deferred marker / null for a row with no
-     * target of its own). [where] prefixes the message (`rows[2]`, `propertyAssignments[0]`).
+     * target of its own). [where] prefixes the message (`rows[2]`, `attributeAssignments[0]`).
      */
-    fun refusal(targetType: String?, targetKey: String?, propertyName: String?, where: String): String? {
-        val name = propertyName?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+    fun refusal(targetType: String?, targetKey: String?, attribute: String?, where: String): String? {
+        val name = attribute?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         return when (targetType?.lowercase()) {
             "fixture" -> {
                 val key = targetKey ?: return null
@@ -75,7 +75,7 @@ class TriggerIndex private constructor(
     /** Throws [TriggerNotStorableException] naming every refused row at once, or returns. */
     fun check(rows: Iterable<RowRef>) {
         if (FixtureTriggers.allReservedNames.isEmpty()) return
-        val problems = rows.mapNotNull { refusal(it.targetType, it.targetKey, it.propertyName, it.where) }
+        val problems = rows.mapNotNull { refusal(it.targetType, it.targetKey, it.attribute, it.where) }
         if (problems.isNotEmpty()) throw TriggerNotStorableException(problems.joinToString("; "))
     }
 
@@ -83,7 +83,7 @@ class TriggerIndex private constructor(
     data class RowRef(
         val targetType: String?,
         val targetKey: String?,
-        val propertyName: String?,
+        val attribute: String?,
         val where: String,
         /** A stored row's level, for [CommandIndex.levelRefusal]; null for an effect or a template row. */
         val value: String? = null,
@@ -94,15 +94,15 @@ class TriggerIndex private constructor(
         val EMPTY = TriggerIndex(emptyMap(), emptyMap())
 
         /**
-         * Whether [propertyName] is a name any trigger-carrying type reserves — the cheap gate a hot
+         * Whether [attribute] is a name any trigger-carrying type reserves — the cheap gate a hot
          * path (a fader's programmer write) takes before it builds an index.
          */
-        fun mayRefuse(propertyName: String?): Boolean =
-            propertyName != null && FixtureTriggers.allReservedNames.any { it.equals(propertyName.trim(), ignoreCase = true) }
+        fun mayRefuse(attribute: String?): Boolean =
+            attribute != null && FixtureTriggers.allReservedNames.any { it.equals(attribute.trim(), ignoreCase = true) }
 
         /** [refusal] against the live register, or null at once for a name no trigger reserves. */
-        fun refusalLive(register: Fixtures, targetType: String?, targetKey: String?, propertyName: String?, where: String): String? =
-            if (!mayRefuse(propertyName)) null else of(register).refusal(targetType, targetKey, propertyName, where)
+        fun refusalLive(register: Fixtures, targetType: String?, targetKey: String?, attribute: String?, where: String): String? =
+            if (!mayRefuse(attribute)) null else of(register).refusal(targetType, targetKey, attribute, where)
 
         /** From the live register: the current project as it is loaded. */
         fun of(register: Fixtures): TriggerIndex {

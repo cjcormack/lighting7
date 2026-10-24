@@ -42,7 +42,7 @@ class SelectionFanTest : RouteIntegrationTest() {
     private fun fixture(key: String) = CueTargetDto("fixture", key)
 
     private fun place(keys: List<String>, intent: String) {
-        val request = FanRequest(targets = keys.map(::fixture), property = "position", from = intent, to = intent)
+        val request = FanRequest(targets = keys.map(::fixture), attribute = "position", from = intent, to = intent)
         assertIs<FanOutcome.Done>(fanIntoProgrammer(state, request, null))
     }
 
@@ -104,7 +104,7 @@ class SelectionFanTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a tilt written on its own property since the fan last wrote is kept, not snapped back`() = testApplication {
+    fun `a tilt written on its own attribute since the fan last wrote is kept, not snapped back`() = testApplication {
         seed()
         mountTestApp(state)
         place(movers, "pos:0,0")
@@ -112,9 +112,9 @@ class SelectionFanTest : RouteIntegrationTest() {
         val fan = state.selectionFan
         sweep(FanAxis.PAN, 74)
         val spot1 = state.show.fixtures.untypedGroupableFixture("spot-1")
-        state.show.fxEngine.programmer.writeProperties(
+        state.show.fxEngine.programmer.writeAttributes(
             ProgrammerOwner.SURFACE,
-            listOf(ProgrammerWriter.PropertyWrite(spot1, "tilt", CueAssignmentResolver.PropertyValue.Slider(180u))),
+            listOf(ProgrammerWriter.AttributeWrite(spot1, "tilt", CueAssignmentResolver.AttributeValue.Slider(180u))),
         )
         fan.turn(FanAxis.PAN, 75u)
         fan.turn(FanAxis.PAN, 65u)

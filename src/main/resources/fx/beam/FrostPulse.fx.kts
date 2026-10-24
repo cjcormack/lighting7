@@ -4,7 +4,7 @@ name: Frost Pulse
 family: beam
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [frost]
+compatibleAttributes: [frost]
 parameters:
   - name: min
     type: ubyte

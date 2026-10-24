@@ -23,7 +23,7 @@ vi.mock('./useRowValues', async () => ({
       resolutions: [
         {
           kind: 'slider',
-          property: {
+          attribute: {
             name: 'dimmer',
             category: 'dimmer',
             min: 0,
@@ -33,7 +33,7 @@ vi.mock('./useRowValues', async () => ({
         },
       ],
       targetKeys: ['a'],
-      keys: [{ targetKey: 'a', propertyName: 'dimmer' }],
+      keys: [{ targetKey: 'a', attribute: 'dimmer' }],
     },
   ],
 }))
@@ -48,7 +48,7 @@ vi.mock('../../api/lightingApi', async () => {
   const programmer = new Proxy(base.programmer as Record<string, unknown>, {
     get: (target, prop: string) =>
       prop === 'getKeyState'
-        ? (key: string, property: string) => ({ entry: heldBack.holds.has(`${key}|${property}`) ? { value: '200' } : null })
+        ? (key: string, attribute: string) => ({ entry: heldBack.holds.has(`${key}|${attribute}`) ? { value: '200' } : null })
         : prop === 'isBlind'
           ? () => heldBack.blind
           : target[prop],
@@ -111,7 +111,7 @@ function layerStore(over: Record<string, unknown>) {
     setValue: () => {},
     serverRows: new Map(),
     targetedKeys: null,
-    propertyMask: null,
+    attributeMask: null,
     deferredRows: [],
     elementRows: [],
     loaded: true,
@@ -744,7 +744,7 @@ describe('FixturesTable scopes', () => {
   it('greys a column outside the layer mask, and says so rather than hiding it', () => {
     scopeState.current = { kind: 'layer', layerId: 7 }
     // Dimmer is INTENSITY, so a COLOUR-only layer asserts nothing here.
-    lookStore.current = layerStore({ propertyMask: 'COLOUR' })
+    lookStore.current = layerStore({ attributeMask: 'COLOUR' })
     render(<Harness />)
     expect(cellWrapper().className).toContain('opacity-40')
     expect(cellWrapper().className).toContain('pointer-events-none')
@@ -1319,7 +1319,7 @@ describe('FixturesTable — the FX lens', () => {
   /** The harness's rows with what the lens reads of a fixture — its groups and its dimmer. */
   const LENS_ROWS = ROWS.map((row, i) =>
     row.kind === 'fixture'
-      ? { ...row, fixture: { ...row.fixture, groups: [], properties: [sliderProp('dimmer', 'dimmer', chan(i + 1))] } }
+      ? { ...row, fixture: { ...row.fixture, groups: [], attributes: [sliderProp('dimmer', 'dimmer', chan(i + 1))] } }
       : row,
   ) as Row[]
 
@@ -1376,13 +1376,13 @@ describe('FixturesTable — the FX lens', () => {
   it('reads a group effect over the whole rig, so a filter hiding its first member moves no chip', () => {
     // `x` leads the group and carries the dimmer only on its cells, so the desk paints x's cells
     // and not `a`, which carries it itself. The rows show `a` alone.
-    const a = { key: 'a', name: 'SL Wash 1', groups: ['wash'], properties: [sliderProp('dimmer', 'dimmer', chan(1))] }
+    const a = { key: 'a', name: 'SL Wash 1', groups: ['wash'], attributes: [sliderProp('dimmer', 'dimmer', chan(1))] }
     const x = {
       key: 'x',
       name: 'Bar',
       groups: ['wash'],
-      properties: [],
-      elements: [{ key: 'x.1', displayName: 'Cell 1', index: 0, properties: [sliderProp('dimmer', 'dimmer', chan(9))] }],
+      attributes: [],
+      elements: [{ key: 'x.1', displayName: 'Cell 1', index: 0, attributes: [sliderProp('dimmer', 'dimmer', chan(9))] }],
     }
     const rows = [{ kind: 'fixture', id: 'fixture:a', depth: 0, fixture: a }] as unknown as Row[]
     lensFx.effects = [cue({ targetKey: 'wash', isGroupTarget: true, targetType: 'group' })]

@@ -1,0 +1,9 @@
+{
+  "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+  "delayMs": 400,
+  "intervalMs": 800,
+  "randomWindowMs": 200,
+  "scriptUuid": "f1b4a9dd-9c3a-41e9-b969-f9a378cfd412",
+  "triggerType": "ACTIVATION",
+  "uuid": "5fffef13-bcc0-489a-8a48-8e2b137fdaee"
+}

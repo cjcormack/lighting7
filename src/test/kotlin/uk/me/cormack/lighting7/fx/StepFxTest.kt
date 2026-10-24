@@ -271,20 +271,20 @@ class StepFxTest {
         assertEquals(109 to 99, rig.at(21) to rig.at(22), "the second half the second, in this head's degrees")
 
         val shape = paletteStepsShape(PaletteSource(templates).paletteStepsOf(refs)).getOrThrow()
-        assertEquals(PaletteStepsShape(PropertyMaskGroup.POSITION, "position", "position"), shape)
+        assertEquals(PaletteStepsShape(AttributeFamily.POSITION, "position", "position"), shape)
     }
 
     @Test
-    fun `a Palette Steps list is one family, stepping a property every palette names`() {
+    fun `a Palette Steps list is one family, stepping an attribute every palette names`() {
         val beam = paletteStepsShape(listOf(step("Wide", "zoom" to "pct:90", "frost" to "pct:10"), step("Tight", "zoom" to "pct:10")))
-        assertEquals("zoom", beam.getOrThrow().property, "frost is not in both, so the steps step the zoom")
+        assertEquals("zoom", beam.getOrThrow().attribute, "frost is not in both, so the steps step the zoom")
         assertEquals("beam", beam.getOrThrow().fxFamily)
 
         val mixed = paletteStepsShape(listOf(step("Red", "rgbColour" to "#FF0000"), step("Down", "position" to "pos:0,0")))
         assertTrue(mixed.isFailure, "colour and position cannot be one list")
 
         val colour = paletteStepsShape(listOf(step("Red", "rgbColour" to "#FF0000"), step("UV", "uv" to "dmx:200")))
-        assertEquals(PaletteStepsShape(PropertyMaskGroup.COLOUR, "colour", "colour"), colour.getOrThrow(), "colour is one colour, whatever rows spell it")
+        assertEquals(PaletteStepsShape(AttributeFamily.COLOUR, "colour", "colour"), colour.getOrThrow(), "colour is one colour, whatever rows spell it")
     }
 
     @Test

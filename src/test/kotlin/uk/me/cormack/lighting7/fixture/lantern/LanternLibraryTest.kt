@@ -4,7 +4,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.fixture.BodyArchetype
 import uk.me.cormack.lighting7.fixture.FixtureKind
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
@@ -107,7 +107,7 @@ class LanternLibraryTest {
         assertTrue(declared.isNotEmpty())
         for (t in declared) {
             val moves = t.kind == FixtureKind.MOVING_HEAD || t.kind == FixtureKind.SCANNER ||
-                t.properties.any { it is SliderPropertyDescriptor && it.axis == "TILT" }
+                t.attributes.any { it is SliderAttributeDescriptor && it.axis == "TILT" }
             assertEquals(moves, t.body!!.archetype == BodyArchetype.MOVER, "${t.typeKey} declares ${t.body}")
         }
         assertTrue(FixtureTypeRegistry.allTypes.filter { it.acceptsLantern }.none { it.body != null }, "a lantern is the body")

@@ -34,7 +34,7 @@ function layer(source: { kind: 'LOOK' | 'PALETTE'; id: number; name: string; fam
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,
@@ -49,7 +49,7 @@ function pulse(runUuid: string | null, settings: Record<string, unknown> = { cyc
     uuid: `fx${nextId}`,
     runUuid,
     fxType: 'Pulse',
-    propertyName: 'dimmer',
+    attribute: 'dimmer',
     targetType: 'group',
     targetKey: 'wash',
     family: 'INTENSITY',
@@ -81,7 +81,7 @@ function act(): StackTimeline {
       cue(1, {
         layers: [
           layer(WARM, { heads: ['hex-1'], amount: 0.6, stomp: true }),
-          layer(LAVENDER, { targets: [hex1, hex2], heads: ['hex-1', 'hex-2'], propertyMask: 'COLOUR' }),
+          layer(LAVENDER, { targets: [hex1, hex2], heads: ['hex-1', 'hex-2'], attributeMask: 'COLOUR' }),
         ],
         fx: [pulse('run-a')],
         scenery: [{ elementUuid: 'tabs', state: { open: 1 }, transitionMs: 4000 }],
@@ -280,7 +280,7 @@ describe('an added column', () => {
 
 describe('layer glyphs', () => {
   it('reads a blend and a mask written in any case, as the desk does', () => {
-    expect(layerGlyphs(layer(WARM, { blendMode: 'additive', propertyMask: 'colour,position' }))).toEqual(['ADD', 'CP'])
+    expect(layerGlyphs(layer(WARM, { blendMode: 'additive', attributeMask: 'colour,position' }))).toEqual(['ADD', 'CP'])
   })
 })
 

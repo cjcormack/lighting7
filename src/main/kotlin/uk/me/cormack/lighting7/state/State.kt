@@ -656,8 +656,8 @@ class State(val config: ApplicationConfig) {
             validSpeedMasterUuids = snapshot.speedMasterUuids,
             validStackUuids = snapshot.stacks.mapTo(HashSet()) { it.second },
             validCueUuids = snapshot.cues.mapTo(HashSet()) { it.second },
-            selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
-            colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
+            selectionAttributes = BindingHealthEvaluator.selectionAttributesOf(fixtures),
+            colourAttributes = BindingHealthEvaluator.colourAttributesOf(fixtures),
             validLookUuids = snapshot.lookUuids,
             validPaletteUuids = snapshot.paletteUuids,
             validPadUuids = snapshot.padUuids,
@@ -1380,6 +1380,11 @@ class State(val config: ApplicationConfig) {
 
             ensureInstallRow()
         }
+
+        // Terminology plan step 6: the surface bindings' attribute targets and the position FX's
+        // centres in the glossary's words, backed up first when anything moves. After step 5 is
+        // recorded, so it meets the renamed schema. `AttributeNamesMigration.kt`.
+        AttributeNamesMigration.runIfNeeded(ds, database, dbPath)
 
         databaseInitWindow = startedAt to java.time.Instant.now()
         return database

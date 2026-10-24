@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Blade
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.createTestTransaction
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -120,28 +120,28 @@ class Source4RevolutionFixtureTest {
     fun `the descriptor carries the optics the Stage view reads`() {
         val fixture = Source4RevolutionFixture.BaseFrame31Ch(universe, "s4rev-1", "S4 Rev 1", 1)
 
-        val zoom = assertNotNull(fixture.fixtureProperty("zoom"))
+        val zoom = assertNotNull(fixture.fixtureAttribute("zoom"))
         assertEquals(35.0, zoom.degMin, "DMX 0 is wide")
         assertEquals(15.0, zoom.degMax)
 
-        assertEquals(PropertyCategory.COLOUR, fixture.fixtureProperty("gelScroller")?.category)
-        assertEquals(PropertyCategory.GOBO, fixture.fixtureProperty("fbWheelPos")?.category)
-        assertEquals(PropertyCategory.GOBO_ROTATION_MODE, fixture.fixtureProperty("fbWheelFunc")?.category)
+        assertEquals(AttributeCategory.COLOUR, fixture.fixtureAttribute("gelScroller")?.category)
+        assertEquals(AttributeCategory.GOBO, fixture.fixtureAttribute("fbWheelPos")?.category)
+        assertEquals(AttributeCategory.GOBO_ROTATION_MODE, fixture.fixtureAttribute("fbWheelFunc")?.category)
 
-        val rot = assertNotNull(fixture.fixtureProperty("fbWheelRot"))
-        assertEquals(PropertyCategory.GOBO_ROTATION, rot.category)
+        val rot = assertNotNull(fixture.fixtureAttribute("fbWheelRot"))
+        assertEquals(AttributeCategory.GOBO_ROTATION, rot.category)
         assertEquals(30.0, rot.rpmMax)
         assertEquals(360.0, rot.indexDegMax)
         assertNull(rot.fineOf)
 
-        val fine = assertNotNull(fixture.fixtureProperty("fbWheelRotFine"))
+        val fine = assertNotNull(fixture.fixtureAttribute("fbWheelRotFine"))
         assertEquals("fbWheelRot", fine.fineOf)
         assertNull(fine.rpmMax)
 
-        assertNotNull(fixture.fixtureProperty("fanSpeed"))
-        assertNotNull(fixture.fixtureProperty("mediaFrame"))
+        assertNotNull(fixture.fixtureAttribute("fanSpeed"))
+        assertNotNull(fixture.fixtureAttribute("mediaFrame"))
         for (removed in listOf("rbWheelPos", "rbWheelFunc", "rbWheelRot", "rbWheelRotFine")) {
-            assertNull(fixture.fixtureProperty(removed), "$removed is reserved with the shutter module fitted")
+            assertNull(fixture.fixtureAttribute(removed), "$removed is reserved with the shutter module fitted")
         }
 
         // Every exposed channel is described, and the reset channel as its commands (fixture optics
@@ -157,14 +157,14 @@ class Source4RevolutionFixtureTest {
         val blades = listOf(Blade.TOP, Blade.BOTTOM, Blade.LEFT, Blade.RIGHT)
         for ((i, blade) in blades.withIndex()) {
             val n = i + 1
-            val pos = assertNotNull(fixture.fixtureProperty("frame${n}Pos"))
-            assertEquals(PropertyCategory.SHUTTER, pos.category, "frame $n position")
+            val pos = assertNotNull(fixture.fixtureAttribute("frame${n}Pos"))
+            assertEquals(AttributeCategory.SHUTTER, pos.category, "frame $n position")
             assertEquals(blade, pos.blade, "frame $n cuts the $blade")
             assertEquals(0.5, pos.depthMax, "frame $n reaches the centre at full")
             assertFalse(pos.inverted)
 
-            val rot = assertNotNull(fixture.fixtureProperty("frame${n}Rot"))
-            assertEquals(PropertyCategory.SHUTTER_ROTATION, rot.category, "frame $n rotation")
+            val rot = assertNotNull(fixture.fixtureAttribute("frame${n}Rot"))
+            assertEquals(AttributeCategory.SHUTTER_ROTATION, rot.category, "frame $n rotation")
             assertEquals(blade, rot.blade)
             assertEquals(-45.0, rot.degMin, "the manual's ±45°")
             assertEquals(45.0, rot.degMax)

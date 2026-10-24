@@ -1,0 +1,17 @@
+{
+  "attribute": "dimmer",
+  "blendMode": "OVERRIDE",
+  "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+  "cycle": 1.0,
+  "elementMode": "FLAT",
+  "family": "intensity",
+  "fxType": "Pulse",
+  "order": "CENTRE_OUT",
+  "parameters": {
+    "depth": "0.5"
+  },
+  "sortOrder": 4,
+  "targetKey": "[{\"key\":\"front-wash\",\"type\":\"group\"},{\"key\":\"hex-4\",\"type\":\"fixture\"}]",
+  "targetType": "selection",
+  "uuid": "045bce87-3165-462d-9b93-332bc79ef90b"
+}

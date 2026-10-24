@@ -38,7 +38,7 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
  * per head).
  *
  * [value] is always a **literal** in the canonical
- * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.serialize] grammar. **Looks do
+ * [uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.serialize] grammar. **Looks do
  * not nest**: a `ref:` value is rejected at the write boundary, so resolution can never recurse.
  *
  * `moveInDark` deliberately has no place here — it is a cue-*crossfade* concept, which is also
@@ -48,7 +48,7 @@ const val DEFERRED_TARGET_TYPE: String = "deferred"
 data class LookRowDto(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val elementKey: String? = null,
@@ -56,7 +56,7 @@ data class LookRowDto(
     /**
      * Validation status of this row against the live patch. Populated server-side on read;
      * ignored on write — the server never trusts client-supplied health. Same contract as
-     * [CuePropertyAssignmentDto.health].
+     * [CueAttributeAssignmentDto.health].
      */
     val health: AssignmentHealth = AssignmentHealth.Ok,
 ) {
@@ -84,7 +84,7 @@ data class LookFxDto(
     val targetKey: String,
     val fxType: String,
     val family: String,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val cycle: Double,
     val blendMode: String,
     val order: String,
@@ -141,9 +141,9 @@ data class LookFxDto(
  * that layers it with no cue re-fired. That republish is the point of the feature.
  *
  * **No stored attribute-family type.** Which families a Look touches is derived from its rows via
- * [uk.me.cormack.lighting7.fx.maskGroupForProperty], so the library banks by family the way
+ * [uk.me.cormack.lighting7.fx.familyForAttribute], so the library banks by family the way
  * `/palettes/:type` used to and a Look can grow from one family to several with no migration.
- * `PaletteType` was already a typealias of `PropertyMaskGroup` to keep exactly this cheap.
+ * `PaletteType` was already a typealias of `AttributeFamily` to keep exactly this cheap.
  *
  * The [uuid] is load-bearing beyond sync: it is what a `ref:{uuid}` value names, and the
  * palettes → Looks migration preserves each palette's uuid so existing references keep resolving.
@@ -301,7 +301,7 @@ object DaoLookFx : IntIdTable("look_fx") {
 data class LookFxSpec(
     val fxType: String,
     val family: String,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val cycle: Double,
     val blendMode: String,
     val order: String,

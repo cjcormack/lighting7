@@ -117,7 +117,7 @@ class GlossaryVocabularyTest {
     @Test
     fun `controls is not a routable master family`() {
         // `controls` is the synthetic family for from-state settings effects (FxSpawner,
-        // categoryFromPropertyName), and a settings slider has no tempo. It routes to master 1 via
+        // categoryFromAttributeName), and a settings slider has no tempo. It routes to master 1 via
         // a null `speedMasterUuid`, which is what an unmatched family is defined to do.
         assertTrue("controls" !in SPEED_MASTER_FAMILIES)
     }

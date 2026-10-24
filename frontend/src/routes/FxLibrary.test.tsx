@@ -38,7 +38,7 @@ function entry(name: string, over: Partial<FxLibraryEntry> = {}): FxLibraryEntry
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: '' }],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     source: 'BUILT_IN',
     sourceDefinitionId: null,
     script: 'FxOutput.Slider(0u)',
@@ -51,8 +51,8 @@ const LIBRARY = [
   entry('Pulse'),
   entry('PulseCustom', { source: 'USER', sourceDefinitionId: 3 }),
   entry('RandomFlicker', { source: 'USER', sourceDefinitionId: 7, timingSource: 'WALL_CLOCK' }),
-  entry('WarmFlicker', { family: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
-  entry('ColourChase', { family: 'colour', outputType: 'COLOUR', compatibleProperties: ['rgbColour'] }),
+  entry('WarmFlicker', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'], source: 'USER', sourceDefinitionId: 12 }),
+  entry('ColourChase', { family: 'colour', outputType: 'COLOUR', compatibleAttributes: ['rgbColour'] }),
 ]
 
 function definition(id: number, fxId: string, name: string): FxDefinition {
@@ -64,7 +64,7 @@ function definition(id: number, fxId: string, name: string): FxDefinition {
     outputType: 'SLIDER',
     fxMode: 'STANDARD',
     parameters: [],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
     script: '',
     defaultTiming: 'CYCLE',
     timingSource: 'BEAT',
@@ -216,7 +216,7 @@ describe('FX Library sheet', () => {
       family: 'intensity',
       outputType: 'SLIDER',
       fxMode: 'STANDARD',
-      compatibleProperties: ['dimmer'],
+      compatibleAttributes: ['dimmer'],
       script: 'FxOutput.Slider(0u)',
       timingSource: 'BEAT',
       defaultTiming: 'CYCLE',

@@ -171,7 +171,7 @@ export function LayerStack({
   onOpenChange,
   heads,
   group,
-  propertyName,
+  attribute,
   label,
   trigger,
   cueLabel: cueLabelProp,
@@ -183,7 +183,7 @@ export function LayerStack({
   heads: readonly { key: string; name: string }[]
   /** A group's *All*: ask the group, and clear the group entry. */
   group?: string
-  propertyName: string
+  attribute: string
   label: string
   trigger: ReactNode
   /**
@@ -208,9 +208,9 @@ export function LayerStack({
     const keys = headsKey.split('\u0000')
     const request: Promise<{ blind: boolean; stacks: KeyStack[] }> =
       group != null
-        ? lightingApi.programmer.keyStack('group', group, propertyName)
+        ? lightingApi.programmer.keyStack('group', group, attribute)
         : // Settled, not all: one head the desk could not answer for leaves the others' stacks drawn.
-          Promise.allSettled(keys.map((key) => lightingApi.programmer.keyStack('fixture', key, propertyName))).then((results) => {
+          Promise.allSettled(keys.map((key) => lightingApi.programmer.keyStack('fixture', key, attribute))).then((results) => {
             const answers = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []))
             if (answers.length === 0) throw (results[0] as PromiseRejectedResult).reason
             return { blind: answers.some((a) => a.blind), stacks: answers.flatMap((a) => a.stacks) }
@@ -226,7 +226,7 @@ export function LayerStack({
         setError(e instanceof Error ? e.message : 'The desk did not answer')
       },
     )
-  }, [headsKey, group, propertyName])
+  }, [headsKey, group, attribute])
 
   useEffect(() => {
     if (!open) {
@@ -251,12 +251,12 @@ export function LayerStack({
         if (live) ask()
       })
     }
-    const subs = headsKey.split('\u0000').map((key) => lightingApi.programmer.subscribeToKey(key, propertyName, askSoon))
+    const subs = headsKey.split('\u0000').map((key) => lightingApi.programmer.subscribeToKey(key, attribute, askSoon))
     return () => {
       live = false
       subs.forEach((s) => s.unsubscribe())
     }
-  }, [open, ask, headsKey, propertyName])
+  }, [open, ask, headsKey, attribute])
 
   const stacks = answer?.stacks ?? []
   const nameOf = (key: string) => headsRef.current.find((h) => h.key === key)?.name ?? key
@@ -272,11 +272,11 @@ export function LayerStack({
   const clearYours = () => {
     const fade = getProgrammerFadeMs()
     if (group != null) {
-      lightingApi.programmer.clearEntry('group', group, propertyName, fade)
+      lightingApi.programmer.clearEntry('group', group, attribute, fade)
       return
     }
     for (const stack of stacks) {
-      if (holding(stack)) lightingApi.programmer.clearEntry('fixture', stack.targetKey, propertyName, fade)
+      if (holding(stack)) lightingApi.programmer.clearEntry('fixture', stack.targetKey, attribute, fade)
     }
   }
 

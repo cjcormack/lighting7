@@ -1,0 +1,25 @@
+{
+  "compatibleAttributes": [
+    "dimmer"
+  ],
+  "defaultTiming": "HEAD",
+  "family": "intensity",
+  "fxId": "custom-flicker",
+  "name": "Custom Flicker",
+  "outputType": "SLIDER",
+  "parameters": [
+    {
+      "defaultValue": "0.8",
+      "description": "flicker depth",
+      "name": "depth",
+      "type": "double"
+    },
+    {
+      "defaultValue": "7",
+      "name": "seed",
+      "type": "int"
+    }
+  ],
+  "script": "// effect",
+  "uuid": "14fec82b-5748-489e-b74d-c9e5264083d8"
+}

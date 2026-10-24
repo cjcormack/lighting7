@@ -11,13 +11,13 @@ const SEP = '\u0000'
  * Its own module so the draft store and the read path can share it without either importing the
  * other's React surface.
  */
-export function lookRowKey(targetKey: string, propertyName: string): string {
-  return `${targetKey}${SEP}${propertyName}`
+export function lookRowKey(targetKey: string, attribute: string): string {
+  return `${targetKey}${SEP}${attribute}`
 }
 
 /** The inverse. Returns null for anything that isn't a key this module made. */
-export function splitLookRowKey(key: string): { targetKey: string; propertyName: string } | null {
+export function splitLookRowKey(key: string): { targetKey: string; attribute: string } | null {
   const at = key.indexOf(SEP)
   if (at === -1) return null
-  return { targetKey: key.slice(0, at), propertyName: key.slice(at + 1) }
+  return { targetKey: key.slice(0, at), attribute: key.slice(at + 1) }
 }

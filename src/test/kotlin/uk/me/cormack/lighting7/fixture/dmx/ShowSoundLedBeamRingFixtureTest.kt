@@ -2,8 +2,8 @@ package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.createTestTransaction
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -13,7 +13,7 @@ class ShowSoundLedBeamRingFixtureTest {
     private val universe = Universe(0, 0)
 
     @Test
-    fun `14ch mode writes every property to the head file's channel`() {
+    fun `14ch mode writes every attribute to the head file's channel`() {
         val (controller, transaction) = createTestTransaction(universe)
         val fixture = ShowSoundLedBeamRingFixture.Mode14Ch(universe, "beam-1", "Beam 1", 1)
             .withTransaction(transaction)
@@ -59,8 +59,8 @@ class ShowSoundLedBeamRingFixtureTest {
     @Test
     fun `the ring's bands reach the descriptor, and the speed is a ring speed slider`() {
         val descriptors = ShowSoundLedBeamRingFixture.Mode14Ch(universe, "beam-1", "Beam 1", 1)
-            .generatePropertyDescriptors()
-        val ring = descriptors.filterIsInstance<SettingPropertyDescriptor>().single { it.name == "ringFx" }
+            .generateAttributeDescriptors()
+        val ring = descriptors.filterIsInstance<SettingAttributeDescriptor>().single { it.name == "ringFx" }
         assertEquals("ring", ring.category)
         val byName = ring.options.associateBy { it.name }
         assertNull(byName.getValue("OFF").ringColour)
@@ -68,10 +68,10 @@ class ShowSoundLedBeamRingFixtureTest {
         assertEquals("#FFFFFF", byName.getValue("COLOUR").ringColour)
         assertEquals(true, byName.getValue("CHASE").ringChase)
         assertEquals(true, byName.getValue("CHASE_2").ringChase)
-        assertNull(descriptors.filterIsInstance<SettingPropertyDescriptor>().single { it.name == "colourWheel" }
+        assertNull(descriptors.filterIsInstance<SettingAttributeDescriptor>().single { it.name == "colourWheel" }
             .options.first().ringColour, "only a ring option carries a ring colour")
 
-        val speed = descriptors.filterIsInstance<SliderPropertyDescriptor>().single { it.name == "ringSpeed" }
+        val speed = descriptors.filterIsInstance<SliderAttributeDescriptor>().single { it.name == "ringSpeed" }
         assertEquals("ring_speed", speed.category)
     }
 }

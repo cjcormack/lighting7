@@ -2,7 +2,7 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
 import {
   parsePaletteIntent,
   serializePaletteIntent,
-  palettePropertiesForFamily,
+  paletteAttributesForFamily,
   type PaletteIntent,
   type WhitePolicy,
 } from '@/lib/paletteIntent'
@@ -31,7 +31,7 @@ export function seedValues(template: PaletteSummary | null): PaletteValues {
   const out: PaletteValues = {}
   for (const row of template.rows ?? []) {
     const intent = parsePaletteIntent(row.value)
-    if (intent != null) out[row.propertyName] = intent
+    if (intent != null) out[row.attribute] = intent
   }
   return out
 }
@@ -39,16 +39,16 @@ export function seedValues(template: PaletteSummary | null): PaletteValues {
 /** The draft with one property set, or removed where [intent] is null. Same object when nothing moves. */
 export function withIntent(
   values: PaletteValues,
-  propertyName: string,
+  attribute: string,
   intent: PaletteIntent | null,
 ): PaletteValues {
   if (intent == null) {
-    if (values[propertyName] == null) return values
+    if (values[attribute] == null) return values
     const next = { ...values }
-    delete next[propertyName]
+    delete next[attribute]
     return next
   }
-  return { ...values, [propertyName]: intent }
+  return { ...values, [attribute]: intent }
 }
 
 /**
@@ -83,7 +83,7 @@ export function applyValueChanges(
 
 /** Does this draft hold nothing a template of [family] would store? The builder's emptiness, unbuilt. */
 export function paletteValuesEmpty(family: AttributeFamily, values: PaletteValues): boolean {
-  return palettePropertiesForFamily(family).every((p) => values[p.propertyName] == null)
+  return paletteAttributesForFamily(family).every((p) => values[p.attribute] == null)
 }
 
 /**
@@ -131,14 +131,14 @@ export function effectiveColourPolicy(values: PaletteValues): WhitePolicy {
  */
 export function paletteRowsFromValues(family: AttributeFamily, values: PaletteValues): PaletteRow[] {
   const policy = effectiveColourPolicy(values)
-  return palettePropertiesForFamily(family)
-    .filter((p) => values[p.propertyName] != null)
+  return paletteAttributesForFamily(family)
+    .filter((p) => values[p.attribute] != null)
     .map((p, index) => {
-      const intent = values[p.propertyName]
+      const intent = values[p.attribute]
       return {
         targetType: DEFERRED_TARGET_TYPE,
         targetKey: '',
-        propertyName: p.propertyName,
+        attribute: p.attribute,
         value: serializePaletteIntent(intent.kind === 'colour' ? { ...intent, policy } : intent),
         sortOrder: index,
       }
@@ -150,5 +150,5 @@ export function paletteRowsFromValues(family: AttributeFamily, values: PaletteVa
  * and the Value cell's no-op test both read it.
  */
 export function paletteRowsKey(rows: readonly PaletteRow[]): string {
-  return JSON.stringify(rows.map((row) => [row.targetType, row.targetKey, row.propertyName, row.value]))
+  return JSON.stringify(rows.map((row) => [row.targetType, row.targetKey, row.attribute, row.value]))
 }

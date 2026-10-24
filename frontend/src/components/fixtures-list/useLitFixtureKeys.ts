@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
-import { channelKey } from '../../hooks/usePropertyValues'
-import { findDimmerProperty } from '../../store/fixtures'
+import { channelKey } from '../../hooks/useAttributeValues'
+import { findDimmerAttribute } from '../../store/fixtures'
 import type { Fixture } from '../../store/fixtures'
 
 const EMPTY_SET: ReadonlySet<string> = new Set()
@@ -37,10 +37,10 @@ export function useLitFixtureKeys(fixtures: readonly Fixture[]): ReadonlySet<str
     const perFixture: FixtureDimmers[] = []
     const watched = new Set<string>()
     for (const fixture of fixtures) {
-      const master = findDimmerProperty(fixture.properties)
+      const master = findDimmerAttribute(fixture.attributes)
       const heads: string[] = []
       for (const element of fixture.elements ?? []) {
-        const headDimmer = findDimmerProperty(element.properties)
+        const headDimmer = findDimmerAttribute(element.attributes)
         if (headDimmer) heads.push(channelKey(headDimmer.channel))
       }
       if (!master && heads.length === 0) continue

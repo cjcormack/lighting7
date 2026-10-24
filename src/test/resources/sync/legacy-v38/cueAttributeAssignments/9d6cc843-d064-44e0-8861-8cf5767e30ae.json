@@ -1,0 +1,10 @@
+{
+  "attribute": "position",
+  "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+  "moveInDark": true,
+  "sortOrder": 1,
+  "targetKey": "front-wash",
+  "targetType": "group",
+  "uuid": "9d6cc843-d064-44e0-8861-8cf5767e30ae",
+  "value": "120,64"
+}

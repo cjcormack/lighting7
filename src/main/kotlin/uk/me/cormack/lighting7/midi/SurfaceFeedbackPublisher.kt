@@ -94,7 +94,7 @@ interface SurfaceFeedbackHooks {
  * off state, takeover is disarmed, and the stream reports `value: null`. A turn or move then
  * writes every head and the next tick reads uniform
  * (`docs/plans/completed/midi-surface-plan.md` D10). What a head's value *is* — and so what a
- * turn writes — is [PropertyChannelResolver]'s rule, not this class's.
+ * turn writes — is [AttributeChannelResolver]'s rule, not this class's.
  *
  * ## The control-state stream
  *
@@ -125,7 +125,7 @@ class SurfaceFeedbackPublisher(
      */
     private val speedMasterBankProvider: (() -> SpeedMasterBank)? = null,
     /**
-     * The desk selection a `SelectionProperty` control writes and a `SelectTarget` LED shows.
+     * The desk selection a `SelectionAttribute` control writes and a `SelectTarget` LED shows.
      * A value, not a provider: it is State-scoped and survives a project switch (cleared, not
      * rebuilt). Null disables the selection-relative arms — a harness without a desk.
      */
@@ -209,7 +209,7 @@ class SurfaceFeedbackPublisher(
      * [heads] are what the 7-bit feedback position is read from — one per head the target names:
      * the fixture itself, each member of a group, each selected head of a selection binding. A
      * head is a slider's one channel or a colour's three read together on the binding's [axis]
-     * ([PropertyChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
+     * ([AttributeChannelResolver.readHead] owns that rule, so the ring reads what a turn writes).
      * Empty for a selection binding with nothing selected: the entry exists so the control reads
      * "no selection" rather than "unbound". [channels] is the flat list the index is keyed on.
      * [axis] is baked here at rebuild, like [policy], so the read path never re-derives it.
@@ -219,11 +219,11 @@ class SurfaceFeedbackPublisher(
         val deviceTypeKey: String,
         val control: ControlDescriptor,
         val binding: ControlSurfaceBindingService.ResolvedBinding,
-        val heads: List<PropertyChannelResolver.PropertyRead>,
+        val heads: List<AttributeChannelResolver.AttributeRead>,
         val policy: BindingTakeoverPolicy,
         val axis: ColourAxis?,
     ) {
-        val channels: List<PropertyChannelResolver.PropertyChannel> = heads.flatMap { it.channels }
+        val channels: List<AttributeChannelResolver.AttributeChannel> = heads.flatMap { it.channels }
     }
 
     /** Discrete-binding entry for LED feedback (Flash / Blackout / GrandMasterToggle / Select / Locate). */
@@ -265,7 +265,7 @@ class SurfaceFeedbackPublisher(
 
     /**
      * Continuous entry for a tempo-bound control. Deliberately *not* a [ContinuousEntry]:
-     * that type is built around a DMX [PropertyChannelResolver.PropertyChannel], and a speed
+     * that type is built around a DMX [AttributeChannelResolver.AttributeChannel], and a speed
      * master has no channel behind it — its value lives in the bank.
      *
      * This exists mainly so soft takeover works. PICKUP only engages once something calls
@@ -1030,7 +1030,7 @@ class SurfaceFeedbackPublisher(
      * (to nothing when nothing is selected), because "no selection" is a state the control
      * shows rather than the absence of a binding.
      *
-     * Every arm takes the **whole** [PropertyChannelResolver.PropertyRead]. Each used to take the
+     * Every arm takes the **whole** [AttributeChannelResolver.AttributeRead]. Each used to take the
      * first channel of the flat description, so a colour binding stood on red alone and a
      * red-and-yellow selection read as uniform (`FU-MIDI-SELECTION-COLOUR-RED-ONLY`).
      *
@@ -1038,40 +1038,40 @@ class SurfaceFeedbackPublisher(
      * for the whole entry when any head reads null, and a slider head reads null on an axis — so
      * a selection mixing a colour head and a slider head under one property name would otherwise
      * darken the ring for the heads the move does reach. The write skips those heads
-     * ([PropertyChannelResolver.toPropertyValue]); the read has to skip the same ones.
+     * ([AttributeChannelResolver.toAttributeValue]); the read has to skip the same ones.
      */
     private fun findHeads(
         fixtures: Fixtures,
         target: BindingTarget,
         selectedHeads: List<CueTargetDto>,
         axis: ColourAxis?,
-    ): List<PropertyChannelResolver.PropertyRead>? {
-        fun describe(fixture: Fixture, propertyName: String): PropertyChannelResolver.PropertyRead? {
-            val read = PropertyChannelResolver.describePropertyRead(fixture, propertyName) ?: return null
-            if (axis != null && read !is PropertyChannelResolver.PropertyRead.Colour) return null
+    ): List<AttributeChannelResolver.AttributeRead>? {
+        fun describe(fixture: Fixture, attribute: String): AttributeChannelResolver.AttributeRead? {
+            val read = AttributeChannelResolver.describeAttributeRead(fixture, attribute) ?: return null
+            if (axis != null && read !is AttributeChannelResolver.AttributeRead.Colour) return null
             return read
         }
         return when (target) {
-            is BindingTarget.FixtureProperty -> {
+            is BindingTarget.FixtureAttribute -> {
                 val fixture = try {
                     fixtures.untypedFixture(target.fixtureKey)
                 } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.propertyName) }?.let { listOf(it) }
+                fixture?.let { describe(it, target.attribute) }?.let { listOf(it) }
             }
-            is BindingTarget.GroupProperty -> {
+            is BindingTarget.GroupAttribute -> {
                 val group = try {
                     fixtures.untypedGroup(target.groupName)
                 } catch (_: Exception) { null }
                 group?.fixtures?.filterIsInstance<Fixture>()
-                    ?.mapNotNull { describe(it, target.propertyName) }
+                    ?.mapNotNull { describe(it, target.attribute) }
                     ?.takeIf { it.isNotEmpty() }
             }
-            is BindingTarget.SelectionProperty -> selectedHeads.mapNotNull { head ->
+            is BindingTarget.SelectionAttribute -> selectedHeads.mapNotNull { head ->
                 if (head.type != TargetRef.Fixture.TYPE) return@mapNotNull null
                 val fixture = try {
                     fixtures.untypedFixture(head.key)
                 } catch (_: Exception) { null }
-                fixture?.let { describe(it, target.propertyName) }
+                fixture?.let { describe(it, target.attribute) }
             }
             // Never seen here: resolve() derives a strip to one of the property targets above.
             is BindingTarget.Strip -> null
@@ -1157,7 +1157,7 @@ class SurfaceFeedbackPublisher(
         // Both halves, through the effective axis: a hue button and a saturation button on one
         // colour property are two banks, and (rgbColour, null) is the same bank as (rgbColour, HUE).
         is BindingTarget.EncoderBankSet -> encoderBankState.selectionFor(entry.binding.deviceTypeKey).let {
-            it.propertyName == target.propertyName && it.colourAxis.effective == target.colourAxis.effective
+            it.attribute == target.attribute && it.colourAxis.effective == target.colourAxis.effective
         }
         // Never indexed: resolve() derives a strip to the target of the control it stands on.
         is BindingTarget.Strip -> null
@@ -1231,17 +1231,17 @@ class SurfaceFeedbackPublisher(
      * no position to report (a colour with no hue, a black with no saturation), or when there
      * are none (nothing selected): the control has no one value to show. What "agree" means —
      * exact for a slider, within a head's own quantisation on a colour axis, and every pair
-     * rather than each against the first — is [PropertyChannelResolver.commonValue]'s.
+     * rather than each against the first — is [AttributeChannelResolver.commonValue]'s.
      */
     private fun computeValue7Bit(entry: ContinuousEntry): UByte? {
         val fixtures = currentFixtures ?: return null
         if (entry.heads.isEmpty()) return null
-        val read = PropertyChannelResolver.channelReader(fixtures)
-        val reads = ArrayList<PropertyChannelResolver.HeadValue>(entry.heads.size)
+        val read = AttributeChannelResolver.channelReader(fixtures)
+        val reads = ArrayList<AttributeChannelResolver.HeadValue>(entry.heads.size)
         for (head in entry.heads) {
-            reads += PropertyChannelResolver.readHead(head, read, entry.axis) ?: return null
+            reads += AttributeChannelResolver.readHead(head, read, entry.axis) ?: return null
         }
-        return PropertyChannelResolver.commonValue(reads)
+        return AttributeChannelResolver.commonValue(reads)
     }
 
     /**

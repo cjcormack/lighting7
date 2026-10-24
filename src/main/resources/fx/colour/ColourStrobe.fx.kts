@@ -4,7 +4,7 @@ name: Colour Strobe
 family: colour
 outputType: COLOUR
 fxMode: STANDARD
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: onColour
     type: colour

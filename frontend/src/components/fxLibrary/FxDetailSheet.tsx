@@ -56,10 +56,10 @@ export function FxDetailSheet({
             </Badge>
           )}
         </SheetTitle>
-        {effect.compatibleProperties.length > 0 && (
+        {effect.compatibleAttributes.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">Drives:</span>
-            {effect.compatibleProperties.map((prop) => (
+            {effect.compatibleAttributes.map((prop) => (
               <Badge key={prop} variant="outline" className="text-xs">
                 {prop}
               </Badge>

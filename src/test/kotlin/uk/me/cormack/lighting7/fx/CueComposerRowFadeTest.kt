@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -94,7 +94,7 @@ class CueComposerRowFadeTest {
     fun `a Look row's fade reaches every fixture the row fanned out to`() {
         val warm = look(
             "Warm Wash",
-            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "200", fadeDurationMs = 2_500),
+            LookRowEntry(target = TargetRef.Group("front-wash"), attribute = "dimmer", value = "200", fadeDurationMs = 2_500),
         )
         val rows = cook(twoHexes(), registry = registryOf(twoHexes(), warm), layers = listOf(lookLayer(warm)))
         assertEquals(2, rows.size)
@@ -105,13 +105,13 @@ class CueComposerRowFadeTest {
     fun `a Look's rows carry their own fades independently`() {
         val mixed = look(
             "Mixed",
-            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "200", fadeDurationMs = 2_000),
-            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "rgbColour", value = "#FF0000"),
+            LookRowEntry(target = TargetRef.Group("front-wash"), attribute = "dimmer", value = "200", fadeDurationMs = 2_000),
+            LookRowEntry(target = TargetRef.Group("front-wash"), attribute = "rgbColour", value = "#FF0000"),
         )
         val rows = cook(twoHexes(), registry = registryOf(twoHexes(), mixed), layers = listOf(lookLayer(mixed)))
-        assertEquals(2_000L, rows.first { it.propertyName == "dimmer" }.fadeDurationMs)
+        assertEquals(2_000L, rows.first { it.attribute == "dimmer" }.fadeDurationMs)
         // No fade on the colour row: `null`, not the Look's other row's 2 s.
-        assertNull(rows.first { it.propertyName == "rgbColour" }.fadeDurationMs)
+        assertNull(rows.first { it.attribute == "rgbColour" }.fadeDurationMs)
     }
 
     @Test
@@ -119,23 +119,23 @@ class CueComposerRowFadeTest {
         val amber = template(
             "Amber Key",
             fadeDurationMs = 1_200,
-            PaletteRowEntry(target = null, propertyName = "dimmer", value = "pct:50"),
-            PaletteRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"),
+            PaletteRowEntry(target = null, attribute = "dimmer", value = "pct:50"),
+            PaletteRowEntry(target = null, attribute = "rgbColour", value = "#FF9D4A;policy=extract"),
         )
         val rows = cook(twoHexes(), templates = listOf(amber), layers = listOf(paletteLayer(amber)))
         assertEquals(4, rows.size)
-        for (row in rows) assertEquals(1_200L, row.fadeDurationMs, "${row.targetKey}.${row.propertyName}")
+        for (row in rows) assertEquals(1_200L, row.fadeDurationMs, "${row.targetKey}.${row.attribute}")
     }
 
     @Test
     fun `the winning layer's fade is the one carried, not the layer beneath it`() {
         val slow = look(
             "Slow",
-            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "100", fadeDurationMs = 5_000),
+            LookRowEntry(target = TargetRef.Group("front-wash"), attribute = "dimmer", value = "100", fadeDurationMs = 5_000),
         )
         val snappy = look(
             "Snappy",
-            LookRowEntry(target = TargetRef.Group("front-wash"), propertyName = "dimmer", value = "255"),
+            LookRowEntry(target = TargetRef.Group("front-wash"), attribute = "dimmer", value = "255"),
         )
         val fixtures = twoHexes()
         val rows = cook(
@@ -158,7 +158,7 @@ class CueComposerRowFadeTest {
             "Slow",
             LookRowEntry(
                 target = TargetRef.of("fixture", "hex-1"),
-                propertyName = "dimmer",
+                attribute = "dimmer",
                 value = "100",
                 fadeDurationMs = 5_000,
             ),
@@ -170,10 +170,10 @@ class CueComposerRowFadeTest {
             fadeWeight = 1.0,
             targetKey = "hex-1",
             targetIsGroup = false,
-            propertyName = "dimmer",
-            category = PropertyCategory.DIMMER,
+            attribute = "dimmer",
+            category = AttributeCategory.DIMMER,
             compositionOverride = CompositionRule.UNSET,
-            value = CueAssignmentResolver.PropertyValue.Slider(255u),
+            value = CueAssignmentResolver.AttributeValue.Slider(255u),
             fadeDurationMs = 750,
         )
         val rows = cook(
@@ -182,7 +182,7 @@ class CueComposerRowFadeTest {
             layers = listOf(lookLayer(slow)),
             localRows = listOf(local),
         )
-        val row = rows.single { it.targetKey == "hex-1" && it.propertyName == "dimmer" }
+        val row = rows.single { it.targetKey == "hex-1" && it.attribute == "dimmer" }
         assertEquals(750L, row.fadeDurationMs)
         assertNull(row.layerWinner)
     }

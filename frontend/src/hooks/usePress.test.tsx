@@ -123,7 +123,7 @@ describe('usePress — the programmer', () => {
       projectId: 1,
       paletteId: 1,
       targets: HEX,
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
       families: undefined,
     })
     expect(calls.applyPalette).not.toHaveBeenCalled()
@@ -227,7 +227,7 @@ describe('usePress — a focused Look layer', () => {
     answers.apply = {
       written: 1,
       skipped: [],
-      values: [{ target: { type: 'fixture', key: 'hex-1' }, propertyName: 'rgbColour', value: '#ff8800' }],
+      values: [{ target: { type: 'fixture', key: 'hex-1' }, attribute: 'rgbColour', value: '#ff8800' }],
     }
   })
 
@@ -357,10 +357,10 @@ describe('usePress — in the cue editor (apply-model plan §3.6)', () => {
 
   it('Apply as values lands a value palette’s literals as the cue’s own rows; a Look or an effect palette is refused', async () => {
     const cue = arm()
-    answers.apply = { written: 1, skipped: [], values: [{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }] }
+    answers.apply = { written: 1, skipped: [], values: [{ target: HEX[0], attribute: 'rgbColour', value: '#ff8800' }] }
     expect(await send({ kind: 'palette', palette: AMBER }, 'asValues')).toBe('into')
     expect(calls.applyPalette).toHaveBeenCalledWith({ projectId: 1, paletteId: 1, targets: HEX, families: undefined, write: false })
-    expect(cue.landValues).toHaveBeenCalledWith([{ target: HEX[0], propertyName: 'rgbColour', value: '#ff8800' }])
+    expect(cue.landValues).toHaveBeenCalledWith([{ target: HEX[0], attribute: 'rgbColour', value: '#ff8800' }])
     expect(await send({ kind: 'palette', palette: BREATHE }, 'asValues')).toBeNull()
     expect(await send({ kind: 'look', look: { id: 7, name: 'Warm' } }, 'asValues')).toBeNull()
     expect(toast.error).toHaveBeenCalledTimes(2)

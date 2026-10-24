@@ -1,9 +1,9 @@
 import { useMemo } from 'react'
-import { groupMemberFixtures } from '@/lib/fxTargetProperties'
+import { groupMemberFixtures } from '@/lib/fxTargetAttributes'
 import { selectionFixtures, selectionItems, selectionUnits, spreadsOverMembers, type FxTargetFields } from '@/lib/fxTargets'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
-import type { Fixture, SettingPropertyDescriptor } from '@/store/fixtures'
+import type { Fixture, SettingAttributeDescriptor } from '@/store/fixtures'
 import { detectExtendedChannels } from './colourUtils'
 import { selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorModel'
 
@@ -17,13 +17,13 @@ import { selectionHeadCount, spreadHeadCount, type FxScope } from './fxEditorMod
  */
 export function useFxScope({
   target,
-  propertyName,
+  attribute,
   entry,
   elementMode,
   elementFilter,
 }: {
   target: FxTargetFields
-  propertyName: string | null
+  attribute: string | null
   entry: FxLibraryEntry | undefined
   elementMode: string
   elementFilter: string
@@ -31,7 +31,7 @@ export function useFxScope({
   scope: FxScope
   targetFixtures: Fixture[]
   extendedChannels: ReturnType<typeof detectExtendedChannels>
-  settingProperty: SettingPropertyDescriptor | undefined
+  settingAttribute: SettingAttributeDescriptor | undefined
 } {
   const { fixtures, fixtureByKey } = useFixtureLookup()
   const selection = selectionItems(target)
@@ -52,34 +52,34 @@ export function useFxScope({
   const baseScope = useMemo((): FxScope => {
     const multiElement = targetFixtures.some((f) => (f.elements?.length ?? 0) > 1)
     if (overMembers) return { heads: true, elementMode: multiElement, elementFilter: multiElement }
-    const heads = targetFixtures.some((f) => (f.elementGroupProperties?.length ?? 0) > 0)
+    const heads = targetFixtures.some((f) => (f.elementGroupAttributes?.length ?? 0) > 0)
     return { heads, elementMode: false, elementFilter: heads }
   }, [overMembers, targetFixtures])
 
   const extendedChannels = useMemo(
-    () => (entry?.family === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.properties ?? [])) : undefined),
+    () => (entry?.family === 'colour' ? detectExtendedChannels(targetFixtures.map((f) => f.attributes ?? [])) : undefined),
     [entry, targetFixtures],
   )
-  const settingProperty = useMemo(() => {
+  const settingAttribute = useMemo(() => {
     for (const fixture of targetFixtures) {
-      const p = fixture.properties?.find((d) => d.name === propertyName && d.type === 'setting')
-      if (p) return p as SettingPropertyDescriptor
+      const p = fixture.attributes?.find((d) => d.name === attribute && d.type === 'setting')
+      if (p) return p as SettingAttributeDescriptor
     }
     return undefined
-  }, [targetFixtures, propertyName])
+  }, [targetFixtures, attribute])
 
   // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
   const scope = useMemo((): FxScope => {
-    const property = propertyName ?? ''
+    const name = attribute ?? ''
     return {
       ...baseScope,
       headCount:
         items != null
-          ? selectionHeadCount(selectionUnits(items, fixtures), property, elementMode, elementFilter)
-          : spreadHeadCount(targetFixtures, isGroupTarget, property, elementMode, elementFilter),
+          ? selectionHeadCount(selectionUnits(items, fixtures), name, elementMode, elementFilter)
+          : spreadHeadCount(targetFixtures, isGroupTarget, name, elementMode, elementFilter),
     }
-  }, [baseScope, items, fixtures, targetFixtures, isGroupTarget, propertyName, elementMode, elementFilter])
+  }, [baseScope, items, fixtures, targetFixtures, isGroupTarget, attribute, elementMode, elementFilter])
 
-  return { scope, targetFixtures, extendedChannels, settingProperty }
+  return { scope, targetFixtures, extendedChannels, settingAttribute }
 }

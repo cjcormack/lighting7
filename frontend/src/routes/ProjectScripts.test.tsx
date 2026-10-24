@@ -61,7 +61,7 @@ function libraryEntry(name: string, sourceDefinitionId: number): FxLibraryEntry 
     outputType: 'COLOUR',
     fxMode: 'STANDARD',
     parameters: [],
-    compatibleProperties: ['rgbColour'],
+    compatibleAttributes: ['rgbColour'],
     source: 'USER',
     sourceDefinitionId,
   }

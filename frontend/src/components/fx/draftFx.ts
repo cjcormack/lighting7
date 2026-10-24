@@ -17,7 +17,7 @@ export function storedFxOf(pick: DraftFxPick, target: FxTarget): CueAdHocFx {
     ...where,
     fxType: pick.fxType,
     family: pick.family,
-    propertyName: pick.propertyName,
+    attribute: pick.attribute,
     cycle: pick.cycle,
     direction: pick.direction,
     blendMode: pick.blendMode,
@@ -44,7 +44,7 @@ export function lastIndexOfDraft(stored: readonly CueAdHocFx[], effect: CueAdHoc
     const e = stored[i]
     if (
       e.fxType === effect.fxType &&
-      (e.propertyName ?? null) === (effect.propertyName ?? null) &&
+      (e.attribute ?? null) === (effect.attribute ?? null) &&
       e.targetType === effect.targetType &&
       e.targetKey === effect.targetKey
     ) {

@@ -9,11 +9,11 @@ const colours: TargetColours = {
 
 describe('a binding target’s colour', () => {
   it('is the fixture’s, the head’s fixture’s, or the group’s, through every target that names one', () => {
-    expect(bindingTargetColour({ type: 'fixtureProperty', fixtureKey: 'par-1', propertyName: 'dimmer' }, colours)).toBe('red')
-    expect(bindingTargetColour({ type: 'groupProperty', groupName: 'Movers', propertyName: 'dimmer' }, colours)).toBe('lime')
+    expect(bindingTargetColour({ type: 'fixtureAttribute', fixtureKey: 'par-1', attribute: 'dimmer' }, colours)).toBe('red')
+    expect(bindingTargetColour({ type: 'groupAttribute', groupName: 'Movers', attribute: 'dimmer' }, colours)).toBe('lime')
     expect(
       bindingTargetColour(
-        { type: 'flash', target: { type: 'fixtureProperty', fixtureKey: 'bar.pixel-0', propertyName: 'dimmer' } },
+        { type: 'flash', target: { type: 'fixtureAttribute', fixtureKey: 'bar.pixel-0', attribute: 'dimmer' } },
         colours,
       ),
     ).toBe('cyan')
@@ -23,6 +23,6 @@ describe('a binding target’s colour', () => {
 
   it('is none for a target that names no fixture, or one with no colour', () => {
     expect(bindingTargetColour({ type: 'blackout' }, colours)).toBeNull()
-    expect(bindingTargetColour({ type: 'fixtureProperty', fixtureKey: 'par-9', propertyName: 'dimmer' }, colours)).toBeNull()
+    expect(bindingTargetColour({ type: 'fixtureAttribute', fixtureKey: 'par-9', attribute: 'dimmer' }, colours)).toBeNull()
   })
 })

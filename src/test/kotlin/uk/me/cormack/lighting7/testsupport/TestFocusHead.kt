@@ -2,9 +2,9 @@ package uk.me.cormack.lighting7.testsupport
 
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 
@@ -24,9 +24,9 @@ class TestFocusHead(
     override fun withTransaction(transaction: ControllerTransaction): TestFocusHead =
         TestFocusHead(universe, key, firstChannel, transaction)
 
-    @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+    @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
     val dimmer = DmxSlider(transaction, universe, firstChannel)
 
-    @FixtureProperty("Focus", category = PropertyCategory.FOCUS)
+    @FixtureAttribute("Focus", category = AttributeCategory.FOCUS)
     val focus = DmxSlider(transaction, universe, firstChannel + 1)
 }

@@ -12,7 +12,7 @@ export const CENTRE_BYTE = 128
 /** D12: a movement effect's centre is the position underneath, or a place of its own. */
 export type CentreMode = 'around' | 'absolute'
 
-export const CENTRE_PARAMS = ['panCenter', 'tiltCenter'] as const
+export const CENTRE_PARAMS = ['panCentre', 'tiltCentre'] as const
 
 function paramNamed(entry: Pick<FxLibraryEntry, 'parameters'>, name: string): FxParameterDef | undefined {
   return entry.parameters.find((p) => p.name === name)

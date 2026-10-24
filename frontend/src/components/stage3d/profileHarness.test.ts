@@ -8,7 +8,7 @@ import { partTransmit } from "./scene/sceneParts"
 import { SCRIM_THREAD_SHARE } from "./scene/scrimOpen"
 import { MUSLIN_TRANSMITTANCE, surfaceDrawOf } from "./scene/seeThrough"
 import { resolveDeclaredFocusDistance, resolveFocusParam } from "./beamOptics"
-import type { SliderPropertyDescriptor } from "../../store/fixtures"
+import type { SliderAttributeDescriptor } from "../../store/fixtures"
 import focusInverse from "../../../../src/test/resources/stage/focusInverse.fixture.json"
 
 describe("buildHarness", () => {
@@ -50,9 +50,9 @@ describe("the focus scene", () => {
       expect(8 - (p.stageY ?? 0)).toBe(FOCUS_HARNESS_THROW_M)
       expect(p.basePitchDeg).toBe(-90)
       const fixture = data.fixtureFor?.get(p.key)
-      expect(fixture?.properties[0]).toMatchObject({ category: "focus", focusNearM: 2, focusFarM: 40 })
+      expect(fixture?.attributes[0]).toMatchObject({ category: "focus", focusNearM: 2, focusFarM: 40 })
     }
-    const channels = data.patches.map((p) => (data.fixtureFor?.get(p.key)?.properties[0] as SliderPropertyDescriptor).channel.channelNo)
+    const channels = data.patches.map((p) => (data.fixtureFor?.get(p.key)?.attributes[0] as SliderAttributeDescriptor).channel.channelNo)
     expect(new Set(channels).size).toBe(3)
     // No depth of field of its own: the family's constant is what the scene tunes.
     expect(data.syntheticType.depthOfField).toBeUndefined()
@@ -63,7 +63,7 @@ describe("the focus scene", () => {
     const revolution = focusInverse.cases.find((c) => c.name.startsWith("Source Four Revolution"))!
     for (const head of FOCUS_HARNESS_HEADS) {
       expect(revolution.points.find((p) => p.distanceM === head.focusM)?.level).toBe(head.dmx)
-      const prop = data.fixtureFor?.get(head.key)?.properties[0] as SliderPropertyDescriptor
+      const prop = data.fixtureFor?.get(head.key)?.attributes[0] as SliderAttributeDescriptor
       // Within a DMX step's distance: the byte draws 21.1, 24.0 and 27.6 m.
       expect(Math.abs(resolveDeclaredFocusDistance(prop, resolveFocusParam(prop, head.dmx))! - head.focusM)).toBeLessThan(0.7)
     }
@@ -84,10 +84,10 @@ describe("the drape scene", () => {
   })
 
   it("puts pan, tilt and focus on channels of their own, at the Robe's travel", () => {
-    const channels = data.syntheticFixture.properties.map((p) => (p as SliderPropertyDescriptor).channel.channelNo)
+    const channels = data.syntheticFixture.attributes.map((p) => (p as SliderAttributeDescriptor).channel.channelNo)
     expect(channels).toEqual([DRAPE_HARNESS_CHANNELS.pan, DRAPE_HARNESS_CHANNELS.tilt, DRAPE_HARNESS_CHANNELS.focus])
-    expect(data.syntheticFixture.properties[0]).toMatchObject({ axis: "PAN", degMax: 530 })
-    expect(data.syntheticFixture.properties[1]).toMatchObject({ axis: "TILT", degMax: 280 })
+    expect(data.syntheticFixture.attributes[0]).toMatchObject({ axis: "PAN", degMax: 530 })
+    expect(data.syntheticFixture.attributes[1]).toMatchObject({ axis: "TILT", degMax: 280 })
   })
 
   it("leaves the project's scene alone in every other mode", () => {
@@ -131,7 +131,7 @@ describe("the material scenes (stage-light plan session 2)", () => {
     const cyc = buildHarness(10, 8, 6, "cyc")
     expect(cyc.elements?.map((e) => [e.finishColour, e.params.role])).toEqual([["#e8e6df", "CYC"], ["#101012", "LEG"], ["#3b1219", "LEG"]])
     // Nothing to write: the lanterns carry no channels and burn at full.
-    expect(cyc.syntheticFixture.properties).toEqual([])
+    expect(cyc.syntheticFixture.attributes).toEqual([])
   })
 
   it("stands a flat in front of a wall under one profile, lit from the side (session 3)", () => {
@@ -162,8 +162,8 @@ describe("the cloth scenes (scrim plan session 6)", () => {
       for (const patch of data.patches) {
         const fixture = data.fixtureFor?.get(patch.key)
         expect(fixture?.key).toBe(patch.key)
-        expect(fixture?.properties[0]).toMatchObject({ category: "dimmer", channel: { universe: 1 } })
-        const channelNo = (fixture?.properties[0] as SliderPropertyDescriptor).channel.channelNo
+        expect(fixture?.attributes[0]).toMatchObject({ category: "dimmer", channel: { universe: 1 } })
+        const channelNo = (fixture?.attributes[0] as SliderAttributeDescriptor).channel.channelNo
         expect(Object.values(CLOTH_HARNESS_CHANNELS)).toContain(channelNo)
         sides.add(channelNo)
         // Inside the default stage box, and in front of its back wall.

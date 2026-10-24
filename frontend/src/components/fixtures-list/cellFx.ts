@@ -2,7 +2,7 @@ import { useRef, useSyncExternalStore } from 'react'
 import type { ActiveFx } from '../../store/fixtureFx'
 import type { Fixture } from '../../store/fixtures'
 import { fxAimKeys } from '@/lib/fxTargets'
-import { carriesFxProperty, elementFilterIncludes } from '../fx/fxEditorModel'
+import { carriesFxAttribute, elementFilterIncludes } from '../fx/fxEditorModel'
 import type { Row } from './rowModel'
 import { createValueStore, type ValueStore } from './valueStore'
 
@@ -43,8 +43,8 @@ export function isLocalFx(effect: ActiveFx): boolean {
  * and the grid's FX lens both. An element-targeted effect keys on the element key, which *is* the
  * row model's name for that target, so no extra mapping is needed on either side.
  */
-export function cellFxKey(fixtureKey: string, propertyName: string): string {
-  return `${fixtureKey}|${propertyName}`
+export function cellFxKey(fixtureKey: string, attribute: string): string {
+  return `${fixtureKey}|${attribute}`
 }
 
 /**
@@ -93,7 +93,7 @@ export function fxToStop(
     if (heads.length === 0) continue
     let covered = 0
     for (const head of heads) {
-      if (cleared.has(cellFxKey(head, effect.propertyName))) covered += 1
+      if (cleared.has(cellFxKey(head, effect.attribute))) covered += 1
     }
     if (covered === 0) continue
     if (covered === heads.length) stop.push(effect)
@@ -145,7 +145,7 @@ export function buildCellFxIndex(effects: readonly ActiveFx[] | undefined, fixtu
   effects.forEach((effect, at) => {
     order.set(effect.id, at)
     for (const head of fxPaintedHeads(effect, fixtures)) {
-      const key = cellFxKey(head, effect.propertyName)
+      const key = cellFxKey(head, effect.attribute)
       const list = byKey.get(key)
       if (list == null) byKey.set(key, [effect])
       else if (!list.includes(effect)) list.push(effect)
@@ -157,7 +157,7 @@ export function buildCellFxIndex(effects: readonly ActiveFx[] | undefined, fixtu
 /**
  * The heads an effect paints, in its order — the desk's `FxEngine.paintedHeads` walked rather than
  * counted. Each unit the effect is aimed at ([fxAimKeys]) is itself where it carries the effect's
- * property ([carriesFxProperty], the desk's traits), else its heads that do; a unit with neither
+ * property ([carriesFxAttribute], the desk's traits), else its heads that do; a unit with neither
  * paints nothing and is left out. A group takes its first member's branch, as on the desk: members
  * that carry the property themselves, the rest dropped, or every member's heads. The head filter
  * narrows the heads — over the whole strip under `FLAT`, within each fixture otherwise.
@@ -165,18 +165,18 @@ export function buildCellFxIndex(effects: readonly ActiveFx[] | undefined, fixtu
 export function fxPaintedHeads(
   effect: Pick<
     ActiveFx,
-    'targetKey' | 'isGroupTarget' | 'targetType' | 'targets' | 'propertyName' | 'elementFilter' | 'elementMode'
+    'targetKey' | 'isGroupTarget' | 'targetType' | 'targets' | 'attribute' | 'elementFilter' | 'elementMode'
   >,
   fixtures: readonly Fixture[],
 ): string[] {
-  const property = effect.propertyName
+  const attribute = effect.attribute
   const byKey = new Map(fixtures.map((f) => [f.key, f] as const))
   const members = membersByGroupOf(fixtures)
   const filter = effect.elementFilter ?? 'ALL'
   const narrow = (keys: readonly string[]) => keys.filter((_, i) => elementFilterIncludes(filter, i, keys.length))
   const cellsOf = (fixture: Fixture) =>
-    (fixture.elements ?? []).filter((e) => carriesFxProperty(e.properties, property)).map((e) => e.key)
-  const carries = (fixture: Fixture) => carriesFxProperty(fixture.properties, property)
+    (fixture.elements ?? []).filter((e) => carriesFxAttribute(e.attributes, attribute)).map((e) => e.key)
+  const carries = (fixture: Fixture) => carriesFxAttribute(fixture.attributes, attribute)
 
   // A group: its first member decides, as the desk's expansion does.
   if (effect.isGroupTarget && effect.targetType !== 'selection') {
@@ -194,7 +194,7 @@ export function fxPaintedHeads(
     const fixture = byKey.get(key)
     if (fixture == null || carries(fixture)) {
       // A cell's key, or a unit that carries the property itself: one head.
-      if (fixture != null || isCellCarrying(fixtures, key, property)) runs.push({ keys: [key], cells: false })
+      if (fixture != null || isCellCarrying(fixtures, key, attribute)) runs.push({ keys: [key], cells: false })
       continue
     }
     const cells = cellsOf(fixture).filter((cell) => !seen.has(cell))
@@ -205,11 +205,11 @@ export function fxPaintedHeads(
   return runs.flatMap((r) => (r.cells ? narrow(r.keys) : r.keys))
 }
 
-/** Whether [key] is a cell that carries [property] — an unknown key paints nothing. */
-function isCellCarrying(fixtures: readonly Fixture[], key: string, property: string): boolean {
+/** Whether [key] is a cell that carries [attribute] — an unknown key paints nothing. */
+function isCellCarrying(fixtures: readonly Fixture[], key: string, attribute: string): boolean {
   for (const fixture of fixtures) {
     const cell = fixture.elements?.find((e) => e.key === key)
-    if (cell != null) return carriesFxProperty(cell.properties, property)
+    if (cell != null) return carriesFxAttribute(cell.attributes, attribute)
   }
   return false
 }
@@ -217,11 +217,11 @@ function isCellCarrying(fixtures: readonly Fixture[], key: string, property: str
 /** The effects painting any of a cell's keys, once each, in the desk's order. */
 export function fxForCell(
   index: CellFxIndex,
-  keys: readonly { targetKey: string; propertyName: string }[],
+  keys: readonly { targetKey: string; attribute: string }[],
 ): readonly ActiveFx[] {
   let found: ActiveFx[] | null = null
   for (const key of keys) {
-    const list = index.byKey.get(cellFxKey(key.targetKey, key.propertyName))
+    const list = index.byKey.get(cellFxKey(key.targetKey, key.attribute))
     if (list == null) continue
     if (found == null) found = [...list]
     else for (const effect of list) if (!found.includes(effect)) found.push(effect)
@@ -252,7 +252,7 @@ export function createCellFxStore(): CellFxStore {
  */
 export function useCellFx(
   store: CellFxStore,
-  keys: readonly { targetKey: string; propertyName: string }[],
+  keys: readonly { targetKey: string; attribute: string }[],
 ): readonly ActiveFx[] {
   const cache = useRef<{ index: CellFxIndex; keys: typeof keys; value: readonly ActiveFx[] } | null>(null)
   const read = () => {
@@ -277,7 +277,7 @@ function sameLensFields(a: ActiveFx, b: ActiveFx): boolean {
     a === b ||
     (a.id === b.id &&
       a.fxType === b.fxType &&
-      a.propertyName === b.propertyName &&
+      a.attribute === b.attribute &&
       a.cycle === b.cycle &&
       a.timingSource === b.timingSource &&
       a.seconds === b.seconds &&

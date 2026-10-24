@@ -4,7 +4,7 @@ name: Colour Flicker
 family: colour
 outputType: COLOUR
 fxMode: STANDARD
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: baseColour
     type: colour

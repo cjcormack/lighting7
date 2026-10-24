@@ -7,7 +7,7 @@ import { isEditableTarget } from '@/lib/domUtils'
 import { CueTargetPicker } from '@/components/cues/CueTargetPicker'
 import { FixturesTable } from '@/components/fixtures-list/FixturesTable'
 import { SpreadPopover, type SpreadColumn } from '@/components/fixtures-list/SpreadPopover'
-import { COLUMN_DEFS, cellFamilies, resolutionPropertyNames, resolveCell } from '@/components/fixtures-list/columns'
+import { COLUMN_DEFS, cellFamilies, resolutionAttributeNames, resolveCell } from '@/components/fixtures-list/columns'
 import {
   batchForTargets,
   clampCommitToResolution,
@@ -198,12 +198,12 @@ function CueValuesGridBody({
       const plain = new Set<RowId>()
       for (const row of colRows) {
         if (row.kind === 'group') {
-          for (const name of groupPropertyNames(row, col)) groupWriters.clearValue(row.name, name)
+          for (const name of groupAttributeNames(row, col)) groupWriters.clearValue(row.name, name)
         } else if (row.kind !== 'divider') plain.add(row.id)
       }
       for (const outer of expandSelectionToTargets(rows, plain)) {
         for (const { target, resolution } of resolveTargetCells(outer, col)) {
-          for (const name of resolutionPropertyNames(resolution)) writers.clearValue(target.key, name)
+          for (const name of resolutionAttributeNames(resolution)) writers.clearValue(target.key, name)
         }
       }
     }
@@ -570,18 +570,18 @@ function expandRows(rows: readonly Row[]) {
  */
 function writeGroupRow(writers: ReturnType<typeof cueCellWriters>, row: GroupRow, col: ColumnKey, commit: CellCommit) {
   const foldsWhite = (member: GroupRow['members'][number]) => {
-    const resolution = resolveCell(member.properties, col)
-    return resolution?.kind === 'colour' && !resolution.property.whiteChannel
+    const resolution = resolveCell(member.attributes, col)
+    return resolution?.kind === 'colour' && !resolution.attribute.whiteChannel
   }
   const members =
     commit.kind === 'colour' && (commit.w ?? 0) > 0
       ? [...row.members.filter(foldsWhite), ...row.members.filter((m) => !foldsWhite(m))]
       : row.members
   for (const member of members) {
-    const resolution = resolveCell(member.properties, col)
+    const resolution = resolveCell(member.attributes, col)
     if (resolution == null || !commitMatchesResolution(commit, resolution)) continue
     applyPlannedWrite(writers, {
-      target: { key: row.name, properties: member.properties },
+      target: { key: row.name, attributes: member.attributes },
       resolution,
       commit: clampCommitToResolution(commit, resolution),
     })
@@ -590,10 +590,10 @@ function writeGroupRow(writers: ReturnType<typeof cueCellWriters>, row: GroupRow
 }
 
 /** The property names a group row's own row is stored under in this column. */
-function groupPropertyNames(row: GroupRow, col: ColumnKey): string[] {
+function groupAttributeNames(row: GroupRow, col: ColumnKey): string[] {
   for (const member of row.members) {
-    const resolution = resolveCell(member.properties, col)
-    if (resolution != null) return resolutionPropertyNames(resolution)
+    const resolution = resolveCell(member.attributes, col)
+    if (resolution != null) return resolutionAttributeNames(resolution)
   }
   return []
 }

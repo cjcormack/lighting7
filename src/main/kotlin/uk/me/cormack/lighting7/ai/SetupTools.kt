@@ -44,15 +44,15 @@ import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
-import uk.me.cormack.lighting7.fixture.group.GroupPropertyDescriptor
-import uk.me.cormack.lighting7.fixture.group.GroupSettingPropertyDescriptor
-import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixPropertyDescriptor
-import uk.me.cormack.lighting7.routes.ColourPropertyDescriptor
-import uk.me.cormack.lighting7.routes.PositionPropertyDescriptor
-import uk.me.cormack.lighting7.routes.PropertyDescriptor
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
-import uk.me.cormack.lighting7.routes.WhiteMixPropertyDescriptor
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupAttributeDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupSettingAttributeDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixAttributeDescriptor
+import uk.me.cormack.lighting7.routes.ColourAttributeDescriptor
+import uk.me.cormack.lighting7.routes.PositionAttributeDescriptor
+import uk.me.cormack.lighting7.routes.AttributeDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
+import uk.me.cormack.lighting7.routes.WhiteMixAttributeDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.MAX_CUE_NUMBER_LENGTH
 import uk.me.cormack.lighting7.routes.listedProjects
@@ -316,7 +316,7 @@ class SetupTools(
 
     private fun listFixtureTypes(input: JsonObject): ToolExecutionResult {
         val query = input.string("query")?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }
-        val withProperties = input["properties"]?.jsonPrimitive?.booleanOrNull == true
+        val withAttributes = input["attributes"]?.jsonPrimitive?.booleanOrNull == true
         val types = FixtureTypeRegistry.allTypes
             .filter { it.channelCount != null }
             .filter { t ->
@@ -360,10 +360,10 @@ class SetupTools(
                             }
                         }
                         putJsonArray("capabilities") { t.capabilities.forEach { add(it) } }
-                        if (withProperties) {
-                            putJsonArray("properties") { t.properties.forEach { addTypeProperty(it) } }
-                            t.elementGroupProperties?.takeIf { it.isNotEmpty() }?.let { cells ->
-                                putJsonArray("cellProperties") { cells.forEach { addCellProperty(it) } }
+                        if (withAttributes) {
+                            putJsonArray("attributes") { t.attributes.forEach { addTypeAttribute(it) } }
+                            t.elementGroupAttributes?.takeIf { it.isNotEmpty() }?.let { cells ->
+                                putJsonArray("cellAttributes") { cells.forEach { addCellAttribute(it) } }
                             }
                         }
                     }
@@ -376,31 +376,31 @@ class SetupTools(
      * One settable property of a type, as a Look value names it. One-shot triggers and fixture
      * commands are left out: no stored value may hold either.
      */
-    private fun JsonArrayBuilder.addTypeProperty(property: PropertyDescriptor) {
-        val kind = when (property) {
-            is SliderPropertyDescriptor -> "slider"
-            is ColourPropertyDescriptor -> "colour"
-            is WhiteMixPropertyDescriptor -> "whiteMix"
-            is PositionPropertyDescriptor -> "position"
-            is SettingPropertyDescriptor -> "setting"
+    private fun JsonArrayBuilder.addTypeAttribute(attribute: AttributeDescriptor) {
+        val kind = when (attribute) {
+            is SliderAttributeDescriptor -> "slider"
+            is ColourAttributeDescriptor -> "colour"
+            is WhiteMixAttributeDescriptor -> "whiteMix"
+            is PositionAttributeDescriptor -> "position"
+            is SettingAttributeDescriptor -> "setting"
             else -> return
         }
         addJsonObject {
-            put("name", property.name)
+            put("name", attribute.name)
             put("kind", kind)
-            put("category", property.category)
-            if (property is SettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
-            if (property is WhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
+            put("category", attribute.category)
+            if (attribute is SettingAttributeDescriptor) putJsonArray("options") { attribute.options.forEach { add(it.name) } }
+            if (attribute is WhiteMixAttributeDescriptor) whiteMix(attribute.warmKelvin, attribute.coldKelvin)
         }
     }
 
     /** One property every cell (head) of a multi-head type has, for a value on a cell's own key. */
-    private fun JsonArrayBuilder.addCellProperty(property: GroupPropertyDescriptor) {
+    private fun JsonArrayBuilder.addCellAttribute(attribute: GroupAttributeDescriptor) {
         addJsonObject {
-            put("name", property.name)
-            put("category", property.category)
-            if (property is GroupSettingPropertyDescriptor) putJsonArray("options") { property.options.forEach { add(it.name) } }
-            if (property is GroupWhiteMixPropertyDescriptor) whiteMix(property.warmKelvin, property.coldKelvin)
+            put("name", attribute.name)
+            put("category", attribute.category)
+            if (attribute is GroupSettingAttributeDescriptor) putJsonArray("options") { attribute.options.forEach { add(it.name) } }
+            if (attribute is GroupWhiteMixAttributeDescriptor) whiteMix(attribute.warmKelvin, attribute.coldKelvin)
         }
     }
 
@@ -1759,7 +1759,7 @@ class SetupTools(
                     fadeCurve = spec.fadeCurve
                     speedMasters = spec.speedMasters
                 }.also { cue ->
-                    writeCueChildren(cue, propertyAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true, registry = state.show.fxRegistry)
+                    writeCueChildren(cue, attributeAssignments = spec.values?.asCueAssignments().orEmpty(), layers = spec.layers, created = true, registry = state.show.fxRegistry)
                     replaceCueScenery(cue, spec.scenery)
                     replaceCueEvents(cue, spec.events)
                 }

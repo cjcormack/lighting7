@@ -15,14 +15,14 @@ import uk.me.cormack.lighting7.state.SubselectMode
  * lives in a `type` field set by [SerialName] on each subtype.
  *
  * Targets fall into three rough families:
- *   - **Continuous** ([FixtureProperty], [GroupProperty], [SpeedMasterBpm], [GrandMasterFader],
+ *   - **Continuous** ([FixtureAttribute], [GroupAttribute], [SpeedMasterBpm], [GrandMasterFader],
  *     [StackFxAmount]) — fader / encoder movements map to a Layer 2 property write (Phase 3), a
  *     tempo write, the grand master's level or a cue stack's FX amount.
  *   - **Discrete** ([CueStackGo], [CueStackBack], [CueStackPause], [FireCue],
  *     [SpeedMasterTap], [FireTrigger]) — button press invokes a service call.
  *   - **Momentary / global / meta** ([Flash], [Blackout], [GrandMasterToggle], [SetBank]) —
  *     press / release change transport-level state.
- *   - **Selection-relative** ([SelectionProperty], [SelectionFan], [SelectTarget], [ClearSelection],
+ *   - **Selection-relative** ([SelectionAttribute], [SelectionFan], [SelectTarget], [ClearSelection],
  *     [LocateSelection]) — the desk's selection (`state.DeskSelection`) is the target set, so
  *     one fader or button reaches whatever the operator has selected rather than one fixed thing.
  *     See `docs/plans/completed/midi-surface-plan.md` §D3.
@@ -63,23 +63,23 @@ sealed class BindingTarget {
      * ignores it, because a flash is a level.
      */
     @Serializable
-    @SerialName("fixtureProperty")
-    data class FixtureProperty(
+    @SerialName("fixtureAttribute")
+    data class FixtureAttribute(
         val fixtureKey: String,
-        val propertyName: String,
+        val attribute: String,
         val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
     /**
      * Write a continuous property on a fixture group. Writes fan out to members via the
-     * group's property-aggregator semantics. [colourAxis] as on [FixtureProperty]; a member on
+     * group's property-aggregator semantics. [colourAxis] as on [FixtureAttribute]; a member on
      * which the property is not colour-typed is skipped, the rest take the move.
      */
     @Serializable
-    @SerialName("groupProperty")
-    data class GroupProperty(
+    @SerialName("groupAttribute")
+    data class GroupAttribute(
         val groupName: String,
-        val propertyName: String,
+        val attribute: String,
         val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
@@ -107,7 +107,7 @@ sealed class BindingTarget {
      * Fire one tube of a one-shot fixture on button press (stage-view plan session 9, D16): the
      * Twin Shot's `output1` (or its label, `A`). **Requires the desk's arm**, like every fire — an
      * unarmed press does nothing and is announced (`effects.skipped`), and a blind programmer
-     * rehearses it. Fixture-keyed, as [FixtureProperty] is.
+     * rehearses it. Fixture-keyed, as [FixtureAttribute] is.
      */
     @Serializable
     @SerialName("fireTrigger")
@@ -116,7 +116,7 @@ sealed class BindingTarget {
     /**
      * Momentary "flash" write: on press, write [max] to the nested property via Layer 2;
      * on release, restore whatever was underneath. The nested target must be a
-     * [FixtureProperty] or [GroupProperty] (constrained at bind time).
+     * [FixtureAttribute] or [GroupAttribute] (constrained at bind time).
      */
     @Serializable
     @SerialName("flash")
@@ -125,8 +125,8 @@ sealed class BindingTarget {
         val max: Int = 255,
     ) : BindingTarget() {
         init {
-            require(target is FixtureProperty || target is GroupProperty) {
-                "Flash target must be FixtureProperty or GroupProperty"
+            require(target is FixtureAttribute || target is GroupAttribute) {
+                "Flash target must be FixtureAttribute or GroupAttribute"
             }
             require(max in 0..255) { "Flash max must be in 0..255" }
         }
@@ -205,15 +205,15 @@ sealed class BindingTarget {
 
     /**
      * Write a continuous property on **every selected target** — a fixture in the selection
-     * directly, a group fanned to its members exactly as [GroupProperty] fans. An empty selection
+     * directly, a group fanned to its members exactly as [GroupAttribute] fans. An empty selection
      * drops the write with a debug log (the legend's "no selection" state); it is never widened
-     * to "everything". [colourAxis] as on [FixtureProperty]; refused at bind time unless some
-     * patched fixture declares [propertyName] as a colour, and skipped per head otherwise.
+     * to "everything". [colourAxis] as on [FixtureAttribute]; refused at bind time unless some
+     * patched fixture declares [attribute] as a colour, and skipped per head otherwise.
      */
     @Serializable
-    @SerialName("selectionProperty")
-    data class SelectionProperty(
-        val propertyName: String,
+    @SerialName("selectionAttribute")
+    data class SelectionAttribute(
+        val attribute: String,
         val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
@@ -223,7 +223,7 @@ sealed class BindingTarget {
      * stage axis, which fans the beams' landing points — and each selected head is written at its
      * own position plus its share of the amount, through the Spread panel's own resolve. The desk
      * holds the anchor ([SelectionFan]) and the ring shows the amount, 64 its 0. An empty selection
-     * drops the turn, as [SelectionProperty] does.
+     * drops the turn, as [SelectionAttribute] does.
      */
     @Serializable
     @SerialName("selectionFan")
@@ -275,7 +275,7 @@ sealed class BindingTarget {
     data class Strip(val target: CueTargetDto) : BindingTarget()
 
     /**
-     * Point the device's strip encoders at [propertyName] on press — the attribute-select
+     * Point the device's strip encoders at [attribute] on press — the attribute-select
      * buttons every console has. Applies to the device the button is on, so the payload names
      * no device; the LED is lit while this is the device's current encoder bank — the property
      * **and** the axis, compared through [effective], so a *hue* button and a *saturation* button
@@ -284,7 +284,7 @@ sealed class BindingTarget {
     @Serializable
     @SerialName("encoderBankSet")
     data class EncoderBankSet(
-        val propertyName: String,
+        val attribute: String,
         val colourAxis: ColourAxis? = null,
     ) : BindingTarget()
 
@@ -439,9 +439,9 @@ sealed class BindingTarget {
  * for the property it wraps. Null is also what a hue binding carries; compare through [effective].
  */
 fun BindingTarget.colourAxisOrNull(): ColourAxis? = when (this) {
-    is BindingTarget.FixtureProperty -> colourAxis
-    is BindingTarget.GroupProperty -> colourAxis
-    is BindingTarget.SelectionProperty -> colourAxis
+    is BindingTarget.FixtureAttribute -> colourAxis
+    is BindingTarget.GroupAttribute -> colourAxis
+    is BindingTarget.SelectionAttribute -> colourAxis
     is BindingTarget.EncoderBankSet -> colourAxis
     is BindingTarget.Flash -> target.colourAxisOrNull()
     else -> null

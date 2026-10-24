@@ -55,7 +55,7 @@ fun sameTargets(a: List<CueTargetDto>, b: List<CueTargetDto>): Boolean {
 
 /**
  * One line of a cue's ordered Look composition. Wire shape of [DaoCueLayers]; see its KDoc for
- * what [targets] and [propertyMask] mean.
+ * what [targets] and [attributeMask] mean.
  *
  * [lookId] is the int PK for API traffic — the same choice `CuePresetApplicationDto.presetId` made
  * before it retired with `cue_preset_applications` in session 4, and safe for the same reason: it is
@@ -76,8 +76,8 @@ data class CueLayerDto(
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    /** Comma-separated `PropertyMaskGroup` names; null = every property. */
-    val propertyMask: String? = null,
+    /** Comma-separated `AttributeFamily` names; null = every property. */
+    val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,
     val stomp: Boolean = false,
@@ -118,15 +118,15 @@ data class CueLayerDto(
  * crossfade) and `uk.me.cormack.lighting7.fx.CueAssignmentResolver` for the canonical value parser.
  */
 @Serializable
-data class CuePropertyAssignmentDto(
+data class CueAttributeAssignmentDto(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val fadeDurationMs: Long? = null,
     val sortOrder: Int = 0,
     /**
-     * Move-in-dark: only meaningful when [propertyName] is `"position"`. When true and the
+     * Move-in-dark: only meaningful when [attribute] is `"position"`. When true and the
      * outgoing cue ends with intensity 0 on the same fixture, the resolver pre-applies this
      * position across the whole crossfade rather than linearly blending pan/tilt — the head
      * moves while dark and is already aimed when the incoming dimmer comes up. Ignored for
@@ -151,7 +151,7 @@ data class CueAdHocFxDto(
     val targetKey: String,
     val fxType: String,
     val family: String,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val cycle: Double,
     val blendMode: String,
     val order: String,
@@ -274,7 +274,7 @@ class DaoCue(id: EntityID<Int>) : IntEntity(id) {
     var uuid by DaoCues.uuid
     val layers by DaoCueLayer referrersOn DaoCueLayers.cue
     val adHocFx by DaoCueAdHocFxEntity referrersOn DaoCueAdHocFx.cue
-    val propertyAssignments by DaoCuePropertyAssignment referrersOn DaoCuePropertyAssignments.cue
+    val attributeAssignments by DaoCueAttributeAssignment referrersOn DaoCueAttributeAssignments.cue
     val triggers by DaoCueTrigger referrersOn DaoCueTriggers.cue
 }
 
@@ -377,7 +377,7 @@ class DaoCueAdHocFxEntity(id: EntityID<Int>) : IntEntity(id) {
 
 // ─── Cue Property Assignments table ────────────────────────────────────
 
-object DaoCuePropertyAssignments : IntIdTable("cue_attribute_assignments") {
+object DaoCueAttributeAssignments : IntIdTable("cue_attribute_assignments") {
     val cue = reference("cue_id", DaoCues)
     val targetType = varchar("target_type", 50)
     val targetKey = varchar("target_key", 255)
@@ -389,18 +389,18 @@ object DaoCuePropertyAssignments : IntIdTable("cue_attribute_assignments") {
     val uuid = javaUUID("uuid").autoGenerate()
 }
 
-class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
-    companion object : IntEntityClass<DaoCuePropertyAssignment>(DaoCuePropertyAssignments)
+class DaoCueAttributeAssignment(id: EntityID<Int>) : IntEntity(id) {
+    companion object : IntEntityClass<DaoCueAttributeAssignment>(DaoCueAttributeAssignments)
 
-    var cue by DaoCue referencedOn DaoCuePropertyAssignments.cue
-    var targetType by DaoCuePropertyAssignments.targetType
-    var targetKey by DaoCuePropertyAssignments.targetKey
-    var attribute by DaoCuePropertyAssignments.attribute
-    var value by DaoCuePropertyAssignments.value
-    var fadeDuration by DaoCuePropertyAssignments.fadeDuration
-    var sortOrder by DaoCuePropertyAssignments.sortOrder
-    var moveInDark by DaoCuePropertyAssignments.moveInDark
-    var uuid by DaoCuePropertyAssignments.uuid
+    var cue by DaoCue referencedOn DaoCueAttributeAssignments.cue
+    var targetType by DaoCueAttributeAssignments.targetType
+    var targetKey by DaoCueAttributeAssignments.targetKey
+    var attribute by DaoCueAttributeAssignments.attribute
+    var value by DaoCueAttributeAssignments.value
+    var fadeDuration by DaoCueAttributeAssignments.fadeDuration
+    var sortOrder by DaoCueAttributeAssignments.sortOrder
+    var moveInDark by DaoCueAttributeAssignments.moveInDark
+    var uuid by DaoCueAttributeAssignments.uuid
 
     var target: TargetRef
         get() = TargetRef.of(targetType, targetKey)
@@ -420,10 +420,10 @@ class DaoCuePropertyAssignment(id: EntityID<Int>) : IntEntity(id) {
  * application list carrying `sortOrder`, the timing triple and speed-master overrides. This is an
  * extension of that table rather than a new concept beside it.
  *
- * The cue's own [DaoCuePropertyAssignments] / [DaoCueAdHocFx] are **the local layer** —
+ * The cue's own [DaoCueAttributeAssignments] / [DaoCueAdHocFx] are **the local layer** —
  * always exactly one, always last, so it needs no identity row here. Keeping them separate is
  * deliberate on two counts: they carry `moveInDark`, and they give a Record / Update write an
- * unambiguous destination — `(targetType, targetKey, propertyName)` with no layer dimension.
+ * unambiguous destination — `(targetType, targetKey, attribute)` with no layer dimension.
  *
  * See `docs/plans/completed/looks-and-layers-plan.md` §3.2 and `fx/CueComposer.kt` for how a stack of these
  * is flattened to one contributor per (fixture, property) before the resolver sees it.
@@ -461,10 +461,10 @@ object DaoCueLayers : IntIdTable("cue_layers") {
     val targets = json<List<CueTargetDto>>("targets", Json)
 
     /**
-     * Comma-separated [uk.me.cormack.lighting7.fx.PropertyMaskGroup] names; null = every property.
+     * Comma-separated [uk.me.cormack.lighting7.fx.AttributeFamily] names; null = every property.
      * This is what subsumes value-level `ref:` — "this cue's colour comes from Warm, everything
      * else local" is one `COLOUR`-masked layer, not a separate feature. Parsed with the existing
-     * [uk.me.cormack.lighting7.fx.parseMaskGroups] / [uk.me.cormack.lighting7.fx.maskAllows].
+     * [uk.me.cormack.lighting7.fx.parseFamilies] / [uk.me.cormack.lighting7.fx.maskAllows].
      */
     val attributeMask = varchar("attribute_mask", 255).nullable()
 
@@ -630,11 +630,11 @@ class DaoCueLayer(id: EntityID<Int>) : IntEntity(id) {
     val isTimed: Boolean get() = delay != null || interval != null
 }
 
-/** Convert a DaoCuePropertyAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
-internal fun DaoCuePropertyAssignment.toDto() = CuePropertyAssignmentDto(
+/** Convert a DaoCueAttributeAssignment entity to its DTO form. Health defaults to [AssignmentHealth.Ok]. */
+internal fun DaoCueAttributeAssignment.toDto() = CueAttributeAssignmentDto(
     targetType = targetType,
     targetKey = targetKey,
-    propertyName = attribute,
+    attribute = attribute,
     value = value,
     fadeDurationMs = fadeDuration?.toMillis(),
     sortOrder = sortOrder,
@@ -647,7 +647,7 @@ internal fun DaoCueAdHocFxEntity.toDto() = CueAdHocFxDto(
     targetKey = targetKey,
     fxType = fxType,
     family = family,
-    propertyName = attribute,
+    attribute = attribute,
     cycle = cycle,
     blendMode = blendMode,
     order = order,

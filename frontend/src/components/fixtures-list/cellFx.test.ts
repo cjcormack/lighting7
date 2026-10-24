@@ -41,9 +41,9 @@ describe('isLocalFx', () => {
 describe('fxToStop', () => {
   it('stops one instance per cleared cell — the effect-palette press this exists for', () => {
     const effects = [
-      effect({ id: 1, targetKey: 'hex-1', propertyName: 'rgbColour' }),
-      effect({ id: 2, targetKey: 'hex-2', propertyName: 'rgbColour' }),
-      effect({ id: 3, targetKey: 'hex-3', propertyName: 'rgbColour' }),
+      effect({ id: 1, targetKey: 'hex-1', attribute: 'rgbColour' }),
+      effect({ id: 2, targetKey: 'hex-2', attribute: 'rgbColour' }),
+      effect({ id: 3, targetKey: 'hex-3', attribute: 'rgbColour' }),
     ]
     const { stop, partial } = fxToStop(
       effects,
@@ -55,7 +55,7 @@ describe('fxToStop', () => {
   })
 
   it('matches on the property as well as the head', () => {
-    const effects = [effect({ id: 1, targetKey: 'hex-1', propertyName: 'position' })]
+    const effects = [effect({ id: 1, targetKey: 'hex-1', attribute: 'position' })]
     expect(fxToStop(effects, noMembers, cleared(['hex-1', 'dimmer'])).stop).toEqual([])
   })
 
@@ -116,7 +116,7 @@ describe('the FX lens index', () => {
         key: `${key}.${n}`,
         displayName: `Cell ${n}`,
         index: n - 1,
-        properties: [dimmer(10 + n)],
+        attributes: [dimmer(10 + n)],
       })) as never,
     })
 
@@ -125,12 +125,12 @@ describe('the FX lens index', () => {
     const spot = makeFixture('spot', [colourProp('rgbColour', chan(5), chan(6), chan(7))], { groups: [] })
     const index = buildCellFxIndex(
       [
-        effect({ id: 1, targetKey: 'bar', propertyName: 'dimmer' }),
-        effect({ id: 2, targetKey: 'wash', isGroupTarget: true, targetType: 'group', propertyName: 'rgbColour' }),
+        effect({ id: 1, targetKey: 'bar', attribute: 'dimmer' }),
+        effect({ id: 2, targetKey: 'wash', isGroupTarget: true, targetType: 'group', attribute: 'rgbColour' }),
       ],
       [bar('bar', []), par, spot],
     )
-    const ids = (key: string, prop: string) => fxForCell(index, [{ targetKey: key, propertyName: prop }]).map((e) => e.id)
+    const ids = (key: string, prop: string) => fxForCell(index, [{ targetKey: key, attribute: prop }]).map((e) => e.id)
     expect(ids('bar.2', 'dimmer')).toEqual([1])
     expect(ids('par', 'rgbColour')).toEqual([2])
     expect(ids('spot', 'rgbColour')).toEqual([])
@@ -140,10 +140,10 @@ describe('the FX lens index', () => {
 
   it('marks only the heads the head filter leaves an effect', () => {
     const index = buildCellFxIndex(
-      [effect({ id: 1, targetKey: 'bar', propertyName: 'dimmer', elementFilter: 'ODD' })],
+      [effect({ id: 1, targetKey: 'bar', attribute: 'dimmer', elementFilter: 'ODD' })],
       [bar('bar', [])],
     )
-    const ids = (key: string) => fxForCell(index, [{ targetKey: key, propertyName: 'dimmer' }]).map((e) => e.id)
+    const ids = (key: string) => fxForCell(index, [{ targetKey: key, attribute: 'dimmer' }]).map((e) => e.id)
     expect(['bar.1', 'bar.2', 'bar.3', 'bar.4'].map(ids)).toEqual([[1], [], [1], []])
   })
 
@@ -153,8 +153,8 @@ describe('the FX lens index', () => {
       [makeFixture('a', [dimmer(1)], { groups: ['wash'] }), makeFixture('b', [dimmer(2)], { groups: ['wash'] })],
     )
     const keys = [
-      { targetKey: 'a', propertyName: 'dimmer' },
-      { targetKey: 'b', propertyName: 'dimmer' },
+      { targetKey: 'a', attribute: 'dimmer' },
+      { targetKey: 'b', attribute: 'dimmer' },
     ]
     expect(fxForCell(index, keys).map((e) => e.id)).toEqual([7, 3, 9])
   })
@@ -173,8 +173,8 @@ describe('the FX lens index', () => {
 
   it('is empty with no effects, so a cell reads one stable answer', () => {
     expect(buildCellFxIndex([], [fixture('a')])).toBe(EMPTY_CELL_FX_INDEX)
-    expect(fxForCell(EMPTY_CELL_FX_INDEX, [{ targetKey: 'a', propertyName: 'dimmer' }])).toBe(
-      fxForCell(EMPTY_CELL_FX_INDEX, [{ targetKey: 'b', propertyName: 'dimmer' }]),
+    expect(fxForCell(EMPTY_CELL_FX_INDEX, [{ targetKey: 'a', attribute: 'dimmer' }])).toBe(
+      fxForCell(EMPTY_CELL_FX_INDEX, [{ targetKey: 'b', attribute: 'dimmer' }]),
     )
   })
 

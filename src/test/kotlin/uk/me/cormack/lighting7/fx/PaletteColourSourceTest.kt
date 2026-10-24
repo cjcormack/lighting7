@@ -41,7 +41,7 @@ class PaletteColourSourceTest {
     private fun colourRow(
         value: String = "#ff9d4a;policy=extract",
         target: TargetRef? = null,
-    ) = PaletteRowEntry(target = target, propertyName = "rgbColour", value = value)
+    ) = PaletteRowEntry(target = target, attribute = "rgbColour", value = value)
 
     // ─── The grammar ────────────────────────────────────────────────────
 
@@ -132,7 +132,7 @@ class PaletteColourSourceTest {
     @Test
     fun `an unknown uuid, a non-colour template and a per-fixture one are all refused`() {
         val position = template(
-            PaletteRowEntry(target = null, propertyName = "position", value = "deg:45,12.5"),
+            PaletteRowEntry(target = null, attribute = "position", value = "deg:45,12.5"),
             uuid = UUID.fromString("2f1c8a3e-0000-4000-8000-000000000002"),
             name = "Centre",
         )

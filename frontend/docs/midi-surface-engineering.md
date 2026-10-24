@@ -231,7 +231,7 @@ It is **unrelated to `busk.layoutChanged`'s echo suppression**, despite the name
 names pages whose *document* changed and is keyed on a page being saved. A page-state frame carries
 no layout.
 
-## `hooks/useTargetProperties.ts`
+## `hooks/useTargetAttributes.ts`
 
 Closes `FU-FE-USE-TARGET-PROPERTIES`: `useTargetProperties` / `useRigProperties` (flat) for the
 surfaces that *bind* properties and need names plus "can a fader drive this". It landed beside a

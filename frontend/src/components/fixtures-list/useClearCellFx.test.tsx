@@ -54,7 +54,7 @@ afterEach(cleanup)
 
 describe('useClearCellFx', () => {
   it('stops a fixture-targeted effect through the fixture route', () => {
-    mocks.effects = [effect({ id: 7, targetKey: 'hex-1', propertyName: 'dimmer' })]
+    mocks.effects = [effect({ id: 7, targetKey: 'hex-1', attribute: 'dimmer' })]
     const { result } = renderHook(() => useClearCellFx(true))
     result.current(cells(['hex-1', 'dimmer']))
     expect(mocks.removeFx).toHaveBeenCalledWith({ id: 7, fixtureKey: 'hex-1' })
@@ -88,7 +88,7 @@ describe('useClearCellFx', () => {
     const { result, rerender } = renderHook(() => useClearCellFx(true))
     const first = result.current
 
-    mocks.effects = [effect({ id: 7, targetKey: 'hex-1', propertyName: 'dimmer' })]
+    mocks.effects = [effect({ id: 7, targetKey: 'hex-1', attribute: 'dimmer' })]
     rerender()
     expect(result.current).toBe(first)
 

@@ -99,12 +99,12 @@ export function rigHeadOrder(rows: readonly BuskRigRow[], fixtures: readonly Fix
   return order
 }
 
-const hasColourDescriptor = (properties: readonly { type: string }[]) =>
-  properties.some((p) => p.type === 'colour' || p.type === 'whiteMix')
+const hasColourDescriptor = (attributes: readonly { type: string }[]) =>
+  attributes.some((p) => p.type === 'colour' || p.type === 'whiteMix')
 
 /** A head the colour picker can *write*: its own colour or white-mix descriptor, or one on any of its cells. */
 function hasColour(target: WriteTarget): boolean {
-  return hasColourDescriptor(target.properties) || (target.elements ?? []).some((element) => hasColourDescriptor(element.properties))
+  return hasColourDescriptor(target.attributes) || (target.elements ?? []).some((element) => hasColourDescriptor(element.attributes))
 }
 
 /**
@@ -135,7 +135,7 @@ export function targetHeads(targets: readonly WriteTarget[], order: readonly str
   }
   for (const target of targets) {
     if (target.fixtureKey != null) {
-      if (!hasColourDescriptor(target.properties)) continue
+      if (!hasColourDescriptor(target.attributes)) continue
       add({ fixtureKey: target.fixtureKey, cellIndex: target.cellIndex ?? null })
     } else if (hasColour(target)) {
       add({ fixtureKey: target.key, cellIndex: null })

@@ -28,7 +28,7 @@ import kotlin.script.experimental.jvm.jvmTarget
  *     family = "intensity",
  *     outputType = FxOutputType.SLIDER,
  *     parameters = listOf(ParameterInfo("max", "ubyte", "255", "Peak level")),
- *     compatibleProperties = listOf("dimmer"),
+ *     compatibleAttributes = listOf("dimmer"),
  *     factory = { params, _, _ ->
  *         val max = params["max"]?.toUByteParam() ?: 255u
  *         object : Fx {

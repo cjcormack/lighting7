@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 /**
- * The one rule for "does this effect paint `(fixtureKey, propertyName)` this tick?" — read by the
+ * The one rule for "does this effect paint `(fixtureKey, attribute)` this tick?" — read by the
  * tick loops ([FxEngine]), by provenance ([ProvenanceService.compute]) and by the property-stack
  * read behind `programmer.keyStack` ([ProvenanceService.keyStack]).
  *
@@ -33,16 +33,16 @@ object FxSuppression {
     fun isSuppressed(
         held: Map<String, Set<String>>,
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         effect: FxInstance,
         isLayerStomped: (FxInstance, String, String) -> Boolean,
     ): Boolean {
-        if (isLayerStomped(effect, fixtureKey, propertyName)) return true
-        return heldBackByProgrammer(held, fixtureKey, propertyName, effect.priority)
+        if (isLayerStomped(effect, fixtureKey, attribute)) return true
+        return heldBackByProgrammer(held, fixtureKey, attribute, effect.priority)
     }
 
     /**
-     * Why [effect] does not paint `(fixtureKey, propertyName)`, or null when it does: [isSuppressed]'s
+     * Why [effect] does not paint `(fixtureKey, attribute)`, or null when it does: [isSuppressed]'s
      * two reasons and [BlindHold], asked in [KeyStackLayer.HeldBackReason]'s order, so the reason never
      * disagrees with the answer the compose pass acts on. Read by the property-stack read and the sampler.
      */
@@ -50,22 +50,22 @@ object FxSuppression {
         held: Map<String, Set<String>>,
         blind: Boolean,
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         effect: FxInstance,
         isLayerStomped: (FxInstance, String, String) -> Boolean,
     ): KeyStackLayer.HeldBackReason? = when {
-        isLayerStomped(effect, fixtureKey, propertyName) -> KeyStackLayer.HeldBackReason.STOMP
-        heldBackByProgrammer(held, fixtureKey, propertyName, effect.priority) -> KeyStackLayer.HeldBackReason.PROGRAMMER
+        isLayerStomped(effect, fixtureKey, attribute) -> KeyStackLayer.HeldBackReason.STOMP
+        heldBackByProgrammer(held, fixtureKey, attribute, effect.priority) -> KeyStackLayer.HeldBackReason.PROGRAMMER
         BlindHold.holds(blind, effect) -> KeyStackLayer.HeldBackReason.BLIND
         else -> null
     }
 
     /**
-     * The programmer half alone: the programmer holds `(fixtureKey, propertyName)` in [held], so an
+     * The programmer half alone: the programmer holds `(fixtureKey, attribute)` in [held], so an
      * effect at [priority] must not paint over it — unless it sits in the programmer priority band,
      * whose effects modulate *on top of* programmer values rather than fighting them.
      *
-     * [held] is [ProgrammerStore.activePropertiesByFixture]'s answer, which names **property**
+     * [held] is [ProgrammerStore.activeAttributesByFixture]'s answer, which names **property**
      * entries only, each holding back effects on its own key alone: a raw-channel sideband slot
      * holds a value but suppresses nothing, and a `pan` entry does not hold back a Circle keyed
      * `position`. Provenance reads this same predicate, of the key an effect paints, to decide
@@ -74,11 +74,11 @@ object FxSuppression {
     fun heldBackByProgrammer(
         held: Map<String, Set<String>>,
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         priority: Int,
     ): Boolean {
         if (held.isEmpty()) return false
         if (FxEngine.isProgrammerFxPriority(priority)) return false
-        return held[fixtureKey]?.contains(propertyName) == true
+        return held[fixtureKey]?.contains(attribute) == true
     }
 }

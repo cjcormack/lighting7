@@ -25,14 +25,14 @@ import { AudioWaveform, Loader2, SlidersHorizontal, Trash2 } from 'lucide-react'
 import {
   ATTRIBUTE_FAMILIES,
   FAMILY_LABELS,
-  maskGroupForFxFamily,
+  attributeFamilyForFxFamily,
   type AttributeFamily,
 } from '@/lib/attributeFamily'
 import { describePaletteIntent, type PaletteIntent } from '@/lib/paletteIntent'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import {
-  findPanProperty,
-  findTiltProperty,
+  findPanAttribute,
+  findTiltAttribute,
   useVisibleFixtureListQuery,
 } from '@/store/fixtures'
 import { usePaletteListQuery } from '@/store/palettes'
@@ -220,8 +220,8 @@ export function PaletteEditor({
   /** Name, plus **exactly one** of the two halves — which is the write boundary's first rule. */
   const isValid = name.trim().length > 0 && (holdsFx ? fxDraft != null : rows.length > 0)
 
-  const setIntent = useCallback((propertyName: string, intent: PaletteIntent | null) => {
-    setValues((prev) => withIntent(prev, propertyName, intent))
+  const setIntent = useCallback((attribute: string, intent: PaletteIntent | null) => {
+    setValues((prev) => withIntent(prev, attribute, intent))
   }, [])
 
   /**
@@ -259,7 +259,7 @@ export function PaletteEditor({
         return {
           fxType: entry.name,
           family: category,
-          propertyName: extra?.propertyName ?? null,
+          attribute: extra?.attribute ?? null,
           cycle: timing.cycle,
           blendMode: spec.blendMode,
           order: prev?.order ?? 'NORMAL',
@@ -297,9 +297,9 @@ export function PaletteEditor({
   }, [])
 
   /** The setting a Slot Steps palette steps — the one property an effect palette names. */
-  const setFxProperty = useCallback((propertyName: string, parameters?: Record<string, string>) => {
+  const setFxAttribute = useCallback((attribute: string, parameters?: Record<string, string>) => {
     setFxDraft((prev) =>
-      prev == null ? prev : { ...prev, propertyName, parameters: { ...prev.parameters, ...parameters } },
+      prev == null ? prev : { ...prev, attribute, parameters: { ...prev.parameters, ...parameters } },
     )
   }, [])
 
@@ -467,7 +467,7 @@ export function PaletteEditor({
               entry={fxEntry}
               onChoose={chooseFx}
               onPatch={patchFx}
-              onProperty={setFxProperty}
+              onAttribute={setFxAttribute}
             />
           ) : isGeneric ? (
             <FamilyControls family={family} values={values} onChange={setIntent} />
@@ -554,7 +554,7 @@ function FxControls({
   entry,
   onChoose,
   onPatch,
-  onProperty,
+  onAttribute,
 }: {
   projectId: number
   family: AttributeFamily
@@ -563,7 +563,7 @@ function FxControls({
   entry: FxLibraryEntry | undefined
   onChoose: (entry: FxLibraryEntry, extra?: FxStart) => void
   onPatch: (patch: Partial<FxDraft>) => void
-  onProperty: (propertyName: string, parameters?: Record<string, string>) => void
+  onAttribute: (attribute: string, parameters?: Record<string, string>) => void
 }) {
   // Palette Steps (effects plan §4.4) is offered in this family where two generic value palettes of
   // it name one property; it starts on all of them, in library order.
@@ -578,18 +578,18 @@ function FxControls({
   const rigSettings = useMemo(() => rigSettingUnion(fixtures ?? []), [fixtures])
 
   // Filtered through the same map the write boundary derives the family with, rather than by string
-  // equality against one spelling: `maskGroupForFxFamily` is case-insensitive and takes `color`
+  // equality against one spelling: `attributeFamilyForFxFamily` is case-insensitive and takes `color`
   // as well as `colour`, so an exact match would hide from this picker a script-registered effect
   // that *Save as template…* would happily bank under this very family.
   const offered = useMemo(
     () =>
       (library ?? []).filter((e) =>
-        isPaletteSteps(e.name) ? stepOffer != null : maskGroupForFxFamily(drivenCategoryOf(e)) === family,
+        isPaletteSteps(e.name) ? stepOffer != null : attributeFamilyForFxFamily(drivenCategoryOf(e)) === family,
       ),
     [library, family, stepOffer],
   )
   const fxDraft = useMemo(() => (draft == null ? null : paletteDraftOf(draft)), [draft])
-  const slotSetting = isSlotSteps(draft?.fxType) ? rigSettings.find((p) => p.name === draft?.propertyName) : undefined
+  const slotSetting = isSlotSteps(draft?.fxType) ? rigSettings.find((p) => p.name === draft?.attribute) : undefined
 
   /** What a step effect starts on here: Palette Steps its family's palettes, Slot Steps a gobo wheel. */
   const startOf = (chosen: FxLibraryEntry): FxStart | undefined => {
@@ -601,7 +601,7 @@ function FxControls({
     }
     if (isSlotSteps(chosen.name)) {
       const setting = rigSettings.find((p) => p.category === 'gobo') ?? rigSettings[0]
-      if (setting != null) return { propertyName: setting.name, parameters: { slots: seedSlots(setting) } }
+      if (setting != null) return { attribute: setting.name, parameters: { slots: seedSlots(setting) } }
     }
     return undefined
   }
@@ -646,19 +646,19 @@ function FxControls({
             <div className="flex flex-col gap-1">
               <Label>Setting</Label>
               <Select
-                value={draft.propertyName ?? ''}
+                value={draft.attribute ?? ''}
                 onValueChange={(name) => {
                   // A different setting has different slots, so the list starts again on its own.
                   const setting = rigSettings.find((p) => p.name === name)
-                  onProperty(name, { slots: seedSlots(setting) })
+                  onAttribute(name, { slots: seedSlots(setting) })
                 }}
               >
                 <SelectTrigger aria-label="Setting">
                   <SelectValue placeholder="Choose the setting it steps" />
                 </SelectTrigger>
                 <SelectContent>
-                  {draft.propertyName != null && !rigSettings.some((p) => p.name === draft.propertyName) && (
-                    <SelectItem value={draft.propertyName}>{draft.propertyName}</SelectItem>
+                  {draft.attribute != null && !rigSettings.some((p) => p.name === draft.attribute) && (
+                    <SelectItem value={draft.attribute}>{draft.attribute}</SelectItem>
                   )}
                   {rigSettings.map((p) => (
                     <SelectItem key={p.name} value={p.name}>
@@ -678,8 +678,8 @@ function FxControls({
             draft={fxDraft}
             scope={PALETTE_SCOPE}
             extendedChannels={undefined}
-            settingProperty={slotSetting}
-            propertyName={draft.propertyName}
+            settingAttribute={slotSetting}
+            attribute={draft.attribute}
             paletteFamily={family}
             slotsFromRig
             readOnly={false}
@@ -688,7 +688,7 @@ function FxControls({
           />
           {/* The master's reason, which the old form said beside its picker (session 5 kept it). */}
           <EditorReadout>
-            A new FX is one bar on the master whose usage matches this family, stored on the
+            A new FX is one bar on the master of this family, stored on the
             palette — every layer applying it follows the same tempo. On Seconds it follows none.
           </EditorReadout>
         </div>
@@ -709,7 +709,7 @@ const PALETTE_SCOPE: FxScope = { heads: true, elementMode: false, elementFilter:
  */
 interface FxStart {
   family?: string
-  propertyName?: string
+  attribute?: string
   parameters?: Record<string, string>
 }
 
@@ -725,8 +725,8 @@ function PerFixtureValues({ palette: template }: { palette: PaletteSummary | nul
   // A position recorded in degrees (before D3) reads on the centre scale through its own head.
   const { fixtureByKey } = useFixtureLookup()
   const axesOf = (key: string) => {
-    const props = fixtureByKey.get(key)?.properties ?? []
-    return { pan: findPanProperty(props), tilt: findTiltProperty(props) }
+    const props = fixtureByKey.get(key)?.attributes ?? []
+    return { pan: findPanAttribute(props), tilt: findTiltAttribute(props) }
   }
   return (
     <div className="space-y-1.5">
@@ -737,10 +737,10 @@ function PerFixtureValues({ palette: template }: { palette: PaletteSummary | nul
       </p>
       <div className="rounded-md border divide-y">
         {rows.map((row) => (
-          <div key={`${row.targetKey}:${row.propertyName}`} className="flex items-center gap-2 px-2 py-1.5">
+          <div key={`${row.targetKey}:${row.attribute}`} className="flex items-center gap-2 px-2 py-1.5">
             <span className="text-xs font-medium min-w-0 flex-1 truncate">{row.targetKey}</span>
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">
-              {row.propertyName}
+              {row.attribute}
             </Badge>
             <span className="font-mono text-[11px] tabular-nums text-muted-foreground shrink-0">
               {describePaletteIntent(row.value, axesOf(row.targetKey))}
@@ -763,7 +763,7 @@ function fxKey(effect: PaletteFx | null): string {
   return JSON.stringify([
     effect.fxType,
     effect.family,
-    effect.propertyName ?? null,
+    effect.attribute ?? null,
     effect.cycle,
     effect.blendMode,
     effect.order,

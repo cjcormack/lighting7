@@ -111,9 +111,9 @@ internal class CueCopier(val source: DaoProject, val target: DaoProject) {
                 randomWindow = layer.randomWindow
             }
         }
-        for (assignment in cue.propertyAssignments) {
+        for (assignment in cue.attributeAssignments) {
             checkTarget(assignment.targetType, assignment.targetKey, by)
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = copy
                 targetType = assignment.targetType
                 targetKey = assignment.targetKey

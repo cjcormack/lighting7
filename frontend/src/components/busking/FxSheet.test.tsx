@@ -58,7 +58,7 @@ vi.mock('@/store/palettes', () => ({
           blendMode: 'ADDITIVE',
           order: 'NORMAL',
           phaseOffset: 0,
-          parameters: { panCenter: '128', tiltCenter: '128', panRadius: '60', tiltRadius: '20' },
+          parameters: { panCentre: '128', tiltCentre: '128', panRadius: '60', tiltRadius: '20' },
           speedMasterUuid: null,
           rateSpeedMasterUuid: null,
         },
@@ -94,15 +94,15 @@ const padCircle = (panRadius = '60') =>
     fxType: 'Circle',
     targetKey: 'Spots',
     isGroupTarget: true,
-    propertyName: 'position',
+    attribute: 'position',
     cycle: 0.5,
     blendMode: 'ADDITIVE',
-    parameters: { panCenter: '128', tiltCenter: '128', panRadius, tiltRadius: '20' },
+    parameters: { panCentre: '128', tiltCentre: '128', panRadius, tiltRadius: '20' },
     paletteId: 7,
     programmerLayerId: 3,
     sourceName: 'Big circle',
   })
-const ownPulse = makeActiveFx({ id: 22, fxType: 'Pulse', targetKey: 'spot-1', propertyName: 'dimmer' })
+const ownPulse = makeActiveFx({ id: 22, fxType: 'Pulse', targetKey: 'spot-1', attribute: 'dimmer' })
 const cuePulse = makeActiveFx({ id: 23, fxType: 'Pulse', targetKey: 'spot-1', programmerOwned: false, cueId: 12 })
 const washChase = makeActiveFx({ id: 24, fxType: 'Chase', targetKey: 'wash-1' })
 

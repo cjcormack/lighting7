@@ -4,7 +4,7 @@ name: Iris Pulse
 family: beam
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [iris]
+compatibleAttributes: [iris]
 parameters:
   - name: min
     type: ubyte

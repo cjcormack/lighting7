@@ -62,7 +62,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         )
         // The four rows resolve to exactly what the strip was deriving, and keep its policy.
         assertEquals(
-            BindingTarget.GroupProperty("front-wash", "colour"),
+            BindingTarget.GroupAttribute("front-wash", "colour"),
             service.resolve(projectId, deviceTypeKey, "enc-1", activeBank = null, encoderBank = EncoderBankSelection("colour"))?.target,
         )
         assertEquals(BindingTakeoverPolicy.PICKUP, created.single { it.controlId == "fader-1" }.takeoverPolicy)
@@ -89,7 +89,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
                 projectId = projectId,
                 deleteIds = listOf(strip.id),
                 creates = listOf(
-                    newBinding("fader-1", BindingTarget.GroupProperty("front-wash", "dimmer")),
+                    newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer")),
                     newBinding("btn-25", BindingTarget.SelectTarget(wash)),
                 ),
             )
@@ -109,17 +109,17 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val existing = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-            bank = null, target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+            bank = null, target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
         )
 
         val created = service.replace(
             projectId = projectId,
             deleteIds = listOf(existing.id),
-            creates = listOf(newBinding("fader-1", BindingTarget.GroupProperty("front-wash", "dimmer"))),
+            creates = listOf(newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer"))),
         )
 
         assertEquals(1, created.size)
-        assertIs<BindingTarget.GroupProperty>(service.list(projectId).single().target)
+        assertIs<BindingTarget.GroupAttribute>(service.list(projectId).single().target)
     }
 
     @Test
@@ -132,8 +132,8 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
                 creates = listOf(
                     // Continuous targets: a fader takes no button target since `refuseWrongKind`,
                     // and this test is about the slot clash rather than the kind.
-                    newBinding("fader-1", BindingTarget.FixtureProperty("hex-1", "dimmer")),
-                    newBinding("fader-1", BindingTarget.GroupProperty("front-wash", "dimmer")),
+                    newBinding("fader-1", BindingTarget.FixtureAttribute("hex-1", "dimmer")),
+                    newBinding("fader-1", BindingTarget.GroupAttribute("front-wash", "dimmer")),
                 ),
             )
         }
@@ -206,7 +206,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         assertFailsWith<BindingRefused> {
             service.create(
                 projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "btn-1",
-                bank = null, target = BindingTarget.GroupProperty("front-wash", "dimmer"),
+                bank = null, target = BindingTarget.GroupAttribute("front-wash", "dimmer"),
             )
         }
         assertEquals(emptyList(), service.list(projectId))
@@ -219,7 +219,7 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-1",
-            bank = null, target = BindingTarget.SelectionProperty("dimmer"),
+            bank = null, target = BindingTarget.SelectionAttribute("dimmer"),
         )
         service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "enc-2",
@@ -305,12 +305,12 @@ class ControlSurfaceBindingBatchTest : RouteIntegrationTest() {
         val service = service()
         val fader = service.create(
             projectId = projectId, deviceTypeKey = deviceTypeKey, controlId = "fader-1",
-            bank = null, target = BindingTarget.FixtureProperty("hex-1", "dimmer"),
+            bank = null, target = BindingTarget.FixtureAttribute("hex-1", "dimmer"),
         )
         assertFailsWith<BindingRefused> {
             service.update(projectId = projectId, bindingId = fader.id, target = BindingTarget.Blackout)
         }
-        assertIs<BindingTarget.FixtureProperty>(service.get(projectId, fader.id)?.target)
+        assertIs<BindingTarget.FixtureAttribute>(service.get(projectId, fader.id)?.target)
     }
 
     @Test

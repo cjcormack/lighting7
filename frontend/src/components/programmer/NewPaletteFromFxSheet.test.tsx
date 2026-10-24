@@ -30,7 +30,7 @@ vi.mock('@/components/fx/SpeedMasterChip', () => ({ SpeedMasterChip: () => null 
 import { NewPaletteFromFxSheet } from './NewPaletteFromFxSheet'
 
 const entry = (name: string, family: string) =>
-  ({ name, family, outputType: 'STEPS', parameters: [], compatibleProperties: [], timingSource: 'BEAT' }) as unknown as FxLibraryEntry
+  ({ name, family, outputType: 'STEPS', parameters: [], compatibleAttributes: [], timingSource: 'BEAT' }) as unknown as FxLibraryEntry
 
 const palette = (uuid: string, family: PaletteSummary['family']) =>
   ({ id: 1, uuid, name: uuid, family, isGeneric: true, kind: 'value', rows: [] }) as unknown as PaletteSummary
@@ -39,7 +39,7 @@ const running = (over: Partial<ActiveFx>) =>
   ({
     id: 7,
     fxType: 'SlotSteps',
-    propertyName: 'gobo',
+    attribute: 'gobo',
     cycle: 4,
     blendMode: 'OVERRIDE',
     phaseOffset: 0,
@@ -74,14 +74,14 @@ afterEach(cleanup)
 
 describe('NewPaletteFromFxSheet on a step effect', () => {
   it('saves Slot Steps as a Beam palette naming the setting it steps', async () => {
-    open(running({ fxType: 'SlotSteps', propertyName: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' } }))
+    open(running({ fxType: 'SlotSteps', attribute: 'gobo', parameters: { slots: 'GOBO_3,GOBO_5' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
-    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', propertyName: 'gobo' })
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'SlotSteps', family: 'beam', attribute: 'gobo' })
   })
 
   it("saves Palette Steps under its palettes' family, naming no property", async () => {
-    open(running({ fxType: 'PaletteSteps', propertyName: 'position', parameters: { palettes: 'pal:a,pal:b' } }))
+    open(running({ fxType: 'PaletteSteps', attribute: 'position', parameters: { palettes: 'pal:a,pal:b' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
-    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'PaletteSteps', family: 'position', propertyName: null })
+    expect(mocks.create.mock.calls[0][0].fx).toMatchObject({ fxType: 'PaletteSteps', family: 'position', attribute: null })
   })
 })

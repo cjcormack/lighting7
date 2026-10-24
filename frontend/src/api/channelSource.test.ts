@@ -40,7 +40,7 @@ function fakeProgrammer(initial: Partial<ProgrammerChannelState> = {}) {
 }
 
 function entryMap(...entries: ResolvableEntry[]): Map<string, ResolvableEntry> {
-  return new Map(entries.map((e) => [`${e.targetKey}|${e.propertyName}`, e]))
+  return new Map(entries.map((e) => [`${e.targetKey}|${e.attribute}`, e]))
 }
 
 /** A plain map-backed base source, standing in for the wire. */
@@ -84,7 +84,7 @@ describe('createProgrammerChannelSource', () => {
   it('reads a held property entry as channel values', () => {
     const source = createProgrammerChannelSource(fake.programmer, () => DESCRIPTORS)
     fake.set({
-      entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }),
+      entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '180' }),
     })
     expect(source.getByKey('0:1')).toBe(180)
     expect(source.get(0, 1)).toBe(180)
@@ -95,7 +95,7 @@ describe('createProgrammerChannelSource', () => {
     // The case blind most needs: an operator parking a dimmer at 0 in the programmer must
     // read as a deliberate 0, not as "fall through to the wire".
     const source = createProgrammerChannelSource(fake.programmer, () => DESCRIPTORS)
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '0' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '0' }) })
     expect(source.getByKey('0:1')).toBe(0)
     expect(source.holds('0:1')).toBe(true)
   })
@@ -110,7 +110,7 @@ describe('createProgrammerChannelSource', () => {
     fake.set({
       entries: entryMap({
         targetKey: 'fx-2',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         value: serializeColour(10, 20, 0),
       }),
     })
@@ -124,7 +124,7 @@ describe('createProgrammerChannelSource', () => {
     fake.set({
       entries: entryMap({
         targetKey: 'fx-2',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         value: serializeColour(99, 20, 0),
       }),
     })
@@ -139,7 +139,7 @@ describe('createProgrammerChannelSource', () => {
     const listener = vi.fn()
     source.subscribeToChannel('0:1', listener)
 
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '0' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '0' }) })
 
     expect(listener).toHaveBeenCalledExactlyOnceWith(0)
     expect(source.holds('0:1')).toBe(true)
@@ -147,7 +147,7 @@ describe('createProgrammerChannelSource', () => {
 
   it('notifies 0 when an entry is cleared', () => {
     const source = createProgrammerChannelSource(fake.programmer, () => DESCRIPTORS)
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '180' }) })
 
     const listener = vi.fn()
     source.subscribeToChannel('0:1', listener)
@@ -167,7 +167,7 @@ describe('createProgrammerChannelSource', () => {
     // The patch loads after the stage mounts, so the first rebuild sees no descriptors.
     let descriptors = descriptorsByTarget([])
     const source = createProgrammerChannelSource(fake.programmer, () => descriptors)
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '180' }) })
     expect(source.getByKey('0:1')).toBe(0)
 
     descriptors = DESCRIPTORS
@@ -188,7 +188,7 @@ describe('createProgrammerChannelSource', () => {
       descriptorReads++
       return DESCRIPTORS
     })
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '180' }) })
     const readsAfterRealChange = descriptorReads
 
     fake.notifyUnchanged()
@@ -203,7 +203,7 @@ describe('createProgrammerChannelSource', () => {
   it('stops rebuilding once disposed', () => {
     const source = createProgrammerChannelSource(fake.programmer, () => DESCRIPTORS)
     source.dispose()
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '180' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '180' }) })
     expect(source.getByKey('0:1')).toBe(0)
   })
 })
@@ -212,7 +212,7 @@ describe('createOverlayChannelSource', () => {
   it('prefers the overlay where it holds a channel and the base elsewhere', () => {
     const base = fixedSource({ '0:1': 100, '0:2': 200 })
     const fake = fakeProgrammer({
-      entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '5' }),
+      entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '5' }),
     })
     const overlay = createProgrammerChannelSource(fake.programmer, () => DESCRIPTORS)
     const merged = createOverlayChannelSource(base, overlay)
@@ -249,7 +249,7 @@ describe('createOverlayChannelSource', () => {
     merged.subscribeToChannel('0:1', listener)
     expect(merged.getByKey('0:1')).toBe(255)
 
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '0' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '0' }) })
 
     expect(merged.getByKey('0:1')).toBe(0)
     expect(listener).toHaveBeenLastCalledWith(0)
@@ -264,7 +264,7 @@ describe('createOverlayChannelSource', () => {
     const listener = vi.fn()
     merged.subscribeToChannel('0:1', listener)
 
-    fake.set({ entries: entryMap({ targetKey: 'fx-1', propertyName: 'dimmer', value: '5' }) })
+    fake.set({ entries: entryMap({ targetKey: 'fx-1', attribute: 'dimmer', value: '5' }) })
     expect(listener).toHaveBeenLastCalledWith(5)
 
     // Released: the wire value must come back rather than the channel sticking at 0.

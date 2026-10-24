@@ -22,15 +22,15 @@ export class LookRowDraft {
     return this.values.size
   }
 
-  set(targetKey: string, propertyName: string, value: string): void {
-    const key = lookRowKey(targetKey, propertyName)
+  set(targetKey: string, attribute: string, value: string): void {
+    const key = lookRowKey(targetKey, attribute)
     if (this.values.get(key) === value) return
     this.values.set(key, value)
     this.notify(key)
   }
 
-  get(targetKey: string, propertyName: string): string | undefined {
-    return this.values.get(lookRowKey(targetKey, propertyName))
+  get(targetKey: string, attribute: string): string | undefined {
+    return this.values.get(lookRowKey(targetKey, attribute))
   }
 
   /**
@@ -101,7 +101,7 @@ export class LookRowDraft {
     const out: LookRow[] = []
     for (const row of serverRows) {
       if (row.targetType === 'fixture' && !row.elementKey) {
-        const key = lookRowKey(row.targetKey, row.propertyName)
+        const key = lookRowKey(row.targetKey, row.attribute)
         const value = pending.get(key)
         if (value !== undefined) {
           pending.delete(key)
@@ -117,7 +117,7 @@ export class LookRowDraft {
       out.push({
         targetType: 'fixture',
         targetKey: parts.targetKey,
-        propertyName: parts.propertyName,
+        attribute: parts.attribute,
         value,
       })
     }

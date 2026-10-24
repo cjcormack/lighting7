@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { toast } from 'sonner'
 import { formatError } from '@/lib/formatError'
 import { useIncludeIntoProgrammerMutation } from '@/store/programmerOps'
-import type { PropertyMaskGroup } from '@/store/programmerOps'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 import { publishIncludeSelection } from '@/store/includeSelection'
 import type { IncludedTarget } from '@/api/programmerWsApi'
 
@@ -54,7 +54,7 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
   const [includeIntoProgrammer, { isLoading, error, reset }] = useIncludeIntoProgrammerMutation()
 
   const include = useCallback(
-    async (target: IncludeTargetRequest, mask?: PropertyMaskGroup[]) => {
+    async (target: IncludeTargetRequest, mask?: AttributeFamily[]) => {
       try {
         const response = await includeIntoProgrammer({
           projectId,
@@ -82,7 +82,7 @@ export function useInclude(projectId: number, options: UseIncludeOptions = {}) {
 
   /** `entryId` names the stack entry the cue was included from — the indicator's number. */
   const includeCue = useCallback(
-    (cueId: number, entryId?: number | null, mask?: PropertyMaskGroup[]) =>
+    (cueId: number, entryId?: number | null, mask?: AttributeFamily[]) =>
       include({ kind: 'CUE', cueId, entryId }, mask),
     [include],
   )

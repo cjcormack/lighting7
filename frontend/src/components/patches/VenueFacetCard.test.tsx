@@ -42,7 +42,7 @@ function patch(over: Partial<FixturePatch> = {}): FixturePatch {
 
 const ctx: FacetCardContext = {
   projectId: 5,
-  fixtureType: { typeKey: 'hex', acceptsGel: true, acceptsBeamAngle: true, properties: [] } as unknown as FacetCardContext['fixtureType'],
+  fixtureType: { typeKey: 'hex', acceptsGel: true, acceptsBeamAngle: true, attributes: [] } as unknown as FacetCardContext['fixtureType'],
   universes: [
     { id: 1, subnet: 0, universe: 0, controllerType: 'ARTNET', address: null, refreshIntervalMs: 25, refreshIntervalOverridden: false, patchCount: 4, owner: 'VENUE', uuid: 'u-0' },
     { id: 2, subnet: 0, universe: 1, controllerType: 'ARTNET', address: null, refreshIntervalMs: 25, refreshIntervalOverridden: false, patchCount: 2, owner: 'VENUE', uuid: 'u-1' },
@@ -88,7 +88,7 @@ describe('VenueFacetCard', () => {
   })
 
   it('offers no This show for a facet the type has nothing in, and says why', () => {
-    const noOptics = { ...ctx, fixtureType: { typeKey: 'hex', acceptsGel: false, acceptsBeamAngle: false, properties: [] } as unknown as FacetCardContext['fixtureType'] }
+    const noOptics = { ...ctx, fixtureType: { typeKey: 'hex', acceptsGel: false, acceptsBeamAngle: false, attributes: [] } as unknown as FacetCardContext['fixtureType'] }
     render(<VenueFacetCard facet="FOCUS" patch={patch()} ctx={noOptics} />)
     const item = screen.getByRole('radio', { name: 'This show' })
     expect(item).toBeDisabled()

@@ -73,11 +73,11 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Pre-show","values":[
-                {"target":{"type":"group","key":"Wash"},"propertyName":"dimmer","value":"pct:70"},
-                {"target":{"type":"fixture","key":"haze"},"propertyName":"fanSpeed","value":"dmx:20"},
-                {"target":{"type":"fixture","key":"haze"},"propertyName":"pumpControl","value":"pct:50"},
-                {"target":{"type":"fixture","key":"mac-1"},"propertyName":"gobo","value":"cone"},
-                {"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}
+                {"target":{"type":"group","key":"Wash"},"attribute":"dimmer","value":"pct:70"},
+                {"target":{"type":"fixture","key":"haze"},"attribute":"fanSpeed","value":"dmx:20"},
+                {"target":{"type":"fixture","key":"haze"},"attribute":"pumpControl","value":"pct:50"},
+                {"target":{"type":"fixture","key":"mac-1"},"attribute":"gobo","value":"cone"},
+                {"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:200"}
             ]}""",
         )
         assertTrue(created.success, created.result)
@@ -109,7 +109,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     private fun look(name: String, position: String) =
-        """{"name":"$name","values":[{"target":{"type":"fixture","key":"mac-1"},"propertyName":"position","value":"$position"}]}"""
+        """{"name":"$name","values":[{"target":{"type":"fixture","key":"mac-1"},"attribute":"position","value":"$position"}]}"""
 
     @Test
     fun `a colour value keeps the emitter levels it names, where the head has them`() {
@@ -117,8 +117,8 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Warm","values":[
-                {"target":{"type":"group","key":"Wash"},"propertyName":"rgbColour","value":"#ffc080;policy=extract;w200;a30"},
-                {"target":{"type":"fixture","key":"mac-1"},"propertyName":"rgbColour","value":"#ff0000;uv50"}
+                {"target":{"type":"group","key":"Wash"},"attribute":"rgbColour","value":"#ffc080;policy=extract;w200;a30"},
+                {"target":{"type":"fixture","key":"mac-1"},"attribute":"rgbColour","value":"#ff0000;uv50"}
             ]}""",
         )
         assertTrue(created.success, created.result)
@@ -138,42 +138,42 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Red","values":[
-                {"target":{"type":"group","key":"Mixed"},"propertyName":"rgbColour","value":"#ff0000"},
-                {"target":{"type":"group","key":"Mixed"},"propertyName":"dimmer","value":"pct:100"}
+                {"target":{"type":"group","key":"Mixed"},"attribute":"rgbColour","value":"#ff0000"},
+                {"target":{"type":"group","key":"Mixed"},"attribute":"dimmer","value":"pct:100"}
             ]}""",
         )
         assertTrue(created.success, created.result)
         val rows = storedRows("Red")
 
-        val colour = rows.filter { it.propertyName != "dimmer" }
+        val colour = rows.filter { it.attribute != "dimmer" }
         assertEquals(listOf("hex-1", "hex-2", "mac-1"), colour.map { it.targetKey }, "per head, the hazer has no colour")
-        assertTrue(colour.take(2).all { it.propertyName == "rgbColour" && it.value.startsWith("#ff0000") }, "$colour")
+        assertTrue(colour.take(2).all { it.attribute == "rgbColour" && it.value.startsWith("#ff0000") }, "$colour")
         assertEquals(LookRowDto("fixture", "mac-1", "colourWheel", "176"), colour[2], "the wheel head lands on RED")
 
         assertEquals(
             LookRowDto("group", "Mixed", "dimmer", "255"),
-            rows.single { it.propertyName == "dimmer" },
+            rows.single { it.attribute == "dimmer" },
             "every head that has a dimmer agrees, so the group stays one row",
         )
-        val skipped = created.json()["skipped"]!!.jsonArray.map { it.jsonObject["fixture"]!!.jsonPrimitive.content to it.jsonObject["propertyName"]!!.jsonPrimitive.content }
+        val skipped = created.json()["skipped"]!!.jsonArray.map { it.jsonObject["fixture"]!!.jsonPrimitive.content to it.jsonObject["attribute"]!!.jsonPrimitive.content }
         assertTrue("haze" to "rgbColour" in skipped && "haze" to "dimmer" in skipped, "$skipped")
     }
 
     @Test
     fun `a value no head can take, a malformed one, an unknown target or a taken name refuses the whole call`() {
         patchRig()
-        assertTrue(call("create_look", """{"name":"Taken","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"pct:10"}]}""").success)
+        assertTrue(call("create_look", """{"name":"Taken","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"pct:10"}]}""").success)
         val before = lookCount()
 
         for ((arguments, expected) in listOf(
-            """{"name":"A","values":[{"target":{"type":"fixture","key":"haze"},"propertyName":"gobo","value":"cone"}]}""" to "no head of haze",
-            """{"name":"A","values":[{"target":{"type":"fixture","key":"mac-1"},"propertyName":"gobo","value":"spiral"}]}""" to "no option 'spiral'",
-            """{"name":"A","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"#ff0000"}]}""" to "is not a value dimmer takes",
-            """{"name":"A","values":[{"target":{"type":"fixture","key":"hex-1"},"propertyName":"rgbColour","value":"pct:50"}]}""" to "is not a value rgbColour takes",
-            """{"name":"A","values":[{"target":{"type":"fixture","key":"nope"},"propertyName":"dimmer","value":"pct:50"}]}""" to "no fixture 'nope'",
-            """{"name":"A","values":[{"target":{"type":"group","key":"Nope"},"propertyName":"dimmer","value":"pct:50"}]}""" to "no group 'Nope'",
-            """{"name":"A","values":[{"propertyName":"dimmer","value":"pct:50"}]}""" to "target must be",
-            """{"name":"Taken","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"pct:10"}]}""" to "already exists",
+            """{"name":"A","values":[{"target":{"type":"fixture","key":"haze"},"attribute":"gobo","value":"cone"}]}""" to "no head of haze",
+            """{"name":"A","values":[{"target":{"type":"fixture","key":"mac-1"},"attribute":"gobo","value":"spiral"}]}""" to "no option 'spiral'",
+            """{"name":"A","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"#ff0000"}]}""" to "is not a value dimmer takes",
+            """{"name":"A","values":[{"target":{"type":"fixture","key":"hex-1"},"attribute":"rgbColour","value":"pct:50"}]}""" to "is not a value rgbColour takes",
+            """{"name":"A","values":[{"target":{"type":"fixture","key":"nope"},"attribute":"dimmer","value":"pct:50"}]}""" to "no fixture 'nope'",
+            """{"name":"A","values":[{"target":{"type":"group","key":"Nope"},"attribute":"dimmer","value":"pct:50"}]}""" to "no group 'Nope'",
+            """{"name":"A","values":[{"attribute":"dimmer","value":"pct:50"}]}""" to "target must be",
+            """{"name":"Taken","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"pct:10"}]}""" to "already exists",
             """{"name":"A"}""" to "Give 'values'",
         )) {
             val refused = call("create_look", arguments)
@@ -191,7 +191,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val created = call(
             "create_look",
-            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}],"apply":true}""",
+            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:200"}],"apply":true}""",
         )
         assertTrue(created.success, created.result)
         assertEquals("applied", created.json()["action"]!!.jsonPrimitive.content)
@@ -216,7 +216,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val created = call(
             "create_look",
-            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}]}""",
+            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:200"}]}""",
         )
         assertTrue(created.success, created.result)
         val lookId = created.json()["lookId"]!!.jsonPrimitive.int
@@ -238,7 +238,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val created = call(
             "create_look",
-            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:200"}]}""",
+            """{"name":"FOH","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:200"}]}""",
         )
         assertTrue(created.success, created.result)
         val lookId = created.json()["lookId"]!!.jsonPrimitive.int
@@ -258,7 +258,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         patchRig()
         val created = call(
             "create_look",
-            """{"name":"Steady","values":[{"target":{"type":"fixture","key":"hex-1"},"propertyName":"dimmerMode","value":"off"}]}""",
+            """{"name":"Steady","values":[{"target":{"type":"fixture","key":"hex-1"},"attribute":"dimmerMode","value":"off"}]}""",
         )
         assertTrue(created.success, created.result)
         assertEquals(listOf(LookRowDto("fixture", "hex-1", "dimmerMode", "52")), storedRows("Steady"))
@@ -270,8 +270,8 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Split","values":[
-                {"target":{"type":"group","key":"Mixed"},"propertyName":"rgbColour","value":"#0000ff"},
-                {"target":{"type":"fixture","key":"hex-1"},"propertyName":"rgbColour","value":"#ff0000"}
+                {"target":{"type":"group","key":"Mixed"},"attribute":"rgbColour","value":"#0000ff"},
+                {"target":{"type":"fixture","key":"hex-1"},"attribute":"rgbColour","value":"#ff0000"}
             ]}""",
         )
         assertTrue(created.success, created.result)
@@ -283,8 +283,8 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val twice = call(
             "create_look",
             """{"name":"Twice","values":[
-                {"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"pct:10"},
-                {"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"pct:90"}
+                {"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"pct:10"},
+                {"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"pct:90"}
             ]}""",
         )
         assertFalse(twice.success)
@@ -315,8 +315,8 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Shehds red","values":[
-                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"rgbColour","value":"#ff0000;w40"},
-                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"dimmer","value":"pct:100"}
+                {"target":{"type":"fixture","key":"shehds-1"},"attribute":"rgbColour","value":"#ff0000;w40"},
+                {"target":{"type":"fixture","key":"shehds-1"},"attribute":"dimmer","value":"pct:100"}
             ],"apply":true}""",
         )
         assertTrue(created.success, created.result)
@@ -343,9 +343,9 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val created = call(
             "create_look",
             """{"name":"Two tone","values":[
-                {"target":{"type":"group","key":"Spots"},"propertyName":"rgbColour","value":"#00ff00"},
-                {"target":{"type":"fixture","key":"shehds-1"},"propertyName":"rgbColour","value":"#ff0000"},
-                {"target":{"type":"fixture","key":"shehds-1.zone-2"},"propertyName":"rgbColour","value":"#0000ff"}
+                {"target":{"type":"group","key":"Spots"},"attribute":"rgbColour","value":"#00ff00"},
+                {"target":{"type":"fixture","key":"shehds-1"},"attribute":"rgbColour","value":"#ff0000"},
+                {"target":{"type":"fixture","key":"shehds-1.zone-2"},"attribute":"rgbColour","value":"#0000ff"}
             ]}""",
         )
         assertTrue(created.success, created.result)
@@ -412,7 +412,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
         val controller = state.show.fixtures.controllerOrNull(Universe(0, 0)) as MockDmxController
         val created = call(
             "create_look",
-            """{"name":"Old","values":[{"target":{"type":"fixture","key":"foh-1"},"propertyName":"dimmer","value":"dmx:150"}]}""",
+            """{"name":"Old","values":[{"target":{"type":"fixture","key":"foh-1"},"attribute":"dimmer","value":"dmx:150"}]}""",
         )
         assertTrue(created.success, created.result)
         val lookId = created.json()["lookId"]!!.jsonPrimitive.int
@@ -440,33 +440,33 @@ class McpLookValuesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `list_fixture_types names each type's settable properties when asked`() {
+    fun `list_fixture_types names each type's settable attributes when asked`() {
         val listed = runBlocking {
-            SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"mac-250","properties":true}""").jsonObject)
+            SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"mac-250","attributes":true}""").jsonObject)
         }
         assertTrue(listed.success, listed.result)
-        val properties = listed.json()["fixtureTypes"]!!.jsonArray.single().jsonObject["properties"]!!.jsonArray
+        val attributes = listed.json()["fixtureTypes"]!!.jsonArray.single().jsonObject["attributes"]!!.jsonArray
             .associateBy { it.jsonObject["name"]!!.jsonPrimitive.content }
-        val gobo = properties.getValue("gobo").jsonObject
+        val gobo = attributes.getValue("gobo").jsonObject
         assertEquals("setting", gobo["kind"]!!.jsonPrimitive.content)
         assertTrue("CONE" in gobo["options"]!!.jsonArray.map { it.jsonPrimitive.content })
-        assertEquals("slider", properties.getValue("dimmer").jsonObject["kind"]!!.jsonPrimitive.content)
+        assertEquals("slider", attributes.getValue("dimmer").jsonObject["kind"]!!.jsonPrimitive.content)
 
         val plain = runBlocking {
             SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"mac-250"}""").jsonObject)
         }
-        assertEquals(null, plain.json()["fixtureTypes"]!!.jsonArray.single().jsonObject["properties"], "off by default")
+        assertEquals(null, plain.json()["fixtureTypes"]!!.jsonArray.single().jsonObject["attributes"], "off by default")
     }
 
     @Test
     fun `list_fixture_types lists a blinder's cell colour and its whites`() {
         val listed = runBlocking {
-            SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"china-2-cell","properties":true}""").jsonObject)
+            SetupTools(state, tools).executeTool("list_fixture_types", Json.parseToJsonElement("""{"query":"china-2-cell","attributes":true}""").jsonObject)
         }
         assertTrue(listed.success, listed.result)
         val type = listed.json()["fixtureTypes"]!!.jsonArray.single().jsonObject
         assertTrue("colour" in type["capabilities"]!!.jsonArray.map { it.jsonPrimitive.content })
-        val colour = type["cellProperties"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "rgbColour" }
+        val colour = type["cellAttributes"]!!.jsonArray.map { it.jsonObject }.single { it["name"]!!.jsonPrimitive.content == "rgbColour" }
         assertEquals("colour", colour["category"]!!.jsonPrimitive.content)
         assertTrue("3000 K" in colour["whites"]!!.jsonPrimitive.content)
     }

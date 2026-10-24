@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.buildCombinedCueLayerRows
@@ -23,7 +23,7 @@ import uk.me.cormack.lighting7.state.SceneryService
  * a cue in the browser would otherwise mean reimplementing specificity, HTP/LTP, template
  * resolution and move-in-dark arming client-side. Every step here is the same code an actual
  * apply runs — [buildCombinedCueLayerRows] for the rows, a [CueAssignmentResolver] for the merge,
- * [PropertyChannelWriter] for the patch — so a preview and the GO that follows it cannot
+ * [AttributeChannelWriter] for the patch — so a preview and the GO that follows it cannot
  * disagree.
  *
  * Three deliberate limits, all worth knowing before building a UI on this:
@@ -50,7 +50,7 @@ data class PreviewCueResponse(
     val cueId: Int,
     val channels: List<PreviewChannel>,
     /**
-     * `fixtureKey.property` for each composed value that couldn't be resolved to channels — a
+     * `fixtureKey.attribute` for each composed value that couldn't be resolved to channels — a
      * missing fixture, or a property the patched fixture doesn't have. Advisory: the same
      * forgiving contract [buildCueAssignmentsForCue] uses, surfaced so a caller can see that a
      * preview is thinner than the cue.
@@ -157,12 +157,12 @@ private fun composePreview(
             // the plain fixture register does not hold.
             fixtures.untypedGroupableFixture(key.targetKey)
         } catch (_: IllegalStateException) {
-            skipped.add("${key.targetKey}.${key.propertyName}")
+            skipped.add("${key.targetKey}.${key.attribute}")
             continue
         }
-        val writes = PropertyChannelWriter.resolve(fixture, key.propertyName, value)
+        val writes = AttributeChannelWriter.resolve(fixture, key.attribute, value)
         if (writes.isEmpty()) {
-            skipped.add("${key.targetKey}.${key.propertyName}")
+            skipped.add("${key.targetKey}.${key.attribute}")
             continue
         }
         for (write in writes) {

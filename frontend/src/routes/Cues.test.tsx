@@ -94,7 +94,7 @@ function cue(id: number, name: string, over: Partial<Cue> = {}): Cue {
     name,
     layers: [],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [],
     cueStackId: null,
     cueStackName: null,

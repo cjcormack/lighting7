@@ -455,7 +455,7 @@ class Show(
             // Every patched property, from what composes it now. Effect-covered and parked keys are
             // skipped by the publish itself — an effect repaints its own on the next tick.
             step("republish the rig") {
-                val keys = PropertyChannelWriter.channelKeyIndex(fixtures).propertyKeys.values.flatten().toSet()
+                val keys = AttributeChannelWriter.channelKeyIndex(fixtures).attributeKeys.values.flatten().toSet()
                 fxEngine.programmer.republishKeys(keys)
             }
 

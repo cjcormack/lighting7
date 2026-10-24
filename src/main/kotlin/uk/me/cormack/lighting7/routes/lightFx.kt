@@ -150,7 +150,7 @@ data class AddFxRequest(
     val fxType: String,
     /** The fixture or cell to run on. Ignored when [targets] is sent. */
     val fixtureKey: String = "",
-    val propertyName: String,
+    val attribute: String,
     /**
      * One effect over a selection (effects plan D3): the fixtures, cells and groups in the order the
      * effect spreads across them, as a group's members are. One item is that fixture or group alone.
@@ -219,7 +219,7 @@ data class IndirectFxDto(
     val groupName: String,
     /** `group`, or `selection` for an effect over a selection that names the fixture (effects plan D3). */
     val targetType: String = TargetRef.Group.TYPE,
-    val propertyName: String,
+    val attribute: String,
     val cycle: Double,
     val blendMode: String,
     val isRunning: Boolean,
@@ -580,7 +580,7 @@ private fun FxInstance.toIndirectDto() = IndirectFxDto(
     fxType = fxTypeId,
     groupName = target.targetKey,
     targetType = target.targetRef.discriminator,
-    propertyName = target.propertyName,
+    attribute = target.attribute,
     cycle = timing.cycle,
     blendMode = blendMode.name,
     isRunning = isRunning,
@@ -655,7 +655,7 @@ internal fun buildFxInstance(state: State, request: AddFxRequest): FxInstance {
     markProgrammerOwned(instance, request.programmerOwned)
     if (request.targets != null) {
         require(state.show.fxEngine.fixtureKeysCoveredBy(instance).isNotEmpty()) {
-            "No fixture in targets has '${request.propertyName}'"
+            "No fixture in targets has '${request.attribute}'"
         }
     }
     return instance
@@ -666,14 +666,14 @@ private fun createTargetFromRequest(
     state: State,
     outputType: FxOutputType?,
 ): FxTarget {
-    request.targets?.let { return createTargetFromList(it, request.propertyName, state, outputType) }
+    request.targets?.let { return createTargetFromList(it, request.attribute, state, outputType) }
     require(request.fixtureKey.isNotBlank()) { "Name the effect's fixtureKey, or its targets" }
     // `untypedGroupableFixture`, as `FxSpawner.createFixtureTargetForCue` does: the two doors
     // must build the same target for the same cell, and the factory's fallback reads its catalogue.
     val fixture = try {
         state.show.fixtures.untypedGroupableFixture(request.fixtureKey)
     } catch (_: Exception) { null }
-    return FxTargetFactory.forFixture(request.fixtureKey, request.propertyName, outputType, fixture)
+    return FxTargetFactory.forFixture(request.fixtureKey, request.attribute, outputType, fixture)
 }
 
 /**
@@ -682,7 +682,7 @@ private fun createTargetFromRequest(
  */
 private fun createTargetFromList(
     targets: List<CueTargetDto>,
-    propertyName: String,
+    attribute: String,
     state: State,
     outputType: FxOutputType?,
 ): FxTarget {
@@ -703,18 +703,18 @@ private fun createTargetFromList(
     require(problems.isEmpty()) { problems.joinToString("; ") }
     val target = FxTargetsRef.of(refs)
     // No effect may drive a one-shot trigger or a fixture command on anything the list names.
-    TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "effect")
+    TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "effect")
         ?.let { throw TriggerNotStorableException(it) }
-    CommandIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "effect")
+    CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "effect")
         ?.let { throw CommandNotStorableException(it) }
     val fxTarget = when (target) {
-        is FxTargetsRef.Selection -> FxSpawner.createSelectionTarget(state, target, propertyName, outputType)
+        is FxTargetsRef.Selection -> FxSpawner.createSelectionTarget(state, target, attribute, outputType)
         is FxTargetsRef.Single -> when (val single = target.target) {
             is TargetRef.Fixture -> FxTargetFactory.forFixture(
-                single.key, propertyName, outputType, runCatching { fixtures.untypedGroupableFixture(single.key) }.getOrNull(),
+                single.key, attribute, outputType, runCatching { fixtures.untypedGroupableFixture(single.key) }.getOrNull(),
             )
             is TargetRef.Group -> FxTargetFactory.forGroup(
-                single.key, propertyName, outputType, fixtures.referenceFixtureFor(target, propertyName) as? Fixture,
+                single.key, attribute, outputType, fixtures.referenceFixtureFor(target, attribute) as? Fixture,
             )
         }
     }

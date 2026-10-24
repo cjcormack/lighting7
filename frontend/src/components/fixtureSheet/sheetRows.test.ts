@@ -4,15 +4,15 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
 import { chan, colourProp, positionProp, settingProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
-import type { PropertyDescriptor } from '@/store/fixtures'
+import type { AttributeDescriptor } from '@/store/fixtures'
 import { buildSheetRows, sheetRowKeys } from './sheetRows'
 
-const ids = (properties: PropertyDescriptor[]) =>
-  buildSheetRows(properties).map((g) => `${g.family}: ${g.rows.map((r) => r.id).join(', ')}`)
+const ids = (attributes: AttributeDescriptor[]) =>
+  buildSheetRows(attributes).map((g) => `${g.family}: ${g.rows.map((r) => r.id).join(', ')}`)
 
 describe('buildSheetRows', () => {
   it('gives a warm/cold white pair a Colour row beside its two white sliders', () => {
-    const cell: PropertyDescriptor[] = [
+    const cell: AttributeDescriptor[] = [
       sliderProp('warmWhite', 'white', chan(5)),
       sliderProp('coldWhite', 'white', chan(6)),
       whiteMixProp(chan(5), chan(6)),
@@ -26,7 +26,7 @@ describe('buildSheetRows', () => {
   })
 
   it('groups rows by family in D3 order, whatever order the desk lists them in', () => {
-    const spot: PropertyDescriptor[] = [
+    const spot: AttributeDescriptor[] = [
       settingProp('gobo', 'gobo', chan(9)),
       sliderProp('zoom', 'zoom', chan(8)),
       settingProp('macro', 'led_macro', chan(10)),
@@ -103,7 +103,7 @@ describe('buildSheetRows', () => {
   })
 
   it('leaves triggers and commands out — they are not controls', () => {
-    const trigger = { type: 'trigger', name: 'output1', displayName: 'Tube A', category: 'trigger', label: 'A', channel: chan(1), armChannel: chan(2), armName: 'master' } as PropertyDescriptor
+    const trigger = { type: 'trigger', name: 'output1', displayName: 'Tube A', category: 'trigger', label: 'A', channel: chan(1), armChannel: chan(2), armName: 'master' } as AttributeDescriptor
     const command = {
       type: 'command',
       name: 'reset',
@@ -114,7 +114,7 @@ describe('buildSheetRows', () => {
       confirm: true,
       channel: chan(3),
       dedicated: true,
-    } as unknown as PropertyDescriptor
+    } as unknown as AttributeDescriptor
     expect(buildSheetRows([trigger, command, sliderProp('dimmer', 'dimmer', chan(4))]).flatMap((g) => g.rows.map((r) => r.id))).toEqual([
       'dimmer',
     ])

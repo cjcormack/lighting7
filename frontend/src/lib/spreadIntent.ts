@@ -4,8 +4,8 @@ import type { AttributeFamily } from './attributeFamily'
 import { orderLabel } from './orderLabels'
 import {
   serializePaletteIntent,
-  palettePropertiesForFamily,
-  type PaletteProperty,
+  paletteAttributesForFamily,
+  type PaletteAttribute,
   type WhitePolicy,
 } from './paletteIntent'
 
@@ -47,13 +47,13 @@ export const POSITION_DEFAULT_SWING = 16
 export type SpreadEditorKind = 'colour' | 'percent' | 'position' | 'level'
 
 /** The properties of a family a spread can carry: the template vocabulary, minus the switch. */
-export function spreadPropertiesFor(family: AttributeFamily): PaletteProperty[] {
-  return palettePropertiesForFamily(family).filter((property) => property.intent !== 'switch')
+export function spreadAttributesFor(family: AttributeFamily): PaletteAttribute[] {
+  return paletteAttributesForFamily(family).filter((attribute) => attribute.intent !== 'switch')
 }
 
-/** The editor for a property's endpoints. Callers hand in a property from [spreadPropertiesFor]. */
-export function spreadEditorKind(property: PaletteProperty): SpreadEditorKind {
-  switch (property.intent) {
+/** The editor for a property's endpoints. Callers hand in a property from [spreadAttributesFor]. */
+export function spreadEditorKind(attribute: PaletteAttribute): SpreadEditorKind {
+  switch (attribute.intent) {
     case 'colour':
       return 'colour'
     case 'percent':
@@ -63,7 +63,7 @@ export function spreadEditorKind(property: PaletteProperty): SpreadEditorKind {
     case 'level':
       return 'level'
     case 'switch':
-      // Filtered out by [spreadPropertiesFor]; a switch reaching here is a caller's bug, and a
+      // Filtered out by [spreadAttributesFor]; a switch reaching here is a caller's bug, and a
       // level editor over 0–255 at least draws something rather than throwing mid-render.
       return 'level'
   }
@@ -75,8 +75,8 @@ export function spreadEditorKind(property: PaletteProperty): SpreadEditorKind {
  * travel — centre-relative (`pos:`, D3), 0 the centre on every head, so it never sits against a
  * hard stop the way an absolute degree about a guessed centre could.
  */
-export function defaultSpreadEndpoints(property: PaletteProperty): { from: SpreadEndpoint; to: SpreadEndpoint } {
-  switch (spreadEditorKind(property)) {
+export function defaultSpreadEndpoints(attribute: PaletteAttribute): { from: SpreadEndpoint; to: SpreadEndpoint } {
+  switch (spreadEditorKind(attribute)) {
     case 'colour':
       return {
         from: { kind: 'colour', hex: '#F5B342', policy: 'extract' },

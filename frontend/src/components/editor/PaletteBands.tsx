@@ -9,9 +9,9 @@ import { PalettePressButton, palettePressTitle } from '@/components/press/PressG
 import { NewPaletteFromSelectionSheet } from '@/components/programmer/NewPaletteFromSelectionSheet'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { usePress, type PressGesture, type PressInto, type PressPair } from '@/hooks/usePress'
-import { FAMILY_LABELS, maskGroupForFxFamily, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, attributeFamilyForFxFamily, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { paletteFits, type PaletteFit } from '@/lib/paletteOffer'
-import { palettePropertyFor } from '@/lib/paletteIntent'
+import { paletteAttributeFor } from '@/lib/paletteIntent'
 import { recentFirst } from '@/lib/paletteRecents'
 import { cn } from '@/lib/utils'
 import { isCueFx } from '@/components/fx/fxEditorModel'
@@ -30,12 +30,12 @@ import { EditorLabel } from './EditorLabel'
 
 /**
  * Can a value palette carry this property at all? Its rows are a closed vocabulary
- * (`PALETTE_PROPERTIES`), so a slider cell whose property is outside it — a speed, say — has no
+ * (`PALETTE_ATTRIBUTES`), so a slider cell whose property is outside it — a speed, say — has no
  * Palettes band and nothing to save. A setting cell (gobo, prism) passes `palettes={false}` to
  * [PaletteBands] whatever its property: a value palette cannot carry a slotted role (§4.3).
  */
-export function paletteCarries(property: string): boolean {
-  return palettePropertyFor(property) != null
+export function paletteCarries(attribute: string): boolean {
+  return paletteAttributeFor(attribute) != null
 }
 
 /**
@@ -60,7 +60,7 @@ export function paletteCarries(property: string): boolean {
 export function PaletteBands({
   projectId,
   family,
-  property,
+  attribute,
   targets,
   onSave,
   tools,
@@ -70,7 +70,7 @@ export function PaletteBands({
   projectId?: number
   family: AttributeFamily
   /** The cell's property — a Beam cell is offered the Beam palettes, and the effects, that set it. */
-  property: string
+  attribute: string
   /** The cell batch's heads, as a commit lands on them. */
   targets: readonly WriteTarget[]
   /** *Save as palette…* — the host mounts the sheet, outside its popover ([usePaletteSave]). */
@@ -90,21 +90,21 @@ export function PaletteBands({
   const cueProject = useCueBandProject()
   const bandProject = projectId ?? cueProject
   if (bandProject == null) return <>{children}</>
-  const carries = palettes && paletteCarries(property)
+  const carries = palettes && paletteCarries(attribute)
   return (
     <>
       {carries && (
         <PaletteBand
           projectId={bandProject}
           family={family}
-          property={property}
+          attribute={attribute}
           targets={pressTargets}
           families={families}
           emitters={emitters}
         />
       )}
       {children}
-      <FxBand projectId={bandProject} family={family} property={property} targets={pressTargets} families={families} />
+      <FxBand projectId={bandProject} family={family} attribute={attribute} targets={pressTargets} families={families} />
       {carries && projectId != null && <PaletteFooter projectId={projectId} canSave={targets.length > 0} onSave={onSave} tools={tools} />}
     </>
   )
@@ -130,7 +130,7 @@ export function PaletteBands({
 export function PaletteBand({
   projectId,
   family,
-  property,
+  attribute,
   targets,
   families,
   emitters,
@@ -139,7 +139,7 @@ export function PaletteBand({
 }: {
   projectId: number
   family: AttributeFamily
-  property?: string
+  attribute?: string
   /** Where a press lands — fixtures by key, a cell by its element key. */
   targets: readonly PaletteTarget[]
   /** The press's mask. */
@@ -161,7 +161,7 @@ export function PaletteBand({
     [press],
   )
   const presenceOf = (template: PaletteSummary) => pressPresence(into, cue, applied, targets, 'PALETTE', template.id)
-  const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters, property }), [family, emitters, property])
+  const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters, attribute }), [family, emitters, attribute])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'value' && paletteFits(t, fit))),
     [templates, fit],
@@ -409,7 +409,7 @@ export function usePaletteSave(
 export function FxBand({
   projectId,
   family,
-  property,
+  attribute,
   targets,
   families,
   scope,
@@ -417,7 +417,7 @@ export function FxBand({
 }: {
   projectId: number
   family: AttributeFamily
-  property: string
+  attribute: string
   /** Where a press lands — fixtures by key, a cell by its element key. */
   targets: readonly PaletteTarget[]
   /** The press's mask. */
@@ -441,7 +441,7 @@ export function FxBand({
     (template: PaletteSummary, gesture: PressGesture) => void press({ kind: 'palette', palette: template }, gesture),
     [press],
   )
-  const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters: null, property }), [family, property])
+  const fit = useMemo<PaletteFit>(() => ({ families: [family], emitters: null, attribute }), [family, attribute])
   const context = useMemo(() => ({ library, templates }), [library, templates])
   const offered = useMemo(
     () => recentFirst((templates ?? []).filter((t) => t.kind === 'fx' && paletteFits(t, fit, context))),
@@ -452,20 +452,20 @@ export function FxBand({
       cue != null
         ? []
         : (active ?? []).filter(
-            (e) => !e.leaving && sameProperty(e.propertyName, property) && fxReaches(e, targets, fixtures ?? []),
+            (e) => !e.leaving && sameAttribute(e.attribute, attribute) && fxReaches(e, targets, fixtures ?? []),
           ),
-    [cue, active, property, targets, fixtures],
+    [cue, active, attribute, targets, fixtures],
   )
   // An effect stored with no property of its own is the desk's to resolve per head, so it is listed
   // under its family — on any of the family's cells it reaches — rather than guessed at here.
   const stored = useMemo(() => {
     if (cue == null) return []
     return cue.effects.filter((e) =>
-      e.propertyName != null
-        ? sameProperty(e.propertyName, property) && storedFxReaches(e, targets, fixtures ?? [])
-        : maskGroupForFxFamily(e.family) === family && storedFxReaches({ ...e, propertyName: property }, targets, fixtures ?? []),
+      e.attribute != null
+        ? sameAttribute(e.attribute, attribute) && storedFxReaches(e, targets, fixtures ?? [])
+        : attributeFamilyForFxFamily(e.family) === family && storedFxReaches({ ...e, attribute: attribute }, targets, fixtures ?? []),
     )
-  }, [cue, family, property, targets, fixtures])
+  }, [cue, family, attribute, targets, fixtures])
 
   const [editingId, setEditingId] = useState<number | null>(null)
   const editAnchor = useRef<HTMLElement | null>(null)
@@ -614,7 +614,7 @@ export function FxBand({
           anchorRef={addRef}
           library="fx"
           family={family}
-          property={property}
+          attribute={attribute}
           pair={pair}
           fit={fit}
           offerNew={false}
@@ -626,7 +626,7 @@ export function FxBand({
 }
 
 /** An effect's property and a cell's are one where they name one thing — a colour is `rgbColour` or `colour`. */
-function sameProperty(effect: string, cell: string): boolean {
+function sameAttribute(effect: string, cell: string): boolean {
   if (effect === cell) return true
   const colour = (name: string) => name === 'rgbColour' || name === 'colour'
   return colour(effect) && colour(cell)

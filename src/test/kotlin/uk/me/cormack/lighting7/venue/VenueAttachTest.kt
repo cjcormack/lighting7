@@ -41,7 +41,7 @@ import uk.me.cormack.lighting7.models.DaoControlSurfaceBinding
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCues
 import uk.me.cormack.lighting7.models.DaoEffectTubeStates
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
@@ -294,8 +294,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             DaoPaletteRow.new { this.palette = palette; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "dimmer"; value = "pct:50"; sortOrder = 0 }
             DaoCueLayer.new { cue = DaoCue.find { DaoCues.project eq h.showId }.first(); this.palette = palette; targets = listOf(CueTargetDto("fixture", "panto-spot")) }
             DaoControlSurfaceBinding.new {
-                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureProperty"
-                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("panto-spot", "dimmer"))
+                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-8"; targetType = "fixtureAttribute"
+                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("panto-spot", "dimmer"))
             }
         }
         publish(h.venueId, "a house spot on 0:9")
@@ -366,7 +366,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             patch(h.showId, "hex-3").key = "hex-3b"
             RigKeyReferences.rewrite(show, mapOf("hex-3" to "hex-3b"), emptyMap(), emptyList(), keys)
             val cue = DaoCue.find { DaoCues.project eq h.showId }.first()
-            val assignment = DaoCuePropertyAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "200" }
+            val assignment = DaoCueAttributeAssignment.new { this.cue = cue; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "200" }
             val effect = DaoCueAdHocFxEntity.new {
                 this.cue = cue; targetType = FxTargetsRef.Selection.TYPE
                 targetKey = FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3b"), TargetRef.Fixture("hex-1"))).key
@@ -378,8 +378,8 @@ class VenueAttachTest : RouteIntegrationTest() {
             val palette = DaoPalette.new { project = show; name = "hex-3 focus" }
             val paletteRow = DaoPaletteRow.new { this.palette = palette; targetType = "fixture"; targetKey = "hex-3b"; attribute = "dimmer"; value = "90"; sortOrder = 0 }
             val binding = DaoControlSurfaceBinding.new {
-                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "fixtureProperty"
-                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureProperty("hex-3b", "dimmer"))
+                project = show; deviceTypeKey = "xtouch-mini"; controlId = "fader-3"; targetType = "fixtureAttribute"
+                targetPayload = BindingTargetJson.encodeToString<BindingTarget>(BindingTarget.FixtureAttribute("hex-3b", "dimmer"))
             }
             DaoScript.new { project = show; name = "Hex chase"; script = """fixture<Fixture>("hex-3b")""" }
             listOf(assignment.id.value, effect.id.value, lookRow.id.value, paletteRow.id.value, binding.id.value)
@@ -401,7 +401,7 @@ class VenueAttachTest : RouteIntegrationTest() {
         assertTrue(done.deadReferences.any { it.key == "hex-3b" && it.usedBy.any { u -> u.kind == "SCRIPT" } }, "a script is not rewritten: ${done.deadReferences}")
         transaction(state.database) {
             val (assignment, effect, lookRow, paletteRow, binding) = seeded
-            assertEquals("hex-3", DaoCuePropertyAssignment[assignment].targetKey)
+            assertEquals("hex-3", DaoCueAttributeAssignment[assignment].targetKey)
             assertEquals(
                 FxTargetsRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Fixture("hex-1"))).key,
                 DaoCueAdHocFxEntity[effect].targetKey,
@@ -409,7 +409,7 @@ class VenueAttachTest : RouteIntegrationTest() {
             )
             assertEquals("hex-3", DaoLookRow[lookRow].targetKey)
             assertEquals("hex-3", DaoPaletteRow[paletteRow].targetKey)
-            assertEquals(BindingTarget.FixtureProperty("hex-3", "dimmer"), BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[binding].targetPayload))
+            assertEquals(BindingTarget.FixtureAttribute("hex-3", "dimmer"), BindingTargetJson.decodeFromString<BindingTarget>(DaoControlSurfaceBinding[binding].targetPayload))
             assertEquals(0, DaoFixturePatch.find { (DaoFixturePatches.project eq h.showId) and (DaoFixturePatches.key eq "hex-3b") }.count(), "the show's row is the venue's now")
         }
     }
@@ -674,13 +674,13 @@ class VenueAttachTest : RouteIntegrationTest() {
         runBlocking { state.projectManager.switchProject(projectId) }
         state.show.fixtures.fixtures.sortedBy { it.key }.forEachIndexed { i, fixture ->
             val values = mapOf(
-                "dimmer" to CueAssignmentResolver.PropertyValue.Slider((40 + i * 9).toUByte()),
-                "rgbColour" to CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(200, 100 + i, 50))),
-                "position" to CueAssignmentResolver.PropertyValue.Position(pan = (90 + i).toUByte(), tilt = 150u),
+                "dimmer" to CueAssignmentResolver.AttributeValue.Slider((40 + i * 9).toUByte()),
+                "rgbColour" to CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(200, 100 + i, 50))),
+                "position" to CueAssignmentResolver.AttributeValue.Position(pan = (90 + i).toUByte(), tilt = 150u),
             )
-            for ((property, value) in values) {
+            for ((attribute, value) in values) {
                 runCatching {
-                    state.show.fxEngine.programmer.writeProperty(ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(fixture.key), property, value)
+                    state.show.fxEngine.programmer.writeAttribute(ProgrammerOwner.WEB, state.show.fixtures.untypedGroupableFixture(fixture.key), attribute, value)
                 }
             }
         }

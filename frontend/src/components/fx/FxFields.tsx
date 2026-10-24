@@ -14,7 +14,7 @@ import {
 import { CENTRE_MAX, CENTRE_MIN, centreToDmx, dmxToCentre } from '@/lib/positionScale'
 import type { FxLibraryEntry, FxParameterDef } from '@/store/fixtureFx'
 import { useSpeedMasterLiveQuery } from '@/store/speedMasters'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import { EditorLabel } from '../editor/EditorLabel'
 import { EditorReadout } from '../editor/EditorReadout'
 import { SheetField } from '../fixtureSheet/SheetField'
@@ -76,8 +76,8 @@ const CURVES = [
 
 /** The board's words for the built-ins' parameters; anything else is its name as words. */
 const PARAM_LABELS: Record<string, string> = {
-  panCenter: 'Pan',
-  tiltCenter: 'Tilt',
+  panCentre: 'Pan',
+  tiltCentre: 'Tilt',
   panRadius: 'Pan size',
   tiltRadius: 'Tilt size',
   panRange: 'Pan range',
@@ -116,8 +116,8 @@ export function FxFields({
   draft,
   scope,
   extendedChannels,
-  settingProperty,
-  propertyName,
+  settingAttribute,
+  attribute,
   paletteFamily,
   slotsFromRig = false,
   readOnly,
@@ -131,13 +131,13 @@ export function FxFields({
   scope: FxScope
   extendedChannels: ReturnType<typeof detectExtendedChannels>
   /** The setting the effect drives, where it drives one — a setting effect's `level`, Slot Steps' slots. */
-  settingProperty: SettingPropertyDescriptor | undefined
+  settingAttribute: SettingAttributeDescriptor | undefined
   /** The property the effect drives, where it has one — Palette Steps offers palettes naming it. */
-  propertyName?: string | null
+  attribute?: string | null
   /** An effect palette's family: Palette Steps offers only that family's palettes. */
   paletteFamily?: AttributeFamily | null
   /**
-   * Whether [settingProperty] stands for the whole rig rather than one head (an effect palette's):
+   * Whether [settingAttribute] stands for the whole rig rather than one head (an effect palette's):
    * Slot Steps then takes typed names too, and a name no option matches is on no patched head.
    */
   slotsFromRig?: boolean
@@ -169,9 +169,9 @@ export function FxFields({
       role={role}
       value={draft.parameters[param.name] ?? param.defaultValue}
       extendedChannels={extendedChannels}
-      settingProperty={param.name === 'level' ? settingProperty : undefined}
-      slotSetting={settingProperty}
-      propertyName={propertyName}
+      settingAttribute={param.name === 'level' ? settingAttribute : undefined}
+      slotSetting={settingAttribute}
+      attribute={attribute}
       paletteFamily={paletteFamily}
       slotsFromRig={slotsFromRig}
       readOnly={readOnly}
@@ -973,9 +973,9 @@ function ParamControl({
   role,
   value,
   extendedChannels,
-  settingProperty,
+  settingAttribute,
   slotSetting,
-  propertyName,
+  attribute,
   paletteFamily,
   slotsFromRig = false,
   readOnly,
@@ -985,10 +985,10 @@ function ParamControl({
   role: ReturnType<typeof paramRole>
   value: string
   extendedChannels: ReturnType<typeof detectExtendedChannels>
-  settingProperty: SettingPropertyDescriptor | undefined
+  settingAttribute: SettingAttributeDescriptor | undefined
   /** The setting a slot list names options of, where the effect drives one. */
-  slotSetting?: SettingPropertyDescriptor
-  propertyName?: string | null
+  slotSetting?: SettingAttributeDescriptor
+  attribute?: string | null
   paletteFamily?: AttributeFamily | null
   slotsFromRig?: boolean
   readOnly: boolean
@@ -998,13 +998,13 @@ function ParamControl({
   const label = paramLabel(param.name)
   const num = Number(value) || 0
 
-  if (settingProperty != null && settingProperty.options.length > 0) {
+  if (settingAttribute != null && settingAttribute.options.length > 0) {
     return (
       <SelectRow
         label="Setting"
         value={value}
         readOnly={readOnly}
-        options={settingProperty.options.map((o) => ({ value: String(o.level), label: o.displayName }))}
+        options={settingAttribute.options.map((o) => ({ value: String(o.level), label: o.displayName }))}
         onChange={(v) => onChange(v, true)}
       />
     )
@@ -1170,7 +1170,7 @@ function ParamControl({
         label={label}
         description={undefined}
         value={value}
-        propertyName={propertyName}
+        attribute={attribute}
         family={paletteFamily}
         readOnly={readOnly}
         onChange={(v) => onChange(v, true)}

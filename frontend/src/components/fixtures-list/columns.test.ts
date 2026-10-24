@@ -10,7 +10,7 @@ import {
   columnFamily,
   resolveCell,
   resolutionChannels,
-  resolutionPropertyNames,
+  resolutionAttributeNames,
 } from './columns'
 import { familyForCategory } from '@/lib/attributeFamily'
 import { chan, colourProp, positionProp, settingProp, sliderProp, whiteMixProp } from '@/test/fixtureFactories'
@@ -18,15 +18,15 @@ import { chan, colourProp, positionProp, settingProp, sliderProp, whiteMixProp }
 describe('resolveCell', () => {
   it('resolves the dimmer slider, and null when absent', () => {
     const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
-    expect(resolveCell([dimmer], 'dimmer')).toEqual({ kind: 'slider', property: dimmer })
+    expect(resolveCell([dimmer], 'dimmer')).toEqual({ kind: 'slider', attribute: dimmer })
     expect(resolveCell([sliderProp('zoom', 'zoom', chan(2))], 'dimmer')).toBeNull()
   })
 
   it('prefers a colour property over a colour wheel', () => {
     const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
     const wheel = settingProp('colourWheel', 'colour', chan(4))
-    expect(resolveCell([wheel, rgb], 'colour')).toEqual({ kind: 'colour', property: rgb })
-    expect(resolveCell([wheel], 'colour')).toEqual({ kind: 'colour-setting', property: wheel })
+    expect(resolveCell([wheel, rgb], 'colour')).toEqual({ kind: 'colour', attribute: rgb })
+    expect(resolveCell([wheel], 'colour')).toEqual({ kind: 'colour-setting', attribute: wheel })
     expect(resolveCell([], 'colour')).toBeNull()
   })
 
@@ -35,12 +35,12 @@ describe('resolveCell', () => {
     const warm = sliderProp('warmWhite', 'white', chan(5))
     const cold = sliderProp('coldWhite', 'white', chan(6))
     const res = resolveCell([warm, cold, mix], 'colour')
-    expect(res).toEqual({ kind: 'white-mix', property: mix })
+    expect(res).toEqual({ kind: 'white-mix', attribute: mix })
     expect(resolutionChannels(res)).toEqual([chan(5), chan(6)])
-    expect(resolutionPropertyNames(res)).toEqual(['rgbColour'])
+    expect(resolutionAttributeNames(res)).toEqual(['rgbColour'])
     // An RGB colour on the same head still wins.
     const rgb = colourProp('rgbColour', chan(1), chan(2), chan(3))
-    expect(resolveCell([mix, rgb], 'colour')).toEqual({ kind: 'colour', property: rgb })
+    expect(resolveCell([mix, rgb], 'colour')).toEqual({ kind: 'colour', attribute: rgb })
   })
 
   it('prefers a position descriptor, falling back to paired pan/tilt sliders', () => {
@@ -70,15 +70,15 @@ describe('resolveCell', () => {
     const tilt = sliderProp('tilt', 'tilt', chan(3), { axis: 'TILT', degMin: 0, degMax: 280 })
 
     const res = resolveCell([pos, pan, tilt], 'position')
-    expect(res).toMatchObject({ kind: 'position', property: pos, panProperty: pan, tiltProperty: tilt })
+    expect(res).toMatchObject({ kind: 'position', attribute: pos, panAttribute: pan, tiltAttribute: tilt })
     // The descriptor is still what the cell reads and writes.
-    expect(resolutionPropertyNames(res)).toEqual(['position'])
+    expect(resolutionAttributeNames(res)).toEqual(['position'])
     expect(resolutionChannels(res)).toEqual([chan(1), chan(3)])
 
     // An axis on another channel is not the descriptor's, so it is not attached.
     const elsewhere = resolveCell([positionProp('position', chan(5), chan(6)), pan, tilt], 'position')
-    expect(elsewhere).not.toHaveProperty('panProperty')
-    expect(elsewhere).not.toHaveProperty('tiltProperty')
+    expect(elsewhere).not.toHaveProperty('panAttribute')
+    expect(elsewhere).not.toHaveProperty('tiltAttribute')
   })
 
   it('requires both pan and tilt sliders', () => {
@@ -89,27 +89,27 @@ describe('resolveCell', () => {
   it('picks the first gobo wheel, keeping its descriptor shape', () => {
     const wheel1 = settingProp('gobo1', 'gobo', chan(1))
     const wheel2 = settingProp('gobo2', 'gobo', chan(2))
-    expect(resolveCell([wheel1, wheel2], 'gobo')).toEqual({ kind: 'setting', property: wheel1 })
+    expect(resolveCell([wheel1, wheel2], 'gobo')).toEqual({ kind: 'setting', attribute: wheel1 })
 
     const sliderWheel = sliderProp('gobo', 'gobo', chan(3))
-    expect(resolveCell([sliderWheel], 'gobo')).toEqual({ kind: 'slider', property: sliderWheel })
+    expect(resolveCell([sliderWheel], 'gobo')).toEqual({ kind: 'slider', attribute: sliderWheel })
   })
 
   it('picks the gobo wheel on the lowest channel, whatever the descriptor order', () => {
     // The Robe ColorSpot 575 as the backend's reflection emits it: rotating (ch 10) before static (ch 9).
     const rotating = settingProp('rotatingGobo', 'gobo', chan(10))
     const fixed = settingProp('staticGobo', 'gobo', chan(9))
-    expect(resolveCell([rotating, fixed], 'gobo')).toEqual({ kind: 'setting', property: fixed })
+    expect(resolveCell([rotating, fixed], 'gobo')).toEqual({ kind: 'setting', attribute: fixed })
   })
 
   it('resolves wheel-like strobe/speed as slider or setting by descriptor type', () => {
     const strobeSetting = settingProp('strobe', 'strobe', chan(1))
     expect(resolveCell([strobeSetting], 'strobe')).toEqual({
       kind: 'setting',
-      property: strobeSetting,
+      attribute: strobeSetting,
     })
     const speedSlider = sliderProp('speed', 'speed', chan(2))
-    expect(resolveCell([speedSlider], 'speed')).toEqual({ kind: 'slider', property: speedSlider })
+    expect(resolveCell([speedSlider], 'speed')).toEqual({ kind: 'slider', attribute: speedSlider })
   })
 })
 
@@ -130,23 +130,23 @@ describe('resolutionChannels', () => {
   })
 })
 
-describe('resolutionPropertyNames', () => {
+describe('resolutionAttributeNames', () => {
   it('names the single backing property for scalar-shaped columns', () => {
     const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
-    expect(resolutionPropertyNames(resolveCell([dimmer], 'dimmer'))).toEqual(['dimmer'])
+    expect(resolutionAttributeNames(resolveCell([dimmer], 'dimmer'))).toEqual(['dimmer'])
 
     const rgb = colourProp('rgbColour', chan(2), chan(3), chan(4))
-    expect(resolutionPropertyNames(resolveCell([rgb], 'colour'))).toEqual(['rgbColour'])
+    expect(resolutionAttributeNames(resolveCell([rgb], 'colour'))).toEqual(['rgbColour'])
 
     const wheel = settingProp('gobo', 'gobo', chan(5))
-    expect(resolutionPropertyNames(resolveCell([wheel], 'gobo'))).toEqual(['gobo'])
+    expect(resolutionAttributeNames(resolveCell([wheel], 'gobo'))).toEqual(['gobo'])
 
-    expect(resolutionPropertyNames(null)).toEqual([])
+    expect(resolutionAttributeNames(null)).toEqual([])
   })
 
   it('names the position descriptor when the fixture has one', () => {
     const pos = positionProp('position', chan(1), chan(2))
-    expect(resolutionPropertyNames(resolveCell([pos], 'position'))).toEqual(['position'])
+    expect(resolutionAttributeNames(resolveCell([pos], 'position'))).toEqual(['position'])
   })
 
   it('names both axes when position was paired from two sliders', () => {
@@ -155,7 +155,7 @@ describe('resolutionPropertyNames', () => {
     // channel sideband.
     const pan = sliderProp('pan', 'pan', chan(3), { axis: 'PAN' })
     const tilt = sliderProp('tilt', 'tilt', chan(4), { axis: 'TILT' })
-    expect(resolutionPropertyNames(resolveCell([pan, tilt], 'position'))).toEqual(['pan', 'tilt'])
+    expect(resolutionAttributeNames(resolveCell([pan, tilt], 'position'))).toEqual(['pan', 'tilt'])
   })
 })
 
@@ -178,7 +178,7 @@ describe('COLUMN_CATEGORY', () => {
     expect(columnFamily('dimmer')).toBe('INTENSITY')
     expect(columnFamily('strobe')).toBe('INTENSITY')
     expect(columnFamily('colour')).toBe('COLOUR')
-    // The synthetic pan/tilt pair, which has no `PropertyCategory` entry of its own.
+    // The synthetic pan/tilt pair, which has no `AttributeCategory` entry of its own.
     expect(columnFamily('position')).toBe('POSITION')
     expect(columnFamily('gobo')).toBe('BEAM')
     expect(columnFamily('zoom')).toBe('BEAM')

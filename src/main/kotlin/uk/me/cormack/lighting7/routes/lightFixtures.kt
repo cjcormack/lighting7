@@ -45,9 +45,9 @@ internal fun Fixture.details(fixtures: Fixtures): FixtureDetails {
                 firstChannel = this.firstChannel,
                 channelCount = this.channelCount,
                 channels = channels,
-                properties = this.generatePropertyDescriptors(),
+                attributes = this.generateAttributeDescriptors(),
                 elements = this.generateElementDescriptors(),
-                elementGroupProperties = this.generateElementGroupPropertyDescriptors(),
+                elementGroupAttributes = this.generateElementGroupAttributeDescriptors(),
                 mode = modeInfo,
                 capabilities = capabilities,
                 gelCode = patchMetadata?.gelCode,
@@ -72,11 +72,11 @@ private fun DmxFixture.detectCapabilities(): List<String> {
     if (this is MultiElementFixture<*>) {
         caps.add("multi-element")
         // Also detect capabilities available via element group properties
-        val egp = generateElementGroupPropertyDescriptors()
+        val egp = generateElementGroupAttributeDescriptors()
         if (egp != null) {
-            if ("dimmer" !in caps && egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" }) caps.add("dimmer")
-            if ("colour" !in caps && egp.any { it is GroupColourPropertyDescriptor }) caps.add("colour")
-            if ("position" !in caps && egp.any { it is GroupPositionPropertyDescriptor }) caps.add("position")
+            if ("dimmer" !in caps && egp.any { it is GroupSliderAttributeDescriptor && it.category == "dimmer" }) caps.add("dimmer")
+            if ("colour" !in caps && egp.any { it is GroupColourAttributeDescriptor }) caps.add("colour")
+            if ("position" !in caps && egp.any { it is GroupPositionAttributeDescriptor }) caps.add("position")
         }
     }
     return caps
@@ -109,8 +109,8 @@ internal fun Route.routeApiRestLightsFixtures(state: State) {
                 channelCount = info.channelCount,
                 isRegistered = info.typeKey in registeredTypeKeys,
                 capabilities = info.capabilities,
-                properties = info.properties,
-                elementGroupProperties = info.elementGroupProperties,
+                attributes = info.attributes,
+                elementGroupAttributes = info.elementGroupAttributes,
                 acceptsBeamAngle = info.acceptsBeamAngle,
                 acceptsGel = info.acceptsGel,
                 gelCompactDisplay = info.gelCompactDisplay.serialized(),
@@ -166,9 +166,9 @@ data class DmxFixtureDetails(
     val firstChannel: Int,
     val channelCount: Int,
     val channels: List<DmxFixtureChannelDetails>,
-    val properties: List<PropertyDescriptor>,
+    val attributes: List<AttributeDescriptor>,
     val elements: List<ElementDescriptor>?,
-    val elementGroupProperties: List<GroupPropertyDescriptor>?,
+    val elementGroupAttributes: List<GroupAttributeDescriptor>?,
     val mode: ModeInfo?,
     val capabilities: List<String>,
     override val compatibleLookIds: List<Int> = emptyList(),
@@ -199,7 +199,7 @@ data class ChannelRef(
 )
 
 @Serializable
-sealed interface PropertyDescriptor {
+sealed interface AttributeDescriptor {
     val name: String
     val displayName: String
     val category: String
@@ -208,7 +208,7 @@ sealed interface PropertyDescriptor {
 
 @Serializable
 @kotlinx.serialization.SerialName("slider")
-data class SliderPropertyDescriptor(
+data class SliderAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     override val category: String,
@@ -219,12 +219,12 @@ data class SliderPropertyDescriptor(
     val axis: String? = null,
     val degMin: Double? = null,
     val degMax: Double? = null,
-    /** A PAN slider's front in travel degrees (`@FixtureProperty.forwardDeg`), or null for the middle of its range. */
+    /** A PAN slider's front in travel degrees (`@FixtureAttribute.forwardDeg`), or null for the middle of its range. */
     val forwardDeg: Double? = null,
     val inverted: Boolean? = null,
     val focusNearM: Double? = null,
     val focusFarM: Double? = null,
-    /** The coarse property this slider is the low byte of (`@FixtureProperty.fineOf`), or null. */
+    /** The coarse property this slider is the low byte of (`@FixtureAttribute.fineOf`), or null. */
     val fineOf: String? = null,
     /** A GOBO_ROTATION slider's speed at DMX max in a rotate band, in RPM. */
     val rpmMax: Double? = null,
@@ -234,17 +234,17 @@ data class SliderPropertyDescriptor(
     val blade: String? = null,
     /** A SHUTTER slider's blade depth at DMX max, as a fraction of the field's diameter (0.5 the centre). */
     val depthMax: Double? = null,
-    /** The DMX at which the slider's proportional band starts (`@FixtureProperty.activeMin`), or null for [min]. */
+    /** The DMX at which the slider's proportional band starts (`@FixtureAttribute.activeMin`), or null for [min]. */
     val activeMin: Int? = null,
     /** The DMX at which it ends — above it the channel is effects, and the view holds the end value. Null for [max]. */
     val activeMax: Int? = null,
     /**
-     * A STROBE slider's bands (`@FixtureProperty.strobe`, fixture optics plan D12), in DMX order —
+     * A STROBE slider's bands (`@FixtureAttribute.strobe`, fixture optics plan D12), in DMX order —
      * what each range of the channel does to the light. Null on every other slider.
      */
     val strobeBands: List<StrobeBandInfo>? = null,
     /**
-     * On one of the fixture's own timing channels (`@FixtureProperty.timing`, fixture optics plan
+     * On one of the fixture's own timing channels (`@FixtureAttribute.timing`, fixture optics plan
      * D14), the families it stretches — `POSITION`, `BEAM`, `COLOUR` or `ALL`. Null on every other
      * slider. Drawn by the Stage view, never output.
      */
@@ -253,7 +253,7 @@ data class SliderPropertyDescriptor(
     val timingSecondsPerStep: Double? = null,
     /** The DMX from which a timing channel means "as fast as the fixture can", as 0 does; null for none. */
     val timingFastFrom: Int? = null,
-) : PropertyDescriptor
+) : AttributeDescriptor
 
 /**
  * One band of a STROBE channel on the wire: DMX [from]..[to] does [kind] (`CLOSED`, `OPEN`,
@@ -272,7 +272,7 @@ data class StrobeBandInfo(
 
 @Serializable
 @kotlinx.serialization.SerialName("colour")
-data class ColourPropertyDescriptor(
+data class ColourAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     val redChannel: ChannelRef,
@@ -282,20 +282,20 @@ data class ColourPropertyDescriptor(
     val amberChannel: ChannelRef? = null,
     val uvChannel: ChannelRef? = null,
     override val compactDisplay: String? = null
-) : PropertyDescriptor {
+) : AttributeDescriptor {
     override val category: String = "colour"
 }
 
 /**
  * A colour made by mixing a warm and a cold white (venue-visit plan D8): the head takes any colour
  * as the two whites' nearest mix, and its colour is the one the two channels make
- * (`fixture/property/WhiteMix.kt`, mirrored by `frontend/src/lib/whiteMix.ts`). [warmKelvin] and
+ * (`fixture/attribute/WhiteMix.kt`, mirrored by `frontend/src/lib/whiteMix.ts`). [warmKelvin] and
  * [coldKelvin] are the whites' declared temperatures. The two channels are also the head's own
  * WHITE sliders, listed beside it for direct control.
  */
 @Serializable
 @kotlinx.serialization.SerialName("whiteMix")
-data class WhiteMixPropertyDescriptor(
+data class WhiteMixAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     val warmChannel: ChannelRef,
@@ -303,13 +303,13 @@ data class WhiteMixPropertyDescriptor(
     val warmKelvin: Int,
     val coldKelvin: Int,
     override val compactDisplay: String? = null,
-) : PropertyDescriptor {
+) : AttributeDescriptor {
     override val category: String = "colour"
 }
 
 @Serializable
 @kotlinx.serialization.SerialName("position")
-data class PositionPropertyDescriptor(
+data class PositionAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     val panChannel: ChannelRef,
@@ -319,13 +319,13 @@ data class PositionPropertyDescriptor(
     val tiltMin: Int = 0,
     val tiltMax: Int = 255,
     override val compactDisplay: String? = null
-) : PropertyDescriptor {
+) : AttributeDescriptor {
     override val category: String = "position"
 }
 
 @Serializable
 @kotlinx.serialization.SerialName("setting")
-data class SettingPropertyDescriptor(
+data class SettingAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     override val category: String,
@@ -338,7 +338,7 @@ data class SettingPropertyDescriptor(
      * media overlays them (`docs/fixtures-engineering.md` §"Fitted media").
      */
     val media: String? = null,
-) : PropertyDescriptor
+) : AttributeDescriptor
 
 /**
  * A **one-shot trigger** (stage-view plan session 9, D15) — a cannon's tube. Not a control: nothing
@@ -349,7 +349,7 @@ data class SettingPropertyDescriptor(
  */
 @Serializable
 @kotlinx.serialization.SerialName("trigger")
-data class TriggerPropertyDescriptor(
+data class TriggerAttributeDescriptor(
     override val name: String,
     override val displayName: String,
     /** The short name an event row and a button use ("A"). */
@@ -358,7 +358,7 @@ data class TriggerPropertyDescriptor(
     val armChannel: ChannelRef,
     /** The arm channel's name — never a property, refused by name wherever a row names it. */
     val armName: String,
-) : PropertyDescriptor {
+) : AttributeDescriptor {
     override val category: String = "trigger"
     override val compactDisplay: String? = null
 }
@@ -372,7 +372,7 @@ data class TriggerPropertyDescriptor(
  */
 @Serializable
 @kotlinx.serialization.SerialName("command")
-data class CommandPropertyDescriptor(
+data class CommandAttributeDescriptor(
     override val name: String,
     /** The menu item ("Reset scroller"). */
     override val displayName: String,
@@ -389,7 +389,7 @@ data class CommandPropertyDescriptor(
     val role: String? = null,
     /** A lamp strike's restrike time: how long after the lamp went off it can be struck again. */
     val restrikeMs: Long? = null,
-) : PropertyDescriptor {
+) : AttributeDescriptor {
     override val category: String = "command"
     override val compactDisplay: String? = null
 }
@@ -436,7 +436,7 @@ data class ElementDescriptor(
     val index: Int,
     val key: String,
     val displayName: String,
-    val properties: List<PropertyDescriptor>
+    val attributes: List<AttributeDescriptor>
 )
 
 @Serializable
@@ -454,8 +454,8 @@ data class FixtureTypeDetails(
     val channelCount: Int?,
     val isRegistered: Boolean,
     val capabilities: List<String>,
-    val properties: List<PropertyDescriptor>,
-    val elementGroupProperties: List<GroupPropertyDescriptor>?,
+    val attributes: List<AttributeDescriptor>,
+    val elementGroupAttributes: List<GroupAttributeDescriptor>?,
     val acceptsBeamAngle: Boolean = false,
     val acceptsGel: Boolean = false,
     val gelCompactDisplay: String? = null,

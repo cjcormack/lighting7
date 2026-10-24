@@ -35,7 +35,7 @@ export const SELECTION_TARGET_TYPE = 'selection' as const
 export interface LookRow {
   targetType: LookTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
   fadeDurationMs?: number | null
   /** The cell this row is on, by its own full key (`shehds-1.zone-2`). Null = the whole fixture. */
@@ -60,7 +60,7 @@ export interface LookFx {
   targetKey: string
   fxType: string
   family: string
-  propertyName?: string | null
+  attribute?: string | null
   cycle: number
   blendMode: string
   order: string
@@ -232,7 +232,7 @@ export interface ToggleLookRequest {
   targets: ToggleLookTarget[]
   /**
    * The selection's attribute mask (multi-screen plan D4, D5): the layer lands with
-   * `propertyMask = mask ∩ the Look's families`, the cook skips the rows outside it, and the
+   * `attributeMask = mask ∩ the Look's families`, the cook skips the rows outside it, and the
    * response names them; nothing inside is 400 `LOOK_OUTSIDE_MASK`. Absent is every attribute.
    * Tested on the **on** arm only — an off press comes off under any mask.
    */

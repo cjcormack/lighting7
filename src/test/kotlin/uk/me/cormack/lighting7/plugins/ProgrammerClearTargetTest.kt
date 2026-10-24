@@ -47,8 +47,8 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
             state, ProgrammerClearTargetInMessage(targetType, targetKey, fadeMs, requestId = "r1"),
         )
 
-    private fun set(key: String, property: String, value: CueAssignmentResolver.PropertyValue) =
-        ProgrammerHandler.setTyped(state, TargetRef.Fixture(key), property, value, fadeMs = 0)
+    private fun set(key: String, attribute: String, value: CueAssignmentResolver.AttributeValue) =
+        ProgrammerHandler.setTyped(state, TargetRef.Fixture(key), attribute, value, fadeMs = 0)
 
     private val store get() = state.show.programmerStore
     private val engine get() = state.show.fxEngine
@@ -60,13 +60,13 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 60)
-        set("bar.pixel-2", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(200, 0, 0))))
-        set("bar.pixel-3", "white", CueAssignmentResolver.PropertyValue.Slider(90u))
-        engine.programmer.writeProperty(
+        set("bar.pixel-2", "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(200, 0, 0))))
+        set("bar.pixel-3", "white", CueAssignmentResolver.AttributeValue.Slider(90u))
+        engine.programmer.writeAttribute(
             ProgrammerOwner.SURFACE, state.show.fixtures.untypedGroupableFixture("bar.pixel-3"), "white",
-            CueAssignmentResolver.PropertyValue.Slider(120u),
+            CueAssignmentResolver.AttributeValue.Slider(120u),
         )
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
 
         val answer = release("fixture", "bar")
         assertNull(answer.error)
@@ -100,7 +100,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
             source = LayerSource.look(look.id, UUID.fromString(look.uuid), look.name),
             targets = listOf(CueTargetDto("fixture", "hex-1")),
         )
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(50u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(50u))
         assertEquals(
             listOf("web", "layers"),
             store.slotsFor("hex-1", "dimmer").map { it.owner.id },
@@ -155,8 +155,8 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `the release fades at the requested time, in one publish`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
-        set("hex-1", "uv", CueAssignmentResolver.PropertyValue.Slider(90u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
+        set("hex-1", "uv", CueAssignmentResolver.AttributeValue.Slider(90u))
         val before = controller().changesTo(1).size
 
         release("fixture", "hex-1", fadeMs = 1_500)
@@ -171,7 +171,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `a key a stopped local effect was painting fades with the rest`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
         val effect = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true)
         val before = controller().changesTo(1).size
 
@@ -208,7 +208,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `at no fade a Release stops its local effects at once`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
         val fxId = FxTestSupport.start(state, "Pulse", "hex-1", "dimmer", programmerBand = true).id
 
         release("fixture", "hex-1")
@@ -231,7 +231,7 @@ class ProgrammerClearTargetTest : RouteIntegrationTest() {
     fun `the answer goes to the asking socket`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        set("hex-1", "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u))
+        set("hex-1", "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u))
         val client = createWsClient()
         client.webSocket("/api") {
             sendSerialized<InMessage>(ProgrammerClearTargetInMessage("fixture", "hex-1", requestId = "x"))

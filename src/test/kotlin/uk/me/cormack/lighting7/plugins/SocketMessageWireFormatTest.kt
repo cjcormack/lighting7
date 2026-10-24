@@ -39,7 +39,7 @@ import kotlin.test.assertTrue
  *
  * One inbound + one outbound representative per domain; the goal is structural coverage,
  * not exhaustive per-leaf testing. Domain-specific field-level tests (e.g. programmer
- * setProperty value parsing) live in the per-domain test file.
+ * setAttribute value parsing) live in the per-domain test file.
  */
 class SocketMessageWireFormatTest {
 
@@ -327,12 +327,12 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `surface domain — surfaceEncoderBank set and state cross the wire`() {
-        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","propertyName":"colour"}"""
+        val raw = """{"type":"surfaceEncoderBank.set","deviceTypeKey":"akai-mini","attribute":"colour"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceEncoderBankSetInMessage>(decoded)
         assertEquals("akai-mini", leaf.deviceTypeKey)
-        assertEquals("colour", leaf.propertyName)
+        assertEquals("colour", leaf.attribute)
 
         assertIs<SurfaceEncoderBankStateInMessage>(
             json.decodeFromString<InMessage>("""{"type":"surfaceEncoderBank.state"}"""),
@@ -344,18 +344,18 @@ class SocketMessageWireFormatTest {
         val encoded = json.encodeToString(out)
         assertTrue(encoded.contains(""""type":"surfaceEncoderBank.state""""), encoded)
         // A hue selection carries no axis on the wire; another axis is spelled by its serial name.
-        assertTrue(encoded.contains(""""akai-mini":{"propertyName":"colour"}"""), encoded)
-        assertTrue(encoded.contains(""""x-touch":{"propertyName":"rgbColour","colourAxis":"saturation"}"""), encoded)
+        assertTrue(encoded.contains(""""akai-mini":{"attribute":"colour"}"""), encoded)
+        assertTrue(encoded.contains(""""x-touch":{"attribute":"rgbColour","colourAxis":"saturation"}"""), encoded)
     }
 
     @Test
     fun `surface domain — surfaceEncoderBank set carries a colour axis, and defaults to none`() {
         val withAxis = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour","colourAxis":"hueFine"}""",
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour","colourAxis":"hueFine"}""",
         )
         assertEquals(ColourAxis.HUE_FINE, assertIs<SurfaceEncoderBankSetInMessage>(withAxis).colourAxis)
         val without = json.decodeFromString<InMessage>(
-            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","propertyName":"rgbColour"}""",
+            """{"type":"surfaceEncoderBank.set","deviceTypeKey":"x-touch","attribute":"rgbColour"}""",
         )
         assertEquals(null, assertIs<SurfaceEncoderBankSetInMessage>(without).colourAxis)
     }
@@ -366,12 +366,12 @@ class SocketMessageWireFormatTest {
             "type":"surfaceLearn.commit",
             "sessionId":"s-1",
             "bank":"A",
-            "target":{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"dimmer"}
+            "target":{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}
         }"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<SurfaceInMessage>(decoded)
         val leaf = assertIs<SurfaceLearnCommitInMessage>(decoded)
-        val target = assertIs<BindingTarget.FixtureProperty>(leaf.target)
+        val target = assertIs<BindingTarget.FixtureAttribute>(leaf.target)
         assertEquals("hex-1", target.fixtureKey)
     }
 
@@ -541,7 +541,7 @@ class SocketMessageWireFormatTest {
 
     @Test
     fun `programmer domain — set routes via ProgrammerInMessage`() {
-        val raw = """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+        val raw = """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200"}"""
         val decoded = json.decodeFromString<InMessage>(raw)
         assertIs<ProgrammerInMessage>(decoded)
         val leaf = assertIs<ProgrammerSetInMessage>(decoded)
@@ -591,12 +591,12 @@ class SocketMessageWireFormatTest {
         // release) rather than sending targetType=group. Optional, so existing senders are
         // unaffected.
         val withHint = json.decodeFromString<InMessage>(
-            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200","sourceGroup":"front-wash"}"""
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200","sourceGroup":"front-wash"}"""
         )
         assertEquals("front-wash", assertIs<ProgrammerSetInMessage>(withHint).sourceGroup)
 
         val without = json.decodeFromString<InMessage>(
-            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
+            """{"type":"programmer.set","targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200"}"""
         )
         assertEquals(null, assertIs<ProgrammerSetInMessage>(without).sourceGroup)
     }
@@ -626,7 +626,7 @@ class SocketMessageWireFormatTest {
             blind = false,
             entries = listOf(
                 ProgrammerEntryDto(
-                    targetKey = "hex-1", propertyName = "dimmer", value = "200",
+                    targetKey = "hex-1", attribute = "dimmer", value = "200",
                     owner = "web", touched = true, sourceGroup = null, owners = listOf("web"),
                 ),
             ),

@@ -78,8 +78,8 @@ export function CueValueGrid({
       textFilter: '',
     })
 
-    const lookup = (targetKey: string, propertyName: string) =>
-      cooked.rows.get(lookRowKey(targetKey, propertyName))
+    const lookup = (targetKey: string, attribute: string) =>
+      cooked.rows.get(lookRowKey(targetKey, attribute))
 
     // Two passes: resolve every row's cells, then keep the columns something actually filled. A
     // cue with no position values should not be read against an empty Position column.
@@ -203,7 +203,7 @@ function layerFor(
   const names = new Set<string>()
   for (const cell of cells) {
     for (const key of cell.keys) {
-      const hit = layerByKey.get(lookRowKey(key.targetKey, key.propertyName))
+      const hit = layerByKey.get(lookRowKey(key.targetKey, key.attribute))
       if (hit?.name) names.add(hit.name)
     }
   }

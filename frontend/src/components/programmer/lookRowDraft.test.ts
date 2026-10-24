@@ -6,7 +6,7 @@ import type { LookRow } from '@/api/looksApi'
 const row = (over: Partial<LookRow>): LookRow => ({
   targetType: 'fixture',
   targetKey: 'a',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   value: '128',
   ...over,
 })
@@ -73,7 +73,7 @@ describe('LookRowDraft', () => {
       draft.set('a', 'dimmer', '200')
       const out = draft.applyTo([row({ fadeDurationMs: 1500, sortOrder: 3 })])
       expect(out).toEqual([
-        { targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '200', fadeDurationMs: 1500, sortOrder: 3 },
+        { targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '200', fadeDurationMs: 1500, sortOrder: 3 },
       ])
     })
 
@@ -85,7 +85,7 @@ describe('LookRowDraft', () => {
       expect(out[1]).toEqual({
         targetType: 'fixture',
         targetKey: 'b',
-        propertyName: 'dimmer',
+        attribute: 'dimmer',
         value: '64',
       })
     })
@@ -118,7 +118,7 @@ describe('LookRowDraft', () => {
       draft.set('Front Left', 'dimmer', '77')
       const out = draft.applyTo([])
       expect(out).toEqual([
-        { targetType: 'fixture', targetKey: 'Front Left', propertyName: 'dimmer', value: '77' },
+        { targetType: 'fixture', targetKey: 'Front Left', attribute: 'dimmer', value: '77' },
       ])
     })
 

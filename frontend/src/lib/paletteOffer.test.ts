@@ -18,7 +18,7 @@ function palette(over: Partial<PaletteSummary>): PaletteSummary {
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff0000' }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff0000' }],
     fx: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -37,11 +37,11 @@ describe('paletteFits', () => {
   })
 
   it('narrows a Beam offer to the palettes with a row for the property', () => {
-    const wide = palette({ family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
-    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], property: 'zoom' })).toBe(true)
-    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], property: 'iris' })).toBe(false)
+    const wide = palette({ family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] })
+    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], attribute: 'zoom' })).toBe(true)
+    expect(paletteFits(wide, { families: ['BEAM'], emitters: [], attribute: 'iris' })).toBe(false)
     // A colour cell's property says nothing about which colour palettes fit: only Beam is narrowed.
-    expect(paletteFits(palette({}), { families: ['COLOUR'], emitters: [], property: 'white' })).toBe(true)
+    expect(paletteFits(palette({}), { families: ['COLOUR'], emitters: [], attribute: 'white' })).toBe(true)
   })
 
   it('narrows a Beam cell’s effect palettes to the property the effect drives', () => {
@@ -52,19 +52,19 @@ describe('paletteFits', () => {
         rows: [],
         fx: { fxType, family: 'beam', cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL', parameters: {}, ...extra },
       })
-    const zoomFit = { families: ['BEAM' as const], emitters: null, property: 'zoom' }
-    const library = [{ name: 'ZoomWave', compatibleProperties: ['zoom'] }, { name: 'IrisPulse', compatibleProperties: ['iris'] }]
+    const zoomFit = { families: ['BEAM' as const], emitters: null, attribute: 'zoom' }
+    const library = [{ name: 'ZoomWave', compatibleAttributes: ['zoom'] }, { name: 'IrisPulse', compatibleAttributes: ['iris'] }]
     // A beam built-in by the library's property.
     expect(paletteFits(effect('ZoomWave'), zoomFit, { library })).toBe(true)
     expect(paletteFits(effect('IrisPulse'), zoomFit, { library })).toBe(false)
     // Slot Steps by the setting it names.
-    expect(paletteFits(effect('SlotSteps', { propertyName: 'gobo' }), { ...zoomFit, property: 'gobo' })).toBe(true)
-    expect(paletteFits(effect('SlotSteps', { propertyName: 'prism' }), { ...zoomFit, property: 'gobo' })).toBe(false)
+    expect(paletteFits(effect('SlotSteps', { attribute: 'gobo' }), { ...zoomFit, attribute: 'gobo' })).toBe(true)
+    expect(paletteFits(effect('SlotSteps', { attribute: 'prism' }), { ...zoomFit, attribute: 'gobo' })).toBe(false)
     // Palette Steps by its palettes' rows.
-    const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] })
+    const wide = palette({ uuid: 'w', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] })
     const steps = effect('PaletteSteps', { parameters: { palettes: 'pal:w' } })
     expect(paletteFits(steps, zoomFit, { palettes: [wide] })).toBe(true)
-    expect(paletteFits(steps, { ...zoomFit, property: 'iris' }, { palettes: [wide] })).toBe(false)
+    expect(paletteFits(steps, { ...zoomFit, attribute: 'iris' }, { palettes: [wide] })).toBe(false)
     // Without what it needs to read, it is not narrowed.
     expect(paletteFits(effect('IrisPulse'), zoomFit)).toBe(true)
   })

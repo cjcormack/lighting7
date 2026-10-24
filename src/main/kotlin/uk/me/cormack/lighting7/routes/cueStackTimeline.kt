@@ -11,12 +11,12 @@ import org.jetbrains.exposed.v1.core.dao.id.EntityID
 import org.jetbrains.exposed.v1.core.inList
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.FxRegistry
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.TimingSource
-import uk.me.cormack.lighting7.fx.maskGroupForFxFamily
+import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
 import uk.me.cormack.lighting7.fx.perFixtureRowTargetsOf
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.toMaskNames
 import uk.me.cormack.lighting7.models.*
@@ -145,7 +145,7 @@ private class TimelineReads(
             enabled = layer.enabled,
             amount = layer.amount,
             blendMode = layer.blendMode,
-            propertyMask = layer.attributeMask,
+            attributeMask = layer.attributeMask,
             stomp = layer.stomp,
             timed = layer.delay != null || layer.interval != null || layer.randomWindow != null,
             delayMs = layer.delay?.toMillis(),
@@ -166,7 +166,7 @@ private class TimelineReads(
             uuid = row.uuid.toString(),
             runUuid = row.runUuid?.toString(),
             fxType = dto.fxType,
-            propertyName = dto.propertyName,
+            attribute = dto.attribute,
             targetType = dto.targetType,
             targetKey = dto.targetKey,
             family = fxFamilyOf(dto, heads)?.name,
@@ -202,19 +202,19 @@ private class TimelineReads(
         if (fixtures != null) {
             look.derivedFamilyGroups(fixtures).toMaskNames()
         } else {
-            look.effects.mapNotNullTo(LinkedHashSet()) { maskGroupForFxFamily(it.family) }.toMaskNames()
+            look.effects.mapNotNullTo(LinkedHashSet()) { attributeFamilyForFxFamily(it.family) }.toMaskNames()
         }
 
     /**
      * The family of the property an effect drives, as Record reads it (`fxFamily`): its first
      * head's property's group, else its library category's.
      */
-    private fun fxFamilyOf(effect: CueAdHocFxDto, heads: List<String>): PropertyMaskGroup? {
-        val byCategory = maskGroupForFxFamily(effect.family)
-        val property = effect.propertyName ?: return byCategory
+    private fun fxFamilyOf(effect: CueAdHocFxDto, heads: List<String>): AttributeFamily? {
+        val byCategory = attributeFamilyForFxFamily(effect.family)
+        val attribute = effect.attribute ?: return byCategory
         val fixture = heads.firstOrNull()?.let { key -> runCatching { fixtures?.untypedGroupableFixture(key) }.getOrNull() }
             ?: return byCategory
-        return maskGroupForProperty(fixture, property) ?: byCategory
+        return familyForAttribute(fixture, attribute) ?: byCategory
     }
 
     /**
@@ -286,7 +286,7 @@ internal data class TimelineSourceDto(
     val id: Int,
     val uuid: String,
     val name: String,
-    /** `PropertyMaskGroup` names: a Look's from its rows and effects, a palette's its one family. */
+    /** `AttributeFamily` names: a Look's from its rows and effects, a palette's its one family. */
     val families: List<String>,
 )
 
@@ -304,7 +304,7 @@ internal data class TimelineLayerDto(
     val enabled: Boolean,
     val amount: Double,
     val blendMode: String,
-    val propertyMask: String?,
+    val attributeMask: String?,
     val stomp: Boolean,
     /** A delay, interval or random window: the layer fires on a timer rather than at the GO. */
     val timed: Boolean,
@@ -321,11 +321,11 @@ internal data class TimelineFxDto(
     val uuid: String,
     val runUuid: String?,
     val fxType: String,
-    val propertyName: String?,
+    val attribute: String?,
     /** The target as the desk stores it (`CueAdHocFxDto.canonicalTarget`), so a column keys on one spelling. */
     val targetType: String,
     val targetKey: String,
-    /** The `PropertyMaskGroup` of the property it drives, or null for none. */
+    /** The `AttributeFamily` of the property it drives, or null for none. */
     val family: String?,
     val heads: List<String>,
     val settings: TimelineFxSettingsDto,

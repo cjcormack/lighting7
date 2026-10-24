@@ -1,9 +1,9 @@
 package uk.me.cormack.lighting7.fixture.dmx
 
 import uk.me.cormack.lighting7.dmx.EasingCurve
-import uk.me.cormack.lighting7.fixture.property.Colour
-import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.WhiteMix
+import uk.me.cormack.lighting7.fixture.attribute.Colour
+import uk.me.cormack.lighting7.fixture.attribute.Slider
+import uk.me.cormack.lighting7.fixture.attribute.WhiteMix
 import java.awt.Color
 
 /**

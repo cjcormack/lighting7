@@ -23,7 +23,7 @@ describe('fxSummaryTypes speed-master threading', () => {
     const e: LookFx = {
       targetType: 'deferred',
       targetKey: '',
-      fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer',
+      fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
       parameters: {}, speedMasterUuid: MASTER,
@@ -34,7 +34,7 @@ describe('fxSummaryTypes speed-master threading', () => {
   it('fromCueAdHocFx carries it', () => {
     const e: CueAdHocFx = {
       targetType: 'fixture', targetKey: 'hex-1', fxType: 'Pulse', family: 'intensity',
-      propertyName: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
+      attribute: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
       parameters: {}, speedMasterUuid: MASTER,
     }
@@ -43,7 +43,7 @@ describe('fxSummaryTypes speed-master threading', () => {
 
   it('fromFixtureDirectFx carries it', () => {
     const e: FixtureDirectFx = {
-      id: 1, fxType: 'Pulse', targetKey: 'hex-1', propertyName: 'dimmer',
+      id: 1, fxType: 'Pulse', targetKey: 'hex-1', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, isGroupTarget: false, order: null,
       elementFilter: null, timing: 'CYCLE', cueId: null,
@@ -54,7 +54,7 @@ describe('fxSummaryTypes speed-master threading', () => {
 
   it('fromFixtureIndirectFx carries it', () => {
     const e: FixtureIndirectFx = {
-      id: 1, fxType: 'Pulse', groupName: 'wash', propertyName: 'dimmer',
+      id: 1, fxType: 'Pulse', groupName: 'wash', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, order: 'NORMAL', timing: 'CYCLE',
       speedMasterUuid: MASTER,
@@ -64,7 +64,7 @@ describe('fxSummaryTypes speed-master threading', () => {
 
   it('fromGroupActiveFx carries it', () => {
     const e: GroupActiveFx = {
-      id: 1, fxType: 'Pulse', propertyName: 'dimmer', cycle: 1,
+      id: 1, fxType: 'Pulse', attribute: 'dimmer', cycle: 1,
       blendMode: 'OVERRIDE', order: 'NORMAL', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, elementMode: null, elementFilter: null,
       timing: 'CYCLE', cueId: null, speedMasterUuid: MASTER,
@@ -76,7 +76,7 @@ describe('fxSummaryTypes speed-master threading', () => {
     const e: LookFx = {
       targetType: 'deferred',
       targetKey: '',
-      fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer',
+      fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
       parameters: {},
@@ -97,7 +97,7 @@ describe('fxSummaryTypes rate-master threading', () => {
     const e: LookFx = {
       targetType: 'deferred',
       targetKey: '',
-      fxType: 'CandleFlicker', family: 'intensity', propertyName: 'dimmer',
+      fxType: 'CandleFlicker', family: 'intensity', attribute: 'dimmer',
       cycle: 4, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
       parameters: {}, speedMasterUuid: MASTER, rateSpeedMasterUuid: RATE,
@@ -110,7 +110,7 @@ describe('fxSummaryTypes rate-master threading', () => {
   it('fromCueAdHocFx carries it', () => {
     const e: CueAdHocFx = {
       targetType: 'fixture', targetKey: 'hex-1', fxType: 'CandleFlicker',
-      family: 'intensity', propertyName: 'dimmer', cycle: 4,
+      family: 'intensity', attribute: 'dimmer', cycle: 4,
       blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0,
       elementMode: null, elementFilter: null, timing: null,
       parameters: {}, rateSpeedMasterUuid: RATE,
@@ -122,7 +122,7 @@ describe('fxSummaryTypes rate-master threading', () => {
     const e: LookFx = {
       targetType: 'deferred',
       targetKey: '',
-      fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer',
+      fxType: 'Pulse', family: 'intensity', attribute: 'dimmer',
       cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, timing: null,
       parameters: {},

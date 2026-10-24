@@ -28,7 +28,7 @@ data class FxDto(
      */
     val fxType: String,
     /**
-     * The fixture or group key, *without* the property suffix — [propertyName] carries that. A
+     * The fixture or group key, *without* the property suffix — [attribute] carries that. A
      * selection's is its canonical key; [targets] lists it.
      */
     val targetKey: String,
@@ -36,7 +36,7 @@ data class FxDto(
     val targetType: String,
     /** A selection's fixtures and groups, in order; null for a fixture or a group. */
     val targets: List<CueTargetDto>? = null,
-    val propertyName: String,
+    val attribute: String,
     val cycle: Double,
     val blendMode: String,
     val isRunning: Boolean,
@@ -164,7 +164,7 @@ internal fun FxInstance.toFxDto(
         targetKey = target.targetKey,
         targetType = target.targetRef.discriminator,
         targets = (target.targetRef as? FxTargetRef.SelectionRef)?.items?.map { CueTargetDto(it) },
-        propertyName = target.propertyName,
+        attribute = target.attribute,
         cycle = timing.cycle,
         blendMode = blendMode.name,
         isRunning = isRunning,

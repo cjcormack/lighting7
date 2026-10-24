@@ -1,20 +1,20 @@
 import type { PaletteSummary } from '@/api/palettesApi'
 import { FAMILY_LABELS, formatFamilyList, type AttributeFamily } from '@/lib/attributeFamily'
 import { isPaletteSteps, isSlotSteps, parseStepList } from '@/lib/stepFx'
-import { palettePropertyFor } from '@/lib/paletteIntent'
+import { paletteAttributeFor } from '@/lib/paletteIntent'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 
 /**
  * What the selected heads can take — the offer's half of palette compatibility (fx-templates D6).
  *
  * `families` is the families a palette may be in (null: any), `emitters` the bundled emitters some
- * head has (null: not known, so not filtered), and `property` narrows a **Beam** offer to the palettes
+ * head has (null: not known, so not filtered), and `attribute` narrows a **Beam** offer to the palettes
  * that set it: a zoom cell is offered the Beam palettes with a zoom row, not every Beam palette.
  */
 export interface PaletteFit {
   families: readonly AttributeFamily[] | null
   emitters: readonly string[] | null
-  property?: string
+  attribute?: string
 }
 
 /**
@@ -23,7 +23,7 @@ export interface PaletteFit {
  * palettes). Without it an effect palette is not narrowed by property.
  */
 export interface FxFitContext {
-  library?: readonly Pick<FxLibraryEntry, 'name' | 'compatibleProperties'>[]
+  library?: readonly Pick<FxLibraryEntry, 'name' | 'compatibleAttributes'>[]
   palettes?: readonly PaletteSummary[]
 }
 
@@ -40,13 +40,13 @@ export function paletteFits(template: PaletteSummary, fit: PaletteFit, context: 
   if (fit.families != null && !fit.families.includes(template.family)) return false
   // `?? []`: a desk mid-upgrade serves rows without it, and absent means "names no emitter".
   if (fit.emitters != null && !(template.requiredEmitters ?? []).every((e) => fit.emitters!.includes(e))) return false
-  if (fit.property != null && template.family === 'BEAM') {
-    const property = palettePropertyFor(fit.property)?.propertyName ?? fit.property
+  if (fit.attribute != null && template.family === 'BEAM') {
+    const attribute = paletteAttributeFor(fit.attribute)?.attribute ?? fit.attribute
     if (template.kind === 'value') {
-      return (template.rows ?? []).some((row) => palettePropertyFor(row.propertyName)?.propertyName === property)
+      return (template.rows ?? []).some((row) => paletteAttributeFor(row.attribute)?.attribute === attribute)
     }
     const driven = fxPaletteDrives(template, context)
-    return driven == null || driven.some((name) => (palettePropertyFor(name)?.propertyName ?? name) === property)
+    return driven == null || driven.some((name) => (paletteAttributeFor(name)?.attribute ?? name) === attribute)
   }
   return true
 }
@@ -59,17 +59,17 @@ export function paletteFits(template: PaletteSummary, fit: PaletteFit, context: 
 export function fxPaletteDrives(template: PaletteSummary, context: FxFitContext): readonly string[] | null {
   const effect = template.fx
   if (effect == null) return null
-  if (isSlotSteps(effect.fxType)) return effect.propertyName ? [effect.propertyName] : []
+  if (isSlotSteps(effect.fxType)) return effect.attribute ? [effect.attribute] : []
   if (isPaletteSteps(effect.fxType)) {
     if (context.palettes == null) return null
     const named = new Set(parseStepList(effect.parameters?.palettes).map((ref) => ref.replace(/^pal:/, '')))
     return context.palettes
       .filter((t) => named.has(t.uuid))
-      .flatMap((t) => (t.rows ?? []).map((row) => row.propertyName))
+      .flatMap((t) => (t.rows ?? []).map((row) => row.attribute))
   }
   if (context.library == null) return null
   const entry = context.library.find((e) => fxKey(e.name) === fxKey(effect.fxType))
-  return entry?.compatibleProperties ?? null
+  return entry?.compatibleAttributes ?? null
 }
 
 /** An effect's name as the library matches it: `Zoom Wave` and `ZoomWave` are one. */

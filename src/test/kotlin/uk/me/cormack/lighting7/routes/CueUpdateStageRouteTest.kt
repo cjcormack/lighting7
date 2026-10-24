@@ -27,9 +27,9 @@ import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoProject
@@ -79,7 +79,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
                 fadeDuration = fadeMs?.let { Duration.ofMillis(it) }
                 fadeCurve = curve.name
             }.also { cue ->
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-1"
                     attribute = "dimmer"; value = "$level"; sortOrder = 0
@@ -107,7 +107,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
     }
 
     private suspend fun HttpClient.setDimmer(cueId: Int, level: Int) =
-        assertEquals(HttpStatusCode.OK, patchCue(cueId, """{"propertyAssignments":[{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"$level"}]}""").status)
+        assertEquals(HttpStatusCode.OK, patchCue(cueId, """{"attributeAssignments":[{"targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"$level"}]}""").status)
 
     private suspend fun HttpClient.updateStage(cueId: Int, dryRun: Boolean = false): HttpResponse = post("$base/cues/$cueId/update-stage") {
         contentType(ContentType.Application.Json)
@@ -199,7 +199,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         assertEquals(0L, snap.fadeMs)
 
         client.patchCue(rig.q, """{"fadeDurationMs":800}""")
-        client.patchCue(rig.q, """{"propertyAssignments":[]}""")
+        client.patchCue(rig.q, """{"attributeAssignments":[]}""")
         assertEquals(UpdateStageResponse(1, UpdateStageFx(0, 0, 0), 800, "LINEAR"), client.updateStage(rig.q).body())
         val released = controller.changesTo(hex1Dimmer).last()
         assertEquals(0, released.newValue.toInt(), "nothing else holds hex-1's dimmer")
@@ -211,9 +211,9 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val rig = seed()
-        fun effect(fixture: String, type: String, property: String, division: Double = 0.5, size: Double = 1.0) = CueAdHocFxDto(
+        fun effect(fixture: String, type: String, attribute: String, division: Double = 0.5, size: Double = 1.0) = CueAdHocFxDto(
             targetType = "fixture", targetKey = fixture, fxType = type, family = "intensity",
-            propertyName = property, cycle = division, blendMode = "OVERRIDE", order = "NORMAL", amount = size,
+            attribute = attribute, cycle = division, blendMode = "OVERRIDE", order = "NORMAL", amount = size,
         )
         val sine = effect("hex-1", "SineWave", "dimmer")
         val pulse = effect("hex-2", "Pulse", "dimmer")
@@ -241,13 +241,13 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         assertEquals(1.0, running("hex-1")!!.dynamics.amount)
 
         assertEquals(dry, client.updateStage(rig.q).body())
-        val sineAfter = assertNotNull(engine.cueFx(rig.q).firstOrNull { it.target.targetKey == "hex-1" && it.target.propertyName == "dimmer" })
+        val sineAfter = assertNotNull(engine.cueFx(rig.q).firstOrNull { it.target.targetKey == "hex-1" && it.target.attribute == "dimmer" })
         assertEquals(sineId, sineAfter.id, "edited in place")
         assertEquals(sineStarted, sineAfter.startedAtMs, "phase kept")
         assertEquals(1.0, sineAfter.timing.cycle)
         assertEquals(0.5, sineAfter.dynamics.amount)
         assertNull(running("hex-2"), "the removed effect stopped (a snap cue's, at once)")
-        val uv = assertNotNull(engine.cueFx(rig.q).firstOrNull { it.target.propertyName == "uv" }, "the new effect started")
+        val uv = assertNotNull(engine.cueFx(rig.q).firstOrNull { it.target.attribute == "uv" }, "the new effect started")
         assertEquals(sineAfter.priority, uv.priority, "at the cue's priority")
         assertEquals(rig.a, uv.cueStackId)
 
@@ -264,7 +264,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val looks = listOf("hex-1", "hex-2").associateWith { head ->
             val pulse = LookFxDto(
                 targetType = "fixture", targetKey = head, fxType = "Pulse", family = "intensity",
-                propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+                attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
             )
             client.post("$base/looks") {
                 contentType(ContentType.Application.Json)
@@ -296,7 +296,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
 
     private fun dimmerEffect(fixture: String, type: String = "SineWave", division: Double = 0.5) = CueAdHocFxDto(
         targetType = "fixture", targetKey = fixture, fxType = type, family = "intensity",
-        propertyName = "dimmer", cycle = division, blendMode = "OVERRIDE", order = "NORMAL",
+        attribute = "dimmer", cycle = division, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
     private suspend fun HttpClient.setFx(cueId: Int, vararg effects: CueAdHocFxDto) = assertEquals(
@@ -337,7 +337,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         client.setFx(rig.q, timed)
         manager.activateEntry(state, rig.a, rig.aQ)
 
-        val timing = """{"propertyAssignments":[{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"100","fadeDurationMs":900,"moveInDark":true}]}"""
+        val timing = """{"attributeAssignments":[{"targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"100","fadeDurationMs":900,"moveInDark":true}]}"""
         assertEquals(HttpStatusCode.OK, client.patchCue(rig.q, timing).status)
         assertFalse(holds.isEdited(rig.q), "a row's own fade and move-in-dark are not sent")
         client.setFx(rig.q, timed.copy(delayMs = 1_500, cycle = 1.0))
@@ -378,7 +378,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val rig = seed()
         val pulse = LookFxDto(
             targetType = "fixture", targetKey = "hex-2", fxType = "Pulse", family = "intensity",
-            propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+            attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val look = client.post("$base/looks") {
             contentType(ContentType.Application.Json)
@@ -397,7 +397,7 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
             assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         }
 
-        putLook(mapOf("rows" to listOf(LookRowDto(targetType = "fixture", targetKey = "hex-2", propertyName = "uv", value = "90"))))
+        putLook(mapOf("rows" to listOf(LookRowDto(targetType = "fixture", targetKey = "hex-2", attribute = "uv", value = "90"))))
         assertFalse(holds.isEdited(rig.q), "its values republish")
         putLook(mapOf("fx" to listOf(pulse)))
         assertFalse(holds.isEdited(rig.q), "the same effect again")
@@ -414,13 +414,13 @@ class CueUpdateStageRouteTest : RouteIntegrationTest() {
         val rig = seed()
         val pulse = LookFxDto(
             targetType = "fixture", targetKey = "hex-2", fxType = "Pulse", family = "intensity",
-            propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+            attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val look = client.post("$base/looks") {
             contentType(ContentType.Application.Json)
             setBody(CreateLookRequest(name = "Chase", fx = listOf(pulse)))
         }.body<LookDetails>().id
-        assertEquals(HttpStatusCode.OK, client.patchCue(rig.q, """{"propertyAssignments":[]}""").status)
+        assertEquals(HttpStatusCode.OK, client.patchCue(rig.q, """{"attributeAssignments":[]}""").status)
         client.patch("$base/cues/${rig.q}") {
             contentType(ContentType.Application.Json)
             setBody(mapOf("layers" to listOf(CueLayerDto(lookId = look))))

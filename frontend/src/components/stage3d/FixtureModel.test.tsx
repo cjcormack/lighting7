@@ -38,11 +38,11 @@ import {
 import { ChannelSourceProvider } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
 import { chan, colourProp, revolutionShutterProps, sliderProp } from '../../test/fixtureFactories'
-import { findShutterProperties, type ElementDescriptor } from '../../store/fixtures'
+import { findShutterAttributes, type ElementDescriptor } from '../../store/fixtures'
 import type { Cell } from './bodies/archetype'
 import { createColourTicker } from './colourTicker'
 
-// usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
+// useAttributeValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -570,7 +570,7 @@ describe('a cell of several takes its own element', () => {
       index: i,
       key: `bar.cell-${i}`,
       displayName: `Cell ${i + 1}`,
-      properties: [colourProp('rgbColour', chan(3 + i * 3), chan(4 + i * 3), chan(5 + i * 3))],
+      attributes: [colourProp('rgbColour', chan(3 + i * 3), chan(4 + i * 3), chan(5 + i * 3))],
     }))
     const cells: Cell[] = [0, 1, 2].map((i) => ({ x: i * 0.2, y: 0, z: 0, shape: 'disc', halfWidthM: 0.05, halfDepthM: 0.05, element: i }))
     const pools = (strobeLevel: number, timeS: number) => {
@@ -759,7 +759,7 @@ describe("a lantern's focus, through the frame the pool and the haze share", () 
 
 describe("a DMX head's framing shutters, in the head's own frame", () => {
   // The Revolution's frames, found as the director finds them.
-  const shutters = findShutterProperties(revolutionShutterProps())!
+  const shutters = findShutterAttributes(revolutionShutterProps())!
   // A mover's rig as FixtureModel builds it: the mount's base turn (YXZ), the yoke panning about its
   // Y, the head tilting about its X, the beam along the head's +Y (a mover's emitAxis).
   const moverHead = (basePitchDeg: number, panDeg: number, tiltDeg: number) => {

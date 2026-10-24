@@ -1,7 +1,7 @@
 import React, { useCallback } from 'react'
 import { Slider } from '@/components/ui/slider'
 import { Input } from '@/components/ui/input'
-import { useChannelValue, useUpdateChannel } from '../../hooks/usePropertyValues'
+import { useChannelValue, useUpdateChannel } from '../../hooks/useAttributeValues'
 import { cn } from '@/lib/utils'
 import type { Fixture } from '../../store/fixtures'
 

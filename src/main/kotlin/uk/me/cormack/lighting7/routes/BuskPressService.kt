@@ -4,7 +4,7 @@ import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.core.neq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.models.BuskPadKind
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -139,7 +139,7 @@ internal object BuskPressService {
         state: State,
         plan: PressPlan,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>? = null,
+        families: Set<AttributeFamily>? = null,
         cycle: Double? = null,
         fadeMs: Long = 0,
     ): Outcome {
@@ -187,7 +187,7 @@ internal object BuskPressService {
                     val outcome = stack.toggle(
                         source = record.source,
                         targets = pressTargets,
-                        propertyMask = (record as? PressRecord.Palette)?.family?.name,
+                        attributeMask = (record as? PressRecord.Palette)?.family?.name,
                         cycleOverride = cycle,
                         releaseSiblings = plan.layerSiblings,
                         fadeMs = fadeMs,
@@ -228,7 +228,7 @@ internal object BuskPressService {
         projectId: Int,
         padUuid: UUID,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>? = null,
+        families: Set<AttributeFamily>? = null,
     ): Outcome = planByUuid(state, projectId, padUuid)?.let { apply(state, it, targets, families) } ?: Outcome.NotFound
 }
 
@@ -256,7 +256,7 @@ internal sealed interface PressRecord {
     }
 
     /** [family] is the template's own (`familyOf`), the mask its layer carries and the one a selection mask tests. */
-    data class Palette(override val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean) : Layer {
+    data class Palette(override val source: LayerSource, val family: AttributeFamily?, val isGeneric: Boolean) : Layer {
         override val kind get() = BuskPadKind.PALETTE
     }
 

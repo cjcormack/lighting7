@@ -19,7 +19,7 @@ import { LibraryPalette } from './LibraryPalette'
 /** The library as a palette: one search, two filters, and a row per placeable record. */
 
 const templates = [
-  { id: 1, uuid: 't1', name: 'Amber Key', notes: null, sortOrder: 0, fadeDurationMs: null, groupId: null, family: 'COLOUR', isGeneric: true, kind: 'value', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'colour', value: '#FF9D4A' }], fx: null, layerCount: 0 },
+  { id: 1, uuid: 't1', name: 'Amber Key', notes: null, sortOrder: 0, fadeDurationMs: null, groupId: null, family: 'COLOUR', isGeneric: true, kind: 'value', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'colour', value: '#FF9D4A' }], fx: null, layerCount: 0 },
   { id: 2, uuid: 't2', name: 'Downstage Centre', notes: null, sortOrder: 1, fadeDurationMs: null, groupId: null, family: 'POSITION', isGeneric: true, kind: 'value', rows: [], fx: null, layerCount: 0 },
 ]
 

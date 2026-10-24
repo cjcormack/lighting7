@@ -5,11 +5,11 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fx.FxSpawner
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedLookFx
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.lookFxSettings
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
+import uk.me.cormack.lighting7.fx.familyForAttribute
 import uk.me.cormack.lighting7.fx.toFxEntry
 import uk.me.cormack.lighting7.fx.toFxSpec
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -80,7 +80,7 @@ internal fun includeLookIntoProgrammer(
     state: State,
     lookId: Int,
     lookUuid: java.util.UUID,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fadeMs: Long,
     includeFx: Boolean = true,
 ): LookIncludeOutcome {
@@ -117,7 +117,7 @@ private data class IncludedLookFxResult(
 private fun spawnIncludedLookFx(
     state: State,
     lookId: Int,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
 ): IncludedLookFxResult {
     val stored = transaction(state.database) {
         DaoLook.findById(lookId)?.fxInOrder()
@@ -144,14 +144,14 @@ private fun spawnIncludedLookFx(
 
         if (mask != null) {
             val reference = state.show.fixtures.referenceFixtureFor(target.fxTarget)
-            val group = reference?.let { maskGroupForProperty(it, fxTarget.propertyName) }
+            val group = reference?.let { familyForAttribute(it, fxTarget.attribute) }
             if (!maskAllows(mask, group)) continue
         }
 
         val duplicate = running.any {
             it.registrationId == registrationId &&
                 it.target.targetKey == fxTarget.targetKey &&
-                it.target.propertyName == fxTarget.propertyName &&
+                it.target.attribute == fxTarget.attribute &&
                 (it.source?.let { s -> s.kind == LayerSourceKind.LOOK && s.id == lookId } == true ||
                     it.includedLookFx?.lookFxId == lookFxId)
         }
@@ -190,14 +190,14 @@ private fun spawnIncludedLookFx(
 internal fun includeExpandedIntoProgrammer(
     state: State,
     sourceUuid: java.util.UUID,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fadeMs: Long,
     includedTarget: uk.me.cormack.lighting7.fx.IncludedTarget,
 ): LookIncludeOutcome {
     val expanded = state.show.lookRegistry.expanded(sourceUuid)
         ?: return LookIncludeOutcome(0, emptyList(), emptyList())
 
-    val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite>()
+    val writes = ArrayList<uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite>()
     val skips = ArrayList<RecordSkip>()
     val fixtureKeys = LinkedHashSet<String>()
 
@@ -211,41 +211,41 @@ internal fun includeExpandedIntoProgrammer(
                 .filterIsInstance<uk.me.cormack.lighting7.fixture.Fixture>()
         }.getOrNull() ?: continue
         for (member in members) {
-            groupHints[member.key to canonicalPropertyName(entry.propertyName)] = group.key
+            groupHints[member.key to canonicalAttributeName(entry.attribute)] = group.key
         }
     }
 
-    for ((fixtureKey, byProperty) in expanded.byFixture) {
+    for ((fixtureKey, byAttribute) in expanded.byFixture) {
         val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(fixtureKey) }.getOrNull()
         if (fixture == null) {
             skips += RecordSkip(fixtureKey, reason = RecordSkipReason.MISSING_FIXTURE)
             continue
         }
-        for ((propertyName, literal) in byProperty) {
-            val group = uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
+        for ((attribute, literal) in byAttribute) {
+            val group = uk.me.cormack.lighting7.fx.familyForAttribute(fixture, attribute)
             if (group == null) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_ATTRIBUTE)
                 continue
             }
             if (!uk.me.cormack.lighting7.fx.maskAllows(mask, group)) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MASKED_OUT)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MASKED_OUT)
                 continue
             }
-            val resolvedProperty = uk.me.cormack.lighting7.fx.PropertyChannelWriter
-                .resolveProperty(fixture, propertyName)
-            val category = resolvedProperty?.category
-                ?: uk.me.cormack.lighting7.fixture.PropertyCategory.OTHER
+            val resolvedAttribute = uk.me.cormack.lighting7.fx.AttributeChannelWriter
+                .resolveAttribute(fixture, attribute)
+            val category = resolvedAttribute?.category
+                ?: uk.me.cormack.lighting7.fixture.AttributeCategory.OTHER
             val value = uk.me.cormack.lighting7.fx.CueAssignmentResolver.parseAssignmentValue(
-                category, propertyName, literal,
-                settingBacked = resolvedProperty?.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
+                category, attribute, literal,
+                settingBacked = resolvedAttribute?.value is uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting<*>,
             )
             if (value == null) {
-                skips += RecordSkip(fixtureKey, propertyName, reason = RecordSkipReason.MISSING_PROPERTY)
+                skips += RecordSkip(fixtureKey, attribute, reason = RecordSkipReason.MISSING_ATTRIBUTE)
                 continue
             }
-            writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
-                fixture, propertyName, value,
-                sourceGroup = groupHints[fixtureKey to propertyName],
+            writes += uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
+                fixture, attribute, value,
+                sourceGroup = groupHints[fixtureKey to attribute],
             )
             fixtureKeys += fixtureKey
         }
@@ -254,7 +254,7 @@ internal fun includeExpandedIntoProgrammer(
     if (writes.isNotEmpty()) {
         // One batched write, as Include-a-cue does: a large palette is hundreds of properties and
         // per-property publishing would visibly stutter the rig.
-        state.show.fxEngine.programmer.writeProperties(
+        state.show.fxEngine.programmer.writeAttributes(
             uk.me.cormack.lighting7.fx.ProgrammerOwner.INCLUDE, writes, fadeMs = fadeMs,
         )
     }

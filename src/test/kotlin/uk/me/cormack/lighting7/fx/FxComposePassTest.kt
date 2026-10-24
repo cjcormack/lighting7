@@ -58,8 +58,8 @@ class FxComposePassTest {
         timingSource: TimingSource,
         division: Double = 1.0,
         priority: Int = 0,
-        property: String = "dimmer",
-    ) = FxInstance(effect, SliderTarget("hex-a", property), FxTiming(cycle = division), blendMode).also {
+        attribute: String = "dimmer",
+    ) = FxInstance(effect, SliderTarget("hex-a", attribute), FxTiming(cycle = division), blendMode).also {
         it.timingSource = timingSource
         it.priority = priority
     }
@@ -69,8 +69,8 @@ class FxComposePassTest {
      * (one with nothing running on a clock that woke it is skipped).
      */
     private fun Rig.withCompanionOn(timingSource: TimingSource) = engine.addFx(
-        if (timingSource == TimingSource.BEAT) instance(fx("Pulse"), BlendMode.OVERRIDE, timingSource, property = "uv")
-        else instance(fx("CandleFlicker"), BlendMode.OVERRIDE, timingSource, property = "uv"),
+        if (timingSource == TimingSource.BEAT) instance(fx("Pulse"), BlendMode.OVERRIDE, timingSource, attribute = "uv")
+        else instance(fx("CandleFlicker"), BlendMode.OVERRIDE, timingSource, attribute = "uv"),
     )
 
     /** One pass of a schedule: which clocks woke it, the master's tick, and the time. */

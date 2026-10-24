@@ -8,7 +8,7 @@ import {
 
 /**
  * The canonical assignment-value string form shared by cue assignments and the programmer
- * (`Layer3Resolver.PropertyValue.serialize()` / `parseAssignmentValue()` in lighting7):
+ * (`Layer3Resolver.AttributeValue.serialize()` / `parseAssignmentValue()` in lighting7):
  *
  * - sliders and settings — `"0".."255"`
  * - colours — `"#rrggbb"` with optional `;wNNN` / `;aNNN` / `;uvNNN` tags, emitted only for

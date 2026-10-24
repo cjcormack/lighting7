@@ -5,16 +5,16 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.trait.WithColour
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.test.assertEquals
@@ -54,15 +54,15 @@ class BundledEmitterHeadAmberUvTest {
         ) : FixtureElement<RgbAuvBar>, WithColour {
             override val parentFixture: RgbAuvBar get() = this@RgbAuvBar
 
-            @FixtureProperty("RGB colour", category = PropertyCategory.COLOUR)
+            @FixtureAttribute("RGB colour", category = AttributeCategory.COLOUR)
             override val rgbColour = DmxColour(
                 headTransaction, universe, headFirstChannel, headFirstChannel + 1, headFirstChannel + 2,
             )
 
-            @FixtureProperty("Amber", category = PropertyCategory.AMBER, bundleWithColour = true)
+            @FixtureAttribute("Amber", category = AttributeCategory.AMBER, bundleWithColour = true)
             val amber = DmxSlider(headTransaction, universe, headFirstChannel + 3)
 
-            @FixtureProperty("UV", category = PropertyCategory.UV, bundleWithColour = true)
+            @FixtureAttribute("UV", category = AttributeCategory.UV, bundleWithColour = true)
             val uv = DmxSlider(headTransaction, universe, headFirstChannel + 4)
 
             override fun withTransaction(transaction: ControllerTransaction): Head =
@@ -89,8 +89,8 @@ class BundledEmitterHeadAmberUvTest {
         return Rig(fixtures, controller)
     }
 
-    private fun colour(serialized: String) = CueAssignmentResolver.PropertyValue.Colour(parseExtendedColour(serialized))
-    private fun slider(level: Int) = CueAssignmentResolver.PropertyValue.Slider(level.toUByte())
+    private fun colour(serialized: String) = CueAssignmentResolver.AttributeValue.Colour(parseExtendedColour(serialized))
+    private fun slider(level: Int) = CueAssignmentResolver.AttributeValue.Slider(level.toUByte())
 
     private fun head(rig: Rig, tx: ControllerTransaction? = null): GroupableFixture =
         if (tx == null) rig.fixtures.untypedGroupableFixture(headKey)
@@ -110,8 +110,8 @@ class BundledEmitterHeadAmberUvTest {
         val store = ProgrammerStore()
         val below = FxOutput.Colour(ExtendedColour.BLACK)
 
-        fun onStage(property: String): Int =
-            (SliderTarget(headKey, property).composeProgrammerOver(head, store, FxOutput.Slider(0u)) as FxOutput.Slider)
+        fun onStage(attribute: String): Int =
+            (SliderTarget(headKey, attribute).composeProgrammerOver(head, store, FxOutput.Slider(0u)) as FxOutput.Slider)
                 .value.toInt()
         fun colourCopy(): ExtendedColour =
             (ColourTarget(headKey).composeProgrammerOver(head, store, below) as FxOutput.Colour).color
@@ -158,32 +158,32 @@ class BundledEmitterHeadAmberUvTest {
     fun `a cue holding both lands the head's own amber and UV, in either publish order`() {
         val rig = rig()
         val rows = listOf(
-            CuePropertyAssignmentDto("fixture", headKey, "rgbColour", "#ff0000;a10;uv20"),
-            CuePropertyAssignmentDto("fixture", headKey, "amber", "200"),
-            CuePropertyAssignmentDto("fixture", headKey, "uv", "150"),
+            CueAttributeAssignmentDto("fixture", headKey, "rgbColour", "#ff0000;a10;uv20"),
+            CueAttributeAssignmentDto("fixture", headKey, "amber", "200"),
+            CueAttributeAssignmentDto("fixture", headKey, "uv", "150"),
         )
         for (ordered in listOf(rows, rows.reversed())) {
             val built = buildCueAssignmentsForCue(
-                rig.fixtures, CueApplyData(cueId = 1, cueName = "both", adHocFx = emptyList(), propertyAssignments = ordered),
+                rig.fixtures, CueApplyData(cueId = 1, cueName = "both", adHocFx = emptyList(), attributeAssignments = ordered),
             )
             val composed = CueAssignmentResolver().resolve(built)
             val composedColour = (composed.getValue(CueAssignmentResolver.Key.fixture(headKey, "rgbColour"))
-                as CueAssignmentResolver.PropertyValue.Colour).value
+                as CueAssignmentResolver.AttributeValue.Colour).value
             assertEquals(200u.toUByte(), composedColour.amber, "the colour carries the head's own amber")
             assertEquals(150u.toUByte(), composedColour.uv, "the colour carries the head's own UV")
             assertEquals(Color(255, 0, 0), composedColour.color)
 
             // Transmit both keys in both orders: the channels end on the emitters' values either way.
-            fun publish(vararg properties: String) {
+            fun publish(vararg attributes: String) {
                 val tx = ControllerTransaction(rig.fixtures.controllers)
                 val head = head(rig, tx)
-                for (property in properties) {
-                    val key = CueAssignmentResolver.Key.fixture(headKey, property)
+                for (attribute in attributes) {
+                    val key = CueAssignmentResolver.Key.fixture(headKey, attribute)
                     when (val value = composed.getValue(key)) {
-                        is CueAssignmentResolver.PropertyValue.Colour ->
+                        is CueAssignmentResolver.AttributeValue.Colour ->
                             ColourTarget(headKey).resetToFallback(head, FxOutput.Colour(value.value))
-                        is CueAssignmentResolver.PropertyValue.Slider ->
-                            SliderTarget(headKey, property).resetToFallback(head, FxOutput.Slider(value.value))
+                        is CueAssignmentResolver.AttributeValue.Slider ->
+                            SliderTarget(headKey, attribute).resetToFallback(head, FxOutput.Slider(value.value))
                         else -> error("unexpected $value")
                     }
                 }

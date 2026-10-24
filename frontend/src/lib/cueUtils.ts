@@ -103,7 +103,7 @@ export function cueLayerInput(layer: CueLayer): CueLayer {
     sortOrder: layer.sortOrder,
     enabled: layer.enabled,
     targets: layer.targets,
-    propertyMask: layer.propertyMask,
+    attributeMask: layer.attributeMask,
     blendMode: layer.blendMode,
     amount: layer.amount,
     stomp: layer.stomp,
@@ -134,7 +134,7 @@ export function buildCueInput(cue: Cue): CueInput {
     // effect by its target, property and type, so a body echoing it back would claim an identity
     // the write does not read.
     adHocFx: cue.adHocFx.map(cueFxInput),
-    propertyAssignments: cue.propertyAssignments.map((a) => ({ ...a })),
+    attributeAssignments: cue.attributeAssignments.map((a) => ({ ...a })),
     triggers: cue.triggers.map((t) => ({
       triggerType: t.triggerType,
       delayMs: t.delayMs,

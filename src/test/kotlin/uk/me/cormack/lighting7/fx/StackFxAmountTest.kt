@@ -56,7 +56,7 @@ class StackFxAmountTest : RouteIntegrationTest() {
                         fx = listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = head,
-                                fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
                                 cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         ),

@@ -96,7 +96,7 @@ function FxBody({
    * The effect this picker session added, at its place in the list and on the selection it was
    * added over — what a second tap swaps. A tap over another selection adds afresh.
    */
-  const [picked, setPicked] = useState<{ index: number; fxType: string; propertyName: string; over: string } | null>(null)
+  const [picked, setPicked] = useState<{ index: number; fxType: string; attribute: string; over: string } | null>(null)
 
   /**
    * One gesture: [apply] takes the list it lands on and the list the tab drew it on, and finds its
@@ -140,7 +140,7 @@ function FxBody({
   const onPick = (pick: DraftFxPick) => {
     if (target == null) return
     const effect = storedFxOf(pick, target)
-    const next = { fxType: pick.fxType, propertyName: pick.propertyName, over }
+    const next = { fxType: pick.fxType, attribute: pick.attribute, over }
     if (swapping != null && swapping.index < effects.length) {
       const index = swapping.index
       edit((list, drawn) => {
@@ -320,7 +320,7 @@ function FxRow({
             {target}
           </span>
           <span className="shrink-0 font-medium">{entry?.name ?? effect.fxType}</span>
-          {effect.propertyName && <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.propertyName}</span>}
+          {effect.attribute && <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.attribute}</span>}
           <SpeedLabel effect={effect} entry={entry} />
           {dynamics.length > 0 && <span className="shrink-0 text-muted-foreground">· {dynamics.join(' · ')}</span>}
         </button>
@@ -382,9 +382,9 @@ function CueFxEditor({
     intervalMs: effect.intervalMs ?? null,
     randomWindowMs: effect.randomWindowMs ?? null,
   }))
-  const { scope, extendedChannels, settingProperty } = useFxScope({
+  const { scope, extendedChannels, settingAttribute } = useFxScope({
     target: targetFieldsOf(effect),
-    propertyName: effect.propertyName,
+    attribute: effect.attribute,
     entry,
     elementMode: draft.elementMode,
     elementFilter: draft.elementFilter,
@@ -406,8 +406,8 @@ function CueFxEditor({
           draft={draft}
           scope={scope}
           extendedChannels={extendedChannels}
-          settingProperty={settingProperty}
-          propertyName={effect.propertyName}
+          settingAttribute={settingAttribute}
+          attribute={effect.attribute}
           readOnly={readOnly}
           set={(patch, release = true) => write({ ...draft, ...patch }, release)}
           setParam={(name, value, release) => write({ ...draft, parameters: { ...draft.parameters, [name]: value } }, release)}

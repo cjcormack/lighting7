@@ -12,7 +12,7 @@ import kotlin.reflect.full.memberProperties
  * that spends something physical when it fires — a confetti tube, a streamer — and so must never be
  * a value a Look, a template, a cue, an effect, the programmer or Record can hold.
  *
- * A trigger is its own property kind, not a `@FixtureProperty`: nothing that resolves a property by
+ * A trigger is its own property kind, not a `@FixtureAttribute`: nothing that resolves a property by
  * name sees it, and it takes no part in composition or a crossfade. It fires as an event — a cue
  * event, a hold-to-fire button, a MIDI `FireTrigger` — through `state/EffectsService.kt`, and only
  * while the desk is armed.
@@ -57,7 +57,7 @@ data class ResolvedTrigger(
 /**
  * The `@FixtureTrigger` members of every fixture class, and the constants a fire uses.
  *
- * Cached per class like [FixturePropertyCatalogue], and for the same reason: the scan is reflective,
+ * Cached per class like [FixtureAttributeCatalogue], and for the same reason: the scan is reflective,
  * and the trigger output asks on every fixture-register change.
  */
 object FixtureTriggers {

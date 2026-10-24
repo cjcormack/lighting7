@@ -59,30 +59,30 @@ class ProgrammerLayerSlotCompositionTest {
     private fun Fixtures.hex(): HexFixture = fixture("hex-a")
 
     private fun ProgrammerStore.layer(
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         layerIndex: Int = 0,
     ) = putLayerSlots(
-        listOf(ProgrammerStore.LayerSlotWrite("hex-a", propertyName, value, layerIndex))
+        listOf(ProgrammerStore.LayerSlotWrite("hex-a", attribute, value, layerIndex))
     )
 
     private fun ProgrammerStore.local(
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         owner: ProgrammerOwner = ProgrammerOwner.WEB,
-    ) = putValue(owner, "hex-a", propertyName, ProgrammerValue.Hard(value))
+    ) = putValue(owner, "hex-a", attribute, ProgrammerValue.Hard(value))
 
-    private fun slider(v: Int) = CueAssignmentResolver.PropertyValue.Slider(v.toUByte())
+    private fun slider(v: Int) = CueAssignmentResolver.AttributeValue.Slider(v.toUByte())
     private fun colour(c: Color, white: Int = 0) =
-        CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(c, white = white.toUByte()))
+        CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(c, white = white.toUByte()))
 
     private fun sliderOut(
         fixtures: Fixtures,
         store: ProgrammerStore,
-        propertyName: String,
+        attribute: String,
         below: Int = 0,
     ): Int {
-        val out = SliderTarget("hex-a", propertyName)
+        val out = SliderTarget("hex-a", attribute)
             .composeProgrammerOver(fixtures.hex(), store, FxOutput.Slider(below.toUByte()))
         return (out as FxOutput.Slider).value.toInt()
     }
@@ -231,8 +231,8 @@ class ProgrammerLayerSlotCompositionTest {
     @Test
     fun `a local setting write beats a layer's`() {
         val (fixtures, store) = rig()
-        store.layer("mode", CueAssignmentResolver.PropertyValue.Setting(9u))
-        store.local("mode", CueAssignmentResolver.PropertyValue.Setting(3u))
+        store.layer("mode", CueAssignmentResolver.AttributeValue.Setting(9u))
+        store.local("mode", CueAssignmentResolver.AttributeValue.Setting(3u))
 
         val out = SettingTarget("hex-a", "mode")
             .composeProgrammerOver(fixtures.hex(), store, FxOutput.Slider(0u))

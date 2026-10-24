@@ -20,7 +20,7 @@ import uk.me.cormack.lighting7.fx.group.SpreadOrder
 import uk.me.cormack.lighting7.fx.CueStackManager
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.routes.*
-import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
 import org.jetbrains.exposed.v1.core.isNotNull
@@ -330,7 +330,7 @@ class AiTools(private val state: State) {
                 addJsonObject {
                     put("target", buildJsonObject { put("type", row.targetType); put("key", row.targetKey) })
                     row.elementKey?.let { put("elementKey", it) }
-                    put("propertyName", row.propertyName)
+                    put("attribute", row.attribute)
                     put("value", row.value)
                 }
             }
@@ -544,7 +544,7 @@ class AiTools(private val state: State) {
                             // resolves to nothing in the registry.
                             put("fxType", effect.fxTypeId)
                             put("targetKey", effect.target.targetKey)
-                            put("propertyName", effect.target.propertyName)
+                            put("attribute", effect.target.attribute)
                             put("isGroupTarget", effect.isGroupFx)
                             put("targetType", effect.target.targetRef.discriminator)
                             (effect.target.targetRef as? FxTargetRef.SelectionRef)?.let { ref ->
@@ -795,12 +795,12 @@ class AiTools(private val state: State) {
                     // top, which is the value on stage.
                     put("entries", buildJsonArray {
                         val entries = store.entries()
-                            .sortedWith(compareBy({ it.fixtureKey }, { it.propertyName }))
+                            .sortedWith(compareBy({ it.fixtureKey }, { it.attribute }))
                         for (entry in entries) {
                             val top = entry.slots.first()
                             addJsonObject {
                                 put("targetKey", entry.fixtureKey)
-                                put("propertyName", entry.propertyName)
+                                put("attribute", entry.attribute)
                                 put("value", top.value.resolved.serialize())
                                 put("owner", top.owner.id)
                                 put("touched", top.touched)
@@ -964,7 +964,7 @@ class AiTools(private val state: State) {
             PaletteRowDto(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = w.target.key,
-                propertyName = PaletteProperty.POSITION.propertyName,
+                attribute = PaletteAttribute.POSITION.attribute,
                 value = value,
             )
         }
@@ -1285,7 +1285,7 @@ class AiTools(private val state: State) {
                 // Declaration order is the stack order unless the caller says otherwise, so a tool
                 // call that lists layers bottom-to-top composes the way it reads.
                 sortOrder = obj["sortOrder"]?.jsonPrimitive?.int ?: index,
-                propertyMask = obj["propertyMask"]?.jsonPrimitive?.contentOrNull,
+                attributeMask = obj["attributeMask"]?.jsonPrimitive?.contentOrNull,
                 // Unrecognised blends are rejected by `writeCueChildren` rather than here, so this
                 // surface and the cue routes cannot disagree about what a valid blend is.
                 blendMode = obj["blendMode"]?.jsonPrimitive?.contentOrNull ?: "OVERRIDE",
@@ -1908,7 +1908,7 @@ class AiTools(private val state: State) {
             ?: return errorResult("Unknown record mode '${input["mode"]?.jsonPrimitive?.content}'")
         val source = parseEnumOrNull<RecordSource>(input["source"]?.jsonPrimitive?.content ?: "TOUCHED")
             ?: return errorResult("Unknown record source '${input["source"]?.jsonPrimitive?.content}'")
-        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+        val mask = input.families().getOrElse { return errorResult(it.message ?: "Bad mask") }
 
         val result = performProgrammerRecord(
             state,
@@ -1955,7 +1955,7 @@ class AiTools(private val state: State) {
     }
 
     private fun executeInclude(input: JsonObject): ToolExecutionResult {
-        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+        val mask = input.families().getOrElse { return errorResult(it.message ?: "Bad mask") }
         // The entry a cue is included from, for the indicator (cue model plan §3.5): by id, or by a
         // stack's number; `performProgrammerInclude` checks it places the cue.
         val namesEntry = listOf("entryId", "number", "stackId").any { input.present(it) != null }
@@ -2019,7 +2019,7 @@ class AiTools(private val state: State) {
     }
 
     private fun executeUpdate(input: JsonObject): ToolExecutionResult {
-        val mask = input.maskGroups().getOrElse { return errorResult(it.message ?: "Bad mask") }
+        val mask = input.families().getOrElse { return errorResult(it.message ?: "Bad mask") }
         val targets = input["targets"]?.jsonArray?.map { it.jsonPrimitive.int }
 
         val result = performProgrammerUpdate(
@@ -2122,8 +2122,8 @@ class AiTools(private val state: State) {
                 // not a missing field.
                 targetType = if (targetKey == null) DEFERRED_TARGET_TYPE else TargetRef.Fixture.TYPE,
                 targetKey = targetKey.orEmpty(),
-                propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull
-                    ?: return errorResult("A palette row is missing 'propertyName'"),
+                attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull
+                    ?: return errorResult("A palette row is missing 'attribute'"),
                 value = obj["value"]?.jsonPrimitive?.contentOrNull
                     ?: return errorResult("A palette row is missing 'value'"),
             )
@@ -2137,7 +2137,7 @@ class AiTools(private val state: State) {
             PaletteFxDto(
                 fxType = spec.fxType,
                 family = spec.family,
-                propertyName = spec.propertyName,
+                attribute = spec.attribute,
                 cycle = spec.cycle,
                 blendMode = spec.blendMode,
                 order = spec.order,
@@ -2212,7 +2212,7 @@ class AiTools(private val state: State) {
         val spec = LookFxSpec(
             fxType = obj.requiredString("fxType", at),
             family = obj.requiredString("family", at),
-            propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
+            attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
             cycle = timing.cycle,
             blendMode = obj.requiredString("blendMode", at),
             order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
@@ -2266,7 +2266,7 @@ class AiTools(private val state: State) {
             targetKey = target.key,
             fxType = obj.requiredString("fxType", at),
             family = obj.requiredString("family", at),
-            propertyName = obj["propertyName"]?.jsonPrimitive?.contentOrNull,
+            attribute = obj["attribute"]?.jsonPrimitive?.contentOrNull,
             cycle = timing.cycle,
             blendMode = obj.requiredString("blendMode", at),
             order = obj["order"]?.jsonPrimitive?.content ?: "UNIFIED",
@@ -2412,7 +2412,7 @@ class AiTools(private val state: State) {
                 targetKey = target.key,
                 fxType = spec.fxType,
                 family = spec.family,
-                propertyName = spec.propertyName,
+                attribute = spec.attribute,
                 cycle = spec.cycle,
                 blendMode = spec.blendMode,
                 order = spec.order,
@@ -2503,10 +2503,10 @@ class AiTools(private val state: State) {
      * The parsed `mask` argument, or null when it names a family that does not exist.
      *
      * Doubly-wrapped on purpose: the outer null is "reject this call", the inner one is the
-     * legitimate "no mask at all" that [parseMaskGroups] returns for an absent or complete mask.
+     * legitimate "no mask at all" that [parseFamilies] returns for an absent or complete mask.
      */
-    private fun JsonObject.maskGroups(): Result<Set<PropertyMaskGroup>?> = runCatching {
-        parseMaskGroups(this["mask"]?.jsonArray?.map { it.jsonPrimitive.content })
+    private fun JsonObject.families(): Result<Set<AttributeFamily>?> = runCatching {
+        parseFamilies(this["mask"]?.jsonArray?.map { it.jsonPrimitive.content })
     }
 
     /**
@@ -2536,7 +2536,7 @@ class AiTools(private val state: State) {
             for (dto in skips.map { it.toDto() }) {
                 addJsonObject {
                     dto.targetKey?.let { put("targetKey", it) }
-                    dto.propertyName?.let { put("propertyName", it) }
+                    dto.attribute?.let { put("attribute", it) }
                     dto.universe?.let { put("universe", it) }
                     dto.channel?.let { put("channel", it) }
                     put("reason", dto.reason)
@@ -2552,7 +2552,7 @@ class AiTools(private val state: State) {
             skips.forEach { skip ->
                 addJsonObject {
                     put("fixture", skip.target)
-                    put("propertyName", skip.propertyName)
+                    put("attribute", skip.attribute)
                     put("reason", skip.reason)
                 }
             }

@@ -1,0 +1,508 @@
+package uk.me.cormack.lighting7.fx
+
+import uk.me.cormack.lighting7.dmx.MockDmxController
+import uk.me.cormack.lighting7.dmx.Universe
+import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.dmx.Fusion100SpotMkIIFixture
+import uk.me.cormack.lighting7.fixture.dmx.HexFixture
+import uk.me.cormack.lighting7.fixture.dmx.LedLightbar12PixelFixture
+import uk.me.cormack.lighting7.fixture.dmx.LightstripFixture
+import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
+import uk.me.cormack.lighting7.fixture.dmx.SlenderBeamBarQuadFixture
+import uk.me.cormack.lighting7.show.Fixtures
+import java.awt.Color
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
+
+/**
+ * Unit tests for [AttributeChannelWriter]. The writer is stateless and reads only the static
+ * DMX patch off each fixture, so no controller transaction is required — the tests
+ * instantiate bare fixtures. A single round-trip test drives a `CueAssignmentResolver.Assignment`
+ * through both the cue-apply pipeline and the writer, asserting both paths produce identical
+ * DMX bytes on the same fixture.
+ */
+class AttributeChannelWriterTest {
+
+    private val universe = Universe(0, 0)
+
+    private fun hex(firstChannel: Int = 1): HexFixture =
+        HexFixture(universe, key = "hex-1", fixtureName = "Hex 1", firstChannel = firstChannel)
+
+    // ─── Slider ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `slider resolves to single channel write at full range`() {
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "dimmer",
+            CueAssignmentResolver.AttributeValue.Slider(180u),
+        )
+        assertEquals(1, writes.size)
+        val w = writes.single()
+        assertEquals(1, w.channel)
+        assertEquals(universe, w.universe)
+        assertEquals(180u.toUByte(), w.value)
+        assertEquals(AttributeCategory.DIMMER, w.category)
+    }
+
+    @Test
+    fun `slider endpoints pass through unchanged`() {
+        val zero = AttributeChannelWriter.resolve(hex(), "dimmer", CueAssignmentResolver.AttributeValue.Slider(0u)).single()
+        val full = AttributeChannelWriter.resolve(hex(), "dimmer", CueAssignmentResolver.AttributeValue.Slider(255u)).single()
+        assertEquals(0u.toUByte(), zero.value, "no min/max scaling — 0 maps to 0")
+        assertEquals(255u.toUByte(), full.value, "no min/max scaling — 255 maps to 255")
+    }
+
+    @Test
+    fun `slider on fixture at offset produces channel at offset`() {
+        val write = AttributeChannelWriter.resolve(
+            hex(firstChannel = 100),
+            "uv",
+            CueAssignmentResolver.AttributeValue.Slider(200u),
+        ).single()
+        // uv = firstChannel + 6 = 106.
+        assertEquals(106, write.channel)
+        assertEquals(AttributeCategory.UV, write.category)
+        assertEquals(200u.toUByte(), write.value)
+    }
+
+    // ─── Setting ────────────────────────────────────────────────────────────
+
+    @Test
+    fun `setting resolves to single channel write at raw level`() {
+        // HexFixture.mode sits at firstChannel + 9.
+        val write = AttributeChannelWriter.resolve(
+            hex(),
+            "mode",
+            CueAssignmentResolver.AttributeValue.Setting(201u),
+        ).single()
+        assertEquals(10, write.channel)
+        assertEquals(201u.toUByte(), write.value)
+        assertEquals(AttributeCategory.SETTING, write.category)
+    }
+
+    // ─── Colour ─────────────────────────────────────────────────────────────
+
+    @Test
+    fun `colour on RGBWA+UV fixture emits all six channels`() {
+        val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
+        val writes = AttributeChannelWriter.resolve(hex(), "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ext))
+        // HexFixture: R/G/B at firstChannel+1..+3 (2, 3, 4), amber at +4 (5), white at +5 (6), UV at +6 (7).
+        val byChannel = writes.associate { it.channel to it.value }
+        assertEquals(200u.toUByte(), byChannel[2])
+        assertEquals(100u.toUByte(), byChannel[3])
+        assertEquals(50u.toUByte(), byChannel[4])
+        assertEquals(64u.toUByte(), byChannel[5], "amber via WithAmber")
+        assertEquals(128u.toUByte(), byChannel[6], "white via WithWhite")
+        assertEquals(180u.toUByte(), byChannel[7], "uv via WithUv")
+        assertEquals(6, writes.size, "R/G/B + W + A + UV — full extended colour")
+        assertEquals(AttributeCategory.WHITE, writes.single { it.channel == 6 }.category)
+        assertEquals(AttributeCategory.AMBER, writes.single { it.channel == 5 }.category)
+        assertEquals(AttributeCategory.UV, writes.single { it.channel == 7 }.category)
+    }
+
+    @Test
+    fun `colour without extended values still writes W A UV channels as zero on trait-bearing fixtures`() {
+        // HexFixture implements WithWhite/WithAmber/WithUv. An ExtendedColour with the
+        // extended channels defaulted to 0 should still emit writes for each — otherwise
+        // a previous sticky value on those channels would linger at Layer 2.
+        val ext = ExtendedColour(Color(255, 0, 0))
+        val writes = AttributeChannelWriter.resolve(hex(), "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ext))
+        assertEquals(6, writes.size)
+        assertEquals(0u.toUByte(), writes.single { it.channel == 5 }.value, "amber zero-write")
+        assertEquals(0u.toUByte(), writes.single { it.channel == 6 }.value, "white zero-write")
+        assertEquals(0u.toUByte(), writes.single { it.channel == 7 }.value, "uv zero-write")
+    }
+
+    @Test
+    fun `colour on fixture with WithWhite but no WithAmber drops amber silently`() {
+        // LightstripFixture implements WithColour + WithWhite, but not WithAmber or WithUv.
+        // Asymmetric-trait case: white lands, amber/uv drop without error.
+        val lightstrip = LightstripFixture(universe, key = "strip-1", fixtureName = "Strip 1", firstChannel = 1)
+        val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
+        val writes = AttributeChannelWriter.resolve(lightstrip, "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ext))
+        // LightstripFixture: RGB at 1/2/3, white at 4. No amber / no UV.
+        val byChannel = writes.associate { it.channel to it.value }
+        assertEquals(200u.toUByte(), byChannel[1])
+        assertEquals(100u.toUByte(), byChannel[2])
+        assertEquals(50u.toUByte(), byChannel[3])
+        assertEquals(128u.toUByte(), byChannel[4], "white via WithWhite")
+        assertEquals(4, writes.size, "amber and uv drop silently — traits not implemented")
+    }
+
+    // ─── Position ───────────────────────────────────────────────────────────
+
+    @Test
+    fun `position on moving head resolves to pan and tilt channels`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(
+            universe = universe,
+            key = "spot-1",
+            fixtureName = "Spot 1",
+            firstChannel = 1,
+        )
+        val writes = AttributeChannelWriter.resolve(
+            fx,
+            "position",
+            CueAssignmentResolver.AttributeValue.Position(pan = 100u, tilt = 200u),
+        )
+        assertEquals(2, writes.size)
+        val byChannel = writes.associate { it.channel to it.value }
+        // Mode8Ch: pan = firstChannel (1), tilt = firstChannel + 1 (2).
+        assertEquals(100u.toUByte(), byChannel[1])
+        assertEquals(200u.toUByte(), byChannel[2])
+        assertEquals(AttributeCategory.PAN, writes.single { it.channel == 1 }.category)
+        assertEquals(AttributeCategory.TILT, writes.single { it.channel == 2 }.category)
+    }
+
+    @Test
+    fun `position on non-moving fixture returns empty list`() {
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "position",
+            CueAssignmentResolver.AttributeValue.Position(pan = 100u, tilt = 200u),
+        )
+        assertTrue(writes.isEmpty(), "HexFixture does not implement WithPosition")
+    }
+
+    // ─── Error cases ────────────────────────────────────────────────────────
+
+    @Test
+    fun `unknown attribute name returns empty list`() {
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "nonesuch",
+            CueAssignmentResolver.AttributeValue.Slider(100u),
+        )
+        assertTrue(writes.isEmpty())
+    }
+
+    @Test
+    fun `a slider value drives a setting-backed attribute`() {
+        // "mode" is backed by a DmxFixtureSetting. A Slider AttributeValue must still write
+        // it: Slider-vs-Setting is chosen from the property's *category*, which doesn't
+        // predict the backing shape (gobo rotation is a DmxFixtureSetting on the Equinox
+        // Fusion 100 but a plain DmxSlider on the Martin MAC 250). Dropping the write is
+        // what left several fixtures' gobo/prism/macro channels undriveable from a cue.
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "mode",
+            CueAssignmentResolver.AttributeValue.Slider(100u),
+        )
+        assertEquals(1, writes.size)
+        assertEquals(100u.toUByte(), writes.single().value)
+    }
+
+    @Test
+    fun `a setting value drives a slider-backed attribute`() {
+        // The mirror image: "dimmer" is a DmxSlider, targeted by a Setting AttributeValue.
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "dimmer",
+            CueAssignmentResolver.AttributeValue.Setting(200u),
+        )
+        assertEquals(1, writes.size)
+        assertEquals(200u.toUByte(), writes.single().value)
+    }
+
+    @Test
+    fun `a byte value targeting a multi-channel attribute returns empty list`() {
+        // rgbColour is a DmxColour — no single backing channel, so there is nothing
+        // sensible to write one byte to. This one genuinely must drop.
+        val writes = AttributeChannelWriter.resolve(
+            hex(),
+            "rgbColour",
+            CueAssignmentResolver.AttributeValue.Slider(100u),
+        )
+        assertTrue(writes.isEmpty())
+    }
+
+    // ─── channelsFor (clear-path enumeration) ───────────────────────────────
+
+    @Test
+    fun `channelsFor slider returns single channel`() {
+        val channels = AttributeChannelWriter.channelsFor(hex(), "dimmer")
+        assertEquals(1, channels.size)
+        assertEquals(1, channels.single().channel)
+    }
+
+    @Test
+    fun `channelsFor colour returns R G B plus W A UV`() {
+        val channels = AttributeChannelWriter.channelsFor(hex(), "rgbColour")
+        // HexFixture: R/G/B (2,3,4) + amber (5) + white (6) + UV (7).
+        assertEquals(setOf(2, 3, 4, 5, 6, 7), channels.map { it.channel }.toSet())
+    }
+
+    @Test
+    fun `channelsFor position returns pan and tilt`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(
+            universe = universe,
+            key = "spot-1",
+            fixtureName = "Spot 1",
+            firstChannel = 1,
+        )
+        val channels = AttributeChannelWriter.channelsFor(fx, "position")
+        assertEquals(setOf(1, 2), channels.map { it.channel }.toSet())
+    }
+
+    // ─── attributeKeysByChannel (the channel-mapping frame's per-address keys) ─
+
+    private fun keysAt(
+        keys: Map<Pair<Int, Int>, List<CueAssignmentResolver.Key>>,
+        channel: Int,
+    ): Set<Pair<String, String>> =
+        keys[universe.universe to channel].orEmpty().map { it.targetKey to it.attribute }.toSet()
+
+    @Test
+    fun `attributeKeysByChannel names a bundled emitter under both its slider and the colour`() {
+        // HexFixture: dimmer 1, R/G/B 2-4, amber 5, white 6, UV 7. `updateChannel` lifts an
+        // amber write to the `amber` slider; a cue colour lands on `rgbColour` — the DMX sheet
+        // has to ask about both to see either.
+        val keys = AttributeChannelWriter.attributeKeysByChannel(listOf(hex()))
+        assertEquals(setOf("hex-1" to "dimmer"), keysAt(keys, 1))
+        assertEquals(setOf("hex-1" to "rgbColour"), keysAt(keys, 2))
+        assertEquals(setOf("hex-1" to "amber", "hex-1" to "rgbColour"), keysAt(keys, 5))
+        assertEquals(setOf("hex-1" to "white", "hex-1" to "rgbColour"), keysAt(keys, 6))
+        assertEquals(setOf("hex-1" to "uv", "hex-1" to "rgbColour"), keysAt(keys, 7))
+    }
+
+    @Test
+    fun `attributeKeysByChannel names a pan axis under its slider and position`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(universe, "spot-1", "Spot 1", firstChannel = 1)
+        val keys = AttributeChannelWriter.attributeKeysByChannel(listOf(fx))
+        val pan = keysAt(keys, 1)
+        assertTrue("spot-1" to "position" in pan, "pan channel is half of position: $pan")
+        assertTrue(pan.any { it.second != "position" }, "and its own slider: $pan")
+    }
+
+    @Test
+    fun `attributeKeysByChannel reaches every element of a multi-head fixture`() {
+        // Mode48Ch: twelve RGBW pixels, 4 channels each. The white is a bundled slider the
+        // element descriptors omit — which is why the sheet's descriptor-built map missed it.
+        val bar = LedLightbar12PixelFixture.Mode48Ch(universe, "bar", "Bar", firstChannel = 1)
+        val keys = AttributeChannelWriter.attributeKeysByChannel(listOf(bar))
+        val pixel2 = bar.elements[2].elementKey
+        assertEquals(setOf(pixel2 to "rgbColour"), keysAt(keys, 9), "head 3 red")
+        assertEquals(setOf(pixel2 to "white", pixel2 to "rgbColour"), keysAt(keys, 12), "head 3 white")
+    }
+
+    @Test
+    fun `attributeKeysByChannel leaves an address no attribute covers out`() {
+        val keys = AttributeChannelWriter.attributeKeysByChannel(listOf(hex(firstChannel = 1)))
+        assertEquals(emptySet(), keysAt(keys, 100))
+    }
+
+    // ─── coveringKeysByChannel (the one key a raw write belongs to) ─────────
+
+    private fun coveringAt(
+        keys: Map<Pair<Int, Int>, CueAssignmentResolver.Key>,
+        channel: Int,
+    ): Pair<String, String>? = keys[universe.universe to channel]?.let { it.targetKey to it.attribute }
+
+    @Test
+    fun `coveringKeysByChannel keeps the whole-fixture answers the old walk gave`() {
+        // Pinned against the walk this replaced: an R/G/B channel is the colour, but a bundled
+        // emitter with its own slider is that slider — the slider wins over the aggregate.
+        val keys = AttributeChannelWriter.coveringKeysByChannel(listOf(hex()))
+        assertEquals("hex-1" to "dimmer", coveringAt(keys, 1))
+        assertEquals("hex-1" to "rgbColour", coveringAt(keys, 2), "red")
+        assertEquals("hex-1" to "rgbColour", coveringAt(keys, 4), "blue")
+        assertEquals("hex-1" to "amber", coveringAt(keys, 5), "amber is its own slider, not rgbColour")
+        assertEquals("hex-1" to "white", coveringAt(keys, 6))
+        assertEquals("hex-1" to "uv", coveringAt(keys, 7))
+        assertEquals(null, coveringAt(keys, 100), "an address nothing covers has no key")
+    }
+
+    @Test
+    fun `coveringKeysByChannel names a pan axis by its slider, not position`() {
+        val fx = Fusion100SpotMkIIFixture.Mode8Ch(universe, "spot-1", "Spot 1", firstChannel = 1)
+        val keys = AttributeChannelWriter.coveringKeysByChannel(listOf(fx))
+        assertEquals("spot-1" to "pan", coveringAt(keys, 1))
+        assertEquals("spot-1" to "tilt", coveringAt(keys, 2))
+    }
+
+    @Test
+    fun `coveringKeysByChannel reaches a head of a multi-head fixture`() {
+        // Mode48Ch: the parent declares no channel of its own; head 3 (pixel-2) is 9-12.
+        val bar = LedLightbar12PixelFixture.Mode48Ch(universe, "bar", "Bar", firstChannel = 1)
+        val keys = AttributeChannelWriter.coveringKeysByChannel(listOf(bar))
+        val pixel2 = bar.elements[2].elementKey
+        assertEquals(pixel2 to "rgbColour", coveringAt(keys, 9), "head 3 red")
+        assertEquals(pixel2 to "rgbColour", coveringAt(keys, 11), "head 3 blue")
+        assertEquals(pixel2 to "white", coveringAt(keys, 12), "head 3 white is the head's own slider")
+        assertEquals(bar.elements[11].elementKey to "white", coveringAt(keys, 48), "last head's white")
+    }
+
+    // ─── FixtureElement targeting (multi-element fixtures) ────────────────
+
+    @Test
+    fun `slider write on element routes to that element's channel`() {
+        // Mode14Ch: master dimmer = firstChannel (1), master strobe = firstChannel+1 (2),
+        // head 0 pan = 3, head 1 pan = 6, head 2 pan = 9, head 3 pan = 12.
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head1 = bar.head(1)
+        val writes = AttributeChannelWriter.resolve(
+            head1,
+            "pan",
+            CueAssignmentResolver.AttributeValue.Slider(128u),
+        )
+        assertEquals(1, writes.size)
+        val w = writes.single()
+        assertEquals(6, w.channel, "head 1 pan at firstChannel + 2 + (1 * 3) = 6")
+        assertEquals(128u.toUByte(), w.value)
+        assertEquals(AttributeCategory.PAN, w.category)
+    }
+
+    @Test
+    fun `position write on element emits both pan and tilt channels`() {
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head2 = bar.head(2)
+        val writes = AttributeChannelWriter.resolve(
+            head2,
+            "position",
+            CueAssignmentResolver.AttributeValue.Position(pan = 100u, tilt = 200u),
+        )
+        // Head 2 pan = firstChannel + 2 + (2 * 3) = 9; tilt = 10.
+        val byChannel = writes.associate { it.channel to it.value }
+        assertEquals(100u.toUByte(), byChannel[9])
+        assertEquals(200u.toUByte(), byChannel[10])
+    }
+
+    @Test
+    fun `channelsFor on element enumerates the element's channels`() {
+        val bar = SlenderBeamBarQuadFixture.Mode14Ch(universe, "bar-1", "Bar 1", firstChannel = 1)
+        val head0 = bar.head(0)
+        val channels = AttributeChannelWriter.channelsFor(head0, "tilt")
+        assertEquals(1, channels.size)
+        // Head 0 tilt = firstChannel + 2 + (0 * 3) + 1 = 4.
+        assertEquals(4, channels.single().channel)
+    }
+
+    // ─── Round-trip vs cue-apply pipeline ───────────────────────────────────
+
+    @Test
+    fun `colour write produces same DMX bytes as Layer 4 cue apply for the same value`() {
+        // Rig with FxEngine → MockDmxController so we can observe bytes that the cue-apply
+        // path writes when it lands the same AttributeValue.
+        val controller = MockDmxController(universe)
+        val fixtures = Fixtures()
+        fixtures.register {
+            addController(controller)
+            addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
+        }
+        val programmerStore = ProgrammerStore()
+        val engine = FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+
+        // Cue-apply path: assignment → setCueAssignments → publishCueLayerToControllers → controller bytes.
+        val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
+        val assignment = CueAssignmentResolver.Assignment(
+            cueId = 1, priority = 1, fadeWeight = 1.0,
+            targetKey = "hex-1", targetIsGroup = false,
+            attribute = "rgbColour",
+            category = AttributeCategory.COLOUR,
+            value = CueAssignmentResolver.AttributeValue.Colour(ext),
+        )
+        engine.cueLayer.setAssignments(1, listOf(assignment))
+        val cueBytes = mapOf(
+            2 to controller.currentValues[2],
+            3 to controller.currentValues[3],
+            4 to controller.currentValues[4],
+            5 to controller.currentValues[5],
+            6 to controller.currentValues[6],
+            7 to controller.currentValues[7],
+        )
+
+        // Writer path: resolve AttributeValue directly.
+        val writerBytes = AttributeChannelWriter.resolve(
+            HexFixture(universe, "hex-1", "Hex 1", 1),
+            "rgbColour",
+            CueAssignmentResolver.AttributeValue.Colour(ext),
+        ).associate { it.channel to it.value }
+
+        assertEquals(cueBytes[2], writerBytes[2], "red channel matches cue-apply")
+        assertEquals(cueBytes[3], writerBytes[3], "green channel matches cue-apply")
+        assertEquals(cueBytes[4], writerBytes[4], "blue channel matches cue-apply")
+        assertEquals(cueBytes[5], writerBytes[5], "amber channel matches cue-apply")
+        assertEquals(cueBytes[6], writerBytes[6], "white channel matches cue-apply")
+        assertEquals(cueBytes[7], writerBytes[7], "uv channel matches cue-apply")
+    }
+
+    @Test
+    fun `a stored zoom row on a stepped zoom reaches DMX through the cue layer`() {
+        // The Robe ColorSpot 575's zoom is a setting (fixture-optics plan D2), category ZOOM. A
+        // stored row is parsed with the property's own `settingBacked`, as the cook does; parsed as
+        // a slider it would build a SliderTarget, find no slider and write nothing.
+        val controller = MockDmxController(universe)
+        val fixtures = Fixtures()
+        fixtures.register {
+            addController(controller)
+            addFixture(RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1))
+        }
+        val programmerStore = ProgrammerStore()
+        val engine = FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+        val zoom = assertNotNull(RobeColorSpot575Fixture.Mode2Ch(universe, "robe-1", "Robe 1", 1).fixtureAttribute("zoom"))
+        assertTrue(zoom.settingBacked)
+        val stored = RobeColorSpot575Fixture.Zoom.ZOOM_18.level.toString()
+        val value = assertNotNull(
+            CueAssignmentResolver.parseAssignmentValue(zoom.category, "zoom", stored, settingBacked = zoom.settingBacked),
+        )
+        assertEquals(CueAssignmentResolver.AttributeValue.Setting(RobeColorSpot575Fixture.Zoom.ZOOM_18.level), value)
+
+        engine.cueLayer.setAssignments(1, listOf(
+            CueAssignmentResolver.Assignment(
+                cueId = 1, priority = 1, fadeWeight = 1.0,
+                targetKey = "robe-1", targetIsGroup = false,
+                attribute = "zoom",
+                category = AttributeCategory.ZOOM,
+                value = value,
+            ),
+        ))
+        // Ch 16 is the zoom.
+        assertEquals(RobeColorSpot575Fixture.Zoom.ZOOM_18.level, controller.currentValues[16])
+    }
+
+    @Test
+    fun `slider write produces same DMX byte as Layer 4 cue apply for the same value`() {
+        val controller = MockDmxController(universe)
+        val fixtures = Fixtures()
+        fixtures.register {
+            addController(controller)
+            addFixture(HexFixture(universe, "hex-1", "Hex 1", 1))
+        }
+        val programmerStore = ProgrammerStore()
+        val engine = FxEngine(
+            fixtures = fixtures,
+            speedMasters = SpeedMasterBank(),
+            programmerStore = programmerStore,
+            layerResolver = LayerResolver(CueAssignmentResolver(), programmerStore),
+        )
+
+        val assignment = CueAssignmentResolver.Assignment(
+            cueId = 1, priority = 1, fadeWeight = 1.0,
+            targetKey = "hex-1", targetIsGroup = false,
+            attribute = "dimmer",
+            category = AttributeCategory.DIMMER,
+            value = CueAssignmentResolver.AttributeValue.Slider(180u),
+        )
+        engine.cueLayer.setAssignments(1, listOf(assignment))
+
+        val writerWrite = AttributeChannelWriter.resolve(
+            HexFixture(universe, "hex-1", "Hex 1", 1),
+            "dimmer",
+            CueAssignmentResolver.AttributeValue.Slider(180u),
+        ).single()
+
+        assertEquals(controller.currentValues[1], writerWrite.value, "dimmer channel matches cue-apply")
+    }
+}

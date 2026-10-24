@@ -1,12 +1,12 @@
 import { familyForCategory, type AttributeFamily } from '@/lib/attributeFamily'
 import { annotatesDegrees } from '@/lib/axisDegrees'
 import {
-  findDimmerProperty,
-  type ColourPropertyDescriptor,
-  type PropertyDescriptor,
-  type SettingPropertyDescriptor,
-  type SliderPropertyDescriptor,
-  type WhiteMixPropertyDescriptor,
+  findDimmerAttribute,
+  type ColourAttributeDescriptor,
+  type AttributeDescriptor,
+  type SettingAttributeDescriptor,
+  type SliderAttributeDescriptor,
+  type WhiteMixAttributeDescriptor,
 } from '@/store/fixtures'
 import { resolveCell, type CellResolution } from '../fixtures-list/columns'
 
@@ -36,25 +36,25 @@ export type PositionResolution = Extract<NonNullable<CellResolution>, { kind: 'p
 
 /**
  * One row of the sheet. [keys] are the property names the row's source mark, its × and Release's
- * count read — the programmer is keyed by `(head, propertyName)`. The first is the one the row
+ * count read — the programmer is keyed by `(head, attribute)`. The first is the one the row
  * writes and asks the stack about.
  */
 export type SheetRow =
-  | { kind: 'slider'; id: string; family: SheetFamily; label: string; keys: string[]; property: SliderPropertyDescriptor }
-  | { kind: 'setting'; id: string; family: SheetFamily; label: string; keys: string[]; property: SettingPropertyDescriptor }
+  | { kind: 'slider'; id: string; family: SheetFamily; label: string; keys: string[]; attribute: SliderAttributeDescriptor }
+  | { kind: 'setting'; id: string; family: SheetFamily; label: string; keys: string[]; attribute: SettingAttributeDescriptor }
   /** [dimmer] is what its swatch is dimmed by: the set's own dimmer, else the fixture's for a head. */
-  | { kind: 'colour'; id: string; family: SheetFamily; label: string; keys: string[]; property: ColourPropertyDescriptor; dimmer?: SliderPropertyDescriptor }
+  | { kind: 'colour'; id: string; family: SheetFamily; label: string; keys: string[]; attribute: ColourAttributeDescriptor; dimmer?: SliderAttributeDescriptor }
   /**
    * A warm/cold white pair's colour (venue-visit plan D8) — the blinder's cells: a warmth and a
    * level, written as the colour that mix makes. Its two white sliders keep rows of their own.
    */
-  | { kind: 'white-mix'; id: string; family: SheetFamily; label: string; keys: string[]; property: WhiteMixPropertyDescriptor }
+  | { kind: 'white-mix'; id: string; family: SheetFamily; label: string; keys: string[]; attribute: WhiteMixAttributeDescriptor }
   /**
    * A colour head with no dimmer: one Intensity row reading max(R, G, B) and scaling the colour —
    * `useVirtualDimmer`. Keyed by the colour property, since that is the entry it writes. It used to
    * carry a "Virtual" badge; a row that sets the level is a dimmer to the operator (Main board, 3).
    */
-  | { kind: 'virtual-dimmer'; id: string; family: SheetFamily; label: string; keys: string[]; property: ColourPropertyDescriptor }
+  | { kind: 'virtual-dimmer'; id: string; family: SheetFamily; label: string; keys: string[]; attribute: ColourAttributeDescriptor }
   /**
    * Pan and tilt as **one** row (D8), written as one `programmer.setPosition` — never the two raw
    * axes. Keyed `position` first: a Circle is keyed `position`, so that is the key whose entry holds
@@ -67,10 +67,10 @@ export interface SheetRowGroup {
   rows: SheetRow[]
 }
 
-function familyOf(property: PropertyDescriptor): SheetFamily {
-  if (property.type === 'slider' && property.timing != null) return 'CONTROLS'
-  if (CONTROL_CATEGORIES.has(property.category)) return 'CONTROLS'
-  return familyForCategory(property.category)
+function familyOf(attribute: AttributeDescriptor): SheetFamily {
+  if (attribute.type === 'slider' && attribute.timing != null) return 'CONTROLS'
+  if (CONTROL_CATEGORIES.has(attribute.category)) return 'CONTROLS'
+  return familyForCategory(attribute.category)
 }
 
 const AXIS_CATEGORIES = new Set(['pan', 'tilt', 'pan_fine', 'tilt_fine'])
@@ -84,23 +84,23 @@ const AXIS_CATEGORIES = new Set(['pan', 'tilt', 'pan_fine', 'tilt_fine'])
  * property), and the pan / tilt sliders once they make a Position row.
  */
 export function buildSheetRows(
-  properties: readonly PropertyDescriptor[] | undefined,
+  attributes: readonly AttributeDescriptor[] | undefined,
   options: {
     /**
      * A dimmer the set does not carry still drives these heads — a multi-head fixture's all-heads
-     * dimmer (`elementGroupProperties`). Then a colour here gets no Intensity row of its own, as
+     * dimmer (`elementGroupAttributes`). Then a colour here gets no Intensity row of its own, as
      * `FixtureContent`'s `hasRealDimmer` had it.
      */
     dimmerElsewhere?: boolean
     /** A head's fixture-level dimmer, for its colour swatch when the head has none of its own. */
-    fallbackDimmer?: SliderPropertyDescriptor
+    fallbackDimmer?: SliderAttributeDescriptor
   } = {},
 ): SheetRowGroup[] {
-  const props = (properties ?? []) as PropertyDescriptor[]
+  const props = (attributes ?? []) as AttributeDescriptor[]
   const rows: SheetRow[] = []
 
   const position = resolveCell(props, 'position') as PositionResolution | null
-  const ownDimmer = findDimmerProperty(props)
+  const ownDimmer = findDimmerAttribute(props)
   const hasDimmer = options.dimmerElsewhere === true || ownDimmer != null
   let positionPlaced = false
 
@@ -112,7 +112,7 @@ export function buildSheetRows(
     if (position && (p.type === 'position' || isAxis)) {
       if (positionPlaced) continue
       positionPlaced = true
-      const axisKeys = [position.panProperty?.name, position.tiltProperty?.name].filter((n): n is string => n != null)
+      const axisKeys = [position.panAttribute?.name, position.tiltAttribute?.name].filter((n): n is string => n != null)
       rows.push({
         kind: 'position',
         id: 'position',
@@ -122,14 +122,14 @@ export function buildSheetRows(
         resolution: position,
         // Aim solves pan and tilt from the travel degrees a type annotates, so only such a head
         // offers *Aim…*. The row's own values are centre-relative on every head (D3).
-        aimable: annotatesDegrees(position.panProperty) && annotatesDegrees(position.tiltProperty),
+        aimable: annotatesDegrees(position.panAttribute) && annotatesDegrees(position.tiltAttribute),
       })
       continue
     }
     switch (p.type) {
       case 'colour':
         if (!hasDimmer) {
-          rows.push({ kind: 'virtual-dimmer', id: `virtual-dimmer:${p.name}`, family: 'INTENSITY', label: 'Dimmer', keys: [p.name], property: p })
+          rows.push({ kind: 'virtual-dimmer', id: `virtual-dimmer:${p.name}`, family: 'INTENSITY', label: 'Dimmer', keys: [p.name], attribute: p })
         }
         rows.push({
           kind: 'colour',
@@ -137,18 +137,18 @@ export function buildSheetRows(
           family: 'COLOUR',
           label: p.displayName,
           keys: [p.name],
-          property: p,
+          attribute: p,
           dimmer: ownDimmer ?? options.fallbackDimmer,
         })
         break
       case 'whiteMix':
-        rows.push({ kind: 'white-mix', id: p.name, family: 'COLOUR', label: p.displayName, keys: [p.name], property: p })
+        rows.push({ kind: 'white-mix', id: p.name, family: 'COLOUR', label: p.displayName, keys: [p.name], attribute: p })
         break
       case 'slider':
-        rows.push({ kind: 'slider', id: p.name, family: familyOf(p), label: p.displayName, keys: [p.name], property: p })
+        rows.push({ kind: 'slider', id: p.name, family: familyOf(p), label: p.displayName, keys: [p.name], attribute: p })
         break
       case 'setting':
-        rows.push({ kind: 'setting', id: p.name, family: familyOf(p), label: p.displayName, keys: [p.name], property: p })
+        rows.push({ kind: 'setting', id: p.name, family: familyOf(p), label: p.displayName, keys: [p.name], attribute: p })
         break
       case 'position':
         // Only reached with no position resolution, which a real descriptor always makes.

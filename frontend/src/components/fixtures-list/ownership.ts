@@ -1,5 +1,5 @@
 import { computeCombinedCss } from '../../lib/colourMath'
-import { resolveSettingOption } from '../../hooks/usePropertyValues'
+import { resolveSettingOption } from '../../hooks/useAttributeValues'
 import type { CellResolution } from './columns'
 import type { CellState, CueCellStateSource } from './scopedCellValue'
 import type { CellValue } from './useRowValues'
@@ -55,7 +55,7 @@ export function ownershipCellClass(ownership?: CellOwnership): string {
  * one place the fork belongs. The subscription machinery stays single-implementation.
  *
  * Three states, and none of them is about the rig — they are about this layer:
- * - **inert**: the column's family sits outside the layer's `propertyMask`, so the layer would
+ * - **inert**: the column's family sits outside the layer's `attributeMask`, so the layer would
  *   never write it whatever the Look holds;
  * - **untargeted**: the fixture sits outside the layer's `targets`. The value still shows when the
  *   Look has one, because "this Look has a value for it, this layer filters it out" is the useful
@@ -192,7 +192,7 @@ export function applyStagedValue(
       if (staged.kind !== 'level') return value
       const options =
         first && (first.kind === 'setting' || first.kind === 'colour-setting')
-          ? first.property.options
+          ? first.attribute.options
           : []
       return {
         kind: 'setting',

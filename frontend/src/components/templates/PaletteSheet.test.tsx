@@ -75,7 +75,7 @@ function template(id: number, over: Partial<PaletteSummary>): PaletteSummary {
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:100' }],
     fx: null,
     layerCount: 0,
     lastPressedAt: null,
@@ -89,7 +89,7 @@ const FULL = template(1, { name: 'Full' })
 const HALF = template(2, {
   name: 'Half',
   fadeDurationMs: 2000,
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:50' }],
 })
 // An effect template's empty `rows` is omitted on the wire: no `rows` field at all.
 const PULSE = template(3, { name: 'Pulse', kind: 'fx', rows: undefined, fx: effect({ speedMasterUuid: U(4) }) })
@@ -97,7 +97,7 @@ const AMBER = template(4, {
   name: 'Amber',
   family: 'COLOUR',
   fadeDurationMs: 1000,
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' }],
 })
 const RAINBOW = template(5, {
   name: 'Rainbow',
@@ -111,8 +111,8 @@ const SPECIALS = template(6, {
   family: 'COLOUR',
   isGeneric: false,
   rows: [
-    { targetType: 'fixture', targetKey: 'par-1', propertyName: 'rgbColour', value: '#FF0000;policy=rgbonly' },
-    { targetType: 'fixture', targetKey: 'par-2', propertyName: 'rgbColour', value: '#00FF00;policy=rgbonly' },
+    { targetType: 'fixture', targetKey: 'par-1', attribute: 'rgbColour', value: '#FF0000;policy=rgbonly' },
+    { targetType: 'fixture', targetKey: 'par-2', attribute: 'rgbColour', value: '#00FF00;policy=rgbonly' },
   ],
 })
 const LIBRARY = [FULL, HALF, PULSE, AMBER, RAINBOW, SPECIALS]
@@ -350,8 +350,8 @@ describe('PaletteSheet — Master', () => {
 
 /** The rows each saved `PUT {rows}` carried, as `property=value` in order — the grammar the desk stores. */
 function sentRows(call: number): string[] {
-  const body = savePalette.mock.calls[call][0] as { rows: { propertyName: string; value: string }[] }
-  return body.rows.map((r) => `${r.propertyName}=${r.value}`)
+  const body = savePalette.mock.calls[call][0] as { rows: { attribute: string; value: string }[] }
+  return body.rows.map((r) => `${r.attribute}=${r.value}`)
 }
 
 describe('PaletteSheet — Value (session 3)', () => {
@@ -375,8 +375,8 @@ describe('PaletteSheet — Value (session 3)', () => {
       projectId: 1,
       paletteId: 4,
       rows: [
-        { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=rgbonly', sortOrder: 0 },
-        { targetType: 'deferred', targetKey: '', propertyName: 'white', value: 'dmx:255', sortOrder: 1 },
+        { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=rgbonly', sortOrder: 0 },
+        { targetType: 'deferred', targetKey: '', attribute: 'white', value: 'dmx:255', sortOrder: 1 },
       ],
     })
   })
@@ -400,7 +400,7 @@ describe('PaletteSheet — Value (session 3)', () => {
 
   it('Enter on an untouched slider editor writes nothing either — and a stored row the builder reads the same is no change', async () => {
     // A lower-case hex and no policy order the builder would write: the same intent, so no change.
-    const lower = template(4, { ...AMBER, rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff9d4a;policy=extract' }] })
+    const lower = template(4, { ...AMBER, rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff9d4a;policy=extract' }] })
     draw({ rows: [...ROWS.slice(0, 3), { id: paletteRowId(4), palette: lower }] })
     drag('value', 4, 4)
     fireEvent.click(screen.getByRole('button', { name: 'Set' }))
@@ -440,8 +440,8 @@ describe('PaletteSheet — Value (session 3)', () => {
     const strobed = template(7, {
       name: 'Strobed',
       rows: [
-        { targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' },
-        { targetType: 'deferred', targetKey: '', propertyName: 'strobe', value: 'pct:25' },
+        { targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:50' },
+        { targetType: 'deferred', targetKey: '', attribute: 'strobe', value: 'pct:25' },
       ],
     })
     draw({ rows: [ROWS[0], { id: paletteRowId(7), palette: strobed }] })
@@ -466,8 +466,8 @@ describe('PaletteSheet — Value (session 3)', () => {
     const both = template(8, {
       name: 'Both',
       rows: [
-        { targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:40' },
-        { targetType: 'deferred', targetKey: '', propertyName: 'strobe', value: 'pct:10' },
+        { targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:40' },
+        { targetType: 'deferred', targetKey: '', attribute: 'strobe', value: 'pct:10' },
       ],
     })
     // Clearing Both's level leaves its strobe; the same removal would empty Full.

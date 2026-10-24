@@ -25,7 +25,7 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
 import { computeCombinedCss, parseCssRgb } from '@/lib/colourMath'
 import { LiveAppearanceReporter, pickSelectionColour, targetHeads, type PickedColour } from '@/lib/liveAppearance'
 import { cn } from '@/lib/utils'
-import type { ColourPropertyDescriptor } from '@/store/fixtures'
+import type { ColourAttributeDescriptor } from '@/store/fixtures'
 import { usePatchListQuery } from '@/store/patches'
 import { EditorField } from './EditorField'
 import { EditorFooter } from './EditorFooter'
@@ -241,8 +241,8 @@ function channelByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)))
 }
 
-function colourDescriptorOf(properties: readonly { type: string }[]): ColourPropertyDescriptor | null {
-  return (properties.find((p) => p.type === 'colour') as ColourPropertyDescriptor | undefined) ?? null
+function colourDescriptorOf(attributes: readonly { type: string }[]): ColourAttributeDescriptor | null {
+  return (attributes.find((p) => p.type === 'colour') as ColourAttributeDescriptor | undefined) ?? null
 }
 
 export type ColourEmitter = 'white' | 'amber' | 'uv'
@@ -257,9 +257,9 @@ export type ColourEmitter = 'white' | 'amber' | 'uv'
 export function emitterHeadCounts(targets: readonly WriteTarget[]): Record<ColourEmitter | 'any', number> {
   const counts = { white: 0, amber: 0, uv: 0, any: 0 }
   for (const target of targets) {
-    const descriptors = [target.properties, ...(target.elements ?? []).map((e) => e.properties)]
+    const descriptors = [target.attributes, ...(target.elements ?? []).map((e) => e.attributes)]
       .map(colourDescriptorOf)
-      .filter((d): d is ColourPropertyDescriptor => d != null)
+      .filter((d): d is ColourAttributeDescriptor => d != null)
     const white = descriptors.some((d) => d.whiteChannel != null)
     const amber = descriptors.some((d) => d.amberChannel != null)
     const uv = descriptors.some((d) => d.uvChannel != null)
@@ -671,7 +671,7 @@ export function ColourEditor({
       <FxBand
         projectId={effects.projectId}
         family="COLOUR"
-        property="rgbColour"
+        attribute="rgbColour"
         targets={effects.targets}
         families={effects.families}
         scope={effects.scope}

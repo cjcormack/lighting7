@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { PaletteSummary } from '@/api/palettesApi'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import {
   categoryForFamily,
   isPaletteSteps,
@@ -28,7 +28,7 @@ const palette = (name: string, family: PaletteSummary['family'], rows: [string, 
     isGeneric: true,
     kind: 'value',
     requiredEmitters: [],
-    rows: rows.map(([propertyName, value]) => ({ targetType: 'deferred', targetKey: '', propertyName, value })),
+    rows: rows.map(([attribute, value]) => ({ targetType: 'deferred', targetKey: '', attribute, value })),
     fx: null,
     ...over,
   }) as unknown as PaletteSummary
@@ -44,7 +44,7 @@ const GOBO = {
     { name: 'GOBO_2', level: 20, displayName: 'Gobo 2' },
     { name: 'GOBO_3', level: 30, displayName: 'Gobo 3' },
   ],
-} as unknown as SettingPropertyDescriptor
+} as unknown as SettingAttributeDescriptor
 
 describe('step effects (effects plan §3.6, §4.4)', () => {
   it('names the two built-ins however a stored row spells them', () => {
@@ -88,15 +88,15 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
     const ref = (t: PaletteSummary) => `pal:${t.uuid}`
     const steps = (...list: PaletteSummary[]) => ({ fxType: 'PaletteSteps', parameters: { palettes: list.map(ref).join(',') } })
 
-    expect(stepFxPaletteShape(steps(red, uv), [red, uv, down])).toEqual({ family: 'COLOUR', fxFamily: 'colour', propertyName: null })
+    expect(stepFxPaletteShape(steps(red, uv), [red, uv, down])).toEqual({ family: 'COLOUR', fxFamily: 'colour', attribute: null })
     expect(stepFxPaletteShape(steps(red, down), [red, uv, down])).toHaveProperty('reason')
     expect(stepFxPaletteShape(steps(red, uv), undefined)).toEqual({ reason: 'Reading the palette library…' })
-    expect(stepFxPaletteShape({ fxType: 'SlotSteps', propertyName: 'gobo' }, [])).toEqual({
+    expect(stepFxPaletteShape({ fxType: 'SlotSteps', attribute: 'gobo' }, [])).toEqual({
       family: 'BEAM',
       fxFamily: 'beam',
-      propertyName: 'gobo',
+      attribute: 'gobo',
     })
-    expect(stepFxPaletteShape({ fxType: 'SlotSteps', propertyName: null }, [])).toHaveProperty('reason')
+    expect(stepFxPaletteShape({ fxType: 'SlotSteps', attribute: null }, [])).toHaveProperty('reason')
     expect(stepFxPaletteShape({ fxType: 'Pulse' }, [])).toBeNull()
   })
 
@@ -110,11 +110,11 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
     ]
     const has = (name: string) => ['zoom', 'iris', 'dimmer', 'rgbColour'].includes(name)
     const offers = paletteStepsOffers(templates, has)
-    expect(offers.map((o) => [o.family, o.propertyName, o.palettes.length])).toEqual([
+    expect(offers.map((o) => [o.family, o.attribute, o.palettes.length])).toEqual([
       ['COLOUR', 'rgbColour', 2],
       ['BEAM', 'zoom', 2],
     ])
-    expect(paletteStepsOffers(templates, has, 'iris').find((o) => o.family === 'BEAM')?.propertyName).toBe('iris')
+    expect(paletteStepsOffers(templates, has, 'iris').find((o) => o.family === 'BEAM')?.attribute).toBe('iris')
     expect(paletteStepsOffers(templates, (n) => n === 'dimmer')).toEqual([])
   })
 
@@ -146,8 +146,8 @@ describe('step effects (effects plan §3.6, §4.4)', () => {
       options: options.map(([name, level]) => ({ name, level, displayName: name })),
     })
     const union = rigSettingUnion([
-      { properties: [wheel([['OPEN', 0], ['GOBO_3', 59]])] },
-      { properties: [wheel([['Open', 0], ['GOBO_3', 70], ['GOBO_6', 124]]), { type: 'slider', name: 'dimmer' }] },
+      { attributes: [wheel([['OPEN', 0], ['GOBO_3', 59]])] },
+      { attributes: [wheel([['Open', 0], ['GOBO_3', 70], ['GOBO_6', 124]]), { type: 'slider', name: 'dimmer' }] },
     ])
     expect(union).toHaveLength(1)
     expect(union[0].options.map((o) => o.name)).toEqual(['OPEN', 'GOBO_3', 'GOBO_6'])

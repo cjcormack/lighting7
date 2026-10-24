@@ -27,7 +27,7 @@ import uk.me.cormack.lighting7.fx.FxTiming
 import uk.me.cormack.lighting7.fx.SliderTarget
 import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueTriggerDto
 import uk.me.cormack.lighting7.models.DaoCue
@@ -65,13 +65,13 @@ class CueChildIdentityTest : RouteIntegrationTest() {
 
     private val pulse = CueAdHocFxDto(
         targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
-        propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+        attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
     private fun rows() = listOf(
-        CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "100", sortOrder = 0),
-        CuePropertyAssignmentDto("fixture", "hex-1", "uv", "10", sortOrder = 1),
-        CuePropertyAssignmentDto("fixture", "hex-2", "rgbColour", "#00ff00", sortOrder = 2),
+        CueAttributeAssignmentDto("fixture", "hex-1", "dimmer", "100", sortOrder = 0),
+        CueAttributeAssignmentDto("fixture", "hex-1", "uv", "10", sortOrder = 1),
+        CueAttributeAssignmentDto("fixture", "hex-2", "rgbColour", "#00ff00", sortOrder = 2),
     )
 
     @Test
@@ -85,12 +85,12 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val edited = rows().map { if (it.targetKey == "hex-2") it.copy(value = "#0000ff") else it }
         val response = client.patch("${base()}/${cue.id}") {
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("propertyAssignments", Json.encodeToJsonElement(edited)) })
+            setBody(buildJsonObject { put("attributeAssignments", Json.encodeToJsonElement(edited)) })
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
 
         assertEquals(before, children(cue.id), "every child keeps its uuid, the edited row included")
-        assertEquals("#0000ff", response.body<CueDetails>().propertyAssignments.single { it.targetKey == "hex-2" }.value)
+        assertEquals("#0000ff", response.body<CueDetails>().attributeAssignments.single { it.targetKey == "hex-2" }.value)
     }
 
     @Test
@@ -105,10 +105,10 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val input = cue.asInput().let { input ->
             input.copy(
                 adHocFx = input.adHocFx.map { it.copy(cycle = 2.0, parameters = mapOf("min" to "40")) },
-                propertyAssignments = input.propertyAssignments
-                    .filterNot { it.propertyName == "uv" }
-                    .map { if (it.targetKey == "hex-2") it.copy(propertyName = "colour") else it } +
-                    CuePropertyAssignmentDto("fixture", "hex-2", "dimmer", "50", sortOrder = 9),
+                attributeAssignments = input.attributeAssignments
+                    .filterNot { it.attribute == "uv" }
+                    .map { if (it.targetKey == "hex-2") it.copy(attribute = "colour") else it } +
+                    CueAttributeAssignmentDto("fixture", "hex-2", "dimmer", "50", sortOrder = 9),
             )
         }
         val response = client.put("${base()}/${cue.id}") {
@@ -153,9 +153,9 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             NewCue(
                 name = "twice",
                 cueStackId = ProgrammerRouteTestSupport.createStack(client, projectId, "s"),
-                propertyAssignments = listOf(
-                    CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "10", sortOrder = 5),
-                    CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "20", sortOrder = 1),
+                attributeAssignments = listOf(
+                    CueAttributeAssignmentDto("fixture", "hex-1", "dimmer", "10", sortOrder = 5),
+                    CueAttributeAssignmentDto("fixture", "hex-1", "dimmer", "20", sortOrder = 1),
                 ),
                 adHocFx = listOf(pulse.copy(sortOrder = 4), pulse.copy(sortOrder = 2)),
                 layers = listOf(
@@ -176,7 +176,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             setBody(
                 NewCue(
                     name = "twice",
-                    propertyAssignments = listOf(CuePropertyAssignmentDto("fixture", "hex-1", "dimmer", "30", sortOrder = 0)),
+                    attributeAssignments = listOf(CueAttributeAssignmentDto("fixture", "hex-1", "dimmer", "30", sortOrder = 0)),
                     adHocFx = listOf(pulse.copy(sortOrder = 0)),
                     layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0)),
                 ),
@@ -189,7 +189,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         assertEquals(listOf(before.rows.first()), after.rows)
         assertEquals(listOf(before.effects.first()), after.effects)
         assertEquals(listOf(before.layers.first()), after.layers)
-        assertEquals("30", response.body<CueDetails>().propertyAssignments.single().value)
+        assertEquals("30", response.body<CueDetails>().attributeAssignments.single().value)
     }
 
     @Test
@@ -248,7 +248,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val edited = rows().map { if (it.targetKey == "hex-2") it.copy(value = "#0000ff") else it }
         client.patch("${base()}/${cue.id}") {
             contentType(ContentType.Application.Json)
-            setBody(buildJsonObject { put("propertyAssignments", Json.encodeToJsonElement(edited)) })
+            setBody(buildJsonObject { put("attributeAssignments", Json.encodeToJsonElement(edited)) })
         }
         val after = exported()
 
@@ -293,7 +293,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(
                 client.get("${base()}/$imported").body<CueDetails>().asInput().let { input ->
-                    input.copy(propertyAssignments = input.propertyAssignments.map { it.copy(value = "1") })
+                    input.copy(attributeAssignments = input.attributeAssignments.map { it.copy(value = "1") })
                 },
             )
         }
@@ -334,8 +334,8 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             val after = children(created.cue.id)
             assertEquals(before, after, "the re-recorded row and effect are written over in place")
             val cue = updated.body<ProgrammerRecordResponse>().cue
-            assertEquals("255", cue.propertyAssignments.single { it.targetKey == "hex-1" }.value)
-            assertEquals("100", cue.propertyAssignments.single { it.targetKey == "hex-2" }.value, "outside the scope")
+            assertEquals("255", cue.attributeAssignments.single { it.targetKey == "hex-1" }.value)
+            assertEquals("100", cue.attributeAssignments.single { it.targetKey == "hex-2" }.value, "outside the scope")
             assertEquals(CycleLength.TWO_BEATS, cue.adHocFx.single().cycle)
         }
 
@@ -468,7 +468,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     @Test
     fun `create_cue gives its effects no run key, and refuses one a call names`() = testApplication {
         mountTestApp(state)
-        val effect = """{"targetType":"fixture","targetKey":"hex-1","fxType":"Pulse","family":"intensity","propertyName":"dimmer",""" +
+        val effect = """{"targetType":"fixture","targetKey":"hex-1","fxType":"Pulse","family":"intensity","attribute":"dimmer",""" +
             """"cycle":0.5,"blendMode":"OVERRIDE"}"""
         val keyed = AiTools(state).executeTool(
             "create_cue",
@@ -509,7 +509,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         DaoCue[cueId].adHocFx.associate { it.targetKey to it.runUuid }
     }
 
-    private data class Row(val targetKey: String, val propertyName: String)
+    private data class Row(val targetKey: String, val attribute: String)
 
     private data class Children(val rows: Map<Row, UUID>, val layers: Set<UUID>, val effects: Set<UUID>, val hooks: Set<UUID>)
 
@@ -518,7 +518,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun children(cueId: Int): Children = transaction(state.database) {
         val cue = DaoCue[cueId]
         Children(
-            rows = cue.propertyAssignments.associate { Row(it.targetKey, it.attribute) to it.uuid },
+            rows = cue.attributeAssignments.associate { Row(it.targetKey, it.attribute) to it.uuid },
             layers = cue.layers.mapTo(HashSet()) { it.uuid },
             effects = cue.adHocFx.mapTo(HashSet()) { it.uuid },
             hooks = cue.triggers.mapTo(HashSet()) { it.uuid },
@@ -528,7 +528,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
     private fun orderedChildren(cueId: Int): Ordered = transaction(state.database) {
         val cue = DaoCue[cueId]
         Ordered(
-            rows = cue.propertyAssignmentsInOrder().map { it.uuid },
+            rows = cue.attributeAssignmentsInOrder().map { it.uuid },
             layers = cue.layersInOrder().map { it.uuid },
             effects = cue.adHocFxInOrder().map { it.uuid },
         )
@@ -563,7 +563,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
             NewCue(
                 name = "rich",
                 cueStackId = ProgrammerRouteTestSupport.createStack(this, projectId, "s"),
-                propertyAssignments = rows(),
+                attributeAssignments = rows(),
                 adHocFx = listOf(pulse),
                 layers = listOf(CueLayerDto(lookId = warm, sortOrder = 0), CueLayerDto(lookId = cool, sortOrder = 1)),
                 triggers = listOf(CueTriggerDto(triggerType = "ACTIVATION", scriptId = scriptId)),
@@ -585,7 +585,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         name = name,
         layers = layers,
         adHocFx = adHocFx,
-        propertyAssignments = propertyAssignments,
+        attributeAssignments = attributeAssignments,
         triggers = triggers.map {
             CueTriggerDto(it.triggerType, it.delayMs, it.intervalMs, it.randomWindowMs, it.scriptId, it.sortOrder)
         },

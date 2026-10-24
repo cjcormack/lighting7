@@ -19,7 +19,7 @@ import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -61,7 +61,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "dimmer")!!
         assertEquals(ProgrammerOwner.INCLUDE, slot.owner)
         assertTrue(slot.touched, "included content must be recordable")
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(200u), slot.value.resolved)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(200u), slot.value.resolved)
 
         val target = state.show.programmerStore.lastIncludedTarget
         assertNotNull(target)
@@ -98,7 +98,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 )
             }.body()
 
-            val row = rerecorded.cue.propertyAssignments.single()
+            val row = rerecorded.cue.attributeAssignments.single()
             assertEquals("group", row.targetType)
             assertEquals("front-wash", row.targetKey)
             assertEquals("150", row.value)
@@ -125,11 +125,11 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
         client.include(cueId)
 
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.AttributeValue.Slider(150u),
             programmerValue(state, "hex-1", "dimmer"),
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(40u),
+            CueAssignmentResolver.AttributeValue.Slider(40u),
             programmerValue(state, "hex-2", "dimmer"),
             "the direct fixture row is the more specific statement",
         )
@@ -145,7 +145,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             adHoc = listOf(
                 CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    fxType = "SineWave", propertyName = "dimmer",
+                    fxType = "SineWave", attribute = "dimmer",
                 ),
             ),
         )
@@ -174,7 +174,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             adHoc = listOf(
                 CueAdHocFxSpec(
                     targetType = "fixture", targetKey = "hex-1",
-                    fxType = "SineWave", propertyName = "dimmer",
+                    fxType = "SineWave", attribute = "dimmer",
                 ),
             ),
         )
@@ -191,7 +191,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a layer's running effect does not mask a different ad-hoc child on the same property`() =
+    fun `a layer's running effect does not mask a different ad-hoc child on the same attribute`() =
         testApplication {
             // The guard used to match on `(target, property)` alone: it compared a preset id that
             // nothing had stamped since Looks replaced presets, so `null == null` made every effect
@@ -209,7 +209,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                 effects = listOf(
                     LookFxDto(
                         targetType = "fixture", targetKey = "hex-1",
-                        fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                        fxType = "Pulse", family = "intensity", attribute = "dimmer",
                         cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),
@@ -238,7 +238,7 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
                             CueAdHocFxDto(
                                 targetType = "fixture", targetKey = "hex-1",
                                 fxType = "SineWave", family = "intensity",
-                                propertyName = "dimmer", cycle = 1.0,
+                                attribute = "dimmer", cycle = 1.0,
                                 blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         ),
@@ -534,15 +534,15 @@ class ProgrammerIncludeRouteTest : RouteIntegrationTest() {
             setBody(ProgrammerIncludeRequest(projectId = projectId.toString(), cueId = cueId))
         }
 
-    private fun assignment(type: String, key: String, property: String, value: String) =
-        CuePropertyAssignmentDto(
-            targetType = type, targetKey = key, propertyName = property, value = value,
+    private fun assignment(type: String, key: String, attribute: String, value: String) =
+        CueAttributeAssignmentDto(
+            targetType = type, targetKey = key, attribute = attribute, value = value,
         )
 
     private suspend fun createCue(
         client: HttpClient,
         name: String,
-        rows: List<CuePropertyAssignmentDto> = emptyList(),
+        rows: List<CueAttributeAssignmentDto> = emptyList(),
         adHoc: List<CueAdHocFxSpec> = emptyList(),
         layers: List<CueLayerDto> = emptyList(),
     ): Int = ProgrammerRouteTestSupport.createCue(

@@ -26,7 +26,7 @@ import uk.me.cormack.lighting7.models.DaoBuskRigTiles
 import uk.me.cormack.lighting7.models.DaoControlSurfaceBindings
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoCueSlots
 import uk.me.cormack.lighting7.models.DaoCueStackEntries
 import uk.me.cormack.lighting7.models.DaoCueStacks
@@ -173,7 +173,7 @@ class SyncCoverageTest {
         // entry — markers included — so a drag rewrites one file and two desks adding to one stack add
         // two. Until then each cue's one entry rode inside its cue file.
         DaoCueStackEntries to Disposition.Portable("cueStackEntries"),
-        DaoCuePropertyAssignments to Disposition.Portable("cueAttributeAssignments"),
+        DaoCueAttributeAssignments to Disposition.Portable("cueAttributeAssignments"),
         DaoCueLayers to Disposition.Portable("cueLayers"),
         DaoCueAdHocFx to Disposition.Portable("cueAdHocFx"),
         DaoCueTriggers to Disposition.Portable("cueTriggers"),

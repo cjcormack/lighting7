@@ -180,15 +180,15 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), WithPosition {
 
-        @FixtureProperty("Head pan 0-540", category = PropertyCategory.PAN,
+        @FixtureAttribute("Head pan 0-540", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan = DmxSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.TILT,
+        @FixtureAttribute("Head tilt 0-270", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 
-        @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Head colour preset", category = AttributeCategory.COLOUR)
         val colourWheel = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 2, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): BasicHead =
@@ -206,24 +206,24 @@ sealed class SlenderBeamBarQuadFixture(
         private val headFirstChannel: Int
     ) : Head(elementIndex, headTransaction), WithPosition {
 
-        @FixtureProperty("Head pan 0-540", category = PropertyCategory.PAN,
+        @FixtureAttribute("Head pan 0-540", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan = DmxSlider(headTransaction, universe, headFirstChannel)
 
-        @FixtureProperty("Head pan fine", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Head pan fine", category = AttributeCategory.PAN_FINE)
         val panFine = DmxSlider(headTransaction, universe, headFirstChannel + 1)
 
-        @FixtureProperty("Head tilt 0-270", category = PropertyCategory.TILT,
+        @FixtureAttribute("Head tilt 0-270", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 270.0)
         override val tilt = DmxSlider(headTransaction, universe, headFirstChannel + 2)
 
-        @FixtureProperty("Head tilt fine", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Head tilt fine", category = AttributeCategory.TILT_FINE)
         val tiltFine = DmxSlider(headTransaction, universe, headFirstChannel + 3)
 
-        @FixtureProperty("Head pan/tilt speed (fast to slow)", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Head pan/tilt speed (fast to slow)", category = AttributeCategory.SPEED)
         val speed = DmxSlider(headTransaction, universe, headFirstChannel + 4)
 
-        @FixtureProperty("Head colour preset", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Head colour preset", category = AttributeCategory.COLOUR)
         val colourWheel = DmxFixtureSetting(headTransaction, universe, headFirstChannel + 5, Colour.entries.toTypedArray())
 
         override fun withTransaction(transaction: ControllerTransaction): FullHead =
@@ -262,7 +262,7 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode1Ch =
             Mode1Ch(this, transaction)
 
-        @FixtureProperty("Show mode preset", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
+        @FixtureAttribute("Show mode preset", category = AttributeCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val showMode = DmxFixtureSetting(transaction, universe, firstChannel, ShowMode.entries.toTypedArray())
     }
 
@@ -298,14 +298,14 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode6Ch =
             Mode6Ch(this, transaction)
 
-        @FixtureProperty("Dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
         // FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 7, StrobeKind.OPEN),
                 StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -313,16 +313,16 @@ sealed class SlenderBeamBarQuadFixture(
         )
         override val strobe = StrobeChannel(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Movement preset", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Movement preset", category = AttributeCategory.SETTING)
         val movementPreset = DmxFixtureSetting(transaction, universe, firstChannel + 2, ShowMode.entries.toTypedArray())
 
-        @FixtureProperty("Movement speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Movement speed", category = AttributeCategory.SPEED)
         val movementSpeed = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Colour chase", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Colour chase", category = AttributeCategory.SETTING)
         val colourChase = DmxFixtureSetting(transaction, universe, firstChannel + 4, ColourChase.entries.toTypedArray())
 
-        @FixtureProperty("Colour chase speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Colour chase speed", category = AttributeCategory.SPEED)
         val colourChaseSpeed = DmxSlider(transaction, universe, firstChannel + 5)
     }
 
@@ -405,14 +405,14 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode14Ch =
             Mode14Ch(this, transaction)
 
-        @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Master dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
         // FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Master strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 7, StrobeKind.OPEN),
                 StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -478,14 +478,14 @@ sealed class SlenderBeamBarQuadFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode27Ch =
             Mode27Ch(this, transaction)
 
-        @FixtureProperty("Master dimmer", category = PropertyCategory.DIMMER)
+        @FixtureAttribute("Master dimmer", category = AttributeCategory.DIMMER)
         override val dimmer = DmxSlider(transaction, universe, firstChannel)
 
         // The bands are [StrobeChannel]'s. Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
         // FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Master strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 7, StrobeKind.OPEN),
                 StrobeBand(8, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -504,7 +504,7 @@ sealed class SlenderBeamBarQuadFixture(
             return elements[index]
         }
 
-        @FixtureProperty("Special function", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Special function", category = AttributeCategory.SETTING)
         val specialFunction = DmxFixtureSetting(transaction, universe, firstChannel + 26, SpecialFunction.entries.toTypedArray())
 
         // The special-function channel's 200–239 band (it was the setting's RESET option until fixture

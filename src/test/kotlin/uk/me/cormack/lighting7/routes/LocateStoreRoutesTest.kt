@@ -72,17 +72,17 @@ class LocateStoreRoutesTest : RouteIntegrationTest() {
 
         // Locate now points the unit at it.
         assertTrue(LocateTestSupport.toggleLocate(client, "fixture", "mac-1").status == HttpStatusCode.OK)
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(40u, 210u), entry("mac-1", "position"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(17u), entry("mac-1", axes.panFine.first))
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(3u), entry("mac-1", axes.tiltFine.first))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(40u, 210u), entry("mac-1", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(17u), entry("mac-1", axes.panFine.first))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(3u), entry("mac-1", axes.tiltFine.first))
 
         // Clear: back to the centre of travel — and a located unit moves at once, rather than when
         // Locate is next pressed.
         val cleared = client.locate(projectId, "clear", """[{"type":"fixture","key":"mac-1"}]""")
         assertEquals(HttpStatusCode.OK, cleared.status, cleared.bodyAsText())
         assertEquals(emptyList(), storedLocateOf("mac-1"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(128u, 128u), entry("mac-1", "position"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(0u), entry("mac-1", axes.panFine.first))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(128u, 128u), entry("mac-1", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(0u), entry("mac-1", axes.panFine.first))
     }
 
     @Test
@@ -178,9 +178,9 @@ class LocateStoreRoutesTest : RouteIntegrationTest() {
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private fun entry(key: String, property: String): CueAssignmentResolver.PropertyValue? =
+    private fun entry(key: String, attribute: String): CueAssignmentResolver.AttributeValue? =
         state.show.programmerStore.entries()
-            .firstOrNull { it.fixtureKey == key && it.propertyName == property }
+            .firstOrNull { it.fixtureKey == key && it.attribute == attribute }
             ?.slots?.firstOrNull()?.value?.resolved
 
     private fun axesOf(key: String): LocateValueResolver.LocateAxes {

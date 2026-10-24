@@ -146,16 +146,16 @@ export type ExtendedChannelFlags = {
  * Detect which extended colour channels (W/A/UV) are available from an array
  * of property descriptor arrays (one per fixture or fixture type).
  *
- * Works with both Fixture.properties and FixtureTypeInfo.properties since both
- * use the same PropertyDescriptor union.
+ * Works with both Fixture.attributes and FixtureTypeInfo.attributes since both
+ * use the same AttributeDescriptor union.
  *
  * Returns undefined if no extended channels are available.
  */
 export function detectExtendedChannels(
-  propertySets: ReadonlyArray<ReadonlyArray<{ type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }>>,
+  attributeSets: ReadonlyArray<ReadonlyArray<{ type: string; category?: string; whiteChannel?: unknown; amberChannel?: unknown; uvChannel?: unknown }>>,
 ): ExtendedChannelFlags | undefined {
   const hasChannel = (channelKey: 'whiteChannel' | 'amberChannel' | 'uvChannel', category: string) => {
-    return propertySets.some((props) =>
+    return attributeSets.some((props) =>
       props.some(
         (p) =>
           (p.type === 'colour' && p[channelKey]) ||
@@ -164,7 +164,7 @@ export function detectExtendedChannels(
     )
   }
 
-  if (propertySets.length === 0) return undefined
+  if (attributeSets.length === 0) return undefined
 
   const white = hasChannel('whiteChannel', 'white')
   const amber = hasChannel('amberChannel', 'amber')

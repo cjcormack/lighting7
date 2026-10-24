@@ -36,7 +36,7 @@ import {
   type ProgrammerLayer,
 } from '@/store/programmer'
 import { handPickUp } from '@/store/hand'
-import { formatFamilyList, parsePropertyMask } from '@/lib/attributeFamily'
+import { formatFamilyList, parseAttributeMask } from '@/lib/attributeFamily'
 import { sourceKey } from '@/lib/replacementNotes'
 import {
   STACK_KINDS,
@@ -322,7 +322,7 @@ function handlersFor(layer: ProgrammerLayer): LayerHandlers {
     onSetBlendMode: (_, blendMode) => programmerPatchLayer(layer.layerId, { blendMode }),
     // An unmasked layer travels as the empty string: an omitted field means "leave alone", and the
     // server reads the empty string as "no mask".
-    onSetPropertyMask: (_, propertyMask) => programmerPatchLayer(layer.layerId, { propertyMask: propertyMask ?? '' }),
+    onSetAttributeMask: (_, attributeMask) => programmerPatchLayer(layer.layerId, { attributeMask: attributeMask ?? '' }),
     onSetStomp: (_, stomp) => programmerPatchLayer(layer.layerId, { stomp }),
     onDetach: () => programmerDetachLayer(layer.layerId),
   }
@@ -357,7 +357,7 @@ function sortValue(row: LayerRow, key: string): SortValue {
 }
 
 function settingsText(layer: ProgrammerLayer): string {
-  const mask = parsePropertyMask(layer.propertyMask)
+  const mask = parseAttributeMask(layer.attributeMask)
   const parts = [
     layer.blendMode !== 'OVERRIDE' ? layer.blendMode : null,
     mask.length > 0 ? `[${formatFamilyList(mask)}]` : null,
@@ -441,7 +441,7 @@ function stackColumns(band: AppliedBand, onMakeLayer: () => void): { columns: Sh
     display: (row) => {
       const layer = asLayer(row)?.entry.layer
       if (layer == null) return null
-      const families = parsePropertyMask(layer.propertyMask)
+      const families = parseAttributeMask(layer.attributeMask)
       return text(families.length > 0 ? `[${formatFamilyList(families)}]` : '—', { muted: families.length === 0 })
     },
   }

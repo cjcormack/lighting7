@@ -1,0 +1,33 @@
+{
+  "basePitchDeg": 30.0,
+  "baseYawDeg": 45.0,
+  "displayName": "Hex 2",
+  "extraPlacements": [
+    {
+      "basePitchDeg": -15.0,
+      "baseYawDeg": 180.0,
+      "label": "SR",
+      "riggingUuid": "a52cc69f-a6d8-465a-a254-c69f732037a5",
+      "stageX": 3.5,
+      "stageY": 0.25,
+      "stageZ": -0.5,
+      "uuid": "e60de0f8-ff98-45e7-8097-494440b7b68d"
+    },
+    {
+      "stageX": -4.0,
+      "stageY": 1.0,
+      "uuid": "97daace6-426b-496e-9c55-abd73f734e74"
+    }
+  ],
+  "fixtureTypeKey": "hex-fixture",
+  "headNumber": 103,
+  "key": "hex-2",
+  "riggingUuid": "a52cc69f-a6d8-465a-a254-c69f732037a5",
+  "sortOrder": 2,
+  "stageX": 0.0,
+  "stageY": 4.5,
+  "stageZ": -1.0,
+  "startChannel": 20,
+  "universeConfigUuid": "08615f24-edb5-4c0b-b322-e38e4d81cee4",
+  "uuid": "0e9dbb25-cd31-4472-b76b-dfa034398fb9"
+}

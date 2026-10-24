@@ -44,14 +44,14 @@ class RecordedFxCategoryTest {
     }
 
     @Test
-    fun `Palette Steps is its palettes' family, read off the property it drives`() {
+    fun `Palette Steps is its palettes' family, read off the attribute it drives`() {
         assertEquals("intensity", recordedFxFamily(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))))
         assertEquals("beam", recordedFxFamily(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SettingTarget(FxTargetRef.fixture("spot"), "prism"))))
         assertEquals("intensity", recordedFxFamily(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "dimmer"))))
     }
 
     @Test
-    fun `any other effect keeps the property name's category`() {
+    fun `any other effect keeps the attribute name's category`() {
         val pulse = running("Pulse", FxOutputType.SLIDER, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))
         assertEquals("controls", recordedFxFamily(pulse))
     }

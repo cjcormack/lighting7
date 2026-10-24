@@ -10,7 +10,7 @@ import { ORDER_LABELS } from '@/lib/orderLabels'
 
 /**
  * Holds the frontend's label tables to `docs/glossary.md` (terminology plan D17): every `done` or
- * `screen` row's frontend locators must give the row's word. The `fx:`, `category:` and `usage:` locators
+ * `screen` row's frontend locators must give the row's word. The `fx:`, `family:` and `masterFamily:` locators
  * are `GlossaryVocabularyTest`'s; the glossary's header says what each prefix reads.
  */
 

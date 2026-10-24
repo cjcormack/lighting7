@@ -7,7 +7,7 @@ import uk.me.cormack.lighting7.models.TIMING_HEAD
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.PALETTE_STEPS_ID
 import uk.me.cormack.lighting7.fx.PaletteStep
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.SpreadShape
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.genericColourRows
@@ -53,6 +53,12 @@ object LegacyNames {
     const val GLOSSARY_FORMAT_VERSION = 38
 
     /**
+     * The `formatVersion` that put a surface binding's attribute targets and the position FX's centre
+     * parameters into the glossary's words (terminology plan session 6).
+     */
+    const val ATTRIBUTE_FORMAT_VERSION = 39
+
+    /**
      * Whether a bouncing FX that names no `pingPong` ran with it on: one in an archive written before
      * [GLOSSARY_FORMAT_VERSION] that says no [FX_LIBRARY] (see [Context.absentPingPongIsOn]).
      */
@@ -81,8 +87,21 @@ object LegacyNames {
     /** `category` / `family`, a speed master's `usage` among them: Intensity (D25) and Steps (D23). */
     private val FAMILIES = mapOf("dimmer" to "intensity", "palette" to "steps")
 
-    /** A surface binding's `type` (§4.3). */
-    private val BINDINGS = mapOf("pressTemplate" to "pressPalette", "stackEffectSize" to "stackFxAmount")
+    /** A surface binding's `type` (§4.3; the attribute targets, session 6). */
+    private val BINDINGS = mapOf(
+        "pressTemplate" to "pressPalette",
+        "stackEffectSize" to "stackFxAmount",
+        "fixtureProperty" to "fixtureAttribute",
+        "groupProperty" to "groupAttribute",
+        "selectionProperty" to "selectionAttribute",
+    )
+
+    /** A surface binding payload's fields, by old name: a palette press's, and an attribute target's. */
+    private val BINDING_FIELDS = mapOf("templateUuid" to "paletteUuid", "propertyName" to "attribute")
+
+    /** The built-in FX whose centre parameters took the UK spelling (D20), and the old names of those parameters. */
+    private val CENTRED_FX = setOf("Circle", "Figure8", "RandomPosition")
+    internal val CENTRE_PARAMETERS = mapOf("panCenter" to "panCentre", "tiltCenter" to "tiltCentre")
 
     /** A palette reference's old prefix, `tmpl:{uuid}`, today [PALETTE_COLOUR_REF_PREFIX]. */
     private val OLD_PALETTE_REF = Regex("(?<![A-Za-z0-9_])tmpl:", RegexOption.IGNORE_CASE)
@@ -169,10 +188,23 @@ object LegacyNames {
         isRetiredFxId(fxType) -> "'$fxType' is now '${fxId(fxType)}'"
         bouncedFxIds.any { same(it, fxType) } && PING_PONG in parameters ->
             "'$fxType' takes no pingPong: it bounces by Direction (BOUNCE)"
+        isCentred(fxType) && parameters.keys.any { it in CENTRE_PARAMETERS } ->
+            parameters.keys.first { it in CENTRE_PARAMETERS }.let { "'$it' is now '${CENTRE_PARAMETERS.getValue(it)}'" }
         else -> parameters.entries.firstOrNull { OLD_PALETTE_REF.containsMatchIn(it.value) }
             ?.let { "'${it.key}' names a palette as tmpl:{uuid}; a palette reference is pal:{uuid}" }
             ?: familyProblem(family)
     }
+
+    private fun isCentred(fxType: String) = CENTRED_FX.any { same(it, fxType) }
+
+    /**
+     * [parameters] of a stored FX of type [fxType] with a position FX's centre at today's names, or
+     * [parameters] itself when it holds no old one. Only the built-in position FX are renamed: a
+     * script FX's own parameters are its author's words.
+     */
+    fun centreParameters(fxType: String, parameters: Map<String, String>): Map<String, String> =
+        if (!isCentred(fxType) || parameters.keys.none { it in CENTRE_PARAMETERS }) parameters
+        else parameters.entries.associate { (key, value) -> (CENTRE_PARAMETERS[key] ?: key) to value }
 
     /** Why [family], being written, is an old name, or null. */
     fun familyProblem(family: String?): String? =
@@ -211,22 +243,21 @@ object LegacyNames {
     fun bindingType(stored: String): String = BINDINGS[stored] ?: stored
 
     /**
-     * A stored surface binding's JSON payload at today's names — its `type`, and a palette press's
-     * `templateUuid` as `paletteUuid` — or [payload] itself when it holds no old name.
+     * A stored surface binding's JSON payload at today's names — its `type`, a palette press's
+     * `templateUuid` as `paletteUuid` and an attribute target's `propertyName` as `attribute`, a
+     * flash's nested target included — or [payload] itself when it holds no old name.
      */
     fun bindingPayload(payload: String): String {
         val target = runCatching { canonicalJson.parseToJsonElement(payload) }.getOrNull() as? JsonObject ?: return payload
-        val type = (target["type"] as? JsonPrimitive)?.takeIf { it.isString }?.content ?: return payload
-        val renamed = bindingType(type)
-        if (renamed == type) return payload
-        val fields = target.entries.associate { (key, value) ->
-            when (key) {
-                "type" -> key to JsonPrimitive(renamed)
-                "templateUuid" -> "paletteUuid" to value
-                else -> key to value
-            }
-        }
-        return Json.encodeToString(JsonElement.serializer(), JsonObject(fields))
+        val renamed = bindingTarget(target)
+        return if (renamed == target) payload else Json.encodeToString(JsonElement.serializer(), renamed)
+    }
+
+    private fun bindingTarget(target: JsonObject): JsonObject {
+        if ((target["type"] as? JsonPrimitive)?.isString != true) return target
+        val renamed = rename(target, BINDING_FIELDS).mapString("type", ::bindingType)
+        val nested = renamed["target"] as? JsonObject ?: return renamed
+        return JsonObject(renamed + ("target" to bindingTarget(nested)))
     }
 
     /** Today's mode for a stored `effectMode` or `fxMode`, by name. */
@@ -298,7 +329,9 @@ object LegacyNames {
             .timing("timing")
             .let { fx ->
                 val parameters = fx["parameters"] as? JsonObject ?: return@let fx
-                JsonObject(fx + ("parameters" to JsonObject(parameters.mapValues { (_, value) -> value.mapString(::paletteRefs) })))
+                val type = (fx["fxType"] as? JsonPrimitive)?.takeIf { it.isString }?.let { fxId(it.content) }
+                val centred = if (type != null && isCentred(type)) rename(parameters, CENTRE_PARAMETERS) else parameters
+                JsonObject(fx + ("parameters" to JsonObject(centred.mapValues { (_, value) -> value.mapString(::paletteRefs) })))
             }
 
     /** A value row at today's names: its attribute, and a palette reference in its value. */
@@ -477,7 +510,7 @@ object LegacyNames {
                 parsePaletteColourRefUuid(entry)?.let { uuid -> context.palettes(uuid)?.let { step(uuid, it) } }
             }
             val shape = steps.takeIf { it.size == entries.size }?.let { paletteStepsShape(it).getOrNull() }
-            if (shape?.family == PropertyMaskGroup.COLOUR) {
+            if (shape?.family == AttributeFamily.COLOUR) {
                 changes += "Colour Cycle over ${steps.joinToString { "'${it.name}'" }} is now Palette Steps"
                 notes += "each palette now lands on each head for itself"
                 return fx.copy(

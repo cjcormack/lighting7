@@ -58,7 +58,7 @@ function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
     family: 'COLOUR',
     isGeneric: true,
     rows: [
-      { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
+      { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
     kind: 'value',
     requiredEmitters: [],
@@ -93,7 +93,7 @@ beforeEach(() => {
       uuid: 'u2',
       name: 'Half Up',
       family: 'INTENSITY',
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:50' }],
+      rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:50' }],
     }),
     template({
       id: 3,
@@ -102,8 +102,8 @@ beforeEach(() => {
       family: 'POSITION',
       isGeneric: false,
       rows: [
-        { targetType: 'fixture', targetKey: 'mover-1', propertyName: 'position', value: 'deg:12,-8' },
-        { targetType: 'fixture', targetKey: 'mover-2', propertyName: 'position', value: 'deg:-14,-8' },
+        { targetType: 'fixture', targetKey: 'mover-1', attribute: 'position', value: 'deg:12,-8' },
+        { targetType: 'fixture', targetKey: 'mover-2', attribute: 'position', value: 'deg:-14,-8' },
       ],
     }),
   ]

@@ -1,12 +1,12 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.models.TargetRef
 import java.awt.Color
 
 /**
- * Cue-layer composition resolver — merges [CuePropertyAssignment] rows from active cues
+ * Cue-layer composition resolver — merges [CueAttributeAssignment] rows from active cues
  * into a per-(target, property) value stream that [LayerResolver] consumes.
  *
  * See `docs/lighting-composition-model.md` §"Layer 4 — Cue Property Assignments".
@@ -26,15 +26,15 @@ class CueAssignmentResolver {
      *   row produced by group expansion). Lets [applySpecificity] drop the group-derived row
      *   when the same cue also asserts a direct fixture-level row on the same (fixture,
      *   property).
-     * @property propertyName property on the (resolved) fixture.
+     * @property attribute property on the (resolved) fixture.
      * @property category property category — drives composition default when [compositionOverride]
      *   is [CompositionRule.UNSET].
-     * @property compositionOverride per-property override from `@FixtureProperty(composition = …)`.
+     * @property compositionOverride per-property override from `@FixtureAttribute(composition = …)`.
      *   Use [CompositionRule.UNSET] to inherit from [category].
      * @property value the asserted value, type tagged.
      * @property moveInDark if true and this is a position property, the resolver pre-applies
      *   this value across the entire crossfade (instead of linearly blending pan/tilt) when an
-     *   outgoing-or-parallel cue from a different [cueId] asserts a [PropertyCategory.DIMMER]
+     *   outgoing-or-parallel cue from a different [cueId] asserts a [AttributeCategory.DIMMER]
      *   contributor with value 0 on the same target. Ignored for non-position properties. See
      *   [computeMoveInDarkArmed] / `docs/lighting-composition-model.md` §"Crossfade behaviour".
      */
@@ -44,10 +44,10 @@ class CueAssignmentResolver {
         val fadeWeight: Double,
         val targetKey: String,
         val targetIsGroup: Boolean,
-        val propertyName: String,
-        val category: PropertyCategory,
+        val attribute: String,
+        val category: AttributeCategory,
         val compositionOverride: CompositionRule = CompositionRule.UNSET,
-        val value: PropertyValue,
+        val value: AttributeValue,
         val moveInDark: Boolean = false,
         /**
          * Which Look layer produced [value], when a layer did — see [CookWinner].
@@ -109,16 +109,16 @@ class CueAssignmentResolver {
      * contributors. Stored at property level, not channel level — conversion to channel values
      * happens in [LayerResolver] via the fixture patch.
      */
-    sealed class PropertyValue {
-        data class Slider(val value: UByte) : PropertyValue()
-        data class Colour(val value: ExtendedColour) : PropertyValue()
-        data class Position(val pan: UByte, val tilt: UByte) : PropertyValue()
-        data class Setting(val channelValue: UByte) : PropertyValue()
+    sealed class AttributeValue {
+        data class Slider(val value: UByte) : AttributeValue()
+        data class Colour(val value: ExtendedColour) : AttributeValue()
+        data class Position(val pan: UByte, val tilt: UByte) : AttributeValue()
+        data class Setting(val channelValue: UByte) : AttributeValue()
 
         /**
          * Inverse of [parseAssignmentValue] — emits the canonical string form that round-trips
          * back through the parser. Used by `snapshot-from-live` to serialise live Layer 4
-         * state into [uk.me.cormack.lighting7.models.CuePropertyAssignmentDto] rows.
+         * state into [uk.me.cormack.lighting7.models.CueAttributeAssignmentDto] rows.
          *
          * Format:
          * - [Slider] / [Setting]: unsigned decimal `"0".."255"`.
@@ -126,7 +126,7 @@ class CueAssignmentResolver {
          * - [Position]: `"pan,tilt"` (each `"0".."255"`).
          *
          * Round-trip invariant: `parseAssignmentValue(category, name, v.serialize()) == v` for
-         * every [PropertyValue] instance, provided (category, name) matches what produced it.
+         * every [AttributeValue] instance, provided (category, name) matches what produced it.
          * See `CueAssignmentResolverTest`.
          */
         fun serialize(): String = when (this) {
@@ -148,85 +148,85 @@ class CueAssignmentResolver {
          * of this loop would let them silently diverge.
          */
         fun flattenIndexed(
-            indexed: Map<String, Map<String, PropertyValue>>,
-        ): Map<Key, PropertyValue> {
+            indexed: Map<String, Map<String, AttributeValue>>,
+        ): Map<Key, AttributeValue> {
             if (indexed.isEmpty()) return emptyMap()
-            val out = HashMap<Key, PropertyValue>()
-            for ((targetKey, properties) in indexed) {
-                for ((propertyName, value) in properties) {
-                    out[Key.fixture(targetKey, propertyName)] = value
+            val out = HashMap<Key, AttributeValue>()
+            for ((targetKey, attributes) in indexed) {
+                for ((attribute, value) in attributes) {
+                    out[Key.fixture(targetKey, attribute)] = value
                 }
             }
             return out
         }
 
         /**
-         * Parse the canonical string form of a [CuePropertyAssignment][uk.me.cormack.lighting7.models.CuePropertyAssignmentDto]
-         * value into a typed [PropertyValue].
+         * Parse the canonical string form of a [CueAttributeAssignment][uk.me.cormack.lighting7.models.CueAttributeAssignmentDto]
+         * value into a typed [AttributeValue].
          *
-         * Dispatch uses [propertyName] first (to pick up the synthetic "position" property,
-         * which has no dedicated [PropertyCategory] entry) and falls back to [category]:
+         * Dispatch uses [attribute] first (to pick up the synthetic "position" property,
+         * which has no dedicated [AttributeCategory] entry) and falls back to [category]:
          *
-         * - `propertyName == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
-         *   [PropertyValue.Position]. This matches the `createFixtureTargetForCue` special case.
-         * - [PropertyCategory.COLOUR]: hex / named / extended string consumed by
-         *   [parseExtendedColour] → [PropertyValue.Colour]. A **template reference**
+         * - `attribute == "position"` (case-insensitive): `"pan,tilt"` (each `0..255`) →
+         *   [AttributeValue.Position]. This matches the `createFixtureTargetForCue` special case.
+         * - [AttributeCategory.COLOUR]: hex / named / extended string consumed by
+         *   [parseExtendedColour] → [AttributeValue.Colour]. A **template reference**
          *   (`pal:{uuid}`) is refused here and returns null: an assignment value is a literal,
          *   and a dependency on a template is expressed by a *layer*. Letting it through would
          *   hand [parseExtendedColour] an unparseable string, which answers white — the same
          *   silent failure the retired positional-palette grammar had when its list was empty.
          *   **Unless [settingBacked]**: a COLOUR property backed by a slot channel (a colour wheel,
          *   a gel scroller) stores and is written slot levels, so a plain `"0".."255"` is a
-         *   [PropertyValue.Setting] there. A level is read first because the colour parse would
+         *   [AttributeValue.Setting] there. A level is read first because the colour parse would
          *   take `"128"` for the hex shorthand `#112288`, which a slot channel cannot take — the
          *   writer drops a colour on anything but an RGB property. Anything else still parses as
          *   a colour, as before.
-         * - [PropertyCategory.SETTING] / [PropertyCategory.OTHER]: `"0".."255"` → [PropertyValue.Setting].
+         * - [AttributeCategory.SETTING] / [AttributeCategory.OTHER]: `"0".."255"` → [AttributeValue.Setting].
          * - Every other category (intensity-like and axis sliders): `"0".."255"` →
-         *   [PropertyValue.Slider] — **unless [settingBacked]**: a slider-category property backed
+         *   [AttributeValue.Slider] — **unless [settingBacked]**: a slider-category property backed
          *   by a slot channel (the Robe ColorSpot 575's stepped zoom, fixture-optics plan D2) is a
-         *   [PropertyValue.Setting], because the cue layer picks its output target from the value's
+         *   [AttributeValue.Setting], because the cue layer picks its output target from the value's
          *   type and a slider target finds no slider on a setting, silently writing nothing.
          *
          * Returns `null` if the string doesn't parse for the given category — the caller should
          * log at warn and skip the assignment, never throw.
          */
         fun parseAssignmentValue(
-            category: PropertyCategory,
-            propertyName: String,
+            category: AttributeCategory,
+            attribute: String,
             value: String,
             settingBacked: Boolean = false,
-        ): PropertyValue? {
+        ): AttributeValue? {
             val trimmed = value.trim()
-            if (propertyName.equals("position", ignoreCase = true)) {
+            if (attribute.equals("position", ignoreCase = true)) {
                 val parts = trimmed.split(",")
                 if (parts.size != 2) return null
                 val pan = parts[0].trim().toUByteParam() ?: return null
                 val tilt = parts[1].trim().toUByteParam() ?: return null
-                return PropertyValue.Position(pan, tilt)
+                return AttributeValue.Position(pan, tilt)
             }
             return when (category) {
-                PropertyCategory.COLOUR -> {
+                AttributeCategory.COLOUR -> {
                     val level = if (settingBacked) trimmed.toUByteParam() else null
-                    if (level != null) PropertyValue.Setting(level)
+                    if (level != null) AttributeValue.Setting(level)
                     else if (isPaletteColourRef(trimmed)) null
-                    else runCatching { PropertyValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
+                    else runCatching { AttributeValue.Colour(parseExtendedColour(trimmed)) }.getOrNull()
                 }
                 // Wheel-like roles read as discrete selections. Which arm a category lands
-                // in is now only a labelling choice: PropertyChannelWriter resolves both
+                // in is now only a labelling choice: AttributeChannelWriter resolves both
                 // Setting and Slider through the same single-byte-channel path, precisely
                 // because category doesn't predict the backing shape (gobo rotation is a
                 // DmxFixtureSetting on the Fusion and a DmxSlider on the MAC 250).
-                PropertyCategory.SETTING, PropertyCategory.OTHER,
-                PropertyCategory.GOBO, PropertyCategory.GOBO_ROTATION,
-                PropertyCategory.GOBO_ROTATION_MODE,
-                PropertyCategory.PRISM, PropertyCategory.PRISM_ROTATION,
-                PropertyCategory.LED_MACRO, PropertyCategory.MOVEMENT_MACRO ->
-                    trimmed.toUByteParam()?.let { PropertyValue.Setting(it) }
+                AttributeCategory.SETTING, AttributeCategory.OTHER,
+                AttributeCategory.GOBO, AttributeCategory.GOBO_ROTATION,
+                AttributeCategory.GOBO_ROTATION_MODE,
+                AttributeCategory.PRISM, AttributeCategory.PRISM_ROTATION,
+                AttributeCategory.LED_MACRO, AttributeCategory.MOVEMENT_MACRO ->
+                    trimmed.toUByteParam()?.let { AttributeValue.Setting(it) }
                 // Continuous positions: FOCUS, ZOOM, IRIS, FROST, PAN/TILT, DIMMER… — a slot level
                 // where the property is backed by a setting (a stepped zoom).
                 else ->
-                    trimmed.toUByteParam()?.let { if (settingBacked) PropertyValue.Setting(it) else PropertyValue.Slider(it) }
+                    trimmed.toUByteParam()?.let { if (settingBacked) AttributeValue.Setting(it) else AttributeValue.Slider(it) }
             }
         }
     }
@@ -274,7 +274,7 @@ class CueAssignmentResolver {
     /** One target's buckets — the outer level of [resolveIndexed]'s output. */
     internal class CookedTarget(
         val targetKey: String,
-        val properties: List<Bucket>,
+        val attributes: List<Bucket>,
         /**
          * This target's colour-and-emitters bundle, **only when it composes both halves** — null
          * otherwise, which is every target but the few that hold both, so [compose]'s per-frame
@@ -284,11 +284,11 @@ class CueAssignmentResolver {
     )
 
     /** The target's [BundleRole.COLOUR] property and its [BundleRole.EMITTER] buckets. */
-    internal class BundleBuckets(val colourProperty: String, val emitters: List<Bucket>)
+    internal class BundleBuckets(val colourAttribute: String, val emitters: List<Bucket>)
 
     /** One (target, property)'s contributors and the rule that combines them. */
     internal class Bucket(
-        val propertyName: String,
+        val attribute: String,
         val contributors: List<Assignment>,
         val rule: CompositionRule,
     )
@@ -311,21 +311,21 @@ class CueAssignmentResolver {
         val grouped = HashMap<String, HashMap<String, MutableList<Assignment>>>()
         for (a in assignments) {
             grouped.getOrPut(a.targetKey) { HashMap() }
-                .getOrPut(a.propertyName) { mutableListOf() }
+                .getOrPut(a.attribute) { mutableListOf() }
                 .add(a)
         }
 
         val targets = ArrayList<CookedTarget>(grouped.size)
-        for ((targetKey, properties) in grouped) {
-            val buckets = ArrayList<Bucket>(properties.size)
-            for ((propertyName, contributors) in properties) {
+        for ((targetKey, attributes) in grouped) {
+            val buckets = ArrayList<Bucket>(attributes.size)
+            for ((attribute, contributors) in attributes) {
                 val effective = applySpecificity(contributors)
                 if (effective.isEmpty()) continue
                 val rule = effective.first().let {
                     it.compositionOverride.takeUnless { r -> r == CompositionRule.UNSET }
                         ?: it.category.defaultComposition
                 }
-                buckets.add(Bucket(propertyName, effective, rule))
+                buckets.add(Bucket(attribute, effective, rule))
             }
             if (buckets.isNotEmpty()) targets.add(CookedTarget(targetKey, buckets, bundleOf(buckets)))
         }
@@ -342,8 +342,8 @@ class CueAssignmentResolver {
         for (bucket in buckets) {
             val first = bucket.contributors.first()
             when (first.bundleRole) {
-                BundleRole.COLOUR -> if (first.value is PropertyValue.Colour) colour = bucket.propertyName
-                BundleRole.EMITTER -> if (first.value is PropertyValue.Slider) {
+                BundleRole.COLOUR -> if (first.value is AttributeValue.Colour) colour = bucket.attribute
+                BundleRole.EMITTER -> if (first.value is AttributeValue.Slider) {
                     val list = emitters ?: ArrayList<Bucket>(3)
                     list.add(bucket)
                     emitters = list
@@ -356,7 +356,7 @@ class CueAssignmentResolver {
     }
 
     /**
-     * Compose a [Cook] at one frame's [weights], indexed `targetKey → propertyName → value` —
+     * Compose a [Cook] at one frame's [weights], indexed `targetKey → attribute → value` —
      * the shape [LayerResolver]'s hot-path index wants, built directly so a publish doesn't
      * also materialise a flat [Key]-keyed duplicate of the same data (or a compound [Key] per
      * row).
@@ -365,13 +365,13 @@ class CueAssignmentResolver {
      * This runs on cue apply *and once per crossfade frame (~62 fps)* — the nested maps it
      * allocates land on a hot path; keep it lean.
      */
-    fun compose(cook: Cook, weights: FadeWeights): Map<String, Map<String, PropertyValue>> {
+    fun compose(cook: Cook, weights: FadeWeights): Map<String, Map<String, AttributeValue>> {
         if (cook.targets.isEmpty()) return emptyMap()
-        val out = HashMap<String, Map<String, PropertyValue>>(cook.targets.size)
+        val out = HashMap<String, Map<String, AttributeValue>>(cook.targets.size)
         for (target in cook.targets) {
-            val composed = HashMap<String, PropertyValue>(target.properties.size)
-            for (bucket in target.properties) {
-                composed[bucket.propertyName] = when (bucket.rule) {
+            val composed = HashMap<String, AttributeValue>(target.attributes.size)
+            for (bucket in target.attributes) {
+                composed[bucket.attribute] = when (bucket.rule) {
                     CompositionRule.HTP -> composeHtp(bucket.contributors, weights)
                     CompositionRule.LTP -> composeLtp(bucket.contributors, weights, cook.moveInDarkArmed)
                     CompositionRule.UNSET ->
@@ -394,7 +394,7 @@ class CueAssignmentResolver {
      *
      * The emitter wins **outright**: whichever cue, stack or layer each key came from, and however
      * each composed (UV is HTP, colour LTP, so "whose contributor ranks higher" has no single
-     * answer for a blended bucket). It is the precedence `PropertyChannelWriter.coveringKeysByChannel`
+     * answer for a blended bucket). It is the precedence `AttributeChannelWriter.coveringKeysByChannel`
      * already uses — the single-channel property over the aggregate — so provenance, Record and
      * the channel sheet all name the key whose value is on the channel.
      *
@@ -402,21 +402,21 @@ class CueAssignmentResolver {
      * emitter must hand the colour its *blended* value frame by frame.
      */
     private fun reconcileBundledEmitters(
-        composed: HashMap<String, PropertyValue>,
+        composed: HashMap<String, AttributeValue>,
         bundle: BundleBuckets,
     ) {
-        val value = composed[bundle.colourProperty] as? PropertyValue.Colour ?: return
+        val value = composed[bundle.colourAttribute] as? AttributeValue.Colour ?: return
         var colour = value.value
         for (bucket in bundle.emitters) {
-            val level = (composed[bucket.propertyName] as? PropertyValue.Slider)?.value ?: continue
+            val level = (composed[bucket.attribute] as? AttributeValue.Slider)?.value ?: continue
             colour = when (bucket.contributors.first().category) {
-                PropertyCategory.WHITE -> colour.copy(white = level)
-                PropertyCategory.AMBER -> colour.copy(amber = level)
-                PropertyCategory.UV -> colour.copy(uv = level)
+                AttributeCategory.WHITE -> colour.copy(white = level)
+                AttributeCategory.AMBER -> colour.copy(amber = level)
+                AttributeCategory.UV -> colour.copy(uv = level)
                 else -> colour
             }
         }
-        if (colour != value.value) composed[bundle.colourProperty] = PropertyValue.Colour(colour)
+        if (colour != value.value) composed[bundle.colourAttribute] = AttributeValue.Colour(colour)
     }
 
     /**
@@ -443,9 +443,9 @@ class CueAssignmentResolver {
         if (winners.values.none { (it.fadeDurationMs ?: 0L) > 0L }) return emptyMap()
         val out = HashMap<Key, Long>()
         for (target in cook.targets) {
-            for (bucket in target.properties) {
+            for (bucket in target.attributes) {
                 if (bucket.rule == CompositionRule.HTP && bucket.contributors.size > 1) continue
-                val key = Key.fixture(target.targetKey, bucket.propertyName)
+                val key = Key.fixture(target.targetKey, bucket.attribute)
                 val fade = winners[key]?.fadeDurationMs ?: continue
                 if (fade > 0L) out[key] = fade
             }
@@ -454,20 +454,20 @@ class CueAssignmentResolver {
     }
 
     /** One-shot [cook] + [compose] at the rows' own weights. */
-    fun resolveIndexed(assignments: List<Assignment>): Map<String, Map<String, PropertyValue>> =
+    fun resolveIndexed(assignments: List<Assignment>): Map<String, Map<String, AttributeValue>> =
         compose(cook(assignments), FadeWeights.NONE)
 
     /**
      * [resolveIndexed] flattened to a per-[Key] map — for one-shot composition sites (cue
      * preview) and tests. The engine's publish path uses [compose] directly.
      */
-    fun resolve(assignments: List<Assignment>): Map<Key, PropertyValue> =
+    fun resolve(assignments: List<Assignment>): Map<Key, AttributeValue> =
         flattenIndexed(resolveIndexed(assignments))
 
     /**
      * Returns the fixture targets for which a `moveInDark`-flagged `position` row should snap
      * to the incoming value across the whole crossfade. A target arms when the flagged row is
-     * accompanied by a *different* cue's [PropertyCategory.DIMMER] contributor with value 0
+     * accompanied by a *different* cue's [AttributeCategory.DIMMER] contributor with value 0
      * on the same target; the different-cue requirement excludes self-arming, which the LTP
      * fallback already handles. Empty set is the common case (no flagged rows).
      */
@@ -477,7 +477,7 @@ class CueAssignmentResolver {
         // when scanning for an outgoing dark dimmer.
         var candidates: HashMap<String, MutableSet<Int>>? = null
         for (a in assignments) {
-            if (a.moveInDark && a.propertyName.equals("position", ignoreCase = true)) {
+            if (a.moveInDark && a.attribute.equals("position", ignoreCase = true)) {
                 val map = candidates ?: HashMap<String, MutableSet<Int>>().also { candidates = it }
                 map.getOrPut(a.targetKey) { HashSet() }.add(a.cueId)
             }
@@ -486,10 +486,10 @@ class CueAssignmentResolver {
 
         val armed = HashSet<String>()
         for (a in assignments) {
-            if (a.category != PropertyCategory.DIMMER) continue
+            if (a.category != AttributeCategory.DIMMER) continue
             val candidateCueIds = candidateMap[a.targetKey] ?: continue
             if (a.cueId in candidateCueIds) continue
-            val slider = a.value as? PropertyValue.Slider ?: continue
+            val slider = a.value as? AttributeValue.Slider ?: continue
             if (slider.value.toInt() == 0) {
                 armed.add(a.targetKey)
             }
@@ -498,24 +498,24 @@ class CueAssignmentResolver {
     }
 
     /**
-     * Key for a ([target], [propertyName]) pair. Resolver output is always
+     * Key for a ([target], [attribute]) pair. Resolver output is always
      * [TargetRef.Fixture] (group assignments are expanded upstream); pre-expansion callers
      * may use [TargetRef.Group].
      */
-    data class Key(val target: TargetRef, val propertyName: String) {
+    data class Key(val target: TargetRef, val attribute: String) {
         val targetKey: String get() = target.key
 
         companion object {
-            fun fixture(fixtureKey: String, propertyName: String): Key =
-                Key(TargetRef.Fixture(fixtureKey), propertyName)
+            fun fixture(fixtureKey: String, attribute: String): Key =
+                Key(TargetRef.Fixture(fixtureKey), attribute)
 
-            fun group(groupKey: String, propertyName: String): Key =
-                Key(TargetRef.Group(groupKey), propertyName)
+            fun group(groupKey: String, attribute: String): Key =
+                Key(TargetRef.Group(groupKey), attribute)
         }
     }
 
     /**
-     * Within a (targetKey, propertyName) bucket, drop group-expanded rows when any direct
+     * Within a (targetKey, attribute) bucket, drop group-expanded rows when any direct
      * fixture-level row is present — the direct row wins. If all rows share the same origin
      * (all direct, or all from group expansion), everything passes through.
      *
@@ -531,33 +531,33 @@ class CueAssignmentResolver {
     /**
      * HTP: combines contributors so two independent cues at full weight take the highest
      * value (classic HTP), while contributors whose weights look like a crossfade pair
-     * interpolate linearly. For [PropertyValue.Slider] / [PropertyValue.Setting]:
+     * interpolate linearly. For [AttributeValue.Slider] / [AttributeValue.Setting]:
      *
      * - `Σ fadeWeight ≤ 1.0 + ε` → treated as a crossfade partition, composed as
      *   `Σ value × fadeWeight` (linear blend, no V-dip).
      * - `Σ fadeWeight > 1.0` → classical HTP max: `max(value × fadeWeight)` per contributor.
      *
-     * [PropertyValue.Colour] maxes each R/G/B/W/A/UV independently. [PropertyValue.Position]
+     * [AttributeValue.Colour] maxes each R/G/B/W/A/UV independently. [AttributeValue.Position]
      * falls through to LTP — HTP isn't meaningful on axis values.
      */
-    private fun composeHtp(contributors: List<Assignment>, weights: FadeWeights): PropertyValue {
+    private fun composeHtp(contributors: List<Assignment>, weights: FadeWeights): AttributeValue {
         val first = contributors.first().value
         // Epsilon tolerates floating-point sums like `0.5 + 0.5 = 1.0000000000000002`.
         var weightSum = 0.0
         for (a in contributors) weightSum += weights.of(a)
         val isCrossfadeBlend = weightSum <= 1.0 + 1e-9
         return when (first) {
-            is PropertyValue.Slider -> PropertyValue.Slider(
-                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as PropertyValue.Slider).value.toInt() }
+            is AttributeValue.Slider -> AttributeValue.Slider(
+                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as AttributeValue.Slider).value.toInt() }
             )
-            is PropertyValue.Setting -> PropertyValue.Setting(
-                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as PropertyValue.Setting).channelValue.toInt() }
+            is AttributeValue.Setting -> AttributeValue.Setting(
+                composeHtpScalar(contributors, weights, isCrossfadeBlend) { (it.value as AttributeValue.Setting).channelValue.toInt() }
             )
-            is PropertyValue.Colour -> {
+            is AttributeValue.Colour -> {
                 var r = 0; var g = 0; var b = 0
                 var w = 0; var amber = 0; var uv = 0
                 for (a in contributors) {
-                    val c = (a.value as PropertyValue.Colour).value
+                    val c = (a.value as AttributeValue.Colour).value
                     val wf = weights.of(a)
                     r = maxOf(r, (c.color.red * wf).toInt().coerceIn(0, 255))
                     g = maxOf(g, (c.color.green * wf).toInt().coerceIn(0, 255))
@@ -566,9 +566,9 @@ class CueAssignmentResolver {
                     amber = maxOf(amber, (c.amber.toInt() * wf).toInt().coerceIn(0, 255))
                     uv = maxOf(uv, (c.uv.toInt() * wf).toInt().coerceIn(0, 255))
                 }
-                PropertyValue.Colour(ExtendedColour(Color(r, g, b), w.toUByte(), amber.toUByte(), uv.toUByte()))
+                AttributeValue.Colour(ExtendedColour(Color(r, g, b), w.toUByte(), amber.toUByte(), uv.toUByte()))
             }
-            is PropertyValue.Position -> composeLtp(contributors, weights) // positions don't combine
+            is AttributeValue.Position -> composeLtp(contributors, weights) // positions don't combine
         }
     }
 
@@ -615,16 +615,16 @@ class CueAssignmentResolver {
         contributors: List<Assignment>,
         weights: FadeWeights,
         moveInDarkArmed: Set<String> = emptySet(),
-    ): PropertyValue {
+    ): AttributeValue {
         // Snap before the winner-by-priority logic: at fade start the outgoing cue wins on
         // fadeWeight tie-break and would short-circuit to outgoing.value, but moveInDark
         // wants the incoming position immediately.
         val firstContributor = contributors.first()
-        if (firstContributor.value is PropertyValue.Position &&
+        if (firstContributor.value is AttributeValue.Position &&
             firstContributor.targetKey in moveInDarkArmed
         ) {
             val moveInDark = contributors
-                .filter { it.moveInDark && it.value is PropertyValue.Position }
+                .filter { it.moveInDark && it.value is AttributeValue.Position }
                 .maxByOrNull { it.priority }
             if (moveInDark != null) return moveInDark.value
         }
@@ -660,27 +660,27 @@ class CueAssignmentResolver {
         val progress = winnerWeight.coerceIn(0.0, 1.0)
 
         return when (val w = winner.value) {
-            is PropertyValue.Slider -> {
-                val o = (outgoing.value as? PropertyValue.Slider)?.value?.toInt() ?: 0
+            is AttributeValue.Slider -> {
+                val o = (outgoing.value as? AttributeValue.Slider)?.value?.toInt() ?: 0
                 val blended = (o + (w.value.toInt() - o) * progress).toInt().coerceIn(0, 255)
-                PropertyValue.Slider(blended.toUByte())
+                AttributeValue.Slider(blended.toUByte())
             }
-            is PropertyValue.Colour -> {
-                val o = (outgoing.value as? PropertyValue.Colour)?.value ?: ExtendedColour.BLACK
-                PropertyValue.Colour(blendExtendedColours(o, w.value, progress))
+            is AttributeValue.Colour -> {
+                val o = (outgoing.value as? AttributeValue.Colour)?.value ?: ExtendedColour.BLACK
+                AttributeValue.Colour(blendExtendedColours(o, w.value, progress))
             }
-            is PropertyValue.Setting -> {
+            is AttributeValue.Setting -> {
                 // Discrete — snap at 50% fade progress.
                 if (progress < 0.5) outgoing.value else w
             }
-            is PropertyValue.Position -> {
-                val o = outgoing.value as? PropertyValue.Position
+            is AttributeValue.Position -> {
+                val o = outgoing.value as? AttributeValue.Position
                 if (o == null) {
                     w
                 } else {
                     val pan = (o.pan.toInt() + (w.pan.toInt() - o.pan.toInt()) * progress).toInt().coerceIn(0, 255)
                     val tilt = (o.tilt.toInt() + (w.tilt.toInt() - o.tilt.toInt()) * progress).toInt().coerceIn(0, 255)
-                    PropertyValue.Position(pan.toUByte(), tilt.toUByte())
+                    AttributeValue.Position(pan.toUByte(), tilt.toUByte())
                 }
             }
         }

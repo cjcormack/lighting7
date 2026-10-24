@@ -6,11 +6,11 @@ const saveLook = vi.hoisted(() => vi.fn(() => ({ unwrap: () => Promise.resolve({
 const LOOKS = vi.hoisted(() => ({
   3: {
     id: 3,
-    rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '10' }],
+    rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '10' }],
   },
   4: {
     id: 4,
-    rows: [{ targetType: 'fixture', targetKey: 'b', propertyName: 'dimmer', value: '20' }],
+    rows: [{ targetType: 'fixture', targetKey: 'b', attribute: 'dimmer', value: '20' }],
   },
 }))
 /** Which layer the grid is pointed at — mutable, because moving the focus is a scenario. */
@@ -25,19 +25,19 @@ vi.mock('@/store/programmer', () => ({
         layerId: 7,
         source: { kind: 'LOOK', id: 3, uuid: 'u3', name: 'Warm Wash' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
       {
         layerId: 8,
         source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
       {
         layerId: 9,
         source: { kind: 'LOOK', id: 4, uuid: 'u4', name: 'Cold Wash' },
         targets: [{ type: 'fixture', key: 'b' }],
-        propertyMask: null,
+        attributeMask: null,
       },
       // A palette layer whose `source.id` **collides with LOOK 3** on purpose: the two live in
       // different tables and share an int PK space, so a gate written against `source.id` alone
@@ -46,7 +46,7 @@ vi.mock('@/store/programmer', () => ({
         layerId: 10,
         source: { kind: 'PALETTE', id: 3, uuid: 't3', name: 'Warm Tilt' },
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
       },
     ],
   }),
@@ -124,7 +124,7 @@ describe('LookRowStoreProvider', () => {
     expect(saveLook).toHaveBeenCalledWith({
       projectId: 1,
       lookId: 3,
-      rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '119' }],
+      rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '119' }],
     })
   })
 
@@ -176,7 +176,7 @@ describe('LookRowStoreProvider', () => {
     expect(saveLook).toHaveBeenCalledWith({
       projectId: 1,
       lookId: 3,
-      rows: [{ targetType: 'fixture', targetKey: 'a', propertyName: 'dimmer', value: '200' }],
+      rows: [{ targetType: 'fixture', targetKey: 'a', attribute: 'dimmer', value: '200' }],
     })
   })
 

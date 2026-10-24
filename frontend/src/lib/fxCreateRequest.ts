@@ -28,7 +28,7 @@ export type FxCreateTarget =
 
 export interface FxCreateRequest {
   fxType: string
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: BlendMode
   phaseOffset: number
@@ -82,7 +82,7 @@ export function fxCreateAddition(
 ): FxCreateAddition {
   const shared = {
     fxType: request.fxType,
-    propertyName: request.propertyName,
+    attribute: request.attribute,
     cycle: request.cycle,
     blendMode: request.blendMode,
     phaseOffset: request.phaseOffset,

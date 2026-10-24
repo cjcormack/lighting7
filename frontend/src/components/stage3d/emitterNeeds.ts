@@ -1,7 +1,7 @@
 import type { FixturePatch } from '../../api/patchApi'
 import { drawnLengthM } from '../../lib/fixtureLength'
 import { EMPTY_LANTERNS, type LanternFocus, type LanternIndex } from '../../lib/lanterns'
-import { findPrismProperty, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
+import { findPrismAttribute, type Fixture, type FixtureTypeInfo } from '../../store/fixtures'
 import { bodyInputFor, bodySpecFor, lightRuns, MAX_LIGHTS_PER_FIXTURE, type BodySpec } from './bodies/archetype'
 import { MAX_PRISM_LOBES, type SlotNeeds } from './emitterLayout'
 
@@ -39,7 +39,7 @@ export function emitterNeedsForSpec(spec: BodySpec, fixture: Fixture | undefined
   const cells = spec.cells.length
   if (!spec.emits || cells === 0) return { lobes: 0, lights: 0 }
   if (cells === 1) {
-    const lobes = findPrismProperty(fixture?.properties) ? MAX_PRISM_LOBES : 1
+    const lobes = findPrismAttribute(fixture?.attributes) ? MAX_PRISM_LOBES : 1
     return { lobes, lights: lobes }
   }
   return { lobes: cells, lights: lightRuns(cells, MAX_LIGHTS_PER_FIXTURE).length }

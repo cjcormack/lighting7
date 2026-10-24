@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 
 /**
  * Which axis of a colour property a continuous control drives. Colour is HSV here — the model
- * [PropertyChannelResolver] has always preserved on a hue turn — and each axis is one of its three
+ * [AttributeChannelResolver] has always preserved on a hue turn — and each axis is one of its three
  * components, plus a fine trim on hue, the one axis coarse enough at 128 steps to want one.
  *
  * **Null means [HUE].** A binding target carries `colourAxis: ColourAxis? = null`, and the wire
@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 enum class ColourAxis {
-    /** The colour wheel in [PropertyChannelResolver.HUE_STEPS] steps, 0 red. */
+    /** The colour wheel in [AttributeChannelResolver.HUE_STEPS] steps, 0 red. */
     @SerialName("hue") HUE,
 
     /**

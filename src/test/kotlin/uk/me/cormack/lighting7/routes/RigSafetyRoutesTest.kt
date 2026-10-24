@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
@@ -86,7 +86,7 @@ class RigSafetyRoutesTest : RouteIntegrationTest() {
     /** What [key]'s dimmer channel sends at full, after the scalers. */
     private fun dimmerOut(key: String): Int {
         val fixture = state.show.fixtures.untypedFixture(key) as DmxFixture
-        val dimmer = fixture.fixtureProperties.first { it.category == PropertyCategory.DIMMER }.classProperty.call(fixture) as DmxSlider
+        val dimmer = fixture.fixtureAttributes.first { it.category == AttributeCategory.DIMMER }.classProperty.call(fixture) as DmxSlider
         return state.show.globalScalerState.modify(Universe(0, 0), dimmer.channelNo, 255u).toInt()
     }
 

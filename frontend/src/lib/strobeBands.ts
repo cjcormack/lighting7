@@ -1,7 +1,7 @@
 import type {
   SettingOption,
-  SettingPropertyDescriptor,
-  SliderPropertyDescriptor,
+  SettingAttributeDescriptor,
+  SliderAttributeDescriptor,
   StrobeBand,
   StrobeKind,
 } from '../store/fixtures'
@@ -52,7 +52,7 @@ export const SHIMMER_DEPTH = 0.08
 /** The fastest a shimmer ripples, in Hz — faster only aliases against the frame rate. */
 const SHIMMER_HZ_MAX = 10
 
-type StrobeProperty = SliderPropertyDescriptor | SettingPropertyDescriptor
+type StrobeAttribute = SliderAttributeDescriptor | SettingAttributeDescriptor
 
 const TAU = Math.PI * 2
 
@@ -60,7 +60,7 @@ const TAU = Math.PI * 2
  * The band [level] sits in on [prop]: a slider's declared band, or a setting's option as a band
  * running from its level to the next option's. `undefined` where nothing is declared.
  */
-export function strobeBandAt(prop: StrobeProperty, level: number): StrobeBand | undefined {
+export function strobeBandAt(prop: StrobeAttribute, level: number): StrobeBand | undefined {
   if (prop.type === 'slider') {
     const bands = prop.strobeBands
     if (!bands) return undefined
@@ -170,17 +170,17 @@ export function strobeLevelAt(band: StrobeBand | undefined, level: number, timeS
 }
 
 /** A strobe channel's seed: its address, so each fixture's random strobe keeps its own dice. */
-export function strobeSeed(prop: StrobeProperty): number {
+export function strobeSeed(prop: StrobeAttribute): number {
   return prop.channel.universe * 512 + prop.channel.channelNo
 }
 
 /**
- * The light's strobe factor across every strobe channel the fixture has (`findStrobeProperties`):
+ * The light's strobe factor across every strobe channel the fixture has (`findStrobeAttributes`):
  * the product of each one's [strobeLevelAt], [read] giving each channel's DMX value. 1 with none.
  */
 export function strobeFactor(
-  props: readonly StrobeProperty[],
-  read: (prop: StrobeProperty) => number,
+  props: readonly StrobeAttribute[],
+  read: (prop: StrobeAttribute) => number,
   timeS: number,
 ): number {
   let factor = 1
@@ -196,8 +196,8 @@ export function strobeFactor(
  * a band that moves with time, and none is closed — a closed one holds the product at 0.
  */
 export function strobeAnimates(
-  props: readonly StrobeProperty[],
-  read: (prop: StrobeProperty) => number,
+  props: readonly StrobeAttribute[],
+  read: (prop: StrobeAttribute) => number,
 ): boolean {
   let moving = false
   for (const p of props) {

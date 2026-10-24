@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.models.DaoBuskPads
 import uk.me.cormack.lighting7.models.DaoCueAdHocFx
 import uk.me.cormack.lighting7.models.DaoCueLayers
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignments
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignments
 import uk.me.cormack.lighting7.models.DaoFxDefinitions
 import uk.me.cormack.lighting7.models.DaoLookFx
 import uk.me.cormack.lighting7.models.DaoLookRows
@@ -128,7 +128,7 @@ internal object TerminologyMigration {
         Rebuild("template_effects", DaoPaletteFx, FX_COLUMNS + ("palette_id" to "template_id")),
         Rebuild("look_effects", DaoLookFx, FX_COLUMNS),
         Rebuild("cue_ad_hoc_effects", DaoCueAdHocFx, FX_COLUMNS),
-        Rebuild("cue_property_assignments", DaoCuePropertyAssignments, mapOf("attribute" to "property_name")),
+        Rebuild("cue_property_assignments", DaoCueAttributeAssignments, mapOf("attribute" to "property_name")),
         Rebuild("look_rows", DaoLookRows, mapOf("attribute" to "property_name")),
         Rebuild(
             "cue_layers", DaoCueLayers, mapOf("palette_id" to "template_id", "attribute_mask" to "property_mask"),
@@ -244,7 +244,7 @@ internal object TerminologyMigration {
             count("families", renameColumn(table, "family", LegacyNames::family))
             count("palette references", renameColumn(table, "parameters", ::parameters))
         }
-        for (table in listOf(DaoPaletteRows, DaoLookRows, DaoCuePropertyAssignments).map { it.tableName }) {
+        for (table in listOf(DaoPaletteRows, DaoLookRows, DaoCueAttributeAssignments).map { it.tableName }) {
             if (tableExists(table)) count("palette references", renameColumn(table, "value", LegacyNames::paletteRefs))
         }
         for (table in listOf(DaoSpeedMasters, DaoFxDefinitions).map { it.tableName }) {
@@ -314,8 +314,9 @@ internal object TerminologyMigration {
 
 /**
  * Record [TERMINOLOGY_RENAMED_USER_VERSION] once step 4 is behind the rename — every database, the
- * fresh one included, since it is born in the glossary's words. Last of `initDatabase`'s one-shot
- * steps; see [TerminologyMigration] for why the rename does not record it itself.
+ * fresh one included, since it is born in the glossary's words. Last of the one-shot steps inside
+ * `initDatabase`'s transaction (step 6, [AttributeNamesMigration], runs after it); see
+ * [TerminologyMigration] for why the rename does not record it itself.
  */
 internal fun JdbcTransaction.markTerminologyRenamed() {
     var version = 0

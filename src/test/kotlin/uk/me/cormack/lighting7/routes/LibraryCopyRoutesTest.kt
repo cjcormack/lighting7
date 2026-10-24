@@ -103,8 +103,8 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         assertEquals(2_500L, copy.fadeDurationMs)
         assertEquals("POSITION", copy.family)
         assertEquals(
-            source.rows.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value, it.sortOrder) },
-            copy.rows.map { listOf(it.targetType, it.targetKey, it.propertyName, it.value, it.sortOrder) },
+            source.rows.map { listOf(it.targetType, it.targetKey, it.attribute, it.value, it.sortOrder) },
+            copy.rows.map { listOf(it.targetType, it.targetKey, it.attribute, it.value, it.sortOrder) },
             "per-fixture keys travel as they are",
         )
         assertNull(copy.lastPressedAt, "the copy has never been pressed")
@@ -132,7 +132,7 @@ class LibraryCopyRoutesTest : RouteIntegrationTest() {
         val effect = PaletteFxDto(
             fxType = "ColourWave",
             family = "colour",
-            propertyName = "rgbColour",
+            attribute = "rgbColour",
             cycle = 0.5,
             blendMode = "ADDITIVE",
             order = "NORMAL",

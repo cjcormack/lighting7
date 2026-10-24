@@ -86,11 +86,11 @@ fun serializePaletteColourRef(paletteUuid: UUID): String = "$PALETTE_COLOUR_REF_
  */
 fun <R> genericColourRows(
     rows: List<R>,
-    propertyName: (R) -> String,
+    attribute: (R) -> String,
     isDeferred: (R) -> Boolean,
 ): List<R>? {
     val colour = rows.filter {
-        PaletteProperty.ofOrNull(propertyName(it))?.family == PropertyMaskGroup.COLOUR
+        PaletteAttribute.ofOrNull(attribute(it))?.family == AttributeFamily.COLOUR
     }
     if (colour.isEmpty() || colour.any { !isDeferred(it) }) return null
     return colour
@@ -158,7 +158,7 @@ class PaletteSource(private val registry: PaletteRegistry) : (String) -> Extende
                 logger.warn("Palette '{}' ({}) has an unreadable intent '{}'", snapshot.name, uuid, row.value)
                 return null
             }
-            row.propertyName to intent
+            row.attribute to intent
         }
         return PaletteStep(uuid, snapshot.name, rows)
     }
@@ -177,7 +177,7 @@ private fun resolvePaletteColour(registry: PaletteRegistry, uuid: UUID): Extende
     }
     // Every colour-family row, not just the hex: a template may also name white, amber or UV
     // explicitly, and those are part of the one colour this reference stands for.
-    val colourRows = genericColourRows(snapshot.rows, { it.propertyName }, { it.isDeferred }) ?: run {
+    val colourRows = genericColourRows(snapshot.rows, { it.attribute }, { it.isDeferred }) ?: run {
         logger.warn(
             "Palette '{}' ({}) holds no generic colour — an effect parameter needs one",
             snapshot.name, uuid,
@@ -189,7 +189,7 @@ private fun resolvePaletteColour(registry: PaletteRegistry, uuid: UUID): Extende
             logger.warn("Palette '{}' ({}) has an unreadable colour intent '{}'", snapshot.name, uuid, row.value)
             return null
         }
-        row.propertyName to intent
+        row.attribute to intent
     }
     return PaletteResolver.resolveColourGeneric(intents)
 }

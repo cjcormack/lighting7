@@ -64,7 +64,7 @@ export function splitScopeOf(
  * cue editor, read as [fxReaches] reads a running one.
  */
 export function storedFxReaches(
-  effect: Pick<CueAdHocFx, 'targetType' | 'targetKey' | 'propertyName' | 'elementFilter' | 'elementMode'>,
+  effect: Pick<CueAdHocFx, 'targetType' | 'targetKey' | 'attribute' | 'elementFilter' | 'elementMode'>,
   targets: readonly CueTarget[],
   fixtures: readonly Fixture[],
 ): boolean {
@@ -74,7 +74,7 @@ export function storedFxReaches(
       isGroupTarget: effect.targetType === 'group',
       targetType: effect.targetType,
       targets: effect.targetType === 'selection' ? storedFxTargets(effect.targetType, effect.targetKey) : null,
-      propertyName: effect.propertyName ?? '',
+      attribute: effect.attribute ?? '',
       elementFilter: effect.elementFilter,
       elementMode: effect.elementMode,
     },

@@ -26,7 +26,7 @@ import { rowIdsForTargets, selectedRowTargets, type Row, type RowId } from './ro
  * **The mask rides the publish** (D2, D3). A marquee is targets × families, so beside the rows
  * this publishes `cellFamilies(cells)` — the union under a ⌘-union of two rectangles over
  * different columns, an accepted approximation, since the press it feeds can only apply one
- * `propertyMask` per layer. A row selection with no cells publishes no mask, which is a `set`
+ * `attributeMask` per layer. A row selection with no cells publishes no mask, which is a `set`
  * that clears the desk's: a row selection has no column axis to speak with. The publish is keyed
  * on the mask's *key*, not on `cells`, because a marquee drag mints a fresh `cells` array every
  * animation frame and only the families it names are the desk's business.

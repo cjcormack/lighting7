@@ -122,7 +122,7 @@ vi.mock('@/store/looks', async (importOriginal) => ({
   useLookQuery: () => ({
     data: {
       id: 4,
-      fx: [{ targetType: 'deferred', targetKey: '', fxType: 'Pulse', family: 'intensity', propertyName: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0, parameters: {} }],
+      fx: [{ targetType: 'deferred', targetKey: '', fxType: 'Pulse', family: 'intensity', attribute: 'dimmer', cycle: 1, blendMode: 'OVERRIDE', order: 'NORMAL', phaseOffset: 0, parameters: {} }],
     },
   }),
 }))
@@ -180,7 +180,7 @@ const PULSE: FxLibraryEntry = {
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   parameters: [
     { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
@@ -204,7 +204,7 @@ const pulse = (over: Partial<CueAdHocFx> = {}): CueAdHocFx => ({
   targetKey: 'orbit-sr',
   fxType: 'Pulse',
   family: 'intensity',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   cycle: 2,
   blendMode: 'OVERRIDE',
   order: 'NORMAL',
@@ -235,7 +235,7 @@ function cueOf(over: Partial<Cue> = {}): Cue {
     cueNumberAuto: false,
     layers: [],
     adHocFx: [],
-    propertyAssignments: [{ targetType: 'fixture', targetKey: 'orbit-sr', propertyName: 'dimmer', value: '10', sortOrder: 0 }],
+    attributeAssignments: [{ targetType: 'fixture', targetKey: 'orbit-sr', attribute: 'dimmer', value: '10', sortOrder: 0 }],
     triggers: [],
     cueStackId: 7,
     cueStackName: 'Act 1',
@@ -471,7 +471,7 @@ describe('the FX tab', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
     const first = (await patched(1)).adHocFx as CueAdHocFx[]
     expect(first).toEqual([
-      expect.objectContaining({ targetType: 'fixture', targetKey: 'orbit-sr', fxType: 'Pulse', propertyName: 'dimmer', sortOrder: 0 }),
+      expect.objectContaining({ targetType: 'fixture', targetKey: 'orbit-sr', fxType: 'Pulse', attribute: 'dimmer', sortOrder: 0 }),
     ])
     // The desk now holds the Pulse; the cache has not caught up.
     data.desk = cueOf({ adHocFx: [{ ...first[0], uuid: 'e-new' }] })
@@ -649,16 +649,16 @@ it('one flush carries the rows and a list in one PATCH, and one Undo puts both b
     void probe.store!.editLayers((list) => list.map((l, i) => ({ ...l, enabled: i !== 0 })))
   })
   const body = await patched(1)
-  expect(Object.keys(body).sort()).toEqual(['cueId', 'layers', 'projectId', 'propertyAssignments'])
+  expect(Object.keys(body).sort()).toEqual(['attributeAssignments', 'cueId', 'layers', 'projectId'])
   // The desk now holds what that save wrote.
   data.desk = cueOf({
     layers: [{ ...layer(WARM, 0), id: 1, enabled: false }, { ...layer(COOL, 1), id: 2 }],
-    propertyAssignments: body.propertyAssignments as Cue['propertyAssignments'],
+    attributeAssignments: body.attributeAssignments as Cue['attributeAssignments'],
   })
   act(() => probe.store!.undo())
   const undone = await patched(2)
   expect((undone.layers as CueLayer[]).map((l) => l.enabled)).toEqual([true, true])
-  expect((undone.propertyAssignments as Cue['propertyAssignments']).map((r) => r.value)).toEqual(['10'])
+  expect((undone.attributeAssignments as Cue['attributeAssignments']).map((r) => r.value)).toEqual(['10'])
 })
 
 it('sends no programmer, channel or effect frame over a full pass of both tabs (P2)', async () => {
@@ -670,7 +670,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
     stack.handlers!.onSetEnabled(0, false)
     stack.handlers!.onSetAmount(1, 0.5)
     stack.handlers!.onSetBlendMode(1, 'MAX')
-    stack.handlers!.onSetPropertyMask(1, 'COLOUR')
+    stack.handlers!.onSetAttributeMask(1, 'COLOUR')
     stack.handlers!.onSetStomp(1, true)
     stack.handlers!.onSetTargets!(0)
   })
@@ -686,7 +686,7 @@ it('sends no programmer, channel or effect frame over a full pass of both tabs (
   await waitFor(() => expect(data.presses).toHaveLength(1))
   await waitFor(() => expect(data.patches.length).toBeGreaterThanOrEqual(3), { timeout: 3000 })
   // Every write is the cue's layers or effects, never its own rows.
-  expect(data.patches.every((p) => !('propertyAssignments' in p))).toBe(true)
+  expect(data.patches.every((p) => !('attributeAssignments' in p))).toBe(true)
   const banned = socket.sent.filter(
     (frame) =>
       /^(programmer|channels|fx)\./.test(frame.type ?? '') ||

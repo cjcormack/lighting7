@@ -4,16 +4,16 @@ name: Figure 8
 family: position
 outputType: POSITION
 fxMode: STANDARD
-compatibleProperties: [position]
+compatibleAttributes: [position]
 parameters:
-  - name: panCenter
+  - name: panCentre
     type: ubyte
     default: "128"
-    description: Center pan position
-  - name: tiltCenter
+    description: Centre pan position
+  - name: tiltCentre
     type: ubyte
     default: "128"
-    description: Center tilt position
+    description: Centre tilt position
   - name: panRadius
     type: ubyte
     default: "64"
@@ -24,11 +24,11 @@ parameters:
     description: Vertical extent
 ---*/
 
-val panCenter = params.ubyte("panCenter")
-val tiltCenter = params.ubyte("tiltCenter")
+val panCentre = params.ubyte("panCentre")
+val tiltCentre = params.ubyte("tiltCentre")
 val panRadius = params.ubyte("panRadius")
 val tiltRadius = params.ubyte("tiltRadius")
 val angle = phase * 2 * PI
-val pan = (panCenter.toInt() + panRadius.toInt() * sin(angle)).toInt().coerceIn(0, 255).toUByte()
-val tilt = (tiltCenter.toInt() + tiltRadius.toInt() * sin(2 * angle)).toInt().coerceIn(0, 255).toUByte()
+val pan = (panCentre.toInt() + panRadius.toInt() * sin(angle)).toInt().coerceIn(0, 255).toUByte()
+val tilt = (tiltCentre.toInt() + tiltRadius.toInt() * sin(2 * angle)).toInt().coerceIn(0, 255).toUByte()
 FxOutput.Position(pan, tilt)

@@ -35,7 +35,7 @@ import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.jetbrains.exposed.v1.jdbc.insert
 import org.jetbrains.exposed.v1.core.and
 import org.jetbrains.exposed.v1.core.eq
-import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueAttributeAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.CueAdHocFxJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.models.CueTargetDto
@@ -137,11 +137,12 @@ class ProjectRoundTripTest {
     }
 
     /**
-     * The archive in the glossary's words (terminology plan session 4, `formatVersion` 38): no folder,
-     * field or value the rename moved is written, and `project.json` no longer says the FX library.
+     * The archive in the glossary's words (terminology plan sessions 4 and 6, `formatVersion` 39): no
+     * folder, field or value the renames moved is written, and `project.json` no longer says the FX
+     * library.
      */
     @Test
-    fun `a v38 export says no old name`() {
+    fun `a v39 export says no old name`() {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
 
@@ -153,12 +154,13 @@ class ProjectRoundTripTest {
             "\"nShot\"", "\"blocks\"", "\"groups\"", "\"templateUuid\"", "\"propertyMask\"", "\"usage\"", "\"effectId\"",
             "\"effectMode\"", "\"compatibleProperties\"", "\"defaultStepTiming\"", "\"effects\"", "\"effect\"", "\"fxLibrary\"",
             "tmpl:", "pressTemplate", "stackEffectSize", "\"CENTER_OUT\"", "\"EDGES_IN\"", "\"order\": \"LINEAR\"",
+            "fixtureProperty", "groupProperty", "selectionProperty", "panCenter", "tiltCenter",
         )
         for ((path, text) in files) {
             if (!path.endsWith(".json")) continue
             for (name in old) assertTrue(name !in text, "$path says $name")
         }
-        assertEquals(FormatVersionJson(formatVersion = 38, minReader = 38), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+        assertEquals(FormatVersionJson(formatVersion = 39, minReader = 39), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
     }
 
     /**
@@ -948,11 +950,11 @@ class ProjectRoundTripTest {
         // A pre-v21 cue row raising a tube, as the Twin Shot's sliders once allowed.
         val rowDir = exportDirA.resolve("cueAttributeAssignments")
         Files.createDirectories(rowDir)
-        val raised = CuePropertyAssignmentJson(
+        val raised = CueAttributeAssignmentJson(
             uuid = java.util.UUID.randomUUID().toString(), cueUuid = written.uuid,
             targetType = "fixture", targetKey = "cannon-1", attribute = "output1", value = "255",
         )
-        Files.writeString(rowDir.resolve("${raised.uuid}.json"), canonicalEncode(CuePropertyAssignmentJson.serializer(), raised))
+        Files.writeString(rowDir.resolve("${raised.uuid}.json"), canonicalEncode(CueAttributeAssignmentJson.serializer(), raised))
 
         val imported = ProjectImporter(state).import(exportDirA, nameOverride = null)
         ProjectExporter(state).export(imported.projectId, exportDirB)
@@ -961,7 +963,7 @@ class ProjectRoundTripTest {
         }.single { it.name == "open" }
         assertEquals(written.events.map { it.trigger }, back.events.map { it.trigger })
         val rows = Files.list(exportDirB.resolve("cueAttributeAssignments")).use { stream ->
-            stream.toList().map { canonicalDecode(CuePropertyAssignmentJson.serializer(), Files.readString(it)) }
+            stream.toList().map { canonicalDecode(CueAttributeAssignmentJson.serializer(), Files.readString(it)) }
         }
         assertTrue(rows.none { it.attribute == "output1" }, "the raised tube was stripped")
         assertTrue(rows.isNotEmpty(), "the cue's other rows came through")

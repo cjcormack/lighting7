@@ -26,8 +26,8 @@ import {
 import { frameFromBasis, frameInBasis } from './scene/lightTable'
 import { LAMBERT_LOBES } from './scene/lobes'
 import { FOCUS_LOD_MAX, GOBO_BLUR_TEXELS } from './washConfig'
-import { findGoboProperties, findGoboRotationProperty, goboRotationWheel } from '../../store/fixtures'
-import { fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
+import { findGoboAttributes, findGoboRotationAttribute, goboRotationWheel } from '../../store/fixtures'
+import { fittedAttributes, type FittedMedia } from '../../lib/fittedMedia'
 import { EMPTY_GELS } from '../../lib/gels'
 import { chan, settingProp, sliderProp } from '../../test/fixtureFactories'
 
@@ -245,24 +245,24 @@ const ROBE = [ROBE_ROTATING, ROBE_ROTATION, ROBE_STATIC]
 
 describe('which wheel is which layer', () => {
   it("orders the wheels by DMX channel, whatever the descriptors' order", () => {
-    expect(findGoboProperties(ROBE).map((p) => p.name)).toEqual(['staticGobo', 'rotatingGobo'])
-    expect(findGoboProperties([...ROBE].reverse()).map((p) => p.name)).toEqual(['staticGobo', 'rotatingGobo'])
+    expect(findGoboAttributes(ROBE).map((p) => p.name)).toEqual(['staticGobo', 'rotatingGobo'])
+    expect(findGoboAttributes([...ROBE].reverse()).map((p) => p.name)).toEqual(['staticGobo', 'rotatingGobo'])
   })
 
   it('gives the rotation channel to the wheel it follows', () => {
-    const wheels = findGoboProperties(ROBE)
-    expect(goboRotationWheel(wheels, findGoboRotationProperty(ROBE))).toBe(1)
+    const wheels = findGoboAttributes(ROBE)
+    expect(goboRotationWheel(wheels, findGoboRotationAttribute(ROBE))).toBe(1)
     // The MAC 250: one wheel, its rotation on the next channel.
     const mac = [settingProp('gobo', 'gobo', chan(4)), sliderProp('goboRotation', 'gobo_rotation', chan(5))]
-    expect(goboRotationWheel(findGoboProperties(mac), findGoboRotationProperty(mac))).toBe(0)
+    expect(goboRotationWheel(findGoboAttributes(mac), findGoboRotationAttribute(mac))).toBe(0)
     // No rotation channel turns nothing; one before every wheel turns the first.
     expect(goboRotationWheel(wheels, undefined)).toBe(-1)
     expect(goboRotationWheel(wheels, sliderProp('r', 'gobo_rotation', chan(2)))).toBe(0)
   })
 
   it("stacks the Robe's static and rotating wheels, turning only the rotating one", () => {
-    const wheels = findGoboProperties(ROBE)
-    const turned = goboRotationWheel(wheels, findGoboRotationProperty(ROBE))
+    const wheels = findGoboAttributes(ROBE)
+    const turned = goboRotationWheel(wheels, findGoboRotationAttribute(ROBE))
     const out = stepGoboLayers(
       resolveGoboSlot(wheels[0], 65),
       resolveGoboSlot(wheels[1], 4),
@@ -295,8 +295,8 @@ describe("a Revolution's module wheel", () => {
     media: 'GOBO_OR_GEL' as const,
   }
   const slotOn = (media: FittedMedia | null, level: number) => {
-    const props = fittedProperties([WHEEL], media, EMPTY_GELS)
-    const wheels = findGoboProperties(props)
+    const props = fittedAttributes([WHEEL], media, EMPTY_GELS)
+    const wheels = findGoboAttributes(props)
     return stepGoboLayers(resolveGoboSlot(wheels[0], level), 0, 0, makeGoboRotation(), 0, 0, makeGoboLayers()).packed
   }
 

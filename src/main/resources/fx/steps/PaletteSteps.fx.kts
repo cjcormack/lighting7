@@ -4,7 +4,7 @@ name: Palette Steps
 family: steps
 outputType: STEPS
 fxMode: STANDARD
-compatibleProperties: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
+compatibleAttributes: [dimmer, strobe, rgbColour, position, zoom, focus, iris, frost, prism]
 parameters:
   - name: palettes
     type: paletteList

@@ -33,7 +33,7 @@ export interface PressCue {
     families: readonly AttributeFamily[] | null,
   ) => Promise<CueLayerPressResponse | null>
   /** *Apply as values*: the desk's literals as the cue's own rows. Answers how many landed. */
-  landValues: (values: readonly { target: CueTarget; propertyName: string; value: string }[]) => number
+  landValues: (values: readonly { target: CueTarget; attribute: string; value: string }[]) => number
   /**
    * A bare effect stored in draft (show-cue-editing plan D17), nothing run: appended, or in place
    * of [replacing] — the effect the picker is auditioning, found in the cue as the desk holds it.

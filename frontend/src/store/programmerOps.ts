@@ -17,18 +17,6 @@ import type { IncludedTarget } from '../api/programmerWsApi'
  * own errors, so a global toast would double up.
  */
 
-/**
- * Which attribute families an operation touches. Omitted or all four means "everything".
- *
- * An **alias**, not a second declaration: this is the same four-value vocabulary
- * `lib/attributeFamily.ts` calls [AttributeFamily], and one Kotlin enum (`PropertyMaskGroup`)
- * behind both. The name survives because it is the wire's — these request bodies are mirrors of
- * the backend's own field — but the *type* must not, or a literal added to one union still
- * typechecks against the other while meaning nothing to the server. `maskPicker.test.ts` pins the
- * vocabulary; this pins the types.
- */
-export type PropertyMaskGroup = AttributeFamily
-
 export type RecordMode = 'CREATE' | 'MERGE' | 'REMOVE' | 'UPDATE_EXISTING'
 
 export type RecordSource = 'TOUCHED' | 'ALL' | 'STAGE_SNAPSHOT'
@@ -36,14 +24,14 @@ export type RecordSource = 'TOUCHED' | 'ALL' | 'STAGE_SNAPSHOT'
 /** An entry that couldn't be written, and why. Rendered so a partial record isn't silent. */
 export interface ProgrammerSkip {
   targetKey?: string
-  propertyName?: string
+  attribute?: string
   universe?: number
   channel?: number
   reason:
     | 'ELEMENT_TARGET'
     | 'MISSING_FIXTURE'
-    | 'MISSING_PROPERTY'
-    | 'NO_BACKING_PROPERTY'
+    | 'MISSING_ATTRIBUTE'
+    | 'NO_BACKING_ATTRIBUTE'
     | 'MASKED_OUT'
     /**
      * Outside the request's fixture scope — the `targets` it sent, when it sent any.
@@ -78,7 +66,7 @@ export interface RecordRequest {
   cueStackId?: number
   /** Required for MERGE / REMOVE / UPDATE_EXISTING. */
   cueId?: number
-  mask?: PropertyMaskGroup[]
+  mask?: AttributeFamily[]
   includeFx?: boolean
   name?: string
   cueNumber?: string
@@ -133,7 +121,7 @@ export interface RecordLookRequest {
    * nothing about the destination says "this is a colour record", so the operator's mask is the
    * only statement of intent there is.
    */
-  mask?: PropertyMaskGroup[]
+  mask?: AttributeFamily[]
   /**
    * The operator's selection. Groups are expanded server-side.
    *
@@ -195,7 +183,7 @@ export interface IncludeRequest {
   /** The stack entry a cue was included from, when it was included from one. */
   entryId?: number
   lookId?: number
-  mask?: PropertyMaskGroup[]
+  mask?: AttributeFamily[]
   includeFx?: boolean
   fadeMs?: number
 }
@@ -233,7 +221,7 @@ export interface IncludeResponse {
 /** One (fixture, property) the programmer is currently overriding. */
 export interface ChecklistKey {
   targetKey: string
-  propertyName: string
+  attribute: string
   currentValue: string
   cueValue?: string
   /** The cue drives this through an effect, so a written assignment would be masked on GO. */
@@ -270,7 +258,7 @@ export interface UpdateRequest {
   projectId: number
   /** Cue ids to write (Mode B). Omit for Mode A, or for the checklist when nothing is included. */
   targets?: number[]
-  mask?: PropertyMaskGroup[]
+  mask?: AttributeFamily[]
   /** Fetch the checklist without writing, even when an include target exists. */
   preview?: boolean
   includeFx?: boolean
@@ -371,9 +359,9 @@ export interface SpreadRequest {
   projectId: number
   targets: CueTarget[]
   /** The selection's attribute mask; absent is every attribute. */
-  families?: PropertyMaskGroup[]
-  /** A `PaletteProperty` name — `rgbColour`, `dimmer`, `position`, `white` … */
-  property: string
+  families?: AttributeFamily[]
+  /** A `PaletteAttribute` name — `rgbColour`, `dimmer`, `position`, `white` … */
+  attribute: string
   /** The two endpoint intents; absent on a fan, which has none. */
   from?: string
   to?: string
@@ -427,7 +415,7 @@ export interface SpreadBase {
  */
 export interface SpreadWrite {
   target: CueTarget
-  propertyName: string
+  attribute: string
   value: string
 }
 

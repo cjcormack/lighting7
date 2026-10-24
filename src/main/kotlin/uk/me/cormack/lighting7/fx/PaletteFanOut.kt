@@ -20,7 +20,7 @@ import uk.me.cormack.lighting7.fixture.media.FittedMedia
  *    own dimmer takes a dimmer row as it always did; only the rows its cells alone can serve fan.
  *  - **The decision is per row**, so one template can land partly on a parent and partly on its
  *    cells — a beam template's zoom on the Shehds' parent, its colour on the zones.
- *  - **Presence, not resolution, decides** ([PaletteResolver.hasProperty]): a parent that has the
+ *  - **Presence, not resolution, decides** ([PaletteResolver.hasAttribute]): a parent that has the
  *    property but cannot take this value — a pan with no annotated degree range — keeps the row
  *    and reports why, rather than handing it to cells that can.
  *  - **Colour is decided as a family**: a colour-family row (the hex, white, amber, UV) fans when
@@ -38,23 +38,23 @@ import uk.me.cormack.lighting7.fixture.media.FittedMedia
  */
 object PaletteFanOut {
     /**
-     * The heads [target] stands for, for [propertyName]. [fittedMediaFor] is
+     * The heads [target] stands for, for [attribute]. [fittedMediaFor] is
      * `Fixtures.fittedMediaFor`, answered per head through [mediaOf].
      *
      * Cells come back in element order, each the parent's own element object — the same instance
      * the parent's transaction writes through. A cell is chosen for **having** the property
-     * ([PaletteResolver.hasProperty]), not for resolving one value of it; whether the value lands
+     * ([PaletteResolver.hasAttribute]), not for resolving one value of it; whether the value lands
      * is each head's own answer, reported by the caller.
      */
     fun headsFor(
         target: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         fittedMediaFor: (String) -> FittedMedia?,
     ): List<GroupableFixture> {
         val multi = target as? MultiElementFixture<*> ?: return listOf(target)
-        if (PaletteResolver.hasProperty(target, propertyName, mediaOf(target, fittedMediaFor))) return listOf(target)
+        if (PaletteResolver.hasAttribute(target, attribute, mediaOf(target, fittedMediaFor))) return listOf(target)
         val cells = multi.elements.filter {
-            PaletteResolver.hasProperty(it, propertyName, mediaOf(it, fittedMediaFor))
+            PaletteResolver.hasAttribute(it, attribute, mediaOf(it, fittedMediaFor))
         }
         return cells.ifEmpty { listOf(target) }
     }

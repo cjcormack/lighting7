@@ -102,7 +102,7 @@ function lavender(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer 
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,
@@ -335,7 +335,7 @@ describe('a range', () => {
   })
 
   it('Settings… over differing masks says so, and the first mask chosen is written to every layer', async () => {
-    TIMELINE!.entries[3] = entry(103, { layers: [lavender(13, { propertyMask: 'COLOUR' })] })
+    TIMELINE!.entries[3] = entry(103, { layers: [lavender(13, { attributeMask: 'COLOUR' })] })
     mount()
     selectColumn()
     fireEvent.click(document.querySelector('[data-timeline-verb="Settings"]')!)
@@ -345,8 +345,8 @@ describe('a range', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Beam' }))
     await waitFor(() => expect(edit).toHaveBeenCalledTimes(1))
     expect(requests[0].ops).toEqual([
-      { op: 'layerSettings', cueId: 1, layerId: 11, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
-      { op: 'layerSettings', cueId: 3, layerId: 13, fields: { propertyMask: 'INTENSITY,POSITION,COLOUR' } },
+      { op: 'layerSettings', cueId: 1, layerId: 11, fields: { attributeMask: 'INTENSITY,POSITION,COLOUR' } },
+      { op: 'layerSettings', cueId: 3, layerId: 13, fields: { attributeMask: 'INTENSITY,POSITION,COLOUR' } },
     ])
   })
 })

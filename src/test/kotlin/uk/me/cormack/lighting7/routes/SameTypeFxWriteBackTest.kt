@@ -84,7 +84,7 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(
                 ProgrammerFxRequest(
-                    fxType = fxType, propertyName = "dimmer", targets = targets,
+                    fxType = fxType, attribute = "dimmer", targets = targets,
                     parameters = mapOf("min" to "$level", "max" to "$level"), blendMode = blendMode, stack = stack,
                 ),
             )

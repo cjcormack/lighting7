@@ -628,7 +628,7 @@ class RemoteSyncEngine(
      * Read every project `sync_state` row into the `(hash, isDeleted)` map shape the
      * three-way diff consumes. One trip to the DB per diff invocation.
      *
-     * A row last synced at a commit older than [LegacyNames.GLOSSARY_FORMAT_VERSION] holds the hash
+     * A row last synced at a commit older than [LegacyNames.ATTRIBUTE_FORMAT_VERSION] holds the hash
      * an older desk took of the record's raw bytes, which no longer match what [RecordHasher] takes
      * of the same record in today's words; so its hash is taken again from that commit's file, and
      * a record nobody touched since reads as unchanged on both sides rather than as a conflict.
@@ -643,7 +643,7 @@ class RemoteSyncEngine(
         fun olderFormat(sha: String) = olderFormat.getOrPut(sha) {
             runCatching { JGitClient.readBlob(repo, sha, "formatVersion.json") }.getOrNull()
                 ?.let { runCatching { canonicalDecode(FormatVersionJson.serializer(), it).formatVersion }.getOrNull() }
-                ?.let { it < LegacyNames.GLOSSARY_FORMAT_VERSION } ?: false
+                ?.let { it < LegacyNames.ATTRIBUTE_FORMAT_VERSION } ?: false
         }
         return rows.associate { row ->
             val rehashed = if (row.meta.isDeleted || RecordHasher.isMultiFileTable(row.key.tableName) || !olderFormat(row.sha)) {

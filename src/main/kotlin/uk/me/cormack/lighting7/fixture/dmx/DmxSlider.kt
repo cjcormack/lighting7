@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.EasingCurve
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 
 /**
  * DMX implementation of Slider for controlling a single DMX channel.

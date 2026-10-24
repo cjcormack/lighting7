@@ -4,7 +4,7 @@ name: Colour Wave
 family: colour
 outputType: COLOUR
 fxMode: STANDARD
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: colourA
     type: colour

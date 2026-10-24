@@ -361,7 +361,7 @@ class CueAssignmentLayer internal constructor(
      * stomping layer is an escape hatch, not everyday authoring — so the usual tick pays two
      * volatile reads and no map lookups.
      */
-    fun isLayerStomped(effect: FxInstance, fixtureKey: String, propertyName: String): Boolean {
+    fun isLayerStomped(effect: FxInstance, fixtureKey: String, attribute: String): Boolean {
         if (cueStompFlat.isEmpty() && programmerStompFlat.isEmpty()) return false
         val cueLayerId = effect.cueLayerId
         val programmerLayerId = effect.programmerLayerId
@@ -370,7 +370,7 @@ class CueAssignmentLayer internal constructor(
             programmerLayerId != null -> programmerStompFlat[programmerLayerId]
             else -> return false
         }
-        return layerStomp?.get(fixtureKey)?.contains(propertyName) == true
+        return layerStomp?.get(fixtureKey)?.contains(attribute) == true
     }
 
     /** Which stack [cueId]'s published assignments belong to — its highest hold's ([holdStackOf]). */

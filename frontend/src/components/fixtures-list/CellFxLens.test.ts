@@ -66,7 +66,7 @@ describe('lensDivision', () => {
  * every instance's phase re-renders no lensed cell.
  */
 describe('useCellFx', () => {
-  const keys = [{ targetKey: 'a', propertyName: 'dimmer' }]
+  const keys = [{ targetKey: 'a', attribute: 'dimmer' }]
   const fixtures = [makeFixture('a', [sliderProp('dimmer', 'dimmer', chan(1))])]
 
   it('keeps a cell’s array across a refetch that moves only the phase, and drops it when the chip would change', () => {

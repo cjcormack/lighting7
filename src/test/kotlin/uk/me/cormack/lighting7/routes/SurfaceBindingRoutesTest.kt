@@ -133,7 +133,7 @@ class SurfaceBindingRoutesTest : RouteIntegrationTest() {
 
         assertEquals(setOf("fader-1", "btn-25", "enc-1", "btn-1"), expanded.map { it.controlId }.toSet())
         assertEquals(
-            BindingTarget.GroupProperty("front-wash", "dimmer"),
+            BindingTarget.GroupAttribute("front-wash", "dimmer"),
             expanded.single { it.controlId == "fader-1" }.target,
         )
         assertIs<BindingTarget.Flash>(expanded.single { it.controlId == "btn-1" }.target)

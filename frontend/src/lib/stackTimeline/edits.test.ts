@@ -17,7 +17,7 @@ function layer(id: number, over: Partial<TimelineLayer> = {}): TimelineLayer {
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,

@@ -68,7 +68,7 @@ class ProgrammerLayerFadeTest {
             rows = listOf(
                 LookRowEntry(
                     target = TargetRef.Fixture("hex-1"),
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     value = dimmer.toString(),
                     fadeDurationMs = fadeDurationMs,
                 ),

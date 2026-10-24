@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 
@@ -84,21 +84,21 @@ class Gear4MusicSolParty12BFixture(
         override val noColour: Boolean get() = colourPreview == null
     }
 
-    @FixtureProperty("Internal mode", category = PropertyCategory.SETTING)
+    @FixtureAttribute("Internal mode", category = AttributeCategory.SETTING)
     val intMode: Slider = DmxSlider(transaction, universe, firstChannel)
 
-    @FixtureProperty("Built-in colour wheel", category = PropertyCategory.COLOUR)
+    @FixtureAttribute("Built-in colour wheel", category = AttributeCategory.COLOUR)
     val colourWheel = DmxFixtureSetting(
         transaction, universe, firstChannel + 1, ColourWheel.entries.toTypedArray(),
     )
 
-    @FixtureProperty("Colour-wheel transition speed", category = PropertyCategory.SPEED)
+    @FixtureAttribute("Colour-wheel transition speed", category = AttributeCategory.SPEED)
     val colourSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-    @FixtureProperty(category = PropertyCategory.DIMMER)
+    @FixtureAttribute(category = AttributeCategory.DIMMER)
     override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-    @FixtureProperty(category = PropertyCategory.COLOUR)
+    @FixtureAttribute(category = AttributeCategory.COLOUR)
     override val rgbColour = DmxColour(
         transaction, universe,
         firstChannel + 4,
@@ -106,6 +106,6 @@ class Gear4MusicSolParty12BFixture(
         firstChannel + 6,
     )
 
-    @FixtureProperty("FX / prism macro", category = PropertyCategory.OTHER)
+    @FixtureAttribute("FX / prism macro", category = AttributeCategory.OTHER)
     val fx: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 }

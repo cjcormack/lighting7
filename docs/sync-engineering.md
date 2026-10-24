@@ -251,7 +251,7 @@ their embedded child arrays by `(sortOrder, uuid)` so the canonical output is de
 ## Format versioning
 
 `formatVersion.json` at repo root carries `{ formatVersion, minReader }`.
-Current writer emits `formatVersion = 38`, `minReader = 38`. Rules for future
+Current writer emits `formatVersion = 39`, `minReader = 39`. Rules for future
 phases:
 
 * New optional field → no version bump (`ignoreUnknownKeys = true`).
@@ -426,6 +426,29 @@ position); a tie survives only in a home written before, and in its copies and i
 such a tie in id order, but an export lists it by uuid, so a clone or an import of a tied home may
 play it the other way round.
 
+### Version 39 — attributes and centres
+
+Terminology plan session 6: the two stored names session 5 left behind. A surface binding's attribute
+targets are `fixtureAttribute`, `groupAttribute` and `selectionAttribute` (`targetType` and the
+payload's `type`), and their `propertyName` — `encoderBankSet`'s too, and a flash's nested target's —
+is `attribute`. Circle's, Figure 8's and Random Position's `panCenter` and `tiltCenter` are
+`panCentre` and `tiltCentre` in every Look, cue and palette FX (D20); a script FX's own parameters
+keep their author's words. `LegacyNames` reads the old names in any archive (`bindingPayload`,
+`centreParameters`), and every write boundary refuses an old centre (`LegacyNames.writeProblem`).
+
+`SUPPORTED_FORMAT_VERSION = 39`; `MIN_SUPPORTED_FORMAT_VERSION` **stays 5**. `LegacyV38ArchiveTest`
+imports `src/test/resources/sync/legacy-v38/`, `RichProjectFixture` as main exported it at v38 with a
+Circle, a group binding and a flash added for the names that moved (frozen: never regenerate it), and
+re-exports it with only those names moved. **`minReader` moves to 39**: a v38 reader would hold every
+attribute binding as one it does not know, dead, and run each centre at its default. Database step 6,
+`state/AttributeNamesMigration.kt`, renames a database's copies (CLAUDE.md §Database), and names
+in a warning each stored script and FX definition that still says an old centre, which it leaves as
+it is.
+
+A base `sync_state` took at a commit before v39 is re-hashed from that commit's blob, as one before v38
+is (below), so a binding or a Circle nobody touched reads as unchanged rather than as a conflict
+(`PreV39BaseSyncTest`).
+
 ### Version 38 — the glossary's words
 
 Terminology plan session 4 (§4.4, the storage half of §4.3): the archive says what the screen says.
@@ -455,7 +478,8 @@ new folder rather than a deletion and an addition.
 A record is **hashed in today's words** (`RecordHasher.recordHash`, the record put through
 `LegacyNames.record` first), so a v37 file and this desk's export of the same record hash alike. The
 hash `sync_state` holds for a commit made before v38 is of the old bytes, so the three-way diff
-re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`); without it
+re-hashes such a base from that commit's own blob (`RemoteSyncEngine.readSyncStateMeta`, which since
+v39 re-hashes a base from any commit before v39); without it
 every record would read as changed here, and a peer's edit to one this desk never touched would be a
 conflict. `PreV38BaseSyncTest` is that case.
 

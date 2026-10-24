@@ -43,7 +43,7 @@ const CHANNEL: ChannelRef = { universe: 1, channelNo: 1 }
 
 const SLIDER_RESOLUTION: NonNullable<CellResolution> = {
   kind: 'slider',
-  property: {
+  attribute: {
     type: 'slider',
     name: 'dimmer',
     displayName: 'Dimmer',
@@ -56,7 +56,7 @@ const SLIDER_RESOLUTION: NonNullable<CellResolution> = {
 
 const COLOUR_RESOLUTION: NonNullable<CellResolution> = {
   kind: 'colour',
-  property: {
+  attribute: {
     type: 'colour',
     name: 'colour',
     displayName: 'Colour',
@@ -80,7 +80,7 @@ const POSITION_RESOLUTION: NonNullable<CellResolution> = {
 function settingResolution(options: SettingOption[]): NonNullable<CellResolution> {
   return {
     kind: 'setting',
-    property: {
+    attribute: {
       type: 'setting',
       name: 'gobo',
       displayName: 'Gobo',

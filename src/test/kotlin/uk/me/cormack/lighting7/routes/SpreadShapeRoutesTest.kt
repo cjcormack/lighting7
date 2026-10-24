@@ -65,7 +65,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         seedQuad()
         val response = jsonClient().post("/api/rest/groups/quad/fx") {
             contentType(ContentType.Application.Json)
-            setBody(AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", spread = 0.5, wings = 2, segments = 2, parts = 3))
+            setBody(AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", spread = 0.5, wings = 2, segments = 2, parts = 3))
         }
         assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
         val id = response.body<AddGroupFxResponse>().fxId
@@ -87,11 +87,11 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         seedQuad()
         val client = jsonClient()
         for (request in listOf(
-            AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", order = "CENTRE_OUT", wings = 2),
-            AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", order = "CENTRE_IN", wings = 2),
-            AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", spread = 2.5),
-            AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", segments = 0),
-            AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer", parts = -1),
+            AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", order = "CENTRE_OUT", wings = 2),
+            AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", order = "CENTRE_IN", wings = 2),
+            AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", spread = 2.5),
+            AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", segments = 0),
+            AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer", parts = -1),
         )) {
             val response = client.post("/api/rest/groups/quad/fx") {
                 contentType(ContentType.Application.Json)
@@ -101,7 +101,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         }
         LocateTestSupport.seedHex(state, projectId, "hex-9", 101)
         val fixture = client.add(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-9", propertyName = "dimmer", order = "CENTRE_IN", wings = 3),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-9", attribute = "dimmer", order = "CENTRE_IN", wings = 3),
         )
         assertEquals(HttpStatusCode.BadRequest, fixture.status)
         assertTrue(engine.getActiveFx().isEmpty(), "nothing was added")
@@ -114,7 +114,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val id = client.post("/api/rest/groups/quad/fx") {
             contentType(ContentType.Application.Json)
-            setBody(AddGroupFxRequest(fxType = "Pulse", propertyName = "dimmer"))
+            setBody(AddGroupFxRequest(fxType = "Pulse", attribute = "dimmer"))
         }.body<AddGroupFxResponse>().fxId
         val before = effect(id)
 
@@ -156,7 +156,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         fun look(name: String, effect: LookFxDto) = CreateLookRequest(name = name, fx = listOf(effect))
         val pulse = LookFxDto(
             targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
-            propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+            attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
 
         val created = client.post(base) {
@@ -188,7 +188,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedQuad()
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", propertyName = "dimmer", cycle = 1.0,
+            fxType = "Pulse", family = "intensity", attribute = "dimmer", cycle = 1.0,
             blendMode = "OVERRIDE", order = "NORMAL", spread = 0.75, wings = 2, segments = 1, parts = 2,
         )
         val target = FxTargetFactory.forGroup("quad", "dimmer", null, null)
@@ -240,7 +240,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(
                 AddGroupFxRequest(
-                    fxType = "Pulse", propertyName = "dimmer",
+                    fxType = "Pulse", attribute = "dimmer",
                     spread = 0.6, wings = 2, segments = 2, parts = 2, programmerOwned = true,
                 ),
             )
@@ -271,7 +271,7 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
             val pulse = CueAdHocFxDto(
                 // Every field as Record reads it back, so an Update that edited nothing writes nothing.
                 targetType = "group", targetKey = "quad", fxType = "Pulse",
-                family = categoryFromPropertyName("dimmer"), propertyName = "dimmer",
+                family = categoryFromAttributeName("dimmer"), attribute = "dimmer",
                 cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL", elementMode = "PER_FIXTURE",
             )
             val created = client.post("/api/rest/projects/$projectId/cues") {

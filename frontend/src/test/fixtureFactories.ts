@@ -1,15 +1,15 @@
 import type {
   ChannelRef,
-  ColourPropertyDescriptor,
+  ColourAttributeDescriptor,
   ElementDescriptor,
   Fixture,
-  PositionPropertyDescriptor,
-  PropertyCategory,
-  PropertyDescriptor,
+  PositionAttributeDescriptor,
+  AttributeCategory,
+  AttributeDescriptor,
   SettingOption,
-  SettingPropertyDescriptor,
-  SliderPropertyDescriptor,
-  WhiteMixPropertyDescriptor,
+  SettingAttributeDescriptor,
+  SliderAttributeDescriptor,
+  WhiteMixAttributeDescriptor,
 } from '@/store/fixtures'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { ActiveFx } from '@/store/fixtureFx'
@@ -24,10 +24,10 @@ export function chan(channelNo: number, universe = 0): ChannelRef {
 
 export function sliderProp(
   name: string,
-  category: PropertyCategory,
+  category: AttributeCategory,
   channel: ChannelRef,
-  over: Partial<SliderPropertyDescriptor> = {},
-): SliderPropertyDescriptor {
+  over: Partial<SliderAttributeDescriptor> = {},
+): SliderAttributeDescriptor {
   return {
     type: 'slider',
     name,
@@ -45,7 +45,7 @@ export function sliderProp(
  * descriptors carry them: frame 1 top, 2 bottom, 3 left, 4 right, each reaching the centre at DMX
  * max (`depthMax` 0.5) and turning −45° → +45°.
  */
-export function revolutionShutterProps(firstChannel = 1, universe = 0): SliderPropertyDescriptor[] {
+export function revolutionShutterProps(firstChannel = 1, universe = 0): SliderAttributeDescriptor[] {
   const blades = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT'] as const
   return blades.flatMap((blade, i) => [
     sliderProp(`frame${i + 1}Pos`, 'shutter', chan(firstChannel + 23 + 2 * i, universe), { blade, depthMax: 0.5 }),
@@ -62,8 +62,8 @@ export function colourProp(
   red: ChannelRef,
   green: ChannelRef,
   blue: ChannelRef,
-  over: Partial<ColourPropertyDescriptor> = {},
-): ColourPropertyDescriptor {
+  over: Partial<ColourAttributeDescriptor> = {},
+): ColourAttributeDescriptor {
   return {
     type: 'colour',
     name,
@@ -80,8 +80,8 @@ export function colourProp(
 export function whiteMixProp(
   warm: ChannelRef,
   cold: ChannelRef,
-  over: Partial<WhiteMixPropertyDescriptor> = {},
-): WhiteMixPropertyDescriptor {
+  over: Partial<WhiteMixAttributeDescriptor> = {},
+): WhiteMixAttributeDescriptor {
   return {
     type: 'whiteMix',
     name: 'rgbColour',
@@ -97,10 +97,10 @@ export function whiteMixProp(
 
 export function settingProp(
   name: string,
-  category: PropertyCategory,
+  category: AttributeCategory,
   channel: ChannelRef,
   options: SettingOption[] = [{ name: 'open', level: 0, displayName: 'Open' }],
-): SettingPropertyDescriptor {
+): SettingAttributeDescriptor {
   return {
     type: 'setting',
     name,
@@ -115,8 +115,8 @@ export function positionProp(
   name: string,
   pan: ChannelRef,
   tilt: ChannelRef,
-  over: Partial<PositionPropertyDescriptor> = {},
-): PositionPropertyDescriptor {
+  over: Partial<PositionAttributeDescriptor> = {},
+): PositionAttributeDescriptor {
   return {
     type: 'position',
     name,
@@ -136,7 +136,7 @@ let nextChannel = 1
 
 export function makeFixture(
   key: string,
-  properties: PropertyDescriptor[],
+  attributes: AttributeDescriptor[],
   over: Partial<Fixture> = {},
 ): Fixture {
   const firstChannel = nextChannel
@@ -149,7 +149,7 @@ export function makeFixture(
     firstChannel,
     channelCount: 8,
     channels: [],
-    properties,
+    attributes,
     capabilities: [],
     groups: [],
     compatibleLookIds: [],
@@ -171,10 +171,10 @@ export function groupSummary(name: string, memberCount = 0): GroupSummary {
 export function element(
   index: number,
   key: string,
-  properties: PropertyDescriptor[],
+  attributes: AttributeDescriptor[],
   displayName = `Head ${index + 1}`,
 ): ElementDescriptor {
-  return { index, key, displayName, properties }
+  return { index, key, displayName, attributes }
 }
 
 /**
@@ -185,7 +185,7 @@ export function element(
 export function makePixelBar(
   key: string,
   heads: number,
-  parentProps: PropertyDescriptor[] = [],
+  parentProps: AttributeDescriptor[] = [],
   over: Partial<Fixture> = {},
 ): Fixture {
   const elements: ElementDescriptor[] = []
@@ -214,7 +214,7 @@ export function makeActiveFx(over: Partial<ActiveFx> = {}): ActiveFx {
     id: 1,
     fxType: 'sinewave',
     targetKey: 'hex-1',
-    propertyName: 'dimmer',
+    attribute: 'dimmer',
     cycle: 1,
     blendMode: 'OVERRIDE',
     isRunning: true,

@@ -23,7 +23,7 @@ export type ScriptInput = {
 export type ScriptDetails = ScriptInput & {
   scriptType: ScriptType
   // Usage tracking fields (server-provided)
-  usedByProperties: string[]
+  usedByAttributes: string[]
   canDelete: boolean
   cannotDeleteReason: string | null
 }

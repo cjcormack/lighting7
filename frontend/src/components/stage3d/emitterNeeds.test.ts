@@ -24,8 +24,8 @@ function type(over: Partial<FixtureTypeInfo>): FixtureTypeInfo {
     channelCount: null,
     isRegistered: true,
     capabilities: [],
-    properties: [],
-    elementGroupProperties: null,
+    attributes: [],
+    elementGroupAttributes: null,
     ...over,
   }
 }
@@ -39,7 +39,7 @@ function fixture(over: Partial<Fixture>): Fixture {
     firstChannel: 1,
     channelCount: 1,
     channels: [],
-    properties: [],
+    attributes: [],
     capabilities: [],
     groups: [],
     compatibleLookIds: [],
@@ -69,7 +69,7 @@ describe('emitterNeedsFor', () => {
   })
 
   it('gives a prism fixture the full lobe block, each lobe its own light', () => {
-    const f = fixture({ properties: [PRISM] as unknown as Fixture['properties'] })
+    const f = fixture({ attributes: [PRISM] as unknown as Fixture['attributes'] })
     expect(emitterNeedsFor(NO_OVERRIDE, f, type({ acceptsBeamAngle: true, kind: 'MOVING_HEAD' }))).toEqual({
       lobes: MAX_PRISM_LOBES,
       lights: MAX_PRISM_LOBES,

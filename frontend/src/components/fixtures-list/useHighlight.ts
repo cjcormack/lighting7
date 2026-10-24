@@ -6,7 +6,7 @@ import type { WriteTarget } from './rowModel'
 /** What the programmer held on one dimmer property before Highlight took it. */
 interface CapturedDimmer {
   targetKey: string
-  propertyName: string
+  attribute: string
   /** The programmer entry that was there, or null if the property was unheld. */
   previousValue: string | null
 }
@@ -43,11 +43,11 @@ export function useHighlight(getTargets: () => WriteTarget[]) {
     capturedRef.current = null
     setIsActive(false)
     if (!captured) return
-    for (const { targetKey, propertyName, previousValue } of captured) {
+    for (const { targetKey, attribute, previousValue } of captured) {
       if (previousValue === null) {
-        lightingApi.programmer.clearEntry('fixture', targetKey, propertyName)
+        lightingApi.programmer.clearEntry('fixture', targetKey, attribute)
       } else {
-        lightingApi.programmer.set('fixture', targetKey, propertyName, previousValue)
+        lightingApi.programmer.set('fixture', targetKey, attribute, previousValue)
       }
     }
   }, [])
@@ -60,17 +60,17 @@ export function useHighlight(getTargets: () => WriteTarget[]) {
       for (const { target: resolved, resolution } of resolveTargetCells(target, 'dimmer')) {
         if (resolution.kind !== 'slider') continue
         const targetKey = resolved.key
-        const propertyName = resolution.property.name
-        const id = `${targetKey}|${propertyName}`
+        const attribute = resolution.attribute.name
+        const id = `${targetKey}|${attribute}`
         if (seen.has(id)) continue
         seen.add(id)
         captured.push({
           targetKey,
-          propertyName,
+          attribute,
           previousValue:
-            lightingApi.programmer.getKeyState(targetKey, propertyName).entry?.value ?? null,
+            lightingApi.programmer.getKeyState(targetKey, attribute).entry?.value ?? null,
         })
-        lightingApi.programmer.set('fixture', targetKey, propertyName, '255')
+        lightingApi.programmer.set('fixture', targetKey, attribute, '255')
       }
     }
     capturedRef.current = captured

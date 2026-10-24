@@ -1,0 +1,105 @@
+{
+  "columns": [
+    {
+      "banks": [
+        {
+          "flow": "WRAP",
+          "name": "keys",
+          "pads": [
+            {
+              "paletteUuid": "28331295-cc48-4af6-9fc9-8c12c81e8f26",
+              "sortOrder": 0,
+              "uuid": "566afa45-c1e6-44c0-bedd-9758bd0f8337"
+            },
+            {
+              "lookUuid": "cf6a2703-659c-4b14-b6d6-8cd83cd5f5b4",
+              "sortOrder": 1,
+              "uuid": "5d30f34a-0c79-4831-bf8f-6a6e6c062138"
+            },
+            {
+              "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+              "sortOrder": 2,
+              "uuid": "92042133-476f-481d-a3f1-6ee5574cd8e4"
+            }
+          ],
+          "solo": true,
+          "sortOrder": 0,
+          "uuid": "4f22f1ee-3dea-4ce3-9508-4d38d4878ab0"
+        }
+      ],
+      "row": 0,
+      "sortOrder": 0,
+      "uuid": "954650a8-8402-4786-a294-67b293333a11",
+      "width": 8
+    },
+    {
+      "banks": [
+        {
+          "flow": "COLUMN",
+          "name": "moves",
+          "pads": [
+            {
+              "paletteUuid": "4ab4dbe3-4105-4c97-a139-ab482bb8d475",
+              "sortOrder": 0,
+              "uuid": "5b7ca83e-c445-4d0b-80cf-a2bbb382dec8"
+            },
+            {
+              "cueUuid": "f751f272-daf5-4bf3-a294-74a142daa8b6",
+              "sortOrder": 1,
+              "uuid": "f2f5fdfb-7f04-4254-8485-cbad49f824be"
+            }
+          ],
+          "solo": false,
+          "sortOrder": 0,
+          "uuid": "9119f067-ee4c-4391-bf9b-17f8c7b90de1"
+        },
+        {
+          "flow": "WRAP",
+          "name": "cues",
+          "solo": false,
+          "sortOrder": 1,
+          "uuid": "725dc8b5-d873-4685-8da8-f28d6196bbf7"
+        }
+      ],
+      "row": 0,
+      "sortOrder": 1,
+      "uuid": "8d1555b4-0044-47ae-81f9-cd399167110a",
+      "width": 4
+    },
+    {
+      "banks": [
+        {
+          "flow": "WRAP",
+          "name": "fx",
+          "pads": [
+            {
+              "paletteUuid": "5fa2456a-a607-45f9-8398-49a65cb1c066",
+              "sortOrder": 0,
+              "uuid": "8ce95581-1a84-41c9-ae97-fdbe390cf1ce"
+            },
+            {
+              "lookUuid": "213fc1f9-978a-4fad-8d45-f1c21576f255",
+              "sortOrder": 1,
+              "uuid": "6ecd9513-d001-45dd-aab9-b7b20813c856"
+            },
+            {
+              "paletteUuid": "28331295-cc48-4af6-9fc9-8c12c81e8f26",
+              "sortOrder": 2,
+              "uuid": "873523cd-a698-4e9b-94e7-dff3d1b1d4e5"
+            }
+          ],
+          "solo": true,
+          "sortOrder": 0,
+          "uuid": "6f5d7d44-dff7-4773-b1d7-e46c145765f2"
+        }
+      ],
+      "row": 1,
+      "sortOrder": 0,
+      "uuid": "b5d055d2-e9b7-4469-a98c-d4bd5e3163f7",
+      "width": 12
+    }
+  ],
+  "name": "act-one",
+  "sortOrder": 2,
+  "uuid": "5d2f94fe-d7ed-456e-b579-407c8e414646"
+}

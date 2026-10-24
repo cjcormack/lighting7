@@ -220,7 +220,7 @@ Property assignments (Layer 3) need a **fade envelope**, mirroring effects' `int
 
 Fixture library files in ETC EOS / grandMA / Hog all tag each parameter with a category (Intensity / Color / Position / Beam / Shutter), and HTP/LTP falls out of the category, not the cue. Fixture authors can override per-parameter when the default doesn't fit.
 
-Our existing enum [PropertyCategory](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureProperty.kt) already has the right granularity: `DIMMER`, `COLOUR`, `PAN`, `TILT`, `PAN_FINE`, `TILT_FINE`, `UV`, `STROBE`, `AMBER`, `WHITE`, `SPEED`, `SETTING`, `OTHER`.
+Our existing enum [PropertyCategory](../../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureAttribute.kt) already has the right granularity: `DIMMER`, `COLOUR`, `PAN`, `TILT`, `PAN_FINE`, `TILT_FINE`, `UV`, `STROBE`, `AMBER`, `WHITE`, `SPEED`, `SETTING`, `OTHER`.
 
 **Proposed model**: each `PropertyCategory` carries a default composition rule. When multiple cues contribute Layer-3 assignments to the same property, the resolver uses the category's rule:
 

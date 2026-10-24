@@ -26,7 +26,7 @@ visualiser must:
 - **Coordinates**: reset & start clean. Existing `stageX/stageY` percentages
   are dropped; fixtures are re-placed in the new 3D editor in metres.
 - **Live DMX path**: reuse existing per-channel hooks
-  (`useSliderValue`, `useColourValue` from `src/hooks/usePropertyValues.ts`).
+  (`useSliderValue`, `useColourValue` from `src/hooks/useAttributeValues.ts`).
   Each `<FixtureModel>` reads channels inside `useFrame` and applies pan/tilt
   + colour imperatively. No backend WebSocket changes needed.
 - **2D view**: keep as fallback with a user-facing 2D ↔ 3D toggle on the
@@ -640,8 +640,8 @@ without React re-renders (observe via React DevTools Profiler).
          place.
        - `normaliseSliderDmx(dmx, min, max)` — the `(value - min)
          / span` clamp logic in `dmxToDegrees` is also in
-         `usePropertyValues.ts:260–263`,
-         `useGroupPropertyValues.ts:407–410`,
+         `useAttributeValues.ts:260–263`,
+         `useGroupAttributeValues.ts:407–410`,
          `PropertyVisualizers.tsx:247–251`, and
          `GroupPropertyVisualizers.tsx:299–300`. Lift to a shared
          helper (likely in `src/lib/stageCoords.ts` or

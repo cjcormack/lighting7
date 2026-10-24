@@ -4,11 +4,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import {
-  EMITTER_PROPERTIES,
+  EMITTER_ATTRIBUTES,
   EMITTER_TINTS,
   WHITE_POLICIES,
   WHITE_POLICY_LABELS,
-  palettePropertyFor,
+  paletteAttributeFor,
   type PaletteIntent,
   type WhitePolicy,
 } from '@/lib/paletteIntent'
@@ -32,7 +32,7 @@ export function ColourControl({
   onChange,
 }: {
   values: PaletteValues
-  onChange: (propertyName: string, intent: PaletteIntent | null) => void
+  onChange: (attribute: string, intent: PaletteIntent | null) => void
 }) {
   const value = values.rgbColour
   const current = value?.kind === 'colour' ? value : null
@@ -126,10 +126,10 @@ export function ColourControl({
             deliberately, rather than `ExtendedChannelSlider`'s. That component always shows a
             slider, and a slider resting at 0 is exactly the reading this control must not give:
             here "off" means the template does not mention the emitter, not that it drives it to 0. */}
-        {EMITTER_PROPERTIES.map((name) => {
+        {EMITTER_ATTRIBUTES.map((name) => {
           const intent = values[name]
           const level = intent?.kind === 'level' ? intent.value : null
-          const label = palettePropertyFor(name)?.label ?? name
+          const label = paletteAttributeFor(name)?.label ?? name
           return (
             <div key={name} className="space-y-1">
               <div className="flex items-center justify-between gap-2">

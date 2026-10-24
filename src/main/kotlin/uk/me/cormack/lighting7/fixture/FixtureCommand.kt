@@ -19,7 +19,7 @@ import kotlin.reflect.full.memberProperties
  * A reset recorded into a Look re-homes every head on every recall; a lamp off in a cue is a dark
  * stage for eight minutes.
  *
- * A command is its own kind, not a `@FixtureProperty`: nothing that resolves a property by name sees
+ * A command is its own kind, not a `@FixtureAttribute`: nothing that resolves a property by name sees
  * it, and it takes no part in composition or a crossfade. It runs from the fixture panel's
  * *Commands* menu behind a confirm (`POST …/patches/{pid}/commands/{command}`), or from MCP's
  * `run_fixture_command`, and the desk holds its level for [holdMs] before giving the channel back.
@@ -119,7 +119,7 @@ object FixtureCommands {
         if (fixture !is DmxFixture) return emptyList()
         val specs = specsOf(fixture::class)
         if (specs.isEmpty()) return emptyList()
-        val covered = propertyChannelsOf(fixture)
+        val covered = attributeChannelsOf(fixture)
         return specs.mapNotNull { spec ->
             @Suppress("UNCHECKED_CAST")
             val command = (spec.classProperty as KProperty1<Any, *>).get(fixture) as? DmxCommand ?: return@mapNotNull null
@@ -138,10 +138,10 @@ object FixtureCommands {
     }
 
     /**
-     * Every channel a `@FixtureProperty` of [fixture] — or of one of its heads — drives. A command on
+     * Every channel a `@FixtureAttribute` of [fixture] — or of one of its heads — drives. A command on
      * any other channel is dedicated.
      */
-    fun propertyChannelsOf(fixture: DmxFixture): Set<Int> {
+    fun attributeChannelsOf(fixture: DmxFixture): Set<Int> {
         val out = HashSet<Int>()
         fun add(value: Any?) {
             when (value) {
@@ -158,10 +158,10 @@ object FixtureCommands {
                 is DmxFixtureSetting<*> -> out += value.channelNo
             }
         }
-        for (prop in fixture.fixtureProperties) add(runCatching { prop.classProperty.call(fixture) }.getOrNull())
+        for (prop in fixture.fixtureAttributes) add(runCatching { prop.classProperty.call(fixture) }.getOrNull())
         if (fixture is MultiElementFixture<*>) {
             for (element in fixture.elements) {
-                for (prop in FixturePropertyCatalogue.of(element::class).all) {
+                for (prop in FixtureAttributeCatalogue.of(element::class).all) {
                     @Suppress("UNCHECKED_CAST")
                     add(runCatching { (prop.classProperty as KProperty1<Any, *>).call(element) }.getOrNull())
                 }
@@ -207,7 +207,7 @@ object FixtureCommands {
             val fixture = FixtureTypeRegistry.introspectionInstanceForTypeKey(key) ?: return@computeIfAbsent emptyMap()
             val shared = of(fixture).filterNot { it.dedicated }
             if (shared.isEmpty()) return@computeIfAbsent emptyMap()
-            fixture.fixtureProperties.mapNotNull { prop ->
+            fixture.fixtureAttributes.mapNotNull { prop ->
                 val channel = when (val v = runCatching { prop.classProperty.call(fixture) }.getOrNull()) {
                     is DmxSlider -> v.channelNo
                     is DmxFixtureSetting<*> -> v.channelNo
@@ -223,7 +223,7 @@ object FixtureCommands {
     private val sharedBandsByTypeKey = ConcurrentHashMap<String, Map<String, List<SharedBand>>>()
 
     /** Every property name that shares a command's channel on some type — the write boundaries' gate. */
-    val allSharedBandProperties: Set<String> by lazy {
+    val allSharedBandAttributes: Set<String> by lazy {
         reservedByTypeKey.keys.flatMapTo(HashSet()) { sharedBandsForTypeKey(it).keys }
     }
 }

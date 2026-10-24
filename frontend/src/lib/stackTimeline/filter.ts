@@ -3,7 +3,7 @@ import { TIMELINE_KINDS, type TimelineColumn, type TimelineKind } from './model'
 export interface TimelineFilter {
   /** The kind chips that are on. */
   kinds: ReadonlySet<TimelineKind>
-  /** A `PropertyMaskGroup` name, or null for All. */
+  /** A `AttributeFamily` name, or null for All. */
   family: string | null
   /** The desk selection's heads, groups expanded, for *Selection only*; null leaves it off. */
   selectionHeads: ReadonlySet<string> | null

@@ -24,10 +24,10 @@ class ProgrammerStoreTest {
     // stack's owner semantics, not about who the owners happen to be.
     private val include = ProgrammerOwner.INCLUDE
 
-    private fun slider(v: Int) = CueAssignmentResolver.PropertyValue.Slider(v.toUByte())
+    private fun slider(v: Int) = CueAssignmentResolver.AttributeValue.Slider(v.toUByte())
 
-    private fun ProgrammerStore.topSlider(fixtureKey: String, propertyName: String): UByte? =
-        (get(fixtureKey, propertyName)?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+    private fun ProgrammerStore.topSlider(fixtureKey: String, attribute: String): UByte? =
+        (get(fixtureKey, attribute)?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
 
     @Test
     fun `put then get returns the stored value`() {
@@ -72,7 +72,7 @@ class ProgrammerStoreTest {
     fun `clearAll removes everything including the sideband`() {
         val store = ProgrammerStore()
         store.put(web, "hex-1", "dimmer", slider(10))
-        store.put(locate, "hex-2", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK))
+        store.put(locate, "hex-2", "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ExtendedColour.BLACK))
         store.putChannel(ProgrammerOwner.UNPARK, 0, 7, 55u, touched = false)
         store.clearAll()
         assertEquals(0, store.size)
@@ -171,7 +171,7 @@ class ProgrammerStoreTest {
     }
 
     @Test
-    fun `clearOwner sweeps only that owner's entries across properties and sideband`() {
+    fun `clearOwner sweeps only that owner's entries across attributes and sideband`() {
         val store = ProgrammerStore()
         store.put(include, "hex-1", "dimmer", slider(100))
         store.put(include, "hex-2", "dimmer", slider(110))
@@ -206,7 +206,7 @@ class ProgrammerStoreTest {
     // --- Channel sideband ---
 
     @Test
-    fun `sideband stores and releases per owner like property entries`() {
+    fun `sideband stores and releases per owner like attribute entries`() {
         val store = ProgrammerStore()
         store.putChannel(ProgrammerOwner.UNPARK, 0, 5, 90u, touched = false)
         store.putChannel(web, 0, 5, 200u)
@@ -227,7 +227,7 @@ class ProgrammerStoreTest {
     }
 
     @Test
-    fun `a property write absorbs sideband slots under its channels`() {
+    fun `an attribute write absorbs sideband slots under its channels`() {
         val store = ProgrammerStore()
         store.putChannel(ProgrammerOwner.UNPARK, 0, 1, 90u, touched = false)
         store.putChannel(ProgrammerOwner.UNPARK, 0, 2, 91u, touched = false)
@@ -245,7 +245,7 @@ class ProgrammerStoreTest {
         val store = ProgrammerStore()
         store.put(web, "hex-1", "dimmer", slider(10))
         store.put(locate, "hex-1", "dimmer", slider(20))
-        store.put(web, "hex-2", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK), sourceGroup = "all-hex")
+        store.put(web, "hex-2", "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ExtendedColour.BLACK), sourceGroup = "all-hex")
 
         val entries = store.entries().sortedBy { it.fixtureKey }
         assertEquals(2, entries.size)
@@ -259,7 +259,7 @@ class ProgrammerStoreTest {
             ),
             store.activeKeys(),
         )
-        assertEquals(mapOf("hex-1" to setOf("dimmer"), "hex-2" to setOf("rgbColour")), store.activePropertiesByFixture())
+        assertEquals(mapOf("hex-1" to setOf("dimmer"), "hex-2" to setOf("rgbColour")), store.activeAttributesByFixture())
     }
 
     @Test
@@ -276,10 +276,10 @@ class ProgrammerStoreTest {
         assertTrue(store.isEmpty)
         assertEquals(0, store.size)
         assertTrue(store.activeKeys().isEmpty())
-        assertTrue(store.activePropertiesByFixture().isEmpty())
+        assertTrue(store.activeAttributesByFixture().isEmpty())
 
         // And a fresh put on the same fixture lands normally.
-        store.put(web, "hex-1", "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ExtendedColour.BLACK))
+        store.put(web, "hex-1", "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ExtendedColour.BLACK))
         assertTrue(store.coversFixture("hex-1"))
         assertEquals(1, store.size)
     }

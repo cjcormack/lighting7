@@ -15,7 +15,7 @@ const DEFINITION: FxDefinition = {
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
   parameters: [],
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   script: 'FxOutput.Slider(0u)',
   defaultTiming: 'CYCLE',
   timingSource: 'BEAT',

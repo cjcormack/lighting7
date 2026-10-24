@@ -121,7 +121,7 @@ export const EditPatchForm = forwardRef<EditPatchFormHandle, EditPatchFormProps>
   // replaces *Beam & Gel* and *3D shape* for it, and the desk derives its kind from the lantern.
   const acceptsLantern = fixtureType?.acceptsLantern === true
   // A type with loadable settings — a gel scroller, a module wheel — carries fitted media per unit.
-  const mediaSettings = loadableSettings(fixtureType?.properties)
+  const mediaSettings = loadableSettings(fixtureType?.attributes)
   // Only expose the override picker for types whose declared kind is GENERIC — a UV fixture ships
   // without a shape hint, and a dimmer feeds whatever is plugged into it. Every other type already
   // renders distinctly per kind. A dimmer with a lantern named takes the lantern's kind, which the

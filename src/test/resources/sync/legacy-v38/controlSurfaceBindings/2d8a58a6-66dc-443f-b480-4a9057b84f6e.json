@@ -1,0 +1,8 @@
+{
+  "controlId": "button-7",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 9,
+  "targetPayload": "{\"type\":\"applyLook\",\"lookUuid\":\"cf6a2703-659c-4b14-b6d6-8cd83cd5f5b4\"}",
+  "targetType": "applyLook",
+  "uuid": "2d8a58a6-66dc-443f-b480-4a9057b84f6e"
+}

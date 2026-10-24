@@ -52,7 +52,7 @@ class FxSpawnerElementTest : RouteIntegrationTest() {
                 PaletteInput(
                     name = name,
                     fx = PaletteFxDto(
-                        fxType = "RainbowCycle", family = "colour", propertyName = "rgbColour",
+                        fxType = "RainbowCycle", family = "colour", attribute = "rgbColour",
                         cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),
@@ -111,19 +111,19 @@ class FxSpawnerElementTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a property named by the spec resolves against the cell's own catalogue`() = testApplication {
+    fun `an attribute named by the spec resolves against the cell's own catalogue`() = testApplication {
         mountTestApp(state)
         seedBar()
         // `white` is not one of the names the factory dispatches on, so it reaches the reflective
         // fallback — which used to see no fixture at all for an element key and answer a
         // SettingTarget that discards every slider frame.
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", propertyName = "white",
+            fxType = "Pulse", family = "intensity", attribute = "white",
             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
         val target = FxSpawner.resolveTargetForCue(state, CueTargetDto("fixture", cell(2)), spec)
         assertIs<SliderTarget>(target)
-        assertEquals("white", target.propertyName)
+        assertEquals("white", target.attribute)
         assertEquals(cell(2), target.targetKey)
     }
 }

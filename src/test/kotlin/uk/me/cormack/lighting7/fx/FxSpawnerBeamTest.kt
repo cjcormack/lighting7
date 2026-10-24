@@ -27,7 +27,7 @@ class FxSpawnerBeamTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a selection whose first item lacks the property still drives the head that has it`() {
+    fun `a selection whose first item lacks the attribute still drives the head that has it`() {
         seed()
         val selection = FxTargetsRef.of(listOf(TargetRef.Fixture("hex-1"), TargetRef.Fixture("rev-1")))
         val target = FxSpawner.resolveTargetForCue(state, selection, zoomWave)
@@ -35,13 +35,13 @@ class FxSpawnerBeamTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a group where a member lacks the property is skipped, as a dimmer effect on a dimmerless group is`() {
+    fun `a group where a member lacks the attribute is skipped, as a dimmer effect on a dimmerless group is`() {
         seed()
         assertNull(FxSpawner.resolveTargetForCue(state, FxTargetsRef.Single(TargetRef.Group("mixed")), zoomWave))
     }
 
     @Test
-    fun `a group whose members have the property takes it`() {
+    fun `a group whose members have the attribute takes it`() {
         seed()
         LocateTestSupport.seedGroup(state, projectId, "revs", "rev-1")
         val target = FxSpawner.resolveTargetForCue(state, FxTargetsRef.Single(TargetRef.Group("revs")), zoomWave)

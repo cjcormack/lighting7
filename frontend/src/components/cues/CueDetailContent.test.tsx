@@ -75,7 +75,7 @@ function layer(over: Partial<CueLayerDetail> = {}): CueLayerDetail {
     sortOrder: 0,
     enabled: true,
     targets: [{ type: 'fixture', key: 'hex-1' }],
-    propertyMask: null,
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
@@ -92,7 +92,7 @@ function cue(over: Partial<Cue> = {}): Cue {
     sortOrder: 0,
     layers: [],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [],
     ...over,
   } as Cue
@@ -128,7 +128,7 @@ describe('CueDetailContent', () => {
   it('shows a masked layer’s families, so a colour-only layer explains itself', () => {
     // The migration sets a mask on every layer folded from a value-level reference, so this is the
     // common case. It reads the same here as in the editor because both draw `LayerRow`.
-    render(<CueDetailContent cue={cue({ layers: [layer({ propertyMask: 'COLOUR' })] })} projectId={1} />)
+    render(<CueDetailContent cue={cue({ layers: [layer({ attributeMask: 'COLOUR' })] })} projectId={1} />)
     expect(screen.getByText('[Colour]')).toBeInTheDocument()
   })
 
@@ -138,7 +138,7 @@ describe('CueDetailContent', () => {
     // the Run card and the Prompt Book rail, where there is no mutation behind them.
     render(
       <CueDetailContent
-        cue={cue({ layers: [layer({ propertyMask: 'COLOUR', blendMode: 'MAX', amount: 0.5 })] })}
+        cue={cue({ layers: [layer({ attributeMask: 'COLOUR', blendMode: 'MAX', amount: 0.5 })] })}
         projectId={1}
       />,
     )

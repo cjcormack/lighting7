@@ -68,7 +68,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
     private suspend fun HttpClient.busk() {
         val response = post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", programmerOwned = true))
+            setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", programmerOwned = true))
         }
         assertEquals(HttpStatusCode.OK, response.status)
     }
@@ -100,7 +100,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val cueId = ProgrammerRouteTestSupport.createCue(
             client, projectId, "chase",
-            adHoc = listOf(CueAdHocFxSpec(targetType = "fixture", targetKey = "hex-1", fxType = "SineWave", propertyName = "dimmer")),
+            adHoc = listOf(CueAdHocFxSpec(targetType = "fixture", targetKey = "hex-1", fxType = "SineWave", attribute = "dimmer")),
         )
 
         setBlind(true)
@@ -123,7 +123,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
             effects = listOf(
                 LookFxDto(
                     targetType = "fixture", targetKey = "hex-1",
-                    fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                    fxType = "Pulse", family = "intensity", attribute = "dimmer",
                     cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                 ),
             ),
@@ -146,7 +146,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val cueId = ProgrammerRouteTestSupport.createCue(
             client, projectId, "chase",
-            adHoc = listOf(CueAdHocFxSpec(targetType = "fixture", targetKey = "hex-1", fxType = "SineWave", propertyName = "dimmer")),
+            adHoc = listOf(CueAdHocFxSpec(targetType = "fixture", targetKey = "hex-1", fxType = "SineWave", attribute = "dimmer")),
         )
         client.post("/api/rest/projects/$projectId/cues/$cueId/apply")
         val cueEffect = engine.getActiveFx().single()
@@ -168,7 +168,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
         client.busk()
 
         fun dimmerSource() = engine.provenance.compute()
-            .singleOrNull { it.targetKey == "hex-1" && it.propertyName == "dimmer" }?.source
+            .singleOrNull { it.targetKey == "hex-1" && it.attribute == "dimmer" }?.source
 
         assertEquals(ProvenanceSource.FX, dimmerSource(), "the busk is what the rig shows")
         setBlind(true)
@@ -192,7 +192,7 @@ class BlindHoldsProgrammerFxTest : RouteIntegrationTest() {
 
         val recorded = response.cue.adHocFx.single()
         assertEquals("hex-1", recorded.targetKey)
-        assertEquals("dimmer", recorded.propertyName)
+        assertEquals("dimmer", recorded.attribute)
         assertTrue(blind(), "Record leaves Blind as it found it")
     }
 }

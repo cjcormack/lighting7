@@ -49,7 +49,7 @@ export function fxTargetOf(
 function headAsFixtureOf(fixtures: readonly Fixture[], key: string): Fixture | null {
   for (const fixture of fixtures) {
     const element = fixture.elements?.find((e) => e.key === key)
-    if (element) return headAsFixture(fixture, { key: element.key, name: element.displayName, properties: element.properties })
+    if (element) return headAsFixture(fixture, { key: element.key, name: element.displayName, attributes: element.attributes })
   }
   return null
 }

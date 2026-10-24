@@ -190,7 +190,7 @@ export function facetEditable(facet: PatchFacet, type: FixtureTypeInfo | undefin
   if (facet === 'FOCUS' && type && !type.acceptsLantern && !type.acceptsBeamAngle) {
     return { ok: false, reason: 'This type carries its own optics — there is no focus to change' }
   }
-  if (facet === 'MEDIA' && type && !type.acceptsGel && loadableSettings(type.properties).length === 0) {
+  if (facet === 'MEDIA' && type && !type.acceptsGel && loadableSettings(type.attributes).length === 0) {
     return { ok: false, reason: 'This type takes no gel and has no loadable settings' }
   }
   return { ok: true }
@@ -333,7 +333,7 @@ function FacetFields({
     }
     case 'MEDIA': {
       const v = draft as MediaFacetValue
-      const settings = loadableSettings(type?.properties)
+      const settings = loadableSettings(type?.attributes)
       const placements = mergePlacements(patch, v.placements, (p) => ({ media: p.media ?? null }))
       return (
         <div className="space-y-2">

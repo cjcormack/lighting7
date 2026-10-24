@@ -23,7 +23,7 @@ import { useEditCueStackTimelineMutation } from '@/store/cueStacks'
 import { useLookListQuery } from '@/store/looks'
 import { usePaletteListQuery } from '@/store/palettes'
 import { useSpeedMasterListQuery } from '@/store/speedMasters'
-import { parsePropertyMask, serializePropertyMask } from '@/lib/attributeFamily'
+import { parseAttributeMask, serializeAttributeMask } from '@/lib/attributeFamily'
 import { MaskToggles, maskIsEmpty, maskToWire, useMaskDraft, type MaskValue } from '@/components/programmer/maskPicker'
 import { shownSceneryState } from '@/lib/scenery'
 import { replacePlan, sharedValue, type TimelineColumn } from '@/lib/stackTimeline'
@@ -384,7 +384,7 @@ export function TimelineSettingsPopover({
   const value = <T,>(read: (l: TimelineLayer) => T) => sharedValue(layers.map(({ layer }) => read(layer)))
   const amount = value((l) => l.amount)
   const blend = value((l) => l.blendMode.toUpperCase())
-  const mask = value((l) => l.propertyMask ?? null)
+  const mask = value((l) => l.attributeMask ?? null)
   const stomp = value((l) => l.stomp)
   const enabled = value((l) => l.enabled)
   const delay = value((l) => l.delayMs ?? null)
@@ -431,7 +431,7 @@ export function TimelineSettingsPopover({
           />
         </SettingRow>
         <SettingRow label="Mask">
-          <TimelineMaskField key={mask === 'mixed' ? 'mixed' : 'shared'} mask={mask ?? null} onWrite={(propertyMask) => write({ propertyMask }, 'Mask')} />
+          <TimelineMaskField key={mask === 'mixed' ? 'mixed' : 'shared'} mask={mask ?? null} onWrite={(attributeMask) => write({ attributeMask }, 'Mask')} />
         </SettingRow>
         <SettingRow label="Stomp">
           <SegmentButtons
@@ -489,17 +489,17 @@ export function TimelineSettingsPopover({
  * attributes*: the first choice that is a mask — every attribute, or a narrowing — is written to
  * every layer, and the picker then reads as one mask.
  */
-function TimelineMaskField({ mask, onWrite }: { mask: string | null | 'mixed'; onWrite: (propertyMask: string | null) => void }) {
+function TimelineMaskField({ mask, onWrite }: { mask: string | null | 'mixed'; onWrite: (attributeMask: string | null) => void }) {
   return mask === 'mixed' ? <MixedMask onWrite={onWrite} /> : <SharedMask mask={mask} onWrite={onWrite} />
 }
 
-function SharedMask({ mask, onWrite }: { mask: string | null; onWrite: (propertyMask: string | null) => void }) {
-  const stored = parsePropertyMask(mask)
-  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) => onWrite(serializePropertyMask(families ?? [])))
+function SharedMask({ mask, onWrite }: { mask: string | null; onWrite: (attributeMask: string | null) => void }) {
+  const stored = parseAttributeMask(mask)
+  const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) => onWrite(serializeAttributeMask(families ?? [])))
   return <MaskToggles value={draft} onChange={setDraft} />
 }
 
-function MixedMask({ onWrite }: { onWrite: (propertyMask: string | null) => void }) {
+function MixedMask({ onWrite }: { onWrite: (attributeMask: string | null) => void }) {
   const [draft, setDraft] = useState<MaskValue>(null)
   return (
     <div className="space-y-1">
@@ -509,7 +509,7 @@ function MixedMask({ onWrite }: { onWrite: (propertyMask: string | null) => void
         onChange={(next) => {
           setDraft(next)
           if (maskIsEmpty(next) || (next != null && maskToWire(next) == null)) return
-          onWrite(serializePropertyMask(next ?? []))
+          onWrite(serializeAttributeMask(next ?? []))
         }}
       />
     </div>

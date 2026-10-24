@@ -10,7 +10,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookRow
@@ -60,12 +60,12 @@ class CueCookedSourceTargetRouteTest : RouteIntegrationTest() {
                 type = CueStackType.STACK.name; sortOrder = 0
             }
             val cue = DaoCue.new { this.project = project; name = "Q1" }.inStack(stack, sortOrder = 0)
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "group"; targetKey = "Front"
                 attribute = "dimmer"; value = "120"; sortOrder = 0
             }
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
                 attribute = "dimmer"; value = "200"; sortOrder = 1
@@ -82,8 +82,8 @@ class CueCookedSourceTargetRouteTest : RouteIntegrationTest() {
         val resp = client.get("/api/rest/projects/$projectId/cues/$cueId/cooked")
         assertEquals(HttpStatusCode.OK, resp.status, resp.bodyAsText())
         val rows = resp.body<CueCookedResponse>().rows
-        fun row(key: String, property: String) =
-            assertNotNull(rows.singleOrNull { it.targetKey == key && it.propertyName == property }, "$key.$property in $rows")
+        fun row(key: String, attribute: String) =
+            assertNotNull(rows.singleOrNull { it.targetKey == key && it.attribute == attribute }, "$key.$attribute in $rows")
 
         // The fixture's own row beats the group's on hex-1, and names the fixture.
         row("hex-1", "dimmer").let {

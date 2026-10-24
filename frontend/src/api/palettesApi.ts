@@ -38,8 +38,8 @@ export const DEFERRED_TARGET_TYPE = 'deferred' as const
 export interface PaletteRow {
   targetType: typeof DEFERRED_TARGET_TYPE | 'fixture'
   targetKey: string
-  /** One of `PALETTE_PROPERTIES` — the closed vocabulary; see `paletteIntent.ts`. */
-  propertyName: string
+  /** One of `PALETTE_ATTRIBUTES` — the closed vocabulary; see `paletteIntent.ts`. */
+  attribute: string
   /** A serialised intent: `#FF9D4A;policy=extract`, `pct:75`, `pos:-12,30` (or a stored `deg:45,12.5`), `on`. */
   value: string
   sortOrder?: number
@@ -68,7 +68,7 @@ export interface PaletteFx {
    */
   family: string
   /** Null for a template effect — it names no target, so it names no property on one. */
-  propertyName?: string | null
+  attribute?: string | null
   /** Beats for a `BEAT` effect, seconds for a `WALL_CLOCK` one — see {@link timingSource}. */
   cycle: number
   blendMode: string
@@ -79,7 +79,7 @@ export interface PaletteFx {
   timing?: Timing | null
   /** May hold a `pal:{uuid}` colour reference — but never to this template's own uuid (D12). */
   parameters: Record<string, string>
-  /** Stamped at authoring time from the family's usage master (D8); null still means master 1. */
+  /** Stamped at authoring time from the family's master (D8); null still means master 1. */
   speedMasterUuid?: string | null
   rateSpeedMasterUuid?: string | null
   /**
@@ -293,7 +293,7 @@ export interface PaletteInUseError {
  */
 export interface ApplyPaletteResponse {
   written: number
-  skipped: { fixtureKey: string; propertyName: string; reason: string }[]
+  skipped: { fixtureKey: string; attribute: string; reason: string }[]
   fxIds?: number[]
   /**
    * Each head's literal for a **value** palette, in the Look row grammar, on the property it landed
@@ -301,7 +301,7 @@ export interface ApplyPaletteResponse {
    * the desk did, and `written` counts what it would have written. Absent from a desk that predates
    * the field.
    */
-  values?: { target: PaletteTarget; propertyName: string; value: string }[]
+  values?: { target: PaletteTarget; attribute: string; value: string }[]
 }
 
 /**
@@ -322,14 +322,14 @@ export interface ApplyPaletteRequest {
 }
 
 /**
- * The press (a tap): a layer that tracks the template. `propertyMask` is what this client believes
+ * The press (a tap): a layer that tracks the template. `attributeMask` is what this client believes
  * the layer's mask is; the desk derives the real one and reports it back. `families` is the
  * selection's mask, refused as on [ApplyPaletteRequest] — on the **on** arm only, since a press
  * that takes the layer off comes off under any mask.
  */
 export interface TogglePaletteRequest {
   targets: PaletteTarget[]
-  propertyMask?: string
+  attributeMask?: string
   families?: AttributeFamily[]
 }
 
@@ -345,11 +345,11 @@ export interface TogglePaletteResponse {
   /**
    * The mask the layer actually carries — the template's own family, **derived server-side** from
    * its rows (or its effect's category) rather than echoed from the request. Null only for a
-   * template whose contents name no known family. It can therefore disagree with the `propertyMask`
+   * template whose contents name no known family. It can therefore disagree with the `attributeMask`
    * sent, which is the point: the send states what this client believed, and a disagreement
    * surfaces here rather than on the rig.
    */
-  propertyMask: string | null
+  attributeMask: string | null
   /**
    * How many other palettes this press took heads off: the palettes of its family and kind it
    * replaced on the pressed heads (apply-model plan D2, D6). 0 on a `removed`. Optional on the wire:
@@ -376,9 +376,9 @@ export interface PaletteResolution {
   fixtureKey: string
   fixtureName: string
   typeKey: string
-  propertyName: string
-  /** The property the value landed on — differs from `propertyName` on a colour wheel. */
-  resolvedPropertyName: string
+  attribute: string
+  /** The property the value landed on — differs from `attribute` on a colour wheel. */
+  resolvedAttributeName: string
   outcome: 'EXACT' | 'CLAMPED' | 'SNAPPED' | 'DEGRADED' | 'UNSUPPORTED'
   /**
    * The clamp, the slot name or a warm/cold white mix's temperature (`3400 K`), or the reason.

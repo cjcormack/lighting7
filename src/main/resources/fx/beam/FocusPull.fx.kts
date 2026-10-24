@@ -6,7 +6,7 @@ outputType: SLIDER
 fxMode: STANDARD
 defaultDirection: BOUNCE
 defaultCycle: 2.0
-compatibleProperties: [focus]
+compatibleAttributes: [focus]
 parameters:
   - name: start
     type: ubyte

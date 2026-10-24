@@ -118,7 +118,7 @@ const cue = (): Cue =>
         sortOrder: 1,
         enabled: true,
         targets: [],
-        propertyMask: null,
+        attributeMask: null,
         blendMode: 'OVERRIDE',
         amount: 1,
         stomp: false,
@@ -130,7 +130,7 @@ const cue = (): Cue =>
       },
     ],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [],
     autoAdvance: false,
     autoAdvanceDelayMs: null,
@@ -191,7 +191,7 @@ describe('the programmer’s layer stack', () => {
     expect(pressed).toEqual([
       {
         route: 'togglePalette',
-        args: { projectId: 1, paletteId: 8, targets: [{ type: 'fixture', key: 'par-1' }], propertyMask: undefined, families: undefined },
+        args: { projectId: 1, paletteId: 8, targets: [{ type: 'fixture', key: 'par-1' }], attributeMask: undefined, families: undefined },
       },
     ])
   })

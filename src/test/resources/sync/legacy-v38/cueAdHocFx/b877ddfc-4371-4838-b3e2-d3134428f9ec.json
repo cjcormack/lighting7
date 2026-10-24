@@ -1,0 +1,16 @@
+{
+  "attribute": "dimmer",
+  "blendMode": "OVERRIDE",
+  "cueUuid": "fbd17661-164b-479f-aeb4-ebbb8676927e",
+  "cycle": 0.5,
+  "family": "intensity",
+  "fxType": "Pulse",
+  "order": "NORMAL",
+  "parameters": {
+    "depth": "0.8"
+  },
+  "runUuid": "3c9d2e7a-41f6-4b8e-a0d5-6e2f8c1b9a47",
+  "targetKey": "hex-1",
+  "targetType": "fixture",
+  "uuid": "b877ddfc-4371-4838-b3e2-d3134428f9ec"
+}

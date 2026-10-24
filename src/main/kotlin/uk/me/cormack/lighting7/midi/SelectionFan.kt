@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.POSITION_CENTRE_MAX
 import uk.me.cormack.lighting7.fx.POSITION_CENTRE_MIN
@@ -153,7 +153,7 @@ class SelectionFan(private val state: State) : FanRing {
         }
         val request = FanRequest(
             targets = targets,
-            property = "position",
+            attribute = "position",
             mode = "ABOUT",
             fan = fan,
             base = held?.bases,
@@ -177,8 +177,8 @@ class SelectionFan(private val state: State) : FanRing {
                     placements = placements,
                     rigOrder = rigOrder,
                     written = answer.written.mapNotNull { write ->
-                        val position = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, "position", write.value)
-                            as? CueAssignmentResolver.PropertyValue.Position
+                        val position = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, "position", write.value)
+                            as? CueAssignmentResolver.AttributeValue.Position
                         position?.let { write.target.key to LocalPosition(it.pan, it.tilt) }
                     }.toMap(),
                 )

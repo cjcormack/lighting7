@@ -72,11 +72,11 @@ class LegacyFxArchiveImportTest {
 
         val look = DaoLook.new { this.project = project; name = "Old FX" }
         fun lookFx(
-            fxType: String, category: String, propertyName: String, parameters: Map<String, String>, sort: Int,
+            fxType: String, category: String, attribute: String, parameters: Map<String, String>, sort: Int,
             runs: Int? = null, spread: Double = 1.0,
         ) = DaoLookFxEntity.new {
             this.look = look; targetType = "fixture"; targetKey = "hex-1"
-            this.fxType = fxType; this.family = category; this.attribute = propertyName
+            this.fxType = fxType; this.family = category; this.attribute = attribute
             cycle = 4.0; blendMode = "OVERRIDE"; order = "NORMAL"; phaseOffset = 0.5
             this.parameters = parameters; sortOrder = sort; this.runs = runs; this.spread = spread
         }

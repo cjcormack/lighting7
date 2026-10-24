@@ -12,7 +12,7 @@ export interface FxDefinition {
   outputType: string
   fxMode: string
   parameters: FxParameterDef[]
-  compatibleProperties: string[]
+  compatibleAttributes: string[]
   script: string
   defaultTiming: Timing
   timingSource?: 'BEAT' | 'WALL_CLOCK'
@@ -25,7 +25,7 @@ export interface CreateFxDefinitionRequest {
   outputType?: string
   fxMode?: string
   parameters?: FxParameterDef[]
-  compatibleProperties?: string[]
+  compatibleAttributes?: string[]
   script: string
   defaultTiming?: Timing
   timingSource?: string
@@ -38,7 +38,7 @@ export interface UpdateFxDefinitionRequest {
   outputType?: string
   fxMode?: string
   parameters?: FxParameterDef[]
-  compatibleProperties?: string[]
+  compatibleAttributes?: string[]
   script?: string
   defaultTiming?: Timing
   timingSource?: string

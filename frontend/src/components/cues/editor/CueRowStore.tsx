@@ -17,12 +17,12 @@ import type {
   CueLayerDetail,
   CueLayerPressResponse,
   CuePatchInput,
-  CuePropertyAssignment,
+  CueAttributeAssignment,
 } from '@/api/cuesApi'
 import {
   CueRowDraft,
   applyCueRowEntries,
-  canonicalCueProperty,
+  canonicalCueAttribute,
   cueRowKey,
   restoreCueRows,
   rowsWithKeys,
@@ -36,7 +36,7 @@ import { lastIndexOfDraft } from '@/components/fx/draftFx'
  * it, and the whole layer or effect list as it stood before, for each list the save wrote.
  */
 interface UndoStep {
-  rows?: { keys: readonly string[]; rows: readonly CuePropertyAssignment[] }
+  rows?: { keys: readonly string[]; rows: readonly CueAttributeAssignment[] }
   layers?: readonly CueLayer[]
   adHocFx?: readonly CueAdHocFx[]
 }
@@ -77,10 +77,10 @@ export type CueRowSaveState = 'clean' | 'dirty' | 'saving' | 'error'
  * One cue's own rows, in the shape the Values grid reads and writes them (show-cue-editing plan
  * §3.3) — `LookRowStore`'s shape, over a cue.
  *
- * **Server state** is the cue's details (its `propertyAssignments`) and its cook (`/cooked`); the
+ * **Server state** is the cue's details (its `attributeAssignments`) and its cook (`/cooked`); the
  * **draft** holds own values the operator set and own rows they took away, notifying per key.
  * Writes go to the draft and schedule a flush — 400 ms of quiet, 2 s at most (D10) — which builds
- * the whole `propertyAssignments` list from the cue **as the desk holds it at flush time** — read
+ * the whole `attributeAssignments` list from the cue **as the desk holds it at flush time** — read
  * past the cache (`fetchLatestCue`), since another client's edit does not invalidate it — keeping
  * each row's fade, move-in-dark and sort order, and PATCHes it. A flush sends only the entries no
  * save has carried, and saves run one after another. The PATCH is a stored write and sends nothing
@@ -105,14 +105,14 @@ export interface CueRowStoreValue {
   cookFailed: boolean
   draft: CueRowDraft
   /** What the grid draws at one head and property — the draft over the cook. See [lookupCueCell]. */
-  lookup: (headKey: string, propertyName: string, group?: string) => CueCellValue | undefined
+  lookup: (headKey: string, attribute: string, group?: string) => CueCellValue | undefined
   /**
    * The value a single-axis position edit takes its other axis from: the draft, else the composed
    * cell — never the wire (the Look arm's rule).
    */
-  composedValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => string | undefined
-  setValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => void
-  removeValue: (targetType: CueRowTargetType, targetKey: string, propertyName: string) => void
+  composedValue: (targetType: CueRowTargetType, targetKey: string, attribute: string) => string | undefined
+  setValue: (targetType: CueRowTargetType, targetKey: string, attribute: string, value: string) => void
+  removeValue: (targetType: CueRowTargetType, targetKey: string, attribute: string) => void
   /** Every head the cue holds an own row on, or a layer composes onto — D14's rows. */
   heads: ReadonlySet<string>
   /** Groups holding an own row of the cue's — drawn as a group row. */
@@ -122,7 +122,7 @@ export interface CueRowStoreValue {
   /**
    * A gesture on the cue's layers or effects (the Looks and FX tabs, §3.3): [edit] is applied to the
    * list as the desk holds it at flush time, after any gesture still pending on that list, and the
-   * whole list is PATCHed — never `propertyAssignments`. Coalesced with the rows' flush (400 ms,
+   * whole list is PATCHed — never `attributeAssignments`. Coalesced with the rows' flush (400 ms,
    * 2 s); [now] saves at once, for a discrete gesture (a reorder, a toggle, an add). Answers
    * whether the write that carried it landed.
    */
@@ -160,7 +160,7 @@ export const CUE_ROW_SAVE_DEBOUNCE_MS = 400
 export const CUE_ROW_SAVE_CEILING_MS = 2000
 
 const EMPTY_ROWS: readonly CookedRow[] = []
-const EMPTY_ASSIGNMENTS: readonly CuePropertyAssignment[] = []
+const EMPTY_ASSIGNMENTS: readonly CueAttributeAssignment[] = []
 const EMPTY_FX: readonly CueAdHocFx[] = []
 
 export function CueRowStoreProvider({
@@ -308,7 +308,7 @@ export function CueRowStoreProvider({
     setUndoSeq((n) => n + 1)
     void enqueue((latest) => ({
       body: {
-        ...(step.rows ? { propertyAssignments: restoreCueRows(latest.propertyAssignments, step.rows.keys, step.rows.rows) } : {}),
+        ...(step.rows ? { attributeAssignments: restoreCueRows(latest.attributeAssignments, step.rows.keys, step.rows.rows) } : {}),
         ...(step.layers ? { layers: [...step.layers] } : {}),
         ...(step.adHocFx ? { adHocFx: [...step.adHocFx] } : {}),
       },
@@ -335,8 +335,8 @@ export function CueRowStoreProvider({
       const body: CuePatchInput = {}
       const step: UndoStep = {}
       if (sent.size > 0) {
-        body.propertyAssignments = applyCueRowEntries(latest.propertyAssignments, sent)
-        step.rows = { keys, rows: rowsWithKeys(latest.propertyAssignments, keys) }
+        body.attributeAssignments = applyCueRowEntries(latest.attributeAssignments, sent)
+        step.rows = { keys, rows: rowsWithKeys(latest.attributeAssignments, keys) }
       }
       const layers = layerEdit?.(latest.layers) ?? null
       if (layers != null) {
@@ -383,19 +383,19 @@ export function CueRowStoreProvider({
   }, [])
 
   const setValue = useCallback(
-    (targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string) => {
+    (targetType: CueRowTargetType, targetKey: string, attribute: string, value: string) => {
       if (readOnlyRef.current) return
-      draft.set(targetType, targetKey, propertyName, value)
+      draft.set(targetType, targetKey, attribute, value)
       schedule()
     },
     [draft, schedule],
   )
   const removeValue = useCallback(
-    (targetType: CueRowTargetType, targetKey: string, propertyName: string) => {
+    (targetType: CueRowTargetType, targetKey: string, attribute: string) => {
       if (readOnlyRef.current) return
-      const key = cueRowKey(targetType, targetKey, propertyName)
-      const stored = (entry.cue?.propertyAssignments ?? []).some(
-        (row) => cueRowKey(row.targetType, row.targetKey, row.propertyName) === key,
+      const key = cueRowKey(targetType, targetKey, attribute)
+      const stored = (entry.cue?.attributeAssignments ?? []).some(
+        (row) => cueRowKey(row.targetType, row.targetKey, row.attribute) === key,
       )
       if (!stored && !draft.isSent(key)) {
         // No own row to take away: ⌫ over a Look-won cell, or over a value set here and not yet
@@ -403,7 +403,7 @@ export function CueRowStoreProvider({
         draft.discard([key])
         return
       }
-      draft.remove(targetType, targetKey, propertyName)
+      draft.remove(targetType, targetKey, attribute)
       schedule()
     },
     [draft, entry, schedule],
@@ -478,7 +478,7 @@ export function CueRowStoreProvider({
   const landValues = useCallback<PressCue['landValues']>(
     (values) => {
       if (readOnlyRef.current) return 0
-      for (const value of values) setValue(value.target.type === 'group' ? 'group' : 'fixture', value.target.key, value.propertyName, value.value)
+      for (const value of values) setValue(value.target.type === 'group' ? 'group' : 'fixture', value.target.key, value.attribute, value.value)
       return values.length
     },
     [setValue],
@@ -501,7 +501,7 @@ export function CueRowStoreProvider({
   // Retire what the server now states, once a cook read after the save has landed.
   useEffect(() => {
     if (!cue || cookAt == null) return
-    draft.reconcile(cue.propertyAssignments, cookAt)
+    draft.reconcile(cue.attributeAssignments, cookAt)
   }, [cue, cookAt, draft])
 
   // A pending edit lands when the editor goes — a card collapsing on a GO from elsewhere, a pane
@@ -516,10 +516,10 @@ export function CueRowStoreProvider({
   }, [])
 
   const rows = cookedData?.rows ?? EMPTY_ROWS
-  const assignments = cue?.propertyAssignments ?? EMPTY_ASSIGNMENTS
+  const assignments = cue?.attributeAssignments ?? EMPTY_ASSIGNMENTS
   const cookedByKey = useMemo(() => {
     const out = new Map<string, CookedRow>()
-    for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row)
+    for (const row of rows) out.set(lookRowKey(row.targetKey, canonicalCueAttribute(row.attribute)), row)
     return out
   }, [rows])
 
@@ -529,7 +529,7 @@ export function CueRowStoreProvider({
   const overriddenRef = useRef(new Map<string, string>())
   for (const row of rows) {
     if (row.layerId != null && row.layerSource?.name) {
-      overriddenRef.current.set(lookRowKey(row.targetKey, canonicalCueProperty(row.propertyName)), row.layerSource.name)
+      overriddenRef.current.set(lookRowKey(row.targetKey, canonicalCueAttribute(row.attribute)), row.layerSource.name)
     }
   }
 
@@ -560,7 +560,7 @@ export function CueRowStoreProvider({
   const storedGroupRows = useMemo(() => {
     const out = new Map<string, string>()
     for (const row of assignments) {
-      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.propertyName), row.value)
+      if (row.targetType === 'group') out.set(cueRowKey('group', row.targetKey, row.attribute), row.value)
     }
     return out
   }, [assignments])
@@ -573,19 +573,19 @@ export function CueRowStoreProvider({
       value: v,
       source: { kind: 'own', targetType, targetKey, overrides: overriddenRef.current.get(cellKey) },
     })
-    const lookup = (headKey: string, rawProperty: string, group?: string): CueCellValue | undefined => {
-      const propertyName = canonicalCueProperty(rawProperty)
-      const cellKey = lookRowKey(headKey, propertyName)
+    const lookup = (headKey: string, rawAttribute: string, group?: string): CueCellValue | undefined => {
+      const attribute = canonicalCueAttribute(rawAttribute)
+      const cellKey = lookRowKey(headKey, attribute)
       if (group != null) {
         // A group row draws the group's **own** row and nothing else: what its members compose to is
         // on their own rows.
-        const pending = draft.get('group', group, propertyName)
+        const pending = draft.get('group', group, attribute)
         if (pending?.kind === 'removed') return undefined
         if (pending?.kind === 'set') return own('group', group, pending.value, cellKey)
-        const stored = storedGroupRows.get(cueRowKey('group', group, propertyName))
+        const stored = storedGroupRows.get(cueRowKey('group', group, attribute))
         return stored == null ? undefined : own('group', group, stored, cellKey)
       }
-      const pending = draft.get('fixture', headKey, propertyName)
+      const pending = draft.get('fixture', headKey, attribute)
       if (pending?.kind === 'set') return own('fixture', headKey, pending.value, cellKey)
       const cooked = cookedByKey.get(cellKey)
       const sourceType = cooked?.sourceTargetType ?? (cooked ? (cooked.targetType === 'group' ? 'group' : 'fixture') : null)
@@ -596,11 +596,11 @@ export function CueRowStoreProvider({
       }
       // A group's own row reaches its members unless a fixture row of their own beats it.
       for (const name of groupsByHead.get(headKey) ?? []) {
-        const groupPending = draft.get('group', name, propertyName)
+        const groupPending = draft.get('group', name, attribute)
         if (groupPending?.kind === 'set') return own('group', name, groupPending.value, cellKey)
       }
       if (cookedOwn && sourceType === 'group' && sourceKey != null) {
-        if (draft.get('group', sourceKey, propertyName)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
+        if (draft.get('group', sourceKey, attribute)?.kind !== 'removed') return own('group', sourceKey, cooked.value, cellKey)
         return undefined
       }
       if (cooked != null && cooked.layerId != null) {
@@ -608,17 +608,17 @@ export function CueRowStoreProvider({
       }
       return undefined
     }
-    const composedValue = (targetType: CueRowTargetType, targetKey: string, rawProperty: string): string | undefined => {
-      const propertyName = canonicalCueProperty(rawProperty)
-      const pending = draft.get(targetType, targetKey, propertyName)
+    const composedValue = (targetType: CueRowTargetType, targetKey: string, rawAttribute: string): string | undefined => {
+      const attribute = canonicalCueAttribute(rawAttribute)
+      const pending = draft.get(targetType, targetKey, attribute)
       if (pending?.kind === 'set') return pending.value
       if (targetType === 'group') {
-        const stored = storedGroupRows.get(cueRowKey('group', targetKey, propertyName))
+        const stored = storedGroupRows.get(cueRowKey('group', targetKey, attribute))
         if (stored != null) return stored
         const member = (fixtures ?? []).find((f) => f.groups.includes(targetKey))
-        return member ? cookedByKey.get(lookRowKey(member.key, propertyName))?.value : undefined
+        return member ? cookedByKey.get(lookRowKey(member.key, attribute))?.value : undefined
       }
-      return cookedByKey.get(lookRowKey(targetKey, propertyName))?.value
+      return cookedByKey.get(lookRowKey(targetKey, attribute))?.value
     }
 
     const heads = new Set<string>()

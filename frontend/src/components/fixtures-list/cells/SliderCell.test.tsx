@@ -25,10 +25,10 @@ beforeEach(() => {
 })
 afterEach(() => vi.unstubAllGlobals())
 
-const DIMMER: NonNullable<CellResolution> = { kind: 'slider', property: sliderProp('dimmer', 'dimmer', chan(1)) }
+const DIMMER: NonNullable<CellResolution> = { kind: 'slider', attribute: sliderProp('dimmer', 'dimmer', chan(1)) }
 const NARROW: NonNullable<CellResolution> = {
   kind: 'slider',
-  property: sliderProp('strobe', 'strobe', chan(2), { min: 10, max: 250 }),
+  attribute: sliderProp('strobe', 'strobe', chan(2), { min: 10, max: 250 }),
 }
 
 function draw(

@@ -155,7 +155,7 @@ function fullCue(id: number): Cue | undefined {
     cueStackId: 10,
     layers: [],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [],
     stomp: false,
   } as unknown as Cue

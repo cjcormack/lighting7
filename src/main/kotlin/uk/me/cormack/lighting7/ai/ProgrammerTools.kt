@@ -21,10 +21,10 @@ import uk.me.cormack.lighting7.fixture.CommandIndex
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.groupHintsForTargets
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoPalette
 import uk.me.cormack.lighting7.models.DaoPalettes
@@ -65,14 +65,14 @@ internal class ProgrammerTools(private val state: State) {
 
     private fun setProgrammerUnguarded(input: JsonObject): ToolExecutionResult {
         val targets = parseTargets(input, required = true).getOrElse { return errorResult(it.message ?: "Bad arguments") }!!
-        val values = input.present("values") as? JsonArray ?: return errorResult("Missing 'values': [{propertyName, value}]")
+        val values = input.present("values") as? JsonArray ?: return errorResult("Missing 'values': [{attribute, value}]")
         val fadeMs = fadeMs(input).getOrElse { return errorResult(it.message ?: "Bad arguments") }
         val fixtures = state.show.fixtures
 
         val refusals = targets.flatMap { target ->
-            values.mapNotNull { (it as? JsonObject)?.text("propertyName") }.mapNotNull { propertyName ->
-                TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "programmer")
-                    ?: CommandIndex.refusalLive(fixtures, target.discriminator, target.key, propertyName, "programmer")
+            values.mapNotNull { (it as? JsonObject)?.text("attribute") }.mapNotNull { attribute ->
+                TriggerIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "programmer")
+                    ?: CommandIndex.refusalLive(fixtures, target.discriminator, target.key, attribute, "programmer")
             }
         }
         if (refusals.isNotEmpty()) return errorResult(refusals.distinct().joinToString("; "))
@@ -83,15 +83,15 @@ internal class ProgrammerTools(private val state: State) {
         // The group each head arrived through, so Record collapses it back to a group row.
         val groupHints = groupHintsForTargets(fixtures, targets)
         val writes = resolved.writes.map {
-            ProgrammerWriter.PropertyWrite(it.head, it.propertyName, it.value, sourceGroup = groupHints[it.head.targetKey])
+            ProgrammerWriter.AttributeWrite(it.head, it.attribute, it.value, sourceGroup = groupHints[it.head.targetKey])
         }
-        val landed = state.show.fxEngine.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
+        val landed = state.show.fxEngine.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fadeMs)
 
         val written = ArrayList<ProgrammerValueWrite>()
         val skipped = resolved.skipped.toMutableList()
         resolved.writes.forEachIndexed { index, write ->
             if (landed[index].isEmpty()) {
-                skipped += LookValueSkip(write.head.targetKey, write.requestedName, "${write.propertyName} resolves to no DMX channels")
+                skipped += LookValueSkip(write.head.targetKey, write.requestedName, "${write.attribute} resolves to no DMX channels")
             } else {
                 written += write
             }
@@ -105,7 +105,7 @@ internal class ProgrammerTools(private val state: State) {
                     for (write in written) {
                         addJsonObject {
                             put("targetKey", write.head.targetKey)
-                            put("propertyName", write.propertyName)
+                            put("attribute", write.attribute)
                             put("value", write.value.serialize())
                             groupHints[write.head.targetKey]?.let { put("group", it) }
                         }
@@ -176,7 +176,7 @@ internal class ProgrammerTools(private val state: State) {
                                             put("fxId", p.fxId)
                                             put("fxType", p.fxType)
                                             put("targetKey", p.targetKey)
-                                            put("propertyName", p.propertyName)
+                                            put("attribute", p.attribute)
                                         }
                                     }
                                 })
@@ -244,20 +244,20 @@ internal class ProgrammerTools(private val state: State) {
         else applyPaletteLiterals(project.id.value, found, targets, families, fadeMs)
     }
 
-    private class Found(val source: LayerSource, val family: PropertyMaskGroup?, val isGeneric: Boolean)
+    private class Found(val source: LayerSource, val family: AttributeFamily?, val isGeneric: Boolean)
 
     /** The press: the toggle route's path, with no solo siblings. */
     private fun togglePalette(
         projectId: Int,
         found: Found,
         targets: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>?,
+        families: Set<AttributeFamily>?,
     ): ToolExecutionResult {
         if (families != null && !maskAllows(families, found.family) && !pressWouldRelease(state, found.source.uuid, targets)) {
             return errorResult(paletteOutsideMaskMessage(found.source.name, found.family, families), CODE_PALETTE_OUTSIDE_MASK)
         }
         val outcome = try {
-            state.show.programmerLayerStack.toggle(source = found.source, targets = targets, propertyMask = found.family?.name)
+            state.show.programmerLayerStack.toggle(source = found.source, targets = targets, attributeMask = found.family?.name)
         } catch (e: IllegalStateException) {
             return errorResult(e.message ?: "Target not found")
         }
@@ -270,7 +270,7 @@ internal class ProgrammerTools(private val state: State) {
                 put("action", outcome.action)
                 put("fxCount", outcome.fxCount)
                 if (outcome.released > 0) put("released", outcome.released)
-                found.family?.let { put("propertyMask", it.name) }
+                found.family?.let { put("attributeMask", it.name) }
             }.toString(),
         )
     }
@@ -280,7 +280,7 @@ internal class ProgrammerTools(private val state: State) {
         projectId: Int,
         found: Found,
         requested: List<CueTargetDto>,
-        families: Set<PropertyMaskGroup>?,
+        families: Set<AttributeFamily>?,
         fadeMs: Long?,
     ): ToolExecutionResult {
         val snapshot = state.show.paletteRegistry.snapshot(found.source.uuid)
@@ -315,7 +315,7 @@ internal class ProgrammerTools(private val state: State) {
                         if (response.fxIds.isNotEmpty()) {
                             put("fxIds", buildJsonArray { response.fxIds.forEach { add(JsonPrimitive(it)) } })
                         }
-                        putValueSkips(response.skipped.map { LookValueSkip(it.fixtureKey, it.propertyName, it.reason) })
+                        putValueSkips(response.skipped.map { LookValueSkip(it.fixtureKey, it.attribute, it.reason) })
                     }.toString(),
                 )
             }
@@ -372,7 +372,7 @@ internal class ProgrammerTools(private val state: State) {
                                     put("targetType", row.targetType)
                                     put("targetKey", row.targetKey)
                                     row.elementKey?.let { put("elementKey", it) }
-                                    put("propertyName", row.propertyName)
+                                    put("attribute", row.attribute)
                                     put("value", row.value)
                                 }
                             }
@@ -382,7 +382,7 @@ internal class ProgrammerTools(private val state: State) {
                                 for (skip in r.skipped) {
                                     addJsonObject {
                                         skip.targetKey?.let { put("targetKey", it) }
-                                        skip.propertyName?.let { put("propertyName", it) }
+                                        skip.attribute?.let { put("attribute", it) }
                                         put("reason", skip.reason)
                                     }
                                 }
@@ -427,7 +427,7 @@ internal class ProgrammerTools(private val state: State) {
             for (skip in skips) {
                 addJsonObject {
                     put("targetKey", skip.target)
-                    put("propertyName", skip.propertyName)
+                    put("attribute", skip.attribute)
                     put("reason", skip.reason)
                 }
             }
@@ -456,13 +456,13 @@ internal class ProgrammerTools(private val state: State) {
         (it as? JsonPrimitive)?.takeIf { p -> !p.isString }?.booleanOrNull ?: throw IllegalArgumentException("'$key' must be true or false")
     }
 
-    private fun maskOf(input: JsonObject): Set<PropertyMaskGroup>? {
+    private fun maskOf(input: JsonObject): Set<AttributeFamily>? {
         val names = input.present("mask")?.let { mask ->
             (mask as? JsonArray)?.map {
                 (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content ?: throw IllegalArgumentException("'mask' entries must be family names")
             } ?: throw IllegalArgumentException("'mask' must be an array of family names")
         }
-        return parseMaskGroups(names)
+        return parseFamilies(names)
     }
 
     private fun errorResult(message: String, code: String? = null) = ToolExecutionResult(

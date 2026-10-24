@@ -11,11 +11,11 @@ import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxStacking
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.familyMasterUuidFor
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -67,7 +67,7 @@ internal fun Route.routeApiRestProgrammerFx(state: State) {
         withCurrentProject(state, resource.projectId) { _ ->
             val request = call.receive<ProgrammerFxRequest>()
             val families = try {
-                parseMaskGroups(request.families)
+                parseFamilies(request.families)
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
@@ -88,7 +88,7 @@ internal data class ProgrammerFxResource(val projectId: String)
 @Serializable
 internal data class ProgrammerFxRequest(
     val fxType: String,
-    val propertyName: String,
+    val attribute: String,
     /** The selection, in the order the effect spreads over it: fixtures, cells and groups. */
     val targets: List<CueTargetDto> = emptyList(),
     /** The selection's attribute mask; absent is every attribute. */
@@ -144,7 +144,7 @@ internal sealed interface BareFxOutcome {
 internal fun pressBareFx(
     state: State,
     request: ProgrammerFxRequest,
-    families: Set<PropertyMaskGroup>?,
+    families: Set<AttributeFamily>?,
 ): BareFxOutcome {
     if (request.targets.isEmpty()) {
         return BareFxOutcome.Invalid("A Local effect needs a selection", CODE_FX_NEEDS_SELECTION)
@@ -159,7 +159,7 @@ internal fun pressBareFx(
         state,
         AddFxRequest(
             fxType = request.fxType,
-            propertyName = request.propertyName,
+            attribute = request.attribute,
             targets = request.targets,
             cycle = request.cycle,
             blendMode = request.blendMode ?: start?.blendMode?.name ?: "OVERRIDE",
@@ -191,7 +191,7 @@ internal fun pressBareFx(
     val family = fxFamily(state, instance)
     if (families != null && !maskAllows(families, family)) {
         return BareFxOutcome.Invalid(
-            "'${request.propertyName}' is ${family?.name ?: "no attribute"}, outside the selection's mask",
+            "'${request.attribute}' is ${family?.name ?: "no attribute"}, outside the selection's mask",
             CODE_FX_OUTSIDE_MASK,
         )
     }
@@ -258,14 +258,14 @@ private fun stackingParameters(request: ProgrammerFxRequest, start: FxStacking.S
 
 /**
  * The attribute family an effect lands on: its property's group on the first head it paints
- * ([maskGroupForProperty], as Record and Include read it), so an Intensity Pulse on `uv` is
+ * ([familyForAttribute], as Record and Include read it), so an Intensity Pulse on `uv` is
  * Colour. Null when it paints nothing; a null family is in no mask and replaces nothing. Agreed
  * with Chris during session 2 over the library category an effect palette's family reads.
  */
-internal fun fxFamily(state: State, effect: FxInstance): PropertyMaskGroup? {
+internal fun fxFamily(state: State, effect: FxInstance): AttributeFamily? {
     val head = state.show.fxEngine.paintedHeads(effect).firstOrNull() ?: return null
     val fixture = runCatching { state.show.fixtures.untypedGroupableFixture(head.key) }.getOrNull() ?: return null
-    return maskGroupForProperty(fixture, effect.target.propertyName)
+    return familyForAttribute(fixture, effect.target.attribute)
 }
 
 /** Which heads an effect edit is for: [planSplit]'s answer. */
