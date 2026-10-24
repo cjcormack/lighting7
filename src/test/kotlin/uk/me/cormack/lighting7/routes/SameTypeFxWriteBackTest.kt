@@ -27,11 +27,11 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Two stacked FX of one type on one head, written into a cue that already holds them: each lands on
- * its own child, and Remove deletes its own. Record matches an FX Include brought back to the child
- * it came from, and any other FX to the first child of its key no other FX took. A Sine Wave
- * Replacing at 200 under a Sine Wave Within at half reads 100 on Hex 1's dimmer; the other way
- * round, 200.
+ * Two stacked FX of one type on one head, written into a cue that already holds them, or one of
+ * them: each lands on its own child, and Remove deletes its own. Record matches an FX Include
+ * brought back to the child it came from, and any other FX to the first child of its key no other
+ * FX took. A Sine Wave Replacing at 200 under a Sine Wave Within at half reads 100 on Hex 1's
+ * dimmer; the other way round, 200.
  */
 class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
@@ -39,7 +39,14 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
     private val hex = listOf(CueTargetDto(TargetRef.Fixture.TYPE, "hex-1"))
 
+    private val wash = listOf(CueTargetDto(TargetRef.Group.TYPE, "wash"))
+
     private fun seedRig() = LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
+
+    private fun seedWash() {
+        seedRig()
+        LocateTestSupport.seedGroup(state, projectId, "wash", "hex-1")
+    }
 
     private fun dimmer(): Int = (state.show.fixtures.controllers.first().currentValues[1] ?: 0u).toInt()
 
@@ -62,12 +69,22 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
     }
 
     /** A Sine Wave on Hex 1's dimmer whose min and max agree: one level whatever the phase. */
-    private suspend fun HttpClient.pressSine(level: Int, blendMode: String, stack: Boolean): FxInstance {
+    private suspend fun HttpClient.pressSine(level: Int, blendMode: String, stack: Boolean): FxInstance =
+        pressLevel("SineWave", hex, level, blendMode, stack)
+
+    /** [effectType] on [targets]' dimmer at one level whatever the phase. */
+    private suspend fun HttpClient.pressLevel(
+        effectType: String,
+        targets: List<CueTargetDto>,
+        level: Int,
+        blendMode: String,
+        stack: Boolean,
+    ): FxInstance {
         val response = post("/api/rest/projects/$projectId/programmer/effects") {
             contentType(ContentType.Application.Json)
             setBody(
                 ProgrammerEffectRequest(
-                    effectType = "SineWave", propertyName = "dimmer", targets = hex,
+                    effectType = effectType, propertyName = "dimmer", targets = targets,
                     parameters = mapOf("min" to "$level", "max" to "$level"), blendMode = blendMode, stack = stack,
                 ),
             )
@@ -384,5 +401,91 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
         clearStage()
         client.applyCue(cueId)
         awaitDimmer(200, "the cue plays the Replace alone")
+    }
+
+    /** A Pulse on the wash at [level], Replacing unless [blendMode] says otherwise. */
+    private suspend fun HttpClient.pressWash(level: Int, blendMode: String = "OVERRIDE", stack: Boolean = false) =
+        pressLevel("Pulse", wash, level, blendMode, stack)
+
+    /** A cue holding one Pulse on the wash, Replacing at 200; the stage cleared after. */
+    private suspend fun HttpClient.cueWithOnePulse(): Pair<Int, Child> {
+        pressWash(200)
+        awaitDimmer(200, "the one Pulse")
+        val cueId = record("CREATE").cue.id
+        val stored = children(cueId).single()
+        assertEquals("OVERRIDE" to "200", stored.blendMode to stored.level)
+        clearStage()
+        return cueId to stored
+    }
+
+    @Test
+    fun `Record Merge of two stacked Pulses on a group into a cue holding one keeps both`() = testApplication {
+        mountTestApp(state)
+        seedWash()
+        val client = jsonClient()
+        val (cueId, stored) = client.cueWithOnePulse()
+
+        client.pressWash(180)
+        client.pressWash(64, "MULTIPLY", stack = true)
+        awaitDimmer(180 * 64 / 255, "the Within over the Replace")
+
+        assertEquals(2, client.record("MERGE", cueId).fxWritten)
+        val after = children(cueId)
+        assertEquals(2, after.size, "one child per Pulse")
+        assertEquals(stored.copy(level = "180"), after[0], "the Replace written onto the child the cue held")
+        assertEquals("MULTIPLY" to "64", after[1].blendMode to after[1].level, "the Within a child of its own")
+
+        clearStage()
+        client.applyCue(cueId)
+        awaitDimmer(180 * 64 / 255, "the cue plays both")
+    }
+
+    @Test
+    fun `a Pulse stacked on the one a cue's Include brought back is Updated as a child of its own`() = testApplication {
+        mountTestApp(state)
+        seedWash()
+        val client = jsonClient()
+        val (cueId, stored) = client.cueWithOnePulse()
+        client.include(cueId)
+        awaitDimmer(200, "Include runs the cue's Pulse")
+
+        client.pressWash(64, "MULTIPLY", stack = true)
+        awaitDimmer(200 * 64 / 255, "the stacked Within over the included Replace")
+        assertEquals(2, fx.getActiveEffects().count { it.isLocalEffect })
+
+        assertEquals(1, client.update().fxWritten)
+        val after = children(cueId)
+        assertEquals(2, after.size, "one child per Pulse")
+        assertEquals(stored, after[0], "the included Pulse's child as it was")
+        assertEquals("MULTIPLY" to "64", after[1].blendMode to after[1].level)
+
+        clearStage()
+        client.applyCue(cueId)
+        awaitDimmer(200 * 64 / 255, "the cue plays both")
+    }
+
+    @Test
+    fun `two Pulses pressed over a cue's Included one are Updated as two children`() = testApplication {
+        mountTestApp(state)
+        seedWash()
+        val client = jsonClient()
+        val (cueId, stored) = client.cueWithOnePulse()
+        client.include(cueId)
+        awaitDimmer(200, "Include runs the cue's Pulse")
+
+        client.pressWash(180)
+        client.pressWash(64, "MULTIPLY", stack = true)
+        awaitDimmer(180 * 64 / 255, "the Within over the Replace that took the included one's place")
+        assertEquals(2, fx.getActiveEffects().count { it.isLocalEffect }, "the first press stopped the included Pulse")
+
+        assertEquals(2, client.update().fxWritten)
+        val after = children(cueId)
+        assertEquals(2, after.size, "one child per Pulse")
+        assertEquals(stored.copy(level = "180"), after[0])
+        assertEquals("MULTIPLY" to "64", after[1].blendMode to after[1].level)
+
+        clearStage()
+        client.applyCue(cueId)
+        awaitDimmer(180 * 64 / 255, "the cue plays both")
     }
 }
