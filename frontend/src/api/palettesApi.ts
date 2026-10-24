@@ -141,9 +141,9 @@ export interface PaletteSummary {
   /** True when every row is generic; false for the per-fixture case. Always true for an effect. */
   isGeneric: boolean
   /**
-   * Which of the two a template holds (D1) — orthogonal to `family`, which says *which* attribute.
+   * Which of the two a palette holds (D1) — orthogonal to `family`, which says *which* attribute.
    *
-   * `value` means `rows` is populated and `effect` is null; `effect` means the reverse. Never both,
+   * `value` means `rows` is populated and `fx` is null; `fx` means the reverse. Never both,
    * never neither.
    */
   kind: 'value' | 'fx'
@@ -214,10 +214,10 @@ export interface PaletteSummary {
  * `notes` and `fadeDurationMs` carry an explicit `*Present` flag, because null is a *value* for both
  * (clear the notes; use the caller's default fade) and a PUT has to tell that from "leave it alone".
  *
- * **`rows` and `effect` carry no such flag, and could not use one.** Omitting either means "leave
- * that half alone"; sending one replaces it. Neither half can be *cleared*, because a template with
+ * **`rows` and `fx` carry no such flag, and could not use one.** Omitting either means "leave
+ * that half alone"; sending one replaces it. Neither half can be *cleared*, because a palette with
  * no contents is not a state the write boundary allows — so there is no third meaning for a flag to
- * express. Send **at most one of the two**: which half a template holds is fixed at creation, and a
+ * express. Send **at most one of the two**: which half a palette holds is fixed at creation, and a
  * PUT sending the wrong one for the stored kind is a 400 rather than a no-op.
  */
 export interface PaletteInput {

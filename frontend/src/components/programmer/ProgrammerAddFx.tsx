@@ -34,7 +34,7 @@ export interface AddFxOffer {
  *
  * A hook plus a picker rather than one button component: the FX table's *+ Effect* and ⌘K's
  * *Apply FX → On the selection* ([ProgrammerAddFxDoor]) are two doors onto one gesture. The
- * authoring UI is the one picker's effects arm (`ApplyPicker`, `library="effects"`): `FxPicker` and
+ * authoring UI is the one picker's effects arm (`ApplyPicker`, `library="fx"`): `FxPicker` and
  * the live editor, above the effect palettes.
  */
 export function useProgrammerAddFx(): AddFxOffer {

@@ -395,7 +395,7 @@ export function usePaletteSave(
  *    ([paletteFits]) — so a zoom cell is offered the Beam effect palettes that drive zoom, a gobo cell
  *    the Slot Steps of its gobo — pressed through `usePress` onto the cell batch under the cell's
  *    family, with the chip's gestures and ring.
- *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="effects"`) on this
+ *  - ***+ Effect …*** opens the picker's effects arm ([ApplyPicker], `library="fx"`) on this
  *    property: `FxPicker` on the family of the cell and the bare effect press, `POST
  *    /programmer/fx` with the same pair, so a Pulse on a uv cell is masked as Colour (the
  *    family the desk reads off the driven property). Under a focused Look it starts on `/fx/add` and

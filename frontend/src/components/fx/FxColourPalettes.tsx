@@ -47,7 +47,7 @@ import { parsePaletteRefUuid, serializePaletteRef } from './colourUtils'
  * colour template means something exact to a single-colour output rather than "one of these".
  *
  * The old clause was also what excluded an **effect** template (fx-templates D12), by the accident
- * that it holds no rows at all; that file's own note said to put `kind !== 'effect'` in its place if
+ * that it holds no rows at all; that file's own note said to put `kind !== 'fx'` in its place if
  * the count were ever relaxed, and this is that. The exclusion is deliberate and not a by-product:
  * an effect template is not a colour, has nothing for a fixture-agnostic colour output to take, and
  * `resolvePaletteColour` refuses one server-side for the same reason. The other direction stays

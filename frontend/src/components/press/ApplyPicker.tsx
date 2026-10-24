@@ -48,7 +48,7 @@ import type { PaletteSummary } from '@/api/palettesApi'
 import type { CueAdHocFx } from '@/api/cuesApi'
 
 /**
- * Which library the picker draws. `effects` is the bare effects (`FxPicker` on the bare effect
+ * Which library the picker draws. `fx` is the bare effects (`FxPicker` on the bare effect
  * press) above the effect palettes that fit — ⌘K *Apply FX*, the FX table's *+ Effect* and a band's
  * *+ Effect …*; the palettes' own Effects section reaches it too.
  */

@@ -13,7 +13,7 @@ export interface RowSource {
   kind: RowSourceKind
   /** The chip's words: *Programmer*, *Pulse · ¼ · M2*, *Q12 · Night*, *Parked*, *Base*. */
   label: string
-  /** The effect on stage, for an `effect` row. */
+  /** The effect on stage, for an `fx` row. */
   effect?: ActiveFx
   /** The programmer holds an entry on one of the row's keys, by an owner `clearEntry` releases — what draws its ×. */
   holds: boolean
