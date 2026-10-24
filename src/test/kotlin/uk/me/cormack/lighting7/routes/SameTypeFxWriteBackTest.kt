@@ -2,6 +2,7 @@ package uk.me.cormack.lighting7.routes
 
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.request.delete
 import io.ktor.client.request.post
 import io.ktor.client.request.put
 import io.ktor.client.request.setBody
@@ -27,10 +28,10 @@ import kotlin.test.assertTrue
 
 /**
  * Two stacked FX of one type on one head, written into a cue that already holds them, or one of
- * them: each lands on its own child. Record's Merge and Update match an FX Include brought back to
- * the child it came from, and any other FX to the first child of its key no other FX took. A Sine
- * Wave Replacing at 200 under a Sine Wave Within at half reads 100 on Hex 1's dimmer; the other way
- * round, 200.
+ * them: each lands on its own child, and Remove deletes its own. Record matches an FX Include
+ * brought back to the child it came from, and any other FX to the first child of its key no other
+ * FX took. A Sine Wave Replacing at 200 under a Sine Wave Within at half reads 100 on Hex 1's
+ * dimmer; the other way round, 200.
  */
 class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
@@ -281,6 +282,25 @@ class SameTypeFxWriteBackTest : RouteIntegrationTest() {
 
         assertEquals(0, client.update().fxWritten)
         assertEquals(stored, children(cueId))
+    }
+
+    @Test
+    fun `Record Remove of one Included FX of the pair deletes its own child`() = testApplication {
+        mountTestApp(state)
+        seedRig()
+        val client = jsonClient()
+        val (cueId, stored) = client.includedPair()
+
+        val stopped = client.delete("/api/rest/fx/${included("OVERRIDE").id}")
+        assertEquals(HttpStatusCode.NoContent, stopped.status, stopped.bodyAsText())
+        awaitDimmer(0, "the Within alone, over nothing")
+
+        assertEquals(1, client.record("REMOVE", cueId).assignmentsRemoved)
+        assertEquals(listOf(stored[0]), children(cueId), "the Within's child gone, the Replace's kept")
+
+        clearStage()
+        client.applyCue(cueId)
+        awaitDimmer(200, "the cue plays the Replace alone")
     }
 
     /** A Pulse on the wash at [level], Replacing unless [blendMode] says otherwise. */
