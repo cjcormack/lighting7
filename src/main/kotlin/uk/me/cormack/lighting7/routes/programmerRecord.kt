@@ -359,7 +359,10 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     // A preset-application merge loop stood here, beside the layer one above. It was already
     // unreachable: `recording.presetApplications` had been `emptyList()` since `captureCurrentState`
     // moved to keying on `lookId`, so it iterated nothing. Gone with `cue_preset_applications`.
-    val existingAdHoc = cue.adHocEffects.toList()
+    val existingAdHoc = cue.adHocEffectsInOrder()
+    // Every child the recording names, in its (apply) order, and those of them nothing else changed.
+    val recorded = ArrayList<DaoCueAdHocEffect>()
+    val unchanged = HashSet<DaoCueAdHocEffect>()
     for (effect in recording.adHocEffects) {
         // Upsert, not skip-if-present. `(target, effectType, property)` identifies *which*
         // effect this is; everything else about it — parameters, blend, phase, distribution —
@@ -378,11 +381,18 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
             if (!match.matches(effect)) {
                 match.applyFrom(effect)
                 count++
+            } else {
+                unchanged += match
             }
+            recorded += match
             continue
         }
-        newAdHocChild(cue, effect)
+        recorded += newAdHocChild(cue, effect)
         count++
+    }
+    // A child written again only to take its place in the apply order is written too.
+    if (recorded.isNotEmpty()) {
+        count += renumberInApplyOrder(existingAdHoc, recorded, DaoCueAdHocEffect::sortOrder).count { it in unchanged }
     }
     return count
 }
@@ -539,6 +549,8 @@ private fun replaceImmediateFxChildren(
     // Two more preset-application blocks stood here — an unmasked-only replace sweep, and an
     // insert loop with the same group-shadow warning the ad-hoc one below still emits. Both had
     // layer equivalents beside them already, and both iterated an always-empty list.
+    val storedEffects = cue.adHocEffectsInOrder()
+    val recorded = ArrayList<DaoCueAdHocEffect>()
     val queues = replacedEffects.groupByTo(LinkedHashMap()) { it.effectKey }.mapValues { ArrayDeque(it.value) }
     // Replaced effects not yet written over: gone as far as the shadow check is concerned, exactly
     // as if they had been deleted before the recording went in.
@@ -564,13 +576,20 @@ private fun replaceImmediateFxChildren(
         val stored = queues[effect.effectKey]?.removeFirstOrNull()
         if (stored != null) {
             pending -= stored.id.value
+            // Its place is the renumber's to change, not the recording's index.
+            val place = stored.sortOrder
             stored.take(effect)
+            stored.sortOrder = place
+            recorded += stored
         } else {
-            newAdHocChild(cue, effect)
+            recorded += newAdHocChild(cue, effect)
         }
         written++
     }
     replacedEffects.filter { it.id.value in pending }.forEach { it.delete() }
+    if (recorded.isNotEmpty()) {
+        renumberInApplyOrder(storedEffects.filter { it.id.value !in pending }, recorded, DaoCueAdHocEffect::sortOrder)
+    }
     return written
 }
 
@@ -598,14 +617,13 @@ private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocEffect): Pro
     return uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
 }
 
-private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto) {
+private fun newAdHocChild(cue: DaoCue, effect: CueAdHocEffectDto): DaoCueAdHocEffect =
     DaoCueAdHocEffect.new {
         this.cue = cue
         targetType = effect.targetType
         targetKey = effect.targetKey
         take(effect)
     }
-}
 
 /**
  * Republish [cueId]'s Layer 4 if anything holds it live — a stack or a loose press.

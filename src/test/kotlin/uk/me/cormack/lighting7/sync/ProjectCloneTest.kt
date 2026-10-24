@@ -5,6 +5,7 @@ import org.jetbrains.exposed.v1.core.eq
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import uk.me.cormack.lighting7.routes.effectsInOrder
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.BindingTargetJson
 import uk.me.cormack.lighting7.models.AssignmentHealth
@@ -176,6 +177,19 @@ class ProjectCloneTest {
             assertEquals(FittedSlot(gel = "R80"), sl.fittedMedia?.slot("gelScroller", "L201_FULL_CT_BLUE"))
             assertEquals(FittedSlot(gel = "L202"), sl.fittedMedia?.slot("mediaFrame", "IN"))
         }
+    }
+
+    /** A clone's Look keeps its FX in their stored order, which is not the order they were made in. */
+    @Test
+    fun `clone keeps a Look's FX order`() {
+        val sourceId = seedRichProject(state)
+        val result = ProjectCloner(state).clone(sourceId, "cloned-order", description = null)
+
+        fun stacked(projectId: Int) = transaction(state.database) {
+            DaoProject.findById(projectId)!!.looks.single { it.name == "stacked" }.effectsInOrder().map { it.fxType to it.sortOrder }
+        }
+        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked(sourceId))
+        assertEquals(stacked(sourceId), stacked(result.projectId))
     }
 
     /**

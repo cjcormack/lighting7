@@ -469,7 +469,7 @@ internal fun recordingForUpdate(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(bandEffects, mask = null, state.show.fixtures)
+    val adHoc = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask = null, state.show.fixtures)
     return ProgrammerRecording(
         rows = collapsed.rows,
         // Update never writes the layer stack through this path: the *structural* half of Mode A is
@@ -483,16 +483,16 @@ internal fun recordingForUpdate(
 }
 
 /**
- * The sort orders of [cueId]'s ad-hoc effects whose Included instance now runs only as split
+ * The uuids of [cueId]'s ad-hoc effects whose Included instance now runs only as split
  * copies (apply-model plan §3.4). Update writes the copies as children of their own, one per head,
  * so the child they stand for is retired, or the cue would play the effect twice.
  */
-internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
+internal fun splitIncludedChildren(state: State, cueId: Int): Set<String> =
     state.show.fxEngine.getActiveEffects()
         .filter { FxEngine.isProgrammerFxPriority(it.priority) && it.programmerOrigin?.cueId == cueId && !it.leaving }
-        .groupBy { it.programmerOrigin!!.childSortOrder }
+        .groupBy { it.programmerOrigin!!.childUuid }
         .filterValues { instances -> instances.all { it.splitMember != null } }
-        .keys
+        .keys.filterNotNullTo(HashSet())
 
 private fun DaoCueLayer.cueFields() =
     CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)

@@ -1114,6 +1114,33 @@ class FxEngine(
      */
     fun getActiveEffects(): List<FxInstance> = activeEffects.values.toList()
 
+    /**
+     * [effects] in the order a home stores them (FX editor plan §3.5): two that share a key — an
+     * attribute on a head both cover — in apply order, so a home spawning them in this order folds
+     * them as the programmer did; any others in the order they were made in, which for FX Include
+     * brought back is the order their home stored them in, so an Update that moved nothing moves
+     * nothing. Each FX's keys and place are read once, so an FX re-ranked meanwhile cannot make the
+     * order contradict itself.
+     */
+    fun inStoredApplyOrder(effects: Collection<FxInstance>): List<FxInstance> {
+        class Placed(val effect: FxInstance, val place: Triple<Int, Long, Long>, val keys: Set<String>)
+        val apply = compareBy<Placed>({ it.place.first }, { it.place.second }, { it.place.third })
+        val left = effects.map { Placed(it, Triple(it.priority, it.composeOrder, it.id), resolveEffectFixtureKeys(it).toHashSet()) }
+            .sortedWith(compareBy({ it.place.second }, { it.place.third }))
+            .toMutableList()
+        fun shareKey(a: Placed, b: Placed) =
+            a.effect.target.propertyName == b.effect.target.propertyName && a.keys.any { it in b.keys }
+        val ordered = ArrayList<FxInstance>(left.size)
+        while (left.isNotEmpty()) {
+            val next = left.first { candidate ->
+                left.none { it !== candidate && shareKey(it, candidate) && apply.compare(it, candidate) < 0 }
+            }
+            left.remove(next)
+            ordered += next.effect
+        }
+        return ordered
+    }
+
     val activeEffectCount: Int get() = activeEffects.size
 
     /**

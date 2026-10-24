@@ -25,7 +25,10 @@ import uk.me.cormack.lighting7.fx.*
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.time.Duration
+import java.util.Collections
+import java.util.IdentityHashMap
 import java.util.UUID
+import kotlin.reflect.KMutableProperty1
 import uk.me.cormack.lighting7.models.asDuration
 
 
@@ -52,7 +55,8 @@ internal data class CapturedState(
  * single composed value — see [captureCueAssignments] for the shape-preservation rules.
  */
 internal fun captureCurrentState(state: State): CapturedState {
-    val activeEffects = state.show.fxEngine.getActiveEffects()
+    // In stored apply order, so the ad-hoc FX are numbered in the order they fold on stage.
+    val activeEffects = state.show.fxEngine.let { it.inStoredApplyOrder(it.getActiveEffects()) }
 
     // Keyed by the **source record**, Look or template: an effect names where it came from and
     // nothing else, so one palette applied twice to different targets collapses into one layer
@@ -105,6 +109,7 @@ internal fun captureCurrentState(state: State): CapturedState {
                 elementFilter = if (dyn.elementFilter != ElementFilter.ALL) dyn.elementFilter.name else null,
                 stepTiming = if (dyn.stepTiming != effect.effect.defaultStepTiming) dyn.stepTiming else null,
                 parameters = effect.effect.parameters,
+                sortOrder = adHocEffects.size,
                 speedMasterUuid = effect.speedMasterUuid?.toString(),
                 rateSpeedMasterUuid = effect.rateSpeedMasterUuid?.toString(),
                 seconds = effect.seconds,
@@ -375,7 +380,7 @@ internal fun DaoCue.toCueDetails(
         id = this.id.value,
         name = this.name,
         layers = this.layers.sortedBy { it.sortOrder }.mapNotNull { it.toDto() },
-        adHocEffects = this.adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+        adHocEffects = adHocEffectsInOrder().map { it.toDto() },
         propertyAssignments = assignmentDetails,
         triggers = triggerDetails,
         cueStackId = stack?.id?.value,
@@ -612,6 +617,37 @@ internal fun DaoCue.layersInOrder(): List<DaoCueLayer> = layers.sortedWith(compa
 
 internal fun DaoCue.adHocEffectsInOrder(): List<DaoCueAdHocEffect> = adHocEffects.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
+/**
+ * A home's FX after a write from the programmer, bottom first (FX editor plan §3.5): [stored] in its
+ * stored order, the rows the write wrote ([written], in apply order) taking the places of the stored
+ * ones among them, and the rest of them after everything. A row the write did not touch keeps its
+ * place. Each row's [sortOrder] becomes its index, unless the order is the stored one and nothing was
+ * added, when the stored numbers stand; answers the rows whose place moved.
+ */
+internal fun <T : Any> renumberInApplyOrder(
+    stored: List<T>,
+    written: List<T>,
+    sortOrder: KMutableProperty1<T, Int>,
+): Set<T> {
+    val writtenRows = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    // A row written twice (two of the write's FX matched it) takes the place of its first.
+    val queue = ArrayDeque(written.filter { writtenRows.add(it) })
+    val ordered = stored.map { if (it in writtenRows) queue.removeFirst() else it } + queue
+    val moved = Collections.newSetFromMap(IdentityHashMap<T, Boolean>())
+    for ((index, row) in ordered.withIndex()) if (stored.getOrNull(index) !== row) moved += row
+    if (moved.isEmpty()) return moved
+    for ((index, row) in ordered.withIndex()) if (sortOrder.get(row) != index) sortOrder.set(row, index)
+    return moved
+}
+
+/**
+ * [items] in their list's order: as they are when their sort orders already rise along the list,
+ * else renumbered by position — so an explicit list, whatever sort orders it sends, is stored in the
+ * order it was written.
+ */
+internal fun <T> inListOrder(items: List<T>, order: (T) -> Int, renumbered: (T, Int) -> T): List<T> =
+    if (items.zipWithNext().all { (a, b) -> order(a) < order(b) }) items else items.mapIndexed { i, item -> renumbered(item, i) }
+
 internal fun DaoCue.propertyAssignmentsInOrder(): List<DaoCuePropertyAssignment> =
     propertyAssignments.sortedWith(compareBy({ it.sortOrder }, { it.id.value }))
 
@@ -722,7 +758,8 @@ internal fun writeCueChildren(
     }
     if (adHocEffects != null) {
         val existing = if (created) emptyList() else cue.adHocEffectsInOrder()
-        val incoming = adHocEffects.map { it.canonicalTarget() }
+        val incoming = inListOrder(adHocEffects, { it.sortOrder }) { effect, i -> effect.copy(sortOrder = i) }
+            .map { it.canonicalTarget() }
         val pairing = if (restore) {
             pairByKey(existing, incoming, { it.uuid to it.effectKey }, { restoredUuid(it.uuid) to it.effectKey })
         } else {

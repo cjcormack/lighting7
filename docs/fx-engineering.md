@@ -964,7 +964,21 @@ over a Local FX on the same key (any layer above the bottom one did) now applies
   moved FX always takes that lowest rank, so moving the other one back restores the order. Only
   priorities change: nothing restarts. Answered `fxChanged(UPDATED)` per FX whose priority moved, or
   `fxError` — `FX_MOVE_NOT_LOCAL` when either FX is not Local, `FX_NOT_FOUND` when either is not running.
-  Nothing is stored: Record's FX order is session 3b's.
+- **Record keeps the order** (FX editor plan D4, session 3b). Every write of a home's FX from the
+  programmer numbers them bottom first in `FxEngine.inStoredApplyOrder`: two FX sharing a key (an
+  attribute on a head both cover) in apply order, any others in the order they were made in — which
+  for FX Include brought back is their stored order, so an Update that moved nothing writes nothing.
+  That covers Record into a cue (`fxInstancesToCueChildren`) and into a Look (`writeLookEffects`,
+  absorb-effects too), a stage snapshot, and Update's write-back into either. A write that keeps some
+  of a home's FX (Record's Merge and Replace into a cue, Update) gives the FX it writes, new ones
+  included, the places of the stored ones it wrote over, in that order, and puts any extra on top
+  (`renumberInApplyOrder`): an FX it did not write keeps its place in the list, though a written one
+  may move past it. A write that moves no FX renumbers nothing, gaps and ties included. A writer that takes an explicit list — the
+  cue and Look bodies, MCP's `create_look` and `create_cue` — stores it in the list's order
+  (`inListOrder`). The spawners give the order back: a cue's GO and loose holds, a Look press,
+  Include, copy and duplicate all read a home's FX by `sortOrder`, then id, and add them in that
+  order, so their compose orders follow it, and FX that Include brings into the programmer take their
+  Local ranks in it. Include's origin names a cue's FX by uuid, since Update may renumber them.
 
 **One rule, three readers** (fixture-fx-sheets plan W1, W4). The rule is
 `fx/EffectSuppression.kt` — a pure function of a suppression snapshot, the stomp check, the
@@ -1060,7 +1074,10 @@ effect's `composeOrder` is its own id, except that a cue re-stamps the instances
 into its layer order (`restampComposeOrder`) and a copy split off an effect keeps its parent's, so
 same-priority effects compose in the order they were placed rather than the order they were
 created; `id` breaks only what is left. Multi-effect composition on the same property is
-therefore **deterministic** — previously the effective "last-wins" ordering was undefined.
+therefore **deterministic** — previously the effective "last-wins" ordering was undefined. A home
+spawns its FX in their stored `sortOrder`, which Record writes in this order, so the order an
+operator built in the programmer is the one a cue or Look plays back
+(§"Programmer suppression and the priority band").
 
 Priority assignment:
 

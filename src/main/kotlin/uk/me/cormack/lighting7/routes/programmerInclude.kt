@@ -338,7 +338,7 @@ private fun spawnIncludedFx(
     for (adHoc in cueData.adHocEffects.filter { it.delayMs == null && it.intervalMs == null }) {
         spawn(
             adHoc.toEffectSpec(), adHoc.target,
-            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.sortOrder),
+            ProgrammerFxOrigin(cueData.cueId, ProgrammerFxOrigin.Kind.AD_HOC, adHoc.uuid),
         )
     }
 

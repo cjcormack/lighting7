@@ -662,6 +662,25 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         sortOrder = 0
     }
 
+    // Two FX stacked in apply order (FX editor plan §3.5): the one made first applies on top, so its
+    // `sortOrder` is not its id order and a reader that ignored the field would flip the stack.
+    val stackedLook = DaoLook.new {
+        this.project = project
+        name = "stacked"
+    }
+    DaoLookEffect.new {
+        look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
+        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
+        sortOrder = 1
+    }
+    DaoLookEffect.new {
+        look = stackedLook; targetType = "fixture"; targetKey = "hex-2"
+        fxType = "SquareWave"; family = "intensity"; attribute = "dimmer"; parameters = emptyMap()
+        cycle = 1.0; blendMode = "MULTIPLY"; order = "NORMAL"
+        sortOrder = 0
+    }
+
     // A **generic** template: one deferred row, one family, an intent rather than a literal. This is
     // the half of the old deferred look that is not a look at all.
     val colourTemplate = DaoTemplate.new {

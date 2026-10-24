@@ -120,8 +120,7 @@ private fun spawnIncludedLookEffects(
     mask: Set<PropertyMaskGroup>?,
 ): IncludedLookFx {
     val stored = transaction(state.database) {
-        DaoLook.findById(lookId)?.effects
-            ?.sortedBy { it.sortOrder }
+        DaoLook.findById(lookId)?.effectsInOrder()
             ?.mapNotNull { effect -> effect.toEffectEntry()?.let { effect.id.value to it } }
     }.orEmpty()
     if (stored.isEmpty()) return IncludedLookFx(0, 0, emptySet())

@@ -473,7 +473,7 @@ internal fun collectProgrammerRecording(
         state.show.fxEngine.getActiveEffects()
             .filter { FxEngine.isProgrammerFxPriority(it.priority) && !it.leaving }
     } else emptyList()
-    val adHoc = fxInstancesToCueChildren(bandEffects, mask, fixtures, scope)
+    val adHoc = fxInstancesToCueChildren(state.show.fxEngine.inStoredApplyOrder(bandEffects), mask, fixtures, scope)
 
     // **`ALL` means flatten; `TOUCHED` means save the structure.** The distinction is not a
     // convenience — emitting layers *and* the rows they cook to would put both representations of
@@ -530,7 +530,9 @@ private fun maskGroupForAdHoc(fixtures: Fixtures, effect: CueAdHocEffectDto): Pr
  * would be detached from the Look, so a later Look edit would no longer move it. That is the same
  * double-representation trap [RecordSource.ALL] avoids on the value side.
  *
- * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child.
+ * Everything else — a manually applied effect, a busked one — becomes an ad-hoc child, its place
+ * in [instances] as its `sortOrder`: callers pass them in [FxEngine.inStoredApplyOrder], so the cue
+ * spawns them back in the order they applied.
  */
 internal fun fxInstancesToCueChildren(
     instances: List<FxInstance>,
