@@ -10,6 +10,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
+import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.fx.EffectDto
 import uk.me.cormack.lighting7.fx.EffectSpawner
@@ -18,6 +19,7 @@ import uk.me.cormack.lighting7.fx.FxTargetFactory
 import uk.me.cormack.lighting7.fx.lookEffectSettings
 import uk.me.cormack.lighting7.fx.toLookEffectSpec
 import uk.me.cormack.lighting7.models.CueAdHocEffectDto
+import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.LookEffectDto
 import uk.me.cormack.lighting7.models.LookEffectSpec
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
@@ -256,4 +258,82 @@ class SpreadShapeRoutesTest : RouteIntegrationTest() {
         assertEquals(2, recorded.blocks)
         assertEquals(2, recorded.groups)
     }
+
+    /**
+     * A cue holding a group Pulse is included, its shape alone edited through the update route
+     * ([edit], none when null), and Update pressed: answers `fxWritten` and the stored child's shape.
+     */
+    private fun updateAfterShapeEdit(edit: UpdateEffectRequest?, check: (fxWritten: Int, stored: List<Number>) -> Unit) =
+        testApplication {
+            mountTestApp(state)
+            seedQuad()
+            val client = jsonClient()
+            val pulse = CueAdHocEffectDto(
+                // Every field as Record reads it back, so an Update that edited nothing writes nothing.
+                targetType = "group", targetKey = "quad", effectType = "Pulse",
+                category = categoryFromPropertyName("dimmer"), propertyName = "dimmer",
+                beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL", elementMode = "PER_FIXTURE",
+            )
+            val created = client.post("/api/rest/projects/$projectId/cues") {
+                contentType(ContentType.Application.Json)
+                setBody(NewCue(name = "Ripple", adHocEffects = listOf(pulse)))
+            }
+            assertEquals(HttpStatusCode.Created, created.status, created.bodyAsText())
+            val cueId = created.body<CueDetails>().id
+
+            val included = client.post("/api/rest/programmer/include") {
+                contentType(ContentType.Application.Json)
+                setBody(ProgrammerIncludeRequest(projectId = projectId.toString(), cueId = cueId))
+            }
+            assertEquals(HttpStatusCode.OK, included.status, included.bodyAsText())
+            if (edit != null) {
+                val edited = client.update(engine.getActiveEffects().single().id, edit)
+                assertEquals(HttpStatusCode.OK, edited.status, edited.bodyAsText())
+            }
+
+            val response = client.post("/api/rest/programmer/update") {
+                contentType(ContentType.Application.Json)
+                setBody(ProgrammerUpdateRequest(projectId = projectId.toString()))
+            }
+            assertEquals(HttpStatusCode.OK, response.status, response.bodyAsText())
+            val stored = transaction(state.database) {
+                DaoCue.findById(cueId)!!.adHocEffects.single().let { listOf(it.spread, it.wings, it.segments, it.parts) }
+            }
+            check(response.body<ProgrammerUpdateResponse>().results.single().fxWritten, stored)
+        }
+
+    @Test
+    fun `Update of an included cue whose effect kept its shape writes nothing`() =
+        updateAfterShapeEdit(edit = null) { fxWritten, stored ->
+            assertEquals(0, fxWritten)
+            assertEquals(listOf(1.0, 1, 1, 0), stored)
+        }
+
+    @Test
+    fun `Update writes a cue effect's edited Spread`() =
+        updateAfterShapeEdit(UpdateEffectRequest(spread = 0.5)) { fxWritten, stored ->
+            assertEquals(1, fxWritten)
+            assertEquals(listOf(0.5, 1, 1, 0), stored)
+        }
+
+    @Test
+    fun `Update writes a cue effect's edited Wings`() =
+        updateAfterShapeEdit(UpdateEffectRequest(wings = 2)) { fxWritten, stored ->
+            assertEquals(1, fxWritten)
+            assertEquals(listOf(1.0, 2, 1, 0), stored)
+        }
+
+    @Test
+    fun `Update writes a cue effect's edited Segments`() =
+        updateAfterShapeEdit(UpdateEffectRequest(blocks = 2)) { fxWritten, stored ->
+            assertEquals(1, fxWritten)
+            assertEquals(listOf(1.0, 1, 2, 0), stored)
+        }
+
+    @Test
+    fun `Update writes a cue effect's edited Parts`() =
+        updateAfterShapeEdit(UpdateEffectRequest(groups = 2)) { fxWritten, stored ->
+            assertEquals(1, fxWritten)
+            assertEquals(listOf(1.0, 1, 1, 2), stored)
+        }
 }
