@@ -18,7 +18,7 @@ enum class EffectSource {
  *
  * @param params Effect-specific parameters as string key-value pairs
  * @param resolveColourSource Optional resolver for a colour parameter that *names* a colour rather
- *        than stating one — a `tmpl:{uuid}` template reference. See [templateColourSource].
+ *        than stating one — a `pal:{uuid}` template reference. See [templateColourSource].
  * @param colourSourceVersion Optional version counter, bumped when a referenced template is edited,
  *        so a running effect re-resolves without being rebuilt.
  */
@@ -41,7 +41,7 @@ data class EffectRegistration(
     val aliases: Set<String> = emptySet(),
     /** Human-readable display name */
     val name: String,
-    /** UI category (e.g., "dimmer", "colour", "position", "beam", "controls") */
+    /** UI category (e.g., "intensity", "colour", "position", "beam", "controls") */
     val category: String,
     /** Output type this effect produces */
     val outputType: FxOutputType,

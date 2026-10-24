@@ -156,7 +156,7 @@ const STRATEGY_VALUES = new Set<string>(DISTRIBUTION_STRATEGY_OPTIONS.map((o) =>
  * The group sheet's member list (venue-visit plan S7): every shown member in the group's order,
  * numbered by its place in the whole group (an infrastructure head is still counted, so a number
  * can skip), with its **step** under the strategy *Runs as* names — the desk's
- * `distributionSteps`, so shared steps (a `CENTER_OUT` pair) read alike. A drag writes the new
+ * `distributionSteps`, so shared steps (a `CENTRE_OUT` pair) read alike. A drag writes the new
  * order at once, optimistically, rolled back if the desk refuses it; a venue's group in a show,
  * and a venue's rig for an operator, are read-only and say why.
  *
@@ -180,7 +180,7 @@ function OrderedMembers({
 }) {
   const reorder = useGroupMemberReorder(groupName)
   const [strategy, setStrategy] = useState<DistributionStrategy>(() =>
-    defaultDistribution != null && STRATEGY_VALUES.has(defaultDistribution) ? (defaultDistribution as DistributionStrategy) : 'LINEAR',
+    defaultDistribution != null && STRATEGY_VALUES.has(defaultDistribution) ? (defaultDistribution as DistributionStrategy) : 'NORMAL',
   )
   const steps = distributionSteps?.[strategy]
   const strategyLabel = DISTRIBUTION_STRATEGY_OPTIONS.find((o) => o.value === strategy)?.label ?? strategy

@@ -12,7 +12,7 @@ import kotlin.test.assertTrue
  * The point of [EffectSpecCoercion] is that one bad string has one outcome *per policy*, not one
  * per field — which is what these tests pin. Before it existed, `blendMode` and `elementMode`
  * threw on an unknown value while `distributionStrategy` and `elementFilter` silently defaulted,
- * so the same typo produced a 400 or a quiet LINEAR depending on where it landed.
+ * so the same typo produced a 400 or a quiet NORMAL depending on where it landed.
  */
 class EffectSpecCoercionTest {
 
@@ -55,7 +55,7 @@ class EffectSpecCoercionTest {
         assertEquals(BlendMode.OVERRIDE, EffectSpecCoercion.Lenient.blendMode("nope", CONTEXT))
         assertEquals(ElementMode.PER_FIXTURE, EffectSpecCoercion.Lenient.elementMode("nope", CONTEXT))
         assertEquals(ElementFilter.ALL, EffectSpecCoercion.Lenient.elementFilter("nope", CONTEXT))
-        assertEquals(DistributionStrategy.LINEAR, EffectSpecCoercion.Lenient.distribution("nope", CONTEXT))
+        assertEquals(DistributionStrategy.NORMAL, EffectSpecCoercion.Lenient.distribution("nope", CONTEXT))
     }
 
     @Test
@@ -77,7 +77,7 @@ class EffectSpecCoercionTest {
         assertEquals(BlendMode.OVERRIDE, EffectSpecCoercion.Lenient.blendMode("", context))
         assertTrue(contextBuilt, "a present-but-blank value should be reported")
 
-        assertEquals(DistributionStrategy.LINEAR, EffectSpecCoercion.Lenient.distribution("  ", CONTEXT))
+        assertEquals(DistributionStrategy.NORMAL, EffectSpecCoercion.Lenient.distribution("  ", CONTEXT))
     }
 
     @Test
@@ -119,6 +119,6 @@ class EffectSpecCoercionTest {
         // …and the enums' own `fromName` shims keep their default-on-miss contract for the
         // internal callers (a group's `defaultDistributionName` metadata) that still use them.
         assertEquals(ElementFilter.ALL, ElementFilter.fromName("nope"))
-        assertEquals(DistributionStrategy.LINEAR, DistributionStrategy.fromName("nope"))
+        assertEquals(DistributionStrategy.NORMAL, DistributionStrategy.fromName("nope"))
     }
 }

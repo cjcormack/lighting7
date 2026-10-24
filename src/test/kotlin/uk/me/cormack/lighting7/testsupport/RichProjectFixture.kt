@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.testsupport
 
+import uk.me.cormack.lighting7.models.TIMING_CYCLE
+import uk.me.cormack.lighting7.models.TIMING_HEAD
 import uk.me.cormack.lighting7.fixture.locate.UnitLocate
 import uk.me.cormack.lighting7.fixture.locate.storedLocate
 import uk.me.cormack.lighting7.fixture.media.FittedMedia
@@ -536,13 +538,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // 1 fx definition
     DaoFxDefinition.new {
         this.project = project
-        effectId = "custom-flicker"; name = "Custom Flicker"
-        category = "dimmer"; outputType = FxOutputType.SLIDER
-        effectMode = EffectMode.STANDARD
+        fxId = "custom-flicker"; name = "Custom Flicker"
+        family = "intensity"; outputType = FxOutputType.SLIDER
+        fxMode = EffectMode.STANDARD
         script = "// effect"
         timingSource = TimingSource.BEAT
-        defaultStepTiming = true
-        compatibleProperties = listOf("dimmer")
+        defaultTiming = TIMING_HEAD
+        compatibleAttributes = listOf("dimmer")
         // Non-empty so the importer's decodeFromJsonElement over this column is exercised —
         // left at its emptyList() default the field is omitted from canonical JSON entirely,
         // and a copier that lost every effect's parameter metadata would still pass.
@@ -561,14 +563,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         bpm = 128.0; source = SpeedMasterSource.TAP.name
         notes = "tapped at soundcheck"
         // Master 1 may not follow, so it carries the usage instead of the ratio.
-        usageCategory = "dimmer"
+        family = "intensity"
     }
     val slowMaster = DaoSpeedMaster.new {
         this.project = project
         masterIndex = 2; name = "Slow Wash"
         bpm = 64.0; source = SpeedMasterSource.MANUAL.name
         notes = "half-time position waves"
-        usageCategory = "position"
+        family = "position"
         // No target: the pre-follow-target spelling of "follows master 1", which still has to
         // survive a round trip as the null it is.
         followNum = 1; followDen = 2
@@ -601,24 +603,24 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookRow.new {
         look = boundLook; targetType = "fixture"; targetKey = "hex-1"
-        propertyName = "colour"; value = "#ff8800"; sortOrder = 0
+        attribute = "colour"; value = "#ff8800"; sortOrder = 0
         fadeDuration = Duration.ofMillis(750L)
     }
     DaoLookRow.new {
         look = boundLook; targetType = "group"; targetKey = "front-wash"
-        propertyName = "colour"; value = "#ffaa44"; sortOrder = 1
+        attribute = "colour"; value = "#ffaa44"; sortOrder = 1
     }
     DaoLookRow.new {
         look = boundLook; targetType = "fixture"; targetKey = "hex-3"
-        propertyName = "position"; value = "120,64"; sortOrder = 2
+        attribute = "position"; value = "120,64"; sortOrder = 2
     }
     // One effect over a selection (effects plan session 3, formatVersion 34): a fixture, then a
     // group, in that order — the order the effect spreads in.
     DaoLookEffect.new {
         look = boundLook; targetType = EffectTargetRef.Selection.TYPE
         targetKey = EffectTargetRef.Selection(listOf(TargetRef.Fixture("hex-3"), TargetRef.Group("front-wash"))).key
-        effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-        beatDivision = 2.0; blendMode = "OVERRIDE"; distribution = "REVERSE"
+        fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+        cycle = 2.0; blendMode = "OVERRIDE"; order = "REVERSE"
         parameters = mapOf("min" to "40")
         sortOrder = 0
     }
@@ -632,12 +634,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoLookEffect.new {
         look = effectsLook; targetType = "group"; targetKey = "front-wash"
-        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"
-        beatDivision = 0.5; blendMode = "OVERRIDE"; distribution = "LINEAR"
+        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"
+        cycle = 0.5; blendMode = "OVERRIDE"; order = "NORMAL"
         phaseOffset = 0.25
         elementMode = "ALL"
         elementFilter = "ODD"
-        stepTiming = true
+        timing = TIMING_HEAD
         parameters = mapOf("depth" to "0.8")
         // A real column now rather than a field inside a JSON blob, but the reference still has
         // to be remapped for a clone to point at its own master.
@@ -649,14 +651,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         seconds = true
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
-        size = 0.4
+        amount = 0.4
         direction = "BACKWARD"
-        nShot = 2
+        runs = 2
         // The spread's shape (effects plan session 2, formatVersion 33), likewise.
         spread = 0.5
         wings = 2
-        blocks = 3
-        groups = 4
+        segments = 3
+        parts = 4
         sortOrder = 0
     }
 
@@ -669,8 +671,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         fadeDuration = Duration.ofMillis(1_500L)
     }
     DaoTemplateRow.new {
-        template = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-        propertyName = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
+        palette = colourTemplate; targetType = DEFERRED_TARGET_TYPE; targetKey = ""
+        attribute = "rgbColour"; value = "#ff9d4a;policy=extract"; sortOrder = 0
     }
 
     // An **effect** template: no rows, one target-less effect (fx-templates D1–D3). Seeded with a
@@ -678,7 +680,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // left at its default is invisible to the round-trip and clone tests, so a copier that drops it
     // would look correct.
     //
-    // Its colour parameter names `colourTemplate` as `tmpl:{uuid}` (D12's allowed direction), which
+    // Its colour parameter names `colourTemplate` as `pal:{uuid}` (D12's allowed direction), which
     // is what proves `ExportUuidRemapper` rewrites a reference *inside a parameters map* on clone —
     // the analogue of the retired `ref:{boundLook.uuid}` case.
     val effectTemplate = DaoTemplate.new {
@@ -690,14 +692,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         fadeDuration = null
     }
     DaoTemplateEffect.new {
-        template = effectTemplate
-        effectType = "ColourWave"; category = "colour"; propertyName = "rgbColour"
-        beatDivision = 2.0; blendMode = "MAX"; distribution = "REVERSE"
+        palette = effectTemplate
+        fxType = "ColourWave"; family = "colour"; attribute = "rgbColour"
+        cycle = 2.0; blendMode = "MAX"; order = "REVERSE"
         phaseOffset = 0.125
         elementMode = "FLAT"
         elementFilter = "EVEN"
-        stepTiming = false
-        parameters = mapOf("colours" to "tmpl:${colourTemplate.uuid}", "depth" to "0.6")
+        timing = TIMING_CYCLE
+        parameters = mapOf("colours" to "pal:${colourTemplate.uuid}", "depth" to "0.6")
         speedMasterUuid = slowMaster.uuid
         rateSpeedMasterUuid = slowMaster.uuid
         // D7's Seconds (formatVersion 29), non-default so the round trip sees it. A row the desk
@@ -706,13 +708,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         seconds = true
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
-        size = 0.75
+        amount = 0.75
         direction = "BOUNCE"
-        nShot = 3
+        runs = 3
         spread = 1.5
         wings = 3
-        blocks = 2
-        groups = 2
+        segments = 2
+        parts = 2
     }
 
     // A **per-fixture** template — a focus position, where each head holds its own value. Seeded
@@ -725,12 +727,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         name = "downstage-centre"
     }
     DaoTemplateRow.new {
-        template = positionTemplate; targetType = "fixture"; targetKey = "hex-1"
-        propertyName = "position"; value = "deg:12,-8"; sortOrder = 0
+        palette = positionTemplate; targetType = "fixture"; targetKey = "hex-1"
+        attribute = "position"; value = "deg:12,-8"; sortOrder = 0
     }
     DaoTemplateRow.new {
-        template = positionTemplate; targetType = "fixture"; targetKey = "hex-2"
-        propertyName = "position"; value = "pos:-14,-8"; sortOrder = 1
+        palette = positionTemplate; targetType = "fixture"; targetKey = "hex-2"
+        attribute = "position"; value = "pos:-14,-8"; sortOrder = 1
     }
 
     // 2 cue stacks, 3 cues, with property assignments + ad-hoc + preset apps + triggers
@@ -794,12 +796,12 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
-        propertyName = "dimmer"; value = "255"; sortOrder = 0
+        attribute = "dimmer"; value = "255"; sortOrder = 0
         fadeDuration = Duration.ofMillis(1500L)
     }
     DaoCuePropertyAssignment.new {
         cue = cue1; targetType = "group"; targetKey = "front-wash"
-        propertyName = "position"; value = "120,64"; sortOrder = 1
+        attribute = "position"; value = "120,64"; sortOrder = 1
         moveInDark = true
     }
     // There used to be a third row here holding `ref:{boundLook.uuid}`, seeded to prove
@@ -810,14 +812,14 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // v37: the Pulse runs on into "build", show-1's next cue, so two rows share a run key.
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = "fixture"; targetKey = "hex-1"
-        effectType = "Pulse"; category = "dimmer"; beatDivision = 0.5
-        blendMode = "OVERRIDE"; distribution = "LINEAR"
+        fxType = "Pulse"; family = "intensity"; cycle = 0.5
+        blendMode = "OVERRIDE"; order = "NORMAL"
         parameters = mapOf("depth" to "0.8")
-        propertyName = "dimmer"
+        attribute = "dimmer"
         phaseOffset = 0.25
         elementMode = "ALL"
         elementFilter = "ODD"
-        stepTiming = true
+        timing = TIMING_HEAD
         delay = Duration.ofMillis(100L)
         interval = Duration.ofMillis(200L)
         randomWindow = Duration.ofMillis(50L)
@@ -830,13 +832,13 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         seconds = true
         // Size, direction and runs (effects plan session 1, formatVersion 30), non-default so the
         // round trip sees them.
-        size = 0.6
+        amount = 0.6
         direction = "BACKWARD"
-        nShot = 1
+        runs = 1
         spread = 0.25
         wings = 2
-        blocks = 4
-        groups = 3
+        segments = 4
+        parts = 3
         runUuid = RICH_PROJECT_PULSE_RUN
     }
     // An ad-hoc effect over a selection (formatVersion 34), the shape Record writes for a Local effect
@@ -844,10 +846,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueAdHocEffect.new {
         cue = cue1; targetType = EffectTargetRef.Selection.TYPE
         targetKey = EffectTargetRef.Selection(listOf(TargetRef.Group("front-wash"), TargetRef.Fixture("hex-4"))).key
-        effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
-        blendMode = "OVERRIDE"; distribution = "CENTER_OUT"
+        fxType = "Pulse"; family = "intensity"; cycle = 1.0
+        blendMode = "OVERRIDE"; order = "CENTRE_OUT"
         parameters = mapOf("depth" to "0.5")
-        propertyName = "dimmer"
+        attribute = "dimmer"
         elementMode = "FLAT"
         sortOrder = 4
     }
@@ -867,10 +869,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     // A layer applying a **template** rather than a look, so the polymorphic referent is exercised
     // on both arms — an export or clone that carried only `look_id` would lose this one silently.
     DaoCueLayer.new {
-        cue = cue1; template = colourTemplate
+        cue = cue1; palette = colourTemplate
         targets = listOf(CueTargetDto("fixture", "hex-2"))
         sortOrder = 4
-        propertyMask = "COLOUR"
+        attributeMask = "COLOUR"
     }
     // A second layer exercising every field the first leaves at its default: disabled, masked,
     // non-OVERRIDE blend, partial amount, stomp.
@@ -879,7 +881,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         targets = emptyList()
         sortOrder = 3
         enabled = false
-        propertyMask = "COLOUR"
+        attributeMask = "COLOUR"
         blendMode = "MULTIPLY"
         amount = 0.5
         stomp = true
@@ -897,8 +899,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoCueStackEntry.new { stack = stack1; cue = build; ordinal = 2.0 }
     DaoCueAdHocEffect.new {
         cue = build; targetType = "fixture"; targetKey = "hex-1"
-        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"; beatDivision = 0.5
-        blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = mapOf("depth" to "0.8")
+        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 0.5
+        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = mapOf("depth" to "0.8")
         runUuid = RICH_PROJECT_PULSE_RUN
     }
     // v32 (cue model plan §3.9): show-1's list as the archive now carries it, entry by entry, with
@@ -961,7 +963,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val keysBank = DaoBuskBank.new {
         column = keysColumn; sortOrder = 0; name = "keys"; solo = true; flow = BuskFlow.WRAP.name
     }
-    DaoBuskPad.new { bank = keysBank; sortOrder = 0; template = colourTemplate }
+    DaoBuskPad.new { bank = keysBank; sortOrder = 0; palette = colourTemplate }
     DaoBuskPad.new { bank = keysBank; sortOrder = 1; look = boundLook }
     val cuePad = DaoBuskPad.new { bank = keysBank; sortOrder = 2; cue = cue1 }
     val sideColumn = DaoBuskColumn.new {
@@ -970,7 +972,7 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val movesBank = DaoBuskBank.new {
         column = sideColumn; sortOrder = 0; name = "moves"; solo = false; flow = BuskFlow.COLUMN.name
     }
-    DaoBuskPad.new { bank = movesBank; sortOrder = 0; template = positionTemplate }
+    DaoBuskPad.new { bank = movesBank; sortOrder = 0; palette = positionTemplate }
     // A loose cue (no stack) on a pad: held loose when pressed (cue model plan §3.2, D6).
     DaoBuskPad.new { bank = movesBank; sortOrder = 1; cue = looseCue }
     DaoBuskBank.new {
@@ -982,10 +984,10 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     val fxBank = DaoBuskBank.new {
         column = fxColumn; sortOrder = 0; name = "fx"; solo = true; flow = BuskFlow.WRAP.name
     }
-    DaoBuskPad.new { bank = fxBank; sortOrder = 0; template = effectTemplate }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 0; palette = effectTemplate }
     DaoBuskPad.new { bank = fxBank; sortOrder = 1; look = effectsLook }
     // The same template on a second pad — one record, two places.
-    DaoBuskPad.new { bank = fxBank; sortOrder = 2; template = colourTemplate }
+    DaoBuskPad.new { bank = fxBank; sortOrder = 2; palette = colourTemplate }
 
     // The **busk rig** (v12): two rows, every tile shape — a group tile with a label, a WHOLE
     // fixture tile, a HALVES tile with its split, a PER_CELL tile and a single-cell tile — and
@@ -1123,8 +1125,8 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
     DaoControlSurfaceBinding.new {
         this.project = project
         deviceTypeKey = "xtouch-mini"; controlId = "button-8"
-        targetType = "pressTemplate"
-        targetPayload = """{"type":"pressTemplate","templateUuid":"${colourTemplate.uuid}"}"""
+        targetType = "pressPalette"
+        targetPayload = """{"type":"pressPalette","paletteUuid":"${colourTemplate.uuid}"}"""
         sortOrder = 10
     }
     DaoControlSurfaceBinding.new {
@@ -1154,6 +1156,15 @@ fun seedRichProject(state: State): Int = transaction(state.database) {
         targetType = "buskPagePrev"
         targetPayload = """{"type":"buskPagePrev"}"""
         sortOrder = 14
+    }
+
+    // A stack's FX amount on a fader: the other binding name the terminology plan renamed (§4.3).
+    DaoControlSurfaceBinding.new {
+        this.project = project
+        deviceTypeKey = "xtouch-mini"; controlId = "fader-2"
+        targetType = "stackFxAmount"
+        targetPayload = """{"type":"stackFxAmount","stackId":${stack1.id.value},"stackUuid":"${stack1.uuid}"}"""
+        sortOrder = 15
     }
 
     // Wire up the show playhead to the first stack.

@@ -1,7 +1,7 @@
 /*---
 id: RampDown
 name: Ramp Down
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

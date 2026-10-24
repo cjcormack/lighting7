@@ -82,8 +82,8 @@ class BuskPressRouteTest : RouteIntegrationTest() {
                         listOf(
                             LookEffectDto(
                                 targetType = "fixture", targetKey = fixtureKeys.first(),
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                             ),
                         )
                     } else {

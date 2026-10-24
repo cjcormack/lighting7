@@ -13,7 +13,7 @@ import type { TemplateSummary } from '@/api/templatesApi'
 
 interface ColourEditorBodyProps {
   /**
-   * The colour being edited, **already resolved**: a caller holding a `tmpl:` reference passes the
+   * The colour being edited, **already resolved**: a caller holding a `pal:` reference passes the
    * colour that template currently paints, not the placeholder behind it. That is what makes a
    * reference open at the colour the rig is showing rather than at black, and it is why this
    * component never resolves anything itself — the two callers hold references differently (one
@@ -28,7 +28,7 @@ interface ColourEditorBodyProps {
   /** The raw stored value, read only for which template chip is highlighted. */
   rawValue: string
   /**
-   * Pick a template: the caller receives a `tmpl:` reference string. Absent where a colour may not
+   * Pick a template: the caller receives a `pal:` reference string. Absent where a colour may not
    * name a palette — Colour Cycle's list takes literal colours only — and no palettes are offered.
    */
   onPickTemplate?: (ref: string) => void

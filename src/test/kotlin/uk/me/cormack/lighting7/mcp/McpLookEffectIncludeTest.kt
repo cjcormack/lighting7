@@ -63,7 +63,7 @@ class McpLookEffectIncludeTest : RouteIntegrationTest() {
 
     /** A Look of one Pulse on [fixture], and its id. */
     private fun pulseLook(name: String = "Throb", fixture: String = "foh-1"): Int {
-        val pulse = """{"targetType":"fixture","targetKey":"$fixture","effectType":"Pulse","category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
+        val pulse = """{"targetType":"fixture","targetKey":"$fixture","effectType":"Pulse","category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}}"""
         return ok("create_look", """{"name":"$name","effects":[$pulse]}""")["lookId"]!!.jsonPrimitive.int
     }
 
@@ -100,7 +100,7 @@ class McpLookEffectIncludeTest : RouteIntegrationTest() {
         assertEquals(1, update["effectsWritten"]!!.jsonPrimitive.int, "$update")
         val stored = storedEffect("Throb")
         transaction(state.database) {
-            assertEquals(2.0, stored.beatDivision)
+            assertEquals(2.0, stored.cycle)
             assertEquals("MULTIPLY", stored.blendMode)
             assertEquals("fixture" to "foh-1", stored.targetType to stored.targetKey, "the edit is how it runs, not where")
         }
@@ -129,7 +129,7 @@ class McpLookEffectIncludeTest : RouteIntegrationTest() {
         assertEquals(1, ok("update_from_programmer", "{}")["effectsWritten"]!!.jsonPrimitive.int)
         transaction(state.database) {
             val stored = storedEffect("Throb")
-            assertEquals(4.0, stored.beatDivision, "the edit lands")
+            assertEquals(4.0, stored.cycle, "the edit lands")
             assertEquals("FLAT", stored.elementMode, "a field the operator did not move keeps what the row says")
             assertEquals("foh-1", stored.targetKey)
         }
@@ -154,7 +154,7 @@ class McpLookEffectIncludeTest : RouteIntegrationTest() {
         applyEffectUpdate(state, second.id, UpdateEffectRequest(beatDivision = 4.0))
 
         assertEquals(1, ok("update_from_programmer", "{}")["effectsWritten"]!!.jsonPrimitive.int)
-        val stored = transaction(state.database) { storedEffect("Throb").let { it.effectType to it.beatDivision } }
+        val stored = transaction(state.database) { storedEffect("Throb").let { it.fxType to it.cycle } }
         assertTrue(stored in setOf("SineWave" to 1.0, "Pulse" to 4.0), "one instance's edit, never the two merged: $stored")
     }
 
@@ -168,8 +168,8 @@ class McpLookEffectIncludeTest : RouteIntegrationTest() {
             DaoLookEffect.new {
                 this.look = look
                 targetType = DEFERRED_TARGET_TYPE; targetKey = ""
-                effectType = "SineWave"; category = "dimmer"; propertyName = "dimmer"
-                beatDivision = 1.0; blendMode = "OVERRIDE"; distribution = "LINEAR"
+                fxType = "SineWave"; family = "intensity"; attribute = "dimmer"
+                cycle = 1.0; blendMode = "OVERRIDE"; order = "NORMAL"
                 parameters = emptyMap()
                 sortOrder = 1
             }

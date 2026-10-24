@@ -34,7 +34,7 @@ import kotlin.test.assertTrue
 
 /**
  * `POST /projects/{id}/programmer/spread` (busk-further plan D9, §3.5): a group spreads in member
- * order and rig order, a head lacking the property is skipped by name, `tmpl:` endpoints, the mask
+ * order and rig order, a head lacking the property is skipped by name, `pal:` endpoints, the mask
  * answering `skippedFamilies`, `over = CELLS`, and every write landing as a programmer entry.
  *
  * Since the editor-kit plan's session 3 (§3.2): `written[].value` is each head's **literal** in the
@@ -101,7 +101,7 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `LINEAR is rig order, so a rig that reverses the heads reverses the fan`() = testApplication {
+    fun `NORMAL is rig order, so a rig that reverses the heads reverses the fan`() = testApplication {
         seed()
         mountTestApp(state)
         val client = jsonClient()
@@ -198,7 +198,7 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
         val red = client.createTemplate("red", "#ff0000")
         val blue = client.createTemplate("blue", "#0000ff")
         val out = client.run(
-            SpreadRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), property = "rgbColour", from = "tmpl:$red", to = "tmpl:$blue"),
+            SpreadRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), property = "rgbColour", from = "pal:$red", to = "pal:$blue"),
         )
         assertEquals(3, out.written.size)
         // Literals in the Look row grammar: pure red and pure blue have no neutral to extract, so
@@ -369,7 +369,7 @@ class ProgrammerSpreadRouteTest : RouteIntegrationTest() {
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", order = "SIDEWAYS"),
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", over = "PIXELS"),
             SpreadRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", parts = 0),
-            SpreadRequest(targets = listOf(fixture("hex-1")), property = "rgbColour", from = "tmpl:00000000-0000-0000-0000-000000000000", to = "#000000"),
+            SpreadRequest(targets = listOf(fixture("hex-1")), property = "rgbColour", from = "pal:00000000-0000-0000-0000-000000000000", to = "#000000"),
             // One position unit per spread: a lerp from a step to a degree is a number in neither.
             SpreadRequest(targets = listOf(fixture("spot-1")), property = "position", from = "pos:0,0", to = "deg:540,210"),
         )

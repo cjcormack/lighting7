@@ -52,7 +52,7 @@ class CueSharingRoutesTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                attribute = "dimmer"; value = "$level"; sortOrder = 0
             }
         }.id.value
     }

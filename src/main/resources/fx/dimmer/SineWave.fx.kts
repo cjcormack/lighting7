@@ -1,7 +1,7 @@
 /*---
 id: SineWave
 name: Sine Wave
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

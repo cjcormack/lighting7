@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.stepTimingOf
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 
@@ -272,7 +274,7 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         look = copy
                         targetType = row.targetType
                         targetKey = row.targetKey
-                        propertyName = row.propertyName
+                        attribute = row.attribute
                         value = row.value
                         fadeDuration = row.fadeDuration
                         elementKey = row.elementKey
@@ -284,27 +286,27 @@ internal fun Route.routeApiRestProjectLooks(state: State) {
                         look = copy
                         targetType = effect.targetType
                         targetKey = effect.targetKey
-                        effectType = effect.effectType
-                        category = effect.category
-                        propertyName = effect.propertyName
-                        beatDivision = effect.beatDivision
+                        fxType = effect.fxType
+                        family = effect.family
+                        attribute = effect.attribute
+                        cycle = effect.cycle
                         blendMode = effect.blendMode
-                        distribution = effect.distribution
+                        order = effect.order
                         phaseOffset = effect.phaseOffset
                         elementMode = effect.elementMode
                         elementFilter = effect.elementFilter
-                        stepTiming = effect.stepTiming
+                        timing = effect.timing
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                         seconds = effect.seconds
-                        size = effect.size
+                        amount = effect.amount
                         direction = effect.direction
-                        nShot = effect.nShot
+                        runs = effect.runs
                         this.spread = effect.spread
                         this.wings = effect.wings
-                        this.blocks = effect.blocks
-                        this.groups = effect.groups
+                        this.segments = effect.segments
+                        this.parts = effect.parts
                         sortOrder = effect.sortOrder
                     }
                 }
@@ -804,17 +806,18 @@ internal fun lookUsageFor(lookIds: Collection<Int>): Map<Int, LookUsage> {
  *
  * Spelled out here rather than imported, because the module that used to own `ref:` —
  * `fx/PaletteRef.kt` — is gone, and the point of [validateLookRows]'s check is to survive exactly
- * that. `tmpl:` is listed for the same reason ahead of time: `fx/TemplateColourSource.kt` owns that
- * grammar today and this guard must not depend on it still existing tomorrow.
+ * that. `pal:` is listed for the same reason ahead of time: `fx/TemplateColourSource.kt` owns that
+ * grammar today and this guard must not depend on it still existing tomorrow. `tmpl:` is the name it
+ * had before, which a client may still send.
  */
-private val LOOK_ROW_REFERENCE_PREFIXES = listOf("ref:", "tmpl:")
+private val LOOK_ROW_REFERENCE_PREFIXES = listOf("ref:", "tmpl:", "pal:")
 
 /**
  * Reject rows a Look must never hold. Returns the problem, or null when every row is acceptable.
  *
  * The reference rejection is what keeps **Looks from nesting**, so resolution can never recurse, and
  * it **must outlive the grammars it names**. Nothing authors a `ref:` any more — the parser, the
- * resolver and every producer retired in session 4 — and `tmpl:` is legal only in an *effect
+ * resolver and every producer retired in session 4 — and `pal:` is legal only in an *effect
  * parameter*, never in a value. But this is a *write boundary*, and the value it guards is free text
  * a client supplies. It is deliberately an inlined shape check rather than a call into a shared
  * parser, so that deleting the last reader of either grammar cannot quietly delete the guarantee
@@ -882,7 +885,7 @@ internal fun validateLookEffects(effects: List<LookEffectDto>, registry: FxRegis
                 blocks = effect.blocks,
                 groups = effect.groups,
             ),
-            registry.fxWriteProblem(effect.effectType, effect.parameters),
+            registry.fxWriteProblem(effect.effectType, effect.parameters, effect.category),
         ).map { "effects[$index]: $it" }
     }
     return problems.takeIf { it.isNotEmpty() }?.joinToString("; ")
@@ -914,7 +917,7 @@ internal data class LookRowKey(val targetType: String, val targetKey: String, va
 internal fun lookRowKey(targetType: String, targetKey: String, elementKey: String?, propertyName: String) =
     LookRowKey(targetType, targetKey, elementKey, canonicalPropertyName(propertyName))
 
-internal val DaoLookRow.rowKey get() = lookRowKey(targetType, targetKey, elementKey, propertyName)
+internal val DaoLookRow.rowKey get() = lookRowKey(targetType, targetKey, elementKey, attribute)
 
 private val LookRowDto.rowKey get() = lookRowKey(targetType, targetKey, elementKey, propertyName)
 
@@ -924,7 +927,7 @@ internal data class LookEffectKey(val targetType: String, val targetKey: String,
 internal fun lookEffectKey(targetType: String, targetKey: String, propertyName: String?, effectType: String) =
     LookEffectKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), effectType)
 
-internal val DaoLookEffect.effectKey get() = lookEffectKey(targetType, targetKey, propertyName, effectType)
+internal val DaoLookEffect.effectKey get() = lookEffectKey(targetType, targetKey, attribute, fxType)
 
 private val LookEffectDto.effectKey get() = lookEffectKey(targetType, targetKey, propertyName, effectType)
 
@@ -1001,35 +1004,35 @@ internal fun writeLookChildren(
 
 /** [row] onto this row, but for the key fields [writeLookChildren] matched it on. */
 private fun DaoLookRow.take(row: LookRowDto) {
-    propertyName = row.propertyName
+    attribute = row.propertyName
     value = row.value
     fadeDuration = row.fadeDurationMs.asDuration()
     sortOrder = row.sortOrder
 }
 
 private fun DaoLookEffect.take(effect: LookEffectDto) {
-    effectType = effect.effectType
-    category = effect.category
-    propertyName = effect.propertyName
-    beatDivision = effect.beatDivision
+    fxType = effect.effectType
+    family = effect.category
+    attribute = effect.propertyName
+    cycle = effect.beatDivision
     blendMode = effect.blendMode
-    distribution = effect.distribution
+    order = effect.distribution
     phaseOffset = effect.phaseOffset
     elementMode = effect.elementMode
     elementFilter = effect.elementFilter
-    stepTiming = effect.stepTiming
+    timing = timingOf(effect.stepTiming)
     parameters = effect.parameters
     // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
     speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
     rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     seconds = effect.seconds
-    size = effect.size
+    amount = effect.size
     direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
-    nShot = effect.nShot
+    runs = effect.nShot
     this.spread = effect.spread
     this.wings = effect.wings
-    this.blocks = effect.blocks
-    this.groups = effect.groups
+    this.segments = effect.blocks
+    this.parts = effect.groups
     sortOrder = effect.sortOrder
 }
 
@@ -1053,7 +1056,7 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGr
     val families = LinkedHashSet<PropertyMaskGroup>()
 
     for (row in rows) {
-        val canonical = canonicalPropertyName(row.propertyName)
+        val canonical = canonicalPropertyName(row.attribute)
         // An element row is classified against its cell, not its parent: a pixel bar's parent may
         // declare no properties at all, and the family a cell's colour row belongs to is the cell's.
         // The same reading `lookRowInRemit` takes, so recording and banking agree about one row.
@@ -1074,7 +1077,7 @@ internal fun DaoLook.derivedFamilyGroups(fixtures: Fixtures): Set<PropertyMaskGr
 
     // Effects declare a category directly, so they need no fixture to classify.
     for (effect in effects) {
-        familyForEffectCategory(effect.category)?.let { families.add(it) }
+        familyForEffectCategory(effect.family)?.let { families.add(it) }
     }
     return PropertyMaskGroup.entries.filterTo(LinkedHashSet()) { it in families }
 }
@@ -1124,7 +1127,7 @@ internal fun DaoLook.toSummaryDto(
             .sortedByDescending { it.value }
             .take(LOOK_PREVIEW_SIZE)
             .map { it.key },
-        effectTypes = effectList.sortedBy { it.sortOrder }.map { it.effectType }.distinct(),
+        effectTypes = effectList.sortedBy { it.sortOrder }.map { it.fxType }.distinct(),
         layerCount = resolvedUsage.layerCount,
         buskPageCount = resolvedUsage.buskPageCount,
         scenery = scenery ?: lookSceneryOf(id).map { it.toSummaryDto() },
@@ -1143,12 +1146,12 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
         // Sorted in memory, not via `orderBy`: `derivedFamilies` above already iterates the
         // referrer collection, and Exposed refuses to order a SizedIterable once it is loaded.
         rows = rows
-            .sortedWith(compareBy({ it.sortOrder }, { it.targetKey }, { it.propertyName }))
+            .sortedWith(compareBy({ it.sortOrder }, { it.targetKey }, { it.attribute }))
             .map {
                 LookRowDto(
                     targetType = it.targetType,
                     targetKey = it.targetKey,
-                    propertyName = it.propertyName,
+                    propertyName = it.attribute,
                     value = it.value,
                     fadeDurationMs = it.fadeDuration?.toMillis(),
                     elementKey = it.elementKey,
@@ -1161,27 +1164,27 @@ internal fun DaoLook.toDetailsDto(state: State): LookDetails {
                 LookEffectDto(
                     targetType = it.targetType,
                     targetKey = it.targetKey,
-                    effectType = it.effectType,
-                    category = it.category,
-                    propertyName = it.propertyName,
-                    beatDivision = it.beatDivision,
+                    effectType = it.fxType,
+                    category = it.family,
+                    propertyName = it.attribute,
+                    beatDivision = it.cycle,
                     blendMode = it.blendMode,
-                    distribution = it.distribution,
+                    distribution = it.order,
                     phaseOffset = it.phaseOffset,
                     elementMode = it.elementMode,
                     elementFilter = it.elementFilter,
-                    stepTiming = it.stepTiming,
+                    stepTiming = stepTimingOf(it.timing),
                     parameters = it.parameters,
                     speedMasterUuid = it.speedMasterUuid?.toString(),
                     rateSpeedMasterUuid = it.rateSpeedMasterUuid?.toString(),
                     seconds = it.seconds,
-                    size = it.size,
+                    size = it.amount,
                     direction = it.direction,
-                    nShot = it.nShot,
+                    nShot = it.runs,
                     spread = it.spread,
                     wings = it.wings,
-                    blocks = it.blocks,
-                    groups = it.groups,
+                    blocks = it.segments,
+                    groups = it.parts,
                     sortOrder = it.sortOrder,
                 )
             },

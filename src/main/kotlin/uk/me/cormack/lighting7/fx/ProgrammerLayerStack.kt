@@ -1195,7 +1195,7 @@ class ProgrammerLayerStack(
             null
         } ?: return null
 
-        // [createEffectInstance] gives this a **live** colour source: a `tmpl:` reference is a live
+        // [createEffectInstance] gives this a **live** colour source: a `pal:` reference is a live
         // dependency by design, and a programmer layer is no more exempt from that than a cue's.
         return try {
             EffectSpawner.createEffectInstance(

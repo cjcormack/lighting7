@@ -1,7 +1,7 @@
 /*---
 id: CandleFlicker
 name: Candle Flicker
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STATEFUL
 timingSource: WALL_CLOCK

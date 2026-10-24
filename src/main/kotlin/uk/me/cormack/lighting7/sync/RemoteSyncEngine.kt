@@ -517,22 +517,26 @@ class RemoteSyncEngine(
     }
 
     /**
-     * `project.json`'s [ProjectJson.fxLibrary], like `formatVersion.json`, would stay the remote's, so a
-     * merge with a remote written before [LegacyNames.FX_LIBRARY] would have the import read this
-     * desk's bouncing FX, which name no `pingPong`, as if they had it on. The merge says this desk's
-     * marker instead, and first spells out, on every record the remote's tree supplies and this desk
-     * did not write, the `pingPong` its older writer meant by naming none.
+     * A merged tree takes this desk's `formatVersion` ([stampFormatVersion]), which from
+     * [LegacyNames.GLOSSARY_FORMAT_VERSION] says the FX library [LegacyNames.FX_LIBRARY], so a merge
+     * with a remote written before it would have the import read the remote's bouncing FX that name no
+     * `pingPong` as Direction alone. When the remote's archive is one that read them as on
+     * ([LegacyNames.absentPingPongIsOn]), every record its tree supplies and this desk did not write
+     * first spells that `pingPong` out; and the remote's `ProjectJson.fxLibrary`, which the version now
+     * says, goes. Runs before [stampFormatVersion], whose version it reads.
      */
-    private fun stampFxLibrary(
+    private fun spellOutRemotePingPong(
         tree: Path,
         outcomes: Map<RecordKey, DiffOutcome>,
         localSnapshots: Map<RecordKey, RecordSnapshot>,
         remoteSnapshots: Map<RecordKey, RecordSnapshot>,
     ) {
-        val path = tree.resolve("project.json")
-        if (!Files.exists(path)) return
-        val project = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(path)) }.getOrNull() ?: return
-        if (project.fxLibrary >= LegacyNames.FX_LIBRARY) return
+        val project = runCatching { canonicalDecode(ProjectJson.serializer(), Files.readString(tree.resolve("project.json"))) }.getOrNull() ?: return
+        val format = runCatching { canonicalDecode(FormatVersionJson.serializer(), Files.readString(tree.resolve("formatVersion.json"))) }.getOrNull() ?: return
+        if (project.fxLibrary != null) {
+            Files.writeString(tree.resolve("project.json"), canonicalEncode(ProjectJson.serializer(), project.copy(fxLibrary = null)))
+        }
+        if (!LegacyNames.absentPingPongIsOn(format.formatVersion, project.fxLibrary)) return
         val definitions = tree.resolve("fxDefinitions").takeIf { Files.isDirectory(it) }
             ?.let { dir -> Files.list(dir).use { files -> files.toList() } }
             .orEmpty()
@@ -547,7 +551,6 @@ class RemoteSyncEngine(
                 LegacyNames.spellOutAbsentPingPong(Files.readString(file), definitions)?.let { Files.writeString(file, it) }
             }
         }
-        Files.writeString(path, canonicalEncode(ProjectJson.serializer(), project.copy(fxLibrary = LegacyNames.FX_LIBRARY)))
     }
 
     /**
@@ -589,7 +592,7 @@ class RemoteSyncEngine(
 
         val localSnapshots = RecordHasher.fromRef(repo, localSha)
         val remoteSnapshots = RecordHasher.fromRef(repo, remoteSha)
-        val syncStateMeta = readSyncStateMeta(projectId)
+        val syncStateMeta = readSyncStateMeta(repo, projectId)
 
         val outcomes = ThreeWayDiff.compute(
             localSnapshots.mapValues { it.value.toMeta() },
@@ -624,15 +627,35 @@ class RemoteSyncEngine(
     /**
      * Read every project `sync_state` row into the `(hash, isDeleted)` map shape the
      * three-way diff consumes. One trip to the DB per diff invocation.
+     *
+     * A row last synced at a commit older than [LegacyNames.GLOSSARY_FORMAT_VERSION] holds the hash
+     * an older desk took of the record's raw bytes, which no longer match what [RecordHasher] takes
+     * of the same record in today's words; so its hash is taken again from that commit's file, and
+     * a record nobody touched since reads as unchanged on both sides rather than as a conflict.
      */
-    private fun readSyncStateMeta(projectId: Int): Map<RecordKey, SnapshotMeta> =
-        transaction(state.database) {
+    private fun readSyncStateMeta(repo: Repository, projectId: Int): Map<RecordKey, SnapshotMeta> {
+        data class Row(val key: RecordKey, val sha: String, val meta: SnapshotMeta)
+        val rows = transaction(state.database) {
             DaoSyncState.find { DaoSyncStates.project eq projectId }
-                .associate {
-                    RecordKey(it.tableName, it.recordUuid) to
-                        SnapshotMeta(it.lastSyncedHash, it.lastSyncedIsDeleted)
-                }
+                .map { Row(RecordKey(it.tableName, it.recordUuid), it.lastSyncedSha, SnapshotMeta(it.lastSyncedHash, it.lastSyncedIsDeleted)) }
         }
+        val olderFormat = HashMap<String, Boolean>()
+        fun olderFormat(sha: String) = olderFormat.getOrPut(sha) {
+            runCatching { JGitClient.readBlob(repo, sha, "formatVersion.json") }.getOrNull()
+                ?.let { runCatching { canonicalDecode(FormatVersionJson.serializer(), it).formatVersion }.getOrNull() }
+                ?.let { it < LegacyNames.GLOSSARY_FORMAT_VERSION } ?: false
+        }
+        return rows.associate { row ->
+            val rehashed = if (row.meta.isDeleted || RecordHasher.isMultiFileTable(row.key.tableName) || !olderFormat(row.sha)) {
+                null
+            } else {
+                (listOf(row.key.tableName) + LegacyNames.oldFolders(row.key.tableName)).firstNotNullOfOrNull { folder ->
+                    runCatching { JGitClient.readBlob(repo, row.sha, "$folder/${row.key.uuid}.json") }.getOrNull()
+                }?.let { SnapshotMeta(RecordHasher.recordHash(row.key.tableName, it), isDeleted = false) }
+            }
+            row.key to (rehashed ?: row.meta)
+        }
+    }
 
     /**
      * Build the merged working-tree state, commit it as a two-parent merge, and push.
@@ -699,8 +722,8 @@ class RemoteSyncEngine(
         // never touches it and the remote's would win — undoing a pin this desk set (an Extract
         // on a show that already synced) and taking its rig with it. Merge the pin three-way.
         mergeProjectPin(repo, workingTreePath, localSha, remoteSha)
+        spellOutRemotePingPong(workingTreePath, outcomes, localSnapshots, remoteSnapshots)
         stampFormatVersion(workingTreePath)
-        stampFxLibrary(workingTreePath, outcomes, localSnapshots, remoteSnapshots)
 
         val clashes = importTree(projectId, workingTreePath)
 
@@ -916,7 +939,7 @@ class RemoteSyncEngine(
                 val baseSha = JGitClient.mergeBase(repo, newLocalSha, remoteSha)
                 val localSnapshots = RecordHasher.fromRef(repo, newLocalSha)
                 val remoteSnapshots = RecordHasher.fromRef(repo, remoteSha)
-                val syncStateMeta = readSyncStateMeta(projectId)
+                val syncStateMeta = readSyncStateMeta(repo, projectId)
                 val outcomes = ThreeWayDiff.compute(
                     localSnapshots.mapValues { it.value.toMeta() },
                     remoteSnapshots.mapValues { it.value.toMeta() },
@@ -1127,7 +1150,7 @@ class RemoteSyncEngine(
 
         val localSnapshots = RecordHasher.fromRef(repo, view.localSha)
         val remoteSnapshots = RecordHasher.fromRef(repo, view.remoteSha)
-        val syncStateMeta = readSyncStateMeta(projectId)
+        val syncStateMeta = readSyncStateMeta(repo, projectId)
         val baseOutcomes = ThreeWayDiff.compute(
             localSnapshots.mapValues { it.value.toMeta() },
             remoteSnapshots.mapValues { it.value.toMeta() },

@@ -1,0 +1,10 @@
+{
+  "bank": "bank-a",
+  "controlId": "strip-1",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 7,
+  "takeoverPolicy": "PICKUP",
+  "targetPayload": "{\"type\":\"strip\",\"target\":{\"type\":\"group\",\"key\":\"front-wash\"}}",
+  "targetType": "strip",
+  "uuid": "30beb052-10fd-4f48-961f-30f9e811798a"
+}

@@ -1,7 +1,7 @@
 /*---
 id: LightningStrike
 name: Lightning Strike
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer]

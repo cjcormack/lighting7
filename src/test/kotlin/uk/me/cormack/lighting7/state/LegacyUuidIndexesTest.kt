@@ -29,7 +29,7 @@ class LegacyUuidIndexesTest {
                 exec("CREATE UNIQUE INDEX uq_projects_uuid ON projects (uuid)")
                 LEGACY_UUID_INDEXES.forEach { name ->
                     val table = name.removePrefix("uq_").removeSuffix("_uuid")
-                    exec("CREATE UNIQUE INDEX $name ON $table (uuid)")
+                    exec("CREATE UNIQUE INDEX $name ON ${RENAMED[table] ?: table} (uuid)")
                 }
                 declared
             }
@@ -53,4 +53,10 @@ class LegacyUuidIndexesTest {
         }
         return names
     }
+
+    /** Tables database step 5 renamed: an old index keeps its name on the table it moved to. */
+    private val RENAMED = mapOf(
+        "cue_ad_hoc_effects" to "cue_ad_hoc_fx",
+        "cue_property_assignments" to "cue_attribute_assignments",
+    )
 }

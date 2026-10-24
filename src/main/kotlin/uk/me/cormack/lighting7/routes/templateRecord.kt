@@ -273,10 +273,10 @@ private suspend fun RoutingContext.handleTemplateFromProgrammer(state: State, pr
             }
             for (row in rows) {
                 DaoTemplateRow.new {
-                    this.template = template
+                    this.palette = template
                     targetType = row.targetType
                     targetKey = row.targetKey
-                    propertyName = row.propertyName
+                    attribute = row.propertyName
                     value = row.value
                     sortOrder = row.sortOrder
                 }

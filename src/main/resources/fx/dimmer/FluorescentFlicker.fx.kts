@@ -1,7 +1,7 @@
 /*---
 id: FluorescentFlicker
 name: Fluorescent Flicker
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STATEFUL
 timingSource: WALL_CLOCK

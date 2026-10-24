@@ -26,9 +26,9 @@ export {
 /** D12a: a level effect replaces the level underneath, or moves within it. */
 export type LevelMode = 'replace' | 'within'
 
-/** The level effects — the dimmer category, D12a's *Replace it | Within it*. */
+/** The level effects — the intensity category, D12a's *Replace it | Within it*. */
 export function isLevelEffect(entry: Pick<EffectLibraryEntry, 'category'>): boolean {
-  return entry.category === 'dimmer'
+  return entry.category === 'intensity'
 }
 
 /** Replace is Override, Within is Multiply (call 2); anything else is neither. */
@@ -149,7 +149,7 @@ export interface FxDraft {
 /**
  * The draft an editor opens on — and so the snapshot Revert puts back. The DTO omits a
  * distribution, element mode or filter it has nothing to say about, so the absences read as the
- * defaults they stand for: `LINEAR`, `PER_FIXTURE`, `ALL`.
+ * defaults they stand for: `NORMAL`, `PER_FIXTURE`, `ALL`.
  */
 export function draftOf(effect: ActiveEffect): FxDraft {
   return {
@@ -158,7 +158,7 @@ export function draftOf(effect: ActiveEffect): FxDraft {
     blendMode: effect.blendMode,
     phaseOffset: effect.phaseOffset,
     stepTiming: effect.stepTiming ?? false,
-    distributionStrategy: effect.distributionStrategy ?? 'LINEAR',
+    distributionStrategy: effect.distributionStrategy ?? 'NORMAL',
     elementMode: effect.elementMode ?? 'PER_FIXTURE',
     elementFilter: effect.elementFilter ?? 'ALL',
     speedMasterUuid: effect.speedMasterUuid ?? null,
@@ -487,7 +487,7 @@ export const PICKER_FAMILY_LABELS: Record<PickerFamily, string> = {
  */
 export function pickerFamilyOf(category: string): PickerFamily {
   switch (category.toLowerCase()) {
-    case 'dimmer':
+    case 'intensity':
       return 'INTENSITY'
     case 'colour':
     case 'color':
@@ -573,7 +573,7 @@ export function templateDraftOf(effect: TemplateEffectFields, timingSource?: str
 /**
  * [effect] with the draft's fields written back — only the ones a template stores. A draft opened
  * on a running instance whose DTO said nothing about its distribution (a single fixture: the desk
- * leaves it out where it does not apply) holds `draftOf`'s `LINEAR` guess, so [distribution] false
+ * leaves it out where it does not apply) holds `draftOf`'s `NORMAL` guess, so [distribution] false
  * keeps the template's own rather than writing the guess over it.
  */
 export function withTemplateDraft<E extends TemplateEffectFields>(
@@ -685,7 +685,7 @@ function sameParam(a: string | undefined, b: string | undefined): boolean {
  * stores, each compared as the desk would read it: a null speed master is master 1
  * ([master1Uuid]), a parameter either side omits is the library's default ([defaults]), and a
  * number is a number however it is spelled. The distribution is compared only where the instance
- * has one to say ([distribution]) — a single fixture's DTO leaves it out, and `draftOf`'s `LINEAR`
+ * has one to say ([distribution]) — a single fixture's DTO leaves it out, and `draftOf`'s `NORMAL`
  * for the absence would read every template on another distribution as *edited*.
  */
 export function differsFromTemplate(

@@ -95,7 +95,7 @@ class GlossaryVocabularyTest {
     @Test
     fun `the shipped effect library's categories are exactly the known set`() {
         assertEquals(
-            setOf("dimmer", "colour", "position", "beam", STEPS_CATEGORY),
+            setOf("intensity", "colour", "position", "beam", STEPS_CATEGORY),
             builtInCategories(),
             "the built-in category vocabulary moved. If you added a category, decide whether it " +
                 "routes to a usage-tagged speed master (add it to SPEED_MASTER_USAGES and this " +

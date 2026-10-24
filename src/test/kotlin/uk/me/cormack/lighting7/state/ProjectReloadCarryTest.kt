@@ -72,7 +72,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         DaoCuePropertyAssignment.new {
             this.cue = cue
             targetType = "fixture"; targetKey = fixtureKey
-            propertyName = "dimmer"; value = "$level"; sortOrder = 0
+            attribute = "dimmer"; value = "$level"; sortOrder = 0
         }
         stack.id.value to cue.id.value
     }
@@ -171,7 +171,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = DaoCue.findById(cueId)!!
                 targetType = "fixture"; targetKey = "hex-2"
-                propertyName = "dimmer"; value = "120"; sortOrder = 1
+                attribute = "dimmer"; value = "120"; sortOrder = 1
             }
         }
         state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
@@ -315,7 +315,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-2"
-                    propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                    attribute = "dimmer"; value = "$level"; sortOrder = 0
                 }
             }.id.value
             loose(120) to loose(60)

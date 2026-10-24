@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.TIMING_HEAD
+import uk.me.cormack.lighting7.models.timingOf
 import uk.me.cormack.lighting7.sync.LegacyNames
 import uk.me.cormack.lighting7.mcp.requireScriptAccess
 import io.ktor.http.*
@@ -66,7 +68,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         call.requireScriptAccess(state)
         val request = call.receive<CreateFxDefinitionRequest>()
         val currentProject = state.show.project
-        retiredIdProblem(request.effectId)?.let {
+        (retiredIdProblem(request.effectId) ?: LegacyNames.familyProblem(request.category))?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@post
         }
@@ -80,16 +82,16 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
 
         val definition = transaction(state.database) {
             DaoFxDefinition.new {
-                effectId = request.effectId
+                fxId = request.effectId
                 name = request.name
-                category = request.category
+                family = request.category
                 outputType = requestOutputType
-                effectMode = EffectMode.valueOf(request.effectMode)
+                fxMode = EffectMode.valueOf(request.effectMode)
                 parameters = request.parameters
-                compatibleProperties = requestCompatible
+                compatibleAttributes = requestCompatible
                 script = request.script
                 project = currentProject
-                defaultStepTiming = request.defaultStepTiming
+                defaultTiming = timingOf(request.defaultStepTiming)
                 timingSource = try { TimingSource.valueOf(request.timingSource) } catch (_: Exception) { TimingSource.BEAT }
             }
         }
@@ -139,7 +141,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         if (request.script != null && request.script != storedScript) call.requireScriptAccess(state)
         val stored = transaction(state.database) {
             state.fxDefinitionInCurrentProject(resource.definitionId)
-                ?.let { it.outputType to it.compatibleProperties }
+                ?.let { it.outputType to it.compatibleAttributes }
         }
         if (stored == null) {
             call.respond(HttpStatusCode.NotFound, ErrorResponse("FX definition not found"))
@@ -156,7 +158,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
-        request.effectId?.let { retiredIdProblem(it) }?.let {
+        (request.effectId?.let { retiredIdProblem(it) } ?: LegacyNames.familyProblem(request.category))?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -165,15 +167,15 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             val def = state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?: return@transaction null
 
-            request.effectId?.let { def.effectId = it }
+            request.effectId?.let { def.fxId = it }
             request.name?.let { def.name = it }
-            request.category?.let { def.category = it }
+            request.category?.let { def.family = it }
             def.outputType = mergedOutputType
-            request.effectMode?.let { def.effectMode = EffectMode.valueOf(it) }
+            request.effectMode?.let { def.fxMode = EffectMode.valueOf(it) }
             request.parameters?.let { def.parameters = it }
-            def.compatibleProperties = mergedCompatible
+            def.compatibleAttributes = mergedCompatible
             request.script?.let { def.script = it }
-            request.defaultStepTiming?.let { def.defaultStepTiming = it }
+            request.defaultStepTiming?.let { def.defaultTiming = timingOf(it) }
             request.timingSource?.let { def.timingSource = try { TimingSource.valueOf(it) } catch (_: Exception) { TimingSource.BEAT } }
 
             def
@@ -206,7 +208,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
             val def = state.fxDefinitionInCurrentProject(resource.definitionId)
                 ?: return@transaction false
 
-            val effectId = def.effectId
+            val effectId = def.fxId
             def.delete()
 
             // Unregister from FxRegistry
@@ -395,15 +397,15 @@ internal fun registerUserEffect(state: State, definition: DaoFxDefinition): Regi
 
     val snap = transaction(state.database) {
         DefSnapshot(
-            effectMode = definition.effectMode,
+            effectMode = definition.fxMode,
             script = definition.script,
-            effectId = definition.effectId,
+            effectId = definition.fxId,
             name = definition.name,
             outputType = definition.outputType,
             parameters = definition.parameters,
-            compatibleProperties = definition.compatibleProperties,
-            category = definition.category,
-            defaultStepTiming = definition.defaultStepTiming,
+            compatibleProperties = definition.compatibleAttributes,
+            category = definition.family,
+            defaultStepTiming = definition.defaultTiming == TIMING_HEAD,
             timingSource = definition.timingSource,
             dbId = definition.id.value,
         )
@@ -512,15 +514,15 @@ data class FxCompileMessage(
 // Extension to convert DAO to DTO
 internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     id = this.id.value,
-    effectId = this.effectId,
+    effectId = this.fxId,
     name = this.name,
-    category = this.category,
+    category = this.family,
     outputType = this.outputType.name,
-    effectMode = this.effectMode.name,
+    effectMode = this.fxMode.name,
     parameters = this.parameters,
-    compatibleProperties = this.compatibleProperties,
+    compatibleProperties = this.compatibleAttributes,
     script = this.script,
-    defaultStepTiming = this.defaultStepTiming,
+    defaultStepTiming = this.defaultTiming == TIMING_HEAD,
     timingSource = this.timingSource.name,
 )
 

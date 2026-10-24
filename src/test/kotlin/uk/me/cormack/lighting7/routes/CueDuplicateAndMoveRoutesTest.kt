@@ -51,7 +51,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "$level"; sortOrder = 0
+                attribute = "dimmer"; value = "$level"; sortOrder = 0
             }
         }.id.value
     }
@@ -122,8 +122,8 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
             for ((cueId, property) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
                 DaoCueAdHocEffect.new {
                     cue = DaoCue[cueId]; targetType = "fixture"; targetKey = "hex-1"
-                    effectType = "Pulse"; category = "dimmer"; propertyName = property; beatDivision = 1.0
-                    blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap()
+                    fxType = "Pulse"; family = "intensity"; attribute = property; cycle = 1.0
+                    blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
                     runUuid = if (property == "dimmer") run else null
                 }
             }
@@ -133,7 +133,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         val second = client.duplicate(one, a).body<DuplicateCueResponse>()
 
         transaction(state.database) {
-            fun keys(cueId: Int) = DaoCue[cueId].adHocEffects.associate { it.propertyName to it.runUuid }
+            fun keys(cueId: Int) = DaoCue[cueId].adHocEffects.associate { it.attribute to it.runUuid }
             val copied = keys(first.cueId)
             assertNull(copied["uv"], "an effect in no run stays in none")
             val fresh = assertNotNull(copied["dimmer"])

@@ -57,7 +57,7 @@ private const val BEAT_DIVISION_DESCRIPTION =
 /** The speed-master field's words, shared by every effect schema. */
 private const val SPEED_MASTER_DESCRIPTION =
     "Speed master whose tempo this effect follows, by uuid (describe_rig lists them). Omit for the master whose usage " +
-        "matches the effect's family (dimmer, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
+        "matches the effect's family (intensity, colour, position or beam), else master 1, the global tempo. Leave it out with seconds."
 
 /** D7's Seconds, in the tools' words. */
 private const val SECONDS_DESCRIPTION =
@@ -100,7 +100,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
             "description",
             "How much of the cycle the heads cover, 0.0–2.0, over the distribution order: 1.0 spreads them over one " +
                 "whole cycle, 0.5 over half (a tighter ripple), 0 puts them all in step. Omit for 1.0. Spread, wings, " +
-                "blocks and groups shape a spreading distribution only — send one (LINEAR for a chase), since an omitted " +
+                "blocks and groups shape a spreading distribution only — send one (NORMAL for a chase), since an omitted " +
                 "distribution is UNIFIED, under which every head is in step and the shape does nothing.",
         )
     })
@@ -111,7 +111,7 @@ private fun kotlinx.serialization.json.JsonObjectBuilder.putEffectDynamics() {
         put(
             "description",
             "Split the heads into this many wings, alternate wings mirrored (2 = a ripple from both ends meeting in the " +
-                "middle). Only with LINEAR, REVERSE, RANDOM, PING_PONG or POSITIONAL: CENTER_OUT and EDGES_IN are two " +
+                "middle). Only with NORMAL, REVERSE, RANDOM, PING_PONG or POSITIONAL: CENTRE_OUT and CENTRE_IN are two " +
                 "wings already and refuse it. Omit for 1.",
         )
     })
@@ -158,11 +158,11 @@ private val lookEffectSchema = buildJsonObject {
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam"); add("controls") })
+            put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject {
             put("type", "string")
-            put("description", "Target property. Usually inferred from category: dimmer→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for controls category.")
+            put("description", "Target property. Usually inferred from category: intensity→dimmer, colour→colour, position→position, beam→the one property the beam effect drives. Required for controls category.")
         })
         put("beatDivision", buildJsonObject {
             put("type", "number")
@@ -175,7 +175,7 @@ private val lookEffectSchema = buildJsonObject {
         put("distribution", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
-                add("LINEAR"); add("UNIFIED"); add("CENTER_OUT"); add("EDGES_IN")
+                add("NORMAL"); add("UNIFIED"); add("CENTRE_OUT"); add("CENTRE_IN")
                 add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("POSITIONAL")
             })
         })
@@ -565,7 +565,7 @@ private val adHocEffectSchema = buildJsonObject {
         put("effectType", buildJsonObject { put("type", "string") })
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam"); add("controls") })
+            put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam"); add("controls") })
         })
         put("propertyName", buildJsonObject { put("type", "string") })
         put("beatDivision", buildJsonObject {
@@ -579,7 +579,7 @@ private val adHocEffectSchema = buildJsonObject {
         put("distribution", buildJsonObject {
             put("type", "string")
             put("enum", buildJsonArray {
-                add("LINEAR"); add("UNIFIED"); add("CENTER_OUT"); add("EDGES_IN")
+                add("NORMAL"); add("UNIFIED"); add("CENTRE_OUT"); add("CENTRE_IN")
                 add("RANDOM"); add("PING_PONG"); add("REVERSE"); add("POSITIONAL")
             })
         })
@@ -1038,7 +1038,7 @@ private val templateEffectSchema = buildJsonObject {
         // boundary refuses it (D4). Offering it here only buys a rejected call and a retry.
         put("category", buildJsonObject {
             put("type", "string")
-            put("enum", buildJsonArray { add("dimmer"); add("colour"); add("position"); add("beam") })
+            put("enum", buildJsonArray { add("intensity"); add("colour"); add("position"); add("beam") })
         })
     })
     put("required", buildJsonArray { add("effectType"); add("category"); add("blendMode") })
@@ -1048,12 +1048,12 @@ internal val createTemplateTool = ToolDef(
     name = "create_palette",
     description = "Create a palette — a named, referenceable value (a colour, a position, an intensity) " +
             "or a named effect, that effects and cue layers point at instead of restating it: retuning the palette moves " +
-            "everything referencing it. Returns the uuid, which a colour parameter names as 'tmpl:{uuid}'. A palette holds one " +
+            "everything referencing it. Returns the uuid, which a colour parameter names as 'pal:{uuid}'. A palette holds one " +
             "attribute family, and holds values OR one effect, never both — for both together, record a " +
             "look. Pass 'rows' for a value palette (leave every row deferred, the default, to make a " +
             "generic one that can be aimed at any fixture) or 'effect' for an effect palette, which always " +
             "runs on whatever the applying layer or selection names. An effect palette's category must be " +
-            "dimmer, colour, position or beam: 'controls' belongs to no attribute family.",
+            "intensity, colour, position or beam: 'controls' belongs to no attribute family.",
     inputSchema = buildJsonObject {
         put("type", "object")
         put("properties", buildJsonObject {

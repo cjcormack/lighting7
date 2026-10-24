@@ -35,11 +35,11 @@ export function spreadPositions(count: number, order: SpreadOrder, seed = 0): nu
   if (count === 1) return [0]
   const last = count - 1
   switch (order) {
-    case 'LINEAR':
+    case 'NORMAL':
       return Array.from({ length: count }, (_, i) => i / last)
     case 'REVERSE':
       return Array.from({ length: count }, (_, i) => (last - i) / last)
-    case 'CENTER_OUT': {
+    case 'CENTRE_OUT': {
       // The desk's rank from the centre: symmetric pairs share a position and the two ends reach 1.
       const centre = last / 2
       const rank = (i: number) => {
@@ -97,7 +97,7 @@ function wings(size: number, order: SpreadOrder, seed: number): number[] {
  * the first runs one longer when it does not divide — each run's positions under [order] through
  * [curve]. One step in a run sits at 0 (*from*), as it does on the desk.
  */
-export function spreadFractions(count: number, curve: SpreadCurve, order: SpreadOrder = 'LINEAR', parts = 1, seed = 0): number[] {
+export function spreadFractions(count: number, curve: SpreadCurve, order: SpreadOrder = 'NORMAL', parts = 1, seed = 0): number[] {
   if (count <= 0) return []
   const runs = Math.max(1, Math.min(Math.round(parts), count))
   const base = Math.floor(count / runs)

@@ -1,7 +1,7 @@
 /*---
 id: Flicker
 name: Flicker
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

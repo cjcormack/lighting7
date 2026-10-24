@@ -83,7 +83,7 @@ const CONTINUOUS_KINDS: TargetKind[] = [
   "selectionFan",
   "speedMasterBpm",
   "grandMasterFader",
-  "stackEffectSize",
+  "stackFxAmount",
 ]
 const BUTTON_KINDS: TargetKind[] = [
   "flash",
@@ -101,7 +101,7 @@ const BUTTON_KINDS: TargetKind[] = [
   "setBank",
   "speedMasterTap",
   "applyLook",
-  "pressTemplate",
+  "pressPalette",
   "pressPad",
   "pickUpPad",
   "handPlaceInBank",
@@ -134,12 +134,12 @@ const KIND_LABELS: Record<TargetKind, string> = {
   blackout: "Blackout",
   grandMasterToggle: "Grand Master",
   grandMasterFader: "Grand Master — fader",
-  stackEffectSize: "Cue stack — FX amount",
+  stackFxAmount: "Cue stack — FX amount",
   setBank: "Set bank",
   speedMasterBpm: "Speed master — BPM",
   speedMasterTap: "Speed master — Tap",
   applyLook: "Look — apply",
-  pressTemplate: "Palette — press",
+  pressPalette: "Palette — press",
   pressPad: "Busk pad — press",
   pickUpPad: "Hand — pick up pad",
   handPlaceInBank: "Hand — place in bank",
@@ -590,11 +590,11 @@ function TargetBody({
     )
   }
   if (
-    (kind === "cueStackGo" || kind === "cueStackBack" || kind === "cueStackPause" || kind === "stackEffectSize") &&
+    (kind === "cueStackGo" || kind === "cueStackBack" || kind === "cueStackPause" || kind === "stackFxAmount") &&
     (value.type === "cueStackGo" ||
       value.type === "cueStackBack" ||
       value.type === "cueStackPause" ||
-      value.type === "stackEffectSize")
+      value.type === "stackFxAmount")
   ) {
     return (
       <div className="space-y-1.5">
@@ -750,13 +750,13 @@ function TargetBody({
       </div>
     )
   }
-  if (kind === "pressTemplate" && value.type === "pressTemplate") {
+  if (kind === "pressPalette" && value.type === "pressPalette") {
     return (
       <div className="space-y-2">
         <RecordField
           label="Palette"
-          value={value.templateUuid}
-          onChange={(templateUuid) => onChange({ ...value, templateUuid })}
+          value={value.paletteUuid}
+          onChange={(paletteUuid) => onChange({ ...value, paletteUuid })}
           options={records.templates}
         />
         <p className="text-xs text-muted-foreground">
@@ -1000,8 +1000,8 @@ function defaultForKind(
       return { type: "grandMasterToggle" }
     case "grandMasterFader":
       return { type: "grandMasterFader" }
-    case "stackEffectSize":
-      return { type: "stackEffectSize", stackId: stacks[0]?.id ?? 0 }
+    case "stackFxAmount":
+      return { type: "stackFxAmount", stackId: stacks[0]?.id ?? 0 }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
     // `dimmer` is `EncoderBankState.DEFAULT_PROPERTY` and the one property every rig has, so both
@@ -1033,8 +1033,8 @@ function defaultForKind(
     // the button to something the operator never picked. The body below insists on a choice.
     case "applyLook":
       return { type: "applyLook", lookUuid: "" }
-    case "pressTemplate":
-      return { type: "pressTemplate", templateUuid: "" }
+    case "pressPalette":
+      return { type: "pressPalette", paletteUuid: "" }
     case "pressPad":
       return { type: "pressPad", padUuid: "" }
     case "pickUpPad":

@@ -51,7 +51,7 @@ class LookRepublishTest : RouteIntegrationTest() {
             DaoLookRow.new {
                 this.look = look
                 targetType = "fixture"; targetKey = fixtureKey
-                propertyName = "colour"; value = hex; sortOrder = index
+                attribute = "colour"; value = hex; sortOrder = index
             }
         }
         look.uuid
@@ -103,7 +103,7 @@ class LookRepublishTest : RouteIntegrationTest() {
                 DaoCuePropertyAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = fixtureKey
-                    propertyName = "colour"
+                    attribute = "colour"
                     value = hex!!
                     sortOrder = 0
                 }

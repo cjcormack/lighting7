@@ -1,0 +1,35 @@
+{
+  "effects": [
+    {
+      "beatDivision": 0.5,
+      "blendMode": "OVERRIDE",
+      "blocks": 3,
+      "category": "dimmer",
+      "direction": "BACKWARD",
+      "distribution": "LINEAR",
+      "effectType": "Pulse",
+      "elementFilter": "ODD",
+      "elementMode": "ALL",
+      "groups": 4,
+      "nShot": 2,
+      "parameters": {
+        "depth": "0.8"
+      },
+      "phaseOffset": 0.25,
+      "propertyName": "dimmer",
+      "rateSpeedMasterUuid": "15ec39c4-845a-4565-a223-0585b1836c54",
+      "seconds": true,
+      "size": 0.4,
+      "speedMasterUuid": "15ec39c4-845a-4565-a223-0585b1836c54",
+      "spread": 0.5,
+      "stepTiming": true,
+      "targetKey": "front-wash",
+      "targetType": "group",
+      "uuid": "00062397-986a-40e4-97d7-7e287135df15",
+      "wings": 2
+    }
+  ],
+  "name": "warm-pulse",
+  "notes": "warm pulse",
+  "uuid": "9419625d-9c1f-47c9-8cfb-4fb19e2e8631"
+}

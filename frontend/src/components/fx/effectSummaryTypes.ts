@@ -57,7 +57,7 @@ const DIMMER_EFFECTS = ['sinewave', 'rampup', 'rampdown', 'ramp', 'pulse', 'squa
 const COLOUR_EFFECTS = ['colourcycle', 'rainbowcycle', 'colourstrobe', 'colourwave', 'colourfade', 'colourflicker']
 const POSITION_EFFECTS = ['circle', 'figure8', 'sweep', 'pansweep', 'tiltsweep', 'randomposition']
 
-for (const name of DIMMER_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'dimmer'
+for (const name of DIMMER_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'intensity'
 for (const name of COLOUR_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'colour'
 for (const name of POSITION_EFFECTS) EFFECT_CATEGORY_MAP[name] = 'position'
 
@@ -70,7 +70,7 @@ export function lookupCategory(
     const entry = library.find((e) => e.name === effectType)
     if (entry) return drivenCategoryOf(entry)
   }
-  return EFFECT_CATEGORY_MAP[effectType.toLowerCase()] ?? 'dimmer'
+  return EFFECT_CATEGORY_MAP[effectType.toLowerCase()] ?? 'intensity'
 }
 
 /** Look up an effect type's timing source from the effect library. */

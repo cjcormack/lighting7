@@ -48,7 +48,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
         DaoLookRow.new {
             this.look = look
             targetType = "fixture"; targetKey = fixtureKey
-            propertyName = "colour"; value = hex; sortOrder = 0
+            attribute = "colour"; value = hex; sortOrder = 0
         }
         look.uuid
     }
@@ -100,7 +100,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
             DaoCuePropertyAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
-                propertyName = "dimmer"; value = "255"; sortOrder = 0
+                attribute = "dimmer"; value = "255"; sortOrder = 0
             }
             stack.id.value to cue.id.value
         }

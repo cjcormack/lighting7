@@ -24,7 +24,7 @@ import uk.me.cormack.lighting7.state.State
  * The current project's only, like the grand master, and a runtime gesture for both roles
  * (`projectWriteGuard.kt`). Nothing is stored: a project switch drops it and a reload carries it.
  * `stackEffectSize.state` streams it and `stackEffectSize.set` sets it at frame rate
- * (`plugins/StackEffectSizeSocket.kt`); a MIDI `stackEffectSize` binding sets it too.
+ * (`plugins/StackEffectSizeSocket.kt`); a MIDI `stackFxAmount` binding sets it too.
  */
 internal fun Route.routeApiRestProjectStackEffectSize(state: State) {
     get<StackEffectSizeResource> { resource ->

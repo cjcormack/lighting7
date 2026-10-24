@@ -1,0 +1,21 @@
+{
+  "depthM": 0.05,
+  "heightM": 4.8,
+  "kind": "DRAPE",
+  "layer": "SET",
+  "name": "Day/night cloth",
+  "params": {
+    "fabric": "MUSLIN",
+    "operation": "FLY",
+    "paint": {
+      "back": "b1d7345c5ac95253ca5654e36cdb9bfe00436a3acf6d756c85a30856253733ba",
+      "front": "d1e9541fb5dad59294294f5d59114a83f0b9f828c097b7e9786a7fc4e5cc1439"
+    },
+    "role": "BACKCLOTH",
+    "travelS": 8.0
+  },
+  "positionY": 6.5,
+  "sortOrder": 3,
+  "uuid": "72b8169c-3d08-42c2-a5c5-62e241ba3739",
+  "widthM": 9.6
+}

@@ -63,7 +63,7 @@ class CueComposerTemplateLayerTest {
             propertyName = propertyName,
             beatDivision = 0.5,
             blendMode = "OVERRIDE",
-            distribution = "LINEAR",
+            distribution = "NORMAL",
             phaseOffset = 0.0,
             elementMode = null,
             elementFilter = null,

@@ -276,7 +276,7 @@ internal fun removeClearedFromCue(
     if (cleared.isEmpty()) return ClearedOutcome()
     val assignments = cue.propertyAssignmentsInOrder()
     val plan = planClearedRemoval(
-        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.propertyName) },
+        assignments.map { StoredValueRow(it, it.targetType, it.targetKey, it.attribute) },
         cleared,
         groupMembersIn(fixtures),
     )
@@ -286,7 +286,7 @@ internal fun removeClearedFromCue(
             this.cue = cue
             targetType = TargetRef.Fixture.TYPE
             targetKey = member
-            propertyName = group.propertyName
+            attribute = group.attribute
             value = group.value
             fadeDuration = group.fadeDuration
             sortOrder = nextSort++
@@ -495,7 +495,7 @@ internal fun splitIncludedChildren(state: State, cueId: Int): Set<Int> =
         .keys
 
 private fun DaoCueLayer.cueFields() =
-    CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+    CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
 
 /** What a layer-stack diff changed in the cue, for the response and the log line. */
 internal data class LayerDiffOutcome(
@@ -569,11 +569,11 @@ internal fun writeLayerStackIntoCue(
             addedRows[layer.layerId] = DaoCueLayer.new {
                 this.cue = cue
                 this.look = resolved.look
-                this.template = resolved.template
+                this.palette = resolved.template
                 this.sortOrder = index
                 this.enabled = layer.enabled
                 this.targets = layerTargets(layer.source, layer.targets)
-                this.propertyMask = layer.propertyMask
+                this.attributeMask = layer.propertyMask
                 this.blendMode = layer.blendMode
                 this.amount = layer.amount
                 this.stomp = layer.stomp
@@ -590,7 +590,7 @@ internal fun writeLayerStackIntoCue(
         if (stored.cueFields() != layer.cueFields()) {
             stored.enabled = layer.enabled
             stored.targets = layerTargets(layer.source, layer.targets)
-            stored.propertyMask = layer.propertyMask
+            stored.attributeMask = layer.propertyMask
             stored.blendMode = layer.blendMode
             stored.amount = layer.amount
             stored.stomp = layer.stomp

@@ -78,7 +78,7 @@ import { lookLayerTarget } from './buskingTypes'
 const group: BuskingTarget = {
   type: 'group',
   name: 'Front wash',
-  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  group: { name: 'Front wash', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
 }
 const moverTarget: BuskingTarget = { type: 'fixture', key: 'mh-1', fixture: mover }
 const barTarget: BuskingTarget = { type: 'fixture', key: 'bar', fixture: bar }
@@ -147,7 +147,7 @@ describe('the request', () => {
       from: '#F5B342;policy=extract',
       to: '#2456FF;policy=extract',
       curve: 'LINE',
-      order: 'LINEAR',
+      order: 'NORMAL',
       parts: 1,
       over: 'HEADS',
       seed: 0,
@@ -155,7 +155,7 @@ describe('the request', () => {
     })
   })
 
-  it('sends a tmpl: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
+  it('sends a pal: reference for a colour endpoint chosen from the library, and only offers generic value colour palettes', () => {
     templates = [
       { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] },
       { id: 2, uuid: 'u-fx', name: 'Pulse', family: 'COLOUR', kind: 'effect', isGeneric: true, rows: [], requiredEmitters: [] },
@@ -172,7 +172,7 @@ describe('the request', () => {
     expect([...picker.options].map((o) => o.textContent)).toEqual(['— a colour —', 'Amber'])
     fireEvent.change(picker, { target: { value: 'u-amber' } })
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#F5B342;policy=extract', to: 'tmpl:u-amber' })
+    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#F5B342;policy=extract', to: 'pal:u-amber' })
     // The desk interpolates with From's policy alone; while From is a template that policy is the
     // template row's, so the control goes inert and says why rather than pretending to edit it.
     const policies = () => within(screen.getByRole('radiogroup', { name: 'White policy' })).getAllByRole('radio')

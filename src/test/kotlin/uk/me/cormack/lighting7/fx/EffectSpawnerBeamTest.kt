@@ -17,7 +17,7 @@ import kotlin.test.assertNull
 class EffectSpawnerBeamTest : RouteIntegrationTest() {
 
     private val zoomWave = LookEffectSpec(
-        effectType = "ZoomWave", category = "beam", beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+        effectType = "ZoomWave", category = "beam", beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "NORMAL",
     )
 
     private fun seed() {

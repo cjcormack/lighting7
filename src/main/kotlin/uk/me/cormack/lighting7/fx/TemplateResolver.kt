@@ -250,7 +250,7 @@ object TemplateResolver {
      * An FX colour parameter naming a template gets **one** [ExtendedColour] to apply to every head
      * it targets, so the emitter rows have to be folded in here or they would simply not happen:
      * reading `rows[0]` and stopping was correct only while a colour template could hold exactly one
-     * row, and relaxing that without this would make `tmpl:` silently drop an amber the operator can
+     * row, and relaxing that without this would make `pal:` silently drop an amber the operator can
      * see in the library.
      *
      * An explicit emitter row **overwrites** whatever the policy put in that emitter rather than

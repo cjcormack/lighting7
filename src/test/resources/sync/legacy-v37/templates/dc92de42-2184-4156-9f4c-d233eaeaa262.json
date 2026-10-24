@@ -1,0 +1,21 @@
+{
+  "name": "downstage-centre",
+  "rows": [
+    {
+      "propertyName": "position",
+      "targetKey": "hex-1",
+      "targetType": "fixture",
+      "uuid": "b9a24d87-45e1-4212-a40f-a9ca7c7891a5",
+      "value": "deg:12,-8"
+    },
+    {
+      "propertyName": "position",
+      "sortOrder": 1,
+      "targetKey": "hex-2",
+      "targetType": "fixture",
+      "uuid": "38f7a680-85b7-4cfa-9e32-c3fb03cd9a27",
+      "value": "pos:-14,-8"
+    }
+  ],
+  "uuid": "dc92de42-2184-4156-9f4c-d233eaeaa262"
+}

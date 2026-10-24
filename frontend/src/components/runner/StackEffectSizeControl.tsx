@@ -22,7 +22,7 @@ const keep = (e: SyntheticEvent) => e.stopPropagation()
 /**
  * A cue stack's **FX amount** (lighting7 effects plan D10, §4.3): a slider over the desk's runtime
  * weight on that stack's FX, 0–100 %, reading the desk's value. It writes as it moves
- * (`useLiveFader`), and a MIDI `stackEffectSize` fader or another window may move it too. A runtime
+ * (`useLiveFader`), and a MIDI `stackFxAmount` fader or another window may move it too. A runtime
  * gesture, so it works while the show is locked, as GO does; it greys only offline. Amber below
  * full, as the grand master's chip is, so a stack left at 60 % does not read as a quiet chase.
  */

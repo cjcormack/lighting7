@@ -58,7 +58,7 @@ const TEMPLATES: TemplateSummary[] = [
       category: 'colour',
       beatDivision: 0.5,
       blendMode: 'OVERRIDE',
-      distribution: 'LINEAR',
+      distribution: 'NORMAL',
       parameters: {},
       timingSource: 'BEAT',
     },

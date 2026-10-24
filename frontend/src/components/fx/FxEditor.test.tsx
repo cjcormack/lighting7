@@ -104,7 +104,7 @@ const CIRCLE: EffectLibraryEntry = {
 
 const PULSE: EffectLibraryEntry = {
   name: 'Pulse',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   timingSource: 'BEAT',
@@ -350,7 +350,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
       category: 'position',
       beatDivision: 1,
       blendMode: 'ADDITIVE',
-      distribution: 'LINEAR',
+      distribution: 'NORMAL',
       phaseOffset: 0,
       parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
       speedMasterUuid: null,

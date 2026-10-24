@@ -82,7 +82,7 @@ class ProgrammerLayerPressTest {
             rows = emptyList(),
             effect = StoredEffect(
                 effectType = "ColourCycle", category = "colour", propertyName = "rgbColour",
-                beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "LINEAR", phaseOffset = 0.0,
+                beatDivision = 4.0, blendMode = "OVERRIDE", distribution = "NORMAL", phaseOffset = 0.0,
                 elementMode = null, elementFilter = null, stepTiming = null, parameters = emptyMap(),
                 speedMasterUuid = null, rateSpeedMasterUuid = null,
             ),

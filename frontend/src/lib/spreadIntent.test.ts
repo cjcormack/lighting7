@@ -19,7 +19,7 @@ import { serializeTemplateRef } from '@/components/fx/colourUtils'
 
 /**
  * The Spread tab's endpoints (busk-further plan D9): serialised through `templateIntent.ts`'s own
- * grammar and `colourUtils`' `tmpl:` reference, so the desk reads a spread endpoint exactly as it
+ * grammar and `colourUtils`' `pal:` reference, so the desk reads a spread endpoint exactly as it
  * reads a template row — and nothing here resolves, interpolates or knows a head.
  */
 describe('spreadIntent', () => {
@@ -36,13 +36,13 @@ describe('spreadIntent', () => {
     }
   })
 
-  it('serialises a palette endpoint as the tmpl: reference an FX colour parameter uses', () => {
+  it('serialises a palette endpoint as the pal: reference an FX colour parameter uses', () => {
     const uuid = '0b2a4c6e-1111-2222-3333-444455556666'
     expect(serializeSpreadEndpoint({ kind: 'template', uuid })).toBe(serializeTemplateRef(uuid))
-    expect(serializeSpreadEndpoint({ kind: 'template', uuid })).toBe(`tmpl:${uuid}`)
+    expect(serializeSpreadEndpoint({ kind: 'template', uuid })).toBe(`pal:${uuid}`)
     // A reference is not an intent: the row parser refuses it, which is the desk's `spreadEndpoint`
     // branch — a colour property resolves it, any other property is a 400.
-    expect(parseTemplateIntent(`tmpl:${uuid}`)).toBeNull()
+    expect(parseTemplateIntent(`pal:${uuid}`)).toBeNull()
   })
 
   it('offers the palette vocabulary per family, minus the switch', () => {
@@ -92,7 +92,7 @@ describe('spreadIntent', () => {
 
   it('names the desk’s four curves and four orders, and says which design label the desk has no order for', () => {
     expect(SPREAD_CURVES.map((c) => c.id)).toEqual(['LINE', 'MIRROR', 'ARROW', 'WINGS'])
-    expect(SPREAD_ORDERS.filter((o) => o.id != null).map((o) => o.id)).toEqual(['LINEAR', 'REVERSE', 'CENTER_OUT', 'RANDOM'])
+    expect(SPREAD_ORDERS.filter((o) => o.id != null).map((o) => o.id)).toEqual(['NORMAL', 'REVERSE', 'CENTRE_OUT', 'RANDOM'])
     const stage = SPREAD_ORDERS.find((o) => o.label === 'Stage L→R')
     expect(stage?.id).toBeNull()
     expect(stage?.hint).toMatch(/POSITIONAL/)

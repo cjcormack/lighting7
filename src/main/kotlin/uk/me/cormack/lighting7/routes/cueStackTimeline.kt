@@ -124,7 +124,7 @@ private class TimelineReads(
     fun layer(layer: DaoCueLayer, rank: Int): TimelineLayerDto? {
         val source = layer.source ?: return null
         val look = layer.look
-        val template = layer.template
+        val template = layer.palette
         val families = when {
             look != null -> lookFamilies.getOrPut(look.id.value) { lookFamiliesOf(look) }
             template != null -> paletteFamilies.getOrPut(template.id.value) { listOfNotNull(template.familyOf()?.name) }
@@ -145,7 +145,7 @@ private class TimelineReads(
             enabled = layer.enabled,
             amount = layer.amount,
             blendMode = layer.blendMode,
-            propertyMask = layer.propertyMask,
+            propertyMask = layer.attributeMask,
             stomp = layer.stomp,
             timed = layer.delay != null || layer.interval != null || layer.randomWindow != null,
             delayMs = layer.delay?.toMillis(),
@@ -202,7 +202,7 @@ private class TimelineReads(
         if (fixtures != null) {
             look.derivedFamilyGroups(fixtures).toMaskNames()
         } else {
-            look.effects.mapNotNullTo(LinkedHashSet()) { familyForEffectCategory(it.category) }.toMaskNames()
+            look.effects.mapNotNullTo(LinkedHashSet()) { familyForEffectCategory(it.family) }.toMaskNames()
         }
 
     /**

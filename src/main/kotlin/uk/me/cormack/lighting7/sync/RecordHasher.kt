@@ -13,7 +13,8 @@ import java.util.UUID
 
 /**
  * Identity of a synced record across both sides of a sync. `tableName` matches the
- * export folder name (e.g. `"cues"`, `"cueStacks"`, `"scripts"`). Combined with
+ * export folder name (e.g. `"cues"`, `"cueStacks"`, `"scripts"`), today's for a folder an older
+ * archive named otherwise ([LegacyNames.folder]). Combined with
  * `uuid` it points at exactly one logical record on disk and one DAO row in the DB.
  */
 data class RecordKey(val tableName: String, val uuid: UUID) {
@@ -117,7 +118,7 @@ object RecordHasher {
                     live[kind.key] = RecordSnapshot(
                         key = kind.key,
                         files = mapOf(path to content),
-                        hash = sha256Hex(content),
+                        hash = recordHash(kind.key.tableName, content),
                     )
                 }
                 is PathClass.ScriptMeta -> scriptMetas[kind.uuid] = path to content
@@ -208,6 +209,13 @@ object RecordHasher {
     fun tombstonePathFor(key: RecordKey): String =
         "$TOMBSTONES_DIR/${key.tableName}/${key.uuid}.json"
 
+    /**
+     * The hash of one record file from [folder] (today's name), taken of the record in today's words
+     * ([LegacyNames.record]): a record an older desk wrote hashes as the one this desk would write for
+     * it, so the three-way diff sees a rename of names as no change.
+     */
+    fun recordHash(folder: String, content: String): String = sha256Hex(LegacyNames.record(folder, content))
+
     /** Hex-encoded SHA-256 of the UTF-8 bytes of [content]. Mirrors the precedent in
      *  [uk.me.cormack.lighting7.show.Show.cacheKey]. */
     fun sha256Hex(content: String): String = sha256Hex(content.toByteArray(Charsets.UTF_8))
@@ -230,7 +238,7 @@ object RecordHasher {
             val tail = path.substring(TOMBSTONES_DIR.length + 1)
             val slash = tail.indexOf('/')
             if (slash <= 0) return PathClass.Skip
-            val tableName = tail.substring(0, slash)
+            val tableName = LegacyNames.folder(tail.substring(0, slash))
             val rest = tail.substring(slash + 1)
             if (!rest.endsWith(".json") || '/' in rest) return PathClass.Skip
             val uuid = rest.removeSuffix(".json").toUuidOrNull() ?: return PathClass.Skip
@@ -238,7 +246,7 @@ object RecordHasher {
         }
 
         val firstSlash = path.indexOf('/')
-        val tableName = path.substring(0, firstSlash)
+        val tableName = LegacyNames.folder(path.substring(0, firstSlash))
         val rest = path.substring(firstSlash + 1)
 
         if (isMultiFileTable(tableName)) {

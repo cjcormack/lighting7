@@ -53,7 +53,7 @@ class EffectSpawnerElementTest : RouteIntegrationTest() {
                     name = name,
                     effect = TemplateEffectDto(
                         effectType = "RainbowCycle", category = "colour", propertyName = "rgbColour",
-                        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+                        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
                     ),
                 ),
             )
@@ -118,8 +118,8 @@ class EffectSpawnerElementTest : RouteIntegrationTest() {
         // fallback — which used to see no fixture at all for an element key and answer a
         // SettingTarget that discards every slider frame.
         val spec = LookEffectSpec(
-            effectType = "Pulse", category = "dimmer", propertyName = "white",
-            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+            effectType = "Pulse", category = "intensity", propertyName = "white",
+            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val target = EffectSpawner.resolveTargetForCue(state, CueTargetDto("fixture", cell(2)), spec)
         assertIs<SliderTarget>(target)

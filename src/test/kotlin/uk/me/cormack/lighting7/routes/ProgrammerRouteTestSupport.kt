@@ -21,7 +21,7 @@ data class CueAdHocEffectSpec(
     val targetKey: String,
     val effectType: String,
     val propertyName: String,
-    val category: String = "DIMMER",
+    val category: String = "intensity",
     val beatDivision: Double = 1.0,
 )
 
@@ -101,6 +101,6 @@ object ProgrammerRouteTestSupport {
         propertyName = propertyName,
         beatDivision = beatDivision,
         blendMode = "OVERRIDE",
-        distribution = "LINEAR",
+        distribution = "NORMAL",
     )
 }

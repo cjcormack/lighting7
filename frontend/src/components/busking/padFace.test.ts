@@ -37,7 +37,7 @@ describe('describeTemplate — around (fixture-fx-sheets plan D16)', () => {
         category: 'position',
         beatDivision: 0.5,
         blendMode,
-        distribution: 'LINEAR',
+        distribution: 'NORMAL',
         parameters: { panCenter: centre, tiltCenter: centre, panRadius: '64', tiltRadius: '64' },
         timingSource: 'BEAT',
       },

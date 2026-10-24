@@ -178,10 +178,10 @@ class FxSamplerParityTest {
     }
 
     private val orders = listOf(
-        DistributionStrategy.LINEAR,
+        DistributionStrategy.NORMAL,
         DistributionStrategy.UNIFIED,
-        DistributionStrategy.CENTER_OUT,
-        DistributionStrategy.EDGES_IN,
+        DistributionStrategy.CENTRE_OUT,
+        DistributionStrategy.CENTRE_IN,
         DistributionStrategy.RANDOM(),
         DistributionStrategy.PING_PONG,
         DistributionStrategy.REVERSE,
@@ -242,7 +242,7 @@ class FxSamplerParityTest {
     @Test
     fun `Colour Cycle under Amount 50 percent`() {
         val cycle = fx("ColourCycle", ColourTarget.forGroup("hexes"), params = mapOf("colours" to "#ff0000,#00ff80;w200,#0000ff")) {
-            distributionStrategy = DistributionStrategy.LINEAR
+            distributionStrategy = DistributionStrategy.NORMAL
         }.dynamics { it.copy(size = 0.5) }
         val samples = assertParity(rig(), listOf(cycle))
         val series = samples.attribute("rgbColour")!!.row("hex-0")!!.result as FxSampleSeries.Colour
@@ -311,8 +311,8 @@ class FxSamplerParityTest {
             programmerLayerEffectKey = ProgrammerLayerEffectKey(
                 1,
                 StoredEffect(
-                    effectType = "SineWave", category = "dimmer", propertyName = "dimmer", beatDivision = BeatDivision.ONE_BAR,
-                    blendMode = "OVERRIDE", distribution = "LINEAR", phaseOffset = 0.0, elementMode = null,
+                    effectType = "SineWave", category = "intensity", propertyName = "dimmer", beatDivision = BeatDivision.ONE_BAR,
+                    blendMode = "OVERRIDE", distribution = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, stepTiming = null, parameters = emptyMap(), speedMasterUuid = null,
                     rateSpeedMasterUuid = null,
                 ),

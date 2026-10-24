@@ -502,15 +502,14 @@ layer's **mask** is a layer setting like its amount or blend (D3): no press sets
 popover, the cue editor, the Timeline's *Settings…* and MCP do; the cook applies it to the Look's
 rows. To point something at the selection, use a palette.
 
-**Storage still says template.** Palettes were called templates until venue-visit plan D2 renamed
+**Code still says template.** Palettes were called templates until venue-visit plan D2 renamed
 everything a person or Claude reads: the copy, the `/palettes` paths, the `paletteListChanged` /
-`palettePressed` frames, the `PALETTE_*` codes and the `create_palette` / `apply_palette` tools. The
-tables (`templates`, `template_rows`, `template_effects`, `cue_layers.template_id`), the sync
-archive's `templates/` folder and its DTO fields, `tmpl:` references, JSON field names, the stored
-`pressTemplate` binding and the Kotlin and TypeScript identifiers kept the old word. Renaming them
-would have cost a `formatVersion` bump and a migration (there are none, see CLAUDE.md §Database) and
-orphaned every saved surface binding, to rename something no operator sees. So `TemplateResolver`
-resolving a palette is the arrangement, not drift.
+`palettePressed` frames, the `PALETTE_*` codes and the `create_palette` / `apply_palette` tools.
+Terminology plan session 4 renamed the storage: the tables (`palettes`, `palette_rows`,
+`palette_fx`, `cue_layers.palette_id`), the sync archive's `palettes/` folder and its DTO fields,
+`pal:` references and the stored `pressPalette` binding (database step 5, `formatVersion` 38). JSON
+field names and the Kotlin and TypeScript identifiers keep the old word until session 5, so
+`TemplateResolver` resolving a palette is the arrangement, not drift.
 
 These were one entity until session 3, distinguished by the row's targeting mode: a **bound** row
 named its own fixture, a **deferred** one took its targets from the applying layer, and one entity
@@ -589,7 +588,7 @@ project under a new name is *Duplicate*, another project is *Copy to…*, and a 
 target is a 409. The source is `withProject`, so a library that is not the live show can be copied
 out of. A copy is a new entity (fresh uuids on the record and every child row; a palette's
 `lastPressedAt` starts null), but what its rows and effects *name* travels verbatim: a fixture key,
-a speed-master uuid, a `tmpl:` colour reference. Into another project that can land a row that
+a speed-master uuid, a `pal:` colour reference. Into another project that can land a row that
 reads as unhealthy there, or an effect on a master that is not there and so runs on master 1 —
 the trade both routes make rather than guessing which of the target's records was meant. Neither
 re-validates contents, which already crossed the write boundary once.
@@ -1093,12 +1092,12 @@ with zero rows and one deferred effect, which lands in the Looks pool rather tha
 
 Three rules keep the reversal narrow, and each removes a way for it to complicate the cook:
 
-- **A value *or* an effect, never both** (`template_effects` has a unique `template_id`, and the
+- **A value *or* an effect, never both** (`palette_fx` has a unique `palette_id`, and the
   write boundary refuses a mix). A colour *and* a chase is a Look, which already holds rows plus
   effects. Which one a palette holds is its identity, like its family: `validateTemplateContents`
   refuses a PUT that would flip it, so the cook's palette arm never needs both halves.
 - **One effect.** Several together is, again, what a Look with effects already is.
-- **Always generic** — no `target_type` / `target_key`, unlike `look_effects`, every one of which
+- **Always generic** — no `target_type` / `target_key`, unlike `look_fx`, every one of which
   names its own target (absolute-looks plan D2). A palette's effect fans over whatever the layer
   names, full stop. This is load-bearing beyond tidiness: `TemplateRegistry` caches
   snapshots on the argument that nothing patch-shaped is in the cache, so a repatch cannot make an
@@ -1316,7 +1315,7 @@ rather than describing a look, and Looks, cues and stacks each
 carried a column for it.
 
 **It is gone**, and what replaced it inverts the arrangement. An effect's colour parameter names a
-**colour palette** by uuid — `tmpl:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
+**colour palette** by uuid — `pal:{uuid}`, `fx/TemplateColourSource.kt` — so the colour has an
 identity and a name instead of a slot number, and retuning the palette moves every running effect
 that follows it. There is no cascade, because there is nothing left to scope: a reference has one
 answer wherever it is read.
@@ -1325,7 +1324,7 @@ Two rules that fall out of that, both enforced rather than conventional:
 
 - **A reference is legal only in an effect parameter.** A value — a cue row, a Look row, a programmer
   entry — is a literal, and a *value's* dependency mechanism is a layer.
-  `parseAssignmentValue` returns null for a `tmpl:`-shaped value and `validateLookRows` rejects one,
+  `parseAssignmentValue` returns null for a `pal:`-shaped value and `validateLookRows` rejects one,
   beside its `ref:` rejection.
 - **Only a generic colour palette can be named.** An effect's output is one colour applied to every
   head it targets, so `TemplateResolver.resolveColourGeneric` resolves the intent without a fixture —
@@ -1343,7 +1342,7 @@ Two rules that fall out of that, both enforced rather than conventional:
   own* uuid, the one shape that would recurse in `createEffectWithTemplates`.
 
   The other direction is allowed and useful: an **effect palette's** colour parameter may name a
-  *value* colour palette, which is how "Amber Breathe" follows "Amber Key". `template_effects` is
+  *value* colour palette, which is how "Amber Breathe" follows "Amber Key". `palette_fx` is
   therefore the third table `templateFxReferenceCount` scans, or that value palette would stay
   deletable out from under a running effect — the exact failure the delete guard exists to prevent.
 

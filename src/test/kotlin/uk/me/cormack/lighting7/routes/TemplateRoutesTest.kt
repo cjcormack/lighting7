@@ -1380,7 +1380,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             setBody(
                 TemplateInput(
                     name = "candle",
-                    effect = colourEffect(effectType = "Candle Flicker", category = "dimmer"),
+                    effect = colourEffect(effectType = "Candle Flicker", category = "intensity"),
                 )
             )
         }.body<TemplateDto>()
@@ -1403,7 +1403,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         // project's scripts register is unknown here. `validateTemplateContents` refuses authoring
         // such a template, so the DAO is the only way to stand one up.
         transaction(state.database) {
-            DaoTemplate.findById(breathe.id)!!.effect!!.effectType = "NotInThisRegistry"
+            DaoTemplate.findById(breathe.id)!!.effect!!.fxType = "NotInThisRegistry"
         }
 
         // Null rather than a defaulted "BEAT": the two readings of `beatDivision` are a tempo apart,
@@ -1568,14 +1568,14 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val down = client.positionPalette("Downstage", "pos:-64,32")
         val centre = client.positionPalette("Centre", "deg:270,105")
-        val refs = listOf(down, centre).joinToString(",") { "tmpl:${it.uuid}" }
+        val refs = listOf(down, centre).joinToString(",") { "pal:${it.uuid}" }
         fun steps(category: String, palettes: String = refs) =
             colourEffect(effectType = "PaletteSteps", category = category, parameters = mapOf("palettes" to palettes))
                 .copy(propertyName = null)
 
         for ((category, problem) in listOf(
-            "colour" to "is a position effect",
-            "palette" to "has none",
+            "colour" to "is in the position family",
+            "steps" to "has none",
         )) {
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
@@ -1586,7 +1586,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         }
         val one = client.post(base()) {
             contentType(ContentType.Application.Json)
-            setBody(TemplateInput(name = "steps-one", effect = steps("position", "tmpl:${down.uuid}")))
+            setBody(TemplateInput(name = "steps-one", effect = steps("position", "pal:${down.uuid}")))
         }
         assertEquals(HttpStatusCode.BadRequest, one.status)
         assertTrue(one.bodyAsText().contains("two palettes or more"), one.bodyAsText())
@@ -1671,7 +1671,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
                 )
             }
             assertEquals(HttpStatusCode.BadRequest, mismatched.status)
-            assertTrue(mismatched.bodyAsText().contains("is a dimmer effect"), mismatched.bodyAsText())
+            assertTrue(mismatched.bodyAsText().contains("is in the intensity family"), mismatched.bodyAsText())
         }
 
     /**
@@ -1693,17 +1693,17 @@ class TemplateRoutesTest : RouteIntegrationTest() {
             setBody(
                 TemplateInput(
                     name = "amber-breathe",
-                    effect = colourEffect(parameters = mapOf("colours" to "tmpl:${amber.uuid}")),
+                    effect = colourEffect(parameters = mapOf("colours" to "pal:${amber.uuid}")),
                 )
             )
         }.body<TemplateDto>()
-        assertEquals("tmpl:${amber.uuid}", breathe.effect?.parameters?.get("colours"))
+        assertEquals("pal:${amber.uuid}", breathe.effect?.parameters?.get("colours"))
 
         val selfRef = client.put("${base()}/${breathe.id}") {
             contentType(ContentType.Application.Json)
             setBody(
                 TemplateInput(
-                    effect = colourEffect(parameters = mapOf("colours" to "tmpl:${breathe.uuid}")),
+                    effect = colourEffect(parameters = mapOf("colours" to "pal:${breathe.uuid}")),
                 )
             )
         }
@@ -1937,7 +1937,7 @@ class TemplateRoutesTest : RouteIntegrationTest() {
         // Stand in for what an import from a newer build leaves behind: a category this build maps
         // to no family, which `validateTemplateContents` refuses outright.
         transaction(state.database) {
-            DaoTemplate.findById(breathe.id)!!.effect!!.category = "hologram"
+            DaoTemplate.findById(breathe.id)!!.effect!!.family = "hologram"
         }
 
         val renamed = client.put("${base()}/${breathe.id}") {

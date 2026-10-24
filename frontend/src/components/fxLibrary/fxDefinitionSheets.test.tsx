@@ -11,7 +11,7 @@ const DEFINITION: FxDefinition = {
   id: 5,
   effectId: 'PulseCustom',
   name: 'Pulse (Custom)',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   parameters: [],

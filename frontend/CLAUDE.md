@@ -785,8 +785,8 @@ Release folds to its glyph and the scope line drops the fade.
   three glyphs, → ← ↔, the word on the hover, with *Order* beside it on a group or a fixture with
   heads (the strategy, worded *Normal · Reverse · Centre out…* by `lib/orderLabels.ts` — the one
   vocabulary, which `fxConstants.ts`' `DISTRIBUTION_STRATEGY_OPTIONS` / `getDistributionLabel` (a
-  Look's or cue's summary, a group's *Runs as*) and the Fan's `SPREAD_ORDERS` read too; the stored
-  name unchanged). Amount and Direction are dynamics fields on the desk, so a write keeps
+  Look's or cue's summary, a group's *Runs as*) and the Fan's `SPREAD_ORDERS` read too, keyed by the
+  stored names `NORMAL`, `CENTRE_OUT`, `CENTRE_IN` and the rest). Amount and Direction are dynamics fields on the desk, so a write keeps
   the phase, and both ride the `updateFx` frame only once touched (`OPTIONAL_FIELDS`). The client
   computes none of it (P2). A movement
   effect asks *Centre: Around current position | Absolute* — Around is `ADDITIVE` with the centre
@@ -1151,11 +1151,10 @@ more important. **Never mint a `P<n>` short code for either**; display the name.
 one named effect, one attribute family, applied to a selection (venue-visit plan D2). Everything a
 person or Claude reads says palette: the copy, the `/palettes` route (`/templates` redirects, search
 kept), the REST paths, the `paletteListChanged` / `palettePressed` frames, the `PALETTE_*` error
-codes and the `create_palette` / `apply_palette` MCP tools. **Storage and code keep *template*:** the
-`templates` tables, the sync archive's `templates/` folder and its DTO fields, `tmpl:` references,
-JSON field names (`templateId`), stored discriminators (a `pressTemplate` binding, `missingTemplate`
-health, a layer's `TEMPLATE` kind) and every TS and Kotlin identifier. Renaming those would buy a
-`formatVersion` bump, a migration and orphaned surface bindings for no reader's benefit, so
+codes and the `create_palette` / `apply_palette` MCP tools. So does storage since terminology plan
+session 4: the `palettes` tables, the sync archive's `palettes/` folder, `pal:` references and the
+`pressPalette` binding. **Code keeps *template* until session 5:** JSON field names (`templateId`),
+`missingTemplate` health, a layer's `TEMPLATE` kind and every TS and Kotlin identifier, so
 `TemplateSheet` drawing the palette library is deliberate, not drift — and a new identifier for this
 record still says template, so the two halves never meet mid-name.
 
@@ -1170,7 +1169,7 @@ identifiers (`LibraryPalette.tsx`, `RigPalette.tsx`, the `busk-palette` and `pal
 its copy says Library and Rig and this document calls it the library. A lucide `Palette` icon, a
 colour picker's swatches and a 3D material list are unrelated.
 
-**An FX colour parameter names a palette instead** — `tmpl:{uuid}`, whose helpers are
+**An FX colour parameter names a palette instead** — `pal:{uuid}`, whose helpers are
 `isTemplateRef` / `parseTemplateRefUuid` / `serializeTemplateRef` in
 `components/fx/colourUtils.ts`, mirroring `fx/TemplateColourSource.kt`. Five things about it:
 
@@ -1185,7 +1184,7 @@ colour picker's swatches and a 3D material list are unrelated.
   equal to it. Accepted trade, documented at `resolveColourGeneric`, one line to invert.
 - **A reference is legal only in an effect parameter.** A cue row, a Look row and a programmer entry
   are literals; the dependency mechanism for a *value* is a layer. `validateLookRows` refuses a
-  `tmpl:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
+  `pal:`-shaped value beside its `ref:` refusal, and `parseAssignmentValue` returns null for one
   rather than letting `parseExtendedColour` answer white.
 - **Only generic colour *value* palettes are offerable.** `family === 'COLOUR' && isGeneric`
   holds on both sides — a per-fixture palette holds no single colour, so there is nothing for a
@@ -1200,7 +1199,7 @@ colour picker's swatches and a 3D material list are unrelated.
 - **There is no successor to `P*`.** A palette holds one colour, so there is no set to expand; a
   colour list is an explicit ordered mix of literals and references. `FxColourListPicker`'s
   "Use entire palette" checkbox (the positional sense) and its `savedValue` machinery went with it.
-- **`tmpl:` rather than `ref:`** because `ref:{uuid}` is retired *and* still actively rejected at
+- **`pal:` rather than `ref:`** because `ref:{uuid}` is retired *and* still actively rejected at
   the Look write boundary — reusing it would collide with a live check.
 
 `FxColourTemplates.tsx` owns both halves of the UI: `useColourTemplates()` (the offerable list plus
@@ -2220,7 +2219,7 @@ interpolates in the intent's own space, resolves one literal per head through th
 what it wrote. Only the desk knows a group's member order, each head's range, which cells a fixture
 has and what a colour means on a head with amber — the same rule that keeps `templateIntent.ts` a
 serialiser, and `spreadIntent.ts` keeps it: it serialises `from` / `to` per family over
-`templateIntent.ts`'s own serialisers (a colour + policy, or a `tmpl:{uuid}` reference through
+`templateIntent.ts`'s own serialisers (a colour + policy, or a `pal:{uuid}` reference through
 `colourUtils`; `pct:` for a level or a beam role; centre-relative `pos:` for a position; `dmx:` for an emitter) and
 `spreadIntent.test.ts` asserts its import list reaches no resolver — and the panel's and the
 popover's reach no lerp but `rawValues`, from the raw arm alone. **There is no preview strip**
@@ -2236,7 +2235,7 @@ four (`LINE` · `MIRROR` · `ARROW` · `WINGS`, each drawn as a picture — *Mir
 meeting at a marked centre**, since its eight fractions are Mirror's and one polyline through them
 *was* Mirror's V); order is a `DistributionStrategy` name, worded by `lib/orderLabels.ts` — Normal ·
 Reverse · Centre out · Random are
-`LINEAR` · `REVERSE` · `CENTER_OUT` · `RANDOM` (*Centre out* reading *Centre* below 300px of panel, on
+`NORMAL` · `REVERSE` · `CENTRE_OUT` · `RANDOM` (*Centre out* reading *Centre* below 300px of panel, on
 `SPREAD_COMPACT_WORD_CLASS`, its `aria-label` the whole word), and pressing Random again bumps the request's `seed`
 for a fresh shuffle. The design's *Stage L→R* is a **footnote under the row with the reason**, not
 an option: the desk has no stage order today (`SpreadPlan` feeds `POSITIONAL` a head's index, which
@@ -2938,7 +2937,7 @@ row as *Fan pan*, *Fan tilt*, *Fan across* and *Fan depth*, and `describeTarget`
 ring the amount, so nothing on this side computes one — see `docs/midi-surface-engineering.md`
 §"The selection fan".
 
-A button can also press a **record**: `applyLook` puts the Look on whole, `pressTemplate`
+A button can also press a **record**: `applyLook` puts the Look on whole, `pressPalette`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
 component exists to mount `useTargetProperties` per target — so they are built in `SurfaceLibrary`'s
@@ -3101,7 +3100,7 @@ strip, the picker and the popup bands all filter by, so the three offer one set.
 
 **The row is the eight most recently *pressed*, not the library**, and recency is a **desk** fact
 rather than a tab's. lighting7 stamps `last_pressed_at_ms` on every press that *applies* a palette
-— through four doors: the chip's ⌥click (*Apply as values*), its tap, a busk pad press, and a MIDI `pressTemplate`
+— through four doors: the chip's ⌥click (*Apply as values*), its tap, a busk pad press, and a MIDI `pressPalette`
 — so every client and the desk's own hardware agree about what was reached for; a toggle **off** is
 not a press, and neither is an *Apply as values* that reached no head. It arrives as the keyed frame
 `palettePressed { templateId, lastPressedAt }`, which `startTemplatesBridge` **patches** into every
@@ -3297,7 +3296,7 @@ palette vocabulary: two intents of one property's shape, a curve, an order, part
 over-switch go to `POST /programmer/spread`, and one literal per head lands in Local (D3: the
 programmer's rows are heads the desk knows better than the browser does — a group's member order,
 each head's range, which cells a fixture has, what a colour means on a head with amber). The ends
-are intents — a percent, a colour + policy or a `tmpl:` reference, a centre-relative position — so a spread from 0 to
+are intents — a percent, a colour + policy or a `pal:` reference, a centre-relative position — so a spread from 0 to
 full is *0% → 100%* on every head whatever its range, which the byte form never was, and the old
 position exclusion went with the byte lerp it objected to. **`raw`** — bytes on a column outside
 the vocabulary, Speed alone (D15; `rawValues` in `editor/spreadPlans.ts` is `fanValues` renamed and
@@ -3363,7 +3362,7 @@ resolves exactly as it does for Local and answers without writing, and `SpreadPo
 layer's draft through `LookRowStore.setValue`, which coalesces and PUTs as every layer-scope edit
 does (400 ms, 2 s ceiling; flush cadence is stage cadence). A desk that still answers the intent is
 told apart by **shape** (`isIntentString` in `SpreadPopover.tsx`: a `pct:` / `pos:` / `deg:` / `dmx:` /
-`tmpl:` prefix or a `;policy=` tag — `parseProgrammerValue` alone would take a colour intent as a
+`pal:` prefix or a `;policy=` tag — `parseProgrammerValue` alone would take a colour intent as a
 colour, since it splits on `;` and tests only the head) and refused with a toast naming the desk
 rather than landing an intent in a Look row; in practice such a desk 400s the request first, its
 Json refusing the unknown key. Two things the desk does for this arm: a **colour-wheel** head's
@@ -5411,7 +5410,7 @@ four relocated, never a fifth.
 view's speed-master work, and both are edited in `SpeedMasterDetailSheet` and in the Speed Masters
 sheet's Usage, Follows and Ratio columns (§Library sheets):
 
-- **Usage** (`dimmer` / `colour` / `position` / `beam`) is the **apply-time routing default**. An effect
+- **Usage** (`intensity` / `colour` / `position` / `beam`) is the **apply-time routing default**. An effect
   created with no explicit master is *stamped* with the usage-matching master's uuid at the moment
   it is created — `useSpeedMasterForCategory` in `store/speedMasters.ts`, the rule itself in
   `lib/speedMasterModel.ts`. Nothing resolves usage later, and `null` still means master 1
@@ -5959,7 +5958,7 @@ strip — drawn below full, and at full only while an effect runs whose cue this
 locked, as GO does; it greys only offline, and a press inside it never drills the row. It writes
 through `useLiveFader` (`components/editor/`), the grand master fader's drag-and-settle lifted out
 so the two cannot differ. A project switch starts every stack at full and a reload keeps it. The MIDI
-`stackEffectSize` target is mirrored in `lib/surfaceDrop.ts`, the binding picker (*Cue stack — FX
+`stackFxAmount` target is mirrored in `lib/surfaceDrop.ts`, the binding picker (*Cue stack — FX
 amount*) and an *FX amount* chip on each stack's library row.
 
 ### Make rig safe and Quit desk

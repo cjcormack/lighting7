@@ -130,7 +130,7 @@ vi.mock('@/store/fixtures', async (importOriginal) => ({
 vi.mock('@/store/groups', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/groups')>()),
   useGroupListQuery: () => ({
-    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', memberKeys: ['orbit-sr', 'orbit-sl'] }],
+    data: rig.groups ?? [{ name: 'Front', memberCount: 2, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', memberKeys: ['orbit-sr', 'orbit-sl'] }],
   }),
 }))
 const toasts = vi.hoisted(() => ({ last: null as null | { message: string; undo?: () => void } }))
@@ -363,7 +363,7 @@ describe('CueValuesGrid', () => {
 
   it('draws a group row only the cells its own row can take — not a colour its members hold on their cells', () => {
     rig.fixtures = [makePixelBar('bar-1', 2, [sliderProp('dimmer', 'dimmer', chan(90))], { name: 'Bar 1', groups: ['Bars'] })]
-    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', memberKeys: ['bar-1'] }]
+    rig.groups = [{ name: 'Bars', memberCount: 1, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', memberKeys: ['bar-1'] }]
     data.cues.set(1, cue(1, [{ targetType: 'group', targetKey: 'Bars', propertyName: 'dimmer', value: '115', sortOrder: 0 }]))
     data.cooked.set(1, [
       { targetType: 'group', targetKey: 'bar-1', propertyName: 'dimmer', value: '115', sourceTargetType: 'group', sourceTargetKey: 'Bars' },

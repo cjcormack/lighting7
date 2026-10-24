@@ -114,7 +114,7 @@ class SpreadShapeTest {
 
     @Test
     fun `blocks of 3 over 12 heads give 4 slots`() {
-        val plan = DistributionPlan.forElements(DistributionStrategy.LINEAR, 12, SpreadShape(blocks = 3))
+        val plan = DistributionPlan.forElements(DistributionStrategy.NORMAL, 12, SpreadShape(blocks = 3))
         assertEquals(4, plan.slots)
         assertEquals(listOf(0.0, 0.25, 0.5, 0.75), plan.offsets.distinct())
         val dyn = FxDynamics(stepTiming = true, blocks = 3)
@@ -123,7 +123,7 @@ class SpreadShapeTest {
 
     @Test
     fun `wings under a mirrored order are ignored by the plan and refused at the write boundary`() {
-        for (order in listOf(DistributionStrategy.CENTER_OUT, DistributionStrategy.EDGES_IN)) {
+        for (order in listOf(DistributionStrategy.CENTRE_OUT, DistributionStrategy.CENTRE_IN)) {
             val winged = DistributionPlan.forElements(order, 8, SpreadShape(wings = 2))
             val plain = DistributionPlan.forElements(order, 8)
             assertContentEquals(plain.offsets, winged.offsets, "$order: a stored winged row runs as if unwinged")
@@ -132,16 +132,16 @@ class SpreadShapeTest {
             assertTrue("two wings already" in problem, problem)
         }
         // The REST/MCP/Look boundary's one call names the order by its stored string.
-        assertNotNull(EffectSpecCoercion.Strict.problem(distribution = "CENTER_OUT", wings = 2))
-        assertNull(EffectSpecCoercion.Strict.problem(distribution = "CENTER_OUT", wings = 1, blocks = 2))
-        assertNull(EffectSpecCoercion.Strict.problem(distribution = "LINEAR", wings = 2))
-        // No order is LINEAR, which takes wings.
+        assertNotNull(EffectSpecCoercion.Strict.problem(distribution = "CENTRE_OUT", wings = 2))
+        assertNull(EffectSpecCoercion.Strict.problem(distribution = "CENTRE_OUT", wings = 1, blocks = 2))
+        assertNull(EffectSpecCoercion.Strict.problem(distribution = "NORMAL", wings = 2))
+        // No order is NORMAL, which takes wings.
         assertNull(EffectSpecCoercion.Strict.problem(wings = 2))
     }
 
     @Test
     fun `each field is refused outside its range`() {
-        val linear = DistributionStrategy.LINEAR
+        val linear = DistributionStrategy.NORMAL
         assertNotNull(EffectSpecCoercion.Strict.spreadProblem(-0.1, null, null, null, linear))
         assertNotNull(EffectSpecCoercion.Strict.spreadProblem(2.01, null, null, null, linear))
         assertNotNull(EffectSpecCoercion.Strict.spreadProblem(Double.NaN, null, null, null, linear))

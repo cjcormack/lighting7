@@ -62,7 +62,7 @@ export function effectPaletteDrives(template: TemplateSummary, context: EffectFi
   if (isSlotSteps(effect.effectType)) return effect.propertyName ? [effect.propertyName] : []
   if (isPaletteSteps(effect.effectType)) {
     if (context.templates == null) return null
-    const named = new Set(parseStepList(effect.parameters?.palettes).map((ref) => ref.replace(/^tmpl:/, '')))
+    const named = new Set(parseStepList(effect.parameters?.palettes).map((ref) => ref.replace(/^pal:/, '')))
     return context.templates
       .filter((t) => named.has(t.uuid))
       .flatMap((t) => (t.rows ?? []).map((row) => row.propertyName))

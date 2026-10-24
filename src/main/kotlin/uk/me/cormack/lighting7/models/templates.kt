@@ -62,7 +62,7 @@ import org.jetbrains.exposed.v1.json.json
  * bank's sibling pads when the bank is solo. See `docs/lighting-composition-model.md`
  * §"The busk layout". `GET /palettes` therefore lists by name.
  */
-object DaoTemplates : IntIdTable("templates") {
+object DaoTemplates : IntIdTable("palettes") {
     val project = reference("project_id", DaoProjects)
     val name = varchar("name", 255)
     val notes = text("notes").nullable()
@@ -89,7 +89,7 @@ object DaoTemplates : IntIdTable("templates") {
      * cleanup — a deleted template takes its stamp with it.
      *
      * **A press is an application, never a release.** The four doors that stamp it are the chip's
-     * ⌥click (*Apply as values*), its tap, a busk pad and a MIDI `pressTemplate`, and each stamps only on the arm
+     * ⌥click (*Apply as values*), its tap, a busk pad and a MIDI `pressPalette`, and each stamps only on the arm
      * that puts the template *on* — see `TemplatePressLog`. Toggling a layer off leaves the stamp
      * where it was, because "what I reached for" is not undone by putting it down.
      *
@@ -123,7 +123,7 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
     var uuid by DaoTemplates.uuid
     var lastPressedAt by DaoTemplates.lastPressedAt
 
-    val rows by DaoTemplateRow referrersOn DaoTemplateRows.template
+    val rows by DaoTemplateRow referrersOn DaoTemplateRows.palette
 
     /**
      * The effect rows, of which there is at most one — see [effect].
@@ -132,12 +132,12 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
      * (the route's guard, the importer's wipe, the project cascade) all want to iterate, and a
      * back reference would throw rather than iterate if a hand-edited database ever held two.
      */
-    val effects by DaoTemplateEffect referrersOn DaoTemplateEffects.template
+    val effects by DaoTemplateEffect referrersOn DaoTemplateEffects.palette
 
     /**
      * This template's one effect, or null for a value template.
      *
-     * D2: at most one, enforced by `uniqueIndex(template)` and at the write boundary. `firstOrNull`
+     * D2: at most one, enforced by `uniqueIndex(palette)` and at the write boundary. `firstOrNull`
      * rather than `single` because a read is not the place to throw over data the index already
      * forbids.
      */
@@ -164,15 +164,15 @@ class DaoTemplate(id: EntityID<Int>) : IntEntity(id) {
  * in a recorded Look, which names a head and can therefore hold anything that head has — its
  * element rows compose since the busk-further plan's session 1 closed `FU-LOOK-ELEMENT-ROWS`.
  */
-object DaoTemplateRows : IntIdTable("template_rows") {
-    val template = reference("template_id", DaoTemplates)
+object DaoTemplateRows : IntIdTable("palette_rows") {
+    val palette = reference("palette_id", DaoTemplates)
 
     /** [DEFERRED_TARGET_TYPE], or `fixture` for a per-fixture template. Never `group`. */
     val targetType = varchar("target_type", 50)
 
     /** Empty string when [targetType] is [DEFERRED_TARGET_TYPE]. */
     val targetKey = varchar("target_key", 255)
-    val propertyName = varchar("property_name", 255)
+    val attribute = varchar("attribute", 255)
 
     /** A [uk.me.cormack.lighting7.fx.TemplateIntent] in its serialised form. */
     val value = text("value")
@@ -183,10 +183,10 @@ object DaoTemplateRows : IntIdTable("template_rows") {
 class DaoTemplateRow(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoTemplateRow>(DaoTemplateRows)
 
-    var template by DaoTemplate referencedOn DaoTemplateRows.template
+    var palette by DaoTemplate referencedOn DaoTemplateRows.palette
     var targetType by DaoTemplateRows.targetType
     var targetKey by DaoTemplateRows.targetKey
-    var propertyName by DaoTemplateRows.propertyName
+    var attribute by DaoTemplateRows.attribute
     var value by DaoTemplateRows.value
     var sortOrder by DaoTemplateRows.sortOrder
     var uuid by DaoTemplateRows.uuid
@@ -235,25 +235,25 @@ data class TemplateRowDto(
  *   the unique index below *and* at the write boundary, because the index alone would surface as a
  *   constraint violation rather than a named 400.
  *
- * [parameters] may hold a `tmpl:{uuid}` colour reference (D12) — the useful direction, an effect
+ * [parameters] may hold a `pal:{uuid}` colour reference (D12) — the useful direction, an effect
  * template's colour parameter naming a *value* colour template. Naming its own uuid is refused at
  * the write boundary, and `templateFxReferenceCount` scans this table so the referenced template
  * cannot be deleted out from under it.
  */
-object DaoTemplateEffects : IntIdTable("template_effects") {
-    val template = reference("template_id", DaoTemplates)
-    val effectType = varchar("effect_type", 255)
+object DaoTemplateEffects : IntIdTable("palette_fx") {
+    val palette = reference("palette_id", DaoTemplates)
+    val fxType = varchar("fx_type", 255)
 
     /** The effect library's own `category` — D4 derives the template's family from it. */
-    val category = varchar("category", 50)
-    val propertyName = varchar("property_name", 255).nullable()
-    val beatDivision = double("beat_division")
+    val family = varchar("family", 50)
+    val attribute = varchar("attribute", 255).nullable()
+    val cycle = double("cycle")
     val blendMode = varchar("blend_mode", 50)
-    val distribution = varchar("distribution", 50)
+    val order = varchar("spread_order", 50)
     val phaseOffset = double("phase_offset").default(0.0)
     val elementMode = varchar("element_mode", 50).nullable()
     val elementFilter = varchar("element_filter", 50).nullable()
-    val stepTiming = bool("step_timing").nullable()
+    val timing = varchar("timing", 8).nullable()
     val parameters = json<Map<String, String>>("parameters", Json)
 
     /**
@@ -272,13 +272,13 @@ object DaoTemplateEffects : IntIdTable("template_effects") {
     val seconds = bool("seconds").default(false)
 
     /** Size (effects plan D2), 0.0–1.0; see [LookEffectSpec.size]. */
-    val size = double("size").default(1.0)
+    val amount = double("amount").default(1.0)
 
     /** Direction (D5) by name; see [LookEffectSpec.direction]. */
     val direction = varchar("direction", 16).default("FORWARD")
 
     /** Runs (D9), null for forever; see [LookEffectSpec.nShot]. */
-    val nShot = integer("n_shot").nullable()
+    val runs = integer("runs").nullable()
 
     /**
      * The spread's shape (effects plan D4); see [LookEffectSpec.spread]. Groups 0 is off. The three
@@ -286,42 +286,42 @@ object DaoTemplateEffects : IntIdTable("template_effects") {
      */
     val spread = double("spread").default(1.0)
     val wings = integer("spread_wings").default(1)
-    val blocks = integer("spread_blocks").default(1)
-    val groups = integer("spread_groups").default(0)
+    val segments = integer("spread_segments").default(1)
+    val parts = integer("spread_parts").default(0)
     val uuid = javaUUID("uuid").autoGenerate()
 
     init {
         // D2, at the storage layer. One row per template, so a template can never grow a second
         // effect behind the write boundary's back — an import or a hand edit included.
-        uniqueIndex(template)
+        uniqueIndex(palette)
     }
 }
 
 class DaoTemplateEffect(id: EntityID<Int>) : IntEntity(id) {
     companion object : IntEntityClass<DaoTemplateEffect>(DaoTemplateEffects)
 
-    var template by DaoTemplate referencedOn DaoTemplateEffects.template
-    var effectType by DaoTemplateEffects.effectType
-    var category by DaoTemplateEffects.category
-    var propertyName by DaoTemplateEffects.propertyName
-    var beatDivision by DaoTemplateEffects.beatDivision
+    var palette by DaoTemplate referencedOn DaoTemplateEffects.palette
+    var fxType by DaoTemplateEffects.fxType
+    var family by DaoTemplateEffects.family
+    var attribute by DaoTemplateEffects.attribute
+    var cycle by DaoTemplateEffects.cycle
     var blendMode by DaoTemplateEffects.blendMode
-    var distribution by DaoTemplateEffects.distribution
+    var order by DaoTemplateEffects.order
     var phaseOffset by DaoTemplateEffects.phaseOffset
     var elementMode by DaoTemplateEffects.elementMode
     var elementFilter by DaoTemplateEffects.elementFilter
-    var stepTiming by DaoTemplateEffects.stepTiming
+    var timing by DaoTemplateEffects.timing
     var parameters by DaoTemplateEffects.parameters
     var speedMasterUuid by DaoTemplateEffects.speedMasterUuid
     var rateSpeedMasterUuid by DaoTemplateEffects.rateSpeedMasterUuid
     var seconds by DaoTemplateEffects.seconds
-    var size by DaoTemplateEffects.size
+    var amount by DaoTemplateEffects.amount
     var direction by DaoTemplateEffects.direction
-    var nShot by DaoTemplateEffects.nShot
+    var runs by DaoTemplateEffects.runs
     var spread by DaoTemplateEffects.spread
     var wings by DaoTemplateEffects.wings
-    var blocks by DaoTemplateEffects.blocks
-    var groups by DaoTemplateEffects.groups
+    var segments by DaoTemplateEffects.segments
+    var parts by DaoTemplateEffects.parts
     var uuid by DaoTemplateEffects.uuid
 }
 

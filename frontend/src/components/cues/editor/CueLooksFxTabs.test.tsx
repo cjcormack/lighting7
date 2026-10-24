@@ -122,7 +122,7 @@ vi.mock('@/store/looks', async (importOriginal) => ({
   useLookQuery: () => ({
     data: {
       id: 4,
-      effects: [{ targetType: 'deferred', targetKey: '', effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer', beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR', phaseOffset: 0, parameters: {} }],
+      effects: [{ targetType: 'deferred', targetKey: '', effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer', beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'NORMAL', phaseOffset: 0, parameters: {} }],
     },
   }),
 }))
@@ -176,7 +176,7 @@ import { cueEffectDraftOf, withCueEffectDraft } from '@/components/fx/fxEditorMo
 
 const PULSE: EffectLibraryEntry = {
   name: 'Pulse',
-  category: 'dimmer',
+  category: 'intensity',
   outputType: 'SLIDER',
   effectMode: 'STANDARD',
   timingSource: 'BEAT',
@@ -203,11 +203,11 @@ const pulse = (over: Partial<CueAdHocEffect> = {}): CueAdHocEffect => ({
   targetType: 'fixture',
   targetKey: 'orbit-sr',
   effectType: 'Pulse',
-  category: 'dimmer',
+  category: 'intensity',
   propertyName: 'dimmer',
   beatDivision: 2,
   blendMode: 'OVERRIDE',
-  distribution: 'LINEAR',
+  distribution: 'NORMAL',
   phaseOffset: 0,
   elementMode: null,
   elementFilter: null,

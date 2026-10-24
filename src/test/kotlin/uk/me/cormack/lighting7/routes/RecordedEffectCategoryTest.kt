@@ -45,9 +45,9 @@ class RecordedEffectCategoryTest {
 
     @Test
     fun `Palette Steps is its palettes' family, read off the property it drives`() {
-        assertEquals("dimmer", recordedEffectCategory(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))))
+        assertEquals("intensity", recordedEffectCategory(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "strobe"))))
         assertEquals("beam", recordedEffectCategory(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SettingTarget(FxTargetRef.fixture("spot"), "prism"))))
-        assertEquals("dimmer", recordedEffectCategory(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "dimmer"))))
+        assertEquals("intensity", recordedEffectCategory(running(PALETTE_STEPS_ID, FxOutputType.STEPS, SliderTarget(FxTargetRef.fixture("hex"), "dimmer"))))
     }
 
     @Test

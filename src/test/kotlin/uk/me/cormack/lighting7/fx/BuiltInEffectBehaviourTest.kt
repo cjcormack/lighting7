@@ -568,7 +568,7 @@ class BuiltInEffectBehaviourTest {
     fun `LightningStrike is a standard intensity FX`() {
         val registration = registry.getRegistration("LightningStrike")!!
         assertEquals(EffectMode.STANDARD, registration.effectMode)
-        assertEquals("dimmer", registration.category)
+        assertEquals("intensity", registration.category)
         assertEquals(listOf("dimmer"), registration.compatibleProperties)
     }
 

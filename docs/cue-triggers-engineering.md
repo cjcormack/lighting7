@@ -14,7 +14,7 @@ Preset applications and ad-hoc effects can optionally have timing fields that co
 | **Delayed** | Applied after a delay from activation | `delayMs` |
 | **Recurring** | Applied repeatedly at an interval | `intervalMs`, `randomWindowMs` (optional) |
 
-These timing fields live directly on the `cue_preset_applications` and `cue_ad_hoc_effects` tables — no separate trigger entity needed for effect timing.
+These timing fields live directly on the `cue_preset_applications` and `cue_ad_hoc_fx` tables — no separate trigger entity needed for effect timing.
 
 ### Script Hooks (Triggers)
 
@@ -59,9 +59,9 @@ cue_preset_applications
 └── sort_order (Int)
 ```
 
-### Timing on `cue_ad_hoc_effects`
+### Timing on `cue_ad_hoc_fx`
 
-Same timing columns added to `cue_ad_hoc_effects`:
+Same timing columns added to `cue_ad_hoc_fx`:
 - `delay`, `interval`, `random_window` (each a `Duration`, nanoseconds on disk), `sort_order`
 
 ### Script Hooks: `cue_triggers`

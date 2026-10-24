@@ -51,7 +51,7 @@ sealed class ProgrammerInMessage : InMessage()
  * string form as cue assignments ([CueAssignmentResolver.parseAssignmentValue] /
  * [CueAssignmentResolver.PropertyValue.serialize]): `"0".."255"` for sliders and settings,
  * `"#rrggbb"` (+ optional `w`/`a`/`uv` tags) for colours, `"pan,tilt"` for `position`. A programmer
- * value is always a **literal**: a `tmpl:{uuid}` template reference is legal only in an effect
+ * value is always a **literal**: a `pal:{uuid}` template reference is legal only in an effect
  * parameter, and a dependency on a template is a layer (see [templateColourSource]).
  *
  * [sourceGroup] is for clients that fan a group-scoped gesture out to member fixtures rather
@@ -1384,7 +1384,7 @@ object ProgrammerHandler {
      * Parse a canonical value string for (target, property): `position` is the synthetic
      * pan/tilt pair; everything else resolves its category from the fixture's property
      * catalogue (via the first member for groups). A programmer value is always a literal — a
-     * `tmpl:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
+     * `pal:` template reference is refused by [CueAssignmentResolver.parseAssignmentValue] rather
      * than read as white.
      */
     private fun parseValue(

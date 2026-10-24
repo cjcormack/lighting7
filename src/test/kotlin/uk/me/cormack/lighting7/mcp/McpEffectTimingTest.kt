@@ -37,7 +37,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
 
     private fun storedEffect(look: String): StoredEffect = transaction(state.database) {
         val effect = DaoLook.find { DaoLooks.name eq look }.single().effects.single()
-        StoredEffect(effect.beatDivision, effect.speedMasterUuid?.toString(), effect.seconds)
+        StoredEffect(effect.cycle, effect.speedMasterUuid?.toString(), effect.seconds)
     }
 
     private fun effect(type: String, category: String, extra: String = "") =
@@ -53,8 +53,8 @@ class McpEffectTimingTest : RouteIntegrationTest() {
         assertTrue(cycle.success, cycle.result)
         assertEquals(StoredEffect(BeatDivision.ONE_BAR, colourMaster, false), storedEffect("Cycle"))
 
-        // No master is tagged dimmer, so a dimmer effect stays on master 1 — null, as everywhere.
-        val pulse = call("create_look", """{"name":"Pulse","effects":[${effect("Pulse", "dimmer")}]}""")
+        // No master is tagged intensity, so an intensity effect stays on master 1 — null, as everywhere.
+        val pulse = call("create_look", """{"name":"Pulse","effects":[${effect("Pulse", "intensity")}]}""")
         assertTrue(pulse.success, pulse.result)
         assertEquals(StoredEffect(BeatDivision.ONE_BAR, null, false), storedEffect("Pulse"))
     }
@@ -72,11 +72,11 @@ class McpEffectTimingTest : RouteIntegrationTest() {
 
     @Test
     fun `an effect on Seconds follows no master, and asking for both is refused`() {
-        createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", usage = "dimmer"))
+        createSpeedMaster(state, state.projectManager.currentProject, CreateSpeedMasterRequest(name = "Dim", usage = "intensity"))
 
         val breathe = call(
             "create_look",
-            """{"name":"Breathe","effects":[${effect("Pulse", "dimmer", ""","beatDivision":12,"seconds":true""")}]}""",
+            """{"name":"Breathe","effects":[${effect("Pulse", "intensity", ""","beatDivision":12,"seconds":true""")}]}""",
         )
         assertTrue(breathe.success, breathe.result)
         val stored = storedEffect("Breathe")
@@ -87,7 +87,7 @@ class McpEffectTimingTest : RouteIntegrationTest() {
         val master = state.show.fxEngine.speedMasters.masterStates().first().uuid.toString()
         val both = call(
             "create_look",
-            """{"name":"Both","effects":[${effect("Pulse", "dimmer", ""","seconds":true,"speedMasterUuid":"$master"""")}]}""",
+            """{"name":"Both","effects":[${effect("Pulse", "intensity", ""","seconds":true,"speedMasterUuid":"$master"""")}]}""",
         )
         assertFalse(both.success, "Seconds beside a master is two answers to one question")
         assertTrue(both.description.contains("seconds") || both.result.contains("seconds"), both.toString())

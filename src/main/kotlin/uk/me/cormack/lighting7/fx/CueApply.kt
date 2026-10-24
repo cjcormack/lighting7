@@ -82,7 +82,7 @@ internal data class CueApplyData(
 private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayOf(
     DaoCue::layers,
     DaoCueLayer::look,
-    DaoCueLayer::template,
+    DaoCueLayer::palette,
     DaoCue::adHocEffects,
     DaoCue::propertyAssignments,
     DaoCue::triggers,
@@ -201,7 +201,7 @@ internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = propertyMask,
+    propertyMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,

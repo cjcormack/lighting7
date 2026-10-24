@@ -112,9 +112,9 @@ export function NewTemplateFromEffectSheet({
       elementMode: null,
       beatDivision: effect.beatDivision,
       blendMode: effect.blendMode,
-      // The fixture DTO reports the spread as `distributionStrategy`, and absent means `LINEAR`, the
+      // The fixture DTO reports the spread as `distributionStrategy`, and absent means `NORMAL`, the
       // vocabulary the write boundary accepts.
-      distribution: effect.distributionStrategy ?? 'LINEAR',
+      distribution: effect.distributionStrategy ?? 'NORMAL',
       phaseOffset: effect.phaseOffset,
       // Dropped with the two above, and for the same reason (D3): both are questions about a
       // *specific* multi-element head, and a template effect names no target. Carrying them would

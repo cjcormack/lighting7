@@ -1,7 +1,7 @@
 /*---
 id: SlotSteps
 name: Slot Steps
-category: palette
+category: steps
 outputType: STEPS
 effectMode: STANDARD
 compatibleProperties: [setting]

@@ -137,7 +137,7 @@ object BindingHealthEvaluator {
         // nothing selected is a dropped press, which is a fact about the selection at that moment
         // and not about the binding — the same line `SelectionProperty` draws.
         is BindingTarget.PressTemplate ->
-            uuidHealth(target.templateUuid, context.validTemplateUuids) { AssignmentHealth.MissingTemplate(it) }
+            uuidHealth(target.paletteUuid, context.validTemplateUuids) { AssignmentHealth.MissingTemplate(it) }
         // The pad, not its record: a pad whose record was deleted is itself swept in the same
         // transaction, so "the pad exists" already answers "its record does".
         is BindingTarget.PressPad ->

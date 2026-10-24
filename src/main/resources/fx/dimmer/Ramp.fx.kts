@@ -1,7 +1,7 @@
 /*---
 id: Ramp
 name: Ramp
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

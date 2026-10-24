@@ -48,14 +48,14 @@ class SocketMessageWireFormatTest {
     // ─── Palettes ───────────────────────────────────────────────────────────
 
     @Test
-    fun `palette domain — the list and press frames say palette, the stored binding still says template`() {
+    fun `palette domain — the list and press frames and the stored binding say palette`() {
         assertTrue(json.encodeToString<OutMessage>(TemplateListChangedOutMessage).contains(""""type":"paletteListChanged""""))
         val pressed = json.encodeToString<OutMessage>(TemplatePressedOutMessage(templateId = 3, lastPressedAt = "2026-10-15T10:00:00.000Z"))
         assertTrue(pressed.contains(""""type":"palettePressed""""), pressed)
         assertTrue(pressed.contains(""""templateId":3"""), "field names keep the stored word: $pressed")
-        // A rename here would orphan every saved control_surface_bindings row.
+        // Stored in control_surface_bindings: a rename needs a database step and a LegacyNames entry.
         val binding = json.encodeToString<BindingTarget>(BindingTarget.PressTemplate("u"))
-        assertTrue(binding.contains(""""type":"pressTemplate""""), binding)
+        assertTrue(binding.contains(""""type":"pressPalette""""), binding)
     }
 
     // ─── Channel domain ─────────────────────────────────────────────────────

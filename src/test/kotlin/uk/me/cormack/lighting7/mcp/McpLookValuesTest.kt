@@ -61,7 +61,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
 
     private fun storedRows(name: String): List<LookRowDto> = transaction(state.database) {
         DaoLook.find { DaoLooks.name eq name }.single().rows.sortedBy { it.sortOrder }.map {
-            LookRowDto(it.targetType, it.targetKey, it.propertyName, it.value, elementKey = it.elementKey)
+            LookRowDto(it.targetType, it.targetKey, it.attribute, it.value, elementKey = it.elementKey)
         }
     }
 
@@ -372,7 +372,7 @@ class McpLookValuesTest : RouteIntegrationTest() {
     @Test
     fun `create_look and update_look refuse an effect with no target, and write one with a target`() {
         patchRig()
-        val settings = """"effectType":"Pulse","category":"dimmer","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}"""
+        val settings = """"effectType":"Pulse","category":"intensity","beatDivision":1.0,"blendMode":"OVERRIDE","parameters":{}"""
         fun storedTargets() = transaction(state.database) {
             DaoLook.find { DaoLooks.name eq "Throb" }.single().effects.map { it.targetType to it.targetKey }
         }
@@ -417,12 +417,12 @@ class McpLookValuesTest : RouteIntegrationTest() {
                 look = DaoLook[lookId]
                 targetType = "fixture"
                 targetKey = "foh-1"
-                effectType = "StaticValue"
-                category = "dimmer"
-                propertyName = "dimmer"
-                beatDivision = 1.0
+                fxType = "StaticValue"
+                family = "intensity"
+                attribute = "dimmer"
+                cycle = 1.0
                 blendMode = "OVERRIDE"
-                distribution = "UNIFIED"
+                order = "UNIFIED"
                 parameters = mapOf("value" to "255")
             }
         }

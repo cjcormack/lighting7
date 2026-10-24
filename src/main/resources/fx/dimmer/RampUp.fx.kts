@@ -1,7 +1,7 @@
 /*---
 id: RampUp
 name: Ramp Up
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

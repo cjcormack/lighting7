@@ -566,7 +566,7 @@ class CueStackManager(
     // `createInstanceForStack` stood here. It was `createEffectInstance` with a `stackId`
     // parameter, which existed only to resolve `P1` against the stack's positional colour list.
     // With that list gone the two bodies were identical — and this copy had lost the
-    // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `tmpl:`
+    // `prewarmTemplateColours` call the shared one makes, so a stack GO left the first `pal:`
     // resolve to the 50 Hz tick loop, where it opens a transaction.
 }
 

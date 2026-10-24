@@ -1,7 +1,7 @@
 /*---
 id: Pulse
 name: Pulse
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

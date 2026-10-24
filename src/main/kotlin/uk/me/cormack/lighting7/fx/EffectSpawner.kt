@@ -117,7 +117,7 @@ internal object EffectSpawner {
         }
         val capabilities = group.detectCapabilities()
         return when (effectSpec.category) {
-            "dimmer" -> if ("dimmer" in capabilities) "dimmer" else null
+            "intensity" -> if ("dimmer" in capabilities) "dimmer" else null
             "colour" -> if ("colour" in capabilities) "colour" else null
             "position" -> if ("position" in capabilities) "position" else null
             "beam" -> drivenProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
@@ -133,7 +133,7 @@ internal object EffectSpawner {
     ): String? {
         if (registration?.id == PALETTE_STEPS_ID) return drivenProperty
         return when (effectSpec.category) {
-            "dimmer" -> "dimmer"
+            "intensity" -> "dimmer"
             "colour" -> "colour"
             "position" -> "position"
             "beam" -> drivenProperty
@@ -172,7 +172,7 @@ internal object EffectSpawner {
      * There were two of these until the positional colour list went. A cue-scoped one resolved `P1`
      * against `getCuePalette(cueId) ?: getPalette()`, and Include needed a second that took an explicit
      * snapshot instead — because the cue-scoped supplier silently fell back to the *global* list when
-     * the cue wasn't live, resolving an included cue's colours against the wrong ones. A `tmpl:`
+     * the cue wasn't live, resolving an included cue's colours against the wrong ones. A `pal:`
      * reference has one answer wherever it is read, so the fork had nothing left to be about.
      */
     fun createEffectInstance(

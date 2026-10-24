@@ -144,7 +144,7 @@ class SelectionEffectRoutesTest : RouteIntegrationTest() {
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
         val effect = CueAdHocEffectDto(
             targetType = EffectTargetRef.Selection.TYPE, targetKey = selectionKey, effectType = "Pulse",
-            category = "dimmer", propertyName = "dimmer", beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            category = "intensity", propertyName = "dimmer", beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val created = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
@@ -237,8 +237,8 @@ class SelectionEffectRoutesTest : RouteIntegrationTest() {
         val effect = LookEffectDto(
             targetType = EffectTargetRef.Selection.TYPE,
             targetKey = """[ {"type":"fixture", "key":"hex-4"}, {"type":"group","key":"quad"} ]""",
-            effectType = "Pulse", category = "dimmer", propertyName = "dimmer", beatDivision = 1.0,
-            blendMode = "OVERRIDE", distribution = "LINEAR",
+            effectType = "Pulse", category = "intensity", propertyName = "dimmer", beatDivision = 1.0,
+            blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val one = effect.copy(targetKey = """[{"type":"fixture","key":"hex-5"}]""", sortOrder = 1)
         val created = client.post("/api/rest/projects/$projectId/looks") {
@@ -258,7 +258,7 @@ class SelectionEffectRoutesTest : RouteIntegrationTest() {
         seedRig()
         val effect = LookEffectDto(
             targetType = EffectTargetRef.Selection.TYPE, targetKey = selectionKey, effectType = "Pulse",
-            category = "dimmer", propertyName = "dimmer", beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+            category = "intensity", propertyName = "dimmer", beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
         )
         val created = client.post("/api/rest/projects/$projectId/looks") {
             contentType(ContentType.Application.Json)

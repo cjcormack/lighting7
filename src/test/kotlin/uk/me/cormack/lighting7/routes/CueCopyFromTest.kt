@@ -232,12 +232,12 @@ class CueCopyFromTest : RouteIntegrationTest() {
         val cueId = transaction(state.database) {
             val cue = DaoCue.new { project = DaoProject[source]; name = "ghosts" }
             DaoCuePropertyAssignment.new {
-                this.cue = cue; targetType = "fixture"; targetKey = "ghost-1"; propertyName = "dimmer"; value = "200"
+                this.cue = cue; targetType = "fixture"; targetKey = "ghost-1"; attribute = "dimmer"; value = "200"
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "group"; targetKey = "phantoms"
-                effectType = "Pulse"; category = "dimmer"; beatDivision = 1.0
-                blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap(); propertyName = "dimmer"
+                fxType = "Pulse"; family = "intensity"; cycle = 1.0
+                blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap(); attribute = "dimmer"
             }
             cue.id.value
         }
@@ -267,7 +267,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             val cool = DaoLook.new { this.project = project; name = "Cool"; notes = "blue wash" }
             val amber = DaoTemplate.new { this.project = project; name = "Amber" }
             val blue = DaoTemplate.new { this.project = project; name = "Blue" }
-            DaoTemplateRow.new { template = blue; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; propertyName = "rgbColour"; value = "#0000ff" }
+            DaoTemplateRow.new { palette = blue; targetType = DEFERRED_TARGET_TYPE; targetKey = ""; attribute = "rgbColour"; value = "#0000ff" }
             DaoLook.new { this.project = DaoProject[projectId]; name = "Warm" }
             DaoTemplate.new { this.project = DaoProject[projectId]; name = "Amber" }
             val master3 = speedMastersOf(project).single { it.masterIndex == 3 }.uuid
@@ -277,15 +277,15 @@ class CueCopyFromTest : RouteIntegrationTest() {
             }
             for ((i, layer) in listOf<Pair<DaoLook?, DaoTemplate?>>(warm to null, cool to null, null to amber, null to blue).withIndex()) {
                 DaoCueLayer.new {
-                    this.cue = cue; look = layer.first; template = layer.second; targets = emptyList(); sortOrder = i
+                    this.cue = cue; look = layer.first; palette = layer.second; targets = emptyList(); sortOrder = i
                     speedMasterUuid = master3
                 }
             }
             DaoCueAdHocEffect.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                effectType = "PaletteSteps"; category = "colour"; beatDivision = 1.0
-                blendMode = "OVERRIDE"; distribution = "LINEAR"; propertyName = "rgbColour"
-                parameters = mapOf("palettes" to "tmpl:${amber.uuid}, tmpl:${blue.uuid}", "colour" to "tmpl:${blue.uuid}", "depth" to "0.5")
+                fxType = "PaletteSteps"; family = "colour"; cycle = 1.0
+                blendMode = "OVERRIDE"; order = "NORMAL"; attribute = "rgbColour"
+                parameters = mapOf("palettes" to "pal:${amber.uuid}, pal:${blue.uuid}", "colour" to "pal:${blue.uuid}", "depth" to "0.5")
             }
             cue.id.value to mapOf("amber" to amber.uuid, "blue" to blue.uuid)
         }
@@ -312,7 +312,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
             )
             assertEquals(
                 listOf(null, null, templates.getValue("Amber").id, templates.getValue("Blue").id),
-                layers.map { it.template?.id },
+                layers.map { it.palette?.id },
             )
             val master3 = speedMastersOf(target).single { it.masterIndex == 3 }.uuid
             assertTrue(layers.all { it.speedMasterUuid == master3 })
@@ -320,8 +320,8 @@ class CueCopyFromTest : RouteIntegrationTest() {
             val params = copy.adHocEffects.single().parameters
             val amber = templates.getValue("Amber").uuid
             val blue = templates.getValue("Blue").uuid
-            assertEquals("tmpl:$amber,tmpl:$blue", params["palettes"])
-            assertEquals("tmpl:$blue", params["colour"])
+            assertEquals("pal:$amber,pal:$blue", params["palettes"])
+            assertEquals("pal:$blue", params["colour"])
             assertEquals("0.5", params["depth"])
             assertTrue(uuids.values.none { it == amber || it == blue }, "every reference names the target's palette")
         }
@@ -412,8 +412,8 @@ class CueCopyFromTest : RouteIntegrationTest() {
                 DaoCue.new { project = DaoProject[source]; this.name = name }.inStack(stack, sortOrder = i).also { cue ->
                     DaoCueAdHocEffect.new {
                         this.cue = cue; targetType = "fixture"; targetKey = "hex-1"
-                        effectType = "Pulse"; category = "dimmer"; propertyName = "dimmer"; beatDivision = 1.0
-                        blendMode = "OVERRIDE"; distribution = "LINEAR"; parameters = emptyMap()
+                        fxType = "Pulse"; family = "intensity"; attribute = "dimmer"; cycle = 1.0
+                        blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
                         runUuid = if (name == "c") null else run
                     }
                 }.id.value

@@ -15,7 +15,7 @@ import {
 function entry(name: string, over: Partial<EffectLibraryEntry> = {}): EffectLibraryEntry {
   return {
     name,
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'STANDARD',
     timingSource: 'BEAT',
@@ -33,7 +33,7 @@ function definition(id: number, effectId: string, name = effectId): FxDefinition
     id,
     effectId,
     name,
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'STANDARD',
     parameters: [],
@@ -81,7 +81,7 @@ describe('fxSourceOf — the definition list is the discriminator', () => {
 
 describe('forkRefusal', () => {
   it('refuses the step effects, the desk’s own, and nothing else', () => {
-    expect(forkRefusal(entry('PaletteSteps', { outputType: 'STEPS', category: 'palette' }))).toMatch(/cannot be forked/)
+    expect(forkRefusal(entry('PaletteSteps', { outputType: 'STEPS', category: 'steps' }))).toMatch(/cannot be forked/)
     expect(forkRefusal(entry('SlotSteps', { outputType: 'STEPS', category: 'beam' }))).toMatch(/Slot Steps is the desk’s own/)
     expect(forkRefusal(entry('Pulse'))).toBeNull()
   })
@@ -112,7 +112,7 @@ describe('mintForkEffectId — unique across the whole library', () => {
 
 describe('forkRequest', () => {
   const pulse = entry('Pulse', {
-    category: 'dimmer',
+    category: 'intensity',
     outputType: 'SLIDER',
     effectMode: 'STATEFUL',
     timingSource: 'WALL_CLOCK',
@@ -126,7 +126,7 @@ describe('forkRequest', () => {
     expect(body).toEqual({
       effectId: 'PulseCustom',
       name: 'Pulse (Custom)',
-      category: 'dimmer',
+      category: 'intensity',
       outputType: 'SLIDER',
       effectMode: 'STATEFUL',
       parameters: [{ name: 'min', type: 'ubyte', defaultValue: '0', description: 'Floor' }],

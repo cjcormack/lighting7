@@ -1,5 +1,6 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
 import io.ktor.http.HttpStatusCode
 import io.ktor.resources.Resource
 import io.ktor.server.request.receive
@@ -121,7 +122,7 @@ internal fun writeRecordingIntoLook(
 
     /** Everything a recorded row sets but its key, whether written over a stored row or inserted. */
     fun DaoLookRow.take(row: CuePropertyAssignmentDto, sortOrder: Int) {
-        propertyName = canonicalPropertyName(row.propertyName)
+        attribute = canonicalPropertyName(row.propertyName)
         value = row.value
         fadeDuration = null
         this.sortOrder = sortOrder
@@ -210,7 +211,7 @@ internal fun removeClearedFromLook(
     if (cleared.isEmpty()) return ClearedOutcome()
     val rows = look.rowsInOrder()
     val plan = planClearedRemoval(
-        rows.map { StoredValueRow(it, it.targetType, it.elementKey ?: it.targetKey, it.propertyName) },
+        rows.map { StoredValueRow(it, it.targetType, it.elementKey ?: it.targetKey, it.attribute) },
         cleared,
         groupMembersIn(fixtures),
     )
@@ -221,7 +222,7 @@ internal fun removeClearedFromLook(
             targetType = TargetRef.Fixture.TYPE
             targetKey = member
             elementKey = null
-            propertyName = group.propertyName
+            attribute = group.attribute
             value = group.value
             fadeDuration = group.fadeDuration
             sortOrder = nextSort++
@@ -263,12 +264,12 @@ internal fun lookRowInRemit(
             val inScope = scopeTargets == null ||
                 coverage.covers(scopeTargets, CueTargetDto(TargetRef.Fixture.TYPE, elementKey))
             val element = runCatching { fixtures.untypedGroupableFixture(elementKey) }.getOrNull()
-            inScope && element != null && maskAllows(mask, maskGroupForProperty(element, row.propertyName))
+            inScope && element != null && maskAllows(mask, maskGroupForProperty(element, row.attribute))
         } else if (!targetInScope(fixtures, target, scope)) {
             false
         } else {
             val fixture = referenceFixtureOf(fixtures, target)
-            fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.propertyName))
+            fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.attribute))
         }
     }
 }
@@ -563,8 +564,8 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
     fun targetTypeOf(effect: FxInstance) = effect.target.targetRef.discriminator
 
     fun DaoLookEffect.take(effect: FxInstance, sortOrder: Int) {
-        category = recordedEffectCategory(effect)
-        propertyName = effect.target.propertyName
+        family = recordedEffectCategory(effect)
+        attribute = effect.target.propertyName
         takeSettings(effect.lookEffectSettings())
         this.sortOrder = sortOrder
     }
@@ -598,25 +599,25 @@ internal fun writeLookEffects(look: DaoLook, effects: List<FxInstance>, mode: Re
 
 /** [settings] onto this row — everything but where the effect runs and its place in the Look. */
 private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
-    effectType = settings.effectType
-    beatDivision = settings.beatDivision
+    fxType = settings.effectType
+    cycle = settings.beatDivision
     blendMode = settings.blendMode
-    distribution = settings.distribution
+    order = settings.distribution
     phaseOffset = settings.phaseOffset
     elementMode = settings.elementMode
     elementFilter = settings.elementFilter
-    stepTiming = settings.stepTiming
+    timing = timingOf(settings.stepTiming)
     parameters = settings.parameters
     speedMasterUuid = settings.speedMasterUuid
     rateSpeedMasterUuid = settings.rateSpeedMasterUuid
     seconds = settings.seconds
-    size = settings.size
+    amount = settings.size
     direction = settings.direction
-    nShot = settings.nShot
+    runs = settings.nShot
     this.spread = settings.spread
     this.wings = settings.wings
-    this.blocks = settings.blocks
-    this.groups = settings.groups
+    this.segments = settings.blocks
+    this.parts = settings.groups
 }
 
 /**
@@ -630,25 +631,25 @@ private fun DaoLookEffect.takeSettings(settings: LookEffectSettings) {
  */
 private fun DaoLookEffect.takeChanges(baseline: LookEffectSettings, edited: LookEffectSettings) {
     if (edited.effectType != baseline.effectType) {
-        effectType = edited.effectType
+        fxType = edited.effectType
         parameters = edited.parameters
     } else if (edited.parameters != baseline.parameters) {
         parameters = parameters + edited.parameters.filter { (key, value) -> baseline.parameters[key] != value }
     }
-    if (edited.beatDivision != baseline.beatDivision) beatDivision = edited.beatDivision
+    if (edited.beatDivision != baseline.beatDivision) cycle = edited.beatDivision
     if (edited.blendMode != baseline.blendMode) blendMode = edited.blendMode
-    if (edited.distribution != baseline.distribution) distribution = edited.distribution
+    if (edited.distribution != baseline.distribution) order = edited.distribution
     if (edited.phaseOffset != baseline.phaseOffset) phaseOffset = edited.phaseOffset
     if (edited.elementMode != baseline.elementMode) elementMode = edited.elementMode
     if (edited.elementFilter != baseline.elementFilter) elementFilter = edited.elementFilter
-    if (edited.stepTiming != baseline.stepTiming) stepTiming = edited.stepTiming
-    if (edited.size != baseline.size) size = edited.size
+    if (edited.stepTiming != baseline.stepTiming) timing = timingOf(edited.stepTiming)
+    if (edited.size != baseline.size) amount = edited.size
     if (edited.direction != baseline.direction) direction = edited.direction
-    if (edited.nShot != baseline.nShot) nShot = edited.nShot
+    if (edited.nShot != baseline.nShot) runs = edited.nShot
     if (edited.spread != baseline.spread) spread = edited.spread
     if (edited.wings != baseline.wings) wings = edited.wings
-    if (edited.blocks != baseline.blocks) blocks = edited.blocks
-    if (edited.groups != baseline.groups) groups = edited.groups
+    if (edited.blocks != baseline.blocks) segments = edited.blocks
+    if (edited.groups != baseline.groups) parts = edited.groups
     // The timing is one choice (D7) — Seconds or a master — so it is written whole when any part of it
     // moved: a wall-clock row stored with the flag keeps reading Seconds after a rate master is named
     // unless the flag is cleared with it, and an edit onto Seconds nulls the masters beside it.

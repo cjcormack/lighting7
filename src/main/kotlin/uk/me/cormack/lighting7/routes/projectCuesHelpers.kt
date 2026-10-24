@@ -1,6 +1,7 @@
 @file:OptIn(kotlinx.coroutines.DelicateCoroutinesApi::class)
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.CommandIndex
 
@@ -173,7 +174,7 @@ private fun captureCueAssignments(state: State): List<CuePropertyAssignmentDto> 
         for (cue in cues) {
             for (row in cue.propertyAssignments) {
                 if (row.targetType == TargetRef.Group.TYPE) {
-                    hints.add(row.targetKey to canonicalPropertyName(row.propertyName))
+                    hints.add(row.targetKey to canonicalPropertyName(row.attribute))
                 }
             }
         }
@@ -297,11 +298,11 @@ internal fun captureCueAssignmentsFromSnapshot(
  */
 internal fun DaoCueLayer.toDto(): CueLayerDto? = CueLayerDto(
     lookId = look?.id?.value,
-    templateId = template?.id?.value,
+    templateId = palette?.id?.value,
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = propertyMask,
+    propertyMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,
@@ -474,7 +475,7 @@ internal fun resolveLayerSourceRecords(source: LayerSource): ResolvedLayerSource
  * Must run inside a transaction.
  */
 internal fun DaoCueLayer.appliesSameSourceAs(dto: CueLayerDto): Boolean =
-    look?.id?.value == dto.lookId && template?.id?.value == dto.templateId
+    look?.id?.value == dto.lookId && palette?.id?.value == dto.templateId
 
 /**
  * Is this stored layer the one [dto] describes — Record's whole `(source, targets)` key? A Look's
@@ -549,7 +550,7 @@ internal fun validateCueChildren(
             blocks = effect.blocks,
             groups = effect.groups,
         )?.let { return it }
-        registry.fxWriteProblem(effect.effectType, effect.parameters)?.let { return it }
+        registry.fxWriteProblem(effect.effectType, effect.parameters, effect.category)?.let { return it }
     }
     return null
 }
@@ -560,7 +561,7 @@ internal data class CueRowKey(val targetType: String, val targetKey: String, val
 internal fun cueRowKey(targetType: String, targetKey: String, propertyName: String) =
     CueRowKey(targetType, targetKey, canonicalPropertyName(propertyName))
 
-internal val DaoCuePropertyAssignment.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
+internal val DaoCuePropertyAssignment.rowKey get() = cueRowKey(targetType, targetKey, attribute)
 
 internal val CuePropertyAssignmentDto.rowKey get() = cueRowKey(targetType, targetKey, propertyName)
 
@@ -570,7 +571,7 @@ internal data class CueEffectKey(val targetType: String, val targetKey: String, 
 internal fun cueEffectKey(targetType: String, targetKey: String, propertyName: String?, effectType: String) =
     CueEffectKey(targetType, targetKey, propertyName?.let(::canonicalPropertyName), effectType)
 
-internal val DaoCueAdHocEffect.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
+internal val DaoCueAdHocEffect.effectKey get() = cueEffectKey(targetType, targetKey, attribute, fxType)
 
 internal val CueAdHocEffectDto.effectKey get() = cueEffectKey(targetType, targetKey, propertyName, effectType)
 
@@ -580,7 +581,7 @@ internal val CueAdHocEffectDto.effectKey get() = cueEffectKey(targetType, target
  */
 internal data class CueLayerKey(val lookId: Int?, val templateId: Int?)
 
-internal val DaoCueLayer.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
+internal val DaoCueLayer.layerKey get() = CueLayerKey(look?.id?.value, palette?.id?.value)
 
 internal val ResolvedLayerSource.layerKey get() = CueLayerKey(look?.id?.value, template?.id?.value)
 
@@ -712,7 +713,7 @@ internal fun writeCueChildren(
                 DaoCueLayer.new {
                     this.cue = cue
                     this.look = source.look
-                    this.template = source.template
+                    this.palette = source.template
                     take(layer)
                     if (restore) layer.uuid?.let { uuid = UUID.fromString(it) }
                 }
@@ -785,7 +786,7 @@ internal fun DaoCueLayer.take(layer: CueLayerDto) {
     sortOrder = layer.sortOrder
     enabled = layer.enabled
     targets = layer.withStoredTargets().targets
-    propertyMask = layer.propertyMask
+    attributeMask = layer.propertyMask
     blendMode = layer.blendMode
     amount = layer.amount
     stomp = layer.stomp
@@ -801,16 +802,16 @@ internal fun DaoCueLayer.take(layer: CueLayerDto) {
  * key are the stored row's, never the write's (stack-timeline plan P2).
  */
 internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
-    effectType = effect.effectType
-    category = effect.category
-    propertyName = effect.propertyName
-    beatDivision = effect.beatDivision
+    fxType = effect.effectType
+    family = effect.category
+    attribute = effect.propertyName
+    cycle = effect.beatDivision
     blendMode = effect.blendMode
-    distribution = effect.distribution
+    order = effect.distribution
     phaseOffset = effect.phaseOffset
     elementMode = effect.elementMode
     elementFilter = effect.elementFilter
-    stepTiming = effect.stepTiming
+    timing = timingOf(effect.stepTiming)
     parameters = effect.parameters
     delay = effect.delayMs.asDuration()
     interval = effect.intervalMs.asDuration()
@@ -820,18 +821,18 @@ internal fun DaoCueAdHocEffect.take(effect: CueAdHocEffectDto) {
     speedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.speedMasterUuid)
     rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
     seconds = effect.seconds
-    size = effect.size
+    amount = effect.size
     direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
-    nShot = effect.nShot
+    runs = effect.nShot
     this.spread = effect.spread
     this.wings = effect.wings
-    this.blocks = effect.blocks
-    this.groups = effect.groups
+    this.segments = effect.blocks
+    this.parts = effect.groups
 }
 
 /** [row] onto this row, but for the target [writeCueChildren] matched it on. */
 internal fun DaoCuePropertyAssignment.take(row: CuePropertyAssignmentDto) {
-    propertyName = row.propertyName
+    attribute = row.propertyName
     value = row.value
     fadeDuration = row.fadeDurationMs.asDuration()
     sortOrder = row.sortOrder
@@ -910,7 +911,7 @@ private fun findElementProperty(element: FixtureElement<*>, name: String): Fixtu
 /**
  * The category Record files a running effect under: the step effects' own (effects plan §3.6) —
  * Slot Steps is a beam effect whatever setting it steps, Palette Steps is its palettes' family,
- * read off the property it drives (a strobe in an Intensity palette is `dimmer`, not `controls`) —
+ * read off the property it drives (a strobe in an Intensity palette is `intensity`, not `controls`) —
  * else [categoryFromPropertyName].
  */
 internal fun recordedEffectCategory(effect: FxInstance): String {
@@ -929,7 +930,7 @@ internal fun recordedEffectCategory(effect: FxInstance): String {
  */
 internal fun categoryFromPropertyName(propertyName: String): String {
     return when (propertyName.lowercase()) {
-        "dimmer" -> "dimmer"
+        "dimmer" -> "intensity"
         "colour", "color", "rgbcolour" -> "colour"
         "position" -> "position"
         "zoom", "iris", "frost", "focus" -> "beam"

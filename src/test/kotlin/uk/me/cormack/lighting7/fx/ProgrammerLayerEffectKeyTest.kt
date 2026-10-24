@@ -10,8 +10,8 @@ import kotlin.test.assertNotEquals
 class ProgrammerLayerEffectKeyTest {
 
     private val pulse = StoredEffect(
-        effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR",
+        effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL",
         phaseOffset = 0.0, elementMode = null, elementFilter = null, stepTiming = null,
         parameters = emptyMap(), speedMasterUuid = null, rateSpeedMasterUuid = null,
     )

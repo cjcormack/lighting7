@@ -47,16 +47,16 @@ export function effectsRegisteredBy(
   return library.filter((e) => e.sourceDefinitionId === scriptId && fxSourceOf(e, byEffectId) === 'script')
 }
 
-export const FX_CATEGORY_ORDER = ['dimmer', 'colour', 'position', 'beam', 'palette', 'controls'] as const
+export const FX_CATEGORY_ORDER = ['intensity', 'colour', 'position', 'beam', 'steps', 'controls'] as const
 export type FxCategory = (typeof FX_CATEGORY_ORDER)[number]
 
 export const FX_CATEGORY_LABELS: Record<FxCategory, string> = {
-  dimmer: 'Intensity',
+  intensity: 'Intensity',
   colour: 'Colour',
   position: 'Position',
   beam: 'Beam',
   // The Steps FX's own: each is offered in the family of what it steps (effects plan §4.4).
-  palette: 'Steps',
+  steps: 'Steps',
   controls: 'Controls',
 }
 

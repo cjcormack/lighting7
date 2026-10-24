@@ -59,9 +59,9 @@ enum class SpreadOver {
  * order, which cells it has, what a colour means on a head with amber — is the route's business
  * (`routes/programmerSpread.kt`); this file never sees one, which is what makes its tests a table.
  *
- * **Order is a [DistributionStrategy].** The heads arrive already in rig order (`LINEAR`, the
+ * **Order is a [DistributionStrategy].** The heads arrive already in rig order (`NORMAL`, the
  * desk's `state/BuskRigOrder.kt` — or a lone group's own member order, venue-visit plan S7), and the strategy's own phase offsets say where each sits along
- * the curve: `LINEAR` is `0 … 1` in list order, `REVERSE` runs the other way, `CENTER_OUT` folds so
+ * the curve: `NORMAL` is `0 … 1` in list order, `REVERSE` runs the other way, `CENTRE_OUT` folds so
  * the two ends share a position, `RANDOM(seed)` is a permutation, `UNIFIED` puts every head at 0.
  * The offsets are normalised to the largest one so the far end always reaches `1.0` — a strategy's
  * phase spacing is `i / n` (the FX tick's need, never landing on a whole cycle) where a spread's is

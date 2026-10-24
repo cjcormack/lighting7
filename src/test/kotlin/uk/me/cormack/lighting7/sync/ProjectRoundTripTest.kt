@@ -22,6 +22,7 @@ import uk.me.cormack.lighting7.routes.deleteProjectRows
 import uk.me.cormack.lighting7.sync.auth.AuthResolver
 import uk.me.cormack.lighting7.sync.auth.InMemoryCredentialStore
 import uk.me.cormack.lighting7.sync.dto.ProjectJson
+import uk.me.cormack.lighting7.sync.dto.FormatVersionJson
 import uk.me.cormack.lighting7.sync.dto.ShowHideJson
 import uk.me.cormack.lighting7.sync.dto.ShowParkReleaseJson
 import uk.me.cormack.lighting7.sync.dto.ParkedChannelJson
@@ -135,6 +136,31 @@ class ProjectRoundTripTest {
     }
 
     /**
+     * The archive in the glossary's words (terminology plan session 4, `formatVersion` 38): no folder,
+     * field or value the rename moved is written, and `project.json` no longer says the FX library.
+     */
+    @Test
+    fun `a v38 export says no old name`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val files = readExportFiles(exportDirA)
+        assertTrue(files.keys.none { path -> listOf("templates/", "cueAdHocEffects/", "cuePropertyAssignments/").any { path.startsWith(it) } })
+        assertTrue(files.keys.any { it.startsWith("palettes/") } && files.keys.any { it.startsWith("cueAdHocFx/") })
+        val old = listOf(
+            "\"effectType\"", "\"category\"", "\"propertyName\"", "\"beatDivision\"", "\"distribution\"", "\"stepTiming\"",
+            "\"nShot\"", "\"blocks\"", "\"groups\"", "\"templateUuid\"", "\"propertyMask\"", "\"usage\"", "\"effectId\"",
+            "\"effectMode\"", "\"compatibleProperties\"", "\"defaultStepTiming\"", "\"effects\"", "\"effect\"", "\"fxLibrary\"",
+            "tmpl:", "pressTemplate", "stackEffectSize", "\"CENTER_OUT\"", "\"EDGES_IN\"", "\"order\": \"LINEAR\"",
+        )
+        for ((path, text) in files) {
+            if (!path.endsWith(".json")) continue
+            for (name in old) assertTrue(name !in text, "$path says $name")
+        }
+        assertEquals(FormatVersionJson(formatVersion = 38, minReader = 38), canonicalDecode(FormatVersionJson.serializer(), files.getValue("formatVersion.json")))
+    }
+
+    /**
      * A standalone show's origin (venue-attach plan D1) travels in `project.json` and imports back.
      */
     @Test
@@ -175,36 +201,36 @@ class ProjectRoundTripTest {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
 
-        val templates = Files.list(exportDirA.resolve("templates")).use { stream ->
+        val templates = Files.list(exportDirA.resolve("palettes")).use { stream ->
             stream.toList().map { canonicalDecode(TemplateJson.serializer(), Files.readString(it)) }
         }
 
-        val effectTemplate = templates.single { it.effect != null }
+        val effectTemplate = templates.single { it.fx != null }
         assertEquals("amber-breathe", effectTemplate.name)
         assertTrue(effectTemplate.rows.isEmpty(), "an effect template holds no rows (D1)")
-        val effect = effectTemplate.effect!!
-        assertEquals("ColourWave", effect.effectType)
-        assertEquals("colour", effect.category)
+        val effect = effectTemplate.fx!!
+        assertEquals("ColourWave", effect.fxType)
+        assertEquals("colour", effect.family)
         // The off-default fields, which are the ones a copier can silently drop: canonical JSON
         // omits defaults, so a field left at its default is invisible to the round trip.
         assertEquals(0.125, effect.phaseOffset)
-        assertEquals("REVERSE", effect.distribution)
+        assertEquals("REVERSE", effect.order)
         assertEquals("MAX", effect.blendMode)
         assertEquals("EVEN", effect.elementFilter)
-        assertEquals(false, effect.stepTiming)
-        assertTrue(effect.parameters.getValue("colours").startsWith("tmpl:"))
+        assertEquals("CYCLE", effect.timing)
+        assertTrue(effect.parameters.getValue("colours").startsWith("pal:"))
 
-        // The other two templates hold values, and `explicitNulls = false` must keep the key out
-        // of their documents entirely rather than writing `"effect": null`.
-        val valueDocs = Files.list(exportDirA.resolve("templates")).use { stream ->
+        // The other two palettes hold values, and `explicitNulls = false` must keep the key out
+        // of their documents entirely rather than writing `"fx": null`.
+        val valueDocs = Files.list(exportDirA.resolve("palettes")).use { stream ->
             stream.toList()
                 .map { Files.readString(it) }
                 .filter { !it.contains("amber-breathe") }
         }
         assertEquals(2, valueDocs.size)
         assertTrue(
-            valueDocs.none { it.contains("\"effect\"") },
-            "a value template must not carry the effect key at all",
+            valueDocs.none { it.contains("\"fx\"") },
+            "a value palette must not carry the fx key at all",
         )
     }
 
@@ -225,9 +251,9 @@ class ProjectRoundTripTest {
             }
 
         val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
-            .single { it.name == "warm-pulse" }.effects.single()
+            .single { it.name == "warm-pulse" }.fx.single()
         assertTrue(lookEffect.seconds, "a Look's effect keeps Seconds")
-        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+        val templateEffect = docs("palettes", TemplateJson.serializer()).single { it.fx != null }.fx!!
         assertTrue(templateEffect.seconds, "a palette's effect keeps Seconds")
         val adHoc = openPulse(exportDirA)
         assertTrue(adHoc.seconds, "a cue's ad-hoc effect keeps Seconds")
@@ -257,12 +283,12 @@ class ProjectRoundTripTest {
             }
 
         val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
-            .single { it.name == "warm-pulse" }.effects.single()
-        assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.size, lookEffect.direction, lookEffect.nShot))
-        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
-        assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.size, templateEffect.direction, templateEffect.nShot))
+            .single { it.name == "warm-pulse" }.fx.single()
+        assertEquals(Triple(0.4, "BACKWARD", 2), Triple(lookEffect.amount, lookEffect.direction, lookEffect.runs))
+        val templateEffect = docs("palettes", TemplateJson.serializer()).single { it.fx != null }.fx!!
+        assertEquals(Triple(0.75, "BOUNCE", 3), Triple(templateEffect.amount, templateEffect.direction, templateEffect.runs))
         val adHoc = openPulse(exportDirA)
-        assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.size, adHoc.direction, adHoc.nShot))
+        assertEquals(Triple(0.6, "BACKWARD", 1), Triple(adHoc.amount, adHoc.direction, adHoc.runs))
 
         val format = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
@@ -289,15 +315,15 @@ class ProjectRoundTripTest {
         data class Shape(val spread: Double, val wings: Int, val blocks: Int, val groups: Int)
 
         val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
-            .single { it.name == "warm-pulse" }.effects.single()
-        assertEquals(Shape(0.5, 2, 3, 4), Shape(lookEffect.spread, lookEffect.wings, lookEffect.blocks, lookEffect.groups))
-        val templateEffect = docs("templates", TemplateJson.serializer()).single { it.effect != null }.effect!!
+            .single { it.name == "warm-pulse" }.fx.single()
+        assertEquals(Shape(0.5, 2, 3, 4), Shape(lookEffect.spread, lookEffect.wings, lookEffect.segments, lookEffect.parts))
+        val templateEffect = docs("palettes", TemplateJson.serializer()).single { it.fx != null }.fx!!
         assertEquals(
             Shape(1.5, 3, 2, 2),
-            Shape(templateEffect.spread, templateEffect.wings, templateEffect.blocks, templateEffect.groups),
+            Shape(templateEffect.spread, templateEffect.wings, templateEffect.segments, templateEffect.parts),
         )
         val adHoc = openPulse(exportDirA)
-        assertEquals(Shape(0.25, 2, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.blocks, adHoc.groups))
+        assertEquals(Shape(0.25, 2, 4, 3), Shape(adHoc.spread, adHoc.wings, adHoc.segments, adHoc.parts))
 
         val format = canonicalDecode(
             uk.me.cormack.lighting7.sync.dto.FormatVersionJson.serializer(),
@@ -330,10 +356,10 @@ class ProjectRoundTripTest {
             }
 
         val lookEffect = docs("looks", uk.me.cormack.lighting7.sync.dto.LookJson.serializer())
-            .single { it.name == "Warm Amber" }.effects.single()
+            .single { it.name == "Warm Amber" }.fx.single()
         assertEquals("selection", lookEffect.targetType)
         assertEquals("""[{"key":"hex-3","type":"fixture"},{"key":"front-wash","type":"group"}]""", lookEffect.targetKey)
-        val adHoc = docs("cueAdHocEffects", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer())
+        val adHoc = docs("cueAdHocFx", uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson.serializer())
             .single { it.targetType == "selection" }
         assertEquals("""[{"key":"front-wash","type":"group"},{"key":"hex-4","type":"fixture"}]""", adHoc.targetKey)
 
@@ -635,7 +661,7 @@ class ProjectRoundTripTest {
         val keys = banks.first()
         assertTrue(keys.solo)
         assertEquals(listOf("templateUuid", "lookUuid", "cueUuid"), keys.pads.map { pad ->
-            listOfNotNull(pad.templateUuid?.let { "templateUuid" }, pad.lookUuid?.let { "lookUuid" }, pad.cueUuid?.let { "cueUuid" }).single()
+            listOfNotNull(pad.paletteUuid?.let { "templateUuid" }, pad.lookUuid?.let { "lookUuid" }, pad.cueUuid?.let { "cueUuid" }).single()
         })
 
         val slots = Files.list(exportDirA.resolve("cueSlots")).use { stream ->
@@ -873,11 +899,11 @@ class ProjectRoundTripTest {
         )
         Files.writeString(cueFile, canonicalEncode(CueJson.serializer(), written.copy(events = written.events + bogus)))
         // A pre-v21 cue row raising a tube, as the Twin Shot's sliders once allowed.
-        val rowDir = exportDirA.resolve("cuePropertyAssignments")
+        val rowDir = exportDirA.resolve("cueAttributeAssignments")
         Files.createDirectories(rowDir)
         val raised = CuePropertyAssignmentJson(
             uuid = java.util.UUID.randomUUID().toString(), cueUuid = written.uuid,
-            targetType = "fixture", targetKey = "cannon-1", propertyName = "output1", value = "255",
+            targetType = "fixture", targetKey = "cannon-1", attribute = "output1", value = "255",
         )
         Files.writeString(rowDir.resolve("${raised.uuid}.json"), canonicalEncode(CuePropertyAssignmentJson.serializer(), raised))
 
@@ -887,10 +913,10 @@ class ProjectRoundTripTest {
             stream.toList().map { canonicalDecode(CueJson.serializer(), Files.readString(it)) }
         }.single { it.name == "open" }
         assertEquals(written.events.map { it.trigger }, back.events.map { it.trigger })
-        val rows = Files.list(exportDirB.resolve("cuePropertyAssignments")).use { stream ->
+        val rows = Files.list(exportDirB.resolve("cueAttributeAssignments")).use { stream ->
             stream.toList().map { canonicalDecode(CuePropertyAssignmentJson.serializer(), Files.readString(it)) }
         }
-        assertTrue(rows.none { it.propertyName == "output1" }, "the raised tube was stripped")
+        assertTrue(rows.none { it.attribute == "output1" }, "the raised tube was stripped")
         assertTrue(rows.isNotEmpty(), "the cue's other rows came through")
     }
 
@@ -1149,7 +1175,7 @@ class ProjectRoundTripTest {
         // Corrupt one property assignment's cueUuid so FK resolution fails mid-import, after the
         // cues, stacks and entries have landed. (A cue file names no stack since v32, and an entry
         // naming a missing stack is dropped rather than refused — `CueStackEntrySyncTest`.)
-        val dir = exportDirA.resolve("cuePropertyAssignments")
+        val dir = exportDirA.resolve("cueAttributeAssignments")
         val first = Files.list(dir).use { it.findFirst().get() }
         val original = Files.readString(first)
         val corrupt = original.replace(
@@ -1265,12 +1291,12 @@ class ProjectRoundTripTest {
         ProjectExporter(state).export(projectId, exportDirA)
 
         val cueNames = exportDocs(exportDirA, "cues", CueJson.serializer()).associate { it.uuid to it.name }
-        val effects = exportDocs(exportDirA, "cueAdHocEffects", CueAdHocEffectJson.serializer())
+        val effects = exportDocs(exportDirA, "cueAdHocFx", CueAdHocEffectJson.serializer())
         val keyed = effects.filter { it.runUuid != null }
         assertEquals(setOf("open", "build"), keyed.map { cueNames.getValue(it.cueUuid) }.toSet(), "one row in each neighbour")
         assertEquals(setOf(RICH_PROJECT_PULSE_RUN.toString()), keyed.map { it.runUuid }.toSet(), "under one key")
         val unkeyed = effects.single { it.runUuid == null }
-        val unkeyedText = Files.readString(exportDirA.resolve("cueAdHocEffects/${unkeyed.uuid}.json"))
+        val unkeyedText = Files.readString(exportDirA.resolve("cueAdHocFx/${unkeyed.uuid}.json"))
         assertFalse(unkeyedText.contains("runUuid"), "a row in no run writes no key: $unkeyedText")
         assertTrue(SUPPORTED_FORMAT_VERSION >= 37, "run keys sync from v37")
         assertTrue(Files.readString(exportDirA.resolve("formatVersion.json")).contains("\"formatVersion\": $SUPPORTED_FORMAT_VERSION"))
@@ -1294,7 +1320,7 @@ class ProjectRoundTripTest {
         val projectId = seedRichProject(state)
         ProjectExporter(state).export(projectId, exportDirA)
         wipeDatabase()
-        Files.list(exportDirA.resolve("cueAdHocEffects")).use { s -> s.toList() }.forEach { file ->
+        Files.list(exportDirA.resolve("cueAdHocFx")).use { s -> s.toList() }.forEach { file ->
             val doc = Json.parseToJsonElement(Files.readString(file)).jsonObject
             Files.writeString(file, JsonObject(doc - "runUuid").toString())
         }
@@ -1517,8 +1543,8 @@ class ProjectRoundTripTest {
             files.toList().single { canonicalDecode(LookJson.serializer(), Files.readString(it)).name == "warm-pulse" }
         }
         val look = canonicalDecode(LookJson.serializer(), Files.readString(lookFile))
-        val deferred = look.effects.single().copy(targetType = DEFERRED_TARGET_TYPE, targetKey = "")
-        Files.writeString(lookFile, canonicalEncode(LookJson.serializer(), look.copy(effects = listOf(deferred))))
+        val deferred = look.fx.single().copy(targetType = DEFERRED_TARGET_TYPE, targetKey = "")
+        Files.writeString(lookFile, canonicalEncode(LookJson.serializer(), look.copy(fx = listOf(deferred))))
         wipeDatabase()
 
         val (imported, logs) = captureLogs(ProjectImporter::class.java.name) {
@@ -1557,7 +1583,7 @@ class ProjectRoundTripTest {
         transaction(state.database) {
             val layers = DaoCueLayer.all().filter { it.cue.project.id.value == imported.projectId }
             assertTrue(layers.filter { it.look != null }.all { it.targets.isEmpty() }, "every Look layer names none")
-            assertTrue(layers.any { it.template != null && it.targets.isNotEmpty() }, "a palette layer keeps its targets")
+            assertTrue(layers.any { it.palette != null && it.targets.isNotEmpty() }, "a palette layer keeps its targets")
         }
         assertTrue(logs.any { layer.uuid in it && "named targets" in it }, "$logs")
     }
@@ -1619,7 +1645,7 @@ class ProjectRoundTripTest {
     /** The rich fixture's Pulse in `open`, every field set; `build`'s runs it on at the defaults. */
     private fun openPulse(dir: Path): CueAdHocEffectJson {
         val open = exportDocs(dir, "cues", CueJson.serializer()).single { it.name == "open" }.uuid
-        return exportDocs(dir, "cueAdHocEffects", CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" && it.cueUuid == open }
+        return exportDocs(dir, "cueAdHocFx", CueAdHocEffectJson.serializer()).single { it.targetType == "fixture" && it.cueUuid == open }
     }
 
     private fun wipeDatabase() {

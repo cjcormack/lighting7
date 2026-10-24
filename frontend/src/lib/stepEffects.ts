@@ -19,7 +19,7 @@ export const SLOT_STEPS = 'SlotSteps'
  * The category the Steps FX, Palette Steps and Slot Steps, register under (terminology plan D23),
  * which names no attribute family: each is offered, and stored, in the family of what it steps.
  */
-export const STEPS_CATEGORY = 'palette'
+export const STEPS_CATEGORY = 'steps'
 
 /**
  * The category an FX is offered and stored under for the family it drives: Slot Steps' is Beam, a
@@ -42,7 +42,7 @@ export function isSlotSteps(effectType: string | null | undefined): boolean {
 export function categoryForFamily(family: AttributeFamily): string {
   switch (family) {
     case 'INTENSITY':
-      return 'dimmer'
+      return 'intensity'
     case 'COLOUR':
       return 'colour'
     case 'POSITION':
@@ -80,7 +80,7 @@ export function stepPalettesFor(
 function namedPalettes(parameter: string | undefined, templates: readonly TemplateSummary[]): TemplateSummary[] {
   const byUuid = new Map(templates.map((t) => [t.uuid, t] as const))
   return parseStepList(parameter).flatMap((entry) => {
-    const palette = entry.startsWith('tmpl:') ? byUuid.get(entry.slice('tmpl:'.length)) : undefined
+    const palette = entry.startsWith('pal:') ? byUuid.get(entry.slice('pal:'.length)) : undefined
     return palette != null ? [palette] : []
   })
 }
@@ -150,7 +150,7 @@ export function paletteStepsOffers(
   return offers
 }
 
-/** A step list parameter's entries, in order — the palettes' `tmpl:` references, or slot names. */
+/** A step list parameter's entries, in order — the palettes' `pal:` references, or slot names. */
 export function parseStepList(value: string | null | undefined): string[] {
   return (value ?? '')
     .split(',')

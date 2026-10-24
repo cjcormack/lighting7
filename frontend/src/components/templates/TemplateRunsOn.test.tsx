@@ -51,7 +51,7 @@ function effect(over: Partial<TemplateEffect> = {}): TemplateEffect {
     category: 'colour',
     beatDivision: 2,
     blendMode: 'OVERRIDE',
-    distribution: 'LINEAR',
+    distribution: 'NORMAL',
     parameters: {},
     ...over,
   }

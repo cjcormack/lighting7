@@ -32,7 +32,7 @@ FxOutput.Slider(value)
 `
 
 const NEW_FX_DEFAULTS = {
-  category: "dimmer",
+  category: "intensity",
   outputType: "SLIDER",
   effectMode: "STANDARD",
   parameters: [

@@ -1,0 +1,12 @@
+{
+  "kind": "TRUSS",
+  "lengthM": 9.0,
+  "name": "FOH Truss",
+  "pitchDeg": 0.0,
+  "positionX": 0.0,
+  "positionY": -2.0,
+  "positionZ": 6.0,
+  "rollDeg": 0.0,
+  "uuid": "2b2a7134-9bb0-4136-b25c-bce9d6968cf2",
+  "yawDeg": 0.0
+}

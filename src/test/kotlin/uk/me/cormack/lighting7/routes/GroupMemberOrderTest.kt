@@ -97,7 +97,7 @@ class GroupMemberOrderTest : RouteIntegrationTest() {
         val detail = TestJson.parseToJsonElement(client.get("/api/rest/groups/wash").bodyAsText()).jsonObject
         assertEquals(listOf("e", "a", "b", "c", "d"), detail["members"]!!.jsonArray.map { it.jsonObject["fixtureKey"]!!.jsonPrimitive.content })
         val steps = detail["distributionSteps"]!!.jsonObject
-        assertEquals(listOf(3, 2, 1, 2, 3), steps["CENTER_OUT"]!!.jsonArray.map { it.jsonPrimitive.int })
-        assertEquals(listOf(1, 2, 3, 4, 5), steps["LINEAR"]!!.jsonArray.map { it.jsonPrimitive.int })
+        assertEquals(listOf(3, 2, 1, 2, 3), steps["CENTRE_OUT"]!!.jsonArray.map { it.jsonPrimitive.int })
+        assertEquals(listOf(1, 2, 3, 4, 5), steps["NORMAL"]!!.jsonArray.map { it.jsonPrimitive.int })
     }
 }

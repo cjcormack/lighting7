@@ -56,7 +56,7 @@ vi.mock('@/store/templates', () => ({
           category: 'position',
           beatDivision: 0.5,
           blendMode: 'ADDITIVE',
-          distribution: 'LINEAR',
+          distribution: 'NORMAL',
           phaseOffset: 0,
           parameters: { panCenter: '128', tiltCenter: '128', panRadius: '60', tiltRadius: '20' },
           speedMasterUuid: null,

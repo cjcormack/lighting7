@@ -12,11 +12,11 @@ import java.awt.Color
  * @param memberIndex 0-based index of the current element within the group
  * @param distributionOffset The phase offset applied by the distribution strategy for this member (0.0–1.0)
  * @param hasDistributionSpread Whether the distribution strategy produces different offsets
- *        for different members. False for UNIFIED (all offsets 0), true for LINEAR, CENTER_OUT, etc.
+ *        for different members. False for UNIFIED (all offsets 0), true for NORMAL, CENTRE_OUT, etc.
  *        Effects use this to decide whether to chase (windowed) or apply uniformly.
  * @param numDistinctSlots Number of unique offset positions in the distribution. Equals
- *        groupSize for asymmetric distributions (LINEAR, REVERSE, RANDOM), but fewer for
- *        symmetric ones (CENTER_OUT, EDGES_IN) where multiple members share an offset.
+ *        groupSize for asymmetric distributions (NORMAL, REVERSE, RANDOM), but fewer for
+ *        symmetric ones (CENTRE_OUT, CENTRE_IN) where multiple members share an offset.
  *        A step chase uses this for window width: `1/numDistinctSlots`.
  * @param trianglePhase When true, the base phase should be remapped through a triangle wave
  *        before windowing, so the chase sweeps forward then backward (PING_PONG).

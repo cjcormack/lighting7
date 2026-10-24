@@ -151,7 +151,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 val effectiveUsage = if (usagePatched) {
                     normaliseSpeedMasterUsage(body["usage"].nullableString())
                 } else {
-                    master.usageCategory
+                    master.family
                 }
                 val storedRatio = master.followRatio
                 val followPatched = "followNum" in body
@@ -228,7 +228,7 @@ internal fun Route.routeApiRestProjectSpeedMasters(state: State) {
                 if ("notes" in body) {
                     master.notes = body["notes"].nullableString()?.trim()?.takeIf { it.isNotEmpty() }
                 }
-                master.usageCategory = effectiveUsage
+                master.family = effectiveUsage
                 master.followNum = effectiveNum
                 master.followDen = effectiveDen
                 master.followTargetUuid = effectiveTarget
@@ -431,7 +431,7 @@ internal fun createSpeedMaster(
             this.name = name
             request.bpm?.let { bpm = it }
             this.notes = request.notes?.trim()?.takeIf { it.isNotEmpty() }
-            usageCategory = usage
+            family = usage
             followNum = request.followNum
             followDen = request.followDen
             followTargetUuid = followTarget
@@ -748,7 +748,7 @@ private fun DaoSpeedMaster.toDto(references: SpeedMasterUsage): SpeedMasterDto =
     bpm = bpm,
     source = source,
     notes = notes,
-    usage = usageCategory,
+    usage = family,
     followNum = followRatio?.first,
     followDen = followRatio?.second,
     followTargetUuid = followTarget?.toString(),

@@ -1,5 +1,7 @@
 package uk.me.cormack.lighting7.routes
 
+import uk.me.cormack.lighting7.models.timingOf
+import uk.me.cormack.lighting7.models.stepTimingOf
 import uk.me.cormack.lighting7.fixture.FixtureTriggers
 import uk.me.cormack.lighting7.fixture.TriggerIndex
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
@@ -313,7 +315,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 val usage = templateUsage(template.id.value)
                 // Three kinds of usage, and all must block. A cue layer *applies* the template; a
                 // programmer layer is *running* it right now; an effect parameter *references* it
-                // by uuid (`tmpl:{uuid}`) — and deleting out from under that last one is worse than
+                // by uuid (`pal:{uuid}`) — and deleting out from under that last one is worse than
                 // out from under a layer, because the effect keeps running and its colour silently
                 // falls back to white.
                 val fxRefs = templateFxReferenceCount(template.uuid)
@@ -328,7 +330,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 // No DB-level ON DELETE CASCADE — SQLite does not enforce cascades without a
                 // per-connection pragma, so children go first, explicitly.
                 if (resource.force) {
-                    DaoCueLayer.find { DaoCueLayers.template eq template.id }.forEach { it.delete() }
+                    DaoCueLayer.find { DaoCueLayers.palette eq template.id }.forEach { it.delete() }
                 }
                 template.rows.forEach { it.delete() }
                 template.effects.forEach { it.delete() }
@@ -505,7 +507,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     // source's would make sync treat the two as one record. `lastPressedAt` starts null — a press
     // history belongs to the template that was pressed, and a copy has not been.
     //
-    // Per-fixture row keys, the effect's speed master uuids and any `tmpl:{uuid}` colour parameter
+    // Per-fixture row keys, the effect's speed master uuids and any `pal:{uuid}` colour parameter
     // are copied **as they are**, the same trade `copyLook` makes. Into another project that can
     // leave a key that is not patched there (the row reads as unhealthy, exactly as after a
     // repatch), a master that does not exist there (it resolves to master 1, the documented
@@ -516,7 +518,7 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
     // arrived through an import, which writes verbatim by design), and the copy is the same
     // contents under a new uuid. Re-validating would refuse to copy a template the source project
     // can still press — an import-landed category this build's registry lacks, say — which helps
-    // nobody. The one rule that turns on identity, a `tmpl:` parameter naming the template's own
+    // nobody. The one rule that turns on identity, a `pal:` parameter naming the template's own
     // uuid, cannot newly fire: the copy's uuid is fresh.
     post<CopyTemplateResource> { resource ->
         withProject(state, resource.parent.projectId) { project ->
@@ -543,10 +545,10 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 }
                 for (row in source.rows.orderBy(DaoTemplateRows.sortOrder to SortOrder.ASC)) {
                     DaoTemplateRow.new {
-                        template = copy
+                        palette = copy
                         targetType = row.targetType
                         targetKey = row.targetKey
-                        propertyName = row.propertyName
+                        attribute = row.attribute
                         value = row.value
                         sortOrder = row.sortOrder
                     }
@@ -555,28 +557,28 @@ internal fun Route.routeApiRestProjectTemplates(state: State) {
                 // iterates it.
                 for (effect in source.effects) {
                     DaoTemplateEffect.new {
-                        template = copy
-                        effectType = effect.effectType
-                        category = effect.category
-                        propertyName = effect.propertyName
-                        beatDivision = effect.beatDivision
+                        palette = copy
+                        fxType = effect.fxType
+                        family = effect.family
+                        attribute = effect.attribute
+                        cycle = effect.cycle
                         blendMode = effect.blendMode
-                        distribution = effect.distribution
+                        order = effect.order
                         phaseOffset = effect.phaseOffset
                         elementMode = effect.elementMode
                         elementFilter = effect.elementFilter
-                        stepTiming = effect.stepTiming
+                        timing = effect.timing
                         parameters = effect.parameters
                         speedMasterUuid = effect.speedMasterUuid
                         rateSpeedMasterUuid = effect.rateSpeedMasterUuid
                         seconds = effect.seconds
-                        size = effect.size
+                        amount = effect.amount
                         direction = effect.direction
-                        nShot = effect.nShot
+                        runs = effect.runs
                         this.spread = effect.spread
                         this.wings = effect.wings
-                        this.blocks = effect.blocks
-                        this.groups = effect.groups
+                        this.segments = effect.segments
+                        this.parts = effect.parts
                     }
                 }
                 CopyTemplateOutcome.Copied(
@@ -784,7 +786,7 @@ internal data class TemplateInUseResponse(
     val layerCount: Int,
     val cueIds: List<Int>,
     val cueNames: List<String>,
-    /** Effect parameters holding a `tmpl:{uuid}` reference to this template. */
+    /** Effect parameters holding a `pal:{uuid}` reference to this template. */
     val fxReferenceCount: Int = 0,
     /**
      * Programmer layers tracking this template *right now*.
@@ -993,7 +995,7 @@ private sealed interface CopyTemplateOutcome {
  *
  * An **effect** template's one effect (fx-templates D1–D4, D12): exactly one of rows/effect, a
  * category that maps to a bankable family, a type the [FxRegistry] resolves whose own category
- * agrees with the stored one, enum-valued fields the desk recognises, and no `tmpl:` parameter
+ * agrees with the stored one, enum-valued fields the desk recognises, and no `pal:` parameter
  * naming the template itself.
  */
 
@@ -1242,7 +1244,7 @@ private fun validateTemplateEffect(
         stepsFxCategory(registration.id, null) ?: registration.category
     }
     if (!category.equals(effect.category, ignoreCase = true)) {
-        return "'${effect.effectType}' is a $category effect, not ${effect.category}"
+        return "'${effect.effectType}' is in the $category family, not ${effect.category}"
     }
     // A palette's beam effect lands, on a press, on the property the effect names or else the one
     // its registration declares, so a script-registered one must declare exactly one, by name.
@@ -1285,7 +1287,7 @@ private fun validateTemplateEffect(
         groups = effect.groups,
     )?.let { return it }
 
-    registry.fxWriteProblem(effect.effectType, effect.parameters)?.let { return it }
+    registry.fxWriteProblem(effect.effectType, effect.parameters, effect.category)?.let { return it }
 
     // Rule 5 (D12): a template naming itself would recurse in `createEffectWithTemplates`. The
     // other direction — an effect template's colour parameter naming a *value* colour template —
@@ -1344,10 +1346,10 @@ private fun createTemplateRows(template: DaoTemplate, rows: List<TemplateRowDto>
     }
     for ((index, row) in rows.withIndex()) {
         DaoTemplateRow.new {
-            this.template = template
+            this.palette = template
             targetType = row.targetType
             targetKey = if (row.targetType == DEFERRED_TARGET_TYPE) "" else row.targetKey
-            propertyName = row.propertyName
+            attribute = row.propertyName
             value = row.value
             sortOrder = if (row.sortOrder != 0) row.sortOrder else index
         }
@@ -1369,17 +1371,17 @@ private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDt
     CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
     DaoTemplateEffect.new {
         if (uuid != null) this.uuid = uuid
-        this.template = template
-        effectType = effect.effectType
-        category = effect.category
-        propertyName = effect.propertyName
-        beatDivision = effect.beatDivision
+        this.palette = template
+        fxType = effect.effectType
+        family = effect.category
+        attribute = effect.propertyName
+        cycle = effect.beatDivision
         blendMode = effect.blendMode
-        distribution = effect.distribution
+        order = effect.distribution
         phaseOffset = effect.phaseOffset
         elementMode = effect.elementMode
         elementFilter = effect.elementFilter
-        stepTiming = effect.stepTiming
+        timing = timingOf(effect.stepTiming)
         parameters = effect.parameters
         // `speedMasterUuidOrNull`, not `UUID.fromString`: this is a client-supplied string, and
         // the bare parse throws `IllegalArgumentException` out of the transaction and out of the
@@ -1390,13 +1392,13 @@ private fun createTemplateEffect(template: DaoTemplate, effect: TemplateEffectDt
         rateSpeedMasterUuid = if (effect.seconds) null else speedMasterUuidOrNull(effect.rateSpeedMasterUuid)
         // Seconds follows no master (D7), so a row on Seconds keeps none beside it.
         seconds = effect.seconds
-        size = effect.size
+        amount = effect.size
         direction = EffectSpecCoercion.Names.canonicalDirection(effect.direction)
-        nShot = effect.nShot
+        runs = effect.nShot
         this.spread = effect.spread
         this.wings = effect.wings
-        this.blocks = effect.blocks
-        this.groups = effect.groups
+        this.segments = effect.blocks
+        this.parts = effect.groups
     }
 }
 
@@ -1487,10 +1489,10 @@ internal fun templateUsage(templateId: Int): TemplateUsage =
 internal fun templateUsageFor(templateIds: Collection<Int>): Map<Int, TemplateUsage> {
     if (templateIds.isEmpty()) return emptyMap()
     val ids = templateIds.toList()
-    val layers = DaoCueLayer.find { DaoCueLayers.template inList ids }.toList()
+    val layers = DaoCueLayer.find { DaoCueLayers.palette inList ids }.toList()
     // `template` is nullable (a layer may name a Look instead) but this query filtered on it, so
     // every row here has one.
-    val byTemplate = layers.groupBy { it.template!!.id.value }
+    val byTemplate = layers.groupBy { it.palette!!.id.value }
     val buskPages = buskPageCountsFor(BuskPadKind.TEMPLATE, ids)
     return ids.associateWith { templateId ->
         val mine = byTemplate[templateId].orEmpty()
@@ -1510,7 +1512,7 @@ internal fun templateUsageFor(templateIds: Collection<Int>): Map<Int, TemplateUs
 internal fun DaoTemplateRow.toDto() = TemplateRowDto(
     targetType = targetType,
     targetKey = targetKey,
-    propertyName = propertyName,
+    propertyName = attribute,
     value = value,
     sortOrder = sortOrder,
 )
@@ -1523,32 +1525,32 @@ internal fun DaoTemplateRow.toDto() = TemplateRowDto(
  * failure is a client rendering "2 Bars" for a two-second cycle rather than anything that throws.
  */
 internal fun DaoTemplateEffect.toDto(registry: FxRegistry) = TemplateEffectDto(
-    effectType = effectType,
-    category = category,
-    propertyName = propertyName,
-    beatDivision = beatDivision,
+    effectType = fxType,
+    category = family,
+    propertyName = attribute,
+    beatDivision = cycle,
     blendMode = blendMode,
-    distribution = distribution,
+    distribution = order,
     phaseOffset = phaseOffset,
     elementMode = elementMode,
     elementFilter = elementFilter,
-    stepTiming = stepTiming,
+    stepTiming = stepTimingOf(timing),
     parameters = parameters,
     speedMasterUuid = speedMasterUuid?.toString(),
     rateSpeedMasterUuid = rateSpeedMasterUuid?.toString(),
     seconds = seconds,
-    size = size,
+    size = amount,
     direction = direction,
-    nShot = nShot,
+    nShot = runs,
     spread = spread,
     wings = wings,
-    blocks = blocks,
-    groups = groups,
+    blocks = segments,
+    groups = parts,
     // The registry is the authority, exactly as it is for `category` — which the write boundary
     // checks rather than trusts. Unlike `category` this one is not stored at all: an effect's
     // timing source is a property of the *effect type*, so a column would be a second copy that a
     // re-registered script could contradict.
-    timingSource = registry.getRegistration(effectType)?.timingSource?.name,
+    timingSource = registry.getRegistration(fxType)?.timingSource?.name,
 )
 
 /**
@@ -1568,7 +1570,7 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
     // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
     // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
     // this function safe to call whatever the caller has already read.
-    templateFamily(rows.sortedBy { it.sortOrder }.map { it.propertyName }, effect?.category)
+    templateFamily(rows.sortedBy { it.sortOrder }.map { it.attribute }, effect?.family)
 
 /**
  * The bundled emitters this template's rows name outright — `TemplateDto.requiredEmitters`.
@@ -1578,7 +1580,7 @@ internal fun DaoTemplate.familyOf(): PropertyMaskGroup? =
  * transaction.
  */
 internal fun DaoTemplate.requiredEmittersOf(): List<String> {
-    val named = rows.mapNotNull { TemplateProperty.ofOrNull(it.propertyName) }.toSet()
+    val named = rows.mapNotNull { TemplateProperty.ofOrNull(it.attribute) }.toSet()
     return TemplateProperty.EMITTERS.filter { it in named }.map { it.propertyName }
 }
 

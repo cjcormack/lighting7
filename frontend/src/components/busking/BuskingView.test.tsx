@@ -152,7 +152,7 @@ const padPage: BuskPage = {
 const rig = {
   fixtures: [{ key: 'par-1', name: 'PAR 1', typeKey: 'par' }],
   groups: [
-    { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+    { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
   ],
 }
 

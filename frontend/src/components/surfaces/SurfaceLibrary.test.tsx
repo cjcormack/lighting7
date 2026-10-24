@@ -13,7 +13,7 @@ import type { AvailableProperty } from '@/hooks/useTargetProperties'
  */
 
 const groups = [
-  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'LINEAR', compatibleLookIds: [] },
+  { name: 'Movers', memberCount: 4, capabilities: [], symmetricMode: 'NONE', defaultDistribution: 'NORMAL', compatibleLookIds: [] },
 ]
 const fixtures = [{ key: 'par-1', name: 'PAR 1', typeKey: 'par', model: 'LED PAR 64' }]
 const stacks = [

@@ -47,7 +47,7 @@ export interface GroupDetail extends GroupSummary {
   members: GroupMember[]
   /**
    * Each strategy's step per member, indexed by the member's `index`: 1 comes round first, and
-   * members sharing an offset share a step (a pair under `CENTER_OUT`). Computed by the desk's
+   * members sharing an offset share a step (a pair under `CENTRE_OUT`). Computed by the desk's
    * `DistributionStrategy`, so the group sheet shows the order without mirroring a formula. A
    * function of the group's size alone. Absent from an older desk.
    */
@@ -59,10 +59,10 @@ export type BlendMode = 'OVERRIDE' | 'ADDITIVE' | 'MULTIPLY' | 'MAX' | 'MIN'
 export type ElementMode = 'PER_FIXTURE' | 'FLAT'
 
 export type DistributionStrategy =
-  | 'LINEAR'
+  | 'NORMAL'
   | 'UNIFIED'
-  | 'CENTER_OUT'
-  | 'EDGES_IN'
+  | 'CENTRE_OUT'
+  | 'CENTRE_IN'
   | 'REVERSE'
   | 'PING_PONG'
   | 'RANDOM'

@@ -63,7 +63,7 @@ export function isSettingProperty(p: { type: string }): boolean {
 /**
  * A slider the FX surfaces treat as an *extra* property.
  *
- * Dimmer and UV are excluded because they are addressed by name everywhere — the library's dimmer
+ * Dimmer and UV are excluded because they are addressed by name everywhere — the library's intensity
  * effects declare `dimmer`, the UV ones declare `uv` — so letting them answer to the generic
  * `slider` sentinel too would offer a `slider` effect a second route onto a channel that already has
  * its own.

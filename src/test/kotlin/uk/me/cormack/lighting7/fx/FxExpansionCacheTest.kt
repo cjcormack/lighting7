@@ -303,7 +303,7 @@ class FxExpansionCacheTest {
     @Test
     fun `changing the distribution strategy moves the offsets on the next tick`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
+        val effect = groupColourEffect(distribution = DistributionStrategy.NORMAL)
         rig.engine.addEffect(effect)
 
         // 24 flat elements, step-timed, WHOLE (4 beats) each: one cycle is 24 × 4 × 24 = 2304
@@ -318,7 +318,7 @@ class FxExpansionCacheTest {
         rig.clearChannels(bars = 2)
         rig.engine.processBeatTick(tick(12))
 
-        // REVERSE puts offset 0 on the *last* element. A plan cached under LINEAR would keep
+        // REVERSE puts offset 0 on the *last* element. A plan cached under NORMAL would keep
         // painting bar 0 pixel 0 — the strategy edit would appear to do nothing.
         assertEquals(emptyList(), rig.paintedPixels(bar = 0))
         assertEquals(listOf(PIXELS_PER_BAR - 1), rig.paintedPixels(bar = 1))
@@ -327,7 +327,7 @@ class FxExpansionCacheTest {
     @Test
     fun `a repatch that grows the group rebuilds the offsets, not just the key list`() {
         val rig = newRig(barCount = 2)
-        val effect = groupColourEffect(distribution = DistributionStrategy.LINEAR)
+        val effect = groupColourEffect(distribution = DistributionStrategy.NORMAL)
         rig.engine.addEffect(effect)
         rig.engine.processBeatTick(tick(12))
 

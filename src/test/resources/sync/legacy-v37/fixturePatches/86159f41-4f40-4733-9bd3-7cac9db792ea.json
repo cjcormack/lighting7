@@ -1,0 +1,16 @@
+{
+  "baseYawDeg": 45.0,
+  "displayName": "Hex 3",
+  "fixtureTypeKey": "hex-fixture",
+  "headNumber": 102,
+  "infrastructure": true,
+  "key": "hex-3",
+  "riggingUuid": "0e9c6ba7-fddc-4b6f-9c7f-13ec9fb1a61c",
+  "sortOrder": 3,
+  "stageX": 1.0,
+  "stageY": 4.5,
+  "stageZ": -0.5,
+  "startChannel": 30,
+  "universeConfigUuid": "672f63c9-d4b9-4058-9b97-3cfa44c11a2f",
+  "uuid": "86159f41-4f40-4733-9bd3-7cac9db792ea"
+}

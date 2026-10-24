@@ -160,7 +160,7 @@ const beamEffect = (effectType: string, propertyName: string | null = null) => (
   propertyName,
   beatDivision: 4,
   blendMode: 'OVERRIDE',
-  distribution: 'LINEAR',
+  distribution: 'NORMAL',
   parameters: {},
 })
 const WAVE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'effect', rows: [], effect: beamEffect('ZoomWave') })
@@ -451,11 +451,11 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
     targetType: 'fixture' as const,
     targetKey,
     effectType: propertyName === 'zoom' ? 'ZoomWave' : 'Pulse',
-    category: 'dimmer',
+    category: 'intensity',
     propertyName,
     beatDivision: 4,
     blendMode: 'OVERRIDE',
-    distribution: 'LINEAR',
+    distribution: 'NORMAL',
     phaseOffset: 0,
     elementMode: null,
     elementFilter: null,

@@ -410,7 +410,7 @@ data class FxDynamics(
     /**
      * How group-member phase offsets are derived. Ignored for fixture targets.
      */
-    val distributionStrategy: DistributionStrategy = DistributionStrategy.LINEAR,
+    val distributionStrategy: DistributionStrategy = DistributionStrategy.NORMAL,
 
     /**
      * Element mode for group effects on multi-element fixtures: distribution per fixture, or

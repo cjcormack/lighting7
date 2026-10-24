@@ -78,11 +78,11 @@ class CueRoutesTest {
             targetType = "group",
             targetKey = "front-wash",
             effectType = "SineWave",
-            category = "dimmer",
+            category = "intensity",
             propertyName = "dimmer",
             beatDivision = 1.0,
             blendMode = "OVERRIDE",
-            distribution = "LINEAR",
+            distribution = "NORMAL",
             phaseOffset = 0.25,
             elementMode = "FLAT",
             elementFilter = "ODD",
@@ -103,7 +103,7 @@ class CueRoutesTest {
             category = "colour",
             beatDivision = 4.0,
             blendMode = "OVERRIDE",
-            distribution = "LINEAR",
+            distribution = "NORMAL",
         )
         assertNull(dto.propertyName)
         assertNull(dto.elementMode)
@@ -122,7 +122,7 @@ class CueRoutesTest {
             category = "colour",
             beatDivision = 4.0,
             blendMode = "OVERRIDE",
-            distribution = "LINEAR",
+            distribution = "NORMAL",
         )
         val serialized = json.encodeToString(dto)
         val deserialized = json.decodeFromString<CueAdHocEffectDto>(serialized)
@@ -207,11 +207,11 @@ class CueRoutesTest {
                     targetType = "fixture",
                     targetKey = "hex-1",
                     effectType = "Pulse",
-                    category = "dimmer",
+                    category = "intensity",
                     propertyName = "dimmer",
                     beatDivision = 0.5,
                     blendMode = "ADDITIVE",
-                    distribution = "CENTER_OUT",
+                    distribution = "CENTRE_OUT",
                     phaseOffset = 0.1,
                     parameters = mapOf("min" to "50", "max" to "200", "attackRatio" to "0.3"),
                 ),
@@ -337,7 +337,7 @@ class CueRoutesTest {
                     propertyName = "position",
                     beatDivision = 8.0,
                     blendMode = "OVERRIDE",
-                    distribution = "LINEAR",
+                    distribution = "NORMAL",
                     phaseOffset = 0.0,
                     elementMode = "PER_FIXTURE",
                     parameters = mapOf(
@@ -351,7 +351,7 @@ class CueRoutesTest {
                     targetType = "fixture",
                     targetKey = "strobe-1",
                     effectType = "DimmerStrobe",
-                    category = "dimmer",
+                    category = "intensity",
                     propertyName = "dimmer",
                     beatDivision = 0.25,
                     blendMode = "MAX",

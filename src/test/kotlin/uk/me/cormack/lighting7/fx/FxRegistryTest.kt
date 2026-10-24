@@ -16,7 +16,7 @@ class FxRegistryTest {
             id = "TestEffect",
             aliases = setOf("test_effect", "test"),
             name = "Test Effect",
-            category = "dimmer",
+            category = "intensity",
             outputType = FxOutputType.SLIDER,
             parameters = listOf(ParameterInfo("min", "ubyte", "0", "Min value")),
             compatibleProperties = listOf("dimmer"),
@@ -109,7 +109,7 @@ class FxRegistryTest {
         val library = registry.getLibrary()
         assertEquals(1, library.size)
         assertEquals("TestEffect", library[0].name)
-        assertEquals("dimmer", library[0].category)
+        assertEquals("intensity", library[0].category)
         assertEquals("SLIDER", library[0].outputType)
     }
 

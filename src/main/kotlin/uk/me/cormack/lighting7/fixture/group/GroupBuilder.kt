@@ -176,7 +176,7 @@ class GroupBuilder<T : GroupableFixture> @PublishedApi internal constructor(priv
      */
     fun configure(
         symmetricMode: SymmetricMode = SymmetricMode.NONE,
-        defaultDistribution: String = "LINEAR"
+        defaultDistribution: String = "NORMAL"
     ) {
         groupMetadata = GroupMetadata(symmetricMode, defaultDistribution)
     }

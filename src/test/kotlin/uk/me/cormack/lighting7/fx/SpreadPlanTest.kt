@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 /** The curve and order maths of a spread (busk-further plan D9), as a table over n = 1, 2, 3, 8. */
 class SpreadPlanTest {
 
-    private fun fractions(n: Int, curve: SpreadCurve, parts: Int = 1, order: DistributionStrategy = DistributionStrategy.LINEAR) =
+    private fun fractions(n: Int, curve: SpreadCurve, parts: Int = 1, order: DistributionStrategy = DistributionStrategy.NORMAL) =
         SpreadPlan.fractions(n, order, curve, parts).map { Math.round(it * 1000.0) / 1000.0 }
 
     @Test
@@ -66,7 +66,7 @@ class SpreadPlanTest {
         assertEquals(listOf(0.0, 0.5, 1.0, 0.0, 0.5, 1.0, 0.0, 1.0), fractions(8, SpreadCurve.LINE, parts = 3))
         assertEquals(listOf(1.0, 0.0, 1.0, 1.0, 1.0), fractions(5, SpreadCurve.MIRROR, parts = 2), "each fan has its own centre")
         assertEquals(listOf(0.0, 0.0, 0.0), fractions(3, SpreadCurve.LINE, parts = 7), "more parts than heads is one head per fan")
-        assertFailsWith<IllegalArgumentException> { SpreadPlan.fractions(3, DistributionStrategy.LINEAR, SpreadCurve.LINE, 0) }
+        assertFailsWith<IllegalArgumentException> { SpreadPlan.fractions(3, DistributionStrategy.NORMAL, SpreadCurve.LINE, 0) }
     }
 
     @Test
@@ -76,8 +76,8 @@ class SpreadPlanTest {
     }
 
     @Test
-    fun `CENTER_OUT folds so the ends share a position and RANDOM is a seeded permutation`() {
-        val centre = fractions(8, SpreadCurve.LINE, order = DistributionStrategy.CENTER_OUT)
+    fun `CENTRE_OUT folds so the ends share a position and RANDOM is a seeded permutation`() {
+        val centre = fractions(8, SpreadCurve.LINE, order = DistributionStrategy.CENTRE_OUT)
         assertEquals(centre.first(), centre.last())
         assertEquals(1.0, centre.max())
         val a = fractions(8, SpreadCurve.LINE, order = DistributionStrategy.RANDOM(7))
@@ -88,13 +88,13 @@ class SpreadPlanTest {
 
     @Test
     fun `positions normalise the strategy's phase spacing so the far end reaches 1`() {
-        val positions = SpreadPlan.positions(4, DistributionStrategy.LINEAR).toList()
+        val positions = SpreadPlan.positions(4, DistributionStrategy.NORMAL).toList()
         assertEquals(listOf(0.0, 1.0 / 3, 2.0 / 3, 1.0), positions)
-        assertTrue(SpreadPlan.positions(0, DistributionStrategy.LINEAR).isEmpty())
+        assertTrue(SpreadPlan.positions(0, DistributionStrategy.NORMAL).isEmpty())
     }
 
     private fun fan(n: Int, curve: SpreadCurve = SpreadCurve.LINE, parts: Int = 1) =
-        SpreadPlan.fanWeights(n, DistributionStrategy.LINEAR, curve, parts).map { Math.round(it * 1000.0) / 1000.0 }
+        SpreadPlan.fanWeights(n, DistributionStrategy.NORMAL, curve, parts).map { Math.round(it * 1000.0) / 1000.0 }
 
     @Test
     fun `a LINE fan is symmetric about the middle of the order`() {

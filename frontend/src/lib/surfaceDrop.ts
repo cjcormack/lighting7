@@ -128,7 +128,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'selectionFan':
     case 'speedMasterBpm':
     case 'grandMasterFader':
-    case 'stackEffectSize':
+    case 'stackFxAmount':
       return 'continuous'
     // Every button target, records and busk pages included, and the busk-further plan's five (D14:
     // two window commands and three sub-selection rewrites, BUTTON in `midi/BindingControlKind.kt`):
@@ -149,7 +149,7 @@ export function targetControlKind(target: BindingTarget): ControlKind | null {
     case 'setBank':
     case 'speedMasterTap':
     case 'applyLook':
-    case 'pressTemplate':
+    case 'pressPalette':
     case 'pressPad':
     case 'pickUpPad':
     case 'handPlaceInBank':

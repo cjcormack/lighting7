@@ -178,7 +178,7 @@ class EffectSplitTest {
 
     @Test
     fun `a split copy hands the effect its member's context`() {
-        assertSplitPaintsTheSame { dimmerOver(eight, ContextSlider()) { distributionStrategy = DistributionStrategy.CENTER_OUT } }
+        assertSplitPaintsTheSame { dimmerOver(eight, ContextSlider()) { distributionStrategy = DistributionStrategy.CENTRE_OUT } }
     }
 
     @Test

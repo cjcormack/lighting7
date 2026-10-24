@@ -29,7 +29,7 @@ enum class SymmetricMode {
  */
 data class GroupMetadata(
     val symmetricMode: SymmetricMode = SymmetricMode.NONE,
-    val defaultDistributionName: String = "LINEAR"
+    val defaultDistributionName: String = "NORMAL"
 )
 
 /**

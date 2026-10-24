@@ -90,12 +90,12 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
     }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<CueDetails>().id
 
     private fun pulse(targetType: String, targetKey: String, speedMasterUuid: String? = null) = CueAdHocEffectDto(
-        targetType = targetType, targetKey = targetKey, effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "LINEAR", speedMasterUuid = speedMasterUuid,
+        targetType = targetType, targetKey = targetKey, effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+        beatDivision = 1.0, blendMode = "OVERRIDE", distribution = "NORMAL", speedMasterUuid = speedMasterUuid,
     )
 
     private fun keyRun(cueId: Int, effectType: String, run: UUID) = transaction(state.database) {
-        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue eq cueId }.single { it.effectType == effectType }.runUuid = run
+        DaoCueAdHocEffect.find { DaoCueAdHocEffects.cue eq cueId }.single { it.fxType == effectType }.runUuid = run
     }
 
     @Test

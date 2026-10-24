@@ -46,19 +46,19 @@ export const EFFECT_CATEGORY_INFO: Record<
   string,
   { label: string; icon: LucideIcon; description: string }
 > = {
-  dimmer: { label: 'Intensity', icon: Sun, description: 'Intensity and brightness FX' },
+  intensity: { label: 'Intensity', icon: Sun, description: 'Intensity and brightness FX' },
   colour: { label: 'Colour', icon: Palette, description: 'RGB colour cycling and FX' },
   position: { label: 'Position', icon: Move, description: 'Pan/tilt movement patterns' },
   beam: { label: 'Beam', icon: Aperture, description: 'Zoom, iris, frost and focus FX' },
-  palette: { label: 'Steps', icon: ListOrdered, description: 'Steps through palettes, or a setting\'s slots' },
+  steps: { label: 'Steps', icon: ListOrdered, description: 'Steps through palettes, or a setting\'s slots' },
   controls: { label: 'Controls', icon: SlidersHorizontal, description: 'Settings and slider controls' },
 }
 
 const DISTRIBUTION_DESCRIPTIONS: Record<string, string> = {
-  LINEAR: 'Chase across heads in order',
+  NORMAL: 'Chase across heads in order',
   REVERSE: 'Chase in reverse order',
-  CENTER_OUT: 'Expand from centre to edges',
-  EDGES_IN: 'Converge from edges to centre',
+  CENTRE_OUT: 'Expand from centre to edges',
+  CENTRE_IN: 'Converge from edges to centre',
   RANDOM: 'Random offset per head',
   PING_PONG: 'Bounce back and forth',
   POSITIONAL: 'Based on fixture position',

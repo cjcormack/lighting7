@@ -38,7 +38,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A lighting7 FX, anywhere (D19) | FX | the `Fx` prefix: `FxRegistration`, `FxSpawner`, `FxEnvelope`, `FxSpecCoercion`, `FxDto`, `fxType`, `fxMode`; columns `fx_type`, `fx_id`, `allow_fx`; tables `look_fx`, `cue_ad_hoc_fx`, `palette_fx`; MCP `clear_fx`, `active_fx`; REST `/fx/*` already | effect; `EffectRegistration`, `EffectSpawner`, `EffectEnvelope`, `EffectSpecCoercion`, `EffectDto`, `effectType`, `effectMode`, `effect_type`, `effect_id`, `allow_effects`, tables `look_effects`, `cue_ad_hoc_effects`, `template_effects`, MCP `clear_effects`, `active_effects` | | screen, wire, code, storage, MCP | screen | `src:components/applied/AppliedFxTable.tsx` |
+| A lighting7 FX, anywhere (D19) | FX | the `Fx` prefix: `FxRegistration`, `FxSpawner`, `FxEnvelope`, `FxSpecCoercion`, `FxDto`, `fxType`, `fxMode`; columns `fx_type`, `fx_id`, `fx_mode`; tables `look_fx`, `cue_ad_hoc_fx`, `palette_fx`; archive `fx`, `fxType`, `cueAdHocFx/`; MCP `clear_fx`, `active_fx`; REST `/fx/*` already | effect; `EffectRegistration`, `EffectSpawner`, `EffectEnvelope`, `EffectSpecCoercion`, `EffectDto`, `effectType`, `effectMode`, `effect_type`, `effect_id`, `effect_mode`, tables `look_effects`, `cue_ad_hoc_effects`, `template_effects`, archive `effects`, `effectType`, `cueAdHocEffects/`, MCP `clear_effects`, `active_effects` | | screen, wire, code, storage, MCP | screen | `src:components/applied/AppliedFxTable.tsx` |
 | A palette that holds one FX (D19) | FX palette | | Effect palette | FX palette | screen | screen | `src:components/looks/LookNameBadge.tsx` |
 | Length of one cycle (D1) | Cycle | `cycle`, `CycleLength` (constants in beats and bars; `WHOLE` dropped as a duplicate of `ONE_BAR`); column `cycle`; frontmatter and library `defaultCycle` | Speed; `beatDivision`, `BeatDivision`, `beat_division`, `defaultBeatDivision` | Speed is a rate | screen, wire, code, storage, archive | screen | `src:components/fx/FxEffectFields.tsx` |
 | A speed master's rate (D1) | Speed | `bpm` | | | screen, wire | done | `src:components/busking/SideSheet.tsx` |
@@ -69,10 +69,10 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | How the heads' offsets are ordered (D3) | Order | `order`, `SpreadOrder`; column `spread_order` (`ORDER` is an SQL keyword) | Distribution, distribution strategy; `distributionStrategy`, `DistributionStrategy`, `distribution` | | screen, wire, code, storage, archive | screen | `src:components/fx/FxEffectFields.tsx` |
-| Order: member order (D8) | Normal | `NORMAL` | Rig; `LINEAR` | Normal | screen, wire, code | screen | `ORDER_LABELS.LINEAR` |
+| Order: member order (D8) | Normal | `NORMAL` | Rig; `LINEAR` | Normal | screen, wire, code | done | `ORDER_LABELS.NORMAL` |
 | Order: member order backwards | Reverse | `REVERSE` | | | screen, wire | done | `ORDER_LABELS.REVERSE` |
-| Order: from the centre outwards (D20) | Centre out | `CENTRE_OUT` | `CENTER_OUT` | | screen, wire, code | screen | `ORDER_LABELS.CENTER_OUT` |
-| Order: from the edges inwards (D18) | Centre in | `CENTRE_IN` | Edges in, Split; `EDGES_IN`, `SPLIT` | Centre In | screen, wire, code | screen | `ORDER_LABELS.EDGES_IN` |
+| Order: from the centre outwards (D20) | Centre out | `CENTRE_OUT` | `CENTER_OUT` | | screen, wire, code | done | `ORDER_LABELS.CENTRE_OUT` |
+| Order: from the edges inwards (D18) | Centre in | `CENTRE_IN` | Edges in, Split; `EDGES_IN`, `SPLIT` | Centre In | screen, wire, code | done | `ORDER_LABELS.CENTRE_IN` |
 | Order: a random offset per head | Random | `RANDOM` | | | screen, wire | done | `ORDER_LABELS.RANDOM` |
 | Order: there and back across the heads | Ping-pong | `PING_PONG` | | | screen, wire | done | `ORDER_LABELS.PING_PONG` |
 | Order: by where each fixture hangs | Position | `POSITIONAL` | | | screen | done | `ORDER_LABELS.POSITIONAL` |
@@ -99,13 +99,13 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | Idea | Word | In code | Was | MagicQ | Shows | Status | Key |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | The Intensity / Position / Colour / Beam split (D25) | Family | `family`, `AttributeFamily`, `PALETTE_FX_FAMILIES`; column `family` | category, usage, mask group; `category`, `usage`, `PropertyCategory`, `TEMPLATE_EFFECT_FAMILIES` | | screen, wire, code, storage | planned | |
-| Family: intensity (D25) | Intensity | `intensity` | Dimmer; `dimmer` | Intensity | screen, wire, storage, archive | screen | `EFFECT_CATEGORY_INFO.dimmer` |
+| Family: intensity (D25) | Intensity | `intensity` | Dimmer; `dimmer` | Intensity | screen, wire, storage, archive | done | `category:intensity` `usage:intensity` `EFFECT_CATEGORY_INFO.intensity` |
 | Family: colour | Colour | `colour` | | Colour | screen, wire, storage | done | `category:colour` `usage:colour` `EFFECT_CATEGORY_INFO.colour` |
 | Family: position | Position | `position` | | Position | screen, wire, storage | done | `category:position` `usage:position` `EFFECT_CATEGORY_INFO.position` |
 | Family: beam | Beam | `beam` | | Beam | screen, wire, storage | done | `category:beam` `usage:beam` `EFFECT_CATEGORY_INFO.beam` |
-| Family: FX that step through a list (D23) | Steps | `steps` | Palette steps; `palette`, and Slot Steps under `beam` | | screen, wire | screen | `EFFECT_CATEGORY_INFO.palette` |
+| Family: FX that step through a list (D23) | Steps | `steps` | Palette steps; `palette`, and Slot Steps under `beam` | | screen, wire, storage | done | `category:steps` `EFFECT_CATEGORY_INFO.steps` |
 | Family: FX on settings and sliders | Controls | `controls` | | | screen | done | `EFFECT_CATEGORY_INFO.controls` |
-| Lightning Strike's family, the composite mode removed (D27) | Intensity | Lightning Strike `STANDARD`, family `intensity` (`dimmer` until the Intensity row moves) | Composite; `composite`, `effectMode: COMPOSITE`, `CompositeEffect`, `FX_CALC_COMPOSITE` | | FX library | done | `EFFECT_CATEGORY_INFO.dimmer` |
+| Lightning Strike's family, the composite mode removed (D27) | Intensity | Lightning Strike `STANDARD`, family `intensity` | Composite; `composite`, `effectMode: COMPOSITE`, `CompositeEffect`, `FX_CALC_COMPOSITE` | | FX library | done | `EFFECT_CATEGORY_INFO.intensity` |
 | A controllable part of a fixture (D26) | Attribute | `@FixtureAttribute`, `attribute`, `attributes`, `fixture/attribute/`; columns `attribute`, `attribute_mask`; table `cue_attribute_assignments` | Property; `@FixtureProperty`, `propertyName`, `properties`, `fixture/property/`, `property_name`, `property_mask`, `cue_property_assignments` | Attribute | screen, wire, code, storage | screen | `src:components/applied/AppliedFxTable.tsx` |
 
 ## The FX library
@@ -159,7 +159,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 | A cue or a Look into the programmer | Include | | | Include | screen, wire | done | `src:components/looks/LookSheet.tsx` |
 | The programmer back into what it included | Update | | | Update | screen, wire | done | `src:components/programmer/ProgrammerSourceStrip.tsx` |
 | A tempo bus that FX follow | Speed master | | | | screen, wire | done | `src:components/SpeedMasters.tsx` |
-| A stored palette of values or one FX | Palette | `Palette*`, `pal:{uuid}`; tables `palettes`, `palette_rows`, `palette_fx`; column `palette_id`; archive `palettes/`; MIDI `pressPalette` | template; `Template*`, `tmpl:{uuid}`, tables `templates`, `template_rows`, `template_id`, archive `templates/`, MIDI `pressTemplate` | | screen, wire, code, storage, archive, MIDI | planned | |
+| A stored palette of values or one FX | Palette | `Palette*`, `pal:{uuid}`; tables `palettes`, `palette_rows`, `palette_fx`; column `palette_id`; archive `palettes/`, `paletteUuid`; MIDI `pressPalette` | template; `Template*`, `tmpl:{uuid}`, tables `templates`, `template_rows`, `template_effects`, `template_id`, archive `templates/`, `templateUuid`, MIDI `pressTemplate` | | screen, wire, code, storage, archive, MIDI | screen | `src:navigation.ts` `src:lib/windowViews.ts` |
 | One of the five places the output is composed from (D9) | Tier | | Layer 1–5 | | docs | planned | |
 | A part of a multi-head fixture; *head* means a fixture and its head number (D7) | Element | element keys `.head-N`, `.pixel-N`, `.cell-N` unchanged (D29) | Cell, head; the *Cells* chip | Element | screen | screen | `src:components/busking/RigBand.tsx` |
 | lighting7's own identifiers in UK spelling (D20) | Centre | `CENTRE_*`, `panCentre`, `tiltCentre` | `CENTER_*`, `panCenter`, `tiltCenter` | | wire, code | planned | |
@@ -167,7 +167,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 ## Rules
 
 - **Palette references in colour FX (D30).** A colour parameter may name a generic colour palette,
-  `tmpl:{uuid}` (`pal:{uuid}` once renamed). It resolves to one colour when the FX starts, the same
+  `pal:{uuid}` (`tmpl:{uuid}` before the rename). It resolves to one colour when the FX starts, the same
   for every head. Colour Fade, Colour Wave, Colour Strobe and Colour Flicker keep these references.
   Colour Cycle takes literal colours only (D14), and every write boundary refuses a palette in its
   list; Palette Steps is the FX that lands each palette on each head for itself.
@@ -175,6 +175,7 @@ keyed by its old id, `fx:<old id>`, whose `name:` is the new word.
 - **Element keys stay (D29).** `.head-N`, `.pixel-N`, `.cell-N` and the rest name the physical part;
   *Element* is what the screen calls it.
 - **Effect tubes** (`effect_tube_state`, the confetti cannon) are special-effects hardware, not FX,
-  and keep their name.
+  and keep their name, as does `remote_access_settings.allow_effects`, which lets a remote caller arm
+  and fire them.
 - **`/fx/*` REST paths** already say FX and stay.
 - **No hint text (D16).** No control gains a hint for this plan, and none names another desk.

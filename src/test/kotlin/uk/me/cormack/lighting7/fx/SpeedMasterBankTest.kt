@@ -417,13 +417,13 @@ class SpeedMasterBankTest {
         val u2 = UUID.randomUUID()
         bank.load(
             listOf(
-                snapshot(u1, 1, usage = "dimmer"),
+                snapshot(u1, 1, usage = "intensity"),
                 snapshot(u2, 2, usage = "position", follow = 1 to 2),
             )
         )
 
         val states = bank.masterStates()
-        assertEquals("dimmer", states[0].usage)
+        assertEquals("intensity", states[0].usage)
         assertNull(states[0].followNum)
         assertEquals("position", states[1].usage)
         assertEquals(1, states[1].followNum)

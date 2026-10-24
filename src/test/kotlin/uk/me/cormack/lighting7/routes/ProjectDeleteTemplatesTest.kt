@@ -41,10 +41,10 @@ class ProjectDeleteTemplatesTest : RouteIntegrationTest() {
                 name = "amber-key"
             }
             DaoTemplateRow.new {
-                this.template = template
+                this.palette = template
                 targetType = DEFERRED_TARGET_TYPE
                 targetKey = ""
-                propertyName = "rgbColour"
+                attribute = "rgbColour"
                 value = "#ff9d4a"
                 sortOrder = 0
             }

@@ -23,8 +23,8 @@ describe('effectSummaryTypes speed-master threading', () => {
     const e: LookEffect = {
       targetType: 'deferred',
       targetKey: '',
-      effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
-      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer',
+      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, speedMasterUuid: MASTER,
     }
@@ -33,8 +33,8 @@ describe('effectSummaryTypes speed-master threading', () => {
 
   it('fromCueAdHocEffect carries it', () => {
     const e: CueAdHocEffect = {
-      targetType: 'fixture', targetKey: 'hex-1', effectType: 'Pulse', category: 'dimmer',
-      propertyName: 'dimmer', beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      targetType: 'fixture', targetKey: 'hex-1', effectType: 'Pulse', category: 'intensity',
+      propertyName: 'dimmer', beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, speedMasterUuid: MASTER,
     }
@@ -56,7 +56,7 @@ describe('effectSummaryTypes speed-master threading', () => {
     const e: FixtureIndirectEffect = {
       id: 1, effectType: 'Pulse', groupName: 'wash', propertyName: 'dimmer',
       beatDivision: 1, blendMode: 'OVERRIDE', isRunning: true, phaseOffset: 0,
-      currentPhase: 0, parameters: {}, distributionStrategy: 'LINEAR', stepTiming: false,
+      currentPhase: 0, parameters: {}, distributionStrategy: 'NORMAL', stepTiming: false,
       speedMasterUuid: MASTER,
     }
     expect(fromFixtureIndirectEffect(e).speedMasterUuid).toBe(MASTER)
@@ -65,7 +65,7 @@ describe('effectSummaryTypes speed-master threading', () => {
   it('fromGroupActiveEffect carries it', () => {
     const e: GroupActiveEffect = {
       id: 1, effectType: 'Pulse', propertyName: 'dimmer', beatDivision: 1,
-      blendMode: 'OVERRIDE', distribution: 'LINEAR', isRunning: true, phaseOffset: 0,
+      blendMode: 'OVERRIDE', distribution: 'NORMAL', isRunning: true, phaseOffset: 0,
       currentPhase: 0, parameters: {}, elementMode: null, elementFilter: null,
       stepTiming: false, cueId: null, speedMasterUuid: MASTER,
     }
@@ -76,8 +76,8 @@ describe('effectSummaryTypes speed-master threading', () => {
     const e: LookEffect = {
       targetType: 'deferred',
       targetKey: '',
-      effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
-      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer',
+      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {},
     }
@@ -97,8 +97,8 @@ describe('effectSummaryTypes rate-master threading', () => {
     const e: LookEffect = {
       targetType: 'deferred',
       targetKey: '',
-      effectType: 'CandleFlicker', category: 'dimmer', propertyName: 'dimmer',
-      beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      effectType: 'CandleFlicker', category: 'intensity', propertyName: 'dimmer',
+      beatDivision: 4, blendMode: 'OVERRIDE', distribution: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, speedMasterUuid: MASTER, rateSpeedMasterUuid: RATE,
     }
@@ -110,8 +110,8 @@ describe('effectSummaryTypes rate-master threading', () => {
   it('fromCueAdHocEffect carries it', () => {
     const e: CueAdHocEffect = {
       targetType: 'fixture', targetKey: 'hex-1', effectType: 'CandleFlicker',
-      category: 'dimmer', propertyName: 'dimmer', beatDivision: 4,
-      blendMode: 'OVERRIDE', distribution: 'LINEAR', phaseOffset: 0,
+      category: 'intensity', propertyName: 'dimmer', beatDivision: 4,
+      blendMode: 'OVERRIDE', distribution: 'NORMAL', phaseOffset: 0,
       elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {}, rateSpeedMasterUuid: RATE,
     }
@@ -122,8 +122,8 @@ describe('effectSummaryTypes rate-master threading', () => {
     const e: LookEffect = {
       targetType: 'deferred',
       targetKey: '',
-      effectType: 'Pulse', category: 'dimmer', propertyName: 'dimmer',
-      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'LINEAR',
+      effectType: 'Pulse', category: 'intensity', propertyName: 'dimmer',
+      beatDivision: 1, blendMode: 'OVERRIDE', distribution: 'NORMAL',
       phaseOffset: 0, elementMode: null, elementFilter: null, stepTiming: null,
       parameters: {},
     }

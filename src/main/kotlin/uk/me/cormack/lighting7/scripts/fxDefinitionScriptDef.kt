@@ -25,7 +25,7 @@ import kotlin.script.experimental.jvm.jvmTarget
  * registerEffect(EffectRegistration(
  *     id = "half-dimmer",
  *     name = "Half Dimmer",
- *     category = "dimmer",
+ *     category = "intensity",
  *     outputType = FxOutputType.SLIDER,
  *     parameters = listOf(ParameterInfo("max", "ubyte", "255", "Peak level")),
  *     compatibleProperties = listOf("dimmer"),
@@ -68,6 +68,7 @@ abstract class FxDefinitionScript(
         require(!LegacyNames.isRetiredFxId(registration.id)) {
             "'${registration.id}' was a built-in FX's id and is retired; register the FX under another id"
         }
+        LegacyNames.familyProblem(registration.category)?.let { throw IllegalArgumentException("'${registration.id}': $it") }
         val scriptReg = registration.copy(source = EffectSource.USER, sourceDefinitionId = scriptId)
         show.fxRegistry.register(scriptReg)
         registeredEffectIds.add(scriptReg.id)

@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 3 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 4 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -254,7 +254,7 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
   updated for the new ids and families.
 - Closes `FU-FX-SPLIT-DUPLICATE`.
 
-### Session 4: storage and archive (backend + frontend)
+### Session 4: storage and archive (backend + frontend) — done, `0077c76`
 
 - §4.4 and the storage half of §4.3.
 - Every renamed stored value that is also a wire value, with the client that sends it: the Order

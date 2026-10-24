@@ -127,13 +127,13 @@ export function familyForCategory(category: string): AttributeFamily {
  * **Do not fold this into [familyForCategory].** That one is keyed by `PropertyCategory` — the
  * *property* vocabulary, which has `pan` and `tilt` and no `position` at all — and it is total,
  * answering BEAM for anything it does not recognise. This one is over the effect library's own
- * `category`, and its `null` is load-bearing: `controls` has no tempo and `palette` (the Steps FX)
+ * `category`, and its `null` is load-bearing: `controls` has no tempo and `steps` (the Steps FX)
  * steps another family, so neither names one, and saying BEAM for them would be a wrong answer
- * rather than a catch-all. The two vocabularies share two spellings (`dimmer`, `colour`) and nothing else.
+ * rather than a catch-all. The two vocabularies share one spelling (`colour`) and nothing else.
  */
 export function familyForEffectCategory(category: string): AttributeFamily | null {
   switch (category.toLowerCase()) {
-    case 'dimmer':
+    case 'intensity':
       return 'INTENSITY'
     case 'colour':
     case 'color':

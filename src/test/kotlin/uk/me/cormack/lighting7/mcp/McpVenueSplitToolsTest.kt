@@ -140,7 +140,7 @@ class McpVenueSplitToolsTest : RouteIntegrationTest() {
             assertEquals(sbProject.id, scenery["Thrust deck"])
             // Events find the cannon in the venue's rig; layers' Looks and templates came along.
             assertEquals(2, DaoCueEvent.find { DaoCueEvents.cue eq open.id }.count())
-            assertTrue(open.layers.all { (it.look?.project?.id ?: it.template?.project?.id) == sbProject.id })
+            assertTrue(open.layers.all { (it.look?.project?.id ?: it.palette?.project?.id) == sbProject.id })
             assertTrue(DaoCueTrigger.find { DaoCueTriggers.cue eq open.id }.empty())
             // The thrust deck still decks the thrust, now the venue's region.
             val deck = RigScope.of(sbProject).own.stageElements().single { it.name == "Thrust deck" }

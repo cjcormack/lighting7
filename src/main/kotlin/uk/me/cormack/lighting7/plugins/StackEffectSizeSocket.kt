@@ -17,7 +17,7 @@ private val logger = LoggerFactory.getLogger("StackEffectSizeSocket")
  * size, a runtime weight 0–1 on that stack's effects. One inbound frame, for the *FX size* slider,
  * which moves at frame rate; one outbound, every stack below full, streamed. Its own frame rather
  * than a field of `cueRunStateChanged`, which a fader drag would flood. REST
- * (`routes/projectStackEffectSize.kt`) reads and sets the same value, and a MIDI `stackEffectSize`
+ * (`routes/projectStackEffectSize.kt`) reads and sets the same value, and a MIDI `stackFxAmount`
  * binding sets it too.
  */
 

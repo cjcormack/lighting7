@@ -67,7 +67,7 @@ function open(effect: ActiveEffect) {
 
 beforeEach(() => {
   mocks.create.mockReset().mockReturnValue({ unwrap: async () => ({ id: 3, name: 'Steps' }) })
-  mocks.library = [entry('SlotSteps', 'beam'), entry('PaletteSteps', 'palette')]
+  mocks.library = [entry('SlotSteps', 'steps'), entry('PaletteSteps', 'steps')]
   mocks.templates = [palette('a', 'POSITION'), palette('b', 'POSITION')]
 })
 afterEach(cleanup)
@@ -80,7 +80,7 @@ describe('NewTemplateFromEffectSheet on a step effect', () => {
   })
 
   it("saves Palette Steps under its palettes' family, naming no property", async () => {
-    open(running({ effectType: 'PaletteSteps', propertyName: 'position', parameters: { palettes: 'tmpl:a,tmpl:b' } }))
+    open(running({ effectType: 'PaletteSteps', propertyName: 'position', parameters: { palettes: 'pal:a,pal:b' } }))
     await waitFor(() => expect(mocks.create).toHaveBeenCalled())
     expect(mocks.create.mock.calls[0][0].effect).toMatchObject({ effectType: 'PaletteSteps', category: 'position', propertyName: null })
   })

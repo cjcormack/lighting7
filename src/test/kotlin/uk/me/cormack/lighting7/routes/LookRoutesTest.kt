@@ -58,8 +58,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                     effects = listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 )
@@ -225,8 +225,8 @@ class LookRoutesTest : RouteIntegrationTest() {
             val client = jsonClient()
             fun effect(targetType: String, targetKey: String, blendMode: String = "OVERRIDE") = LookEffectDto(
                 targetType = targetType, targetKey = targetKey,
-                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                beatDivision = 0.5, blendMode = blendMode, distribution = "LINEAR",
+                effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                beatDivision = 0.5, blendMode = blendMode, distribution = "NORMAL",
             )
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
@@ -279,8 +279,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                         effects = listOf(
                             LookEffectDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "ADD", distribution = "LINEAR",
+                                effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                                beatDivision = 0.5, blendMode = "ADD", distribution = "NORMAL",
                             ),
                         ),
                     )
@@ -298,8 +298,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                         effects = listOf(
                             LookEffectDto(
                                 targetType = "fixture", targetKey = "hex-1",
-                                effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                                effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                                beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                                 elementFilter = "THIRDS",
                             ),
                         ),
@@ -420,8 +420,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                     effects = listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 )
@@ -460,8 +460,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                     effects = listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 ),
@@ -504,7 +504,7 @@ class LookRoutesTest : RouteIntegrationTest() {
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
                             effectType = "ColourWave", category = "colour", propertyName = "rgbColour",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 ),
@@ -683,8 +683,8 @@ class LookRoutesTest : RouteIntegrationTest() {
                     effects = listOf(
                         LookEffectDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            effectType = "Pulse", category = "dimmer", propertyName = "dimmer",
-                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "LINEAR",
+                            effectType = "Pulse", category = "intensity", propertyName = "dimmer",
+                            beatDivision = 0.5, blendMode = "OVERRIDE", distribution = "NORMAL",
                         ),
                     ),
                 )

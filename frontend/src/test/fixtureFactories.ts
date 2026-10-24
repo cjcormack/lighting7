@@ -163,7 +163,7 @@ export function groupSummary(name: string, memberCount = 0): GroupSummary {
     memberCount,
     capabilities: [],
     symmetricMode: 'NONE',
-    defaultDistribution: 'LINEAR',
+    defaultDistribution: 'NORMAL',
     compatibleLookIds: [],
   }
 }

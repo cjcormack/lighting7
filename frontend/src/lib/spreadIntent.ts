@@ -25,7 +25,7 @@ import {
 
 /**
  * One end of a spread. Four are `TemplateIntent`s of the four shapes a spread can carry; the fifth
- * names a colour **template** (`tmpl:{uuid}`), which the desk resolves to the template's generic
+ * names a colour **template** (`pal:{uuid}`), which the desk resolves to the template's generic
  * colour the way an FX colour reference is resolved — so a spread can run from one library colour
  * to another. A switch (prism in / out) is not offered: the desk would flip it at the midpoint,
  * which is not a fan.
@@ -101,7 +101,7 @@ export function colourEndpointOf(rgb: { r: number; g: number; b: number }, polic
 
 /**
  * The wire form: a serialised `TemplateIntent` through `templateIntent.ts`'s own serialiser, or a
- * `tmpl:` reference through `colourUtils`'. Nothing is spelled here that either does not already
+ * `pal:` reference through `colourUtils`'. Nothing is spelled here that either does not already
  * spell, which is what keeps the grammar in one place per kind.
  */
 export function serializeSpreadEndpoint(endpoint: SpreadEndpoint): string {
@@ -145,9 +145,9 @@ export const SPREAD_ORDERS: readonly {
   label: string
   hint: string
 }[] = [
-  { id: 'LINEAR', label: orderLabel('LINEAR'), hint: 'Rig order: the rig’s rows and tiles, a group in member order, elements in element order' },
+  { id: 'NORMAL', label: orderLabel('NORMAL'), hint: 'Rig order: the rig’s rows and tiles, a group in member order, elements in element order' },
   { id: 'REVERSE', label: orderLabel('REVERSE'), hint: 'Rig order, the other way' },
-  { id: 'CENTER_OUT', label: orderLabel('CENTER_OUT'), hint: 'From the centre outward: the two ends share a step' },
+  { id: 'CENTRE_OUT', label: orderLabel('CENTRE_OUT'), hint: 'From the centre outward: the two ends share a step' },
   { id: 'RANDOM', label: orderLabel('RANDOM'), hint: 'A shuffle of the rig order; press again for another' },
   { id: null, label: 'Stage L→R', hint: 'The desk has no stage order yet — its POSITIONAL strategy reads rig index, which is Normal again' },
 ]

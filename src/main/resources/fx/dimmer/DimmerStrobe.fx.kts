@@ -1,7 +1,7 @@
 /*---
 id: DimmerStrobe
 name: Dimmer Strobe
-category: dimmer
+category: intensity
 outputType: SLIDER
 effectMode: STANDARD
 compatibleProperties: [dimmer, uv]

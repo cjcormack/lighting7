@@ -47,7 +47,7 @@ sealed class AssignmentHealth {
     data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
 
     /**
-     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackEffectSize` binding
+     * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackFxAmount` binding
      * no longer exists in the project. Control-surface-only.
      */
     @Serializable
@@ -97,7 +97,7 @@ sealed class AssignmentHealth {
     @SerialName("missingLook")
     data class MissingLook(val lookUuid: String) : AssignmentHealth()
 
-    /** A `pressTemplate` binding names a template that no longer exists. Control-surface-only. */
+    /** A `pressPalette` binding names a template that no longer exists. Control-surface-only. */
     @Serializable
     @SerialName("missingTemplate")
     data class MissingTemplate(val templateUuid: String) : AssignmentHealth()

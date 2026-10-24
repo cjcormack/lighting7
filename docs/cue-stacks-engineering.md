@@ -280,7 +280,7 @@ target and property, with the same `lookEffectSettings()`), an ad-hoc one across
   take the outgoing cue between the two holds, or the acquire fail, the adoptions go back
   (`giveBack`) and the incoming cue runs its own.
 - **Handed on** (stack-timeline plan D7, D8). An ad-hoc effect's row is its cue's alone, so it is
-  never adopted by `continues`; its **run key** (`cue_ad_hoc_effects.run_uuid`) is what carries it
+  never adopted by `continues`; its **run key** (`cue_ad_hoc_fx.run_uuid`) is what carries it
   across a GO. Under the same `adoptFrom` and the same paused and N-shot rule — an incoming N-shot
   row starts afresh too, an accent its GO fires — an incoming ad-hoc effect with a key takes over
   the outgoing cue's instance with that key, target and property,
@@ -501,7 +501,7 @@ path is gone), and its scenery is tracked as a loose track (`SceneryService.onLo
 
 A step "merge cue palette into stack palette" used to sit in this flow, and the stack carried a
 positional colour list its cues inherited. That whole grammar is gone — an effect parameter names a
-colour palette (`tmpl:{uuid}`) whose answer does not depend on which stack is running — so a stack
+colour palette (`pal:{uuid}`) whose answer does not depend on which stack is running — so a stack
 carries no colour state at all.
 
 ## Crossfade (Option B — Intensity Envelope)

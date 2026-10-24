@@ -125,8 +125,8 @@ export function recordTargetName(
   switch (target.type) {
     case "applyLook":
       return find(options.looks, target.lookUuid)
-    case "pressTemplate":
-      return find(options.templates, target.templateUuid)
+    case "pressPalette":
+      return find(options.templates, target.paletteUuid)
     case "pressPad":
       return find(options.pads, target.padUuid)
     // The hand's two uuid-bearing targets. `handDrop` names no record and falls to `null` below,
@@ -160,7 +160,7 @@ export function describeBindingTarget(target: BindingTarget, records: RecordBind
   switch (target.type) {
     case "applyLook":
       return `Apply ${name}`
-    case "pressTemplate":
+    case "pressPalette":
       return `Press ${name}`
     case "pressPad":
       return `Press pad ${name}`
