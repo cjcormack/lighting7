@@ -2316,6 +2316,16 @@ effects running a beat wake adds nothing but cost. So a show running one kind of
 passes it made before; the time a skipped pass covers is advanced by the next one, and a skipped
 pass does not hold the next wake back for the 5 ms gap.
 
+A removal does not take `passLock`: some removals run inside a pass (an N-shot's end, the leaving
+sweep), and the lock is not reentrant. So a removal on another thread can land while a pass that has
+already read the old list is running, and that pass commits the removed FX's output over the
+removal's reset of what it uncovered. With nothing left running every later pass is skipped and the
+stale frame would stay. So after its commit the pass resets, as the removal did, what the FX in its
+list that are no longer in the engine (removed, or swapped by an edit or a split) leave uncovered
+(`resetRemovedSince`). A removal takes the FX out of the map, then rebuilds `sortedEffects`, then
+resets, so a pass that finds its list still current knows any reset to come lands after its commit,
+and one that does not finds the FX gone. `FxRemovalRaceTest` forces the interleavings.
+
 What **counts** passes stays with the effect's own clock. The pass records which clocks woke it,
 and:
 
