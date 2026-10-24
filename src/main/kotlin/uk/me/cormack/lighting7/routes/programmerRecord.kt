@@ -1,12 +1,13 @@
 package uk.me.cormack.lighting7.routes
 
-import uk.me.cormack.lighting7.models.timingOf
-import uk.me.cormack.lighting7.models.stepTimingOf
 import java.time.Duration
 
 import kotlinx.serialization.Serializable
 import uk.me.cormack.lighting7.fx.FxRegistry
 import uk.me.cormack.lighting7.fx.EffectSpecCoercion
+import uk.me.cormack.lighting7.fx.ElementFilter
+import uk.me.cormack.lighting7.fx.ElementMode
+import uk.me.cormack.lighting7.fx.TimingSource
 import uk.me.cormack.lighting7.fx.PropertyMaskGroup
 import uk.me.cormack.lighting7.fx.canonicalPropertyName
 import uk.me.cormack.lighting7.fx.maskAllows
@@ -293,7 +294,7 @@ internal fun writeRecordingIntoCue(
     }
 
     val fxWritten = when (mode) {
-        RecordMode.MERGE -> appendFxChildren(cue, recording)
+        RecordMode.MERGE -> appendFxChildren(cue, recording, state.show.fxRegistry)
         RecordMode.UPDATE_EXISTING -> fxReplaced
         else -> 0
     }
@@ -323,7 +324,7 @@ internal fun writeRecordingIntoCue(
  * should not leave the cue with the effect applied twice, which under a non-OVERRIDE blend
  * mode would visibly double it.
  */
-private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
+private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, registry: FxRegistry): Int {
     var count = 0
 
     // Layers first, upserted on `(source, targets)` — a Look's on its source, since it lands whole
@@ -372,7 +373,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
     val unchanged = HashSet<DaoCueAdHocEffect>()
     for ((effect, match) in recording.adHocEffects.zip(matches)) {
         if (match != null) {
-            if (!match.matches(effect)) {
+            if (!match.matches(effect, registry)) {
                 match.applyFrom(effect)
                 count++
             } else {
@@ -436,51 +437,61 @@ private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
     return changed
 }
 
-/** True when the stored child already says exactly what [dto] says (ignoring cue-owned timing). */
-private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto): Boolean =
-    fxType == dto.effectType &&
-        family == dto.category &&
-        cycle == dto.beatDivision &&
-        blendMode == dto.blendMode &&
-        order == dto.distribution &&
-        phaseOffset == dto.phaseOffset &&
-        elementMode == dto.elementMode &&
-        elementFilter == dto.elementFilter &&
-        stepTimingOf(timing) == dto.stepTiming &&
-        parameters == dto.parameters &&
-        speedMasterUuid == speedMasterUuidOrNull(dto.speedMasterUuid) &&
-        rateSpeedMasterUuid == speedMasterUuidOrNull(dto.rateSpeedMasterUuid) &&
-        seconds == dto.seconds &&
-        amount == dto.size &&
-        direction == dto.direction &&
-        runs == dto.nShot
+/** True when the stored child already says what [dto] says, read as [canonical] reads both. */
+private fun DaoCueAdHocEffect.matches(dto: CueAdHocEffectDto, registry: FxRegistry): Boolean =
+    toDto().canonical(registry) == dto.canonical(registry)
 
 /**
- * Copy [dto]'s tunable fields over the stored child, leaving its target, property and timing alone.
- * Its type too, which differs only for an FX Include brought back and swapped since.
+ * [effect]'s settings in one spelling, so a stored child and the FX Capture read back compare equal
+ * whenever they spawn the same effect: names as the spawner parses them, an element mode only over
+ * members, the filter and step timing filled in with their defaults, the parameters laid over the
+ * library's, Seconds and the masters as `applyTimingChoice` reads them, and no category beside a
+ * property, which the spawner then never reads. Timing, place and uuids are blanked: the cue owns the
+ * first two, and the match was made on the last.
  */
-private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) {
-    fxType = dto.effectType
-    family = dto.category
-    cycle = dto.beatDivision
-    blendMode = dto.blendMode
-    order = dto.distribution
-    phaseOffset = dto.phaseOffset
-    elementMode = dto.elementMode
-    elementFilter = dto.elementFilter
-    timing = timingOf(dto.stepTiming)
-    parameters = dto.parameters
-    speedMasterUuid = speedMasterUuidOrNull(dto.speedMasterUuid)
-    rateSpeedMasterUuid = speedMasterUuidOrNull(dto.rateSpeedMasterUuid)
-    seconds = dto.seconds
-    amount = dto.size
-    direction = EffectSpecCoercion.Names.canonicalDirection(dto.direction)
-    runs = dto.nShot
-    this.spread = dto.spread
-    this.wings = dto.wings
-    this.segments = dto.blocks
-    this.parts = dto.groups
+private fun CueAdHocEffectDto.canonical(registry: FxRegistry): CueAdHocEffectDto {
+    val registration = registry.getRegistration(effectType)
+    val overMembers = targetType == TargetRef.Group.TYPE || targetType == EffectTargetRef.Selection.TYPE
+    val names = EffectSpecCoercion.Names
+    // A wall-clock effect is on Seconds whenever it has no rate master, flag or not.
+    val beatSeconds = seconds && registration?.timingSource != TimingSource.WALL_CLOCK
+    return copy(
+        effectType = registration?.id ?: effectType,
+        category = if (propertyName != null) "" else category,
+        blendMode = names.blendMode(blendMode)?.name ?: blendMode,
+        distribution = names.distribution(distribution)?.javaClass?.simpleName ?: distribution,
+        elementMode = if (overMembers) {
+            elementMode?.let { names.elementMode(it)?.name ?: it } ?: ElementMode.PER_FIXTURE.name
+        } else null,
+        elementFilter = elementFilter?.let { names.elementFilter(it)?.name ?: it } ?: ElementFilter.ALL.name,
+        stepTiming = stepTiming ?: registration?.defaultStepTiming ?: false,
+        parameters = registration?.parameters.orEmpty().associate { it.name to it.defaultValue } + parameters,
+        seconds = beatSeconds,
+        speedMasterUuid = if (beatSeconds) null else speedMasterUuidOrNull(speedMasterUuid)?.toString(),
+        rateSpeedMasterUuid = if (seconds) null else speedMasterUuidOrNull(rateSpeedMasterUuid)?.toString(),
+        direction = names.canonicalDirection(direction),
+        delayMs = null,
+        intervalMs = null,
+        randomWindowMs = null,
+        sortOrder = 0,
+        uuid = null,
+        runUuid = null,
+    )
 }
+
+/**
+ * [take] [dto] over the stored child but for its timing and place: the cue owns the one, and the
+ * renumber the other. Its type is written too, which differs only for an FX Include brought back and
+ * swapped since.
+ */
+private fun DaoCueAdHocEffect.applyFrom(dto: CueAdHocEffectDto) = take(
+    dto.copy(
+        delayMs = delay?.toMillis(),
+        intervalMs = interval?.toMillis(),
+        randomWindowMs = randomWindow?.toMillis(),
+        sortOrder = sortOrder,
+    ),
+)
 
 /** Delete the immediate FX children the recording names — [RecordMode.REMOVE]'s FX half. */
 private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording): Int {
