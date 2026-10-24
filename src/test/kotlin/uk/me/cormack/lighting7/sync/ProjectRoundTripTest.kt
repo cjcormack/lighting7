@@ -40,6 +40,7 @@ import uk.me.cormack.lighting7.sync.dto.CueAdHocEffectJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
+import uk.me.cormack.lighting7.fx.loadLookSnapshot
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -338,6 +339,52 @@ class ProjectRoundTripTest {
         }
         assertTrue(lookText.size > 1, "the fixture has more than the one shaped Look")
         assertEquals(1, lookText.count { "\"wings\"" in it }, "only the shaped Look carries the keys")
+    }
+
+    /**
+     * A Look's FX in apply order (FX editor plan §3.5): the archive lists them by `sortOrder`, each
+     * carrying it, and an import gives them back in that order, not the order they were made in.
+     */
+    @Test
+    fun `a Look's FX order exports and round-trips`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+
+        val stacked = Files.walk(exportDirA.resolve("looks")).use { stream ->
+            stream.toList().filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+                .map { canonicalDecode(LookJson.serializer(), Files.readString(it)) }
+        }.single { it.name == "stacked" }
+        assertEquals(listOf("SquareWave" to 0, "SineWave" to 1), stacked.fx.map { it.fxType to it.sortOrder })
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
+        assertEquals(listOf("SquareWave", "SineWave"), stackedLookFx(imported))
+    }
+
+    /** An archive whose Look FX carry no order, as every Look did before Record wrote one, reads them in file order. */
+    @Test
+    fun `Look FX with no order import in file order`() {
+        val projectId = seedRichProject(state)
+        ProjectExporter(state).export(projectId, exportDirA)
+        val file = Files.walk(exportDirA.resolve("looks")).use { stream -> stream.toList() }
+            .filter { Files.isRegularFile(it) && it.toString().endsWith(".json") }
+            .single { canonicalDecode(LookJson.serializer(), Files.readString(it)).name == "stacked" }
+        val look = canonicalDecode(LookJson.serializer(), Files.readString(file))
+        val unordered = look.fx.reversed().map { it.copy(sortOrder = 0) }
+        Files.writeString(file, canonicalEncode(LookJson.serializer(), look.copy(fx = unordered)))
+        assertTrue("sortOrder" !in Files.readString(file), "no FX in the file says an order")
+
+        wipeDatabase()
+        val imported = ProjectImporter(state).import(exportDirA, nameOverride = null).projectId
+        assertEquals(listOf("SineWave", "SquareWave"), stackedLookFx(imported))
+    }
+
+    /** The "stacked" Look's FX types as a press spawns them: by `sortOrder`, ties in id order. */
+    private fun stackedLookFx(projectId: Int): List<String> {
+        val uuid = transaction(state.database) {
+            DaoLook.find { (DaoLooks.project eq projectId) and (DaoLooks.name eq "stacked") }.single().uuid
+        }
+        return assertNotNull(loadLookSnapshot(state.database, uuid)).effects.map { it.effect.effectType }
     }
 
     /**

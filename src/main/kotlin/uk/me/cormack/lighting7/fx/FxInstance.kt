@@ -176,13 +176,13 @@ enum class BlendMode {
  * Which cue FX child an Include-spawned programmer-band instance came from, so Update can
  * write the operator's edits back over that child rather than beside it.
  *
- * [childSortOrder] is the child's `sortOrder` in the cue, which is what identifies it once
- * the DTO has been turned into a live instance.
+ * [childUuid] is the child's uuid, which is what identifies it once the DTO has been turned into a
+ * live instance: its `sortOrder` is not, since Update writes the children in apply order.
  */
 data class ProgrammerFxOrigin(
     val cueId: Int,
     val kind: Kind,
-    val childSortOrder: Int,
+    val childUuid: String?,
 ) {
     enum class Kind {
         AD_HOC,

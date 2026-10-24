@@ -165,7 +165,8 @@ internal fun buildCueApplyDataForCues(cueIds: Collection<Int>): Map<Int, CueAppl
 private fun DaoCue.toCueApplyData(placement: EntryPlacement?): CueApplyData = CueApplyData(
     cueId = id.value,
     cueName = name,
-    adHocEffects = adHocEffects.sortedBy { it.sortOrder }.map { it.toDto() },
+    // In stored order, rows tied on it in id order: the order the cue spawns them, so the order they apply.
+    adHocEffects = adHocEffects.sortedWith(compareBy({ it.sortOrder }, { it.id.value })).map { it.toDto() },
     layers = layers.sortedBy { it.sortOrder }.mapNotNull { it.toCookLayer() },
     propertyAssignments = propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
     triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->

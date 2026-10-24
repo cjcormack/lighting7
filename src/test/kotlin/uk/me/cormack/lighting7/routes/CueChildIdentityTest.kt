@@ -148,7 +148,7 @@ class CueChildIdentityTest : RouteIntegrationTest() {
         val client = jsonClient()
         val (warm, _) = client.twoLooks()
         // Each key twice, the copy written first sorting *last*, so sortOrder order and insertion
-        // (id) order disagree.
+        // (id) order disagree. A body's FX are stored in list order, so the FX are swapped below.
         val created = client.createCue(
             NewCue(
                 name = "twice",
@@ -164,6 +164,11 @@ class CueChildIdentityTest : RouteIntegrationTest() {
                 ),
             ),
         )
+        transaction(state.database) {
+            val (first, second) = DaoCue.findById(created.id)!!.adHocEffects.sortedBy { it.id.value }
+            first.sortOrder = 4
+            second.sortOrder = 2
+        }
         val before = orderedChildren(created.id)
 
         val response = client.put("${base()}/${created.id}") {
