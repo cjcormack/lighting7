@@ -243,7 +243,8 @@ private data class IncludedFxOutcome(
  * 1. **Already-running children are skipped.** If the cue is live, its own instance is already
  *    producing exactly that output. There is no FX-vs-FX suppression in the engine
  *    (suppression keys off programmer *values*), so a band duplicate would compose on top and
- *    visibly double the effect under any non-`OVERRIDE` blend mode.
+ *    visibly double the effect under any non-`OVERRIDE` blend mode. So is a child an earlier
+ *    Include already runs in the programmer, by its origin.
  * 2. **`cueId`/`cueStackId` stay null** on spawned instances. Tagging them would let
  *    `removeCueEffects` sweep the operator's programmer contents out from under them when
  *    the cue stops. `programmerOrigin` carries the provenance Update needs instead, and it is
@@ -268,6 +269,8 @@ private fun spawnIncludedFx(
     val timedSkipped = cueData.adHocEffects.count { it.delayMs != null || it.intervalMs != null }
 
     val running = engine.getActiveEffects().filter { it.cueId == cueData.cueId && !it.leaving }
+    // The children an earlier Include already runs in the programmer, which a second one must not double.
+    val included = engine.getActiveEffects().filter { !it.leaving }.mapNotNullTo(HashSet()) { it.programmerOrigin }
 
     fun spawn(
         effectSpec: LookEffectSpec,
@@ -301,7 +304,7 @@ private fun spawnIncludedFx(
         // fx-templates D5, and `lookId` is null for those, so the old test read a template layer's
         // effect as a loose child and let Include mask a genuine one behind it.
         val registrationId = state.show.fxRegistry.getRegistration(effectSpec.effectType)?.id
-        val duplicate = running.any {
+        val duplicate = (origin.childUuid != null && origin in included) || running.any {
             it.target.targetKey == target.key &&
                 it.target.propertyName == effectSpec.propertyName &&
                 it.registrationId == registrationId &&
