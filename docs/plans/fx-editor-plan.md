@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 2 and 3a of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 2, 3a and 3b of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -42,7 +42,8 @@ rename them.
   table draws *Your values* and its Local FX on top. Two Local FX on one key apply in the order they
   were made, and nothing can change it.
 - **Stored FX keep order in a cue, not in a Look.** `cue_ad_hoc_effects.sort_order` exists
-  (`K/models/cues.kt:297`); `look_effects` has no order column (`K/models/looks.kt:227`).
+  (`K/models/cues.kt:297`); so does `look_effects` (a column this finding missed, synced as
+  `LookEffectJson.sortOrder`), but Record writes neither in apply order.
 - **Beat and wall-clock FX on one key do not combine.** Each tick loop resets the keys its FX cover
   to the layer below and applies its own FX (`K/fx/FxEngine.kt:1598`, `:1740`), in its own
   transaction. The later commit wins, whatever the blend. `docs/fx-engineering.md` §"Beat ↔
@@ -76,7 +77,7 @@ Agreed with Chris on 2026-10-23 (§11):
 | D1 | **The programmer's FX tab becomes the FX editor**, with two views: *Selection*, the new editor, and *All*, today's table. A row in *All* selects its FX's heads and opens it in *Selection*. |
 | D2 | **Selection is three columns: list · graph · inspector.** The list holds every FX reaching the selected heads, by family; the graph draws each element's output over time; the inspector is today's live editor for the FX picked in the list. |
 | D3 | **The list is in family lanes, top wins.** Intensity, Colour, Position, Beam, each with its FX in apply order, top first: Local FX, then programmer layers' FX, then cue FX (read-only, naming the cue), then an *Underneath* line naming what the lane sits on. A lane appears when an FX is in it or the selection can take the family. |
-| D4 | **Apply order can be changed, and it is kept.** A Local FX is dragged within its lane. The desk ranks Local FX in the programmer band; Record keeps the order into a cue's FX (`sort_order`) and a Look's (a new `sort_order`, `formatVersion` 39). |
+| D4 | **Apply order can be changed, and it is kept.** A Local FX is dragged within its lane. The desk ranks Local FX in the programmer band; Record keeps the order into a cue's FX and a Look's (`sort_order`, which both already had and sync carries, so no `formatVersion`). |
 | D5 | **Local FX sit above programmer layers' FX**, as Local values sit above layers. |
 | D6 | **+ FX on a lane that already holds a Local FX asks *Replace · Stack*.** *Replace* is today's press. *Stack* adds the FX on top and replaces nothing, starting on the family's stacking blend: Intensity *Within*, Position *Around*, Colour and Beam *Replace* at 50 % Amount. |
 | D7 | **The graph is sampled by the desk.** `POST /projects/{id}/fx/preview` runs the engine's own phase, spread, waveform, blend and weight functions over a stated window, without touching a running instance or the stage, for running FX and for drafts. A parity test holds it to the tick. |
@@ -214,11 +215,10 @@ bookkeeping keep their per-loop meaning by recording which clock woke the pass.
   re-ranks it below `above`'s FX (null: the bottom), answered by `fxChanged(UPDATED)` for each FX whose
   priority moved; an FX not Local is refused (`fxError FX_MOVE_NOT_LOCAL`). An operator gesture, so
   `FU-AUTH-WS-PER-MESSAGE` does not fire; a row in `TraceSampling.WS_MESSAGES`.
-- **Stored.** Record writes a cue's FX `sort_order` and a Look's new `look_effects.sort_order` in
+- **Stored.** Record writes a cue's FX `sort_order` and a Look's `look_fx.sort_order` in
   apply order; the spawners add a home's FX in that order, so `composeOrder` matches. `sort_order` on
-  Look FX is portable: `formatVersion` 39 (the terminology plan takes 38), `RichProjectFixture` sets
-  a non-default order, the round-trip test reads it back. An archive without it reads FX in file
-  order, as now.
+  Look FX was already portable, so no `formatVersion` moves; `RichProjectFixture` sets a non-default
+  order, the round-trip test reads it back. An archive without it reads FX in file order, as now.
 - **Undo.** Moves are programmer history steps (undo plan §3.6) once that plan lands; `updateFx`
   joins its one-second continuous-gesture merge.
 
@@ -374,7 +374,7 @@ Why each gate is where it is:
 - **Terminology 3 (1a).** The sampler runs the FX library as that session leaves it: no composite
   mode, no `pingPong`, the new default Direction, one Centre in.
 - **Terminology 4 (3b).** It renames `look_effects` and takes `formatVersion` 38; Look FX order is
-  a column on the renamed table, at 39.
+  a column on the renamed table.
 - **Terminology 5 (1b, and the frontend).** The route takes the FX request's fields and the client
   speaks the wire; before that session they are `beatDivision`, `size`, `nShot`, `EffectDto`.
 - **Terminology 6 done or not started (4–7).** Session 6 renames every client identifier that says
@@ -428,15 +428,17 @@ Why each gate is where it is:
 - **Docs**: `fx-engineering.md` §"Programmer suppression and the priority band", with the behaviour
   change, and §"Effect iteration order" (which still says `id` breaks ties; it is `composeOrder`).
 
-### Session 3b: apply order kept (backend)
+### Session 3b: apply order kept (backend) — done, `402cac92`
 
 **Gate: terminology session 4.** Needs 3a.
 
-- §3.5's stored half: the Look FX table's `sort_order`, Record's order into both homes, the spawners'
-  order, `formatVersion` 39. Full suites.
+- §3.5's stored half: Record's order into both homes and the spawners' order. The Look FX table
+  already had `sort_order` and sync already carried it, so no column and no `formatVersion`. Full
+  suites.
 - **Tests**: Record writes both homes' order and a Look spawns in it; the v38 archive imports in file
   order; `RichProjectFixture` carries a non-default order through the round trip and the clone.
-- **Docs**: `sync-engineering.md` §"Version 39".
+- **Docs**: `sync-engineering.md`, the paragraph on an order that needed no version, before
+  §"Version 38"; `fx-engineering.md` §"Programmer suppression and the priority band".
 
 ### Session 4: the editor's shell (frontend)
 
@@ -477,8 +479,8 @@ Why each gate is where it is:
 
 ## 7. Migration
 
-None for the database: `look_effects.sort_order` defaults to 0 and existing Looks keep their id
-order. Archives below v39 read FX in file order.
+None for the database: `look_fx.sort_order` defaults to 0 and existing Looks keep their id order.
+An archive whose Look FX carry no order reads them in file order.
 
 ## 8. Explicitly out of scope
 
