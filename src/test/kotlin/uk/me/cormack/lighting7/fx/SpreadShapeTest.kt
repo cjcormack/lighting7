@@ -79,6 +79,22 @@ class SpreadShapeTest {
     }
 
     @Test
+    fun `the offset ladder's last rung is the plan's offsets before Spread`() {
+        for (case in vector.cases) {
+            val strategy = assertNotNull(SpreadOrder.byName(case.order), case.name)
+            val ladder = DistributionPlan.elementLadder(strategy, case.heads, case.shape)
+            val plan = DistributionPlan.forElements(strategy, case.heads, case.shape)
+            val parts = SpreadShaping.Step.PARTS.ordinal
+            assertEquals(case.slots, ladder.counts[parts], "${case.name}: the last rung's count is the slots")
+            if (case.shape.isDefault) continue
+            for (i in 0 until case.heads) {
+                val offset = case.spread * ladder.ranks[parts][i] / ladder.counts[parts]
+                assertTrue(abs(plan.offsets[i] - offset) < 1e-9, "${case.name}: head $i's ladder gives $offset, not ${plan.offsets[i]}")
+            }
+        }
+    }
+
+    @Test
     fun `the default shape leaves every order's offsets exactly as they were`() {
         // P6: an effect that names no shape runs bit for bit as before session 2.
         val strategies = SpreadOrder.availableOrders.map { SpreadOrder.fromName(it) }

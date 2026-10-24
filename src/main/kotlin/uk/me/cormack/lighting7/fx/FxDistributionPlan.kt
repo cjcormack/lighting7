@@ -57,16 +57,7 @@ internal class DistributionPlan private constructor(
                 offsets = order.offsets(members, size)
                 distinctSlots = order.distinctSlots(size)
             } else {
-                val rankCount = order.distinctSlots(size)
-                val wingsApply = !order.isMirrored
-                // Segments, Wings and Parts count in whole ranks, so a continuous Order (Position) is
-                // snapped first; Spread alone scales its continuous ranks.
-                val ranks = if (SpreadShaping.countsRanks(rankCount, shape, wingsApply)) {
-                    order.wholeRanks(members, size)
-                } else {
-                    order.ranks(members, size)
-                }
-                val shaped = SpreadShaping.shape(ranks, rankCount, shape, wingsApply)
+                val shaped = shaped(order, members, shape, ladder = null)
                 offsets = shaped.offsets
                 distinctSlots = shaped.slots
             }
@@ -89,6 +80,44 @@ internal class DistributionPlan private constructor(
         }
 
         /**
+         * The offset ladder for [members] (FX editor plan D9): each one's rank after each of §3.3's
+         * steps 1–4, from the same ranks and shaping [of] runs. Under [SpreadShape.DEFAULT] every
+         * rung is the Order's rank, and the plan's offsets are the Order's own.
+         */
+        fun ladder(
+            order: SpreadOrder,
+            members: List<DistributionMemberInfo>,
+            shape: SpreadShape = SpreadShape.DEFAULT,
+        ): SpreadShaping.Ladder = SpreadShaping.Ladder(members.size).also { shaped(order, members, shape, it) }
+
+        /** [ladder] for an element list, as [forElements] plans one. */
+        fun elementLadder(order: SpreadOrder, count: Int, shape: SpreadShape = SpreadShape.DEFAULT): SpreadShaping.Ladder =
+            ladder(order, elementSlots(count), shape)
+
+        /** Steps 1–5 of §3.3 over [members], filling [ladder] when one is given. */
+        private fun shaped(
+            order: SpreadOrder,
+            members: List<DistributionMemberInfo>,
+            shape: SpreadShape,
+            ladder: SpreadShaping.Ladder?,
+        ): SpreadShaping.Result {
+            val size = members.size
+            val rankCount = order.distinctSlots(size)
+            val wingsApply = !order.isMirrored
+            // Segments, Wings and Parts count in whole ranks, so a continuous Order (Position) is
+            // snapped first; Spread alone scales its continuous ranks.
+            val ranks = if (SpreadShaping.countsRanks(rankCount, shape, wingsApply)) {
+                order.wholeRanks(members, size)
+            } else {
+                order.ranks(members, size)
+            }
+            return SpreadShaping.shape(ranks, rankCount, shape, wingsApply, ladder)
+        }
+
+        private fun elementSlots(count: Int): List<DistributionMemberInfo> =
+            List(count) { i -> ElementSlot(i, if (count > 1) i.toDouble() / (count - 1) else 0.5) }
+
+        /**
          * Plan for an element key list, whose members are the list positions themselves —
          * the shape the tick loops used to synthesise inline, preserved exactly (including
          * the `0.5` a single element gets).
@@ -99,13 +128,7 @@ internal class DistributionPlan private constructor(
             shape: SpreadShape = SpreadShape.DEFAULT,
         ): DistributionPlan {
             if (count == 0) return EMPTY
-            return of(
-                order,
-                List(count) { i ->
-                    ElementSlot(i, if (count > 1) i.toDouble() / (count - 1) else 0.5)
-                },
-                shape,
-            )
+            return of(order, elementSlots(count), shape)
         }
     }
 }

@@ -26,7 +26,7 @@ internal object FxPhase {
     ): Double {
         val ticksPerCycle = beatCycleTicks(division)
         if (ticksPerCycle <= 0) return 0.0
-        val elapsed = if (dynamics.runs == null) ticks else ticks - anchorTick
+        val elapsed = elapsed(ticks, anchorTick, dynamics)
         return shape(
             cycles = elapsed / ticksPerCycle,
             basePhase = (elapsed % ticksPerCycle).toDouble() / ticksPerCycle,
@@ -49,7 +49,7 @@ internal object FxPhase {
     ): Double {
         val cycleDurationMs = wallClockCycleMs(division)
         if (cycleDurationMs <= 0.0) return 0.0
-        val elapsed = if (dynamics.runs == null) scaledMs else scaledMs - anchorMs
+        val elapsed = elapsed(scaledMs, anchorMs, dynamics)
         return shape(
             cycles = floor(elapsed / cycleDurationMs).toLong(),
             basePhase = (elapsed % cycleDurationMs) / cycleDurationMs,
@@ -59,6 +59,39 @@ internal object FxPhase {
             tally = tally,
         )
     }
+
+    /**
+     * A beat FX member's own clock at master tick [ticks], in cycles — the FX's, less the member's
+     * offset, plus its Phase: the clock [beatPhaseAt] counts Bounce on (Runs counts it less Phase), so
+     * the member's own cycle begins each time this crosses a whole number — under a triangle Order
+     * (Ping-pong) the sweep's turnarounds fall elsewhere. 0 where the cycle is empty.
+     */
+    fun beatOwnCyclesAt(ticks: Long, anchorTick: Long, division: Double, dynamics: FxDynamics, distributionOffset: Double): Double {
+        val ticksPerCycle = beatCycleTicks(division)
+        if (ticksPerCycle <= 0) return 0.0
+        val elapsed = elapsed(ticks, anchorTick, dynamics)
+        val basePhase = (elapsed % ticksPerCycle).toDouble() / ticksPerCycle
+        return own(elapsed / ticksPerCycle, basePhase, distributionOffset) + dynamics.phaseOffset
+    }
+
+    /** [beatOwnCyclesAt]'s wall-clock twin. */
+    fun wallClockOwnCyclesAt(scaledMs: Double, anchorMs: Double, division: Double, dynamics: FxDynamics, distributionOffset: Double): Double {
+        val cycleDurationMs = wallClockCycleMs(division)
+        if (cycleDurationMs <= 0.0) return 0.0
+        val elapsed = elapsed(scaledMs, anchorMs, dynamics)
+        val basePhase = (elapsed % cycleDurationMs) / cycleDurationMs
+        return own(floor(elapsed / cycleDurationMs).toLong(), basePhase, distributionOffset) + dynamics.phaseOffset
+    }
+
+    /** An N-shot counts from its anchor; a forever FX from the clock's zero. */
+    private fun elapsed(ticks: Long, anchorTick: Long, dynamics: FxDynamics): Long =
+        if (dynamics.runs == null) ticks else ticks - anchorTick
+
+    private fun elapsed(scaledMs: Double, anchorMs: Double, dynamics: FxDynamics): Double =
+        if (dynamics.runs == null) scaledMs else scaledMs - anchorMs
+
+    /** The member's own clock, in cycles: the FX's, less this member's offset. */
+    private fun own(cycles: Long, basePhase: Double, distributionOffset: Double): Double = cycles + basePhase - distributionOffset
 
     /** A beat cycle of [division] beats in master ticks; at or below 0 the phase is always 0. */
     fun beatCycleTicks(division: Double): Long = (MasterClock.TICKS_PER_BEAT * division).toLong()
@@ -111,8 +144,7 @@ internal object FxPhase {
         // (element 0 → element N for NORMAL, etc.).
         val phase = ((shaped + dynamics.phaseOffset - distributionOffset) % 1.0 + 1.0) % 1.0
 
-        // The member's own clock, in cycles: the effect's, less this member's offset.
-        val own = cycles + basePhase - distributionOffset
+        val own = own(cycles, basePhase, distributionOffset)
         dynamics.runs?.let { runs ->
             tally?.note(pending = own < runs)
             if (own < 0.0 || own >= runs) return Double.NaN

@@ -369,11 +369,45 @@ internal sealed interface FxUpdateOutcome {
 internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): FxUpdateOutcome {
     val engine = state.show.fxEngine
     val existing = engine.getFx(fxId) ?: return FxUpdateOutcome.NotFound
+    val (edit, splitHeads) = when (val parsed = parseFxUpdate(state, existing, request)) {
+        is FxUpdateParse.Refusal -> return parsed.outcome
+        is FxUpdateParse.Parsed -> parsed
+    }
+    return try {
+        if (splitHeads == null) {
+            engine.updateFx(fxId, edit)?.let { FxUpdateOutcome.Updated(it) } ?: FxUpdateOutcome.NotFound
+        } else {
+            // Every head becomes its own copy, still running exactly as it was, and then the named
+            // heads' copies take the edit, each through the same in-place edit a whole effect gets.
+            val copies = splitIntoHeads(state, fxId) ?: return FxUpdateOutcome.NotFound
+            val (named, rest) = copies.partition { it.target.targetKey in splitHeads }
+            FxUpdateOutcome.Split(edited = named.mapNotNull { engine.updateFx(it.id, edit) }, rest = rest)
+        }
+    } catch (e: Exception) {
+        FxUpdateOutcome.Refused(e.message ?: "Failed to update effect")
+    }
+}
+
+/** What [parseFxUpdate] made of a request. */
+internal sealed interface FxUpdateParse {
+    /** The edit, and the heads it is split off to — null for every head the effect paints. */
+    data class Parsed(val edit: FxEngine.FxEdit, val splitHeads: Set<String>?) : FxUpdateParse
+
+    data class Refusal(val outcome: FxUpdateOutcome) : FxUpdateParse
+}
+
+/**
+ * [request] checked against running effect [existing] and turned into the edit [applyFxUpdate]
+ * makes: the one parse of an effect update, which the FX preview (`POST /fx/preview`) also runs on
+ * an edit not yet sent. Nothing moves; every refusal is decided here.
+ */
+internal fun parseFxUpdate(state: State, existing: FxInstance, request: UpdateFxRequest): FxUpdateParse {
+    fun refused(message: String) = FxUpdateParse.Refusal(FxUpdateOutcome.Refused(message))
     // Which heads the edit is for (apply-model plan §3.4): every one, or some of them split off.
     val splitHeads = when (val plan = planSplit(state, existing, request.targets)) {
         SplitPlan.InPlace -> null
         is SplitPlan.Heads -> plan.selected
-        is SplitPlan.Refusal -> return plan.outcome
+        is SplitPlan.Refusal -> return FxUpdateParse.Refusal(plan.outcome)
     }
     return try {
         // Resolve new effect if type or parameters changed
@@ -406,7 +440,7 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
         val newDirection = request.direction?.let { FxSpecCoercion.Strict.direction(it) }
         val newRuns = FxSpecCoercion.Strict.runs(request.runs)
         if (request.runForever && newRuns != null) {
-            return FxUpdateOutcome.Refused("runs and runForever are two answers to one question — send one")
+            return refused("runs and runForever are two answers to one question — send one")
         }
         // The spread's shape (D4), checked as the effect will run it: this request's Order or the one
         // it has, and the wings it is sent or has — so moving a winged effect onto Centre out is
@@ -423,7 +457,7 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
             val orderMoved = newOrder != null && newOrder != dyn.order
             val wings = request.wings ?: dyn.wings.takeIf { orderMoved }
             FxSpecCoercion.Strict.spreadProblem(request.spread, wings, request.segments, request.parts, order)
-                ?.let { return FxUpdateOutcome.Refused(it) }
+                ?.let { return refused(it) }
         }
         // Only when the client actually renamed the type; a parameters-only edit leaves the
         // instance's registration id — and the clock it runs on — alone. A type swap takes the new
@@ -435,7 +469,7 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
         // D7. Seconds and a master are two answers to one question, so both is refused; a master
         // named on an effect that is on Seconds takes it off Seconds.
         secondsTimingConflict(request.seconds, request.speedMasterUuid, request.rateSpeedMasterUuid)
-            ?.let { return FxUpdateOutcome.Refused(it) }
+            ?.let { return refused(it) }
         val kind = newTimingSource ?: existing.registrationTimingSource
         val namesItsMaster = if (kind == TimingSource.BEAT) newSpeedMaster != null else newRateSpeedMaster != null
         val newSeconds = request.seconds ?: if (namesItsMaster && existing.onSeconds) false else null
@@ -443,9 +477,7 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
         if (newSeconds == false && kind == TimingSource.WALL_CLOCK && newRateSpeedMaster == null &&
             existing.rateSpeedMasterUuid == null
         ) {
-            return FxUpdateOutcome.Refused(
-                "seconds: false on a wall-clock effect names its master — send rateSpeedMasterUuid",
-            )
+            return refused("seconds: false on a wall-clock effect names its master — send rateSpeedMasterUuid")
         }
 
         // A split cannot spread the shape over some heads: each split-off head runs alone. Refused
@@ -462,48 +494,41 @@ internal fun applyFxUpdate(state: State, fxId: Long, request: UpdateFxRequest): 
                 if (request.parts != null && request.parts != dyn.parts) add("parts")
             }
             if (shapeMoved.isNotEmpty()) {
-                return FxUpdateOutcome.Refused(
+                return refused(
                     "${shapeMoved.joinToString(", ")} spread the effect over all its heads, and the heads " +
                         "split off here would each run alone — select every head the effect runs on to change it",
                 )
             }
         }
 
-        fun edit(id: Long) = engine.updateFx(
-            fxId = id,
-            newFx = newFx,
-            newTiming = newTiming,
-            newBlendMode = newBlendMode,
-            newPhaseOffset = request.phaseOffset,
-            newOrder = newOrder,
-            newElementMode = newElementMode,
-            newElementFilter = newElementFilter,
-            newTimingMode = request.timing,
-            newSpeedMasterUuid = newSpeedMaster,
-            newRateSpeedMasterUuid = newRateSpeedMaster,
-            newRegistrationId = registration?.id,
-            newTimingSource = newTimingSource,
-            newSeconds = newSeconds,
-            newAmount = newAmount,
-            newDirection = newDirection,
-            newRuns = newRuns,
-            clearRuns = request.runForever,
-            newSpread = request.spread,
-            newWings = request.wings,
-            newSegments = request.segments,
-            newParts = request.parts,
+        FxUpdateParse.Parsed(
+            FxEngine.FxEdit(
+                newFx = newFx,
+                newTiming = newTiming,
+                newBlendMode = newBlendMode,
+                newPhaseOffset = request.phaseOffset,
+                newOrder = newOrder,
+                newElementMode = newElementMode,
+                newElementFilter = newElementFilter,
+                newTimingMode = request.timing,
+                newSpeedMasterUuid = newSpeedMaster,
+                newRateSpeedMasterUuid = newRateSpeedMaster,
+                newRegistrationId = registration?.id,
+                newTimingSource = newTimingSource,
+                newSeconds = newSeconds,
+                newAmount = newAmount,
+                newDirection = newDirection,
+                newRuns = newRuns,
+                clearRuns = request.runForever,
+                newSpread = request.spread,
+                newWings = request.wings,
+                newSegments = request.segments,
+                newParts = request.parts,
+            ),
+            splitHeads,
         )
-        if (splitHeads == null) {
-            edit(fxId)?.let { FxUpdateOutcome.Updated(it) } ?: FxUpdateOutcome.NotFound
-        } else {
-            // Every head becomes its own copy, still running exactly as it was, and then the named
-            // heads' copies take the edit, each through the same in-place edit a whole effect gets.
-            val copies = splitIntoHeads(state, fxId) ?: return FxUpdateOutcome.NotFound
-            val (named, rest) = copies.partition { it.target.targetKey in splitHeads }
-            FxUpdateOutcome.Split(edited = named.mapNotNull { edit(it.id) }, rest = rest)
-        }
     } catch (e: Exception) {
-        FxUpdateOutcome.Refused(e.message ?: "Failed to update effect")
+        refused(e.message ?: "Failed to update effect")
     }
 }
 

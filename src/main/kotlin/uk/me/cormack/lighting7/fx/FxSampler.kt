@@ -3,6 +3,7 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.PropertyCategory
 import uk.me.cormack.lighting7.fx.KeyStackLayer.HeldBackReason
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToLong
@@ -72,17 +73,31 @@ internal class FxSampler(
         fun clock(): FxSampleClock
     }
 
-    /** Samples [request] over its window, 48 to a cycle of its first FX. */
-    fun sample(request: FxSampleRequest, clock: FxSampleClock = view.clock()): FxSamples {
+    /** Every running FX, in apply order. */
+    fun running(): List<FxInstance> = view.running()
+
+    /** Every clock as it reads now: what [sample] reads when it is handed none. */
+    fun clock(): FxSampleClock = view.clock()
+
+    /**
+     * One request's snapshot of the FX it reads ([Reads]): hand the same one to [heads], [sample] and
+     * [sampleAt] so every part of a request works from one read of each FX.
+     */
+    fun snapshot(): Reads = Reads()
+
+    /**
+     * Samples [request] over its window, 48 to a cycle of its first FX. Past [MAX_FX] the FX named are
+     * cut, and a running one among those cut is left out under *Include* `STACK` too.
+     */
+    fun sample(request: FxSampleRequest, clock: FxSampleClock = view.clock(), reads: Reads = Reads()): FxSamples {
         val truncated = HashSet<FxSamples.Truncation>()
         val picked = request.fx.take(MAX_FX).also { if (request.fx.size > MAX_FX) truncated += FxSamples.Truncation.FX }
         require(picked.isNotEmpty()) { "nothing to sample" }
-        val reads = Reads()
         val cycleMs = cycleMs(picked.first(), clock, reads)
         val sampleMs = cycleMs / SAMPLES_PER_CYCLE
         val lengthMs = when (val window = request.window) {
             is FxSampleWindow.Cycles -> window.cycles * cycleMs
-            is FxSampleWindow.Beats -> window.beats * MasterClock.TICKS_PER_BEAT * clock.msPerTick(beatSlotOf(picked.first(), reads))
+            is FxSampleWindow.Beats -> window.beats * MasterClock.TICKS_PER_BEAT * clock.msPerTick(windowSlot(picked.first(), reads))
             is FxSampleWindow.Seconds -> window.seconds * 1000.0
         }
         var samples = ceil(lengthMs / sampleMs - TICK_EPSILON).toInt().coerceAtLeast(1)
@@ -91,7 +106,7 @@ internal class FxSampler(
             truncated += FxSamples.Truncation.SAMPLES
         }
         val offsets = DoubleArray(samples) { it * sampleMs }
-        return sampleAt(picked, request.include, request.rows, clock, offsets, sampleMs, truncated, reads)
+        return sampleAt(picked, request.include, request.rows, clock, offsets, sampleMs, truncated, reads, cut = request.fx.drop(MAX_FX))
     }
 
     /**
@@ -106,7 +121,8 @@ internal class FxSampler(
         offsetsMs: DoubleArray,
         sampleMs: Double,
         truncated: MutableSet<FxSamples.Truncation> = HashSet(),
-    ): FxSamples = sampleAt(fx, include, rows, clock, offsetsMs, sampleMs, truncated, Reads())
+        reads: Reads = Reads(),
+    ): FxSamples = sampleAt(fx, include, rows, clock, offsetsMs, sampleMs, truncated, reads, cut = emptyList())
 
     private fun sampleAt(
         fx: List<FxInstance>,
@@ -117,6 +133,7 @@ internal class FxSampler(
         sampleMs: Double,
         truncated: MutableSet<FxSamples.Truncation>,
         reads: Reads,
+        cut: List<FxInstance>,
     ): FxSamples {
         val membersOf = reads::membersOf
 
@@ -124,9 +141,13 @@ internal class FxSampler(
         val stack = when (include) {
             FxSampleRequest.Include.ONLY -> fx.distinct().sortedWith(applyOrder)
             FxSampleRequest.Include.STACK -> {
-                val named = fx.toSet()
+                val named = (fx + cut).toSet()
+                // A copy carrying a running FX's id is that FX with an edit not yet sent, so it stands in for it.
+                val standIns = named.mapNotNullTo(HashSet()) { it.id.takeIf { id -> id != 0L } }
                 val keys = rows?.toSet() ?: fx.flatMapTo(HashSet()) { membersOf(it).keys }
-                val reaching = view.running().filter { it !in named && membersOf(it).keys.any { key -> key in keys } }
+                val reaching = view.running().filter {
+                    it !in named && it.id !in standIns && membersOf(it).keys.any { key -> key in keys }
+                }
                 (reaching + fx.distinct()).sortedWith(applyOrder)
             }
         }
@@ -160,10 +181,21 @@ internal class FxSampler(
     }
 
     /**
+     * The heads [fx] paint, in the order their walks list them — the rig's, as a group or a selection
+     * orders its members — each with the first FX's rank under its Order where it paints the head.
+     */
+    fun heads(fx: List<FxInstance>, reads: Reads = Reads()): List<FxSampledHead> {
+        val first = fx.firstOrNull()?.let { reads.membersOf(it) }.orEmpty()
+        return fx.flatMap { reads.membersOf(it).keys }.distinct().map { key ->
+            FxSampledHead(key, first[key]?.rung?.rank(SpreadShaping.Step.ORDER))
+        }
+    }
+
+    /**
      * One request's reads of each FX — its dynamics, the heads it paints and its masters' slots —
      * taken once, so every part of the request works from one snapshot, as the compose pass does.
      */
-    private inner class Reads {
+    internal inner class Reads {
         private val dynamics = HashMap<FxInstance, FxDynamics>()
         private val members = HashMap<FxInstance, Map<String, Member>>()
         private val slots = HashMap<FxInstance, IntArray>()
@@ -182,8 +214,12 @@ internal class FxSampler(
         }
     }
 
-    /** One FX's place on one head: its unit count for the phase, its offset and the context it is handed. */
-    private class Member(val groupSize: Int, val offset: Double, val context: FxContext)
+    /**
+     * One FX's place on one head: its unit count for the phase, its offset, the context it is handed,
+     * and its rung of the offset ladder — none for a split-off copy, which carries its offset but not
+     * the ranks it came from.
+     */
+    internal class Member(val groupSize: Int, val offset: Double, val context: FxContext, val rung: FxLadderRung?)
 
     /**
      * Which heads [effect] paints, each with its member's place: the compose pass's own walk over its
@@ -192,23 +228,31 @@ internal class FxSampler(
     private fun membersOf(effect: FxInstance, dyn: FxDynamics): Map<String, Member> {
         val expansion = view.expansion(effect, dyn)
         val out = LinkedHashMap<String, Member>()
-        fun spread(keys: List<String>, plan: DistributionPlan) {
-            for ((i, key) in keys.withIndex()) out[key] = Member(keys.size, plan.offsets[i], plan.contexts[i])
+        fun spread(keys: List<String>, plan: DistributionPlan, ladder: SpreadShaping.Ladder) {
+            for ((i, key) in keys.withIndex()) {
+                out[key] = Member(keys.size, plan.offsets[i], plan.contexts[i], FxLadderRung(ladder, i))
+            }
         }
+        fun elements(keys: List<String>, plan: DistributionPlan) =
+            spread(keys, plan, DistributionPlan.elementLadder(dyn.order, keys.size, dyn.spreadShape))
         when (expansion.kind) {
             FxTargetExpansion.Kind.DIRECT_FIXTURE -> {
                 val carry = effect.splitMember
                 out[effect.target.targetKey] =
-                    if (carry == null) Member(1, 0.0, FxContext.SINGLE)
-                    else Member(carry.groupSize, carry.offset, carry.context)
+                    if (carry == null) Member(1, 0.0, FxContext.SINGLE, FxLadderRung.SINGLE)
+                    else Member(carry.groupSize, carry.offset, carry.context, rung = null)
             }
-            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> spread(expansion.flat, view.plans(effect, expansion, dyn).flat)
-            FxTargetExpansion.Kind.GROUP_MEMBERS -> spread(expansion.members.map { it.key }, view.plans(effect, expansion, dyn).members)
+            FxTargetExpansion.Kind.FIXTURE_ELEMENTS -> elements(expansion.flat, view.plans(effect, expansion, dyn).flat)
+            FxTargetExpansion.Kind.GROUP_MEMBERS -> spread(
+                expansion.members.map { it.key },
+                view.plans(effect, expansion, dyn).members,
+                DistributionPlan.ladder(dyn.order, expansion.members, dyn.spreadShape),
+            )
             FxTargetExpansion.Kind.GROUP_ELEMENTS -> {
                 val plans = view.plans(effect, expansion, dyn)
                 when (dyn.elementMode) {
-                    ElementMode.PER_FIXTURE -> expansion.perFixture.forEachIndexed { i, keys -> spread(keys, plans.perFixture[i]) }
-                    ElementMode.FLAT -> spread(expansion.flat, plans.flat)
+                    ElementMode.PER_FIXTURE -> expansion.perFixture.forEachIndexed { i, keys -> elements(keys, plans.perFixture[i]) }
+                    ElementMode.FLAT -> elements(expansion.flat, plans.flat)
                 }
             }
             FxTargetExpansion.Kind.NONE -> {}
@@ -249,6 +293,7 @@ internal class FxSampler(
         val result = Series.of(kind, n, planes)
         val outputs = painting.map { (effect, _) -> Series.of(kind, n, planes, steps = effect.effect.outputType == FxOutputType.STEPS) }
         val holding = painting.map { BooleanArray(n) }
+        val own = painting.map { DoubleArray(n) }
         val reasons = painting.map { (effect, _) -> heldBack(effect, key, attribute) }
         val dynamics = painting.map { (effect, _) -> reads.dynamicsOf(effect) }
         val weights = painting.mapIndexed { i, (effect, _) -> FxBlend.weight(dynamics[i].amount, ENVELOPE, view.stackAmount(effect)) }
@@ -273,7 +318,7 @@ internal class FxSampler(
                     outputs[i].set(s, before)
                     continue
                 }
-                val phase = phaseOf(effect, member, dyn, clock, offsetsMs[s], reads)
+                val phase = phaseOf(effect, member, dyn, clock, offsetsMs[s], reads, own[i], s)
                 if (FxInstance.isHolding(phase)) {
                     holding[i][s] = true
                     outputs[i].set(s, before)
@@ -308,13 +353,22 @@ internal class FxSampler(
             underneath = underneath,
             parked = view.parked(target, fixture),
             result = result.build(),
-            fx = painting.mapIndexed { i, (effect, _) ->
-                FxRowOutput(effect, outputs[i].build(), holdingRanges(holding[i]), reasons[i])
+            fx = painting.mapIndexed { i, (effect, member) ->
+                FxRowOutput(
+                    effect, outputs[i].build(), holdingRanges(holding[i]), reasons[i],
+                    offset = member.offset,
+                    slots = member.context.numDistinctSlots,
+                    starts = starts(own[i], holding[i]),
+                    rung = member.rung,
+                )
             },
         )
     }
 
-    /** [effect]'s member phase [offsetMs] after [clock] was read, from its own clock. */
+    /**
+     * [effect]'s member phase [offsetMs] after [clock] was read, from its own clock, writing the
+     * member's own cycle count there to [own] at [s].
+     */
     private fun phaseOf(
         effect: FxInstance,
         member: Member,
@@ -322,6 +376,8 @@ internal class FxSampler(
         clock: FxSampleClock,
         offsetMs: Double,
         reads: Reads,
+        own: DoubleArray,
+        s: Int,
     ): Double {
         val division = FxPhase.memberDivision(effect.timing.cycle, dyn, member.groupSize)
         return if (effect.timingSource == TimingSource.BEAT) {
@@ -329,11 +385,13 @@ internal class FxSampler(
             val start = clock.tickAt(slot)
             val ticks = start + floor(offsetMs / clock.msPerTick(slot) + TICK_EPSILON).toLong()
             val anchor = effect.runsStartTick.takeUnless { it == FxInstance.UNANCHORED || it > start } ?: start
+            own[s] = FxPhase.beatOwnCyclesAt(ticks, anchor, division, dyn, member.offset)
             FxPhase.beatPhaseAt(ticks, anchor, division, member.groupSize, dyn, member.offset)
         } else {
             val start = effect.accumulatedScaledMs
             val scaledMs = start + offsetMs * clock.rateScale(reads.rateSlotOf(effect))
             val anchor = effect.runsStartScaledMs.takeUnless { it.isNaN() || it > start } ?: start
+            own[s] = FxPhase.wallClockOwnCyclesAt(scaledMs, anchor, division, dyn, member.offset)
             FxPhase.wallClockPhaseAt(scaledMs, anchor, division, member.groupSize, dyn, member.offset)
         }
     }
@@ -417,9 +475,15 @@ internal class FxSampler(
         null
     }
 
-    /** The master a beat window counts beats on: [effect]'s own, or master 1 for one on the wall clock. */
-    private fun beatSlotOf(effect: FxInstance, reads: Reads): Int =
-        if (effect.timingSource == TimingSource.BEAT) reads.speedSlotOf(effect) else 0
+    /**
+     * The master a beat window counts beats on: a beat FX's speed master, a wall-clock FX's rate
+     * master, or master 1 for one on its own seconds.
+     */
+    fun windowSlot(effect: FxInstance, reads: Reads = Reads()): Int = when {
+        effect.timingSource == TimingSource.BEAT -> reads.speedSlotOf(effect)
+        reads.rateSlotOf(effect) != FxInstance.NO_RATE_MASTER -> reads.rateSlotOf(effect)
+        else -> 0
+    }
 
     private fun kindOf(target: FxTarget): FxSampleKind = when (target) {
         is SliderTarget, is SettingTarget -> FxSampleKind.SLIDER
@@ -498,6 +562,9 @@ internal class FxSampler(
         /** The envelope, taken as full: a fade in or out is not drawn. */
         private const val ENVELOPE = 1.0
 
+        /** A member's own clock within this much of a whole cycle counts as on it, against rounding. */
+        private const val CYCLE_EPSILON = 1e-9
+
         /** A sample landing within this much of a tick counts as on it, against floating-point division. */
         private const val TICK_EPSILON = 1e-6
 
@@ -507,6 +574,17 @@ internal class FxSampler(
             is PaletteStepList -> steps.steps.map { it.name }
             is SlotStepList -> steps.names
             else -> List(steps.size) { (it + 1).toString() }
+        }
+
+        /**
+         * The samples where a member's cycle starts: where its own cycle count crosses a whole number
+         * since the sample before, or sits on one at the first, and the member is not holding.
+         */
+        private fun starts(own: DoubleArray, holding: BooleanArray): List<Int> {
+            fun cycle(x: Double) = floor(x + CYCLE_EPSILON)
+            return own.indices.filter { s ->
+                !holding[s] && if (s == 0) abs(own[0] - cycle(own[0])) < CYCLE_EPSILON else cycle(own[s]) > cycle(own[s - 1])
+            }
         }
 
         /** The sample ranges a member holds in (an N-shot outside its runs, or a paused FX). */
@@ -635,7 +713,32 @@ internal class FxRowOutput(
     val output: FxSampleSeries,
     val holding: List<IntRange>,
     val heldBack: HeldBackReason?,
+    /** The member's phase offset, the spread's last step. */
+    val offset: Double,
+    /** The rank count after the spread's shape: a step chase's steps. */
+    val slots: Int,
+    /** The samples where the member's cycle starts. */
+    val starts: List<Int>,
+    /** Null for a split-off copy, which carries no ranks. */
+    val rung: FxLadderRung?,
 )
+
+/**
+ * One member's rung of an FX's offset ladder (FX editor plan D9): its rank, and the rank count, after
+ * each of §3.3's steps 1–4 ([SpreadShaping.Ladder]). A head an FX runs on alone is rank 0 of 1 throughout.
+ */
+internal class FxLadderRung(private val ladder: SpreadShaping.Ladder?, private val index: Int) {
+    fun rank(step: SpreadShaping.Step): Double = ladder?.ranks?.get(step.ordinal)?.get(index) ?: 0.0
+
+    fun count(step: SpreadShaping.Step): Int = ladder?.counts?.get(step.ordinal) ?: 1
+
+    companion object {
+        val SINGLE = FxLadderRung(null, 0)
+    }
+}
+
+/** A head the FX paint, and the first FX's rank under its Order where it paints it ([FxSampler.heads]). */
+internal class FxSampledHead(val key: String, val orderRank: Double?)
 
 /** An FX sampled: [running] unless paused; [representative] when stateful (see [FxSampler]). */
 internal class FxSampledFx(val fx: FxInstance, val running: Boolean, val representative: Boolean)

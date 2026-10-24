@@ -51,6 +51,26 @@ object SpreadShaping {
     class Result(val offsets: DoubleArray, val slots: Int)
 
     /**
+     * The offset ladder (FX editor plan D9): each member's rank, and the rank count, after each of
+     * steps 1–4 — [shape] fills it as it goes, so the ladder is the shaping itself, not a copy of it.
+     */
+    class Ladder(members: Int) {
+        /** Indexed by [Step]: each member's rank after that step. */
+        val ranks: Array<DoubleArray> = Array(Step.entries.size) { DoubleArray(members) }
+
+        /** Indexed by [Step]: the rank count after that step. */
+        val counts: IntArray = IntArray(Step.entries.size)
+
+        internal fun record(step: Step, r: DoubleArray, count: Int) {
+            r.copyInto(ranks[step.ordinal])
+            counts[step.ordinal] = count
+        }
+    }
+
+    /** A rung of the [Ladder]: steps 1–4 of §3.3. Step 5, Spread, is the offsets themselves. */
+    enum class Step { ORDER, SEGMENTS, WINGS, PARTS }
+
+    /**
      * Shape [ranks] (step 1's, one per member) over [rankCount] ranks. They are whole numbers whenever
      * Segments, Wings or Parts act ([countsRanks]) — `POSITIONAL`'s position is snapped to a slot
      * first — and continuous only under Spread alone, which scales them as they are.
@@ -67,16 +87,18 @@ object SpreadShaping {
      * [Result.slots] is `R` after step 4: a step chase's window is `1 / slots` and its step timing
      * scales by it, so neither leaves a gap.
      */
-    fun shape(ranks: DoubleArray, rankCount: Int, shape: SpreadShape, wingsApply: Boolean): Result {
+    fun shape(ranks: DoubleArray, rankCount: Int, shape: SpreadShape, wingsApply: Boolean, ladder: Ladder? = null): Result {
         val n = ranks.size
         var count = max(rankCount, 1)
         val r = ranks.copyOf()
+        ladder?.record(Step.ORDER, r, count)
 
         if (shape.segments > 1) {
             val s = shape.segments
             count = ceilDiv(count, s)
             for (i in 0 until n) r[i] = min(floor(r[i] / s), (count - 1).toDouble())
         }
+        ladder?.record(Step.SEGMENTS, r, count)
 
         if (wingsApply && shape.wings > 1) {
             val m = ceilDiv(count, shape.wings)
@@ -92,12 +114,14 @@ object SpreadShaping {
             }
             count = m
         }
+        ladder?.record(Step.WINGS, r, count)
 
         if (shape.parts in 1 until count) {
             val p = shape.parts.toDouble()
             for (i in 0 until n) r[i] = r[i] - p * floor(r[i] / p)
             count = shape.parts
         }
+        ladder?.record(Step.PARTS, r, count)
 
         val offsets = DoubleArray(n) { shape.spread * r[it] / count }
         return Result(offsets, count)

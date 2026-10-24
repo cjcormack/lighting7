@@ -1,6 +1,6 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 2, 3a and 3b of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a and 3b of 9 done.** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
 > ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
@@ -186,6 +186,13 @@ finger before the 50 ms floor has sent it. The answer:
 
 400 `FX_PREVIEW_INVALID` names every problem at once (an unknown FX, a draft the write boundary
 would refuse, a window over the cap); 409 off the current project.
+
+As shipped (session 1b), the route speaks the wire's final names and differs from this sketch in a
+few places; `fx-engineering.md` §"Previewing an FX" is the shape the client is built on. An FX is
+`fxId`; `solo` is an index into `fx` (a draft has no id); an answer's per-row FX output names its FX
+by index into the answer's `fx`, whose `entry` is its place in the request; `heldBackReason` alone says
+an FX is held back; rows carry `rigIndex`, grouped by fixture; the window's `beats` are always
+answered; and a `seconds` clock carries no start time, its playhead running from sample 0.
 
 The client asks again, latest request wins, when the selection changes, on `fxChanged` for an FX in
 the list, after an `updateFx` it sent is answered, on `speedMasters.changed` for a master in `clock`,
@@ -396,7 +403,7 @@ Why each gate is where it is:
   were (P4).
 - **Docs**: `fx-engineering.md` §"Previewing an FX", the sampler half.
 
-### Session 1b: the preview route (backend)
+### Session 1b: the preview route (backend) — done, `11651d1b`
 
 **Gate: terminology session 5.** Needs 1a.
 

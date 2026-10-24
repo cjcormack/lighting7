@@ -1316,139 +1316,108 @@ class FxEngine(
         newWings: Int? = null,
         newSegments: Int? = null,
         newParts: Int? = null,
-    ): FxInstance? {
+    ): FxInstance? = updateFx(
+        fxId,
+        FxEdit(
+            newFx = newFx, newTiming = newTiming, newBlendMode = newBlendMode, newPhaseOffset = newPhaseOffset,
+            newOrder = newOrder, newElementMode = newElementMode, newElementFilter = newElementFilter,
+            newTimingMode = newTimingMode, newSpeedMasterUuid = newSpeedMasterUuid,
+            newRateSpeedMasterUuid = newRateSpeedMasterUuid, newRegistrationId = newRegistrationId,
+            newTimingSource = newTimingSource, replaceMasters = replaceMasters, newSeconds = newSeconds,
+            newAmount = newAmount, newDirection = newDirection, newRuns = newRuns, clearRuns = clearRuns,
+            newSpread = newSpread, newWings = newWings, newSegments = newSegments, newParts = newParts,
+        ),
+    )
+
+    /** One edit of a running FX: [updateFx]'s parameters of the same names, each null (or false) to keep. */
+    data class FxEdit(
+        val newFx: Fx? = null,
+        val newTiming: FxTiming? = null,
+        val newBlendMode: BlendMode? = null,
+        val newPhaseOffset: Double? = null,
+        val newOrder: SpreadOrder? = null,
+        val newElementMode: ElementMode? = null,
+        val newElementFilter: ElementFilter? = null,
+        val newTimingMode: Timing? = null,
+        val newSpeedMasterUuid: UUID? = null,
+        val newRateSpeedMasterUuid: UUID? = null,
+        val newRegistrationId: String? = null,
+        val newTimingSource: TimingSource? = null,
+        val replaceMasters: MasterAssignment? = null,
+        val newSeconds: Boolean? = null,
+        val newAmount: Double? = null,
+        val newDirection: FxDirection? = null,
+        val newRuns: Int? = null,
+        val clearRuns: Boolean = false,
+        val newSpread: Double? = null,
+        val newWings: Int? = null,
+        val newSegments: Int? = null,
+        val newParts: Int? = null,
+    ) {
+        val touchesDynamics: Boolean
+            get() = newPhaseOffset != null || newOrder != null || newElementMode != null || newElementFilter != null ||
+                newTimingMode != null || newAmount != null || newDirection != null || newRuns != null || clearRuns ||
+                newSpread != null || newWings != null || newSegments != null || newParts != null
+
+        /** [dyn] with this edit's dynamics fields. */
+        fun applyTo(dyn: FxDynamics): FxDynamics = dyn.copy(
+            phaseOffset = newPhaseOffset ?: dyn.phaseOffset,
+            order = newOrder ?: dyn.order,
+            elementMode = newElementMode ?: dyn.elementMode,
+            elementFilter = newElementFilter ?: dyn.elementFilter,
+            timing = newTimingMode ?: dyn.timing,
+            amount = newAmount ?: dyn.amount,
+            direction = newDirection ?: dyn.direction,
+            runs = if (clearRuns) null else newRuns ?: dyn.runs,
+            spread = newSpread ?: dyn.spread,
+            wings = newWings ?: dyn.wings,
+            segments = newSegments ?: dyn.segments,
+            parts = newParts ?: dyn.parts,
+        )
+
+        /** Whether this edit moves [existing]'s Runs, which then count again from the next pass. */
+        fun movesRuns(existing: FxInstance): Boolean =
+            (clearRuns && existing.dynamics.runs != null) || (newRuns != null && newRuns != existing.dynamics.runs)
+
+        /** D7: a timing move or a type swap decides the loop and which masters can stand. */
+        fun timingMove(existing: FxInstance): Pair<TimingSource, Boolean>? =
+            if (newSeconds != null || newTimingSource != null) {
+                (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
+            } else null
+
+        /** Whether this edit changes a field an instance holds immutably, so it is a swap. */
+        fun swaps(existing: FxInstance): Boolean =
+            newFx != null || newTiming != null || newBlendMode != null || timingMove(existing) != null
+    }
+
+    /** [updateFx], the edit as one [FxEdit]. */
+    fun updateFx(fxId: Long, edit: FxEdit): FxInstance? {
         // Again from the top when another request swapped or split the instance under this one.
         while (true) {
             val existing = activeFx[fxId] ?: return null
-            val runsChanged = (clearRuns && existing.dynamics.runs != null) ||
-                (newRuns != null && newRuns != existing.dynamics.runs)
+            val runsChanged = edit.movesRuns(existing)
 
             // One atomic dynamics update covering both branches: the cell is shared across the
             // swap below, so applying it up front reaches whichever instance survives — and a
             // tick pass sees either none of this update or all of it, never half.
-            if (newPhaseOffset != null || newOrder != null || newElementMode != null ||
-                newElementFilter != null || newTimingMode != null || newAmount != null || newDirection != null ||
-                newRuns != null || clearRuns || newSpread != null || newWings != null || newSegments != null ||
-                newParts != null
-            ) {
-                existing.updateDynamics { dyn ->
-                    dyn.copy(
-                        phaseOffset = newPhaseOffset ?: dyn.phaseOffset,
-                        order = newOrder ?: dyn.order,
-                        elementMode = newElementMode ?: dyn.elementMode,
-                        elementFilter = newElementFilter ?: dyn.elementFilter,
-                        timing = newTimingMode ?: dyn.timing,
-                        amount = newAmount ?: dyn.amount,
-                        direction = newDirection ?: dyn.direction,
-                        runs = if (clearRuns) null else newRuns ?: dyn.runs,
-                        spread = newSpread ?: dyn.spread,
-                        wings = newWings ?: dyn.wings,
-                        segments = newSegments ?: dyn.segments,
-                        parts = newParts ?: dyn.parts,
-                    )
-                }
-            }
+            if (edit.touchesDynamics) existing.updateDynamics(edit::applyTo)
             // A new count runs from now: the anchors re-take on the next pass. Written from this request
             // thread into tick-owned fields, which at worst re-anchors one pass late.
-            if (runsChanged) {
-                existing.runsStartTick = FxInstance.UNANCHORED
-                existing.runsStartScaledMs = Double.NaN
-                existing.spent = false
-            }
+            if (runsChanged) existing.restartRuns()
 
-            // D7: a timing move or a type swap decides the loop and which masters can stand.
-            val timingMove = if (newSeconds != null || newTimingSource != null) {
-                (newTimingSource ?: existing.registrationTimingSource) to (newSeconds ?: existing.onSeconds)
-            } else null
-
-            // Determine if we need an atomic swap (immutable fields changed)
-            val needsSwap = newFx != null || newTiming != null || newBlendMode != null || timingMove != null
-
+            val needsSwap = edit.swaps(existing)
             val updated = if (needsSwap) {
-                FxInstance(
-                    effect = newFx ?: existing.effect,
-                    target = existing.target,
-                    timing = newTiming ?: existing.timing,
-                    blendMode = newBlendMode ?: existing.blendMode,
-                    // The dynamics (running state, phase offset, distribution, element
-                    // mode/filter, step timing) travel by this shared cell, not by copying —
-                    // which is what makes a pause/resume racing this swap unlosable.
-                    dynamicsRef = existing.dynamicsRef,
-                    // The envelope too, so a fade or a retirement racing the swap reaches both.
-                    envelopeRef = existing.envelopeCell,
-                ).apply {
-                    id = existing.id
-                    composeOrder = existing.composeOrder
-                    registrationId = newRegistrationId ?: existing.registrationId
-                    source = existing.source
-                    // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
-                    // Record reads to tell a layer's effect from a loose one. Dropping them here
-                    // un-stomps an edited layer effect and makes Record write it back a second
-                    // time as an ad-hoc child.
-                    cueLayerId = existing.cueLayerId
-                    programmerLayerFxKey = existing.programmerLayerFxKey
-                    programmerOrigin = existing.programmerOrigin
-                    includedLookFx = existing.includedLookFx
-                    cueId = existing.cueId
-                    cueStackId = existing.cueStackId
-                    priority = existing.priority
-                    layerFxUuid = existing.layerFxUuid
-                    runUuid = existing.runUuid
-                    startedAtMs = existing.startedAtMs
-                    startedAtBeat = existing.startedAtBeat
-                    lastPhase = existing.lastPhase
-                    // Wall-clock phase derives from this and nothing else, so dropping it here
-                    // would snap an edited wall-clock effect back to the start of its cycle —
-                    // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
-                    accumulatedScaledMs = existing.accumulatedScaledMs
-                    // An N-shot's count runs on across an edit, as its phase does.
-                    runsStartTick = existing.runsStartTick
-                    runsStartScaledMs = existing.runsStartScaledMs
-                    spent = existing.spent
-                    timingSource = existing.timingSource
-                    seconds = existing.seconds
-                    // A split-off copy's member (apply-model plan §3.4): without it an edited copy
-                    // loses its set's step cycle, sweep and N-shot lag.
-                    splitMember = existing.splitMember
-                    // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
-                    // it on first read, which costs one walk and is the safe direction. Carrying it
-                    // would survive a future `updateFx` that learns to retarget, and the effect
-                    // would silently keep painting the old fixtures.
-                    //
-                    // Master assignment must survive the swap: this block hand-enumerates every
-                    // carried field, and missing one silently yanks an edited effect back to
-                    // master 1 the moment its beat division or blend mode is tweaked.
-                    speedMasterUuid = newSpeedMasterUuid ?: existing.speedMasterUuid
-                    rateSpeedMasterUuid = newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid
-                    speedMasterSlot = if (newSpeedMasterUuid != null) {
-                        speedMasters.slotFor(newSpeedMasterUuid)
-                    } else {
-                        existing.speedMasterSlot
-                    }
-                    rateMasterSlot = if (newRateSpeedMasterUuid != null) {
-                        rateSlotFor(newRateSpeedMasterUuid)
-                    } else {
-                        existing.rateMasterSlot
-                    }
-                    replaceMasters?.let { assignMasters(this, it) }
-                    // After the masters: Seconds clears whichever master its kind cannot have, and the
-                    // slots are bound again from what is left.
-                    timingMove?.let { (registrationSource, seconds) ->
-                        applyTimingChoice(registrationSource, seconds)
-                        speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
-                        rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
-                    }
-                }
+                swapFor(existing, edit, existing.dynamicsRef, existing.envelopeCell)
             } else {
-                newSpeedMasterUuid?.let {
+                edit.newSpeedMasterUuid?.let {
                     existing.speedMasterUuid = it
                     existing.speedMasterSlot = speedMasters.slotFor(it)
                 }
-                newRateSpeedMasterUuid?.let {
+                edit.newRateSpeedMasterUuid?.let {
                     existing.rateSpeedMasterUuid = it
                     existing.rateMasterSlot = rateSlotFor(it)
                 }
-                replaceMasters?.let { assignMasters(existing, it) }
+                edit.replaceMasters?.let { assignMasters(existing, it) }
                 existing
             }
 
@@ -1468,6 +1437,113 @@ class FxEngine(
             }
             emitStateUpdate()
             return updated
+        }
+    }
+
+    /**
+     * [existing] with [edit] applied, as [updateFx] would leave it, built and never added (FX editor
+     * plan §3.3): the preview of an edit not yet sent. It has its own dynamics and envelope cells, so
+     * nothing the running FX holds moves (P4), and keeps the running FX's id, which is how the
+     * sampler knows it stands in for it.
+     */
+    internal fun editedCopy(existing: FxInstance, edit: FxEdit): FxInstance =
+        swapFor(
+            existing, edit,
+            dynamicsRef = AtomicReference(edit.applyTo(existing.dynamics)),
+            envelopeRef = AtomicReference(existing.envelope),
+        ).apply { if (edit.movesRuns(existing)) restartRuns() }
+
+    private fun FxInstance.restartRuns() {
+        runsStartTick = FxInstance.UNANCHORED
+        runsStartScaledMs = Double.NaN
+        spent = false
+    }
+
+    /**
+     * The instance that replaces [existing] when [edit] swaps it, its dynamics and envelope in
+     * [dynamicsRef] and [envelopeRef]: [updateFx] hands it the existing instance's cells, which is
+     * what makes a pause/resume or a fade racing the swap unlosable.
+     */
+    private fun swapFor(
+        existing: FxInstance,
+        edit: FxEdit,
+        dynamicsRef: AtomicReference<FxDynamics>,
+        envelopeRef: AtomicReference<FxEnvelope>,
+    ): FxInstance {
+        val timingMove = edit.timingMove(existing)
+        return FxInstance(
+            effect = edit.newFx ?: existing.effect,
+            target = existing.target,
+            timing = edit.newTiming ?: existing.timing,
+            blendMode = edit.newBlendMode ?: existing.blendMode,
+            // The dynamics (running state, phase offset, distribution, element
+            // mode/filter, step timing) travel by this shared cell, not by copying —
+            // which is what makes a pause/resume racing this swap unlosable.
+            dynamicsRef = dynamicsRef,
+            // The envelope too, so a fade or a retirement racing the swap reaches both.
+            envelopeRef = envelopeRef,
+        ).apply {
+            id = existing.id
+            composeOrder = existing.composeOrder
+            registrationId = edit.newRegistrationId ?: existing.registrationId
+            source = existing.source
+            // The layer ids are what `isSuppressed` looks a stomp mask up by, and what
+            // Record reads to tell a layer's effect from a loose one. Dropping them here
+            // un-stomps an edited layer effect and makes Record write it back a second
+            // time as an ad-hoc child.
+            cueLayerId = existing.cueLayerId
+            programmerLayerFxKey = existing.programmerLayerFxKey
+            programmerOrigin = existing.programmerOrigin
+            includedLookFx = existing.includedLookFx
+            cueId = existing.cueId
+            cueStackId = existing.cueStackId
+            priority = existing.priority
+            layerFxUuid = existing.layerFxUuid
+            runUuid = existing.runUuid
+            startedAtMs = existing.startedAtMs
+            startedAtBeat = existing.startedAtBeat
+            lastPhase = existing.lastPhase
+            // Wall-clock phase derives from this and nothing else, so dropping it here
+            // would snap an edited wall-clock effect back to the start of its cycle —
+            // the very discontinuity the accumulator replaced `startedAtMs` to avoid.
+            accumulatedScaledMs = existing.accumulatedScaledMs
+            // An N-shot's count runs on across an edit, as its phase does.
+            runsStartTick = existing.runsStartTick
+            runsStartScaledMs = existing.runsStartScaledMs
+            spent = existing.spent
+            timingSource = existing.timingSource
+            seconds = existing.seconds
+            // A split-off copy's member (apply-model plan §3.4): without it an edited copy
+            // loses its set's step cycle, sweep and N-shot lag.
+            splitMember = existing.splitMember
+            // `expansion` is deliberately NOT carried across: the fresh instance rebuilds
+            // it on first read, which costs one walk and is the safe direction. Carrying it
+            // would survive a future `updateFx` that learns to retarget, and the effect
+            // would silently keep painting the old fixtures.
+            //
+            // Master assignment must survive the swap: this block hand-enumerates every
+            // carried field, and missing one silently yanks an edited effect back to
+            // master 1 the moment its beat division or blend mode is tweaked.
+            speedMasterUuid = edit.newSpeedMasterUuid ?: existing.speedMasterUuid
+            rateSpeedMasterUuid = edit.newRateSpeedMasterUuid ?: existing.rateSpeedMasterUuid
+            speedMasterSlot = if (edit.newSpeedMasterUuid != null) {
+                speedMasters.slotFor(edit.newSpeedMasterUuid)
+            } else {
+                existing.speedMasterSlot
+            }
+            rateMasterSlot = if (edit.newRateSpeedMasterUuid != null) {
+                rateSlotFor(edit.newRateSpeedMasterUuid)
+            } else {
+                existing.rateMasterSlot
+            }
+            edit.replaceMasters?.let { assignMasters(this, it) }
+            // After the masters: Seconds clears whichever master its kind cannot have, and the
+            // slots are bound again from what is left.
+            timingMove?.let { (registrationSource, seconds) ->
+                applyTimingChoice(registrationSource, seconds)
+                speedMasterSlot = speedMasters.slotFor(speedMasterUuid)
+                rateMasterSlot = rateSlotFor(rateSpeedMasterUuid)
+            }
         }
     }
 
@@ -2553,7 +2629,8 @@ class FxEngine(
     private val samplerView = object : FxSampler.View {
         // A draft (never inserted) sorts where [insert] would put it: a Local one at the top of its
         // lane, and after every running FX of its priority. Its rank is read without the rank lock;
-        // a preview racing an insert may place it one off.
+        // a preview racing an insert may place it one off. An edited copy of a running FX
+        // ([editedCopy]) carries its id and place, and sorts where that FX is.
         override fun applyOrder(): Comparator<FxInstance> {
             val draftPriority = HashMap<FxInstance, Int>()
             return applyOrder(
@@ -2567,7 +2644,7 @@ class FxEngine(
             )
         }
 
-        private fun isDraft(effect: FxInstance) = activeFx[effect.id] !== effect
+        private fun isDraft(effect: FxInstance) = activeFx[effect.id] == null
 
         private fun previewKeys(effect: FxInstance) = expansion(effect, effect.dynamics).coverageKeys
 
