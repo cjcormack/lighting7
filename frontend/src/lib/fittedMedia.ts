@@ -1,4 +1,4 @@
-import type { PropertyDescriptor, SettingOption, SettingPropertyDescriptor } from '../store/fixtures'
+import type { AttributeDescriptor, SettingOption, SettingAttributeDescriptor } from '../store/fixtures'
 import { findGel, type GelIndex } from './gels'
 
 /**
@@ -66,7 +66,7 @@ export function fittedOption(option: SettingOption, slot: FittedSlot | undefined
 
 /**
  * The type's property descriptors as **this unit** holds them: every loadable setting's options
- * overlaid with the unit's fitted media, the rest untouched. Returns `properties` itself when
+ * overlaid with the unit's fitted media, the rest untouched. Returns `attributes` itself when
  * nothing is fitted, so a memo keyed on the result does not churn for the common case.
  *
  * The overlay is the client's on purpose. A descriptor is per fixture, and a fixture with extra
@@ -74,38 +74,38 @@ export function fittedOption(option: SettingOption, slot: FittedSlot | undefined
  * the surface that draws each placement can know which unit it is drawing. The desk resolves the
  * same order itself for what it answers alone (the template snap, Locate, `describe_rig`).
  */
-export function fittedProperties<P extends PropertyDescriptor>(
-  properties: P[] | undefined,
+export function fittedAttributes<P extends AttributeDescriptor>(
+  attributes: P[] | undefined,
   media: FittedMedia | null | undefined,
   gels: GelIndex,
 ): P[] | undefined {
-  if (!properties || !hasFittedMedia(media)) return properties
+  if (!attributes || !hasFittedMedia(media)) return attributes
   let changed = false
-  const out = properties.map((p) => {
-    if (p.type !== 'setting' || !(p as SettingPropertyDescriptor).media) return p
+  const out = attributes.map((p) => {
+    if (p.type !== 'setting' || !(p as SettingAttributeDescriptor).media) return p
     const fitted = media.slots?.[p.name]
     if (!fitted || Object.keys(fitted).length === 0) return p
     changed = true
-    const setting = p as SettingPropertyDescriptor
+    const setting = p as SettingAttributeDescriptor
     return { ...setting, options: setting.options.map((o) => fittedOption(o, fitted[o.name], gels)) } as P
   })
-  return changed ? out : properties
+  return changed ? out : attributes
 }
 
 /** Whether a loadable setting's slots take a gel — a scroller, a media frame, a module wheel. */
-export function takesGel(setting: SettingPropertyDescriptor): boolean {
+export function takesGel(setting: SettingAttributeDescriptor): boolean {
   return setting.media === 'GEL' || setting.media === 'GOBO_OR_GEL'
 }
 
 /** Whether a loadable setting's slots take a gobo. */
-export function takesGobo(setting: SettingPropertyDescriptor): boolean {
+export function takesGobo(setting: SettingAttributeDescriptor): boolean {
   return setting.media === 'GOBO' || setting.media === 'GOBO_OR_GEL'
 }
 
 /** A type's loadable settings, in descriptor order. Empty for an older desk, which sends no `media`. */
-export function loadableSettings(properties: PropertyDescriptor[] | undefined): SettingPropertyDescriptor[] {
-  return (properties ?? []).filter(
-    (p): p is SettingPropertyDescriptor => p.type === 'setting' && !!(p as SettingPropertyDescriptor).media,
+export function loadableSettings(attributes: AttributeDescriptor[] | undefined): SettingAttributeDescriptor[] {
+  return (attributes ?? []).filter(
+    (p): p is SettingAttributeDescriptor => p.type === 'setting' && !!(p as SettingAttributeDescriptor).media,
   )
 }
 
@@ -116,10 +116,10 @@ export function loadableSettings(properties: PropertyDescriptor[] | undefined): 
  * and an option with none — out of the beam, an empty slot, a gobo — passes the beam unchanged.
  */
 export function mediaFilters(
-  properties: PropertyDescriptor[] | undefined,
+  attributes: AttributeDescriptor[] | undefined,
   colourSourceName: string | undefined,
-): SettingPropertyDescriptor[] {
-  return loadableSettings(properties).filter((s) => s.name !== colourSourceName && takesGel(s))
+): SettingAttributeDescriptor[] {
+  return loadableSettings(attributes).filter((s) => s.name !== colourSourceName && takesGel(s))
 }
 
 /**
@@ -137,15 +137,15 @@ export function mediaFilters(
  * the beam, and multiplying by it would be wrong.
  */
 export function colourFilters(
-  properties: PropertyDescriptor[] | undefined,
-  colourSource: { type: 'colour' | 'setting'; property: { name: string } } | undefined,
-): SettingPropertyDescriptor[] {
-  const media = mediaFilters(properties, colourSource?.property.name)
+  attributes: AttributeDescriptor[] | undefined,
+  colourSource: { type: 'colour' | 'setting'; attribute: { name: string } } | undefined,
+): SettingAttributeDescriptor[] {
+  const media = mediaFilters(attributes, colourSource?.attribute.name)
   if (colourSource?.type !== 'setting') return media
-  const wheels = (properties ?? [])
+  const wheels = (attributes ?? [])
     .filter(
-      (p): p is SettingPropertyDescriptor =>
-        p.type === 'setting' && p.category === 'colour' && p.name !== colourSource.property.name,
+      (p): p is SettingAttributeDescriptor =>
+        p.type === 'setting' && p.category === 'colour' && p.name !== colourSource.attribute.name,
     )
     .sort((a, b) => a.channel.universe - b.channel.universe || a.channel.channelNo - b.channel.channelNo)
   if (wheels.length === 0) return media

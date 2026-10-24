@@ -5,8 +5,8 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
 import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.fixture.property.Slider
-import uk.me.cormack.lighting7.fixture.property.WhiteMix
+import uk.me.cormack.lighting7.fixture.attribute.Slider
+import uk.me.cormack.lighting7.fixture.attribute.WhiteMix
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
@@ -71,7 +71,7 @@ class China2CellLedBlinderFixture(
      * mix ([rgbColour], venue-visit plan D8) — there is no per-cell dimmer
      * or strobe; those are shared on the parent fixture.
      *
-     * Both sliders use [PropertyCategory.WHITE] but neither claims
+     * Both sliders use [AttributeCategory.WHITE] but neither claims
      * [uk.me.cormack.lighting7.fixture.trait.WithWhite] — using that
      * trait for one of the two channels would imply asymmetry that
      * isn't there. The sliders stay for direct control.
@@ -89,13 +89,13 @@ class China2CellLedBlinderFixture(
         override val elementKey: String
             get() = "${this@China2CellLedBlinderFixture.key}.cell-${elementIndex + 1}"
 
-        @FixtureProperty("Warm white", category = PropertyCategory.WHITE)
+        @FixtureAttribute("Warm white", category = AttributeCategory.WHITE)
         val warmWhite = DmxSlider(cellTransaction, universe, warmWhiteChannel)
 
-        @FixtureProperty("Cold white", category = PropertyCategory.WHITE)
+        @FixtureAttribute("Cold white", category = AttributeCategory.WHITE)
         val coldWhite = DmxSlider(cellTransaction, universe, coldWhiteChannel)
 
-        @FixtureProperty("Warmth", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Warmth", category = AttributeCategory.COLOUR)
         override val rgbColour = DmxWhiteMixColour(warmWhite, coldWhite, WHITE_MIX)
 
         override fun withTransaction(transaction: ControllerTransaction): Cell =
@@ -104,14 +104,14 @@ class China2CellLedBlinderFixture(
         override fun toString(): String = "Cell($elementKey)"
     }
 
-    @FixtureProperty(category = PropertyCategory.DIMMER)
+    @FixtureAttribute(category = AttributeCategory.DIMMER)
     override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel)
 
     // The personality's bands: 000–010 open, 011–255 strobe slow → fast.
     // Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
     // FU-MANUAL-S6-STROBE.
-    @FixtureProperty(
-        category = PropertyCategory.STROBE,
+    @FixtureAttribute(
+        category = AttributeCategory.STROBE,
         strobe = [
             StrobeBand(0, 10, StrobeKind.OPEN),
             StrobeBand(11, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -122,12 +122,12 @@ class China2CellLedBlinderFixture(
         strobeMin = STROBE_MIN, strobeMax = STROBE_MAX,
     )
 
-    @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
+    @FixtureAttribute("Built-in program", category = AttributeCategory.SETTING)
     val program = DmxFixtureSetting(
         transaction, universe, firstChannel + 2, Program.entries.toTypedArray(),
     )
 
-    @FixtureProperty("Program speed", category = PropertyCategory.SPEED)
+    @FixtureAttribute("Program speed", category = AttributeCategory.SPEED)
     val progSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
     override val elements: List<Cell> = (0 until 2).map { idx ->

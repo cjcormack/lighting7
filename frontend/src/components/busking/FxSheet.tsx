@@ -295,7 +295,7 @@ export function FxSheet({
                   )}
                 </div>
                 <div className="truncate pl-[13px] text-[11px] text-muted-foreground">
-                  → {e.propertyName} · {viaGroup(e) != null ? `via ${viaGroup(e)}` : onWhat(e)} ·{' '}
+                  → {e.attribute} · {viaGroup(e) != null ? `via ${viaGroup(e)}` : onWhat(e)} ·{' '}
                   {cue ? `cue${e.sourceName ? ` · ${e.sourceName}` : ''}` : pad ? `pad${e.sourceName ? ` · ${e.sourceName}` : ''}` : 'programmer'}
                 </div>
               </div>

@@ -238,7 +238,7 @@ class SpreadShapeTest {
     /** 40 under every head, from the programmer — what an N-shot member hands back to. */
     private fun Rig.underneath() {
         for (i in 0 until 4) {
-            programmer.put(ProgrammerOwner.WEB, "hex-$i", "dimmer", CueAssignmentResolver.PropertyValue.Slider(40u))
+            programmer.put(ProgrammerOwner.WEB, "hex-$i", "dimmer", CueAssignmentResolver.AttributeValue.Slider(40u))
         }
     }
 

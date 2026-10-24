@@ -87,7 +87,7 @@ class FxFadeTest : RouteIntegrationTest() {
                     fx = heads.mapIndexed { i, head ->
                         LookFxDto(
                             targetType = "fixture", targetKey = head,
-                            fxType = fxType, family = "intensity", propertyName = "dimmer",
+                            fxType = fxType, family = "intensity", attribute = "dimmer",
                             cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                             runs = runs, sortOrder = i,
                         )
@@ -929,7 +929,7 @@ class FxFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
         val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
-        ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), fadeMs = 0)
+        ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u), fadeMs = 0)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
 
         clearProgrammerCompletely(state, fadeMs = 1500)
@@ -959,7 +959,7 @@ class FxFadeTest : RouteIntegrationTest() {
         mountTestApp(state)
         val looks = jsonClient().seedLooks()
         val source = LayerSource.look(looks.pulse["hex-1"].id, UUID.fromString(looks.pulse["hex-1"].uuid), looks.pulse["hex-1"].name)
-        ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.PropertyValue.Slider(200u), fadeMs = 0)
+        ProgrammerHandler.setTyped(state, TargetRef.Fixture("hex-1"), "dimmer", CueAssignmentResolver.AttributeValue.Slider(200u), fadeMs = 0)
         engine.programmer.setBlind(true)
         state.show.programmerLayerStack.toggle(source, listOf(CueTargetDto("fixture", "hex-1")))
         val effect = bandFx().single()

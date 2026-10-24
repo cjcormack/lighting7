@@ -5,7 +5,7 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.ProgrammerFxOrigin
 import uk.me.cormack.lighting7.fx.ProgrammerStore
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.buildCueApplyData
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.stackEntryPriorities
@@ -78,7 +78,7 @@ internal fun performProgrammerRecord(
     cueType: CueType,
     cueStackId: Int?,
     cueId: Int?,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     includeFx: Boolean,
     name: String?,
     cueNumber: String?,
@@ -266,7 +266,7 @@ internal fun performProgrammerInclude(
     project: DaoProject,
     cueId: Int?,
     lookId: Int?,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     fadeMs: Long,
     /** Run a Look's effects in the programmer band too, so Update can write them back. */
     includeFx: Boolean = true,
@@ -371,7 +371,7 @@ internal fun performProgrammerUpdate(
     state: State,
     project: DaoProject,
     targets: List<Int>?,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     preview: Boolean,
     includeFx: Boolean,
 ): UpdateCoreResult {

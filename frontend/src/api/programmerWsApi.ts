@@ -43,12 +43,12 @@ import {
 
 export type ProgrammerTargetType = 'fixture' | 'group'
 
-/** Which layer produced the current winning value for a (targetKey, propertyName). */
+/** Which layer produced the current winning value for a (targetKey, attribute). */
 export type ProvenanceSource = 'PARKED' | 'PROGRAMMER' | 'FX' | 'CUE'
 
 export interface ProgrammerEntry {
   targetKey: string
-  propertyName: string
+  attribute: string
   /**
    * Canonical assignment string. See `src/lib/programmerValue.ts`.
    *
@@ -56,7 +56,7 @@ export interface ProgrammerEntry {
    * `paletteUuid`, `paletteId`, `paletteName` and `paletteResolved` beside it describing the
    * referenced Look and whether it still covered this target. The `ref:` value grammar retired; the
    * programmer reports its Look **layers** separately (`programmer.layerState`), and a layer's
-   * `propertyMask` is what says "this property comes from that Look".
+   * `attributeMask` is what says "this property comes from that Look".
    */
   value: string
   /** Winning slot's owner: `web` | `surface` | `flash` | `locate` | `unpark` | `layers`. */
@@ -93,7 +93,7 @@ export interface ProgrammerChannelEntry {
 
 export interface ProvenanceEntry {
   targetKey: string
-  propertyName: string
+  attribute: string
   source: ProvenanceSource
   cueId?: number
   cueStackId?: number
@@ -121,7 +121,7 @@ export interface ProvenanceEntry {
 /** One entry of `ProvenanceEntry.bundled`. */
 export interface BundledProvenance {
   /** The emitter property (`white`, `amber`, `uv`) whose own row supplied the component. */
-  propertyName: string
+  attribute: string
   cueId?: number
   cueStackId?: number
   layerId?: number
@@ -142,7 +142,7 @@ export interface ProgrammerLayer {
   sortOrder: number
   enabled: boolean
   targets: CueTarget[]
-  propertyMask?: string | null
+  attributeMask?: string | null
   blendMode: string
   amount: number
   stomp: boolean
@@ -309,7 +309,7 @@ export interface KeyStack {
 export interface KeyStackAnswer {
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   /**
    * The programmer is blind: its slots are listed, none is on stage, its values hold nothing back, and
    * its own effects are held (`heldBackReason: 'BLIND'`).
@@ -324,7 +324,7 @@ export interface TargetClearedPartial {
   fxType: string
   targetKey: string
   isGroupTarget: boolean
-  propertyName: string
+  attribute: string
 }
 
 /** The answer to [ProgrammerApi.clearTarget]. */
@@ -350,7 +350,7 @@ interface ProgrammerSetOutgoing {
   type: 'programmer.set'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
   fadeMs?: number
   sourceGroup?: string
@@ -360,7 +360,7 @@ interface ProgrammerSetColourOutgoing {
   type: 'programmer.setColour'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName?: string
+  attribute?: string
   r: number
   g: number
   b: number
@@ -385,7 +385,7 @@ interface ProgrammerClearEntryOutgoing {
   type: 'programmer.clearEntry'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   fadeMs?: number
 }
 
@@ -418,7 +418,7 @@ interface ProgrammerAddLayerOutgoing {
   lookId?: number
   paletteId?: number
   targets: CueTarget[]
-  propertyMask?: string
+  attributeMask?: string
   blendMode?: string
   amount?: number
   speedMasterUuid?: string
@@ -454,7 +454,7 @@ interface ProgrammerPatchLayerOutgoing {
   layerId: number
   enabled?: boolean
   amount?: number
-  propertyMask?: string
+  attributeMask?: string
   blendMode?: string
   targets?: CueTarget[]
   stomp?: boolean
@@ -483,7 +483,7 @@ interface ProgrammerKeyStackOutgoing {
   type: 'programmer.keyStack'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   requestId: string
 }
 
@@ -551,7 +551,7 @@ interface ProgrammerEntryChangedIncoming {
   type: 'programmer.entryChanged'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
 }
 
@@ -559,7 +559,7 @@ interface ProgrammerEntryClearedIncoming {
   type: 'programmer.entryCleared'
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
 }
 
 interface ProgrammerClearedIncoming {
@@ -602,7 +602,7 @@ interface ProgrammerKeyStackIncoming {
   requestId?: string | null
   targetType: ProgrammerTargetType
   targetKey: string
-  propertyName: string
+  attribute: string
   blind: boolean
   stacks?: KeyStack[]
   error?: string | null
@@ -638,7 +638,7 @@ type ProgrammerIncomingMessage =
 export interface ProgrammerApi {
   getState(): ProgrammerState
   /** Programmer entry + provenance for one property. Allocation-free on the hot path. */
-  getKeyState(targetKey: string, propertyName: string): ProgrammerKeyState
+  getKeyState(targetKey: string, attribute: string): ProgrammerKeyState
   isBlind(): boolean
   /** Number of stored property entries (the "programmer holds data" count). */
   entryCount(): number
@@ -658,7 +658,7 @@ export interface ProgrammerApi {
   set(
     targetType: ProgrammerTargetType,
     targetKey: string,
-    propertyName: string,
+    attribute: string,
     value: string,
     fadeMs?: number,
     /**
@@ -672,7 +672,7 @@ export interface ProgrammerApi {
   setColour(
     targetType: ProgrammerTargetType,
     targetKey: string,
-    propertyName: string,
+    attribute: string,
     rgb: { r: number; g: number; b: number; w?: number; a?: number; uv?: number },
     fadeMs?: number,
     sourceGroup?: string,
@@ -688,7 +688,7 @@ export interface ProgrammerApi {
   clearEntry(
     targetType: ProgrammerTargetType,
     targetKey: string,
-    propertyName: string,
+    attribute: string,
     fadeMs?: number,
   ): void
   clearAll(fadeMs?: number): void
@@ -716,7 +716,7 @@ export interface ProgrammerApi {
     lookId?: number
     paletteId?: number
     targets?: CueTarget[]
-    propertyMask?: string
+    attributeMask?: string
     blendMode?: string
     amount?: number
     speedMasterUuid?: string
@@ -733,7 +733,7 @@ export interface ProgrammerApi {
     patch: {
       enabled?: boolean
       amount?: number
-      propertyMask?: string
+      attributeMask?: string
       blendMode?: string
       targets?: CueTarget[]
       stomp?: boolean
@@ -751,7 +751,7 @@ export interface ProgrammerApi {
   keyStack(
     targetType: ProgrammerTargetType,
     targetKey: string,
-    propertyName: string,
+    attribute: string,
   ): Promise<KeyStackAnswer>
   /**
    * Release everything the programmer holds on a fixture (and its heads) or a group, plus the
@@ -770,7 +770,7 @@ export interface ProgrammerApi {
    */
   subscribeToKey(
     targetKey: string,
-    propertyName: string,
+    attribute: string,
     fn: (state: ProgrammerKeyState) => void,
   ): Subscription
   /**
@@ -783,8 +783,8 @@ export interface ProgrammerApi {
 }
 
 /** Cache/subscription key for a (target, property) pair. */
-export function programmerKey(targetKey: string, propertyName: string): string {
-  return `${targetKey}|${propertyName}`
+export function programmerKey(targetKey: string, attribute: string): string {
+  return `${targetKey}|${attribute}`
 }
 
 /**
@@ -973,7 +973,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const applyStateSnapshot = (message: ProgrammerStateIncoming) => {
     const nextEntries = new Map<string, ProgrammerEntry>()
     for (const entry of message.entries) {
-      nextEntries.set(programmerKey(entry.targetKey, entry.propertyName), entry)
+      nextEntries.set(programmerKey(entry.targetKey, entry.attribute), entry)
     }
     const touched = entries.install(nextEntries)
     blind = message.blind
@@ -1005,7 +1005,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   const applyProvenance = (message: ProvenanceStateIncoming) => {
     const next = new Map<string, ProvenanceEntry>()
     for (const entry of message.entries) {
-      next.set(programmerKey(entry.targetKey, entry.propertyName), entry)
+      next.set(programmerKey(entry.targetKey, entry.attribute), entry)
     }
     const touched = provenance.install(next)
     // A frame that changed nothing wakes nobody: a fade republishes content-identical
@@ -1036,7 +1036,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
    * lands ~100 ms later and overwrites this with the server's view.
    */
   const applyLocalEntry = (message: ProgrammerEntryChangedIncoming) => {
-    const key = programmerKey(message.targetKey, message.propertyName)
+    const key = programmerKey(message.targetKey, message.attribute)
     const existing = entries.get(key)
     // This reply is only ever our own write (the op is unicast), so the winning slot is now
     // `web` — even if some other owner held the property a moment ago. Carrying the previous
@@ -1050,7 +1050,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     // more, so the echo is the whole entry.
     entries.put(key, {
       targetKey: message.targetKey,
-      propertyName: message.propertyName,
+      attribute: message.attribute,
       value: message.value,
       owner: 'web',
       touched: true,
@@ -1061,7 +1061,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
   }
 
   const applyLocalClear = (message: ProgrammerEntryClearedIncoming) => {
-    const key = programmerKey(message.targetKey, message.propertyName)
+    const key = programmerKey(message.targetKey, message.attribute)
     if (!entries.has(key)) return
     entries.drop(key)
     notifyKeys([key])
@@ -1116,7 +1116,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
         settle(message.requestId, message.error, {
           targetType: message.targetType,
           targetKey: message.targetKey,
-          propertyName: message.propertyName,
+          attribute: message.attribute,
           blind: message.blind,
           stacks: message.stacks ?? [],
         } satisfies KeyStackAnswer)
@@ -1215,7 +1215,7 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
 
   return {
     getState: () => snapshot,
-    getKeyState: (targetKey, propertyName) => keyStateFor(programmerKey(targetKey, propertyName)),
+    getKeyState: (targetKey, attribute) => keyStateFor(programmerKey(targetKey, attribute)),
     isBlind: () => blind,
     entryCount: () => entries.size,
     lastIncluded: () => lastIncluded,
@@ -1223,23 +1223,23 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     applied: () => applied,
     scenery: () => scenery,
 
-    set(targetType, targetKey, propertyName, value, fadeMs, sourceGroup) {
+    set(targetType, targetKey, attribute, value, fadeMs, sourceGroup) {
       send({
         type: 'programmer.set',
         targetType,
         targetKey,
-        propertyName,
+        attribute,
         value,
         fadeMs,
         sourceGroup,
       })
     },
-    setColour(targetType, targetKey, propertyName, rgb, fadeMs, sourceGroup) {
+    setColour(targetType, targetKey, attribute, rgb, fadeMs, sourceGroup) {
       send({
         type: 'programmer.setColour',
         targetType,
         targetKey,
-        propertyName,
+        attribute,
         ...rgb,
         fadeMs,
         sourceGroup,
@@ -1248,16 +1248,16 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
     setPosition(targetType, targetKey, pan, tilt, fadeMs, sourceGroup) {
       send({ type: 'programmer.setPosition', targetType, targetKey, pan, tilt, fadeMs, sourceGroup })
     },
-    clearEntry(targetType, targetKey, propertyName, fadeMs) {
-      send({ type: 'programmer.clearEntry', targetType, targetKey, propertyName, fadeMs })
+    clearEntry(targetType, targetKey, attribute, fadeMs) {
+      send({ type: 'programmer.clearEntry', targetType, targetKey, attribute, fadeMs })
     },
     clearAll(fadeMs) {
       send({ type: 'programmer.clearAll', fadeMs })
     },
     // A read, so a dead socket rejects without the gesture toast; the caller decides what to say.
-    keyStack(targetType, targetKey, propertyName) {
+    keyStack(targetType, targetKey, attribute) {
       return request<KeyStackAnswer>(
-        (requestId) => ({ type: 'programmer.keyStack', targetType, targetKey, propertyName, requestId }),
+        (requestId) => ({ type: 'programmer.keyStack', targetType, targetKey, attribute, requestId }),
         false,
       )
     },
@@ -1280,13 +1280,13 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       send({ type: 'programmer.clearScenery', elementUuid, fadeMs })
     },
 
-    addLayer({ lookId, paletteId, targets, propertyMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
+    addLayer({ lookId, paletteId, targets, attributeMask, blendMode, amount, speedMasterUuid, rateSpeedMasterUuid, fadeMs }) {
       return send({
         type: 'programmer.addLayer',
         lookId,
         paletteId,
         targets: targets ?? [],
-        propertyMask,
+        attributeMask,
         blendMode,
         amount,
         speedMasterUuid,
@@ -1312,8 +1312,8 @@ export function createProgrammerApi(conn: InternalApiConnection): ProgrammerApi 
       stateSubscriptions.set(id, fn)
       return { unsubscribe: () => { stateSubscriptions.delete(id) } }
     },
-    subscribeToKey(targetKey, propertyName, fn) {
-      const key = programmerKey(targetKey, propertyName)
+    subscribeToKey(targetKey, attribute, fn) {
+      const key = programmerKey(targetKey, attribute)
       const id = nextSubscriptionId++
       let subs = keySubscriptions.get(key)
       if (!subs) {

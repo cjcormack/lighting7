@@ -5,7 +5,7 @@ family: intensity
 outputType: SLIDER
 fxMode: STATEFUL
 timingSource: WALL_CLOCK
-compatibleProperties: [dimmer, uv]
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: onLevel
     type: ubyte

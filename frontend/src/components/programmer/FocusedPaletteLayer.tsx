@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo } from 'react'
-import { parsePropertyMask } from '@/lib/attributeFamily'
+import { parseAttributeMask } from '@/lib/attributeFamily'
 import { useFixtureListQuery } from '@/store/fixtures'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { usePaletteListQuery } from '@/store/palettes'
@@ -40,7 +40,7 @@ export interface FocusedPaletteLayerValue {
    * empty, so guessing during the fetch would make the grid flash the wrong one.
    */
   kind: 'value' | 'fx' | undefined
-  /** The layer's `propertyMask`, parsed. Empty means it asserts every attribute. */
+  /** The layer's `attributeMask`, parsed. Empty means it asserts every attribute. */
   mask: readonly AttributeFamily[]
   /** Fixture and element keys the layer asserts on. `null` means it names no targets at all. */
   targetedKeys: ReadonlySet<string> | null
@@ -97,7 +97,7 @@ export function FocusedPaletteLayerProvider({
       name: layer.source.name,
       palette: template,
       kind: template?.kind,
-      mask: parsePropertyMask(layer.propertyMask),
+      mask: parseAttributeMask(layer.attributeMask),
       targetedKeys,
       targets: layer.targets,
     }

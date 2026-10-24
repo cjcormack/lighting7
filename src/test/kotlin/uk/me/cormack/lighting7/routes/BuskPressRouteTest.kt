@@ -14,13 +14,13 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
 import uk.me.cormack.lighting7.models.TargetRef
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.midi.BindingTarget
 import uk.me.cormack.lighting7.midi.DefaultSurfaceActions
 import uk.me.cormack.lighting7.state.SelectionSource
@@ -50,10 +50,10 @@ class BuskPressRouteTest : RouteIntegrationTest() {
 
     private fun pages() = "/api/rest/projects/$projectId/busk/pages"
 
-    private suspend fun HttpClient.createPalette(name: String, value: String = "#ff8800", propertyName: String = "rgbColour"): Int {
+    private suspend fun HttpClient.createPalette(name: String, value: String = "#ff8800", attribute: String = "rgbColour"): Int {
         val resp = post("/api/rest/projects/$projectId/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", propertyName, value))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, value))))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
         return resp.body<PaletteDto>().id
@@ -82,7 +82,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
                         listOf(
                             LookFxDto(
                                 targetType = "fixture", targetKey = fixtureKeys.first(),
-                                fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                                fxType = "Pulse", family = "intensity", attribute = "dimmer",
                                 cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                             ),
                         )
@@ -108,7 +108,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
             setBody(
                 NewCue(
                     name = name, cueStackId = stackId,
-                    propertyAssignments = listOf(CuePropertyAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
+                    attributeAssignments = listOf(CueAttributeAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
                 ),
             )
         }
@@ -260,7 +260,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals("applied", on.action)
         assertEquals(0, on.released)
         assertEquals(setOf("amber@hex-1"), live())
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
 
         val off = client.press(pad, "hex-1")
         assertEquals("removed", off.action)
@@ -315,7 +315,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals("LOOK", on.kind)
         assertEquals("applied", on.action)
         assertEquals(setOf("warm@"), live(), "one layer, naming no targets")
-        assertNull(state.show.programmerStore.layers.single().propertyMask, "a Look layer is unmasked")
+        assertNull(state.show.programmerStore.layers.single().attributeMask, "a Look layer is unmasked")
         assertEquals(setOf("hex-1", "hex-2"), dimmedByLayers(), "both its rows land, not only the selected head")
 
         val off = client.press(pad)
@@ -473,7 +473,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         state.show.programmerLayerStack.toggle(
             uk.me.cormack.lighting7.models.LayerSource.palette(amber, java.util.UUID.fromString(client.paletteUuid(amber)), "amber"),
             listOf(CueTargetDto("fixture", "hex-1"), CueTargetDto("fixture", "hex-2")),
-            propertyMask = "COLOUR",
+            attributeMask = "COLOUR",
         )
         assertEquals(setOf("warm@", "amber@hex-1+hex-2"), live())
 
@@ -490,7 +490,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         val amber = client.createPalette("amber")
         // A level, so the colour palette is not replaced by the press of its own family (apply-model D2).
-        val half = client.createPalette("half", "pct:50", propertyName = "dimmer")
+        val half = client.createPalette("half", "pct:50", attribute = "dimmer")
         val stackId = client.createStack("Main")
         val opening = client.createCue("opening", stackId)
         val (amberPad, halfPad, cuePad) = client.bank("keys", solo = false, tpl(amber), tpl(half), cue(opening))
@@ -574,7 +574,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val on = client.press(pad, "hex-1", families = listOf("COLOUR", "INTENSITY"))
         assertEquals("applied", on.action)
         assertTrue(on.skippedFamilies.isEmpty(), "a template skips nothing — it is one family")
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
     }
 
     @Test
@@ -583,20 +583,20 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedRig()
         val client = jsonClient()
         val warm = client.createLook("warm", "hex-1", withColour = true)
-        val half = client.createPalette("half", "pct:50", propertyName = "dimmer")
+        val half = client.createPalette("half", "pct:50", attribute = "dimmer")
         val (pad, halfPad) = client.bank("looks", solo = false, look(warm), tpl(half))
 
         val on = client.press(pad, "hex-1", families = listOf("COLOUR", "POSITION"))
         assertEquals("applied", on.action)
         assertTrue(on.skippedFamilies.isEmpty(), "nothing is skipped: the Look lands whole")
-        assertNull(state.show.programmerStore.layers.single().propertyMask)
+        assertNull(state.show.programmerStore.layers.single().attributeMask)
         assertEquals(setOf("hex-1"), dimmedByLayers(), "its Intensity row lands under a Colour mask")
 
         // The mask is the layer's own setting (D3), set after the press and kept by the next one.
         val layer = state.show.programmerStore.layers.single()
-        state.show.programmerLayerStack.patch(layer.layerId, propertyMask = "COLOUR")
+        state.show.programmerLayerStack.patch(layer.layerId, attributeMask = "COLOUR")
         assertEquals("applied", client.press(halfPad, "hex-2").action)
-        assertEquals("COLOUR", state.show.programmerStore.layers.single { it.source.name == "warm" }.propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single { it.source.name == "warm" }.attributeMask)
         assertEquals(setOf("hex-2"), dimmedByLayers(), "the cook masks the Look's rows; hex-2's is the palette's")
     }
 
@@ -686,7 +686,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         // then takes. A change to toggle's comparison fails here rather than drifting in pressArm.kt.
         fun check(targets: List<CueTargetDto>) {
             val predicted = pressWouldRelease(state, uuid, targets)
-            val outcome = stack.toggle(source = source, targets = targets, propertyMask = "COLOUR")
+            val outcome = stack.toggle(source = source, targets = targets, attributeMask = "COLOUR")
             assertEquals(predicted, outcome.action == "removed", "targets=$targets")
         }
         check(hex1)          // on
@@ -779,29 +779,29 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")))
         actions().pressPalette(uuid)
         assertEquals(setOf("amber@hex-2"), live())
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask, "mask derived, not sent")
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask, "mask derived, not sent")
     }
 
     @Test
-    fun `pressPalette honours the desk's mask, and a Sel property fader ignores it`() = testApplication {
+    fun `pressPalette honours the desk's mask, and a Sel attribute fader ignores it`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
         val amber = client.createPalette("amber")
         val uuid = client.paletteUuid(amber)
 
-        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(PropertyMaskGroup.INTENSITY))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(AttributeFamily.INTENSITY))
         actions().pressPalette(uuid)
         assertTrue(state.show.programmerStore.layers.isEmpty(), "a Colour template under an Intensity mask is dropped")
 
         // The fader names its own attribute, so the mask does not touch it (§3.3).
-        actions().writeSelectionProperty("rgbColour", 127u, null)
+        actions().writeSelectionAttribute("rgbColour", 127u, null)
         assertTrue(state.show.programmerStore.size > 0, "the selection write landed under a mask it is outside")
 
-        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(PropertyMaskGroup.COLOUR))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-2")), setOf(AttributeFamily.COLOUR))
         actions().pressPalette(uuid)
         assertEquals(setOf("amber@hex-2"), live())
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
     }
 
     @Test
@@ -820,7 +820,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         assertEquals(setOf("amber@hex-1", "warm@"), live())
 
         // A marquee on a screen masks the desk to Position; the buttons must still turn them off.
-        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(PropertyMaskGroup.POSITION))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(AttributeFamily.POSITION))
         actions().pressPalette(uuid)
         actions().pressPad(client.padUuid(warmPad))
         assertTrue(state.show.programmerStore.layers.isEmpty(), "both released under a mask that excludes them")
@@ -839,21 +839,21 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         val warm = client.createLook("warm", "hex-1", withColour = true)
         val amber = client.createPalette("amber")
         val (lookPad, amberPad) = client.bank("keys", solo = false, look(warm), tpl(amber))
-        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(PropertyMaskGroup.INTENSITY))
+        state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), setOf(AttributeFamily.INTENSITY))
 
         actions().pressPad(client.padUuid(amberPad))
         assertTrue(state.show.programmerStore.layers.isEmpty(), "refused by name, logged — a button has no 400")
 
         actions().pressPad(client.padUuid(lookPad))
         assertEquals(setOf("warm@"), live())
-        assertNull(state.show.programmerStore.layers.single().propertyMask, "a Look lands whole, under no mask")
+        assertNull(state.show.programmerStore.layers.single().attributeMask, "a Look lands whole, under no mask")
     }
 
     @Test
     fun `a surface select toggle keeps the desk's mask and a replace clears it`() = testApplication {
         mountTestApp(state)
         seedRig()
-        val colour = setOf(PropertyMaskGroup.COLOUR)
+        val colour = setOf(AttributeFamily.COLOUR)
         state.deskSelection.set(listOf(CueTargetDto("fixture", "hex-1")), colour)
 
         actions().selectTarget(CueTargetDto("fixture", "hex-2"), BindingTarget.SelectMode.TOGGLE)
@@ -924,7 +924,7 @@ class BuskPressRouteTest : RouteIntegrationTest() {
         seedBar()
         val client = jsonClient()
         val red = client.createPalette("red", "#ff0000")
-        val half = client.createPalette("half", "pct:50", propertyName = "dimmer")
+        val half = client.createPalette("half", "pct:50", attribute = "dimmer")
         val (pad, otherPad) = client.bank("solo", solo = true, tpl(red), tpl(half))
         assertEquals("applied", client.press(otherPad, "hex-1").action)
 

@@ -47,8 +47,8 @@ internal class CueCookedResource(val projectId: String, val cueId: Int)
 data class CookedRowDto(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
-    /** `"0".."255"`, `"#rrggbb;w128"`, or `"pan,tilt"` — `PropertyValue.serialize()`. */
+    val attribute: String,
+    /** `"0".."255"`, `"#rrggbb;w128"`, or `"pan,tilt"` — `AttributeValue.serialize()`. */
     val value: String,
     /**
      * The layer that won this key, when one did. Null for the cue's **own** rows, which belong to no
@@ -101,7 +101,7 @@ internal fun Route.routeApiRestCueCooked(state: State) {
                             targetType = if (row.targetIsGroup) TargetRef.Group.TYPE
                             else TargetRef.Fixture.TYPE,
                             targetKey = row.targetKey,
-                            propertyName = row.propertyName,
+                            attribute = row.attribute,
                             value = row.value.serialize(),
                             layerId = row.layerWinner?.layerId,
                             layerSource = row.layerWinner?.source?.toDto(),

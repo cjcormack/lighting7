@@ -16,7 +16,7 @@ import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.cueDerivedPriority
 import uk.me.cormack.lighting7.models.DaoCueStack
@@ -255,9 +255,9 @@ class EntryNumberingTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = cueId, priority = 1, fadeWeight = 1.0,
-                    targetKey = "fx-1", targetIsGroup = false, propertyName = "dimmer",
-                    category = PropertyCategory.DIMMER, compositionOverride = CompositionRule.LTP,
-                    value = CueAssignmentResolver.PropertyValue.Slider(200u),
+                    targetKey = "fx-1", targetIsGroup = false, attribute = "dimmer",
+                    category = AttributeCategory.DIMMER, compositionOverride = CompositionRule.LTP,
+                    value = CueAssignmentResolver.AttributeValue.Slider(200u),
                 ),
             ),
         )

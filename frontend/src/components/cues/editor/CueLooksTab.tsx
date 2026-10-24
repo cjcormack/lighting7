@@ -116,7 +116,7 @@ function LooksBody({
       onSetEnabled: (index, enabled) => set(index, { enabled }),
       onSetAmount: (index, amount) => set(index, { amount }),
       onSetBlendMode: (index, blendMode) => set(index, { blendMode }),
-      onSetPropertyMask: (index, propertyMask) => set(index, { propertyMask }),
+      onSetAttributeMask: (index, attributeMask) => set(index, { attributeMask }),
       onSetStomp: (index, stomp) => set(index, { stomp }),
       onSetTargets: selection.length > 0 ? (index) => set(index, { targets: selection.map((t) => ({ ...t })) }) : undefined,
       // Typed timing coalesces on the store's flush; a master pick is one gesture and saves at once.
@@ -232,19 +232,19 @@ export function cueWriteTargets(targets: readonly CueTarget[], fixtures: readonl
   for (const target of targets) {
     if (target.type === 'group') {
       for (const fixture of fixtures) {
-        if (fixture.groups.includes(target.key)) out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+        if (fixture.groups.includes(target.key)) out.push({ key: fixture.key, attributes: fixture.attributes, elements: fixture.elements })
       }
       continue
     }
     const fixture = fixtures.find((f) => f.key === target.key)
     if (fixture != null) {
-      out.push({ key: fixture.key, properties: fixture.properties, elements: fixture.elements })
+      out.push({ key: fixture.key, attributes: fixture.attributes, elements: fixture.elements })
       continue
     }
     for (const parent of fixtures) {
       const element = parent.elements?.find((e) => e.key === target.key)
       if (element != null) {
-        out.push({ key: element.key, properties: element.properties, fixtureKey: parent.key })
+        out.push({ key: element.key, attributes: element.attributes, fixtureKey: parent.key })
         break
       }
     }

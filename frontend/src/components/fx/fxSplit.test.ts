@@ -42,7 +42,7 @@ describe('splitScopeOf', () => {
         key: `bar.${n}`,
         displayName: `Cell ${n}`,
         index: n - 1,
-        properties: [sliderProp('dimmer', 'dimmer', chan(20 + n))],
+        attributes: [sliderProp('dimmer', 'dimmer', chan(20 + n))],
       })) as never,
     })
     const onBar = makeActiveFx({ targetKey: 'bar', elementFilter: 'ODD' })
@@ -65,7 +65,7 @@ describe('splitScopeOf', () => {
           key: `bar${n}.${c}`,
           displayName: `Cell ${c}`,
           index: c - 1,
-          properties: [sliderProp('dimmer', 'dimmer', chan(40 + n * 3 + c))],
+          attributes: [sliderProp('dimmer', 'dimmer', chan(40 + n * 3 + c))],
         })) as never,
       })
     const bars = [bar(1), bar(2)]

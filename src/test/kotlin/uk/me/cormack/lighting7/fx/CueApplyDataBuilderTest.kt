@@ -8,7 +8,7 @@ import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueTrigger
 import uk.me.cormack.lighting7.models.DaoLook
@@ -57,7 +57,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
             look
         }
 
-    private fun cueColour(fixtureKey: String): CueAssignmentResolver.PropertyValue.Colour {
+    private fun cueColour(fixtureKey: String): CueAssignmentResolver.AttributeValue.Colour {
         val value = state.show.fxEngine.layerResolver
             .currentCueLayerState[CueAssignmentResolver.Key.fixture(fixtureKey, "rgbColour")]
         return assertIs(value)
@@ -109,7 +109,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
                 sortOrder = 3; targets = emptyList()
                 delay = Duration.ofMillis(400L)
             }
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
                 attribute = "dimmer"; value = "128"; sortOrder = 0
@@ -150,7 +150,7 @@ class CueApplyDataBuilderTest : RouteIntegrationTest() {
         assertEquals(1, applyData.layers.size, "layers — the field the GO path used to drop")
         assertEquals(look.id.value, applyData.layers.single().source.id)
         assertEquals(400L, applyData.layers.single().delayMs)
-        assertEquals(1, applyData.propertyAssignments.size, "rows — the field the AI path dropped")
+        assertEquals(1, applyData.attributeAssignments.size, "rows — the field the AI path dropped")
         assertEquals(1, applyData.triggers.size, "triggers — the other field the AI path dropped")
         assertEquals(5_000L, applyData.triggers.single().intervalMs)
         assertEquals(1, applyData.adHocFx.size)

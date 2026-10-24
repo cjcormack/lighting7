@@ -3,12 +3,13 @@ import { Label } from '@/components/ui/label'
 import { ATTRIBUTE_FAMILIES, FAMILY_LABELS, formatFamilyList } from '@/lib/attributeFamily'
 import { familiesKey, normaliseFamilies } from '@/lib/selectionMask'
 import { cn } from '@/lib/utils'
-import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
+import type { ProgrammerSkip } from '@/store/programmerOps'
+import type { AttributeFamily } from '@/lib/attributeFamily'
 
 /**
  * The four attribute families Record / Include / Update can be scoped to.
  *
- * Deliberately coarser than the backend's per-category `PropertyCategory`: the same physical
+ * Deliberately coarser than the backend's per-category `AttributeCategory`: the same physical
  * attribute is annotated differently across heads (a gobo wheel is a setting on one fixture
  * and a plain slider on another), so a category-level mask would silently miss fixtures. This
  * is the console I/P/C/B vocabulary, and it is four checkboxes rather than one per category.
@@ -18,7 +19,7 @@ import type { ProgrammerSkip, PropertyMaskGroup } from '@/store/programmerOps'
  * while this list was hand-written; deriving it makes them true by construction and leaves the
  * test as the guard against someone un-deriving it.
  */
-export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = ATTRIBUTE_FAMILIES.map(
+export const FAMILY_OPTIONS: { value: AttributeFamily; label: string }[] = ATTRIBUTE_FAMILIES.map(
   (family) => ({ value: family, label: FAMILY_LABELS[family].singular }),
 )
 
@@ -32,10 +33,10 @@ export const MASK_GROUPS: { value: PropertyMaskGroup; label: string }[] = ATTRIB
  * no word for — a mask that lets nothing through — so hosts read it with [maskIsEmpty] and refuse
  * to act on it rather than send it. [maskToWire] is the one fold back to what a request carries.
  */
-export type MaskValue = PropertyMaskGroup[] | null
+export type MaskValue = AttributeFamily[] | null
 
 /** The mask a request carries: `undefined` for every attribute (switched on, or all four ticked). */
-export function maskToWire(value: MaskValue): PropertyMaskGroup[] | undefined {
+export function maskToWire(value: MaskValue): AttributeFamily[] | undefined {
   return normaliseFamilies(value) ?? undefined
 }
 
@@ -72,8 +73,8 @@ export function maskValueKey(value: MaskValue): string {
  * rather than mistaken for no change.
  */
 export function useMaskDraft(
-  stored: readonly PropertyMaskGroup[] | null,
-  write: (families: PropertyMaskGroup[] | null) => void,
+  stored: readonly AttributeFamily[] | null,
+  write: (families: AttributeFamily[] | null) => void,
 ): [MaskValue, (next: MaskValue) => void] {
   const storedKey = familiesKey(stored)
   const [draft, setDraft] = useState<MaskValue>(() => normaliseFamilies(stored))
@@ -109,7 +110,7 @@ export interface MaskTogglesProps {
   value: MaskValue
   onChange: (next: MaskValue) => void
   /** Per-family counts beside each checkbox — see [MaskPickerProps.counts]. */
-  counts?: Partial<Record<PropertyMaskGroup, number>>
+  counts?: Partial<Record<AttributeFamily, number>>
   className?: string
 }
 
@@ -128,7 +129,7 @@ export interface MaskTogglesProps {
  */
 export function MaskToggles({ value, onChange, counts, className }: MaskTogglesProps) {
   const all = value == null
-  const toggle = (group: PropertyMaskGroup) => {
+  const toggle = (group: AttributeFamily) => {
     const ticked = value ?? []
     const next = ticked.includes(group) ? ticked.filter((g) => g !== group) : [...ticked, group]
     onChange(ATTRIBUTE_FAMILIES.filter((family) => next.includes(family)))
@@ -160,7 +161,7 @@ export function MaskToggles({ value, onChange, counts, className }: MaskTogglesP
       </label>
       {!all && (
         <div role="group" aria-label="Attribute families" className="flex flex-wrap items-center gap-x-3 gap-y-2">
-          {MASK_GROUPS.map((group) => (
+          {FAMILY_OPTIONS.map((group) => (
             <label key={group.value} className="flex items-center gap-1.5 text-sm">
               <input
                 type="checkbox"
@@ -204,7 +205,7 @@ export interface MaskPickerProps {
    *
    * Drawn beside the family checkboxes, so only while *All attributes* is off.
    */
-  counts?: Partial<Record<PropertyMaskGroup, number>>
+  counts?: Partial<Record<AttributeFamily, number>>
   /** Added to the sentence under the control, for a host whose mask means something narrower. */
   hint?: string
 }
@@ -243,7 +244,7 @@ export function MaskPicker({ value, onChange, counts, hint }: MaskPickerProps) {
 }
 
 /** `The programmer holds Intensity (3) and Colour (4).`, or that it holds nothing, from [counts]. */
-function heldSentence(counts: Partial<Record<PropertyMaskGroup, number>>): string {
+function heldSentence(counts: Partial<Record<AttributeFamily, number>>): string {
   const held = ATTRIBUTE_FAMILIES.filter((family) => (counts[family] ?? 0) > 0).map(
     (family) => `${FAMILY_LABELS[family].singular} (${counts[family]})`,
   )
@@ -255,8 +256,8 @@ function heldSentence(counts: Partial<Record<PropertyMaskGroup, number>>): strin
 const SKIP_REASONS: Record<ProgrammerSkip['reason'], string> = {
   ELEMENT_TARGET: 'element-level entries (this destination addresses whole fixtures)',
   MISSING_FIXTURE: 'fixtures no longer in the patch',
-  MISSING_PROPERTY: 'attributes that no longer resolve',
-  NO_BACKING_PROPERTY: 'raw channels with no backing attribute',
+  MISSING_ATTRIBUTE: 'attributes that no longer resolve',
+  NO_BACKING_ATTRIBUTE: 'raw channels with no backing attribute',
   MASKED_OUT: 'entries outside the attribute mask',
   OUT_OF_SCOPE: 'entries outside the selection',
 }

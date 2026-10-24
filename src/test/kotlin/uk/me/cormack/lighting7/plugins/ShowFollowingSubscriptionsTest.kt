@@ -65,16 +65,16 @@ class ShowFollowingSubscriptionsTest : RouteIntegrationTest() {
 
                 // The resync's provenance may already hold the first write; the second can only
                 // arrive through the live provenance subscription.
-                for (property in listOf("dimmer", "uv")) {
-                    sendSerialized<InMessage>(ProgrammerSetInMessage("fixture", "other-hex", property, "200"))
+                for (attribute in listOf("dimmer", "uv")) {
+                    sendSerialized<InMessage>(ProgrammerSetInMessage("fixture", "other-hex", attribute, "200"))
                     awaitOfType<ProvenanceStateOutMessage> { frame ->
-                        frame.entries.any { it.targetKey == "other-hex" && it.propertyName == property }
+                        frame.entries.any { it.targetKey == "other-hex" && it.attribute == attribute }
                     }
                 }
 
                 val fxId = rest.post("/api/rest/fx/add") {
                     contentType(ContentType.Application.Json)
-                    setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "other-hex", propertyName = "dimmer"))
+                    setBody(AddFxRequest(fxType = "Pulse", fixtureKey = "other-hex", attribute = "dimmer"))
                 }.body<AddFxResponse>().fxId
                 awaitOfType<FxStateOutMessage> { frame ->
                     frame.activeFx.any { it.id == fxId && it.targetKey == "other-hex" }

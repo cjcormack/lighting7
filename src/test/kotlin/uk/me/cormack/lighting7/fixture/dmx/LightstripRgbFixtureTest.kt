@@ -6,7 +6,7 @@ import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.createTestTransaction
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ExtendedColour
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -46,7 +46,7 @@ class LightstripRgbFixtureTest {
         val strip = LightstripRgbFixture(universe, "strip-1", "Strip 1", 1)
         val ext = ExtendedColour(Color(200, 100, 50), white = 128u, amber = 64u, uv = 180u)
 
-        val writes = PropertyChannelWriter.resolve(strip, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(ext))
+        val writes = AttributeChannelWriter.resolve(strip, "rgbColour", CueAssignmentResolver.AttributeValue.Colour(ext))
 
         assertEquals(mapOf(1 to 200u.toUByte(), 2 to 100u.toUByte(), 3 to 50u.toUByte()), writes.associate { it.channel to it.value })
     }

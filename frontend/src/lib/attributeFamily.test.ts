@@ -3,12 +3,12 @@ import {
   ATTRIBUTE_FAMILIES,
   PALETTE_FX_FAMILIES,
   familyForCategory,
-  maskGroupForFxFamily,
+  attributeFamilyForFxFamily,
   familySlug,
   fixturesSupportingFamily,
   parseFamilySlug,
-  parsePropertyMask,
-  serializePropertyMask,
+  parseAttributeMask,
+  serializeAttributeMask,
 } from './attributeFamily'
 import { SPEED_MASTER_FAMILIES } from './speedMasterModel'
 
@@ -37,7 +37,7 @@ describe('familyForCategory', () => {
   })
 
   it('treats the synthetic position category as POSITION, not as an unknown', () => {
-    // `position` is the pan/tilt pair and has no PropertyCategory of its own, so without its
+    // `position` is the pan/tilt pair and has no AttributeCategory of its own, so without its
     // own case it would fall into the BEAM catch-all and offer beam palettes on a position row.
     expect(familyForCategory('position')).toBe('POSITION')
     expect(familyForCategory('pan')).toBe('POSITION')
@@ -51,57 +51,57 @@ describe('familyForCategory', () => {
   })
 })
 
-describe('propertyMask round-trip', () => {
+describe('attributeMask round-trip', () => {
   it('parses the comma-separated wire form into families', () => {
-    expect(parsePropertyMask('COLOUR')).toEqual(['COLOUR'])
-    expect(parsePropertyMask('COLOUR,POSITION')).toEqual(['POSITION', 'COLOUR'])
+    expect(parseAttributeMask('COLOUR')).toEqual(['COLOUR'])
+    expect(parseAttributeMask('COLOUR,POSITION')).toEqual(['POSITION', 'COLOUR'])
   })
 
   it('answers "every family" for all three spellings of no mask', () => {
     // null, undefined and '' all mean unmasked, as the backend reads them — and `LookStack`'s layer
     // picker maps this [] to a `MaskValue` of null, *All attributes*.
-    expect(parsePropertyMask(null)).toEqual([])
-    expect(parsePropertyMask(undefined)).toEqual([])
-    expect(parsePropertyMask('')).toEqual([])
+    expect(parseAttributeMask(null)).toEqual([])
+    expect(parseAttributeMask(undefined)).toEqual([])
+    expect(parseAttributeMask('')).toEqual([])
   })
 
   it('normalises whitespace and case, and returns families in canonical order', () => {
     // A mask has one canonical spelling, so re-selecting the same families is not a change and
     // does not PATCH the cue.
-    expect(parsePropertyMask(' colour , POSITION ')).toEqual(['POSITION', 'COLOUR'])
-    expect(serializePropertyMask(['COLOUR', 'POSITION'])).toBe('POSITION,COLOUR')
+    expect(parseAttributeMask(' colour , POSITION ')).toEqual(['POSITION', 'COLOUR'])
+    expect(serializeAttributeMask(['COLOUR', 'POSITION'])).toBe('POSITION,COLOUR')
   })
 
   it('drops a family it does not recognise rather than rejecting the mask', () => {
     // A newer backend can name a family this client has never heard of; the operator should still
     // be able to edit the ones it does know.
-    expect(parsePropertyMask('COLOUR,WARP_DRIVE')).toEqual(['COLOUR'])
+    expect(parseAttributeMask('COLOUR,WARP_DRIVE')).toEqual(['COLOUR'])
   })
 
   it('serializes both an empty and a complete selection to no mask', () => {
     // The load-bearing case. All four families compose identically to no mask, but they are not the
-    // same stored value — `propertyMask` distinguishes null from a string, so a four-family mask
+    // same stored value — `attributeMask` distinguishes null from a string, so a four-family mask
     // would render a badge that says nothing and would become noise if a fifth family appeared.
-    expect(serializePropertyMask([])).toBeNull()
-    expect(serializePropertyMask(ATTRIBUTE_FAMILIES)).toBeNull()
+    expect(serializeAttributeMask([])).toBeNull()
+    expect(serializeAttributeMask(ATTRIBUTE_FAMILIES)).toBeNull()
   })
 
   it('round-trips a partial mask unchanged', () => {
     for (const mask of ['INTENSITY', 'POSITION,COLOUR', 'INTENSITY,POSITION,BEAM']) {
-      expect(serializePropertyMask(parsePropertyMask(mask)), mask).toBe(mask)
+      expect(serializeAttributeMask(parseAttributeMask(mask)), mask).toBe(mask)
     }
   })
 })
 
-describe('maskGroupForFxFamily', () => {
+describe('attributeFamilyForFxFamily', () => {
   it('mirrors the backend map, including the `color` spelling', () => {
-    // A direct mirror of `maskGroupForFxFamily` in projectLooks.kt, which accepts both
+    // A direct mirror of `attributeFamilyForFxFamily` in projectLooks.kt, which accepts both
     // spellings because the shipped `.fx.kts` files are not consistent about it.
-    expect(maskGroupForFxFamily('intensity')).toBe('INTENSITY')
-    expect(maskGroupForFxFamily('colour')).toBe('COLOUR')
-    expect(maskGroupForFxFamily('color')).toBe('COLOUR')
-    expect(maskGroupForFxFamily('position')).toBe('POSITION')
-    expect(maskGroupForFxFamily('beam')).toBe('BEAM')
+    expect(attributeFamilyForFxFamily('intensity')).toBe('INTENSITY')
+    expect(attributeFamilyForFxFamily('colour')).toBe('COLOUR')
+    expect(attributeFamilyForFxFamily('color')).toBe('COLOUR')
+    expect(attributeFamilyForFxFamily('position')).toBe('POSITION')
+    expect(attributeFamilyForFxFamily('beam')).toBe('BEAM')
   })
 
   it('answers null for a category that names no family, rather than a catch-all', () => {
@@ -109,16 +109,16 @@ describe('maskGroupForFxFamily', () => {
     // does not know under BEAM. Here `controls` has no tempo and `steps` (the Steps FX) steps
     // another family, so neither *has* a family — and answering BEAM would be a wrong answer rather
     // than a default, one the write boundary would then refuse under a family the operator never chose.
-    expect(maskGroupForFxFamily('controls')).toBeNull()
-    expect(maskGroupForFxFamily('steps')).toBeNull()
-    expect(maskGroupForFxFamily('some_future_category')).toBeNull()
+    expect(attributeFamilyForFxFamily('controls')).toBeNull()
+    expect(attributeFamilyForFxFamily('steps')).toBeNull()
+    expect(attributeFamilyForFxFamily('some_future_category')).toBeNull()
   })
 
   it('is a different vocabulary from familyForCategory, not a widening of it', () => {
-    // `position` is an effect category but not a PropertyCategory; the property side reaches
+    // `position` is an effect category but not a AttributeCategory; the property side reaches
     // POSITION through `pan`/`tilt`, which are not effect categories at all. The two maps share
     // `colour` and nothing else, which is why neither can absorb the other.
-    expect(maskGroupForFxFamily('pan')).toBeNull()
+    expect(attributeFamilyForFxFamily('pan')).toBeNull()
     expect(familyForCategory('controls')).toBe('BEAM')
   })
 })
@@ -126,14 +126,14 @@ describe('maskGroupForFxFamily', () => {
 describe('which families can hold an effect', () => {
   it('is all four, Beam included', () => {
     expect([...PALETTE_FX_FAMILIES].sort()).toEqual(['BEAM', 'COLOUR', 'INTENSITY', 'POSITION'])
-    expect(maskGroupForFxFamily('beam')).toBe('BEAM')
+    expect(attributeFamilyForFxFamily('beam')).toBe('BEAM')
   })
 
   it('covers exactly the categories a speed master may be the default for', () => {
-    // A usage excludes `controls` and `steps` for want of a tempo, and a template the same two
+    // A master family excludes `controls` and `steps` for want of a tempo, and a template the same two
     // for want of a family.
-    const usageFamilies = SPEED_MASTER_FAMILIES.map(maskGroupForFxFamily)
-    expect([...usageFamilies].sort()).toEqual([...PALETTE_FX_FAMILIES].sort())
+    const masterFamilies = SPEED_MASTER_FAMILIES.map(attributeFamilyForFxFamily)
+    expect([...masterFamilies].sort()).toEqual([...PALETTE_FX_FAMILIES].sort())
   })
 })
 

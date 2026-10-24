@@ -49,8 +49,8 @@ class FxRemovalRaceTest {
         }
     }
 
-    private fun dimmerFx(effect: Fx, property: String = "dimmer") =
-        FxInstance(effect, SliderTarget("hex-a", property), FxTiming(cycle = 1.0)).also {
+    private fun dimmerFx(effect: Fx, attribute: String = "dimmer") =
+        FxInstance(effect, SliderTarget("hex-a", attribute), FxTiming(cycle = 1.0)).also {
             it.timingSource = TimingSource.WALL_CLOCK
         }
 
@@ -91,7 +91,7 @@ class FxRemovalRaceTest {
                     }.join()
                     controller.setValues(listOf(1 to ChannelChange(150u, 0)))
                 },
-                property = "uv",
+                attribute = "uv",
             ),
         )
 
@@ -127,7 +127,7 @@ class FxRemovalRaceTest {
                     }.join()
                     controller.setValues(listOf(1 to ChannelChange(150u, 0)))
                 },
-                property = "uv",
+                attribute = "uv",
             ),
         )
 

@@ -271,7 +271,7 @@ private fun changedKeyCount(
     before: List<CueAssignmentResolver.Assignment>,
     after: List<CueAssignmentResolver.Assignment>,
 ): Int {
-    val was = before.associate { (it.targetKey to it.propertyName) to it.value }
-    val now = after.associate { (it.targetKey to it.propertyName) to it.value }
+    val was = before.associate { (it.targetKey to it.attribute) to it.value }
+    val now = after.associate { (it.targetKey to it.attribute) to it.value }
     return (was.keys + now.keys).count { was[it] != now[it] }
 }

@@ -279,7 +279,7 @@ export function usePress(projectId: number, pair: PressPair, options: PressOptio
             targets,
             // What this client believes the layer's mask is; the desk derives the real one from the
             // palette and answers it, so a disagreement surfaces in the response.
-            propertyMask: template.family ?? undefined,
+            attributeMask: template.family ?? undefined,
             families,
           }).unwrap()
           return result.action === 'removed' ? 'off' : 'on'

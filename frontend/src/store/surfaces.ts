@@ -22,8 +22,8 @@ export type {
   PickupChange,
   ScalerState,
   BindingTarget,
-  FixturePropertyTarget,
-  GroupPropertyTarget,
+  FixtureAttributeTarget,
+  GroupAttributeTarget,
   CueStackGoTarget,
   CueStackBackTarget,
   CueStackPauseTarget,
@@ -34,7 +34,7 @@ export type {
   SetBankTarget,
   SpeedMasterBpmTarget,
   SpeedMasterTapTarget,
-  SelectionPropertyTarget,
+  SelectionAttributeTarget,
   SelectionFanTarget,
   FanAxis,
   SelectTargetTarget,
@@ -278,8 +278,8 @@ export const surfacesApi = restApi.injectEndpoints({
       queryFn: () => ({ data: lightingApi.surfaces.getEncoderBanks() ?? NO_ENCODER_BANKS }),
       async onCacheEntryAdded(_, { cacheDataLoaded, updateCachedData, cacheEntryRemoved }) {
         await cacheDataLoaded
-        const subscription = lightingApi.surfaces.subscribeEncoderBanks((properties) => {
-          updateCachedData(() => properties)
+        const subscription = lightingApi.surfaces.subscribeEncoderBanks((attributes) => {
+          updateCachedData(() => attributes)
         })
         await cacheEntryRemoved
         subscription.unsubscribe()

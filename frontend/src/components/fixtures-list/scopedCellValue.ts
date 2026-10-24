@@ -1,4 +1,4 @@
-import { channelKey } from '../../hooks/usePropertyValues'
+import { channelKey } from '../../hooks/useAttributeValues'
 import { aggregateCellValue } from './useRowValues'
 import type { CellResolution, ColumnKey } from './columns'
 import type { ChannelRef } from '../../store/fixtures'
@@ -11,7 +11,7 @@ import type { StagedValue } from './useRowOwnership'
  * Building cell values for a scope the wire cannot answer for.
  *
  * The programmer grid reads three scopes — Output, Local, one layer — and only Output is a
- * channel read. The other two are keyed by `(targetKey, propertyName)`: Local asks "did the
+ * channel read. The other two are keyed by `(targetKey, attribute)`: Local asks "did the
  * *operator* set this?", a layer asks "does this Look hold a row for it?". Both answer with a
  * canonical assignment string, which `parseProgrammerValue` turns into a [StagedValue].
  *
@@ -46,7 +46,7 @@ export interface CellState {
   editable: boolean
   /**
    * Why a cell is not editable, when it isn't:
-   * - `inert` — the column's family is outside the layer's `propertyMask`;
+   * - `inert` — the column's family is outside the layer's `attributeMask`;
    * - `untargeted` — the row's fixture is outside the layer's `targets`.
    */
   tone?: 'inert' | 'untargeted'
@@ -95,7 +95,7 @@ export function isLocalEntry(state: ProgrammerKeyState | undefined): boolean {
 }
 
 /**
- * Assemble one resolution's [StagedPart] from a `(targetKey, propertyName)` lookup.
+ * Assemble one resolution's [StagedPart] from a `(targetKey, attribute)` lookup.
  *
  * This is where the position-pairing knowledge lives, so callers can walk resolutions without
  * knowing that a fixture with separate pan and tilt sliders has two properties behind one cell.
@@ -105,27 +105,27 @@ export function isLocalEntry(state: ProgrammerKeyState | undefined): boolean {
 export function stagedPartFor(
   res: NonNullable<CellResolution>,
   targetKey: string,
-  lookup: (targetKey: string, propertyName: string) => StagedValue | undefined,
+  lookup: (targetKey: string, attribute: string) => StagedValue | undefined,
 ): StagedPart | undefined {
   switch (res.kind) {
     case 'slider':
     case 'setting':
     case 'colour-setting': {
-      const staged = lookup(targetKey, res.property.name)
+      const staged = lookup(targetKey, res.attribute.name)
       return staged?.kind === 'level' ? { staged, complete: true } : undefined
     }
     case 'colour':
     case 'white-mix': {
-      const staged = lookup(targetKey, res.property.name)
+      const staged = lookup(targetKey, res.attribute.name)
       return staged?.kind === 'colour' ? { staged, complete: true } : undefined
     }
     case 'position': {
-      if (res.property) {
-        const staged = lookup(targetKey, res.property.name)
+      if (res.attribute) {
+        const staged = lookup(targetKey, res.attribute.name)
         return staged?.kind === 'position' ? { staged, complete: true } : undefined
       }
-      const pan = res.panProperty ? lookup(targetKey, res.panProperty.name) : undefined
-      const tilt = res.tiltProperty ? lookup(targetKey, res.tiltProperty.name) : undefined
+      const pan = res.panAttribute ? lookup(targetKey, res.panAttribute.name) : undefined
+      const tilt = res.tiltAttribute ? lookup(targetKey, res.tiltAttribute.name) : undefined
       const panLevel = pan?.kind === 'level' ? pan.value : undefined
       const tiltLevel = tilt?.kind === 'level' ? tilt.value : undefined
       if (panLevel === undefined && tiltLevel === undefined) return undefined
@@ -156,22 +156,22 @@ function stageOntoChannels(
     case 'slider':
     case 'setting':
     case 'colour-setting':
-      if (staged.kind === 'level') put(res.property.channel, staged.value)
+      if (staged.kind === 'level') put(res.attribute.channel, staged.value)
       return
     case 'colour':
       if (staged.kind !== 'colour') return
-      put(res.property.redChannel, staged.r)
-      put(res.property.greenChannel, staged.g)
-      put(res.property.blueChannel, staged.b)
-      put(res.property.whiteChannel, staged.w)
-      put(res.property.amberChannel, staged.a)
-      put(res.property.uvChannel, staged.uv)
+      put(res.attribute.redChannel, staged.r)
+      put(res.attribute.greenChannel, staged.g)
+      put(res.attribute.blueChannel, staged.b)
+      put(res.attribute.whiteChannel, staged.w)
+      put(res.attribute.amberChannel, staged.a)
+      put(res.attribute.uvChannel, staged.uv)
       return
     case 'white-mix': {
       if (staged.kind !== 'colour') return
-      const levels = whiteLevelsFor(res.property, [staged.r, staged.g, staged.b])
-      put(res.property.warmChannel, levels.warm)
-      put(res.property.coldChannel, levels.cold)
+      const levels = whiteLevelsFor(res.attribute, [staged.r, staged.g, staged.b])
+      put(res.attribute.warmChannel, levels.warm)
+      put(res.attribute.coldChannel, levels.cold)
       return
     }
     case 'position':

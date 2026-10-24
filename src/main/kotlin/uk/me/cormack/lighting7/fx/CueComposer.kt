@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.TargetRef
@@ -28,7 +28,7 @@ internal data class CookLayer(
     val sortOrder: Int = 0,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,
     val stomp: Boolean = false,
@@ -114,11 +114,11 @@ internal data class CookResult(
     /** Empty unless some contributing layer has [CookLayer.stomp] set. */
     val stompSuppression: LayerStompSuppression,
     /**
-     * Every `(targetKey, propertyName)` any contributing layer asserted — fixture keys, plus the
+     * Every `(targetKey, attribute)` any contributing layer asserted — fixture keys, plus the
      * key of the group a row arrived *through*, because a group-targeted effect is matched on the
      * group's own name by [FxEngine.stompForCue] and would otherwise never overlap.
      */
-    val assertedKeys: Set<FxEngine.PropertyKey>,
+    val assertedKeys: Set<FxEngine.TargetAttribute>,
 )
 
 /**
@@ -140,7 +140,7 @@ internal data class CookResult(
  *
  * What it buys:
  * - **Within-cue** = strict ordered override (plus blend / amount), independent of
- *   [PropertyCategory], explainable in one sentence.
+ *   [AttributeCategory], explainable in one sentence.
  * - **Cross-cue** = untouched. All existing HTP/LTP, crossfade weighting and `moveInDark` logic
  *   keeps working, because the resolver still sees one contributor per cue per key — which is what
  *   it was written for.
@@ -169,11 +169,11 @@ internal object CueComposer {
      */
     private data class Contribution(
         val targetKey: String,
-        val propertyName: String,
+        val attribute: String,
         val targetIsGroup: Boolean,
-        val category: PropertyCategory,
+        val category: AttributeCategory,
         val compositionOverride: CompositionRule,
-        val value: CueAssignmentResolver.PropertyValue,
+        val value: CueAssignmentResolver.AttributeValue,
         val moveInDark: Boolean = false,
         /** Which layer last wrote this key. Null once a local row has overlaid it. */
         val winner: CookWinner? = null,
@@ -189,7 +189,7 @@ internal object CueComposer {
         val sourceTarget: TargetRef? = null,
     )
 
-    private data class Key(val targetKey: String, val propertyName: String)
+    private data class Key(val targetKey: String, val attribute: String)
 
     /**
      * The layers of a cue that actually contribute, in rank order.
@@ -232,7 +232,7 @@ internal object CueComposer {
      * contributors on one key and reopen exactly the ambiguity this function removes.
      *
      * **Invariant:** the returned list never holds two entries with the same
-     * `(targetKey, propertyName)`. Enforced by construction (one map slot per key) and asserted by
+     * `(targetKey, attribute)`. Enforced by construction (one map slot per key) and asserted by
      * `CueComposerTest`.
      *
      * Each returned row carries the layer that produced it in
@@ -372,9 +372,9 @@ internal object CueComposer {
         // the same specificity rule [CueAssignmentResolver.applySpecificity] applies — resolved here
         // because after cooking there is only one contributor left to carry the flag.
         for (row in localRows.sortedBy { if (it.targetIsGroup) 0 else 1 }) {
-            acc[Key(row.targetKey, row.propertyName)] = Contribution(
+            acc[Key(row.targetKey, row.attribute)] = Contribution(
                 targetKey = row.targetKey,
-                propertyName = row.propertyName,
+                attribute = row.attribute,
                 targetIsGroup = row.targetIsGroup,
                 category = row.category,
                 compositionOverride = row.compositionOverride,
@@ -400,7 +400,7 @@ internal object CueComposer {
                 fadeWeight = 1.0,
                 targetKey = c.targetKey,
                 targetIsGroup = c.targetIsGroup,
-                propertyName = c.propertyName,
+                attribute = c.attribute,
                 category = c.category,
                 compositionOverride = c.compositionOverride,
                 value = c.value,
@@ -416,8 +416,8 @@ internal object CueComposer {
                 rows = rows,
                 stompSuppression = buildStompSuppression(asserted),
                 assertedKeys = asserted.flatMapTo(HashSet()) { layer ->
-                    layer.keys.entries.flatMap { (targetKey, properties) ->
-                        properties.map { FxEngine.PropertyKey(targetKey, it) }
+                    layer.keys.entries.flatMap { (targetKey, attributes) ->
+                        attributes.map { FxEngine.TargetAttribute(targetKey, it) }
                     }
                 },
             ),
@@ -457,8 +457,8 @@ internal object CueComposer {
             if (stomper.keys.isEmpty()) continue
             for (below in asserted.subList(0, rank)) {
                 val into = out.getOrPut(below.layerId) { HashMap() }
-                for ((targetKey, properties) in stomper.keys) {
-                    into.getOrPut(targetKey) { HashSet() }.addAll(properties)
+                for ((targetKey, attributes) in stomper.keys) {
+                    into.getOrPut(targetKey) { HashSet() }.addAll(attributes)
                 }
             }
         }
@@ -557,7 +557,7 @@ internal object CueComposer {
                 // A Look carries its fade **per row**, so two rows of one Look can move at
                 // different speeds — the reason [SourceRow] holds the field rather than
                 // [LayerContent] doing.
-                SourceRow(it.target, it.propertyName, it.value, it.elementKey, it.fadeDurationMs)
+                SourceRow(it.target, it.attribute, it.value, it.elementKey, it.fadeDurationMs)
             }
         }
 
@@ -569,7 +569,7 @@ internal object CueComposer {
                 // A palette's fade sits on the palette, not the row (see
                 // `DaoPalettes.fadeDurationMs`): it is one gesture, so every row it writes moves
                 // together. Copying it onto each row is what lets `applyLayer` treat both arms alike.
-                SourceRow(it.target, it.propertyName, it.value, elementKey = null, palette.fadeDurationMs)
+                SourceRow(it.target, it.attribute, it.value, elementKey = null, palette.fadeDurationMs)
             }
         }
     }
@@ -581,7 +581,7 @@ internal object CueComposer {
          * so [LayerContent.OfLook] never produces one.
          */
         val target: TargetRef?,
-        val propertyName: String,
+        val attribute: String,
         val value: String,
         val elementKey: String?,
         /**
@@ -607,7 +607,7 @@ internal object CueComposer {
     /** A single (fixture, property) contribution a layer wants to make, before blending. */
     private class Pending(
         val fixture: GroupableFixture,
-        val propertyName: String,
+        val attribute: String,
         val rawValue: String,
         /** The group this contribution arrived through, or null when the row named the fixture. */
         val groupKey: String?,
@@ -646,7 +646,7 @@ internal object CueComposer {
         layerTargets: LayerTargets,
     ) {
         val mask = try {
-            parseMaskGroups(layer.propertyMask?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() })
+            parseFamilies(layer.attributeMask?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() })
         } catch (e: IllegalArgumentException) {
             logger.warn("cue {}: layer on '{}' has an unparsable mask — treating as unmasked: {}", cueId, layer.source.name, e.message)
             null
@@ -672,7 +672,7 @@ internal object CueComposer {
                 parsePaletteIntent(row.value) ?: run {
                     logger.warn(
                         "cue {}: template '{}' — '{}' is not an intent for '{}' — skipping row",
-                        cueId, layer.source.name, row.value, row.propertyName,
+                        cueId, layer.source.name, row.value, row.attribute,
                     )
                     continue
                 }
@@ -690,7 +690,7 @@ internal object CueComposer {
                     logger.warn("cue {}: layer on '{}' — element '{}' missing — skipping", cueId, layer.source.name, elementKey)
                     continue
                 }
-                pending.add(Pending(element, row.propertyName, row.value, null, row.fadeDurationMs, intent, TargetRef.Fixture(elementKey)))
+                pending.add(Pending(element, row.attribute, row.value, null, row.fadeDurationMs, intent, TargetRef.Fixture(elementKey)))
                 continue
             }
             val rowTarget = row.target
@@ -704,15 +704,15 @@ internal object CueComposer {
                     logger.warn(
                         "cue {}: {} '{}' has a row for '{}' that takes its targets from the layer, " +
                             "but the layer names none — skipping",
-                        cueId, layer.source.kind, layer.source.name, row.propertyName,
+                        cueId, layer.source.kind, layer.source.name, row.attribute,
                     )
                     continue
                 }
                 val fanned = HashSet<Pair<String, String?>>()
                 for (e in layerFixtures) {
-                    for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
+                    for (head in headsForRow(fixtures, e.fixture, row.attribute, intent)) {
                         if (!fanned.add(head.targetKey to e.groupKey)) continue
-                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent, e.sourceTarget))
+                        pending.add(Pending(head, row.attribute, row.value, e.groupKey, row.fadeDurationMs, intent, e.sourceTarget))
                     }
                 }
             } else {
@@ -723,8 +723,8 @@ internal object CueComposer {
                     // `covers`, not key membership: a bound row spelled as a cell target lands under a
                     // layer on its parent exactly as an `elementKey` row does.
                     if (layerFixtures != null && !layerTargets.covers(e.fixture.targetKey)) continue
-                    for (head in headsForRow(fixtures, e.fixture, row.propertyName, intent)) {
-                        pending.add(Pending(head, row.propertyName, row.value, e.groupKey, row.fadeDurationMs, intent, rowTarget))
+                    for (head in headsForRow(fixtures, e.fixture, row.attribute, intent)) {
+                        pending.add(Pending(head, row.attribute, row.value, e.groupKey, row.fadeDurationMs, intent, rowTarget))
                     }
                 }
             }
@@ -737,11 +737,11 @@ internal object CueComposer {
         // `pending` because that is where a row and the head it landed on have already been paired.
         // Empty for a Look layer, whose rows carry no intent.
         val hasColourRow = content is LayerContent.OfPalette && pending.any {
-            PaletteProperty.ofOrNull(it.propertyName)?.family == PropertyMaskGroup.COLOUR
+            PaletteAttribute.ofOrNull(it.attribute)?.family == AttributeFamily.COLOUR
         }
         val unmetColour: Map<String, String> = if (hasColourRow) {
             pending.groupBy { it.fixture.targetKey }.mapNotNull { (key, forFixture) ->
-                val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.propertyName to it } }
+                val applicable = forFixture.mapNotNull { p -> p.intent?.let { p.attribute to it } }
                 val requirement =
                     PaletteResolver.unmetColourRequirement(
                         forFixture.first().fixture, applicable, PaletteFanOut.mediaOf(forFixture.first().fixture, fixtures::fittedMediaFor),
@@ -768,7 +768,7 @@ internal object CueComposer {
         for (p in pending.sortedBy { if (it.isGroupOrigin) 0 else 1 }) {
             val unmet = unmetColour[p.fixture.targetKey]
             if (unmet != null &&
-                PaletteProperty.ofOrNull(p.propertyName)?.family == PropertyMaskGroup.COLOUR
+                PaletteAttribute.ofOrNull(p.attribute)?.family == AttributeFamily.COLOUR
             ) {
                 // **Debug, not warn**, for the reason the per-row skip below gives: a template
                 // pointed at a mixed rig meets this on every cook, and it is the editor's
@@ -789,7 +789,7 @@ internal object CueComposer {
                     null
                 } else {
                     val resolution = PaletteResolver.resolve(
-                        p.fixture, p.propertyName, pendingIntent, PaletteFanOut.mediaOf(p.fixture, fixtures::fittedMediaFor),
+                        p.fixture, p.attribute, pendingIntent, PaletteFanOut.mediaOf(p.fixture, fixtures::fittedMediaFor),
                     )
                     if (!resolution.isSupported) {
                         // **Debug, not warn.** A head that cannot take the intent is the normal
@@ -798,7 +798,7 @@ internal object CueComposer {
                         // editor's "resolves to" panel is where an operator is told, before saving.
                         logger.debug(
                             "cue {}: template '{}' — {} cannot take {} ({})",
-                            cueId, layer.source.name, p.fixture.targetKey, p.propertyName, resolution.note,
+                            cueId, layer.source.name, p.fixture.targetKey, p.attribute, resolution.note,
                         )
                         continue
                     }
@@ -806,13 +806,13 @@ internal object CueComposer {
                 }
             // A template's resolved name is already the head's own property; a stored Look row is
             // canonicalised, because it may spell the RGB colour any of the alias's three ways.
-            val canonical = resolved?.propertyName ?: canonicalPropertyName(p.propertyName)
-            if (mask != null && !maskAllows(mask, maskGroupForProperty(p.fixture, canonical))) continue
+            val canonical = resolved?.attribute ?: canonicalAttributeName(p.attribute)
+            if (mask != null && !maskAllows(mask, familyForAttribute(p.fixture, canonical))) continue
             val categoryInfo = fixtureCategoryFor(p.fixture, canonical)
             if (categoryInfo == null) {
                 logger.warn(
                     "cue {}: {} '{}' — property '{}' not on '{}' — skipping",
-                    cueId, layer.source.kind, layer.source.name, p.propertyName, p.fixture.targetKey,
+                    cueId, layer.source.kind, layer.source.name, p.attribute, p.fixture.targetKey,
                 )
                 continue
             }
@@ -824,7 +824,7 @@ internal object CueComposer {
             if (incoming == null) {
                 logger.warn(
                     "cue {}: {} '{}' — invalid value '{}' for {}.{} — skipping",
-                    cueId, layer.source.kind, layer.source.name, p.rawValue, p.fixture.targetKey, p.propertyName,
+                    cueId, layer.source.kind, layer.source.name, p.rawValue, p.fixture.targetKey, p.attribute,
                 )
                 continue
             }
@@ -840,7 +840,7 @@ internal object CueComposer {
             val below = acc[key]?.value
             acc[key] = Contribution(
                 targetKey = p.fixture.targetKey,
-                propertyName = canonical,
+                attribute = canonical,
                 targetIsGroup = p.isGroupOrigin,
                 category = category,
                 compositionOverride = override,
@@ -870,10 +870,10 @@ internal object CueComposer {
     private fun headsForRow(
         fixtures: Fixtures,
         head: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent?,
     ): List<GroupableFixture> =
-        if (intent == null) listOf(head) else PaletteFanOut.headsFor(head, propertyName, fixtures::fittedMediaFor)
+        if (intent == null) listOf(head) else PaletteFanOut.headsFor(head, attribute, fixtures::fittedMediaFor)
 
     /**
      * One expanded target: the fixture, and the group it came through if it came through one.
@@ -1018,41 +1018,41 @@ internal object CueComposer {
      * interpolates once there is a real value beneath it.
      */
     private fun blend(
-        below: CueAssignmentResolver.PropertyValue?,
-        incoming: CueAssignmentResolver.PropertyValue,
+        below: CueAssignmentResolver.AttributeValue?,
+        incoming: CueAssignmentResolver.AttributeValue,
         mode: BlendMode,
         amount: Double,
-    ): CueAssignmentResolver.PropertyValue {
+    ): CueAssignmentResolver.AttributeValue {
         val base = below?.takeIf { it::class == incoming::class } ?: identityFor(incoming, mode)
         val combined = combine(base, incoming, mode)
         return mix(base, combined, amount)
     }
 
     private fun identityFor(
-        like: CueAssignmentResolver.PropertyValue,
+        like: CueAssignmentResolver.AttributeValue,
         mode: BlendMode,
-    ): CueAssignmentResolver.PropertyValue {
+    ): CueAssignmentResolver.AttributeValue {
         val full = mode == BlendMode.MIN || mode == BlendMode.MULTIPLY
         return when (like) {
-            is CueAssignmentResolver.PropertyValue.Slider ->
-                CueAssignmentResolver.PropertyValue.Slider(if (full) 255u else 0u)
-            is CueAssignmentResolver.PropertyValue.Setting ->
-                CueAssignmentResolver.PropertyValue.Setting(if (full) 255u else 0u)
-            is CueAssignmentResolver.PropertyValue.Colour ->
-                CueAssignmentResolver.PropertyValue.Colour(
+            is CueAssignmentResolver.AttributeValue.Slider ->
+                CueAssignmentResolver.AttributeValue.Slider(if (full) 255u else 0u)
+            is CueAssignmentResolver.AttributeValue.Setting ->
+                CueAssignmentResolver.AttributeValue.Setting(if (full) 255u else 0u)
+            is CueAssignmentResolver.AttributeValue.Colour ->
+                CueAssignmentResolver.AttributeValue.Colour(
                     if (full) ExtendedColour(Color(255, 255, 255), 255u, 255u, 255u)
                     else ExtendedColour(Color(0, 0, 0), 0u, 0u, 0u)
                 )
             // No identity — see [blend].
-            is CueAssignmentResolver.PropertyValue.Position -> like
+            is CueAssignmentResolver.AttributeValue.Position -> like
         }
     }
 
     private fun combine(
-        base: CueAssignmentResolver.PropertyValue,
-        incoming: CueAssignmentResolver.PropertyValue,
+        base: CueAssignmentResolver.AttributeValue,
+        incoming: CueAssignmentResolver.AttributeValue,
         mode: BlendMode,
-    ): CueAssignmentResolver.PropertyValue {
+    ): CueAssignmentResolver.AttributeValue {
         if (mode == BlendMode.OVERRIDE) return incoming
         fun scalar(a: Int, b: Int): Int = when (mode) {
             BlendMode.MAX -> maxOf(a, b)
@@ -1063,21 +1063,21 @@ internal object CueComposer {
         }.coerceIn(0, 255)
 
         return when (incoming) {
-            is CueAssignmentResolver.PropertyValue.Slider -> {
-                val a = (base as CueAssignmentResolver.PropertyValue.Slider).value.toInt()
-                CueAssignmentResolver.PropertyValue.Slider(scalar(a, incoming.value.toInt()).toUByte())
+            is CueAssignmentResolver.AttributeValue.Slider -> {
+                val a = (base as CueAssignmentResolver.AttributeValue.Slider).value.toInt()
+                CueAssignmentResolver.AttributeValue.Slider(scalar(a, incoming.value.toInt()).toUByte())
             }
             // Discrete channels have no arithmetic meaning, but they *are* single-byte channel
             // values — the resolver's own comment notes the Setting/Slider split is only a
             // labelling choice — so they combine numerically rather than being a special case.
-            is CueAssignmentResolver.PropertyValue.Setting -> {
-                val a = (base as CueAssignmentResolver.PropertyValue.Setting).channelValue.toInt()
-                CueAssignmentResolver.PropertyValue.Setting(scalar(a, incoming.channelValue.toInt()).toUByte())
+            is CueAssignmentResolver.AttributeValue.Setting -> {
+                val a = (base as CueAssignmentResolver.AttributeValue.Setting).channelValue.toInt()
+                CueAssignmentResolver.AttributeValue.Setting(scalar(a, incoming.channelValue.toInt()).toUByte())
             }
-            is CueAssignmentResolver.PropertyValue.Colour -> {
-                val a = (base as CueAssignmentResolver.PropertyValue.Colour).value
+            is CueAssignmentResolver.AttributeValue.Colour -> {
+                val a = (base as CueAssignmentResolver.AttributeValue.Colour).value
                 val b = incoming.value
-                CueAssignmentResolver.PropertyValue.Colour(
+                CueAssignmentResolver.AttributeValue.Colour(
                     ExtendedColour(
                         Color(
                             scalar(a.color.red, b.color.red),
@@ -1092,32 +1092,32 @@ internal object CueComposer {
             }
             // Axis values don't combine — MAX of two positions is a third position nobody asked
             // for. Ordered override is the only sane rule, and it is what LTP does anyway.
-            is CueAssignmentResolver.PropertyValue.Position -> incoming
+            is CueAssignmentResolver.AttributeValue.Position -> incoming
         }
     }
 
     private fun mix(
-        base: CueAssignmentResolver.PropertyValue,
-        combined: CueAssignmentResolver.PropertyValue,
+        base: CueAssignmentResolver.AttributeValue,
+        combined: CueAssignmentResolver.AttributeValue,
         amount: Double,
-    ): CueAssignmentResolver.PropertyValue {
+    ): CueAssignmentResolver.AttributeValue {
         if (amount >= 1.0) return combined
         fun lerp(a: Int, b: Int): Int = (a + (b - a) * amount).toInt().coerceIn(0, 255)
         return when (combined) {
-            is CueAssignmentResolver.PropertyValue.Slider -> {
-                val a = (base as CueAssignmentResolver.PropertyValue.Slider).value.toInt()
-                CueAssignmentResolver.PropertyValue.Slider(lerp(a, combined.value.toInt()).toUByte())
+            is CueAssignmentResolver.AttributeValue.Slider -> {
+                val a = (base as CueAssignmentResolver.AttributeValue.Slider).value.toInt()
+                CueAssignmentResolver.AttributeValue.Slider(lerp(a, combined.value.toInt()).toUByte())
             }
             // Discrete — snap at the halfway point, the same rule [CueAssignmentResolver.composeLtp]
             // uses for a Setting mid-crossfade. Interpolating an enum index is meaningless.
-            is CueAssignmentResolver.PropertyValue.Setting -> if (amount < 0.5) base else combined
-            is CueAssignmentResolver.PropertyValue.Colour -> {
-                val a = (base as CueAssignmentResolver.PropertyValue.Colour).value
-                CueAssignmentResolver.PropertyValue.Colour(blendExtendedColours(a, combined.value, amount))
+            is CueAssignmentResolver.AttributeValue.Setting -> if (amount < 0.5) base else combined
+            is CueAssignmentResolver.AttributeValue.Colour -> {
+                val a = (base as CueAssignmentResolver.AttributeValue.Colour).value
+                CueAssignmentResolver.AttributeValue.Colour(blendExtendedColours(a, combined.value, amount))
             }
-            is CueAssignmentResolver.PropertyValue.Position -> {
-                val a = base as CueAssignmentResolver.PropertyValue.Position
-                CueAssignmentResolver.PropertyValue.Position(
+            is CueAssignmentResolver.AttributeValue.Position -> {
+                val a = base as CueAssignmentResolver.AttributeValue.Position
+                CueAssignmentResolver.AttributeValue.Position(
                     lerp(a.pan.toInt(), combined.pan.toInt()).toUByte(),
                     lerp(a.tilt.toInt(), combined.tilt.toInt()).toUByte(),
                 )

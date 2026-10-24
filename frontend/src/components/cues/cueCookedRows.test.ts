@@ -10,7 +10,7 @@ import type { CookedRow } from '@/api/cuesApi'
 const row = (over: Partial<CookedRow>): CookedRow => ({
   targetType: 'fixture',
   targetKey: 'a',
-  propertyName: 'dimmer',
+  attribute: 'dimmer',
   value: '128',
   ...over,
 })
@@ -76,9 +76,9 @@ describe('buildStaticRows', () => {
   it('parses the three value shapes', () => {
     const built = buildStaticRows(
       [
-        row({ propertyName: 'rgbColour', value: '#ff8800' }),
-        row({ propertyName: 'position', value: '40,60' }),
-        row({ propertyName: 'dimmer', value: '0' }),
+        row({ attribute: 'rgbColour', value: '#ff8800' }),
+        row({ attribute: 'position', value: '40,60' }),
+        row({ attribute: 'dimmer', value: '0' }),
       ],
       FIXTURES,
       true,

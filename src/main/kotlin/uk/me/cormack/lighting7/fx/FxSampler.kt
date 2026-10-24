@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.KeyStackLayer.HeldBackReason
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -47,8 +47,8 @@ internal class FxSampler(
         /** What [key] holds for [target]'s property on the stage now: read, never written. */
         fun current(target: FxTarget, key: String): FxOutput?
 
-        /** Whether a running FX covers [key]'s [property], so the compose pass resets it every pass. */
-        fun coveredByRunning(key: String, property: String): Boolean
+        /** Whether a running FX covers [key]'s [attribute], so the compose pass resets it every pass. */
+        fun coveredByRunning(key: String, attribute: String): Boolean
 
         /** Whether every channel of [target]'s property on [fixture] is parked (Layer 1). */
         fun parked(target: FxTarget, fixture: GroupableFixture): Boolean
@@ -161,8 +161,8 @@ internal class FxSampler(
         val heldBack = view.heldBack()
         val effects = HashMap<FxInstance, Fx?>()
         val representative = HashSet<FxInstance>()
-        val attributes = stack.map { it.target.propertyName }.distinct().mapNotNull { attribute ->
-            val onAttribute = stack.filter { it.target.propertyName == attribute }
+        val attributes = stack.map { it.target.attribute }.distinct().mapNotNull { attribute ->
+            val onAttribute = stack.filter { it.target.attribute == attribute }
             val sampledRows = rowKeys.mapNotNull { key ->
                 val painting = onAttribute.mapNotNull { effect -> membersOf(effect)[key]?.let { effect to it } }
                 if (painting.isEmpty()) null
@@ -446,14 +446,14 @@ internal class FxSampler(
      * [underneath] with only the bundled emitters [planes] names, the rest at 0: what a head reads
      * where it has no such emitter, which a step crosses from as the target does.
      */
-    private fun withPlanes(underneath: FxOutput, planes: Set<PropertyCategory>): FxOutput {
+    private fun withPlanes(underneath: FxOutput, planes: Set<AttributeCategory>): FxOutput {
         val colour = (underneath as? FxOutput.Colour)?.color ?: return underneath
         return FxOutput.Colour(
             ExtendedColour(
                 colour.color,
-                white = if (PropertyCategory.WHITE in planes) colour.white else 0u,
-                amber = if (PropertyCategory.AMBER in planes) colour.amber else 0u,
-                uv = if (PropertyCategory.UV in planes) colour.uv else 0u,
+                white = if (AttributeCategory.WHITE in planes) colour.white else 0u,
+                amber = if (AttributeCategory.AMBER in planes) colour.amber else 0u,
+                uv = if (AttributeCategory.UV in planes) colour.uv else 0u,
             ),
         )
     }
@@ -495,15 +495,15 @@ internal class FxSampler(
     private class Series private constructor(
         private val kind: FxSampleKind,
         private val n: Int,
-        private val planes: Set<PropertyCategory>,
+        private val planes: Set<AttributeCategory>,
         private val steps: Boolean,
     ) {
         private val a = ByteArray(n)
         private val b = if (kind != FxSampleKind.SLIDER) ByteArray(n) else null
         private val c = if (kind == FxSampleKind.COLOUR) ByteArray(n) else null
-        private val white = if (PropertyCategory.WHITE in planes) ByteArray(n) else null
-        private val amber = if (PropertyCategory.AMBER in planes) ByteArray(n) else null
-        private val uv = if (PropertyCategory.UV in planes) ByteArray(n) else null
+        private val white = if (AttributeCategory.WHITE in planes) ByteArray(n) else null
+        private val amber = if (AttributeCategory.AMBER in planes) ByteArray(n) else null
+        private val uv = if (AttributeCategory.UV in planes) ByteArray(n) else null
         private val indices = if (steps) IntArray(n) else null
         private var labels: List<String> = emptyList()
 
@@ -542,7 +542,7 @@ internal class FxSampler(
         }
 
         companion object {
-            fun of(kind: FxSampleKind, n: Int, planes: Set<PropertyCategory>, steps: Boolean = false) = Series(kind, n, planes, steps)
+            fun of(kind: FxSampleKind, n: Int, planes: Set<AttributeCategory>, steps: Boolean = false) = Series(kind, n, planes, steps)
         }
     }
 
@@ -568,7 +568,7 @@ internal class FxSampler(
         /** A sample landing within this much of a tick counts as on it, against floating-point division. */
         private const val TICK_EPSILON = 1e-6
 
-        private val BUNDLED = setOf(PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV)
+        private val BUNDLED = setOf(AttributeCategory.WHITE, AttributeCategory.AMBER, AttributeCategory.UV)
 
         private fun labelsOf(steps: StepList): List<String> = when (steps) {
             is PaletteStepList -> steps.steps.map { it.name }

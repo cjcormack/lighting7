@@ -34,7 +34,7 @@ class PersistedFixtureReferenceValidatorTest {
     // ── Cue-style targeted reference ──────────────────────────────────────
 
     @Test
-    fun `live fixture + valid property returns Ok`() {
+    fun `live fixture + valid attribute returns Ok`() {
         val fixtures = fixturesWithHexGroup()
         assertEquals(
             AssignmentHealth.Ok,
@@ -64,7 +64,7 @@ class PersistedFixtureReferenceValidatorTest {
             PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "colour", allowElements = true),
             "the colour alias resolves on the head's own catalogue",
         )
-        assertIs<AssignmentHealth.MissingProperty>(
+        assertIs<AssignmentHealth.MissingAttribute>(
             PersistedFixtureReferenceValidator.validateTargetedReference(fixtures, cell, "dimmer", allowElements = true),
             "a head answers from its own properties — it has no dimmer",
         )
@@ -74,7 +74,7 @@ class PersistedFixtureReferenceValidatorTest {
     }
 
     @Test
-    fun `live group + valid property returns Ok`() {
+    fun `live group + valid attribute returns Ok`() {
         val fixtures = fixturesWithHexGroup()
         assertEquals(
             AssignmentHealth.Ok,
@@ -122,23 +122,23 @@ class PersistedFixtureReferenceValidatorTest {
     }
 
     @Test
-    fun `fixture exists but property removed returns MissingProperty`() {
+    fun `fixture exists but attribute removed returns MissingAttribute`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
-            fixtures, TargetRef.Fixture("hex-1"), "nonsenseProperty",
+            fixtures, TargetRef.Fixture("hex-1"), "nonsenseAttribute",
         )
-        val missing = assertIs<AssignmentHealth.MissingProperty>(health)
+        val missing = assertIs<AssignmentHealth.MissingAttribute>(health)
         assertEquals("hex-1", missing.targetKey)
-        assertEquals("nonsenseProperty", missing.propertyName)
+        assertEquals("nonsenseAttribute", missing.attribute)
     }
 
     @Test
-    fun `group-level missing property returns MissingProperty referencing the group key`() {
+    fun `group-level missing attribute returns MissingAttribute referencing the group key`() {
         val fixtures = fixturesWithHexGroup()
         val health = PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures, TargetRef.Group("front-wash"), "nonsense",
         )
-        val missing = assertIs<AssignmentHealth.MissingProperty>(health)
+        val missing = assertIs<AssignmentHealth.MissingAttribute>(health)
         assertEquals("front-wash", missing.targetKey)
     }
 
@@ -176,15 +176,15 @@ class PersistedFixtureReferenceValidatorTest {
     // ── Preset-style preset-local reference ───────────────────────────────
 
     @Test
-    fun `preset with valid fixtureType + property returns Ok`() {
+    fun `preset with valid fixtureType + attribute returns Ok`() {
         // "hex" is the typeKey for HexFixture (WithDimmer, WithColour, WithUv, WithStrobe).
         assertEquals(
             AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("hex", "dimmer"),
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference("hex", "dimmer"),
         )
         assertEquals(
             AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("hex", "rgbColour"),
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference("hex", "rgbColour"),
         )
     }
 
@@ -194,35 +194,35 @@ class PersistedFixtureReferenceValidatorTest {
         // dead in the UI when the code simply lacks the profile yet would be misleading.
         assertEquals(
             AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference(
                 "not-a-real-type-key", "dimmer",
             ),
         )
     }
 
     @Test
-    fun `preset with unknown property on known fixtureType returns MissingProperty`() {
-        val health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
-            "hex", "nonsenseProperty",
+    fun `preset with unknown attribute on known fixtureType returns MissingAttribute`() {
+        val health = PersistedFixtureReferenceValidator.validatePresetAttributeReference(
+            "hex", "nonsenseAttribute",
         )
-        val missing = assertIs<AssignmentHealth.MissingProperty>(health)
+        val missing = assertIs<AssignmentHealth.MissingAttribute>(health)
         assertEquals("hex", missing.targetKey)
-        assertEquals("nonsenseProperty", missing.propertyName)
+        assertEquals("nonsenseAttribute", missing.attribute)
     }
 
     @Test
     fun `preset colour alias canonicalises`() {
         // All three aliases should match the underlying rgbColour descriptor.
         assertTrue(
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("hex", "colour")
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference("hex", "colour")
                 is AssignmentHealth.Ok,
         )
         assertTrue(
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("hex", "color")
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference("hex", "color")
                 is AssignmentHealth.Ok,
         )
         assertTrue(
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference("hex", "rgbColour")
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference("hex", "rgbColour")
                 is AssignmentHealth.Ok,
         )
     }
@@ -235,7 +235,7 @@ class PersistedFixtureReferenceValidatorTest {
         // descriptors include "pan" and "tilt" as common properties.
         assertEquals(
             AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference(
                 "slender-beam-bar-quad-14ch", "pan", elementKey = "head-0",
             ),
         )
@@ -245,27 +245,27 @@ class PersistedFixtureReferenceValidatorTest {
     fun `preset element-scoped position synthetic name validates via pan+tilt`() {
         assertEquals(
             AssignmentHealth.Ok,
-            PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+            PersistedFixtureReferenceValidator.validatePresetAttributeReference(
                 "slender-beam-bar-quad-14ch", "position", elementKey = "head-1",
             ),
         )
     }
 
     @Test
-    fun `preset element-scoped on single-head fixture returns MissingProperty`() {
-        // "hex" has no elements — no elementGroupProperties → any element-scoped
+    fun `preset element-scoped on single-head fixture returns MissingAttribute`() {
+        // "hex" has no elements — no elementGroupAttributes → any element-scoped
         // assignment is dead.
-        val health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+        val health = PersistedFixtureReferenceValidator.validatePresetAttributeReference(
             "hex", "dimmer", elementKey = "head-0",
         )
-        assertIs<AssignmentHealth.MissingProperty>(health)
+        assertIs<AssignmentHealth.MissingAttribute>(health)
     }
 
     @Test
-    fun `preset element-scoped unknown property on multi-head returns MissingProperty`() {
-        val health = PersistedFixtureReferenceValidator.validatePresetPropertyReference(
+    fun `preset element-scoped unknown attribute on multi-head returns MissingAttribute`() {
+        val health = PersistedFixtureReferenceValidator.validatePresetAttributeReference(
             "slender-beam-bar-quad-14ch", "nonsense", elementKey = "head-0",
         )
-        assertIs<AssignmentHealth.MissingProperty>(health)
+        assertIs<AssignmentHealth.MissingAttribute>(health)
     }
 }

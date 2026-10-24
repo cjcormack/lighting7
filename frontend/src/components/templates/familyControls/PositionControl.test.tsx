@@ -31,7 +31,7 @@ const OLD: PaletteSummary = {
   family: 'POSITION',
   kind: 'value',
   isGeneric: true,
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'deg:270,135' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value: 'deg:270,135' }],
 } as unknown as PaletteSummary
 
 describe('PositionControl', () => {

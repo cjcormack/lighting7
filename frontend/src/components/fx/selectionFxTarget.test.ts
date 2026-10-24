@@ -33,7 +33,7 @@ describe('starting one', () => {
     const targets = [{ type: 'fixture' as const, key: 'par-2' }, { type: 'group' as const, key: 'wash' }]
     const addition = fxCreateAddition(
       { type: 'selection', targets },
-      { fxType: 'Pulse', propertyName: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', phaseOffset: 0, parameters: {} },
+      { fxType: 'Pulse', attribute: 'dimmer', cycle: 4, blendMode: 'OVERRIDE', phaseOffset: 0, parameters: {} },
     )
     expect(addition.kind).toBe('fixture')
     expect(addition.payload).toMatchObject({ targets })

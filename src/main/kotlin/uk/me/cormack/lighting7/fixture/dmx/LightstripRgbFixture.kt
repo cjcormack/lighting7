@@ -4,9 +4,9 @@ import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.FixtureKind
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 
 /**
@@ -45,7 +45,7 @@ class LightstripRgbFixture(
     override fun withTransaction(transaction: ControllerTransaction): LightstripRgbFixture =
         LightstripRgbFixture(this, transaction)
 
-    @FixtureProperty(category = PropertyCategory.COLOUR)
+    @FixtureAttribute(category = AttributeCategory.COLOUR)
     override val rgbColour = DmxColour(
         transaction,
         universe,

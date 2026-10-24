@@ -356,7 +356,7 @@ function CreateBindingSheet({
   const continuous = control.type === "fader" || control.type === "encoder"
   const [target, setTarget] = useState<BindingTarget>(
     continuous
-      ? { type: "groupProperty", groupName: "", propertyName: "dimmer" }
+      ? { type: "groupAttribute", groupName: "", attribute: "dimmer" }
       : { type: "blackout" },
   )
   const [bank, setBank] = useState<string | null>(activeBank)

@@ -149,7 +149,7 @@ The programmer's authoring loop, exposed as three REST endpoints under `/api/res
 WS channel can't carry, and because they mutate cues).
 
 **Mask.** All three can be scoped to the console attribute families — `INTENSITY`, `POSITION`,
-`COLOUR`, `BEAM` (`fx/PropertyMask.kt`). Deliberately coarser than `PropertyCategory`: the same
+`COLOUR`, `BEAM` (`fx/AttributeMask.kt`). Deliberately coarser than `PropertyCategory`: the same
 physical attribute is annotated differently across heads (a gobo wheel is a `DmxFixtureSetting` on
 one fixture and a plain slider on another), so a category-level mask would be fixture-dependent and
 silently miss heads. Omitting the mask, or naming all four groups, means "everything".
@@ -335,7 +335,7 @@ Deterministic per-cue state — the "this cue asserts property X = value" layer.
 
 ### Composition rules by `PropertyCategory`
 
-Each property's composition rule is declared by its category. Categories are defined in [FixtureProperty.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureProperty.kt).
+Each property's composition rule is declared by its category. Categories are defined in [FixtureAttribute.kt](../src/main/kotlin/uk/me/cormack/lighting7/fixture/FixtureAttribute.kt).
 
 | Category | Default rule | Reasoning |
 |---|---|---|

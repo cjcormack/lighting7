@@ -1,5 +1,5 @@
 import { parseProgrammerValue } from '@/lib/programmerValue'
-import type { CuePropertyAssignment } from '@/api/cuesApi'
+import type { CueAttributeAssignment } from '@/api/cuesApi'
 import type { StagedValue } from '@/components/fixtures-list/useRowOwnership'
 
 /** A cue's own row is addressed by its target's kind as well as its key: a group row and a fixture row are two rows. */
@@ -14,26 +14,26 @@ const SEP = '\u0000'
  * How the cue grid addresses an own row: target type, target key and the **canonical** property,
  * NUL-joined (a fixture key may hold anything else — `lookRowKey`'s reason).
  */
-export function cueRowKey(targetType: CueRowTargetType, targetKey: string, propertyName: string): string {
-  return `${targetType}${SEP}${targetKey}${SEP}${canonicalCueProperty(propertyName)}`
+export function cueRowKey(targetType: CueRowTargetType, targetKey: string, attribute: string): string {
+  return `${targetType}${SEP}${targetKey}${SEP}${canonicalCueAttribute(attribute)}`
 }
 
-function splitCueRowKey(key: string): { targetType: CueRowTargetType; targetKey: string; propertyName: string } | null {
+function splitCueRowKey(key: string): { targetType: CueRowTargetType; targetKey: string; attribute: string } | null {
   const parts = key.split(SEP)
   if (parts.length !== 3) return null
-  const [targetType, targetKey, propertyName] = parts
+  const [targetType, targetKey, attribute] = parts
   if (targetType !== 'fixture' && targetType !== 'group') return null
-  return { targetType, targetKey, propertyName }
+  return { targetType, targetKey, attribute }
 }
 
 /**
- * The desk's `canonicalPropertyName` (`fx/PersistedFixtureReferenceValidator.kt`): the RGB colour is
+ * The desk's `canonicalAttributeName` (`fx/PersistedFixtureReferenceValidator.kt`): the RGB colour is
  * stored under any of three spellings and composes as `rgbColour`. Mirrored so a row the cue holds as
  * `colour` and an edit the grid makes on `rgbColour` are one row, not two.
  */
-export function canonicalCueProperty(propertyName: string): string {
-  const lower = propertyName.toLowerCase()
-  return lower === 'colour' || lower === 'color' || lower === 'rgbcolour' ? 'rgbColour' : propertyName
+export function canonicalCueAttribute(attribute: string): string {
+  const lower = attribute.toLowerCase()
+  return lower === 'colour' || lower === 'color' || lower === 'rgbcolour' ? 'rgbColour' : attribute
 }
 
 /** Two value strings say the same thing — compared parsed, since the desk may spell one differently. */
@@ -73,16 +73,16 @@ export class CueRowDraft {
     return this.entries.size
   }
 
-  set(targetType: CueRowTargetType, targetKey: string, propertyName: string, value: string): void {
-    this.put(cueRowKey(targetType, targetKey, propertyName), { kind: 'set', value })
+  set(targetType: CueRowTargetType, targetKey: string, attribute: string, value: string): void {
+    this.put(cueRowKey(targetType, targetKey, attribute), { kind: 'set', value })
   }
 
-  remove(targetType: CueRowTargetType, targetKey: string, propertyName: string): void {
-    this.put(cueRowKey(targetType, targetKey, propertyName), { kind: 'removed' })
+  remove(targetType: CueRowTargetType, targetKey: string, attribute: string): void {
+    this.put(cueRowKey(targetType, targetKey, attribute), { kind: 'removed' })
   }
 
-  get(targetType: CueRowTargetType, targetKey: string, propertyName: string): CueRowDraftEntry | undefined {
-    return this.entries.get(cueRowKey(targetType, targetKey, propertyName))
+  get(targetType: CueRowTargetType, targetKey: string, attribute: string): CueRowDraftEntry | undefined {
+    return this.entries.get(cueRowKey(targetType, targetKey, attribute))
   }
 
   /** Every entry, by key — the pending edits a flush writes. */
@@ -140,10 +140,10 @@ export class CueRowDraft {
    * Forget the entries the server now states: a set whose own row holds that value, a removal whose
    * own row is gone — each only once [cookAt], the cook's fetch time, is after the entry's save.
    */
-  reconcile(stored: readonly CuePropertyAssignment[], cookAt: number): void {
+  reconcile(stored: readonly CueAttributeAssignment[], cookAt: number): void {
     const byKey = new Map<string, string[]>()
     for (const row of stored) {
-      const key = cueRowKey(row.targetType, row.targetKey, row.propertyName)
+      const key = cueRowKey(row.targetType, row.targetKey, row.attribute)
       const list = byKey.get(key)
       if (list) list.push(row.value)
       else byKey.set(key, [row.value])
@@ -210,7 +210,7 @@ export class CueRowDraft {
 }
 
 /**
- * The cue's `propertyAssignments` with [entries] applied — the whole list a flush PATCHes, built
+ * The cue's `attributeAssignments` with [entries] applied — the whole list a flush PATCHes, built
  * from the cue **as it stands at flush time**, never from a snapshot taken when the edit began:
  * the PATCH replaces the list, so a stale base would resend another desk's rows as we last saw them.
  *
@@ -220,14 +220,14 @@ export class CueRowDraft {
  * appended after the highest `sortOrder`.
  */
 export function applyCueRowEntries(
-  stored: readonly CuePropertyAssignment[],
+  stored: readonly CueAttributeAssignment[],
   entries: ReadonlyMap<string, CueRowDraftEntry>,
-): CuePropertyAssignment[] {
+): CueAttributeAssignment[] {
   if (entries.size === 0) return stored.map(stripRow)
-  const out: CuePropertyAssignment[] = []
+  const out: CueAttributeAssignment[] = []
   const landed = new Set<string>()
   for (const row of stored) {
-    const key = cueRowKey(row.targetType, row.targetKey, row.propertyName)
+    const key = cueRowKey(row.targetType, row.targetKey, row.attribute)
     const entry = entries.get(key)
     if (entry == null) {
       out.push(stripRow(row))
@@ -249,11 +249,11 @@ export function applyCueRowEntries(
 }
 
 /** A stored row in the shape the write takes — its own fields, nothing a read adds. */
-function stripRow(row: CuePropertyAssignment): CuePropertyAssignment {
-  const out: CuePropertyAssignment = {
+function stripRow(row: CueAttributeAssignment): CueAttributeAssignment {
+  const out: CueAttributeAssignment = {
     targetType: row.targetType,
     targetKey: row.targetKey,
-    propertyName: row.propertyName,
+    attribute: row.attribute,
     value: row.value,
   }
   if (row.fadeDurationMs !== undefined) out.fadeDurationMs = row.fadeDurationMs
@@ -263,9 +263,9 @@ function stripRow(row: CuePropertyAssignment): CuePropertyAssignment {
 }
 
 /** The stored rows under [keys], as the write takes them — what a save replaced, kept for its Undo. */
-export function rowsWithKeys(stored: readonly CuePropertyAssignment[], keys: readonly string[]): CuePropertyAssignment[] {
+export function rowsWithKeys(stored: readonly CueAttributeAssignment[], keys: readonly string[]): CueAttributeAssignment[] {
   const wanted = new Set(keys)
-  return stored.filter((row) => wanted.has(cueRowKey(row.targetType, row.targetKey, row.propertyName))).map(stripRow)
+  return stored.filter((row) => wanted.has(cueRowKey(row.targetType, row.targetKey, row.attribute))).map(stripRow)
 }
 
 /**
@@ -275,12 +275,12 @@ export function rowsWithKeys(stored: readonly CuePropertyAssignment[], keys: rea
  * the first row ordered after it.
  */
 export function restoreCueRows(
-  stored: readonly CuePropertyAssignment[],
+  stored: readonly CueAttributeAssignment[],
   keys: readonly string[],
-  rows: readonly CuePropertyAssignment[],
-): CuePropertyAssignment[] {
+  rows: readonly CueAttributeAssignment[],
+): CueAttributeAssignment[] {
   const touched = new Set(keys)
-  const out = stored.filter((row) => !touched.has(cueRowKey(row.targetType, row.targetKey, row.propertyName))).map(stripRow)
+  const out = stored.filter((row) => !touched.has(cueRowKey(row.targetType, row.targetKey, row.attribute))).map(stripRow)
   for (const row of rows) {
     const order = row.sortOrder
     const at = order == null ? -1 : out.findIndex((other) => other.sortOrder != null && other.sortOrder > order)

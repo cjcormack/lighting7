@@ -11,8 +11,8 @@ import {
   serializePaletteIntent,
   paletteRowsSwatch,
   describePaletteRows,
-  palettePropertyFor,
-  EMITTER_PROPERTIES,
+  paletteAttributeFor,
+  EMITTER_ATTRIBUTES,
 } from '@/lib/paletteIntent'
 import { parsePaletteRefUuid, serializePaletteRef } from './colourUtils'
 
@@ -73,7 +73,7 @@ export function isOfferableColourPalette(template: PaletteSummary): boolean {
 export function isSpreadColourPalette(template: PaletteSummary): boolean {
   return (
     isOfferableColourPalette(template) &&
-    (template.rows ?? []).some((row) => palettePropertyFor(row.propertyName)?.intent === 'colour')
+    (template.rows ?? []).some((row) => paletteAttributeFor(row.attribute)?.intent === 'colour')
   )
 }
 const isOfferable = isOfferableColourPalette
@@ -188,7 +188,7 @@ export function FxColourPaletteRow({
     const trimmed = name.trim()
     if (!trimmed) return
     try {
-      const emitters = EMITTER_PROPERTIES.filter((name) => (currentEmitters?.[name] ?? 0) > 0)
+      const emitters = EMITTER_ATTRIBUTES.filter((name) => (currentEmitters?.[name] ?? 0) > 0)
       const created = await createPalette({
         projectId: projectIdNum,
         name: trimmed,
@@ -196,7 +196,7 @@ export function FxColourPaletteRow({
           {
             targetType: DEFERRED_TARGET_TYPE,
             targetKey: '',
-            propertyName: 'rgbColour',
+            attribute: 'rgbColour',
             value: serializePaletteIntent({
               kind: 'colour',
               hex: currentHex,
@@ -209,7 +209,7 @@ export function FxColourPaletteRow({
           ...emitters.map((name) => ({
             targetType: DEFERRED_TARGET_TYPE,
             targetKey: '',
-            propertyName: name,
+            attribute: name,
             value: serializePaletteIntent({ kind: 'level', value: currentEmitters?.[name] ?? 0 }),
           })),
         ],

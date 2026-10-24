@@ -21,7 +21,7 @@ vi.mock('@/store/park', () => ({
 vi.mock('@/store/errorToastMiddleware', () => ({ ignoreReportedError: () => {} }))
 vi.mock('@/hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
 // Live values, driven directly: channel 7 sits at 100, everything else at 0.
-vi.mock('@/hooks/usePropertyValues', () => ({
+vi.mock('@/hooks/useAttributeValues', () => ({
   useChannelValue: ({ channelNo }: { channelNo: number }) => (channelNo === 7 ? 100 : 0),
 }))
 // The programmer as the ownership tests set it: key states by `target|property`, and the
@@ -39,14 +39,14 @@ vi.mock('@/api/lightingApi', () => ({
     channels: { get: (_u: number, c: number) => (c === 7 ? 100 : 0) },
     programmer: {
       subscribe: () => ({ unsubscribe() {} }),
-      subscribeToKey: (targetKey: string, propertyName: string, fn: (state: unknown) => void) => {
-        const key = `${targetKey}|${propertyName}`
+      subscribeToKey: (targetKey: string, attribute: string, fn: (state: unknown) => void) => {
+        const key = `${targetKey}|${attribute}`
         const set = keyListeners.get(key) ?? new Set()
         set.add(fn)
         keyListeners.set(key, set)
         return { unsubscribe: () => set.delete(fn) }
       },
-      getKeyState: (targetKey: string, propertyName: string) => keyStates.get(`${targetKey}|${propertyName}`) ?? {},
+      getKeyState: (targetKey: string, attribute: string) => keyStates.get(`${targetKey}|${attribute}`) ?? {},
       getState: () => ({ channels: sidebandChannels }),
       isBlind: () => false,
     },
@@ -73,22 +73,22 @@ import { DmxSheet, DMX_ROW_HEIGHT, DMX_ROW_WIDTHS, resetOverflowObserver } from 
 import { resetEditorSurfaceMedia } from '@/components/editor/EditorSurface'
 
 const MAPPINGS = {
-  1: { fixtureKey: 'par-1', fixtureName: 'Front PAR 1', description: 'Dim', properties: [{ targetKey: 'par-1', propertyName: 'dimmer' }] },
-  2: { fixtureKey: 'par-1', fixtureName: 'Front PAR 1', description: 'Red', properties: [{ targetKey: 'par-1', propertyName: 'rgbColour' }] },
+  1: { fixtureKey: 'par-1', fixtureName: 'Front PAR 1', description: 'Dim', attributes: [{ targetKey: 'par-1', attribute: 'dimmer' }] },
+  2: { fixtureKey: 'par-1', fixtureName: 'Front PAR 1', description: 'Red', attributes: [{ targetKey: 'par-1', attribute: 'rgbColour' }] },
   // A bundled amber, as the desk names it: its own slider *and* a component of the colour.
   3: {
     fixtureKey: 'par-1',
     fixtureName: 'Front PAR 1',
     description: 'amber',
-    properties: [
-      { targetKey: 'par-1', propertyName: 'rgbColour' },
-      { targetKey: 'par-1', propertyName: 'amber' },
+    attributes: [
+      { targetKey: 'par-1', attribute: 'rgbColour' },
+      { targetKey: 'par-1', attribute: 'amber' },
     ],
   },
-  7: { fixtureKey: 'par-2', fixtureName: 'Front PAR 2', description: 'Dim', properties: [{ targetKey: 'par-2', propertyName: 'dimmer' }] },
-  8: { fixtureKey: 'par-2', fixtureName: 'Front PAR 2', description: 'Red', properties: [{ targetKey: 'par-2', propertyName: 'rgbColour' }] },
+  7: { fixtureKey: 'par-2', fixtureName: 'Front PAR 2', description: 'Dim', attributes: [{ targetKey: 'par-2', attribute: 'dimmer' }] },
+  8: { fixtureKey: 'par-2', fixtureName: 'Front PAR 2', description: 'Red', attributes: [{ targetKey: 'par-2', attribute: 'rgbColour' }] },
   // A head of a pixel bar: the desk names the element's keys; nothing lifts a write onto them.
-  17: { fixtureKey: 'bar', fixtureName: 'Bar', description: 'Head 1 White', properties: [{ targetKey: 'bar.pixel-0', propertyName: 'white' }] },
+  17: { fixtureKey: 'bar', fixtureName: 'Bar', description: 'Head 1 White', attributes: [{ targetKey: 'bar.pixel-0', attribute: 'white' }] },
 }
 
 const ENTRY = { value: '50', owner: 'web', touched: true, owners: ['web'] }
@@ -325,7 +325,7 @@ describe('DmxSheet', () => {
   })
 
   it('says the whole of a cell on hover, whatever the ellipsis cut off', () => {
-    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', propertyName: 'rgbColour', ...ENTRY } })
+    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', attribute: 'rgbColour', ...ENTRY } })
     draw()
     expect(cell(2).closest('[title]')).toHaveAttribute('title', '002 · Front PAR 1 · Red — Programmer')
     expect(cell(1).closest('[title]')).toHaveAttribute('title', '001 · Front PAR 1 · Dim')
@@ -345,7 +345,7 @@ describe('DmxSheet', () => {
   })
 
   it('gives the run edge the fixture’s colour, and nothing else on the cell (tables-colours plan D8)', () => {
-    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', propertyName: 'rgbColour', ...ENTRY } })
+    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', attribute: 'rgbColour', ...ENTRY } })
     // par-1 is red; par-2 carries none; the bar's head takes its fixture's.
     draw({ colours: new Map([['par-1', 'red'], ['bar', 'cyan']]) })
     const edgeOf = (channelNo: number) => cell(channelNo).closest('[data-cell]')!.querySelector<HTMLElement>('[data-run-edge]')!
@@ -368,8 +368,8 @@ describe('DmxSheet', () => {
     // The ring is an inset box-shadow on the ownership wrapper, which paints beneath the wrapper's
     // children: any background on the face covers it. The alternating footprint tint did, so an
     // owned address on a tinted run read fainter than the same owner beside it.
-    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', propertyName: 'rgbColour', ...ENTRY } })
-    keyStates.set('par-2|rgbColour', { entry: { targetKey: 'par-2', propertyName: 'rgbColour', ...ENTRY } })
+    keyStates.set('par-1|rgbColour', { entry: { targetKey: 'par-1', attribute: 'rgbColour', ...ENTRY } })
+    keyStates.set('par-2|rgbColour', { entry: { targetKey: 'par-2', attribute: 'rgbColour', ...ENTRY } })
     draw({ parkValueMap: new Map([[3, 40]]) })
     for (const channelNo of [2, 3, 8]) {
       const wrapper = cell(channelNo).closest('[data-ownership]')!
@@ -387,7 +387,7 @@ describe('DmxSheet', () => {
   it("rings an address through whichever of the desk's keys holds the entry", () => {
     // The write lifted to the amber slider — the second key. Reading only the colour (what the
     // sheet's own descriptor map did) left a value set here drawn as idle.
-    keyStates.set('par-1|amber', { entry: { targetKey: 'par-1', propertyName: 'amber', ...ENTRY } })
+    keyStates.set('par-1|amber', { entry: { targetKey: 'par-1', attribute: 'amber', ...ENTRY } })
     draw()
     expect(ownershipClass(3)).toContain('ring-primary')
     expect(ownershipClass(3)).not.toContain('border-dashed')
@@ -395,8 +395,8 @@ describe('DmxSheet', () => {
   })
 
   it('draws one owner per address when its keys disagree — the strongest, never dashed', () => {
-    keyStates.set('par-1|rgbColour', { provenance: { targetKey: 'par-1', propertyName: 'rgbColour', source: 'CUE' } })
-    keyStates.set('par-1|amber', { entry: { targetKey: 'par-1', propertyName: 'amber', ...ENTRY } })
+    keyStates.set('par-1|rgbColour', { provenance: { targetKey: 'par-1', attribute: 'rgbColour', source: 'CUE' } })
+    keyStates.set('par-1|amber', { entry: { targetKey: 'par-1', attribute: 'amber', ...ENTRY } })
     draw()
     expect(ownershipClass(3)).toContain('ring-primary')
     expect(ownershipClass(3)).not.toContain('border-dashed')
@@ -406,18 +406,18 @@ describe('DmxSheet', () => {
   it('moves a ring when the desk pushes a key, without a remount', () => {
     draw()
     expect(ownershipClass(3)).toContain('opacity-55')
-    act(() => pushKey('par-1|amber', { entry: { targetKey: 'par-1', propertyName: 'amber', ...ENTRY } }))
+    act(() => pushKey('par-1|amber', { entry: { targetKey: 'par-1', attribute: 'amber', ...ENTRY } }))
     expect(ownershipClass(3)).toContain('ring-primary')
     // The other key of the same address pushing afterwards must not lose the first one's state.
-    act(() => pushKey('par-1|rgbColour', { provenance: { targetKey: 'par-1', propertyName: 'rgbColour', source: 'CUE' } }))
+    act(() => pushKey('par-1|rgbColour', { provenance: { targetKey: 'par-1', attribute: 'rgbColour', source: 'CUE' } }))
     expect(ownershipClass(3)).toContain('ring-primary')
     act(() => pushKey('par-1|amber', {}))
     expect(ownershipClass(3)).toContain('ring-sky-500')
   })
 
   it('lets a sideband slot beat a cue on its address, but never an effect', () => {
-    keyStates.set('par-1|rgbColour', { provenance: { targetKey: 'par-1', propertyName: 'rgbColour', source: 'CUE' } })
-    keyStates.set('par-2|rgbColour', { provenance: { targetKey: 'par-2', propertyName: 'rgbColour', source: 'FX' } })
+    keyStates.set('par-1|rgbColour', { provenance: { targetKey: 'par-1', attribute: 'rgbColour', source: 'CUE' } })
+    keyStates.set('par-2|rgbColour', { provenance: { targetKey: 'par-2', attribute: 'rgbColour', source: 'FX' } })
     sidebandChannels = [
       { universe: 1, channel: 2, value: 80, owner: 'web', touched: true },
       { universe: 1, channel: 8, value: 80, owner: 'web', touched: true },

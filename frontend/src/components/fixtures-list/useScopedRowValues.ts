@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
 import { lightingApi } from '../../api/lightingApi'
-import { familyForCategory, parsePropertyMask } from '../../lib/attributeFamily'
-import { columnFamily, resolutionPropertyNames } from './columns'
+import { familyForCategory, parseAttributeMask } from '../../lib/attributeFamily'
+import { columnFamily, resolutionAttributeNames } from './columns'
 import { cellValueFromParts, isLocalEntry, stagedPartFor } from './scopedCellValue'
 import { parseProgrammerEntryValue, parseProgrammerValue } from '../../lib/programmerValue'
 import { useProgrammerScope } from '../programmer/ProgrammerScope'
@@ -107,8 +107,8 @@ function useLocalRowValues(cells: readonly RowCell[]): RowCellStates {
 }
 
 function computeLocalRowStates(cells: readonly RowCell[]): RowCellStates {
-  const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-    const state = lightingApi.programmer.getKeyState(targetKey, propertyName)
+  const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+    const state = lightingApi.programmer.getKeyState(targetKey, attribute)
     if (!isLocalEntry(state)) return undefined
     return parseProgrammerEntryValue(state.entry!) ?? undefined
   }
@@ -147,7 +147,7 @@ function useLayerRowValues(
       cells
         .flatMap((cell) =>
           cell.resolutions.flatMap((res, i) =>
-            resolutionPropertyNames(res).map((name) => lookRowKey(cell.targetKeys[i], name)),
+            resolutionAttributeNames(res).map((name) => lookRowKey(cell.targetKeys[i], name)),
           ),
         )
         .join(KEY_LIST_SEP),
@@ -179,11 +179,11 @@ function useLayerRowValues(
     // A dependency, not a read: the counter is what re-derives the cells after a draft write.
     void draftVersion
     if (cells.length === 0 || !store) return EMPTY_STATES
-    const mask = parsePropertyMask(store.propertyMask)
-    const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-      const pending = store.draft.get(targetKey, propertyName)
+    const mask = parseAttributeMask(store.attributeMask)
+    const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+      const pending = store.draft.get(targetKey, attribute)
       if (pending !== undefined) return parseProgrammerValue(pending) ?? undefined
-      return store.serverRows.get(lookRowKey(targetKey, propertyName))
+      return store.serverRows.get(lookRowKey(targetKey, attribute))
     }
 
     const states: RowCellStates = {}
@@ -281,7 +281,7 @@ function cellFamily(cell: RowCell): AttributeFamily {
   const first = cell.resolutions[0]
   if (first) {
     if (first.kind === 'position') return 'POSITION'
-    return familyForCategory(first.property.category)
+    return familyForCategory(first.attribute.category)
   }
   return columnFamily(cell.col)
 }
@@ -320,8 +320,8 @@ function useCueRowValues(
     const states: RowCellStates = {}
     for (const cell of cells) {
       const sources: CueCellSource[] = []
-      const lookup = (targetKey: string, propertyName: string): StagedValue | undefined => {
-        const hit = store.lookup(targetKey, propertyName, group)
+      const lookup = (targetKey: string, attribute: string): StagedValue | undefined => {
+        const hit = store.lookup(targetKey, attribute, group)
         if (!hit) return undefined
         const staged = parseProgrammerValue(hit.value)
         if (staged) sources.push(hit.source)

@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
@@ -216,8 +216,8 @@ sealed class MartinMac250Fixture(
          * mechanical dimmer/shutter); the pulses at 0.5–2 Hz; random fast, medium and slow at 8, 4
          * and 2 Hz, its pulses at 2 and 1 Hz. Checked on the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 19, StrobeKind.CLOSED),
                 StrobeBand(20, 49, StrobeKind.OPEN),
@@ -249,53 +249,53 @@ sealed class MartinMac250Fixture(
             fastToSlow = true,
         )
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Colour wheel", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour wheel", category = AttributeCategory.COLOUR)
         val colourWheel = DmxFixtureSetting(
             transaction, universe, firstChannel + 2, Colour.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Gobo wheel", category = PropertyCategory.GOBO)
+        @FixtureAttribute("Gobo wheel", category = AttributeCategory.GOBO)
         val gobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 3, Gobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Gobo rotation (CCW / stop / CW)",
-            category = PropertyCategory.GOBO_ROTATION,
+            category = AttributeCategory.GOBO_ROTATION,
         )
         val goboRotation: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
         // "MAC 250 / MAC 250+ user manual" (Martin): "approximately 2 meters (6.5 feet) to
         // infinity", DMX 0–255 = "Infinity → 2 meters". Infinity is the Stage view's 40 m longest throw.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Focus",
-            category = PropertyCategory.FOCUS,
+            category = AttributeCategory.FOCUS,
             focusNearM = 2.0,
             focusFarM = 40.0,
             inverted = true,
         )
         val focus: Slider = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
+        @FixtureAttribute("Prism", category = AttributeCategory.PRISM)
         val prism = DmxFixtureSetting(
             transaction, universe, firstChannel + 6, Prism.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel + 7)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 8)
 
-        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 257.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
         // Neither speed channel is a timing channel (fixture optics plan D14): the manual's vector bands
@@ -303,10 +303,10 @@ sealed class MartinMac250Fixture(
         // bands. Drawing the vector band would be a guessed curve, so the view moves the head and the
         // effects at the type's travel (its fastest) whatever these hold: early, never late.
         // FU-MANUAL-S8-TRAVEL measures them.
-        @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
-        @FixtureProperty("Effect speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Effect speed", category = AttributeCategory.SPEED)
         val effectSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
         /**

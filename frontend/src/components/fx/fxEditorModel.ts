@@ -88,7 +88,7 @@ export function paramRole(entry: Pick<FxLibraryEntry, 'family' | 'parameters'>, 
 
 /**
  * Which axis a position parameter moves, from its name — `pan` / `tilt` as a camelCase word
- * (`panCenter`, `startPan`, `pan`), never a substring, so a script's `spanWidth` or `expansion` is
+ * (`panCentre`, `startPan`, `pan`), never a substring, so a script's `spanWidth` or `expansion` is
  * not read as a pan axis and drawn on the position scale.
  */
 export function paramAxis(name: string): 'pan' | 'tilt' | null {
@@ -332,26 +332,26 @@ export function orderPatch(draft: Pick<FxDraft, 'wings'>, order: string): Partia
 }
 
 /** The descriptors [spreadHeadCount] reads: a fixture's own properties, by name and type. */
-type CarrierProperty = { name: string; type: string }
+type CarrierAttribute = { name: string; type: string }
 
 /**
  * Whether a fixture carries the effect's property **itself** rather than only on its heads — the
- * desk's `FxTarget.fixtureHasProperty`: a slider or a setting by name, a colour by the colour trait
+ * desk's `FxTarget.fixtureHasAttribute`: a slider or a setting by name, a colour by the colour trait
  * (`WithColour`, a `colour` or `whiteMix` descriptor), a position by `WithPosition`.
  */
-export function carriesFxProperty(properties: readonly CarrierProperty[] | null | undefined, propertyName: string): boolean {
-  return (properties ?? []).some(
+export function carriesFxAttribute(attributes: readonly CarrierAttribute[] | null | undefined, attribute: string): boolean {
+  return (attributes ?? []).some(
     (p) =>
-      p.name === propertyName ||
-      (propertyName === 'rgbColour' && (p.type === 'colour' || p.type === 'whiteMix')) ||
-      (propertyName === 'position' && p.type === 'position'),
+      p.name === attribute ||
+      (attribute === 'rgbColour' && (p.type === 'colour' || p.type === 'whiteMix')) ||
+      (attribute === 'position' && p.type === 'position'),
   )
 }
 
 /**
  * How many heads a live effect's distribution runs over, for the Spread section's dials — the desk's
  * `FxEngine.buildExpansion`, counted. The first fixture stands for a group, as on the desk: where it
- * carries the effect's property itself ([carriesFxProperty]) the effect runs once per fixture —
+ * carries the effect's property itself ([carriesFxAttribute]) the effect runs once per fixture —
  * a group's members, unfiltered, or the one fixture — whatever heads it has (a pixel bar's master
  * dimmer). Otherwise it runs over the heads: one fixture's, narrowed by the head filter; a group's
  * under `FLAT` as one strip, the filter across the whole strip on its global index; under
@@ -359,15 +359,15 @@ export function carriesFxProperty(properties: readonly CarrierProperty[] | null 
  * count, never sent.
  */
 export function spreadHeadCount(
-  fixtures: readonly { properties?: readonly CarrierProperty[] | null; elements?: readonly unknown[] | null }[],
+  fixtures: readonly { attributes?: readonly CarrierAttribute[] | null; elements?: readonly unknown[] | null }[],
   isGroup: boolean,
-  propertyName: string,
+  attribute: string,
   elementMode: string,
   elementFilter: string,
 ): number {
   const perFixture = isGroup ? fixtures.length : 1
   const first = fixtures[0]
-  if (!first || carriesFxProperty(first.properties, propertyName)) return perFixture
+  if (!first || carriesFxAttribute(first.attributes, attribute)) return perFixture
   const elementCounts = fixtures.map((f) => f.elements?.length ?? 0)
   if (!elementCounts.some((n) => n > 0)) return perFixture
   if (isGroup && elementMode === 'FLAT') {
@@ -382,8 +382,8 @@ export function spreadHeadCount(
 /** One unit of a selection, as [selectionHeadCount] walks it. */
 export interface SelectionUnit {
   key: string
-  properties?: readonly CarrierProperty[] | null
-  elements?: readonly { key: string; properties?: readonly CarrierProperty[] | null }[] | null
+  attributes?: readonly CarrierAttribute[] | null
+  elements?: readonly { key: string; attributes?: readonly CarrierAttribute[] | null }[] | null
 }
 
 /**
@@ -396,7 +396,7 @@ export interface SelectionUnit {
  */
 export function selectionHeadCount(
   units: readonly SelectionUnit[],
-  propertyName: string,
+  attribute: string,
   elementMode: string,
   elementFilter: string,
 ): number {
@@ -404,14 +404,14 @@ export function selectionHeadCount(
   const runs: number[] = []
   let anyHeads = false
   for (const unit of units) {
-    if (carriesFxProperty(unit.properties, propertyName)) {
+    if (carriesFxAttribute(unit.attributes, attribute)) {
       if (!seen.has(unit.key)) {
         seen.add(unit.key)
         runs.push(1)
       }
       continue
     }
-    const heads = (unit.elements ?? []).filter((e) => carriesFxProperty(e.properties, propertyName) && !seen.has(e.key))
+    const heads = (unit.elements ?? []).filter((e) => carriesFxAttribute(e.attributes, attribute) && !seen.has(e.key))
     for (const head of heads) seen.add(head.key)
     if (heads.length > 0) {
       runs.push(heads.length)

@@ -66,19 +66,19 @@ function binding(
 const index = (bindings: ControlSurfaceBinding[]) => buildBindingIndex(bindings, profile)
 
 /** An encoder bank selection, `colourAxis` absent for hue — the form the server sends. */
-const bank = (propertyName: string, colourAxis?: ColourAxis): EncoderBankSelection =>
-  colourAxis ? { propertyName, colourAxis } : { propertyName }
+const bank = (attribute: string, colourAxis?: ColourAxis): EncoderBankSelection =>
+  colourAxis ? { attribute, colourAxis } : { attribute }
 
 describe('deriveStripTarget', () => {
   it('drives dimmer from the fader and the flash, whatever the encoder bank', () => {
     expect(deriveStripTarget('fader', group, bank('pan'))).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
     expect(deriveStripTarget('flash', group, bank('pan'))).toEqual({
       type: 'flash',
-      target: { type: 'groupProperty', groupName: 'front-wash', propertyName: 'dimmer' },
+      target: { type: 'groupAttribute', groupName: 'front-wash', attribute: 'dimmer' },
     })
   })
 
@@ -91,8 +91,8 @@ describe('deriveStripTarget', () => {
   })
 
   it('follows the encoder bank on the encoder', () => {
-    expect(deriveStripTarget('encoder', group, bank('dimmer'))).toMatchObject({ propertyName: 'dimmer' })
-    expect(deriveStripTarget('encoder', group, bank('colour'))).toMatchObject({ propertyName: 'colour' })
+    expect(deriveStripTarget('encoder', group, bank('dimmer'))).toMatchObject({ attribute: 'dimmer' })
+    expect(deriveStripTarget('encoder', group, bank('colour'))).toMatchObject({ attribute: 'colour' })
   })
 
   it('carries the bank’s colour axis on the encoder, and never on the fader or flash', () => {
@@ -101,46 +101,46 @@ describe('deriveStripTarget', () => {
     // the field *absent*, which is what every pre-axis row has.
     const sat = bank('rgbColour', 'saturation')
     expect(deriveStripTarget('encoder', group, sat)).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'rgbColour',
+      attribute: 'rgbColour',
       colourAxis: 'saturation',
     })
     expect(deriveStripTarget('encoder', fixture, sat)).toEqual({
-      type: 'fixtureProperty',
+      type: 'fixtureAttribute',
       fixtureKey: 'hex-1',
-      propertyName: 'rgbColour',
+      attribute: 'rgbColour',
       colourAxis: 'saturation',
     })
     expect(deriveStripTarget('fader', group, sat)).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
     expect(deriveStripTarget('flash', group, sat)).toEqual({
       type: 'flash',
-      target: { type: 'groupProperty', groupName: 'front-wash', propertyName: 'dimmer' },
+      target: { type: 'groupAttribute', groupName: 'front-wash', attribute: 'dimmer' },
     })
     expect(deriveStripTarget('encoder', group, bank('rgbColour'))).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'rgbColour',
+      attribute: 'rgbColour',
     })
-    expect(deriveStripTarget('encoder', group, { propertyName: 'rgbColour', colourAxis: 'hue' })).toEqual(
-      { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' },
+    expect(deriveStripTarget('encoder', group, { attribute: 'rgbColour', colourAxis: 'hue' })).toEqual(
+      { type: 'groupAttribute', groupName: 'front-wash', attribute: 'rgbColour' },
     )
   })
 
   it('derives fixture targets from a fixture target', () => {
     expect(deriveStripTarget('fader', fixture, bank('tilt'))).toEqual({
-      type: 'fixtureProperty',
+      type: 'fixtureAttribute',
       fixtureKey: 'hex-1',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
     expect(deriveStripTarget('encoder', fixture, bank('tilt'))).toEqual({
-      type: 'fixtureProperty',
+      type: 'fixtureAttribute',
       fixtureKey: 'hex-1',
-      propertyName: 'tilt',
+      attribute: 'tilt',
     })
   })
 })
@@ -178,14 +178,14 @@ describe('resolveControl', () => {
   it('resolves each of a strip’s controls to that control’s role', () => {
     const i = index([binding(9, 'strip-1', { type: 'strip', target: group })])
     expect(resolveControl('fader-1', i, null, bank('colour'))?.target).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
     })
     expect(resolveControl('enc-1', i, null, bank('colour'))?.target).toEqual({
-      type: 'groupProperty',
+      type: 'groupAttribute',
       groupName: 'front-wash',
-      propertyName: 'colour',
+      attribute: 'colour',
     })
     expect(resolveControl('btn-25', i, null, bank('colour'))?.target).toEqual({
       type: 'selectTarget',

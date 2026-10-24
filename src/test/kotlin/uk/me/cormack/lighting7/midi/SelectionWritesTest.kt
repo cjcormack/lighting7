@@ -41,8 +41,8 @@ class SelectionWritesTest {
         )
         assertEquals(listOf("hex-1", "hex-2"), writes.map { it.fixture.targetKey })
         assertTrue(writes.all { it.sourceGroup == "front-wash" })
-        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(writes[0].value).value)
-        assertEquals(200u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(writes[1].value).value)
+        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(writes[0].value).value)
+        assertEquals(200u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(writes[1].value).value)
     }
 
     @Test
@@ -58,7 +58,7 @@ class SelectionWritesTest {
     }
 
     @Test
-    fun `a head without the property and a target that no longer resolves are skipped`() {
+    fun `a head without the attribute and a target that no longer resolves are skipped`() {
         val writes = SelectionWrites.forTargets(
             fixtures(),
             listOf(CueTargetDto("fixture", "hex-9"), CueTargetDto("group", "gone"), CueTargetDto("fixture", "hex-1")),
@@ -67,7 +67,7 @@ class SelectionWritesTest {
         assertTrue(writes.isEmpty(), "no Hex has a tilt, and the ghosts contribute nothing")
         val colour = SelectionWrites.forTargets(fixtures(), listOf(CueTargetDto("fixture", "hex-1")), "rgbColour", 64u)
         assertEquals(1, colour.size)
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(colour.single().value)
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(colour.single().value)
     }
 
     @Test
@@ -81,8 +81,8 @@ class SelectionWritesTest {
         controller.setValue(14, 128u, 0)
         val writes = SelectionWrites.forTargets(fixtures, listOf(CueTargetDto("group", "front-wash")), "rgbColour", 0u)
         assertEquals(listOf("hex-1", "hex-2"), writes.map { it.fixture.targetKey })
-        val hex1 = assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[0].value).value.color
-        val hex2 = assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[1].value).value.color
+        val hex1 = assertIs<CueAssignmentResolver.AttributeValue.Colour>(writes[0].value).value.color
+        val hex2 = assertIs<CueAssignmentResolver.AttributeValue.Colour>(writes[1].value).value.color
         assertEquals(Color(200, 0, 0), hex1, "dim and saturated stays so, at the new hue")
         assertEquals(Color(255, 128, 128), hex2, "bright and pastel stays so, at the new hue")
     }
@@ -100,8 +100,8 @@ class SelectionWritesTest {
             fixtures, listOf(CueTargetDto("group", "front-wash")), "rgbColour", 0u, ColourAxis.SATURATION,
         )
         assertEquals(listOf("hex-1", "hex-2"), writes.map { it.fixture.targetKey })
-        assertEquals(Color(200, 200, 200), assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[0].value).value.color)
-        assertEquals(Color(255, 255, 255), assertIs<CueAssignmentResolver.PropertyValue.Colour>(writes[1].value).value.color)
+        assertEquals(Color(200, 200, 200), assertIs<CueAssignmentResolver.AttributeValue.Colour>(writes[0].value).value.color)
+        assertEquals(Color(255, 255, 255), assertIs<CueAssignmentResolver.AttributeValue.Colour>(writes[1].value).value.color)
 
         assertTrue(
             SelectionWrites.forTargets(fixtures, listOf(CueTargetDto("group", "front-wash")), "dimmer", 64u, ColourAxis.SATURATION).isEmpty(),

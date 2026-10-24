@@ -59,7 +59,7 @@ for (fixture in fixtures) {
 val dimParam = registerFloatParam("dim", "Dimmer", 0.0, 1.0, 1.0)
 
 // Register the FX attributes
-registerProperty("intensity", FixturePropertyType.INTENSITY)
+registerAttribute("intensity", FixtureAttributeType.INTENSITY)
 
 // Set the calculation script (by name or ID)
 // setCalcScript("MyCalcScript")

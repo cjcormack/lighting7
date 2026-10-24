@@ -41,9 +41,9 @@ fun dispatchableKinds(descriptor: ControlDescriptor): Set<ControlKind> = when (d
  * here keeps one rule per refusal instead of two saying overlapping things.
  */
 fun targetControlKind(target: BindingTarget): ControlKind? = when (target) {
-    is BindingTarget.FixtureProperty,
-    is BindingTarget.GroupProperty,
-    is BindingTarget.SelectionProperty,
+    is BindingTarget.FixtureAttribute,
+    is BindingTarget.GroupAttribute,
+    is BindingTarget.SelectionAttribute,
     is BindingTarget.SelectionFan,
     is BindingTarget.SpeedMasterBpm,
     BindingTarget.GrandMasterFader,

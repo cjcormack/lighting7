@@ -129,7 +129,7 @@ class SelectionFxTest {
     }
 
     @Test
-    fun `a fixture whose heads carry the property contributes its heads, beside a fixture that carries it`() {
+    fun `a fixture whose heads carry the attribute contributes its heads, beside a fixture that carries it`() {
         val rig = newRig()
         val effect = FxInstance(
             effect = Solid(),
@@ -183,16 +183,16 @@ class SelectionFxTest {
         val effect = dimmerOver(selection(TargetRef.Fixture("par-0"), TargetRef.Group("four"))).apply { cueId = 7 }
         rig.engine.addFx(effect)
 
-        assertEquals(0, rig.engine.stompForCue(8, setOf(FxEngine.PropertyKey("par-1", "dimmer"))), "not one of its items")
-        assertEquals(0, rig.engine.stompForCue(8, setOf(FxEngine.PropertyKey("four", "dimmer"))), "one item of two")
+        assertEquals(0, rig.engine.stompForCue(8, setOf(FxEngine.TargetAttribute("par-1", "dimmer"))), "not one of its items")
+        assertEquals(0, rig.engine.stompForCue(8, setOf(FxEngine.TargetAttribute("four", "dimmer"))), "one item of two")
         assertEquals(
             0,
-            rig.engine.stompForCue(8, setOf(FxEngine.PropertyKey("par-0", "colour"), FxEngine.PropertyKey("four", "colour"))),
+            rig.engine.stompForCue(8, setOf(FxEngine.TargetAttribute("par-0", "colour"), FxEngine.TargetAttribute("four", "colour"))),
             "another property",
         )
         assertEquals(
             1,
-            rig.engine.stompForCue(8, setOf(FxEngine.PropertyKey("par-0", "dimmer"), FxEngine.PropertyKey("four", "dimmer"))),
+            rig.engine.stompForCue(8, setOf(FxEngine.TargetAttribute("par-0", "dimmer"), FxEngine.TargetAttribute("four", "dimmer"))),
         )
         assertTrue(rig.engine.getActiveFx().isEmpty())
     }

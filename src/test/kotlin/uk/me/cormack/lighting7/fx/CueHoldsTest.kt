@@ -20,7 +20,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoCueStackEntry
 import uk.me.cormack.lighting7.models.DaoProject
@@ -85,7 +85,7 @@ class CueHoldsTest : RouteIntegrationTest() {
                 this.name = name
                 fadeDuration = fadeMs?.let { Duration.ofMillis(it) }
             }.also { cue ->
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = fixture
                     attribute = "rgbColour"; value = "#%02x0000".format(level); sortOrder = 0
@@ -104,7 +104,7 @@ class CueHoldsTest : RouteIntegrationTest() {
             val b = stack("B", 1)
             val c = cue("C", "hex-1", 100, cFadeMs).also { cue ->
                 // And hex-1's dimmer, which only C sets: HTP, so a fade's weight shows in its level.
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-1"
                     attribute = "dimmer"; value = "100"; sortOrder = 1
@@ -124,12 +124,12 @@ class CueHoldsTest : RouteIntegrationTest() {
     /** The red of [fixture]'s composed Layer 4 colour, or null when no cue holds it. */
     private fun red(fixture: String): Int? =
         (state.show.fxEngine.layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture(fixture, "rgbColour")]
-            as? CueAssignmentResolver.PropertyValue.Colour)?.value?.toSerializedString()?.substring(1, 3)?.toInt(16)
+            as? CueAssignmentResolver.AttributeValue.Colour)?.value?.toSerializedString()?.substring(1, 3)?.toInt(16)
 
     /** hex-1's composed Layer 4 dimmer — C's alone, scaled by C's fade weight. */
     private fun dimmer(): Int? =
         (state.show.fxEngine.layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture("hex-1", "dimmer")]
-            as? CueAssignmentResolver.PropertyValue.Slider)?.value?.toInt()
+            as? CueAssignmentResolver.AttributeValue.Slider)?.value?.toInt()
 
     private fun onStage(cueId: Int) = cueId in state.show.fxEngine.cueLayer.activeCueIds()
 

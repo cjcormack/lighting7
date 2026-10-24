@@ -100,9 +100,9 @@ export function FxEditor({
   const [draft, setDraft] = useState<FxDraft>(snapshot)
   // The Spread section's dials are drawn over the effect's own heads, as the head filter and element
   // mode the draft now says narrow them.
-  const { scope: spreadScope, extendedChannels, settingProperty } = useFxScope({
+  const { scope: spreadScope, extendedChannels, settingAttribute } = useFxScope({
     target: effect,
-    propertyName: effect.propertyName,
+    attribute: effect.attribute,
     entry,
     elementMode: draft.elementMode,
     elementFilter: draft.elementFilter,
@@ -233,7 +233,7 @@ export function FxEditor({
     <div data-fx-editor={effect.id} className={cn('flex flex-col gap-3', className)}>
       <div className="flex items-center gap-1.5">
         <span className="min-w-0 truncate text-[13px] font-medium">{name}</span>
-        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.propertyName}</span>
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground">→ {effect.attribute}</span>
         {edited && <EditedMark paletteName={spawning?.palette.name} />}
         <span className="flex-1" />
         {/* Pause and resume in every host: the FX lens's chips have no other. */}
@@ -277,8 +277,8 @@ export function FxEditor({
           draft={draft}
           scope={spreadScope}
           extendedChannels={extendedChannels}
-          settingProperty={settingProperty}
-          propertyName={effect.propertyName}
+          settingAttribute={settingAttribute}
+          attribute={effect.attribute}
           readOnly={readOnly}
           set={set}
           setParam={setParam}

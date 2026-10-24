@@ -6,7 +6,7 @@ outputType: COLOUR
 fxMode: STANDARD
 defaultDirection: BOUNCE
 defaultCycle: 2.0
-compatibleProperties: [rgbColour]
+compatibleAttributes: [rgbColour]
 parameters:
   - name: fromColour
     type: colour

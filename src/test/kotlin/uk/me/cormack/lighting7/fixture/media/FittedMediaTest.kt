@@ -65,7 +65,7 @@ class FittedMediaTest {
                     "SLOT_2" to FittedSlot(gel = "R26", gobo = "breakup"),
                 ),
                 "fbWheelFunc" to mapOf("INDEX" to FittedSlot(gel = "R26")),
-                "noSuchProperty" to mapOf("X" to FittedSlot()),
+                "noSuchAttribute" to mapOf("X" to FittedSlot()),
             ),
         )
         val problems = media.typeProblems(rev).joinToString("\n")
@@ -77,7 +77,7 @@ class FittedMediaTest {
             "media.slots.fbWheelPos.SLOT_1: unknown gobo 'lasers'",
             "media.slots.fbWheelPos.SLOT_2: a slot holds a gel or a gobo, not both",
             "media.slots.fbWheelFunc: fbWheelFunc is not loadable",
-            "media.slots.noSuchProperty: '$rev' has no property noSuchProperty",
+            "media.slots.noSuchAttribute: '$rev' has no property noSuchAttribute",
         )) {
             assertTrue(problems.contains(expected), "expected '$expected' in:\n$problems")
         }

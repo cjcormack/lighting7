@@ -1,0 +1,8 @@
+{
+  "controlId": "button-1",
+  "deviceTypeKey": "xtouch-mini",
+  "sortOrder": 1,
+  "targetPayload": "{\"type\":\"grandMasterToggle\"}",
+  "targetType": "grandMasterToggle",
+  "uuid": "a1368061-2efd-43c5-aa9d-fe74ae7f1a3e"
+}

@@ -35,7 +35,7 @@ const bar = {
   name: 'Bar L',
   typeKey: 'bar',
   groups: [],
-  elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, properties: [] })),
+  elements: [0, 1].map((i) => ({ index: i, key: `bar-1.pixel-${i}`, displayName: `Cell ${i + 1}`, attributes: [] })),
 }
 
 // The store's readers over a real `lib/deskFollow.ts`, so the local arm is the real one.

@@ -5,16 +5,16 @@ import { ATTRIBUTE_FAMILIES, formatFamilyList, type AttributeFamily } from './at
  * (multi-screen plan D2, D3) — as this side spells it.
  *
  * `null` is *every attribute*, and it is the only spelling of "no mask": an empty list and a list
- * naming all four both land as null, exactly as `serializePropertyMask` folds both to a null
- * `propertyMask` and as the desk's `DeskSelection.normalise` does. Keeping one spelling is what
+ * naming all four both land as null, exactly as `serializeAttributeMask` folds both to a null
+ * `attributeMask` and as the desk's `DeskSelection.normalise` does. Keeping one spelling is what
  * lets a frame be compared to what was sent (`useDeskSelectionBridge`'s echo FIFO) and lets "has
  * the mask changed?" be one string comparison rather than a set algebra in three places.
  *
- * The vocabulary is `ATTRIBUTE_FAMILIES` — the four `PropertyMaskGroup` names — and an unknown
- * name is **dropped**, as `parsePropertyMask` drops one and as the desk's lenient parser does for
+ * The vocabulary is `ATTRIBUTE_FAMILIES` — the four `AttributeFamily` names — and an unknown
+ * name is **dropped**, as `parseAttributeMask` drops one and as the desk's lenient parser does for
  * `selection.set`. `store/selection.test.ts` pins the parser against the list — the way
- * `maskPicker.test.ts` pins `MASK_GROUPS` — so a fifth family fails here as well as on the
- * backend's `PropertyMaskTest`.
+ * `maskPicker.test.ts` pins `FAMILY_OPTIONS` — so a fifth family fails here as well as on the
+ * backend's `AttributeMaskTest`.
  */
 
 /** Fold a family list to the one spelling: declaration order, `null` for none or all. */
@@ -68,7 +68,7 @@ export function sameFamilies(
  * The pressing window's toast for a Look pressed under a mask (multi-screen plan D6):
  * `Position rows skipped — the selection is Colour`.
  *
- * It says **rows** on purpose. The mask lands through the layer's own `propertyMask`, which the
+ * It says **rows** on purpose. The mask lands through the layer's own `attributeMask`, which the
  * cook applies to the layer's rows and not to its effects — so a Look's effect in a skipped family
  * still runs while being named here (documented at lighting7's `resolveLookMask`). A toast that
  * promised the whole family was held back would be promising more than the desk does.

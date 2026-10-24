@@ -112,14 +112,14 @@ export function LookDetailSheet({
   const rowsByTarget = useMemo(() => {
     const byTarget = new Map<
       string,
-      { targetKey: string; values: { property: string; value: string }[] }
+      { targetKey: string; values: { attribute: string; value: string }[] }
     >()
     for (const row of detail?.rows ?? []) {
       // A cell's row under the cell's own key: a colour held per zone reads as one line per zone
       // rather than three unlabelled chips under the fixture.
       const key = row.elementKey ?? row.targetKey
       const bucket = byTarget.get(key) ?? { targetKey: key, values: [] }
-      bucket.values.push({ property: row.propertyName, value: row.value })
+      bucket.values.push({ attribute: row.attribute, value: row.value })
       byTarget.set(key, bucket)
     }
     return [...byTarget.values()]
@@ -257,7 +257,7 @@ export function LookDetailSheet({
                           per element for the same property, so the property alone is not unique. */}
                       {bucket.values.map((v, index) => (
                         <LookValueChip
-                          key={`${bucket.targetKey}-${v.property}-${index}`}
+                          key={`${bucket.targetKey}-${v.attribute}-${index}`}
                           value={v.value}
                         />
                       ))}

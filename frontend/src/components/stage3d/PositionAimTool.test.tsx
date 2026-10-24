@@ -41,7 +41,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
 
 const { PositionAimTool } = await import('./PositionAimTool')
 
-const heads = (...keys: string[]): WriteTarget[] => keys.map((key) => ({ key, properties: [] }))
+const heads = (...keys: string[]): WriteTarget[] => keys.map((key) => ({ key, attributes: [] }))
 
 beforeEach(() => {
   aim.calls = []
@@ -72,7 +72,7 @@ describe('PositionAimTool', () => {
   })
 
   it('names each head once — a cell under its selected fixture goes with the fixture', async () => {
-    render(<PositionAimTool projectId={7} targets={[...heads('spot-1'), { key: 'spot-1.head-1', properties: [], fixtureKey: 'spot-1' }]} />)
+    render(<PositionAimTool projectId={7} targets={[...heads('spot-1'), { key: 'spot-1.head-1', attributes: [], fixtureKey: 'spot-1' }]} />)
     fireEvent.click(screen.getByRole('button', { name: 'Aim…' }))
     expect(await screen.findByRole('button', { name: /^Aim$/ })).toBeTruthy()
   })

@@ -44,7 +44,7 @@ export function usePositionJog(targets: readonly WriteTarget[], projectId?: numb
         onAnswer: (answer: AimResponse) =>
           landValuesInLook(
             layerStore,
-            (answer.written ?? []).map((write) => ({ target: write.target, propertyName: 'position', value: write.value })),
+            (answer.written ?? []).map((write) => ({ target: write.target, attribute: 'position', value: write.value })),
           ),
       }
     }

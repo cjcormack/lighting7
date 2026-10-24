@@ -22,7 +22,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 data class PaletteRowEntry(
     val target: TargetRef?,
-    val propertyName: String,
+    val attribute: String,
     /** A [PaletteIntent] in serialised form — an intent, never a literal. */
     val value: String,
 ) {
@@ -56,13 +56,13 @@ data class PaletteSnapshot(
  * holds only rows whose target parses (`loadPaletteSnapshot` drops a corrupt one), so the two can
  * differ for a template whose lowest-ordered row is corrupt, and only for a row a press would refuse.
  */
-internal fun PaletteSnapshot.familyOf(): PropertyMaskGroup? =
-    paletteFamily(rows.map { it.propertyName }, effect?.family)
+internal fun PaletteSnapshot.familyOf(): AttributeFamily? =
+    paletteFamily(rows.map { it.attribute }, effect?.family)
 
 /** The one derivation behind both `familyOf`s. */
-internal fun paletteFamily(propertyNamesInOrder: List<String>, fxCategory: String?): PropertyMaskGroup? =
-    propertyNamesInOrder.firstNotNullOfOrNull { PaletteProperty.ofOrNull(it)?.family }
-        ?: fxCategory?.let { maskGroupForFxFamily(it) }
+internal fun paletteFamily(attributesInOrder: List<String>, fxCategory: String?): AttributeFamily? =
+    attributesInOrder.firstNotNullOfOrNull { PaletteAttribute.ofOrNull(it)?.family }
+        ?: fxCategory?.let { attributeFamilyForFxFamily(it) }
 
 /**
  * Templates, cached by uuid.
@@ -305,7 +305,7 @@ internal fun loadPaletteSnapshot(database: Database, paletteUuid: UUID): Palette
                     }
                     PaletteRowEntry(
                         target = target,
-                        propertyName = row.attribute,
+                        attribute = row.attribute,
                         value = row.value,
                     )
                 },
@@ -317,7 +317,7 @@ internal fun loadPaletteSnapshot(database: Database, paletteUuid: UUID): Palette
                 StoredFx(
                     fxType = fx.fxType,
                     family = fx.family,
-                    propertyName = fx.attribute,
+                    attribute = fx.attribute,
                     cycle = fx.cycle,
                     blendMode = fx.blendMode,
                     order = fx.order,

@@ -75,8 +75,8 @@ class FxTargetBundledColourTest : RouteIntegrationTest() {
         val tx = ControllerTransaction(rig.fixtures.controllers)
         val pixel = rig.fixtures.withTransaction(tx).untypedGroupableFixture(cellKey)
         val store = ProgrammerStore()
-        store.put(ProgrammerOwner.WEB, cellKey, "rgbColour", CueAssignmentResolver.PropertyValue.Colour(amber(10u).color))
-        store.put(ProgrammerOwner.WEB, cellKey, "white", CueAssignmentResolver.PropertyValue.Slider(99u))
+        store.put(ProgrammerOwner.WEB, cellKey, "rgbColour", CueAssignmentResolver.AttributeValue.Colour(amber(10u).color))
+        store.put(ProgrammerOwner.WEB, cellKey, "white", CueAssignmentResolver.AttributeValue.Slider(99u))
 
         val composed = ColourTarget(cellKey).composeProgrammerOver(pixel, store, FxOutput.Colour(ExtendedColour.BLACK))
 
@@ -92,9 +92,9 @@ class FxTargetBundledColourTest : RouteIntegrationTest() {
         val target = ColourTarget(cellKey)
 
         runBlocking { for (channel in 9..11) parkManager.park(universe = 0, channel = channel, value = 0u) }
-        assertFalse(target.isPropertyFullyParked(pixel, parkManager), "the white emitter is still live")
+        assertFalse(target.isAttributeFullyParked(pixel, parkManager), "the white emitter is still live")
 
         runBlocking { parkManager.park(universe = 0, channel = whiteChannel, value = 0u) }
-        assertTrue(target.isPropertyFullyParked(pixel, parkManager))
+        assertTrue(target.isAttributeFullyParked(pixel, parkManager))
     }
 }

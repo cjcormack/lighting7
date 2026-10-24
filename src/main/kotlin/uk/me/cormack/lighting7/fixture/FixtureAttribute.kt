@@ -1,0 +1,329 @@
+package uk.me.cormack.lighting7.fixture
+
+/**
+ * Composition rule determining how multiple contributors to the same property merge.
+ *
+ * Highest-Takes-Precedence (HTP): output = max(contributors × fade). Used for intensity-like
+ * properties where stacked cues should brighten.
+ * Last-Takes-Precedence (LTP): output = highest-priority contributor, fades linearly. Used for
+ * colour, position, settings — anything where combining values produces nonsense.
+ * UNSET: sentinel for the [FixtureAttribute.composition] annotation parameter meaning "inherit
+ * the category default". Never seen on a resolved [Fixture.Property].
+ *
+ * See `docs/lighting-composition-model.md` for the full rule table and rationale.
+ */
+enum class CompositionRule {
+    HTP,
+    LTP,
+    UNSET,
+}
+
+/**
+ * Categories for fixture properties, used for UI grouping, display, and composition.
+ *
+ * Each category carries a [defaultComposition] rule used by Layer 4 when merging property
+ * assignments from active cues. Individual properties can override this via
+ * [FixtureAttribute.composition].
+ */
+enum class AttributeCategory(val defaultComposition: CompositionRule) {
+    DIMMER(CompositionRule.HTP),
+    COLOUR(CompositionRule.LTP),
+    PAN(CompositionRule.LTP),
+    TILT(CompositionRule.LTP),
+    PAN_FINE(CompositionRule.LTP),
+    TILT_FINE(CompositionRule.LTP),
+    UV(CompositionRule.HTP),
+    STROBE(CompositionRule.HTP),
+    AMBER(CompositionRule.LTP),
+    WHITE(CompositionRule.LTP),
+    SPEED(CompositionRule.LTP),
+
+    // Beam-shaping roles. All LTP: these are mechanical selections and positions, so
+    // max()-ing two contributors is meaningless — the same reasoning as PAN/TILT. Splitting
+    // them out of SETTING/OTHER is what lets the 3D stage view recognise them; it already
+    // keys off category this way for pan/tilt. A ZOOM slider reuses the existing
+    // degMin/degMax annotation fields, where they mean "full beam angle at DMX min / max";
+    // a FOCUS slider declares its range with focusNearM/focusFarM.
+    GOBO(CompositionRule.LTP),
+    GOBO_ROTATION(CompositionRule.LTP),
+    // A wheel's function channel: what its GOBO_ROTATION channel means right now. Its bands are
+    // named INDEX, ROTATE_FWD and ROTATE_REV (the Source Four Revolution's front wheel); in index
+    // the rotation channel is an angle over `indexDegMax`, in either rotate band a speed up to
+    // `rpmMax`, turning the way the band names.
+    GOBO_ROTATION_MODE(CompositionRule.LTP),
+    PRISM(CompositionRule.LTP),
+    PRISM_ROTATION(CompositionRule.LTP),
+    FOCUS(CompositionRule.LTP),
+    ZOOM(CompositionRule.LTP),
+    IRIS(CompositionRule.LTP),
+    FROST(CompositionRule.LTP),
+    // A framing shutter: SHUTTER is a blade's insertion, SHUTTER_ROTATION its angle. Each names its
+    // blade (`FixtureAttribute.blade`); an insertion declares its depth at DMX max (`depthMax`), a
+    // rotation its angles at DMX min and max (`degMin`/`degMax`). Not STROBE: that is the light's
+    // shutter, an intensity modulation, and these are four blades in the gate.
+    SHUTTER(CompositionRule.LTP),
+    SHUTTER_ROTATION(CompositionRule.LTP),
+    LED_MACRO(CompositionRule.LTP),
+    MOVEMENT_MACRO(CompositionRule.LTP),
+    // An LED ring around the lens, beside the beam rather than in it: RING is its effect setting, whose
+    // options say what each band shows (`DmxFixtureRingSettingValue`), and RING_SPEED the rate of
+    // its chases.
+    RING(CompositionRule.LTP),
+    RING_SPEED(CompositionRule.LTP),
+
+    SETTING(CompositionRule.LTP),
+    OTHER(CompositionRule.LTP),
+}
+
+/**
+ * Movement axis for pan/tilt sliders. The 3D stage view uses this together with
+ * [FixtureAttribute.degMin]/[FixtureAttribute.degMax]/[FixtureAttribute.inverted] to
+ * convert raw DMX values into degrees and rotate the moving-head model.
+ */
+enum class PanTiltAxis {
+    NONE,
+    PAN,
+    TILT;
+
+    fun serialized(): String? = if (this == NONE) null else name
+}
+
+/**
+ * The framing-shutter blade a [AttributeCategory.SHUTTER] or [AttributeCategory.SHUTTER_ROTATION]
+ * slider drives, named for the edge of the light it cuts — the lantern focus's wire order (top,
+ * bottom, left, right), so a DMX head's blades and a lantern's are drawn by one shader path.
+ * [NONE] is the annotation's sentinel for "no blade", as [PanTiltAxis.NONE] is for "no axis".
+ */
+enum class Blade {
+    NONE,
+    TOP,
+    BOTTOM,
+    LEFT,
+    RIGHT;
+
+    fun serialized(): String? = if (this == NONE) null else name
+}
+
+/**
+ * What can be loaded into a setting's options — fitted media (fixture optics plan D1, D6). A
+ * setting declaring one is **loadable**: what is in each of its slots is the unit's, not the type's,
+ * and each option's stock content is its existing `colourPreview` or `gobo`. [NONE] is the
+ * annotation's sentinel for "not loadable", as [Blade.NONE] is for "no blade".
+ *
+ * - [GEL] — a slot takes a gel from the desk's library (a scroller's frame, a media frame's wing).
+ * - [GOBO] — a slot takes a gobo pattern.
+ * - [GOBO_OR_GEL] — a slot takes either (a module wheel's slot holds a gobo or a dichroic).
+ */
+enum class MediaSlot {
+    NONE,
+    GEL,
+    GOBO,
+    GOBO_OR_GEL;
+
+    fun serialized(): String? = if (this == NONE) null else name
+
+    val takesGel: Boolean get() = this == GEL || this == GOBO_OR_GEL
+    val takesGobo: Boolean get() = this == GOBO || this == GOBO_OR_GEL
+}
+
+/**
+ * What a band of a [AttributeCategory.STROBE] channel does to the light (fixture optics plan D12).
+ * Declared per band, because one channel mixes them: the MAC 250's runs closed, open, strobe,
+ * pulses, random strobes, a reset and the lamp.
+ *
+ * - [CLOSED] — the shutter is shut, or the LEDs are off: the light is dark whatever the dimmer says.
+ * - [OPEN] — no effect: the dimmer alone sets the level.
+ * - [STROBE] — regular flashes, at a rate between the band's `hzMin` and `hzMax`.
+ * - [RANDOM] — flashes (or pulses) at irregular intervals, at that average rate.
+ * - [PULSE] — the level ramps up and down rather than snapping, at that rate.
+ *
+ * The three that move with time declare their rate; [CLOSED] and [OPEN] declare none.
+ * `StrobeBandsTest` enforces both.
+ */
+enum class StrobeKind {
+    CLOSED,
+    OPEN,
+    STROBE,
+    RANDOM,
+    PULSE;
+
+    /** True for the kinds that change the light with time, so a band of one declares a rate. */
+    val flashes: Boolean get() = this == STROBE || this == RANDOM || this == PULSE
+}
+
+/**
+ * One band of a [AttributeCategory.STROBE] slider — `@FixtureAttribute(strobe = […])` — from its
+ * manual: DMX [from]..[to] inclusive does [kind] (fixture optics plan D12).
+ *
+ * A flashing band ([StrobeKind.flashes]) declares its rate: [hzMin] at [from] and [hzMax] at [to],
+ * linear between, with `hzMin <= hzMax` — or the other way round where [inverted] (the MAC 250's
+ * "strobe, fast → slow"). A band with one rate (the MAC 250's "random strobe, fast") declares it
+ * twice. [Double.NaN] is the "unset" sentinel, as on [FixtureAttribute.degMin].
+ *
+ * The bands of one slider are in DMX order, never overlap, and together cover the slider's own
+ * range (`min..max`, which is what composition can write); they may reach past `max` to name what a
+ * raw channel write would find there (the MAC 250's pulses above its clamp). A value no band covers
+ * draws open. `StrobeBandsTest` enforces all of it.
+ */
+@Target()
+@Retention(AnnotationRetention.RUNTIME)
+annotation class StrobeBand(
+    val from: Int,
+    val to: Int,
+    val kind: StrobeKind,
+    val hzMin: Double = Double.NaN,
+    val hzMax: Double = Double.NaN,
+    val inverted: Boolean = false,
+)
+
+/** A resolved [StrobeBand], its NaN sentinels as nulls — what [Fixture.Property.strobeBands] holds. */
+data class StrobeBandSpec(
+    val from: Int,
+    val to: Int,
+    val kind: StrobeKind,
+    val hzMin: Double?,
+    val hzMax: Double?,
+    val inverted: Boolean,
+) {
+    operator fun contains(level: Int): Boolean = level in from..to
+}
+
+fun StrobeBand.toSpec(): StrobeBandSpec = StrobeBandSpec(
+    from = from,
+    to = to,
+    kind = kind,
+    hzMin = hzMin.takeUnless { it.isNaN() },
+    hzMax = hzMax.takeUnless { it.isNaN() },
+    inverted = inverted,
+)
+
+/**
+ * Roles for promoting a property to the compact fixture card display.
+ * Up to two properties can be promoted: one primary (top row) and one secondary (bottom row).
+ */
+enum class CompactDisplayRole {
+    /** Not shown on the compact card (default). */
+    NONE,
+    /** Shown in the top row of the compact card (best for mode/setting/status). */
+    PRIMARY,
+    /** Shown in the bottom row of the compact card (best for sliders/levels). */
+    SECONDARY;
+
+    /** Serialize to a JSON-friendly string, or null for NONE. */
+    fun serialized(): String? = when (this) {
+        NONE -> null
+        PRIMARY -> "primary"
+        SECONDARY -> "secondary"
+    }
+}
+
+/**
+ * Marks a property as a controllable fixture property.
+ *
+ * @param description Human-readable description for display
+ * @param category The property category for UI grouping and default composition
+ * @param composition Override the category's default composition rule for this specific property.
+ *                    Leave as [CompositionRule.UNSET] (the default) to inherit from the category.
+ *                    Use when a fixture's property needs different composition than its category
+ *                    suggests (e.g. a DIMMER-classed channel that is really a shutter enum).
+ * @param bundleWithColour If true, this slider will be bundled with the main colour property
+ *                         (used for white, amber, UV channels that extend RGB)
+ * @param compactDisplay If set to PRIMARY or SECONDARY, this property will be promoted
+ *                        to the compact fixture card display
+ * @param axis Movement axis for moving-head sliders. Defaults to [PanTiltAxis.NONE].
+ *             Used together with [degMin]/[degMax]/[inverted] by the 3D stage view to
+ *             rotate the head model from live DMX.
+ * @param degMin Slider min in degrees (mapped to the slider's DMX min). Defaults to
+ *               [Double.NaN] meaning "unset" — Kotlin annotations can't carry null Double
+ *               defaults, so NaN is the sentinel and is converted to null at reflect time.
+ * @param degMax Slider max in degrees (mapped to the slider's DMX max). Defaults [Double.NaN].
+ * @param forwardDeg On a PAN slider, the travel position in degrees at which the head faces the
+ *                   body's front — where tilt swings the beam towards the body's own +Z, as the Stage
+ *                   view draws a head at pan 0. [Double.NaN] — the default — means the middle of
+ *                   [degMin]..[degMax], which is where most movers' yokes sit at DMX centre. Declared
+ *                   by a type whose yoke sits elsewhere there (the Shehds, a quarter turn round), so
+ *                   the view, an aim and Locate all turn with it; it lies inside the range.
+ * @param inverted Reverse the direction of the slider→degrees mapping. Used for fixtures
+ *                  whose tilt is mechanically inverted from the DMX-up = stage-up convention.
+ *                  On a FOCUS slider it reverses the focus range instead: DMX min is far focus.
+ * @param focusNearM On a FOCUS slider, the nearest focal distance in metres from the aperture,
+ *                   at DMX min (DMX max when [inverted]). [Double.NaN] means "unset", as for
+ *                   [degMin]; a slider declares both ends or neither.
+ * @param focusFarM On a FOCUS slider, the farthest focal distance in metres from the aperture,
+ *                  at DMX max (DMX min when [inverted]). Defaults [Double.NaN].
+ * @param fineOf Names the coarse property this one is the low byte of, so the pair decodes as one
+ *               16-bit value (coarse × 256 + fine). Empty — the default — on every other property.
+ *               Generalises the PAN_FINE / TILT_FINE pairing to any 16-bit pair; pan and tilt keep
+ *               theirs. A fine property carries its coarse property's category, and every
+ *               Stage-view finder that picks "the" property of a category skips it.
+ * @param rpmMax On a GOBO_ROTATION slider whose wheel has a GOBO_ROTATION_MODE channel, the speed in
+ *               revolutions per minute at DMX max in a rotate band. Defaults [Double.NaN].
+ * @param indexDegMax On the same slider, the angle in degrees at DMX max in the index band (DMX min
+ *                    is 0°). Defaults [Double.NaN].
+ * @param blade On a SHUTTER or SHUTTER_ROTATION slider, the blade it drives. [Blade.NONE] — the
+ *              default — on every other property. On a SHUTTER_ROTATION slider [degMin]/[degMax]
+ *              are the blade's angle at DMX min and max (and [inverted] reverses them), turning it
+ *              about the middle of its own edge.
+ * @param depthMax On a SHUTTER slider, the blade's depth at DMX max (DMX min when [inverted]) in
+ *                 the lantern focus's unit — a fraction of the field's diameter, so 0.5 reaches the
+ *                 centre; DMX min is out. Defaults [Double.NaN].
+ * @param media On a setting-backed property, what its options can be loaded with — fitted media,
+ *              per unit ([MediaSlot]). [MediaSlot.NONE] — the default — on every other property.
+ *              `docs/fixtures-engineering.md` §"Fitted media" holds the rules a declaration obeys.
+ * @param activeMin On a slider whose range is not all proportional, the DMX at which its proportional
+ *                  band starts — the Robe ColorSpot's iris and frost run 1–179, 0 being open. Below
+ *                  it the Stage view holds the band's start value. `-1` — the default — means the
+ *                  slider's own min. Declared with [activeMax] or alone.
+ * @param activeMax The DMX at which the proportional band ends: above it the channel is effects
+ *                  (pulses, ramps, random), which the view does not draw, holding the band's end
+ *                  value instead. `-1` — the default — means the slider's own max.
+ * @param strobe On a STROBE slider, what each band of its channel does ([StrobeBand]): closed,
+ *               open, strobe, random or pulse, a flashing band with its rate in Hz. Empty — the
+ *               default — on every other property; every STROBE slider declares its bands, which
+ *               `StrobeBandsTest` enforces. A setting-backed STROBE property declares the same per
+ *               option instead (`DmxFixtureStrobeSettingValue`).
+ * @param timing On a slider, marks it as one of the fixture's own **timing channels** and names the
+ *               families it stretches ([TimingRole], fixture optics plan D14) — the Revolution's
+ *               Focus, Colour and Beam Timing. [TimingRole.NONE] — the default — on every other
+ *               property. Drawn by the Stage view only: the desk sends the channel as composed.
+ * @param timingSecondsPerStep On a timing channel, the **duration** of a move per DMX step: a move
+ *               made while the channel holds `v` takes `v × timingSecondsPerStep` seconds, however far
+ *               it goes (the Revolution's 1 s per step, manual p16 [12]). 0 is "no timing" — the move
+ *               runs at the type's own [Travel] rate. [Double.NaN] — the default — means unset;
+ *               every timing channel declares it, which `TravelVocabularyTest` enforces.
+ * @param timingFastFrom On a timing channel, the DMX from which the channel means "as fast as the
+ *               fixture can" rather than a duration, as 0 does — the Revolution's Focus Timing at
+ *               100 % ("more responsive manual control", p16 [12]). `-1` — the default — means none.
+ */
+@Target(AnnotationTarget.PROPERTY)
+@Retention(AnnotationRetention.RUNTIME)
+annotation class FixtureAttribute(
+    val description: String = "",
+    val category: AttributeCategory = AttributeCategory.OTHER,
+    val composition: CompositionRule = CompositionRule.UNSET,
+    val bundleWithColour: Boolean = false,
+    val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
+    val axis: PanTiltAxis = PanTiltAxis.NONE,
+    val degMin: Double = Double.NaN,
+    val degMax: Double = Double.NaN,
+    val forwardDeg: Double = Double.NaN,
+    val inverted: Boolean = false,
+    val focusNearM: Double = Double.NaN,
+    val focusFarM: Double = Double.NaN,
+    val fineOf: String = "",
+    val rpmMax: Double = Double.NaN,
+    val indexDegMax: Double = Double.NaN,
+    val blade: Blade = Blade.NONE,
+    val depthMax: Double = Double.NaN,
+    val media: MediaSlot = MediaSlot.NONE,
+    val activeMin: Int = -1,
+    val activeMax: Int = -1,
+    val strobe: Array<StrobeBand> = [],
+    val timing: TimingRole = TimingRole.NONE,
+    val timingSecondsPerStep: Double = Double.NaN,
+    val timingFastFrom: Int = -1,
+)
+
+/** Resolved composition rule: annotation override takes precedence, else the category default. */
+fun FixtureAttribute.resolveComposition(): CompositionRule =
+    composition.takeUnless { it == CompositionRule.UNSET } ?: category.defaultComposition

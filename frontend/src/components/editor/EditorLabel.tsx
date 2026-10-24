@@ -27,7 +27,7 @@ export function EditorLabel({
 
 /**
  * The same classes as a bare string, for the places that need them on an element they already
- * compose — the speed rail's card title, which wraps a `BeatIndicator` and a usage badge in one row.
+ * compose — the speed rail's card title, which wraps a `BeatIndicator` and a family badge in one row.
  */
 export const EDITOR_LABEL_CLASS =
   'text-[9px] font-bold uppercase tracking-[0.08em] text-muted-foreground'

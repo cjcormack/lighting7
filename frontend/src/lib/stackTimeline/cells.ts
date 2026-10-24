@@ -17,8 +17,8 @@ export function layerGlyphs(layer: TimelineLayer): string[] {
   // As written, since the desk reads both case-blind.
   const blend = BLEND_GLYPH[layer.blendMode.toUpperCase()]
   if (blend) out.push(blend)
-  if (layer.propertyMask) {
-    const letters = layer.propertyMask
+  if (layer.attributeMask) {
+    const letters = layer.attributeMask
       .split(',')
       .map((f) => MASK_LETTER[f.trim().toUpperCase()] ?? '')
       .join('')

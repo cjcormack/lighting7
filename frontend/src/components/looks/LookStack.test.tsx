@@ -57,7 +57,7 @@ function paletteSummary(overrides: Partial<PaletteSummary> = {}): PaletteSummary
       {
         targetType: 'deferred',
         targetKey: '',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         value: '#FF9D4A;policy=extract',
       },
     ],
@@ -74,7 +74,7 @@ function layer(overrides: Partial<LookStackLayer> = {}): LookStackLayer {
     source: { kind: 'LOOK', id: 7, uuid: 'u7', name: 'Warm Wash' },
     enabled: true,
     targets: [{ type: 'group', key: 'front-wash' }],
-    propertyMask: null,
+    attributeMask: null,
     blendMode: 'OVERRIDE',
     amount: 1,
     stomp: false,
@@ -89,7 +89,7 @@ function handlers() {
     onSetEnabled: vi.fn(),
     onSetAmount: vi.fn(),
     onSetBlendMode: vi.fn(),
-    onSetPropertyMask: vi.fn(),
+    onSetAttributeMask: vi.fn(),
     onSetStomp: vi.fn(),
   }
 }
@@ -215,7 +215,7 @@ describe('LookStack', () => {
   it('reads a layer’s mask and blend off the trigger', () => {
     // The mask and blend became editable in session 4, so the trigger *is* the read-out — an
     // operator who cannot see the mask cannot explain why a layer only moves colour.
-    renderStack([layer({ propertyMask: 'COLOUR', blendMode: 'MAX' })])
+    renderStack([layer({ attributeMask: 'COLOUR', blendMode: 'MAX' })])
     expect(screen.getByText('[Colour]')).toBeInTheDocument()
     expect(screen.getByText('MAX')).toBeInTheDocument()
   })
@@ -263,7 +263,7 @@ describe('LookStack', () => {
   })
 
   it('reports a mask change by index, normalising all-four to no mask', async () => {
-    // The load-bearing half of `serializePropertyMask`: a mask naming all four families composes
+    // The load-bearing half of `serializeAttributeMask`: a mask naming all four families composes
     // identically to no mask, so storing one would render a badge that says nothing.
     //
     // Only the *mask* half of the popover is driven here. `MaskPicker` is a switch and checkboxes, but the
@@ -271,10 +271,10 @@ describe('LookStack', () => {
     // dnd-kit gets, where the pointer sequence isn't drivable so the handle and the pure helper are
     // asserted instead. Here that means the trigger's read-out below plus `attributeFamily`'s own
     // round-trip tests, rather than a fake select that would only prove the mock works.
-    const { handlers: h } = renderStack([layer({ propertyMask: 'INTENSITY,POSITION,COLOUR' })])
+    const { handlers: h } = renderStack([layer({ attributeMask: 'INTENSITY,POSITION,COLOUR' })])
     fireEvent.click(screen.getByTitle(/How this layer combines/))
     fireEvent.click(await screen.findByLabelText('Beam'))
-    expect(h.onSetPropertyMask).toHaveBeenCalledWith(0, null)
+    expect(h.onSetAttributeMask).toHaveBeenCalledWith(0, null)
   })
 
   it('writes a cue layer’s timing and masters from its settings popover, by index', async () => {

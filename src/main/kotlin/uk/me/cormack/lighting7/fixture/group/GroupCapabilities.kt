@@ -4,7 +4,7 @@ import uk.me.cormack.lighting7.fixture.DmxFixture
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -45,16 +45,16 @@ internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
     // Also detect capabilities available via element group properties on multi-head DmxFixtures
     val dmxFixtures = allFixtures.filterIsInstance<DmxFixture>()
     if (dmxFixtures.size == allFixtures.size && dmxFixtures.isNotEmpty()) {
-        val allEgp = dmxFixtures.map { it.generateElementGroupPropertyDescriptors() }
+        val allEgp = dmxFixtures.map { it.generateElementGroupAttributeDescriptors() }
         if (allEgp.all { it != null }) {
             val egpList = allEgp.filterNotNull()
-            if ("dimmer" !in capabilities && egpList.all { egp -> egp.any { it is GroupSliderPropertyDescriptor && it.category == "dimmer" } }) {
+            if ("dimmer" !in capabilities && egpList.all { egp -> egp.any { it is GroupSliderAttributeDescriptor && it.category == "dimmer" } }) {
                 capabilities.add("dimmer")
             }
-            if ("colour" !in capabilities && egpList.all { egp -> egp.any { it is GroupColourPropertyDescriptor } }) {
+            if ("colour" !in capabilities && egpList.all { egp -> egp.any { it is GroupColourAttributeDescriptor } }) {
                 capabilities.add("colour")
             }
-            if ("position" !in capabilities && egpList.all { egp -> egp.any { it is GroupPositionPropertyDescriptor } }) {
+            if ("position" !in capabilities && egpList.all { egp -> egp.any { it is GroupPositionAttributeDescriptor } }) {
                 capabilities.add("position")
             }
         }
@@ -64,7 +64,7 @@ internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
 }
 
 /**
- * Whether **every** one of [fixtures] supports [propertyName] — the per-property question
+ * Whether **every** one of [fixtures] supports [attribute] — the per-property question
  * [detectCapabilities] answers a category at a time.
  *
  * One implementation for a group and for a single head, deliberately: a head is a group of one, and
@@ -74,13 +74,13 @@ internal fun FixtureGroup<*>.detectCapabilities(): List<String> {
  * never fails by design — `"rgbColour"` resolves to a `ColourTarget` whether or not the head has
  * colour, so without this check a head the effect cannot reach would get no light and no report.
  */
-internal fun fixturesSupportProperty(
+internal fun fixturesSupportAttribute(
     fixtures: List<GroupableFixture>,
-    propertyName: String,
+    attribute: String,
 ): Boolean {
     if (fixtures.isEmpty()) return false
 
-    val normalised = propertyName.lowercase()
+    val normalised = attribute.lowercase()
 
     val directSupport = when (normalised) {
         "dimmer" -> fixtures.all { it is WithDimmer }
@@ -90,7 +90,7 @@ internal fun fixturesSupportProperty(
         else -> {
             // Slider or setting property, by name.
             fixtures.all { fixture ->
-                val prop = (fixture as? Fixture)?.fixtureProperty(propertyName)
+                val prop = (fixture as? Fixture)?.fixtureAttribute(attribute)
                 val value = prop?.classProperty?.call(fixture)
                 value is Slider || value is DmxFixtureSetting<*>
             }

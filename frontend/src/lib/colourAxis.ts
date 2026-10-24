@@ -4,7 +4,7 @@ export type { ColourAxis }
 
 /**
  * The colour-axis vocabulary, once — a mirror of lighting7's `midi/ColourAxis.kt`, the way
- * `attributeFamily.ts` mirrors `PropertyMaskGroup`. Keep the four strings in step with the Kotlin
+ * `attributeFamily.ts` mirrors `AttributeFamily`. Keep the four strings in step with the Kotlin
  * `@SerialName`s: `colourAxis.test.ts` pins them, and the `Record` types below turn a fifth axis
  * with no label or swatch into a compile error rather than a chip that draws nothing.
  *
@@ -15,7 +15,7 @@ export type { ColourAxis }
  * two axes; that is what keeps the encoder-bank LED, the inspector's label and the picker honest.
  *
  * This module labels and draws; it never resolves. What a fine trim or a saturation position
- * *does* to a head is `PropertyChannelResolver`'s, in both directions, and a second copy here would
+ * *does* to a head is `AttributeChannelResolver`'s, in both directions, and a second copy here would
  * be the drift `surfaceResolve.ts`'s header warns about.
  */
 

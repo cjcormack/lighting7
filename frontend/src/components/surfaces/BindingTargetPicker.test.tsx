@@ -5,12 +5,12 @@ import type { BindingTarget } from '@/store/surfaces'
 
 // The picker is store-connected on five axes; stub them all so this stays a unit test of
 // which kinds are offered for which control type. The fixture list is behind
-// `useRigProperties`, which is where the target-less kinds (selection property, encoder bank)
+// `useRigAttributes`, which is where the target-less kinds (selection property, encoder bank)
 // get their vocabulary.
 vi.mock('@/store/groups', () => ({
   useGroupListQuery: () => ({ data: [{ name: 'front-wash', memberCount: 2 }] }),
   // The axis field looks a group's property up to see whether it is a colour.
-  useGroupPropertiesQuery: () => ({
+  useGroupAttributesQuery: () => ({
     data: [
       { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', min: 0, max: 255, memberChannels: [] },
       { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', memberColourChannels: [] },
@@ -22,7 +22,7 @@ const rigFixtures = vi.hoisted(() => [
   {
     key: 'hex-1',
     name: 'Hex 1',
-    properties: [
+    attributes: [
       { type: 'slider', name: 'dimmer', displayName: 'dimmer', category: 'dimmer', channel: { universe: 0, channelNo: 1 }, min: 0, max: 255 },
       { type: 'colour', name: 'rgbColour', displayName: 'colour', category: 'colour', redChannel: { universe: 0, channelNo: 2 }, greenChannel: { universe: 0, channelNo: 3 }, blueChannel: { universe: 0, channelNo: 4 } },
     ],
@@ -229,7 +229,7 @@ describe('BindingTargetPicker record targets', () => {
 
   it('does not offer a record kind on a fader', () => {
     // Every one is a press, and a fader has no press — `refuseWrongKind` would refuse the row.
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' })
     expect(screen.queryByText('Look — apply')).toBeNull()
   })
 
@@ -256,10 +256,10 @@ describe('BindingTargetPicker colour axes', () => {
   // write boundary refuses the axis by name (`BINDING_AXIS_NEEDS_COLOUR`), and a field that led
   // there would be a way to learn the rule from a 400.
   it.each([
-    ['a fixture', { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' } as BindingTarget, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' } as BindingTarget],
-    ['a group', { type: 'groupProperty', groupName: 'front-wash', propertyName: 'rgbColour' } as BindingTarget, { type: 'groupProperty', groupName: 'front-wash', propertyName: 'dimmer' } as BindingTarget],
-    ['the selection', { type: 'selectionProperty', propertyName: 'rgbColour' } as BindingTarget, { type: 'selectionProperty', propertyName: 'dimmer' } as BindingTarget],
-    ['the encoder bank', { type: 'encoderBankSet', propertyName: 'rgbColour' } as BindingTarget, { type: 'encoderBankSet', propertyName: 'dimmer' } as BindingTarget],
+    ['a fixture', { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' } as BindingTarget, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' } as BindingTarget],
+    ['a group', { type: 'groupAttribute', groupName: 'front-wash', attribute: 'rgbColour' } as BindingTarget, { type: 'groupAttribute', groupName: 'front-wash', attribute: 'dimmer' } as BindingTarget],
+    ['the selection', { type: 'selectionAttribute', attribute: 'rgbColour' } as BindingTarget, { type: 'selectionAttribute', attribute: 'dimmer' } as BindingTarget],
+    ['the encoder bank', { type: 'encoderBankSet', attribute: 'rgbColour' } as BindingTarget, { type: 'encoderBankSet', attribute: 'dimmer' } as BindingTarget],
   ])('offers a colour axis on %s only for a colour property', (_what, onColour, onSlider) => {
     const continuous = onColour.type !== 'encoderBankSet'
     const { unmount } = render(
@@ -274,20 +274,20 @@ describe('BindingTargetPicker colour axes', () => {
   })
 
   it('shows the axis a binding carries, and hue when it carries none', () => {
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'saturation' })
     expect(screen.getByText('Saturation')).toBeInTheDocument()
     cleanup()
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' })
     expect(screen.getByText('Hue')).toBeInTheDocument()
   })
 
   it('drops the axis when the property changes', () => {
     // A colour → dimmer edit that kept `saturation` would save a 400.
     const onChange = renderPicker(true, {
-      type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour', colourAxis: 'saturation',
+      type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour', colourAxis: 'saturation',
     })
     fireEvent.change(screen.getByPlaceholderText('dimmer'), { target: { value: 'dimmer' } })
-    expect(onChange).toHaveBeenCalledWith({ type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'dimmer' })
+    expect(onChange).toHaveBeenCalledWith({ type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'dimmer' })
     expect('colourAxis' in onChange.mock.calls[0]![0]).toBe(false)
   })
 })
@@ -301,7 +301,7 @@ describe('BindingTargetPicker infrastructure fixtures', () => {
       { key: 'hazer-power', displayName: 'Hazer power', infrastructure: true },
       { key: 'relay-1', displayName: 'Relay 1', infrastructure: true },
     ]
-    renderPicker(true, { type: 'fixtureProperty', fixtureKey: 'hazer-power', propertyName: 'dimmer' })
+    renderPicker(true, { type: 'fixtureAttribute', fixtureKey: 'hazer-power', attribute: 'dimmer' })
     expect(screen.getByText('Hazer power (infrastructure)')).toBeInTheDocument()
     // The second combobox is the Fixture field (the first is the target kind).
     fireEvent.click(screen.getAllByRole('combobox')[1]!)

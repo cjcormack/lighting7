@@ -60,7 +60,7 @@ export interface FixtureDirectFx {
   id: number
   fxType: string
   targetKey: string
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: string
   isRunning: boolean
@@ -88,7 +88,7 @@ export interface FixtureIndirectFx {
   /** `group`, or `selection` for an effect over a selection naming the fixture. Absent before D3. */
   targetType?: 'group' | 'selection'
 
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: string
   isRunning: boolean
@@ -134,7 +134,7 @@ export interface FxLibraryEntry {
   defaultDirection?: string
   description?: string
   parameters: FxParameterDef[]
-  compatibleProperties: string[]
+  compatibleAttributes: string[]
   source?: string
   sourceDefinitionId?: number | null
   script?: string | null
@@ -149,7 +149,7 @@ export interface AddFixtureFxRequest {
    * members are (effects plan D3). One item is that fixture or group alone.
    */
   targets?: CueTarget[]
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: BlendMode
   startOnBeat: boolean
@@ -244,7 +244,7 @@ export function isFxSplit(answer: ActiveFx | FxSplitResponse): answer is FxSplit
 
 /**
  * One running effect, as `GET /api/rest/fx/active` reports it. Richer than the `fxState`
- * WebSocket frame, which carries no `propertyName` or group flag — both of which the FX
+ * WebSocket frame, which carries no `attribute` or group flag — both of which the FX
  * sheet needs to place a chip in the right fixture x column.
  */
 export interface ActiveFx {
@@ -259,7 +259,7 @@ export interface ActiveFx {
   targetType?: 'fixture' | 'group' | 'selection'
   /** A selection's fixtures and groups, in the order the effect spreads over them. */
   targets?: CueTarget[] | null
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: string
   isRunning: boolean

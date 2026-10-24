@@ -17,7 +17,7 @@ export function collectCueTargets(cue: Cue): CueTarget[] {
     out.push({ type: t.type, key: t.key })
   }
 
-  for (const a of cue.propertyAssignments) push({ type: a.targetType, key: a.targetKey })
+  for (const a of cue.attributeAssignments) push({ type: a.targetType, key: a.targetKey })
   for (const e of cue.adHocFx) storedFxTargets(e.targetType, e.targetKey).forEach(push)
   // A layer with no targets of its own contributes none here: it uses the Look's targets, which
   // this client cannot expand without fetching every Look's rows.

@@ -13,12 +13,12 @@ import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.fx.takeLooseCue
 import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoFixturePatch
@@ -53,9 +53,9 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
     private fun mock(): MockDmxController = state.show.fixtures.controller(universe) as MockDmxController
 
     private fun dimmerChannel(fixtureKey: String): Int =
-        PropertyChannelWriter.resolve(
+        AttributeChannelWriter.resolve(
             state.show.fixtures.untypedGroupableFixture(fixtureKey), "dimmer",
-            CueAssignmentResolver.PropertyValue.Slider(1u),
+            CueAssignmentResolver.AttributeValue.Slider(1u),
         ).single().channel
 
     private fun seedStackWithDimmerCue(fixtureKey: String, level: Int): Pair<Int, Int> = transaction(state.database) {
@@ -69,7 +69,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
             this.project = project
             name = "cue"
         }.inStack(stack, sortOrder = 0)
-        DaoCuePropertyAssignment.new {
+        DaoCueAttributeAssignment.new {
             this.cue = cue
             targetType = "fixture"; targetKey = fixtureKey
             attribute = "dimmer"; value = "$level"; sortOrder = 0
@@ -96,11 +96,11 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)
 
         state.show.cueStackManager.activateEntry(state, stackId, state.entryIdOf(cueId))
-        state.show.fxEngine.programmer.writeProperty(
+        state.show.fxEngine.programmer.writeAttribute(
             ProgrammerOwner.WEB,
             state.show.fixtures.untypedGroupableFixture("hex-2"),
             "dimmer",
-            CueAssignmentResolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.AttributeValue.Slider(150u),
         )
         FxTestSupport.start(state, "SineWave", "hex-3", "dimmer", programmerBand = true)
         state.show.parkManager.park(0, 300, 255u)
@@ -133,7 +133,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
 
         assertEquals(cueId, state.show.cueStackManager.getActiveCueId(stackId), "the live cue is live again")
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.AttributeValue.Slider(150u),
             programmerValue(state, "hex-2", "dimmer"),
             "the programmer came across",
         )
@@ -168,7 +168,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val strandedDimmer = dimmerChannel("hex-2")
         val (stackId, cueId) = seedStackWithDimmerCue("hex-1", 200)
         transaction(state.database) {
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = DaoCue.findById(cueId)!!
                 targetType = "fixture"; targetKey = "hex-2"
                 attribute = "dimmer"; value = "120"; sortOrder = 1
@@ -179,7 +179,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
 
         // What a pull brings in: the cue now sets hex-1 to 100 and no longer touches hex-2.
         transaction(state.database) {
-            DaoCue.findById(cueId)!!.propertyAssignments.forEach {
+            DaoCue.findById(cueId)!!.attributeAssignments.forEach {
                 if (it.targetKey == "hex-1") it.value = "100" else it.delete()
             }
         }
@@ -312,7 +312,7 @@ class ProjectReloadCarryTest : RouteIntegrationTest() {
         val (first, second) = transaction(state.database) {
             val project = DaoProject.findById(projectId)!!
             fun loose(level: Int) = DaoCue.new { this.project = project; name = "loose $level" }.also { cue ->
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = "hex-2"
                     attribute = "dimmer"; value = "$level"; sortOrder = 0

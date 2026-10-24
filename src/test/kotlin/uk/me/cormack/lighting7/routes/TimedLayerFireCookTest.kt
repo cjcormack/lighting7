@@ -11,7 +11,7 @@ import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookRow
@@ -60,7 +60,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
     private fun cueColour(fixtureKey: String): String? =
         (state.show.fxEngine.layerResolver
             .currentCueLayerState[CueAssignmentResolver.Key.fixture(fixtureKey, "rgbColour")]
-                as? CueAssignmentResolver.PropertyValue.Colour)
+                as? CueAssignmentResolver.AttributeValue.Colour)
             ?.value?.toSerializedString()
 
     private suspend fun awaitColour(fixtureKey: String, expected: String, whatFor: String) {
@@ -97,7 +97,7 @@ class TimedLayerFireCookTest : RouteIntegrationTest() {
             // A local row so the cue registers Layer 4 at GO. `replaceAssignments` — which is
             // what a fire publishes through — skips a cue that has no rows registered yet, so a
             // cue holding *only* a timed layer would never light at all. Not this test's subject.
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
                 attribute = "dimmer"; value = "255"; sortOrder = 0

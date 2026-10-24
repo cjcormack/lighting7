@@ -93,10 +93,10 @@ const CIRCLE: FxLibraryEntry = {
   outputType: 'POSITION',
   fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['position'],
+  compatibleAttributes: ['position'],
   parameters: [
-    { name: 'panCenter', type: 'ubyte', defaultValue: '128', description: '' },
-    { name: 'tiltCenter', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'panCentre', type: 'ubyte', defaultValue: '128', description: '' },
+    { name: 'tiltCentre', type: 'ubyte', defaultValue: '128', description: '' },
     { name: 'panRadius', type: 'ubyte', defaultValue: '64', description: '' },
     { name: 'tiltRadius', type: 'ubyte', defaultValue: '64', description: '' },
   ],
@@ -108,7 +108,7 @@ const PULSE: FxLibraryEntry = {
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
   timingSource: 'BEAT',
-  compatibleProperties: ['dimmer', 'uv'],
+  compatibleAttributes: ['dimmer', 'uv'],
   parameters: [
     { name: 'min', type: 'ubyte', defaultValue: '0', description: '' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: '' },
@@ -129,9 +129,9 @@ const aroundCircle = () =>
     id: 21,
     fxType: 'Circle',
     targetKey: 'spot-3',
-    propertyName: 'position',
+    attribute: 'position',
     blendMode: 'ADDITIVE',
-    parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+    parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
   })
 
 const lastFrame = () => updateFx.mock.calls.at(-1)?.[1] as Record<string, unknown>
@@ -199,7 +199,7 @@ describe('FxEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Revert' }))
     expect(updateFx).toHaveBeenCalledTimes(1)
     expect(lastFrame()).toEqual({
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
       cycle: 1,
       blendMode: 'ADDITIVE',
       phaseOffset: 0,
@@ -207,7 +207,7 @@ describe('FxEditor', () => {
   })
 
   it('Revert onto Seconds sends seconds alone and draws no master — so it is no longer dirty', () => {
-    render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', propertyName: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
+    render(<FxEditor effect={makeActiveFx({ fxType: 'Pulse', attribute: 'dimmer', cycle: 2, timingSource: 'WALL_CLOCK', seconds: true })} onDone={() => {}} onStop={() => {}} />)
     fireEvent.pointerDown(screen.getByRole('button', { name: 'Timing: Seconds' }), { button: 0, ctrlKey: false, pointerType: 'mouse' })
     fireEvent.click(screen.getByRole('menuitemradio', { name: /M1 · Main/ }))
     expect(lastFrame()).toMatchObject({ seconds: false, speedMasterUuid: 'master-1' })
@@ -236,9 +236,9 @@ describe('FxEditor', () => {
       id: 22,
       fxType: 'Circle',
       targetKey: 'spot-3',
-      propertyName: 'position',
+      attribute: 'position',
       blendMode: 'OVERRIDE',
-      parameters: { panCenter: '60', tiltCenter: '90', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '60', tiltCentre: '90', panRadius: '64', tiltRadius: '64' },
     })
     render(<FxEditor effect={absolute} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Absolute' }).getAttribute('aria-checked')).toBe('true')
@@ -249,7 +249,7 @@ describe('FxEditor', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Around current position' }))
     expect(lastFrame()).toMatchObject({
       blendMode: 'ADDITIVE',
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
     })
     expect(screen.queryByRole('slider', { name: 'Pan' })).toBeNull()
 
@@ -263,7 +263,7 @@ describe('FxEditor', () => {
       id: 31,
       fxType: 'Pulse',
       targetKey: 'spot-3',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       parameters: { min: '0', max: '255', attackRatio: '0.1', curve: 'QUAD_OUT' },
     })
     render(<FxEditor effect={pulse} onDone={() => {}} onStop={() => {}} />)
@@ -281,7 +281,7 @@ describe('FxEditor', () => {
       id: 31,
       fxType: 'Pulse',
       targetKey: 'spot-3',
-      propertyName: 'dimmer',
+      attribute: 'dimmer',
       parameters: { min: '0', max: '255', attackRatio: '0.1', curve: 'QUAD_OUT' },
     })
     render(<FxEditor effect={pulse} onDone={() => {}} onStop={() => {}} />)
@@ -308,7 +308,7 @@ describe('FxEditor', () => {
   })
 
   it('reads a stored Additive Circle with no centres spelled as Around — the defaults are 128', () => {
-    const bare = makeActiveFx({ id: 23, fxType: 'Circle', targetKey: 'spot-3', propertyName: 'position', blendMode: 'ADDITIVE', parameters: {} })
+    const bare = makeActiveFx({ id: 23, fxType: 'Circle', targetKey: 'spot-3', attribute: 'position', blendMode: 'ADDITIVE', parameters: {} })
     render(<FxEditor effect={bare} onDone={() => {}} onStop={() => {}} />)
     expect(screen.getByRole('radio', { name: 'Around current position' }).getAttribute('aria-checked')).toBe('true')
   })
@@ -352,7 +352,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
       blendMode: 'ADDITIVE',
       order: 'NORMAL',
       phaseOffset: 0,
-      parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+      parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
       speedMasterUuid: null,
       rateSpeedMasterUuid: null,
     },
@@ -403,7 +403,7 @@ describe('FxEditor — a pad\'s running instance (fixture-fx-sheets plan §3.3, 
       fx: {
         ...BIG_CIRCLE.fx,
         cycle: 2,
-        parameters: { panCenter: '128', tiltCenter: '128', panRadius: '120', tiltRadius: '64' },
+        parameters: { panCentre: '128', tiltCentre: '128', panRadius: '120', tiltRadius: '64' },
       },
     })
     // Then W5 on this instance: the PUT alone would respawn it at the stack's next recook.

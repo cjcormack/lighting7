@@ -15,8 +15,8 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       return `Fixture '${health.fixtureKey}' no longer exists`
     case "missingGroup":
       return `Group '${health.groupName}' no longer exists`
-    case "missingProperty":
-      return `Attribute '${health.propertyName}' is not defined on '${health.targetKey}'`
+    case "missingAttribute":
+      return `Attribute '${health.attribute}' is not defined on '${health.targetKey}'`
     // Three reference cases for the old `ref:` value grammar stood here; all retired with it
     // (looks-and-layers session 4): a row cannot hold a reference, so a reference that resolves to
     // nothing is not a state to describe. The `missingPalette` below is a binding's, and unrelated.
@@ -30,10 +30,10 @@ export function describeHealth(health: BindingHealth | undefined): string | null
       // Unlike an effect, which degrades to master 1, a dead tempo binding does nothing —
       // silently retuning the global tempo instead would be worse than being visibly dead.
       return "The speed master this controls no longer exists"
-    case "unknownProperty":
+    case "unknownAttribute":
       // A selection or encoder-bank property, so there is no target to name — what makes it dead
       // is that nothing in the patch has the property at all.
-      return `No fixture in this patch has a '${health.propertyName}' attribute`
+      return `No fixture in this patch has a '${health.attribute}' attribute`
     // The record variants. Each names its uuid rather than a resolved name, because this function
     // is pure and has no library to look one up in — the same line `describeTarget` draws.
     case "missingLook":

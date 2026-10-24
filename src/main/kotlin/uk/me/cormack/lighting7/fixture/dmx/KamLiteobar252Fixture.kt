@@ -80,7 +80,7 @@ class KamLiteobar252Fixture(
         override val elementKey: String
             get() = "${this@KamLiteobar252Fixture.key}.cell-${elementIndex + 1}"
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             cellTransaction, universe,
             cellFirstChannel,
@@ -94,7 +94,7 @@ class KamLiteobar252Fixture(
         override fun toString(): String = "Cell($elementKey)"
     }
 
-    @FixtureProperty("Master macro (blackout / dimmer / built-in effects)", category = PropertyCategory.SETTING)
+    @FixtureAttribute("Master macro (blackout / dimmer / built-in effects)", category = AttributeCategory.SETTING)
     val macro = DmxFixtureSetting(
         transaction, universe, firstChannel, Macro.entries.toTypedArray(),
     )
@@ -106,8 +106,8 @@ class KamLiteobar252Fixture(
      */
     // Estimate: the strobe's 1–20 Hz — no rate is published for it. Checked on the rig by
     // FU-MANUAL-S6-STROBE.
-    @FixtureProperty(
-        category = PropertyCategory.STROBE,
+    @FixtureAttribute(
+        category = AttributeCategory.STROBE,
         strobe = [
             StrobeBand(0, 0, StrobeKind.OPEN),
             StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),

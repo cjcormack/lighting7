@@ -19,7 +19,7 @@ class FxRegistryTest {
             family = "intensity",
             outputType = FxOutputType.SLIDER,
             parameters = listOf(ParameterInfo("min", "ubyte", "0", "Min value")),
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             factory = { params, _, _ ->
                 SineSlider(
                     min = params["min"]?.toIntOrNull()?.toUByte() ?: 0u,
@@ -80,7 +80,7 @@ class FxRegistryTest {
             name = "Colour Source Test",
             family = "colour",
             outputType = FxOutputType.COLOUR,
-            compatibleProperties = listOf("rgbColour"),
+            compatibleAttributes = listOf("rgbColour"),
             factory = { _, resolveColourSource, _ ->
                 received = resolveColourSource
                 SineSlider() // dummy return

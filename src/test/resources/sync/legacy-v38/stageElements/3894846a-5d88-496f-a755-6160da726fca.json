@@ -1,0 +1,100 @@
+{
+  "depthM": 0.4,
+  "heightM": 3.0,
+  "kind": "OBJECT",
+  "layer": "SET",
+  "name": "Garden arch",
+  "params": {
+    "parts": [
+      {
+        "colour": "#7a6a58",
+        "depthM": 0.3,
+        "holes": [
+          [
+            [
+              -0.8,
+              0.0
+            ],
+            [
+              0.8,
+              0.0
+            ],
+            [
+              0.0,
+              0.4
+            ]
+          ]
+        ],
+        "name": "Arch",
+        "outline": [
+          [
+            -1.2,
+            0.0
+          ],
+          [
+            1.2,
+            0.0
+          ],
+          [
+            1.2,
+            0.6
+          ],
+          [
+            -1.2,
+            0.6
+          ]
+        ],
+        "pattern": "TILES",
+        "pitchDeg": 1.0,
+        "rollDeg": 2.0,
+        "shape": "EXTRUDE",
+        "texture": {
+          "image": "06704ffda37eb2ea1b6fe29f2f642de4d1625ed4a6ef131acace7d33c4641074",
+          "mode": "TILE",
+          "tileM": 0.25
+        },
+        "yawDeg": 0.5,
+        "z": 2.4
+      },
+      {
+        "profile": [
+          [
+            0.15,
+            0.0
+          ],
+          [
+            0.1,
+            2.4
+          ]
+        ],
+        "segments": 16,
+        "shadow": false,
+        "shape": "LATHE",
+        "x": -1.0
+      },
+      {
+        "emissive": true,
+        "heightM": 2.4,
+        "shape": "CYLINDER",
+        "topWidthM": 0.2,
+        "widthM": 0.3,
+        "x": 1.0,
+        "z": 1.2
+      },
+      {
+        "depthM": 0.2,
+        "heightM": 0.25,
+        "shape": "SPHERE",
+        "widthM": 0.3,
+        "x": 0.0,
+        "z": 3.0
+      }
+    ],
+    "shape": "MODEL"
+  },
+  "positionX": 2.0,
+  "positionY": 4.0,
+  "sortOrder": 5,
+  "uuid": "3894846a-5d88-496f-a755-6160da726fca",
+  "widthM": 2.4
+}

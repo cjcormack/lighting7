@@ -14,8 +14,8 @@ object FxStacking {
         val parameters: Map<String, String> = emptyMap(),
     )
 
-    private const val PAN_CENTRE = "panCenter"
-    private const val TILT_CENTRE = "tiltCenter"
+    private const val PAN_CENTRE = "panCentre"
+    private const val TILT_CENTRE = "tiltCentre"
 
     /** Position's centres at 128: an *Around* FX moves about what is under it, not about a fixed point. */
     private val CENTRED = mapOf(PAN_CENTRE to "128", TILT_CENTRE to "128")
@@ -25,12 +25,12 @@ object FxStacking {
      * Position FX without both (Palette Steps, which outputs where to go) replaces at full, as an
      * unstacked press does.
      */
-    fun startFor(family: PropertyMaskGroup, parameters: Set<String>): Start = when (family) {
-        PropertyMaskGroup.INTENSITY -> Start(BlendMode.MULTIPLY, 1.0)
-        PropertyMaskGroup.POSITION ->
+    fun startFor(family: AttributeFamily, parameters: Set<String>): Start = when (family) {
+        AttributeFamily.INTENSITY -> Start(BlendMode.MULTIPLY, 1.0)
+        AttributeFamily.POSITION ->
             if (PAN_CENTRE in parameters && TILT_CENTRE in parameters) Start(BlendMode.ADDITIVE, 1.0, CENTRED)
             else Start(BlendMode.OVERRIDE, 1.0)
-        PropertyMaskGroup.COLOUR -> Start(BlendMode.OVERRIDE, 0.5)
-        PropertyMaskGroup.BEAM -> Start(BlendMode.OVERRIDE, 0.5)
+        AttributeFamily.COLOUR -> Start(BlendMode.OVERRIDE, 0.5)
+        AttributeFamily.BEAM -> Start(BlendMode.OVERRIDE, 0.5)
     }
 }

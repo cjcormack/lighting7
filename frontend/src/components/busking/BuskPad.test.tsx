@@ -34,7 +34,7 @@ function palettePad(overrides: Partial<PaletteSummary> = {}): BuskPad {
       family: 'COLOUR',
       isGeneric: true,
       kind: 'value',
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'colour', value: '#FF9D4A' }],
+      rows: [{ targetType: 'deferred', targetKey: '', attribute: 'colour', value: '#FF9D4A' }],
       fx: null,
       layerCount: 0,
       ...overrides,

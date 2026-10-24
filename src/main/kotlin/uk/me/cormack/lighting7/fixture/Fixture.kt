@@ -18,18 +18,18 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
     override val memberCount: Int get() = 1
     abstract override fun withTransaction(transaction: ControllerTransaction): Fixture
 
-    data class Property(
+    data class Attribute(
         val classProperty: KProperty1<out Fixture, *>,
         val name: String,
         val description: String,
-        val category: PropertyCategory,
+        val category: AttributeCategory,
         val composition: CompositionRule,
         val bundleWithColour: Boolean,
         val compactDisplay: CompactDisplayRole = CompactDisplayRole.NONE,
         val axis: PanTiltAxis = PanTiltAxis.NONE,
         val degMin: Double? = null,
         val degMax: Double? = null,
-        /** A PAN slider's front ([FixtureProperty.forwardDeg]); null for the middle of its range. */
+        /** A PAN slider's front ([FixtureAttribute.forwardDeg]); null for the middle of its range. */
         val forwardDeg: Double? = null,
         val inverted: Boolean = false,
         val focusNearM: Double? = null,
@@ -41,17 +41,17 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
         val depthMax: Double? = null,
         /** What the setting's options can be loaded with; null when it is not loadable. */
         val media: MediaSlot? = null,
-        /** The proportional band's first DMX value ([FixtureProperty.activeMin]); null for the slider's min. */
+        /** The proportional band's first DMX value ([FixtureAttribute.activeMin]); null for the slider's min. */
         val activeMin: Int? = null,
-        /** The proportional band's last DMX value ([FixtureProperty.activeMax]); null for the slider's max. */
+        /** The proportional band's last DMX value ([FixtureAttribute.activeMax]); null for the slider's max. */
         val activeMax: Int? = null,
-        /** A STROBE slider's bands ([FixtureProperty.strobe]), in DMX order; empty on every other property. */
+        /** A STROBE slider's bands ([FixtureAttribute.strobe]), in DMX order; empty on every other property. */
         val strobeBands: List<StrobeBandSpec> = emptyList(),
-        /** The families this timing channel stretches ([FixtureProperty.timing]); null when it is not one. */
+        /** The families this timing channel stretches ([FixtureAttribute.timing]); null when it is not one. */
         val timing: TimingRole? = null,
-        /** A timing channel's seconds per DMX step ([FixtureProperty.timingSecondsPerStep]). */
+        /** A timing channel's seconds per DMX step ([FixtureAttribute.timingSecondsPerStep]). */
         val timingSecondsPerStep: Double? = null,
-        /** The DMX from which a timing channel means "fastest" ([FixtureProperty.timingFastFrom]). */
+        /** The DMX from which a timing channel means "fastest" ([FixtureAttribute.timingFastFrom]). */
         val timingFastFrom: Int? = null,
         /**
          * Backed by a [DmxFixtureSetting] — a slot channel, whatever its category. A COLOUR
@@ -64,8 +64,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
     ) {
         companion object {
             /**
-             * Build a [Property] from a [@FixtureProperty] annotation. The single caller is
-             * [FixturePropertyCatalogue], which is the one place that scans a class — fixture
+             * Build a [Attribute] from a [@FixtureAttribute] annotation. The single caller is
+             * [FixtureAttributeCatalogue], which is the one place that scans a class — fixture
              * or element — for annotated members. NaN sentinels for the optional Double-valued
              * annotation fields, the empty-string sentinel for [fineOf], [Blade.NONE] for
              * [blade], [MediaSlot.NONE] for [media], [TimingRole.NONE] for [timing] and `-1` for
@@ -74,8 +74,8 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
              */
             fun fromAnnotation(
                 classProperty: KProperty1<out Fixture, *>,
-                ann: FixtureProperty,
-            ): Property = Property(
+                ann: FixtureAttribute,
+            ): Attribute = Attribute(
                 classProperty,
                 classProperty.name,
                 ann.description,
@@ -108,13 +108,13 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
     }
 
     /**
-     * This class's `@FixtureProperty` / `@FixtureType` metadata, shared by every instance of it.
+     * This class's `@FixtureAttribute` / `@FixtureType` metadata, shared by every instance of it.
      *
-     * Resolved through [FixturePropertyCatalogue] rather than scanned here, because the FX tick
+     * Resolved through [FixtureAttributeCatalogue] rather than scanned here, because the FX tick
      * rebuilds a fixture per transaction and this initializer therefore runs 50×/s per patched
      * fixture — see that object's KDoc.
      */
-    private val catalogue = FixturePropertyCatalogue.of(this::class)
+    private val catalogue = FixtureAttributeCatalogue.of(this::class)
 
     private val fixtureTypeAnnotation: FixtureType = checkNotNull(catalogue.fixtureType) {
         "Fixture class ${this::class.qualifiedName} has no @FixtureType annotation"
@@ -122,21 +122,21 @@ sealed class Fixture(val key: String, val fixtureName: String) : GroupableFixtur
     val typeKey: String = fixtureTypeAnnotation.typeKey
     val manufacturer: String = fixtureTypeAnnotation.manufacturer
     val model: String = fixtureTypeAnnotation.model
-    val fixtureProperties: List<Property> get() = catalogue.all
+    val fixtureAttributes: List<Attribute> get() = catalogue.all
 
     /** Look up a declared property by its reflection name; null if no such annotated property. */
-    fun fixtureProperty(name: String): Property? = catalogue.byName[name]
+    fun fixtureAttribute(name: String): Attribute? = catalogue.byName[name]
 
     /**
      * The `bundleWithColour` slider for [category] (WHITE / AMBER / UV), or null if this fixture
      * has none. Indexed rather than scanned: [ColourTarget][uk.me.cormack.lighting7.fx.ColourTarget]
      * asks for all three on every colour write, reset and park check.
      */
-    internal fun bundledProperty(category: PropertyCategory): Property? =
+    internal fun bundledAttribute(category: AttributeCategory): Attribute? =
         catalogue.bundledByCategory[category]
 
-    /** This fixture's [PropertyCategory.COLOUR] property, if it declares one. */
-    internal val colourProperty: Property? get() = catalogue.colour
+    /** This fixture's [AttributeCategory.COLOUR] property, if it declares one. */
+    internal val colourAttribute: Attribute? get() = catalogue.colour
 
     open fun blackout() {
         if (this is WithDimmer) {

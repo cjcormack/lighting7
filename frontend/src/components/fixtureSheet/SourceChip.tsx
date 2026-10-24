@@ -56,7 +56,7 @@ export function SourceChip({
   source,
   heads,
   group,
-  propertyName,
+  attribute,
   label,
   cueLabel,
   connected,
@@ -68,7 +68,7 @@ export function SourceChip({
   /** A group's *All*: the stack is asked of the group. */
   group?: string
   /** The row's first key: the property the stack is asked about. */
-  propertyName: string
+  attribute: string
   /** The row's name, for the stack's title. */
   label: string
   /** Outside a fixture sheet (the grid's cell editor), what its context would carry — see `LayerStack`. */
@@ -86,7 +86,7 @@ export function SourceChip({
         onOpenChange={setOpen}
         heads={heads}
         group={group}
-        propertyName={propertyName}
+        attribute={attribute}
         label={label}
         cueLabel={cueLabel}
         connected={connected}

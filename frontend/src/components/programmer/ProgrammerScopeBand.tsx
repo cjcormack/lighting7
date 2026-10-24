@@ -2,7 +2,7 @@ import { Eye, Hand } from 'lucide-react'
 import { cn, labelUnlessCompact } from '@/lib/utils'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
-import { FAMILY_LABELS, parsePropertyMask } from '@/lib/attributeFamily'
+import { FAMILY_LABELS, parseAttributeMask } from '@/lib/attributeFamily'
 import { useProgrammerLayersQuery } from '@/store/programmer'
 import { useLookSaveState } from './LookRowStore'
 import { useFocusedPaletteLayer } from './FocusedPaletteLayer'
@@ -71,7 +71,7 @@ export function ProgrammerScopeBand({ compact = false }: { compact?: boolean }) 
   // `lookName` rides on the layer frame, so naming the focused Look costs no second query — and
   // the stack this reads is the same broadcast the rail draws, so the two cannot disagree.
   const layer = scope.kind === 'layer' ? layers?.find((l) => l.layerId === scope.layerId) : undefined
-  const mask = parsePropertyMask(layer?.propertyMask)
+  const mask = parseAttributeMask(layer?.attributeMask)
 
   // The two spans the band used to spend a line on, as one. Order is what the operator asks in
   // order: what does this layer assert, and onto what.

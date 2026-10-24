@@ -371,7 +371,7 @@ class Fixtures {
     /**
      * The fixture list and the channel mappings from **one** read of the register, stamped
      * with the [structureVersion] they were read at — for a caller that joins the two, as the
-     * channel-mapping frame does (every address's `properties` comes from walking the fixtures,
+     * channel-mapping frame does (every address's `attributes` comes from walking the fixtures,
      * then lands on that address's mapping). Two separate reads could straddle a [register]
      * and pair one register's keys with the other's mappings.
      *

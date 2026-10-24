@@ -17,7 +17,7 @@
  * types because aim and the Stage view still need them, and that module serves those.
  */
 
-import type { SliderPropertyDescriptor } from '../store/fixtures'
+import type { SliderAttributeDescriptor } from '../store/fixtures'
 import { degreesToDmx } from './axisDegrees'
 
 /** The scale's ends: DMX 0 and DMX 255 on a 0–255 axis. */
@@ -81,8 +81,8 @@ export function legacyDegreesToCentre(degrees: number, spanDegrees: number): num
 
 /** The axes a per-fixture row names, for converting its stored degrees exactly. */
 export interface PositionAxes {
-  pan?: SliderPropertyDescriptor
-  tilt?: SliderPropertyDescriptor
+  pan?: SliderAttributeDescriptor
+  tilt?: SliderAttributeDescriptor
 }
 
 /**
@@ -97,7 +97,7 @@ export function positionOnScale(
   axes?: PositionAxes,
 ): { pan: number; tilt: number } {
   if (intent.unit === 'centre') return { pan: clampCentre(intent.pan), tilt: clampCentre(intent.tilt) }
-  const exact = (deg: number, slider: SliderPropertyDescriptor | undefined, legacySpan: number) => {
+  const exact = (deg: number, slider: SliderAttributeDescriptor | undefined, legacySpan: number) => {
     const dmx = slider ? degreesToDmx(deg, slider) : null
     return dmx != null && slider ? dmxToCentre(dmx, slider) : legacyDegreesToCentre(deg, legacySpan)
   }

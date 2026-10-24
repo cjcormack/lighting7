@@ -26,7 +26,7 @@ const library: FxLibraryEntry[] = [
     timingSource: 'BEAT',
     description: 'Pulses between two colours on the beat.',
     parameters: [{ name: 'colourA', type: 'Colour', defaultValue: '#FF9D4A', description: '' }],
-    compatibleProperties: ['rgbColour'],
+    compatibleAttributes: ['rgbColour'],
   },
   {
     name: 'Rainbow Cycle',
@@ -35,7 +35,7 @@ const library: FxLibraryEntry[] = [
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [],
-    compatibleProperties: ['rgbColour'],
+    compatibleAttributes: ['rgbColour'],
   },
   {
     name: 'Circle',
@@ -44,12 +44,12 @@ const library: FxLibraryEntry[] = [
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [
-      { name: 'panCenter', type: 'UByte', defaultValue: '128', description: '' },
-      { name: 'tiltCenter', type: 'UByte', defaultValue: '128', description: '' },
+      { name: 'panCentre', type: 'UByte', defaultValue: '128', description: '' },
+      { name: 'tiltCentre', type: 'UByte', defaultValue: '128', description: '' },
       { name: 'panRadius', type: 'UByte', defaultValue: '64', description: '' },
       { name: 'tiltRadius', type: 'UByte', defaultValue: '64', description: '' },
     ],
-    compatibleProperties: ['position'],
+    compatibleAttributes: ['position'],
   },
   {
     name: 'Zoom Wave',
@@ -58,7 +58,7 @@ const library: FxLibraryEntry[] = [
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [{ name: 'min', type: 'ubyte', defaultValue: '64', description: '' }],
-    compatibleProperties: ['zoom'],
+    compatibleAttributes: ['zoom'],
   },
   {
     name: 'Sine Dim',
@@ -67,7 +67,7 @@ const library: FxLibraryEntry[] = [
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [],
-    compatibleProperties: ['dimmer'],
+    compatibleAttributes: ['dimmer'],
   },
   {
     name: 'PaletteSteps',
@@ -79,7 +79,7 @@ const library: FxLibraryEntry[] = [
       { name: 'palettes', type: 'paletteList', defaultValue: '', description: '' },
       { name: 'fadeRatio', type: 'double', defaultValue: '0.5', description: '' },
     ],
-    compatibleProperties: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
+    compatibleAttributes: ['dimmer', 'rgbColour', 'position', 'zoom', 'focus', 'iris', 'frost'],
   },
   {
     name: 'SlotSteps',
@@ -89,7 +89,7 @@ const library: FxLibraryEntry[] = [
     fxMode: 'STANDARD',
     timingSource: 'BEAT',
     parameters: [{ name: 'slots', type: 'slotList', defaultValue: '', description: '' }],
-    compatibleProperties: ['setting'],
+    compatibleAttributes: ['setting'],
   },
 ]
 
@@ -102,7 +102,7 @@ vi.mock('@/store/fixtures', () => ({
   useVisibleFixtureListQuery: () => ({ data: wire.fixtures }),
 }))
 vi.mock('@/store/speedMasters', () => ({
-  // The D8 stamp: an effect authored under Colour picks up the master whose usage is `colour`.
+  // The D8 stamp: an effect authored under Colour picks up the master whose family is `colour`.
   useSpeedMasterForFamily: () => (category: string | null) =>
     category === 'colour' ? 'master-2-uuid' : category === 'beam' ? 'master-3-uuid' : null,
   useSpeedMasterDisplay: () => null,
@@ -141,7 +141,7 @@ function template(over: Partial<PaletteSummary> = {}): PaletteSummary {
     kind: 'value',
     requiredEmitters: [],
     rows: [
-      { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
+      { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' },
     ],
     fx: null,
     layerCount: 0,
@@ -196,7 +196,7 @@ afterEach(() => {
 async function savedRows(onSave: ReturnType<typeof vi.fn>) {
   await waitFor(() => expect(onSave).toHaveBeenCalled())
   const body = onSave.mock.calls[onSave.mock.calls.length - 1][0] as PaletteInput
-  return Object.fromEntries((body.rows ?? []).map((row) => [row.propertyName, row.value]))
+  return Object.fromEntries((body.rows ?? []).map((row) => [row.attribute, row.value]))
 }
 
 describe('the colour control', () => {
@@ -206,7 +206,7 @@ describe('the colour control', () => {
     // Extract selected and was rewritten as Extract on the next unrelated edit.
     renderEditor({
       palette: template({
-        rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A' }],
+        rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A' }],
       }),
     })
     expect(screen.getByRole('button', { name: 'RGB only' })).toHaveAttribute('data-variant', 'default')
@@ -244,8 +244,8 @@ describe('the colour control', () => {
     const { onSave } = renderEditor({
       palette: template({
         rows: [
-          { targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#FF9D4A;policy=extract' },
-          { targetType: 'deferred', targetKey: '', propertyName: 'white', value: 'dmx:180' },
+          { targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#FF9D4A;policy=extract' },
+          { targetType: 'deferred', targetKey: '', attribute: 'white', value: 'dmx:180' },
         ],
       }),
     })
@@ -375,9 +375,9 @@ describe('validity and the save body', () => {
     expect(create).toBeDisabled()
   })
 
-  it('sends `effect` and no `rows`, stamped with the family’s usage master', async () => {
+  it('sends `effect` and no `rows`, stamped with the family’s master', async () => {
     // Never both halves: a body naming the other one is a 400 rather than a no-op. And the master
-    // is stamped at authoring time — nothing resolves usage later, so an unstamped effect would
+    // is stamped at authoring time — nothing resolves the family later, so an unstamped effect would
     // silently run on master 1 forever.
     const { onSave } = renderEditor()
     fireEvent.click(screen.getByRole('button', { name: 'FX' }))
@@ -391,7 +391,7 @@ describe('validity and the save body', () => {
     expect(body.fx).toMatchObject({
       fxType: 'Colour Pulse',
       family: 'colour',
-      propertyName: null,
+      attribute: null,
       speedMasterUuid: 'master-2-uuid',
     })
     // Parameters seed from the effect's own declared defaults rather than arriving empty.
@@ -413,7 +413,7 @@ describe('validity and the save body', () => {
     expect(body.fx).toMatchObject({
       fxType: 'Zoom Wave',
       family: 'beam',
-      propertyName: null,
+      attribute: null,
       speedMasterUuid: 'master-3-uuid',
     })
   })
@@ -449,7 +449,7 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toMatchObject({ fxType: 'Circle', blendMode: 'ADDITIVE' })
-    expect(body.fx?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
+    expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
   })
 
   it('reads a stored Override movement palette as Absolute, with its centre shown (call 6)', async () => {
@@ -462,12 +462,12 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
         fx: {
           fxType: 'Circle',
           family: 'position',
-          propertyName: null,
+          attribute: null,
           cycle: 1,
           blendMode: 'OVERRIDE',
           order: 'NORMAL',
           phaseOffset: 0,
-          parameters: { panCenter: '90', tiltCenter: '100', panRadius: '64', tiltRadius: '64' },
+          parameters: { panCentre: '90', tiltCentre: '100', panRadius: '64', tiltRadius: '64' },
           speedMasterUuid: null,
           rateSpeedMasterUuid: null,
           timingSource: 'BEAT',
@@ -483,7 +483,7 @@ describe('Around in palettes (fixture-fx-sheets plan D16)', () => {
     await waitFor(() => expect(onSave).toHaveBeenCalled())
     const body = (onSave as ReturnType<typeof vi.fn>).mock.calls[0][0] as PaletteInput
     expect(body.fx).toMatchObject({ blendMode: 'ADDITIVE' })
-    expect(body.fx?.parameters).toMatchObject({ panCenter: '128', tiltCenter: '128' })
+    expect(body.fx?.parameters).toMatchObject({ panCentre: '128', tiltCentre: '128' })
   })
 })
 
@@ -497,7 +497,7 @@ describe('size, direction and runs in a palette (effects plan session 1)', () =>
       fx: {
         fxType: 'Colour Pulse',
         family: 'colour',
-        propertyName: null,
+        attribute: null,
         cycle: 1,
         blendMode: 'OVERRIDE',
         order: 'NORMAL',
@@ -535,7 +535,7 @@ describe('the step effects (effects plan session 7)', () => {
       uuid: `uuid-${name}`,
       name,
       family: 'POSITION',
-      rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value }],
+      rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value }],
     })
 
   it('offers Palette Steps where the family has two generic value palettes, filed under that family', async () => {
@@ -553,7 +553,7 @@ describe('the step effects (effects plan session 7)', () => {
     expect(body.fx).toMatchObject({
       fxType: 'PaletteSteps',
       family: 'position',
-      propertyName: null,
+      attribute: null,
       parameters: { palettes: 'pal:uuid-Centre,pal:uuid-Downstage', fadeRatio: '0.5' },
     })
   })
@@ -572,7 +572,7 @@ describe('the step effects (effects plan session 7)', () => {
     wire.fixtures = [
       {
         key: 'spot-1',
-        properties: [
+        attributes: [
           {
             type: 'setting',
             name: 'gobo',
@@ -600,7 +600,7 @@ describe('the step effects (effects plan session 7)', () => {
     expect(body.fx).toMatchObject({
       fxType: 'SlotSteps',
       family: 'beam',
-      propertyName: 'gobo',
+      attribute: 'gobo',
       parameters: { slots: 'GOBO_1,GOBO_2' },
     })
   })

@@ -20,7 +20,7 @@ object FxTestSupport {
         state: State,
         fxType: String,
         targetKey: String,
-        propertyName: String,
+        attribute: String,
         group: Boolean = false,
         programmerBand: Boolean = false,
         priority: Int = 0,
@@ -33,10 +33,10 @@ object FxTestSupport {
         )
         val target = if (group) {
             val first = state.show.fixtures.untypedGroup(targetKey).fixtures.firstOrNull() as? Fixture
-            FxTargetFactory.forGroup(targetKey, propertyName, effect.outputType, first)
+            FxTargetFactory.forGroup(targetKey, attribute, effect.outputType, first)
         } else {
             FxTargetFactory.forFixture(
-                targetKey, propertyName, effect.outputType,
+                targetKey, attribute, effect.outputType,
                 state.show.fixtures.untypedGroupableFixture(targetKey),
             )
         }

@@ -6,9 +6,9 @@ import uk.me.cormack.lighting7.fixture.FixtureCommands
 import uk.me.cormack.lighting7.fixture.TriggerNotStorableException
 
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import kotlin.reflect.KProperty1
 
@@ -25,8 +25,8 @@ import kotlin.reflect.KProperty1
  *
  * - Coerce `pan`/`tilt` to a [PositionTarget] for a POSITION effect. This is a **repair for
  *   already-persisted rows** — a Look or cue child recorded while A11 was live carries
- *   `propertyName: "pan"`, and narrowing the effect metadata cannot reach it. It is not a licence
- *   for dishonest `compatibleProperties`: `FxRegistrationTargetCompatibilityTest` asserts every
+ *   `attribute: "pan"`, and narrowing the effect metadata cannot reach it. It is not a licence
+ *   for dishonest `compatibleAttributes`: `FxRegistrationTargetCompatibilityTest` asserts every
  *   built-in's metadata resolves correctly *without* the hint.
  * - Leave `pan`/`tilt` alone for a SLIDER effect. A sine wave on the pan axis by itself is
  *   legitimate and keeps resolving to `SliderTarget("pan")`.
@@ -43,30 +43,30 @@ object FxTargetFactory {
      * Resolve a target on a single fixture.
      *
      * @param fixtureKey the fixture's key
-     * @param propertyName the client-supplied property name, in any case
+     * @param attribute the client-supplied property name, in any case
      * @param outputType the effect's output type, when the caller knows it
      * @param fixture the resolved fixture **or element**, or null when it can't be found — only
      *   the fallback branch reads it, to tell a slider property from a setting
      */
     fun forFixture(
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
         fixture: GroupableFixture?,
-    ): FxTarget = resolve(FxTargetRef.fixture(fixtureKey), propertyName, outputType, fixture)
+    ): FxTarget = resolve(FxTargetRef.fixture(fixtureKey), attribute, outputType, fixture)
 
     /**
      * Resolve a target on a group. Identical dispatch to [forFixture]; the fallback branch
      * reflects on [firstMember], since a group's members are homogeneous by the time a group
-     * effect is applied (`groupSupportsProperty` has already required the property of all of
+     * effect is applied (`groupSupportsAttribute` has already required the property of all of
      * them).
      */
     fun forGroup(
         groupName: String,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
         firstMember: Fixture?,
-    ): FxTarget = resolve(FxTargetRef.group(groupName), propertyName, outputType, firstMember)
+    ): FxTarget = resolve(FxTargetRef.group(groupName), attribute, outputType, firstMember)
 
     /**
      * Resolve a target on a selection (effects plan D3). The fallback branch reflects on
@@ -75,30 +75,30 @@ object FxTargetFactory {
      */
     fun forSelection(
         selection: FxTargetsRef.Selection,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
         firstFixture: GroupableFixture?,
-    ): FxTarget = resolve(FxTargetRef.SelectionRef(selection), propertyName, outputType, firstFixture)
+    ): FxTarget = resolve(FxTargetRef.SelectionRef(selection), attribute, outputType, firstFixture)
 
     private fun resolve(
         ref: FxTargetRef,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
         fixture: GroupableFixture?,
     ): FxTarget {
-        val lower = propertyName.lowercase()
+        val lower = attribute.lowercase()
 
         // No effect may drive a one-shot trigger or its arm (stage-view plan session 9, D15). Neither
         // is a property, so the reflective branch below would find nothing anyway; this says why, on
         // every door an effect is spawned through — the REST routes, a cue's effects, the AI.
         if (fixture != null) {
-            FixtureTriggers.reservedNamesOf(fixture::class).firstOrNull { it.equals(propertyName, ignoreCase = true) }?.let {
+            FixtureTriggers.reservedNamesOf(fixture::class).firstOrNull { it.equals(attribute, ignoreCase = true) }?.let {
                 throw TriggerNotStorableException(
                     "'$it' on '${fixture.targetKey}' is a one-shot trigger or its arm: no effect can drive it — it fires as an event while the desk is armed",
                 )
             }
             // Nor a fixture command (fixture optics plan session 7).
-            FixtureCommands.reservedNamesOf(fixture::class).firstOrNull { it.equals(propertyName, ignoreCase = true) }?.let {
+            FixtureCommands.reservedNamesOf(fixture::class).firstOrNull { it.equals(attribute, ignoreCase = true) }?.let {
                 throw CommandNotStorableException(
                     "'$it' on '${fixture.targetKey}' is a fixture command: no effect can drive it — it runs from the fixture panel's Commands menu",
                 )
@@ -119,15 +119,15 @@ object FxTargetFactory {
             "colour", "color", "rgbcolour" -> ColourTarget(ref)
             "position" -> PositionTarget(ref)
             else -> {
-                // Through the catalogue rather than `Fixture.fixtureProperty`, so an element's own
-                // `@FixtureProperty` members answer for a cell exactly as a fixture's do for it.
-                val prop = fixture?.let { FixturePropertyCatalogue.of(it::class).byName[propertyName] }
+                // Through the catalogue rather than `Fixture.fixtureAttribute`, so an element's own
+                // `@FixtureAttribute` members answer for a cell exactly as a fixture's do for it.
+                val prop = fixture?.let { FixtureAttributeCatalogue.of(it::class).byName[attribute] }
                 @Suppress("UNCHECKED_CAST")
                 val propValue = prop?.let { (it.classProperty as KProperty1<Any, *>).call(fixture) }
                 if (propValue is Slider) {
-                    SliderTarget(ref, propertyName)
+                    SliderTarget(ref, attribute)
                 } else {
-                    SettingTarget(ref, propertyName)
+                    SettingTarget(ref, attribute)
                 }
             }
         }
@@ -149,7 +149,7 @@ fun requireOutputTypeMatch(effect: Fx, target: FxTarget) {
     if (target.accepts(effect.outputType)) return
     throw IllegalArgumentException(
         "Effect '${effect.name}' outputs ${effect.outputType} but property " +
-            "'${target.propertyName}' takes ${target.acceptedOutputType} — the output would be " +
-            "discarded. Check the effect's compatibleProperties."
+            "'${target.attribute}' takes ${target.acceptedOutputType} — the output would be " +
+            "discarded. Check the effect's compatibleAttributes."
     )
 }

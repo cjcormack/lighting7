@@ -12,7 +12,7 @@ import {
   orderPatch,
   selectionHeadCount,
   spreadHeadCount,
-  carriesFxProperty,
+  carriesFxAttribute,
   withPaletteDraft,
   draftOf,
   levelModeOf,
@@ -32,7 +32,7 @@ const entry = (over: Partial<FxLibraryEntry>): FxLibraryEntry => ({
   family: 'intensity',
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   parameters: [],
   ...over,
 })
@@ -41,7 +41,7 @@ const p = (name: string, type: string, defaultValue = '0') => ({ name, type, def
 const CIRCLE = entry({
   name: 'Circle',
   family: 'position',
-  parameters: [p('panCenter', 'ubyte', '128'), p('tiltCenter', 'ubyte', '128'), p('panRadius', 'ubyte', '64'), p('tiltRadius', 'ubyte', '64')],
+  parameters: [p('panCentre', 'ubyte', '128'), p('tiltCentre', 'ubyte', '128'), p('panRadius', 'ubyte', '64'), p('tiltRadius', 'ubyte', '64')],
 })
 const SWEEP = entry({ name: 'Sweep', family: 'position', parameters: [p('startPan', 'ubyte'), p('curve', 'easingCurve', 'LINEAR')] })
 const PULSE = entry({ name: 'Pulse', parameters: [p('min', 'ubyte'), p('max', 'ubyte', '255'), p('attackRatio', 'double', '0.1')] })
@@ -49,15 +49,15 @@ const CYCLE = entry({ name: 'Colour Cycle', family: 'colour', parameters: [p('co
 
 describe('fxEditorModel', () => {
   it('reads Around only as Additive with both centres at 128', () => {
-    expect(centreModeOf('ADDITIVE', { panCenter: '128', tiltCenter: '128' })).toBe('around')
-    expect(centreModeOf('ADDITIVE', { panCenter: '100', tiltCenter: '128' })).toBeNull()
-    expect(centreModeOf('OVERRIDE', { panCenter: '100', tiltCenter: '40' })).toBe('absolute')
-    expect(centreModeOf('MAX', { panCenter: '128', tiltCenter: '128' })).toBeNull()
+    expect(centreModeOf('ADDITIVE', { panCentre: '128', tiltCentre: '128' })).toBe('around')
+    expect(centreModeOf('ADDITIVE', { panCentre: '100', tiltCentre: '128' })).toBeNull()
+    expect(centreModeOf('OVERRIDE', { panCentre: '100', tiltCentre: '40' })).toBe('absolute')
+    expect(centreModeOf('MAX', { panCentre: '128', tiltCentre: '128' })).toBeNull()
   })
 
   it('spells Around as Additive with the centre pinned, and Absolute as Override keeping it', () => {
-    const around = withCentreMode({ blendMode: 'OVERRIDE', parameters: { panCenter: '10', tiltCenter: '20', panRadius: '5' } }, 'around')
-    expect(around).toEqual({ blendMode: 'ADDITIVE', parameters: { panCenter: '128', tiltCenter: '128', panRadius: '5' } })
+    const around = withCentreMode({ blendMode: 'OVERRIDE', parameters: { panCentre: '10', tiltCentre: '20', panRadius: '5' } }, 'around')
+    expect(around).toEqual({ blendMode: 'ADDITIVE', parameters: { panCentre: '128', tiltCentre: '128', panRadius: '5' } })
     expect(withCentreMode(around, 'absolute').blendMode).toBe('OVERRIDE')
   })
 
@@ -75,7 +75,7 @@ describe('fxEditorModel', () => {
 
   it('files a parameter by role: centre, size, axis, level, shape, main', () => {
     const roles = (e: FxLibraryEntry) => Object.fromEntries(e.parameters.map((x) => [x.name, paramRole(e, x)]))
-    expect(roles(CIRCLE)).toEqual({ panCenter: 'centre', tiltCenter: 'centre', panRadius: 'size', tiltRadius: 'size' })
+    expect(roles(CIRCLE)).toEqual({ panCentre: 'centre', tiltCentre: 'centre', panRadius: 'size', tiltRadius: 'size' })
     expect(roles(SWEEP)).toEqual({ startPan: 'axis', curve: 'shape' })
     expect(roles(PULSE)).toEqual({ min: 'level', max: 'level', attackRatio: 'shape' })
     // A ratio with no level beside it is the effect, not its shape.
@@ -199,10 +199,10 @@ describe('fxEditorModel', () => {
 
   it('counts a selection\'s heads as the desk expands one (effects plan D3)', () => {
     const dimmer = [{ name: 'dimmer', type: 'slider' }]
-    const par = (key: string) => ({ key, properties: dimmer })
-    const heads = (key: string, n: number) => Array.from({ length: n }, (_, i) => ({ key: `${key}.pixel-${i}`, properties: dimmer }))
-    const bar = { key: 'bar', properties: [], elements: heads('bar', 12) }
-    const strip = { key: 'strip', properties: [], elements: heads('strip', 4) }
+    const par = (key: string) => ({ key, attributes: dimmer })
+    const heads = (key: string, n: number) => Array.from({ length: n }, (_, i) => ({ key: `${key}.pixel-${i}`, attributes: dimmer }))
+    const bar = { key: 'bar', attributes: [], elements: heads('bar', 12) }
+    const strip = { key: 'strip', attributes: [], elements: heads('strip', 4) }
     // Every unit a member: one dial each, a repeat counted once.
     expect(selectionHeadCount([par('p1'), par('p2'), par('p3'), par('p1')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(3)
     // Every unit its heads: as a group of bars — each bar its own run, or one strip.
@@ -213,12 +213,12 @@ describe('fxEditorModel', () => {
     expect(selectionHeadCount([par('p1'), bar, par('p2')], 'dimmer', 'FLAT', 'ODD')).toBe(7)
     expect(selectionHeadCount([par('p1'), bar, par('p2')], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(12)
     // A head named twice counts once, at its first place: a cell, then its bar's other eleven.
-    expect(selectionHeadCount([{ key: 'bar.pixel-2', properties: dimmer }, bar], 'dimmer', 'FLAT', 'ALL')).toBe(12)
-    expect(selectionHeadCount([bar, { key: 'bar.pixel-2', properties: dimmer }], 'dimmer', 'FLAT', 'ALL')).toBe(12)
+    expect(selectionHeadCount([{ key: 'bar.pixel-2', attributes: dimmer }, bar], 'dimmer', 'FLAT', 'ALL')).toBe(12)
+    expect(selectionHeadCount([bar, { key: 'bar.pixel-2', attributes: dimmer }], 'dimmer', 'FLAT', 'ALL')).toBe(12)
     // Only heads that carry the property; a unit with neither is skipped.
-    const mixed = { key: 'm', properties: [], elements: [...heads('m', 2), { key: 'm.uv', properties: [{ name: 'uv', type: 'slider' }] }] }
+    const mixed = { key: 'm', attributes: [], elements: [...heads('m', 2), { key: 'm.uv', attributes: [{ name: 'uv', type: 'slider' }] }] }
     expect(selectionHeadCount([mixed], 'dimmer', 'FLAT', 'ALL')).toBe(2)
-    expect(selectionHeadCount([par('p1'), { key: 'x', properties: [] }], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
+    expect(selectionHeadCount([par('p1'), { key: 'x', attributes: [] }], 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
   })
 
   it('counts a live effect\'s heads for the dials as the desk distributes them', () => {
@@ -234,17 +234,17 @@ describe('fxEditorModel', () => {
   it('counts a fixture that carries the property itself once, whatever heads it has (the desk\'s DIRECT_FIXTURE)', () => {
     // A Slender 14ch: a master dimmer on the fixture, four cells beneath. A Pulse on the master runs
     // once on the desk — one dial, not four — and a group of three such bars runs three members.
-    const slender = { properties: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
+    const slender = { attributes: [{ name: 'dimmer', type: 'slider' }], elements: Array.from({ length: 4 }) }
     expect(spreadHeadCount([slender], false, 'dimmer', 'PER_FIXTURE', 'ALL')).toBe(1)
     expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'FLAT', 'ALL')).toBe(3)
     expect(spreadHeadCount([slender, slender, slender], true, 'dimmer', 'PER_FIXTURE', 'ODD')).toBe(3)
     // A property only its cells carry spreads over the cells.
     expect(spreadHeadCount([slender], false, 'rgbColour', 'PER_FIXTURE', 'ALL')).toBe(4)
     // Colour and position by trait, as the desk's WithColour / WithPosition.
-    expect(carriesFxProperty([{ name: 'colour', type: 'colour' }], 'rgbColour')).toBe(true)
-    expect(carriesFxProperty([{ name: 'warmth', type: 'whiteMix' }], 'rgbColour')).toBe(true)
-    expect(carriesFxProperty([{ name: 'pt', type: 'position' }], 'position')).toBe(true)
-    expect(carriesFxProperty([{ name: 'dimmer', type: 'slider' }], 'rgbColour')).toBe(false)
+    expect(carriesFxAttribute([{ name: 'colour', type: 'colour' }], 'rgbColour')).toBe(true)
+    expect(carriesFxAttribute([{ name: 'warmth', type: 'whiteMix' }], 'rgbColour')).toBe(true)
+    expect(carriesFxAttribute([{ name: 'pt', type: 'position' }], 'position')).toBe(true)
+    expect(carriesFxAttribute([{ name: 'dimmer', type: 'slider' }], 'rgbColour')).toBe(false)
   })
 
   it('filters a FLAT group across the whole strip on its global index, as the desk does', () => {
@@ -288,7 +288,7 @@ describe('fxEditorModel', () => {
   })
 
   it('reads an axis from a camelCase word, never a substring', () => {
-    expect(paramAxis('panCenter')).toBe('pan')
+    expect(paramAxis('panCentre')).toBe('pan')
     expect(paramAxis('startPan')).toBe('pan')
     expect(paramAxis('pan')).toBe('pan')
     expect(paramAxis('endTilt')).toBe('tilt')
@@ -316,7 +316,7 @@ describe("a pad's instance against its palette (§3.3, D20)", () => {
     blendMode: 'ADDITIVE',
     order: 'CENTRE_OUT',
     phaseOffset: 0,
-    parameters: { panCenter: '128', tiltCenter: '128', panRadius: '64', tiltRadius: '64' },
+    parameters: { panCentre: '128', tiltCentre: '128', panRadius: '64', tiltRadius: '64' },
     speedMasterUuid: null,
     rateSpeedMasterUuid: null,
   }

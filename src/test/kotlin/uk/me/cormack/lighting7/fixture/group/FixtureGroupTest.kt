@@ -370,7 +370,7 @@ class FixtureGroupTest {
     // ============================================
 
     @Test
-    fun `hierarchical groups support property access via extensions`() {
+    fun `hierarchical groups support attribute access via extensions`() {
         val controller = MockDmxController(testUniverse)
         val transaction = createTestTransaction(controller)
 
@@ -453,7 +453,7 @@ class FixtureGroupTest {
     // ============================================
 
     @Test
-    fun `empty group has correct FixtureTarget properties`() {
+    fun `empty group has correct FixtureTarget attributes`() {
         val empty = fixtureGroup<UVFixture>("empty") {}
 
         assertEquals("empty", empty.targetKey)
@@ -463,7 +463,7 @@ class FixtureGroupTest {
     }
 
     @Test
-    fun `single member group has correct FixtureTarget properties`() {
+    fun `single member group has correct FixtureTarget attributes`() {
         val single = fixtureGroup<UVFixture>("single") {
             add(createFixture(0))
         }
@@ -515,7 +515,7 @@ class FixtureGroupTest {
     }
 
     @Test
-    fun `fixtures property includes subgroup fixtures`() {
+    fun `fixtures attribute includes subgroup fixtures`() {
         val subGroup1 = fixtureGroup<UVFixture>("sub-1") {
             add(createFixture(0))
             add(createFixture(1))
@@ -725,7 +725,7 @@ class FixtureGroupTest {
     }
 
     @Test
-    fun `subgroups property returns correct subgroups`() {
+    fun `subgroups attribute returns correct subgroups`() {
         val sub1 = fixtureGroup<UVFixture>("sub-1") { add(createFixture(0)) }
         val sub2 = fixtureGroup<UVFixture>("sub-2") { add(createFixture(1)) }
 

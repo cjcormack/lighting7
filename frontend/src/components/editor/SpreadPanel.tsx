@@ -24,10 +24,10 @@ import {
   isCompleteSpreadEndpoint,
   serializeSpreadEndpoint,
   spreadEditorKind,
-  spreadPropertiesFor,
+  spreadAttributesFor,
   type SpreadEndpoint,
 } from '@/lib/spreadIntent'
-import { WHITE_POLICIES, WHITE_POLICY_LABELS, type PaletteProperty, type WhitePolicy } from '@/lib/paletteIntent'
+import { WHITE_POLICIES, WHITE_POLICY_LABELS, type PaletteAttribute, type WhitePolicy } from '@/lib/paletteIntent'
 import { cn } from '@/lib/utils'
 import { ignoreReportedError } from '@/store/errorToastMiddleware'
 import type { AimNear, SpreadBase, SpreadCurve, SpreadOrder, SpreadOver, SpreadRequest, SpreadResponse } from '@/store/programmerOps'
@@ -156,14 +156,14 @@ export interface IntentSpreadPlan extends SpreadPlanBase {
   /** Which of [families] may be pressed; absent, all of them. The rest are drawn disabled with [familyRefusal]. */
   offered?: readonly AttributeFamily[]
   familyRefusal?: string
-  /** The properties the row offers per family; absent, `spreadPropertiesFor`. The first is the default. */
-  propertiesFor?: (family: AttributeFamily) => PaletteProperty[]
+  /** The properties the row offers per family; absent, `spreadAttributesFor`. The first is the default. */
+  attributesFor?: (family: AttributeFamily) => PaletteAttribute[]
   /**
    * The family and property the panel opens on — the programmer's marquee column. Absent, the
    * panel lands on the first family [mask] names that the heads can take, and re-derives that as
    * the heads arrive (the busk tab's rule).
    */
-  initial?: { family: AttributeFamily; property?: PaletteProperty }
+  initial?: { family: AttributeFamily; attribute?: PaletteAttribute }
   /** The selection's attribute mask, sent as `families`. Null is every attribute. */
   mask: readonly AttributeFamily[] | null
   /**
@@ -227,7 +227,7 @@ export type SpreadPlan = IntentSpreadPlan | RawSpreadPlan | AddressSpreadPlan | 
 
 export interface SpreadForm {
   family: AttributeFamily
-  property: PaletteProperty
+  attribute: PaletteAttribute
   from: SpreadEndpoint
   to: SpreadEndpoint
   curve: SpreadCurve
@@ -336,12 +336,12 @@ function initialFamily(available: readonly AttributeFamily[], mask: readonly Att
   return mask?.find((family) => available.includes(family)) ?? available[0] ?? 'INTENSITY'
 }
 
-function formFor(property: PaletteProperty, base?: SpreadForm): SpreadForm {
+function formFor(attribute: PaletteAttribute, base?: SpreadForm): SpreadForm {
   const prefs = getSpreadFanPrefs()
   return {
-    family: property.family,
-    property,
-    ...defaultSpreadEndpoints(property),
+    family: attribute.family,
+    attribute,
+    ...defaultSpreadEndpoints(attribute),
     curve: base?.curve ?? 'LINE',
     order: base?.order ?? 'NORMAL',
     runs: base?.runs ?? 1,
@@ -359,7 +359,7 @@ function formFor(property: PaletteProperty, base?: SpreadForm): SpreadForm {
 
 /** Whether a form spreads as a fan — Fan chosen, on a position property. */
 export function isFanForm(form: SpreadForm): boolean {
-  return form.mode === 'ABOUT' && spreadEditorKind(form.property) === 'position'
+  return form.mode === 'ABOUT' && spreadEditorKind(form.attribute) === 'position'
 }
 
 /** Whether a fan form fans across the stage, in metres, rather than in pan and tilt. */
@@ -410,7 +410,7 @@ export function spreadRequestOf(plan: IntentSpreadPlan, form: SpreadForm): Sprea
   const body: SpreadRequestBody = {
     targets: [...plan.targets],
     families: plan.mask == null ? undefined : [...plan.mask],
-    property: form.property.propertyName,
+    attribute: form.attribute.attribute,
     // A fan's base is not part of the form: the panel adds the gesture's anchor at send time.
     ...(fan ? { mode: 'ABOUT' as const, fan: fanAmountsOf(form) } : { from: serializeSpreadEndpoint(form.from), to: serializeSpreadEndpoint(form.to) }),
     curve: form.curve,
@@ -492,22 +492,22 @@ export function SpreadPanel({
   const headFamilies = useMemo<readonly AttributeFamily[]>(() => intentPlan?.families ?? [], [intentPlan])
   /** What the segment draws: the heads' families, or all four while nothing has answered. */
   const available = headFamilies.length > 0 ? headFamilies : ATTRIBUTE_FAMILIES
-  const propertiesFor = useCallback(
-    (family: AttributeFamily): PaletteProperty[] => {
-      const offered = intentPlan?.propertiesFor?.(family) ?? spreadPropertiesFor(family)
-      return offered.length > 0 ? offered : spreadPropertiesFor(family)
+  const attributesFor = useCallback(
+    (family: AttributeFamily): PaletteAttribute[] => {
+      const offered = intentPlan?.attributesFor?.(family) ?? spreadAttributesFor(family)
+      return offered.length > 0 ? offered : spreadAttributesFor(family)
     },
     [intentPlan],
   )
-  const propertiesForRef = useRef(propertiesFor)
-  propertiesForRef.current = propertiesFor
+  const attributesForRef = useRef(attributesFor)
+  attributesForRef.current = attributesFor
 
   const [form, setForm] = useState<SpreadForm>(() => {
     const initial = intentPlan?.initial
     const family = initial?.family ?? initialFamily(headFamilies, intentPlan?.mask ?? null)
     // Over is the window's, not this mount's (`lib/spreadOver.ts`): a panel mounted again after an
     // empty selection opens on the operator's last choice.
-    return { ...formFor(initial?.property ?? propertiesFor(family)[0]), over: getSpreadOver() }
+    return { ...formFor(initial?.attribute ?? attributesFor(family)[0]), over: getSpreadOver() }
   })
   // Written by the handlers that move `form`, never at render time — the Colour tab's
   // `channelsRef` rule: a fast drag can dispatch its last move and its release inside one task.
@@ -743,9 +743,9 @@ export function SpreadPanel({
   }, [selectionKey, reset, clearAnswer, resetFan])
 
   /** Change the property (and family): fresh endpoints, and an answer in flight no longer describes this property. */
-  const chooseProperty = useCallback(
-    (property: PaletteProperty) => {
-      const next = formFor(property, formRef.current)
+  const chooseAttribute = useCallback(
+    (attribute: PaletteAttribute) => {
+      const next = formFor(attribute, formRef.current)
       formRef.current = next
       setForm(next)
       clearAnswer()
@@ -768,7 +768,7 @@ export function SpreadPanel({
    * with it. An empty selection keeps whatever is showing.
    */
   const chosenRef = useRef(false)
-  const initialKey = intentPlan?.initial == null ? null : `${intentPlan.initial.family}:${intentPlan.initial.property?.propertyName ?? ''}`
+  const initialKey = intentPlan?.initial == null ? null : `${intentPlan.initial.family}:${intentPlan.initial.attribute?.attribute ?? ''}`
   const appliedInitialRef = useRef<string | null>(null)
   useEffect(() => {
     if (intentPlan == null) return
@@ -778,16 +778,16 @@ export function SpreadPanel({
       appliedInitialRef.current = initialKey
       chosenRef.current = true
       const initial = intentPlan.initial!
-      const property = initial.property ?? propertiesForRef.current(initial.family)[0]
-      if (property.propertyName !== formRef.current.property.propertyName) chooseProperty(property)
+      const attribute = initial.attribute ?? attributesForRef.current(initial.family)[0]
+      if (attribute.attribute !== formRef.current.attribute.attribute) chooseAttribute(attribute)
       return
     }
     if (headFamilies.length === 0) return
     const current = formRef.current.family
     const wanted = chosenRef.current && headFamilies.includes(current) ? current : initialFamily(headFamilies, intentPlan.mask)
     chosenRef.current = true
-    if (wanted !== current) chooseProperty(propertiesForRef.current(wanted)[0])
-  }, [intentPlan, initialKey, headFamilies, form.family, chooseProperty])
+    if (wanted !== current) chooseAttribute(attributesForRef.current(wanted)[0])
+  }, [intentPlan, initialKey, headFamilies, form.family, chooseAttribute])
 
   const cellCount = activePlan != null && 'cellCount' in activePlan ? activePlan.cellCount : 0
   // Over is the operator's choice and survives a change of selection, an empty one included — it
@@ -837,8 +837,8 @@ export function SpreadPanel({
         return
       }
       chosenRef.current = true
-      const property = propertiesForRef.current('POSITION').find((p) => p.intent === 'position') ?? spreadPropertiesFor('POSITION')[0]
-      if (property.propertyName !== formRef.current.property.propertyName) chooseProperty(property)
+      const attribute = attributesForRef.current('POSITION').find((p) => p.intent === 'position') ?? spreadAttributesFor('POSITION')[0]
+      if (attribute.attribute !== formRef.current.attribute.attribute) chooseAttribute(attribute)
       setSpreadFanPrefs({ mode: 'ABOUT', axes: formRef.current.axes })
       const next = { ...formRef.current, mode: 'ABOUT' as const }
       formRef.current = next
@@ -856,15 +856,15 @@ export function SpreadPanel({
       return
     }
     chosenRef.current = true
-    const property = propertiesForRef.current('COLOUR').find((p) => p.intent === 'colour') ?? spreadPropertiesFor('COLOUR')[0]
+    const attribute = attributesForRef.current('COLOUR').find((p) => p.intent === 'colour') ?? spreadAttributesFor('COLOUR')[0]
     const from = colourEndpointOf(seed.from)
     const current = formRef.current
     const next: SpreadForm = {
       ...current,
       family: 'COLOUR',
-      property,
+      attribute,
       from,
-      to: current.property.propertyName === property.propertyName && current.to.kind !== 'level' ? current.to : defaultSpreadEndpoints(property).to,
+      to: current.attribute.attribute === attribute.attribute && current.to.kind !== 'level' ? current.to : defaultSpreadEndpoints(attribute).to,
     }
     formRef.current = next
     setForm(next)
@@ -874,7 +874,7 @@ export function SpreadPanel({
     reset()
     if (host === 'popover') setIsOpen(true)
     onSeedConsumed?.()
-  }, [seed, onSeedConsumed, reseedPicker, reset, clearAnswer, headFamilies, intentPlan, host, chooseProperty, resetFan])
+  }, [seed, onSeedConsumed, reseedPicker, reset, clearAnswer, headFamilies, intentPlan, host, chooseAttribute, resetFan])
 
   // First paint of a colour editor: seed the knob from *From* (the initial state is a placeholder).
   const seededRef = useRef(false)
@@ -1007,10 +1007,10 @@ export function SpreadPanel({
         : 'Fan first→last across the selected cells')
 
   // ── The controls ────────────────────────────────────────────────────────────────────────────
-  const editorKind = spreadEditorKind(form.property)
+  const editorKind = spreadEditorKind(form.attribute)
   const fanForm = intentPlan != null && isFanForm(form)
   const stageFan = fanForm && isStageFanForm(form)
-  const properties = intentPlan == null ? [] : propertiesFor(form.family)
+  const attributes = intentPlan == null ? [] : attributesFor(form.family)
   const offeredFamilies = intentPlan?.offered ?? available
   const editingEndpoint = editing === 'from' ? form.from : form.to
   const editingRgb = hexToRgb(endpointHex(editingEndpoint, colourPalettes) ?? '#000000')
@@ -1171,7 +1171,7 @@ export function SpreadPanel({
             onValueChange={(next) => {
               if (!next) return
               chosenRef.current = true
-              chooseProperty(propertiesFor(next as AttributeFamily)[0])
+              chooseAttribute(attributesFor(next as AttributeFamily)[0])
             }}
             className="w-full justify-start"
           >
@@ -1188,23 +1188,23 @@ export function SpreadPanel({
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          {properties.length > 1 && (
+          {attributes.length > 1 && (
             <ToggleGroup
               type="single"
               size="sm"
               aria-label="Attribute"
-              value={form.property.propertyName}
+              value={form.attribute.attribute}
               onValueChange={(next) => {
-                const property = properties.find((p) => p.propertyName === next)
-                if (property == null) return
+                const attribute = attributes.find((p) => p.attribute === next)
+                if (attribute == null) return
                 chosenRef.current = true
-                chooseProperty(property)
+                chooseAttribute(attribute)
               }}
               className="w-full justify-start"
             >
-              {properties.map((property) => (
-                <ToggleGroupItem key={property.propertyName} value={property.propertyName} className="flex-1 text-xs">
-                  {property.label}
+              {attributes.map((attribute) => (
+                <ToggleGroupItem key={attribute.attribute} value={attribute.attribute} className="flex-1 text-xs">
+                  {attribute.label}
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -1287,7 +1287,7 @@ export function SpreadPanel({
               palettes={colourPalettes}
               onPalette={(uuid) => {
                 // Back to a colour is back to the default for that end; the knob follows it.
-                const endpoint: SpreadEndpoint = uuid == null ? defaultSpreadEndpoints(form.property)[editing] : { kind: 'palette', uuid }
+                const endpoint: SpreadEndpoint = uuid == null ? defaultSpreadEndpoints(form.attribute)[editing] : { kind: 'palette', uuid }
                 setEndpoint(editing, endpoint)
                 reseedPicker(endpoint)
               }}

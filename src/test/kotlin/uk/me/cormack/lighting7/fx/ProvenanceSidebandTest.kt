@@ -30,7 +30,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
 
     private fun provenance(key: CueAssignmentResolver.Key) =
         state.show.fxEngine.provenance.compute()
-            .single { it.targetKey == key.targetKey && it.propertyName == key.propertyName }
+            .single { it.targetKey == key.targetKey && it.attribute == key.attribute }
 
     private fun panKey() = assertNotNull(state.show.fxEngine.cascade.resolveChannelCoveringKey(0, 1))
 
@@ -80,7 +80,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         ProgrammerHandler.setTyped(
             state, TargetRef.Fixture("hex-1"), "rgbColour",
-            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(java.awt.Color(200, 40, 0))), fadeMs = 0,
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(java.awt.Color(200, 40, 0))), fadeMs = 0,
         )
         FxTestSupport.start(state, "SineWave", "hex-1", "uv")
         assertEquals(
@@ -104,7 +104,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
         seedSpot()
         ProgrammerHandler.setTyped(
             state, TargetRef.Fixture("spot-1"), "position",
-            CueAssignmentResolver.PropertyValue.Position(200u, 90u), fadeMs = 0,
+            CueAssignmentResolver.AttributeValue.Position(200u, 90u), fadeMs = 0,
         )
         FxTestSupport.start(state, "Circle", "spot-1", "position")
         assertEquals(
@@ -119,7 +119,7 @@ class ProvenanceSidebandTest : RouteIntegrationTest() {
         seedSpot()
         ProgrammerHandler.setTyped(
             state, TargetRef.Fixture("spot-1"), "position",
-            CueAssignmentResolver.PropertyValue.Position(200u, 90u), fadeMs = 0,
+            CueAssignmentResolver.AttributeValue.Position(200u, 90u), fadeMs = 0,
         )
         val circle = FxTestSupport.start(state, "Circle", "spot-1", "position", programmerBand = true)
         val entry = provenance(CueAssignmentResolver.Key.fixture("spot-1", "position"))

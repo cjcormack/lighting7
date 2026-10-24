@@ -81,9 +81,9 @@ export function rowSourceOf({ headKey, states, effects, blind, cueLabel, fxDetai
   }
 
   const keys = new Set(states.map((s) => s.key))
-  const held = (head: string, property: string) =>
-    head === headKey && keys.has(property) && states.some((s) => s.key === property && s.state.entry != null)
-  const heldBack = effects.some((e) => keys.has(e.propertyName) && isHeldBack(e, headKey, held, blind))
+  const held = (head: string, attribute: string) =>
+    head === headKey && keys.has(attribute) && states.some((s) => s.key === attribute && s.state.entry != null)
+  const heldBack = effects.some((e) => keys.has(e.attribute) && isHeldBack(e, headKey, held, blind))
 
   const kind = best?.kind ?? 'base'
   const provenance = best?.state.provenance

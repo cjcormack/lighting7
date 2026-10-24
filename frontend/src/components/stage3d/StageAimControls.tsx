@@ -13,7 +13,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { annotatesDegrees } from '@/lib/axisDegrees'
 import { bySortOrder } from '@/lib/utils'
-import { findPanProperty, findTiltProperty, type Fixture } from '@/store/fixtures'
+import { findPanAttribute, findTiltAttribute, type Fixture } from '@/store/fixtures'
 import { useAimMutation, type AimResponse, type SpreadSkip } from '@/store/programmerOps'
 import { useStageRegionListQuery } from '@/store/stageRegions'
 import type { StageRegionDto } from '@/api/stageRegionApi'
@@ -37,7 +37,7 @@ export { HEAD_HEIGHT_M }
  */
 export function isAimable(fixture: Fixture | undefined): boolean {
   if (!fixture) return false
-  return annotatesDegrees(findPanProperty(fixture.properties)) && annotatesDegrees(findTiltProperty(fixture.properties))
+  return annotatesDegrees(findPanAttribute(fixture.attributes)) && annotatesDegrees(findTiltAttribute(fixture.attributes))
 }
 
 /**

@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fx
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSetting
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureSettingValue
@@ -42,8 +42,8 @@ import kotlin.math.sqrt
  * on nearly every head in this rig. Colour is the exception and it is not cosmetic: the MAC 250's
  * colour is a wheel, `colourWheel`, and it has no `rgbColour`, so a name-only lookup misses it and
  * the head silently drops out of every colour template. So a colour intent falls back to
- * **whichever property carries the colour**, and [Resolution.propertyName] reports the name that was
- * actually resolved — which the cook must then use, because that is the name [PropertyChannelWriter]
+ * **whichever property carries the colour**, and [Resolution.attribute] reports the name that was
+ * actually resolved — which the cook must then use, because that is the name [AttributeChannelWriter]
  * will be handed downstream.
  */
 object PaletteResolver {
@@ -83,8 +83,8 @@ object PaletteResolver {
      * cannot take the intent contributes nothing rather than contributing a default.
      */
     data class Resolution(
-        val value: CueAssignmentResolver.PropertyValue?,
-        val propertyName: String,
+        val value: CueAssignmentResolver.AttributeValue?,
+        val attribute: String,
         val note: Note,
     ) {
         val isSupported: Boolean get() = value != null
@@ -97,15 +97,15 @@ object PaletteResolver {
      */
     fun resolve(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent,
         media: FittedMedia?,
     ): Resolution = when (intent) {
-        is PaletteIntent.Colour -> resolveColour(fixture, propertyName, intent, media)
-        is PaletteIntent.Position -> resolvePosition(fixture, propertyName, intent)
-        is PaletteIntent.Percent -> resolvePercent(fixture, propertyName, intent)
-        is PaletteIntent.Level -> resolveLevel(fixture, propertyName, intent)
-        is PaletteIntent.Switch -> resolveSwitch(fixture, propertyName, intent)
+        is PaletteIntent.Colour -> resolveColour(fixture, attribute, intent, media)
+        is PaletteIntent.Position -> resolvePosition(fixture, attribute, intent)
+        is PaletteIntent.Percent -> resolvePercent(fixture, attribute, intent)
+        is PaletteIntent.Level -> resolveLevel(fixture, attribute, intent)
+        is PaletteIntent.Switch -> resolveSwitch(fixture, attribute, intent)
     }
 
     /**
@@ -129,12 +129,12 @@ object PaletteResolver {
         /**
          * Has colour, but lacks an emitter this template names outright. Reported.
          *
-         * [propertyName] is the row that actually failed, and it is carried rather than left to the
+         * [attribute] is the row that actually failed, and it is carried rather than left to the
          * caller to guess: a skip reported against `rgbColour` for a UV-only template names a
          * property that template does not have, which a client cross-referencing the skip against
          * the row list would drop on the floor.
          */
-        data class Unmet(val reason: String, val propertyName: String) : ColourRequirement
+        data class Unmet(val reason: String, val attribute: String) : ColourRequirement
     }
 
     /**
@@ -160,15 +160,15 @@ object PaletteResolver {
         media: FittedMedia?,
     ): ColourRequirement {
         val colourFamily = rows.filter {
-            PaletteProperty.ofOrNull(it.first)?.family == PropertyMaskGroup.COLOUR
+            PaletteAttribute.ofOrNull(it.first)?.family == AttributeFamily.COLOUR
         }
         if (colourFamily.isEmpty()) return ColourRequirement.Met
 
         if (!hasColour(fixture, media)) return ColourRequirement.NotACandidate("no colour")
 
-        for ((propertyName, intent) in colourFamily) {
-            val note = resolve(fixture, propertyName, intent, media).note
-            if (note is Note.Unsupported) return ColourRequirement.Unmet(note.reason, propertyName)
+        for ((attribute, intent) in colourFamily) {
+            val note = resolve(fixture, attribute, intent, media).note
+            if (note is Note.Unsupported) return ColourRequirement.Unmet(note.reason, attribute)
         }
         return ColourRequirement.Met
     }
@@ -186,7 +186,7 @@ object PaletteResolver {
      */
     fun hasColour(fixture: GroupableFixture, media: FittedMedia?): Boolean = resolve(
         fixture,
-        PaletteProperty.COLOUR.propertyName,
+        PaletteAttribute.COLOUR.attribute,
         PaletteIntent.Colour("#000000", WhitePolicy.RGB_ONLY),
         media,
     ).note !is Note.Unsupported
@@ -198,16 +198,16 @@ object PaletteResolver {
      * why it cannot take it) rather than handing it to cells.
      *
      * Colour-family rows ask [hasColour]; a position row asks for pan and tilt; every other row
-     * asks the same `PropertyChannelWriter.resolveProperty` lookup its resolve arm makes first.
+     * asks the same `AttributeChannelWriter.resolveAttribute` lookup its resolve arm makes first.
      */
-    fun hasProperty(fixture: GroupableFixture, propertyName: String, media: FittedMedia?): Boolean =
-        when (val property = PaletteProperty.ofOrNull(propertyName)) {
-            null -> PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName)) != null
-            PaletteProperty.POSITION -> fixture is WithPosition
-            else -> if (property.family == PropertyMaskGroup.COLOUR) {
+    fun hasAttribute(fixture: GroupableFixture, attribute: String, media: FittedMedia?): Boolean =
+        when (val known = PaletteAttribute.ofOrNull(attribute)) {
+            null -> AttributeChannelWriter.resolveAttribute(fixture, canonicalAttributeName(attribute)) != null
+            PaletteAttribute.POSITION -> fixture is WithPosition
+            else -> if (known.family == AttributeFamily.COLOUR) {
                 hasColour(fixture, media)
             } else {
-                PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName)) != null
+                AttributeChannelWriter.resolveAttribute(fixture, canonicalAttributeName(attribute)) != null
             }
         }
 
@@ -269,13 +269,13 @@ object PaletteResolver {
         var amber: UByte? = null
         var uv: UByte? = null
 
-        for ((propertyName, intent) in rows) {
-            when (PaletteProperty.ofOrNull(propertyName)) {
-                PaletteProperty.COLOUR ->
+        for ((attribute, intent) in rows) {
+            when (PaletteAttribute.ofOrNull(attribute)) {
+                PaletteAttribute.COLOUR ->
                     if (intent is PaletteIntent.Colour) base = resolveColourGeneric(intent) ?: return null
-                PaletteProperty.WHITE -> if (intent is PaletteIntent.Level) white = intent.value.toUByte()
-                PaletteProperty.AMBER -> if (intent is PaletteIntent.Level) amber = intent.value.toUByte()
-                PaletteProperty.UV -> if (intent is PaletteIntent.Level) uv = intent.value.toUByte()
+                PaletteAttribute.WHITE -> if (intent is PaletteIntent.Level) white = intent.value.toUByte()
+                PaletteAttribute.AMBER -> if (intent is PaletteIntent.Level) amber = intent.value.toUByte()
+                PaletteAttribute.UV -> if (intent is PaletteIntent.Level) uv = intent.value.toUByte()
                 else -> Unit
             }
         }
@@ -291,29 +291,29 @@ object PaletteResolver {
 
     private fun resolveColour(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent.Colour,
         media: FittedMedia?,
     ): Resolution {
         val target = parseHex(intent.hex)
-            ?: return Resolution(null, propertyName, Note.Unsupported("'${intent.hex}' is not a colour"))
+            ?: return Resolution(null, attribute, Note.Unsupported("'${intent.hex}' is not a colour"))
 
         // One walk of the head's properties, not one per lookup (sweep item C8):
-        // `resolvedProperties` reflects — a `KProperty1.call` per declared property — and the cook
+        // `resolvedAttributes` reflects — a `KProperty1.call` per declared property — and the cook
         // asks this once per head per template row.
-        val properties = PropertyChannelWriter.resolvedProperties(fixture)
+        val attributes = AttributeChannelWriter.resolvedAttributes(fixture)
 
         // Mixed colour first, whatever it is called on this head.
-        val mixed = properties.firstOrNull { it.value is DmxColour }
+        val mixed = attributes.firstOrNull { it.value is DmxColour }
         if (mixed != null) {
             val hasWhite = (fixture as? WithWhite)?.white is DmxSlider
             val hasAmber = (fixture as? WithAmber)?.amber is DmxSlider
             val (colour, note) = mixColour(target, intent.policy, hasWhite, hasAmber)
-            return Resolution(CueAssignmentResolver.PropertyValue.Colour(colour), mixed.name, note)
+            return Resolution(CueAssignmentResolver.AttributeValue.Colour(colour), mixed.name, note)
         }
 
         // Then a warm/cold white pair: the nearest mix, and the colour it makes.
-        val whiteMix = properties.firstOrNull { it.value is DmxWhiteMixColour }
+        val whiteMix = attributes.firstOrNull { it.value is DmxWhiteMixColour }
         if (whiteMix != null) {
             val mix = (whiteMix.value as DmxWhiteMixColour).mix
             val levels = mix.levelsFor(target)
@@ -323,12 +323,12 @@ object PaletteResolver {
                 null -> Note.Exact
                 else -> if (deltaE < WHITE_MIX_EXACT_DELTA_E) Note.Exact else Note.Snapped("$kelvin K", deltaE)
             }
-            return Resolution(CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(made)), whiteMix.name, note)
+            return Resolution(CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(made)), whiteMix.name, note)
         }
 
         // Then a colour wheel: a discrete set of slots, each with a declared preview.
-        val wheel = properties
-            .firstOrNull { it.category == PropertyCategory.COLOUR && it.value is DmxFixtureSetting<*> }
+        val wheel = attributes
+            .firstOrNull { it.category == AttributeCategory.COLOUR && it.value is DmxFixtureSetting<*> }
         if (wheel != null) {
             val setting = wheel.value as DmxFixtureSetting<*>
             val snapped = nearestColourSlot(setting, wheel.name, media, target)
@@ -337,13 +337,13 @@ object PaletteResolver {
                     Note.Unsupported("colour wheel has no annotated slot previews"),
                 )
             return Resolution(
-                CueAssignmentResolver.PropertyValue.Setting(snapped.level),
+                CueAssignmentResolver.AttributeValue.Setting(snapped.level),
                 wheel.name,
                 Note.Snapped(snapped.name, snapped.deltaE),
             )
         }
 
-        return Resolution(null, propertyName, Note.Unsupported("no colour"))
+        return Resolution(null, attribute, Note.Unsupported("no colour"))
     }
 
     /**
@@ -419,20 +419,20 @@ object PaletteResolver {
      */
     private fun nearestColourSlot(
         setting: DmxFixtureSetting<*>,
-        propertyName: String,
+        attribute: String,
         media: FittedMedia?,
         target: Color,
     ): SnappedSlot? {
         val targetLab = toLab(target)
         var best: SnappedSlot? = null
         for (slot in setting.sortedValues) {
-            val preview = media.colourOf(propertyName, slot) ?: continue
+            val preview = media.colourOf(attribute, slot) ?: continue
             val colour = parseHex(preview) ?: continue
             if (colour.red == 0 && colour.green == 0 && colour.blue == 0) continue
             val delta = labDistance(targetLab, toLab(colour))
             if (best == null || delta < best.deltaE) {
                 // A fitted gel is named beside its frame, so the editor reads "the frame holding R26".
-                val fitted = media?.slot(propertyName, slot.name)?.gel
+                val fitted = media?.slot(attribute, slot.name)?.gel
                 best = SnappedSlot(if (fitted != null) "${slot.name} ($fitted)" else slot.name, slot.level, delta)
             }
         }
@@ -454,34 +454,34 @@ object PaletteResolver {
      */
     private fun resolvePosition(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent.Position,
     ): Resolution {
         if (fixture !is WithPosition) {
-            return Resolution(null, propertyName, Note.Unsupported("fixed head — no pan or tilt"))
+            return Resolution(null, attribute, Note.Unsupported("fixed head — no pan or tilt"))
         }
         val panSlider = fixture.pan as? DmxSlider
         val tiltSlider = fixture.tilt as? DmxSlider
         if (panSlider == null || tiltSlider == null) {
-            return Resolution(null, propertyName, Note.Unsupported("position is not DMX-backed"))
+            return Resolution(null, attribute, Note.Unsupported("position is not DMX-backed"))
         }
         val (panDmx, tiltDmx) = when (intent.unit) {
             PositionUnit.CENTRE -> centreToDmx(intent.pan, panSlider) to centreToDmx(intent.tilt, tiltSlider)
             PositionUnit.DEGREES -> {
-                // The degree range lives on the `@FixtureProperty` annotation, which only the
+                // The degree range lives on the `@FixtureAttribute` annotation, which only the
                 // fixture-level catalogue carries — elements keep name and category alone. A
                 // template has no element rows, so this is the whole story rather than a gap.
-                val catalogue = (fixture as? Fixture)?.fixtureProperties
-                    ?: return Resolution(null, propertyName, Note.Unsupported("no property catalogue"))
-                val pan = catalogue.firstOrNull { it.category == PropertyCategory.PAN }
-                val tilt = catalogue.firstOrNull { it.category == PropertyCategory.TILT }
+                val catalogue = (fixture as? Fixture)?.fixtureAttributes
+                    ?: return Resolution(null, attribute, Note.Unsupported("no property catalogue"))
+                val pan = catalogue.firstOrNull { it.category == AttributeCategory.PAN }
+                val tilt = catalogue.firstOrNull { it.category == AttributeCategory.TILT }
                 if (pan == null || tilt == null) {
-                    return Resolution(null, propertyName, Note.Unsupported("position is not DMX-backed"))
+                    return Resolution(null, attribute, Note.Unsupported("position is not DMX-backed"))
                 }
                 val panDegrees = degreesToDmx(intent.pan, pan.degMin, pan.degMax, pan.inverted, panSlider)
-                    ?: return Resolution(null, propertyName, Note.Unsupported("pan has no degree range annotated"))
+                    ?: return Resolution(null, attribute, Note.Unsupported("pan has no degree range annotated"))
                 val tiltDegrees = degreesToDmx(intent.tilt, tilt.degMin, tilt.degMax, tilt.inverted, tiltSlider)
-                    ?: return Resolution(null, propertyName, Note.Unsupported("tilt has no degree range annotated"))
+                    ?: return Resolution(null, attribute, Note.Unsupported("tilt has no degree range annotated"))
                 panDegrees to tiltDegrees
             }
         }
@@ -491,7 +491,7 @@ object PaletteResolver {
             tiltDmx.clampedTo?.let { add("tilt ${formatAxis(it, intent.unit)}") }
         }
         return Resolution(
-            CueAssignmentResolver.PropertyValue.Position(panDmx.value, tiltDmx.value),
+            CueAssignmentResolver.AttributeValue.Position(panDmx.value, tiltDmx.value),
             // "position" is the synthetic pan/tilt pair every other path already special-cases;
             // resolving it to one of the two axis names would break that.
             "position",
@@ -509,7 +509,7 @@ object PaletteResolver {
      */
     fun centreIntentOf(
         fixture: GroupableFixture,
-        value: CueAssignmentResolver.PropertyValue.Position,
+        value: CueAssignmentResolver.AttributeValue.Position,
     ): PaletteIntent.Position? {
         if (fixture !is WithPosition) return null
         val panSlider = fixture.pan as? DmxSlider ?: return null
@@ -577,11 +577,11 @@ object PaletteResolver {
      */
     private fun resolvePercent(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent.Percent,
     ): Resolution {
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName))
-            ?: return Resolution(null, propertyName, Note.Unsupported("no $propertyName"))
+        val resolved = AttributeChannelWriter.resolveAttribute(fixture, canonicalAttributeName(attribute))
+            ?: return Resolution(null, attribute, Note.Unsupported("no $attribute"))
         val fraction = (intent.value / 100.0).coerceIn(0.0, 1.0)
         return when (val raw = resolved.value) {
             is DmxSlider -> {
@@ -589,8 +589,8 @@ object PaletteResolver {
                 val max = raw.max.toInt()
                 val dmx = (min + fraction * (max - min)).roundToInt().coerceIn(min, max)
                 Resolution(
-                    CueAssignmentResolver.PropertyValue.Slider(dmx.toUByte()),
-                    propertyName,
+                    CueAssignmentResolver.AttributeValue.Slider(dmx.toUByte()),
+                    attribute,
                     Note.Exact,
                 )
             }
@@ -599,23 +599,23 @@ object PaletteResolver {
             is DmxFixtureSetting<*> -> {
                 val slots = raw.sortedValues
                 if (slots.isEmpty()) {
-                    return Resolution(null, propertyName, Note.Unsupported("$propertyName has no settings"))
+                    return Resolution(null, attribute, Note.Unsupported("$attribute has no settings"))
                 }
                 val stepped = steppedZoomSlot(slots, fraction)
                 val wanted = fraction * 255.0
                 val slot = stepped ?: slots.minBy { abs(it.level.toInt() - wanted) }
                 Resolution(
-                    CueAssignmentResolver.PropertyValue.Setting(slot.level),
-                    propertyName,
+                    CueAssignmentResolver.AttributeValue.Setting(slot.level),
+                    attribute,
                     Note.Snapped(slot.name, 0.0),
                 )
             }
             else -> {
                 logger.debug(
                     "template percent targeted '{}' with no single backing channel on '{}'",
-                    propertyName, fixture.targetKey,
+                    attribute, fixture.targetKey,
                 )
-                Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
+                Resolution(null, attribute, Note.Unsupported("$attribute is not a single channel"))
             }
         }
     }
@@ -653,19 +653,19 @@ object PaletteResolver {
      */
     private fun resolveLevel(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent.Level,
     ): Resolution {
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName))
-            ?: return Resolution(null, propertyName, Note.Unsupported("no $propertyName"))
+        val resolved = AttributeChannelWriter.resolveAttribute(fixture, canonicalAttributeName(attribute))
+            ?: return Resolution(null, attribute, Note.Unsupported("no $attribute"))
         val slider = resolved.value as? DmxSlider
-            ?: return Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
+            ?: return Resolution(null, attribute, Note.Unsupported("$attribute is not a single channel"))
         val min = slider.min.toInt()
         val max = slider.max.toInt()
         val dmx = intent.value.coerceIn(min, max)
         return Resolution(
-            CueAssignmentResolver.PropertyValue.Slider(dmx.toUByte()),
-            propertyName,
+            CueAssignmentResolver.AttributeValue.Slider(dmx.toUByte()),
+            attribute,
             if (dmx == intent.value) Note.Exact else Note.Clamped(dmx.toString()),
         )
     }
@@ -681,30 +681,30 @@ object PaletteResolver {
      */
     private fun resolveSwitch(
         fixture: GroupableFixture,
-        propertyName: String,
+        attribute: String,
         intent: PaletteIntent.Switch,
     ): Resolution {
-        val resolved = PropertyChannelWriter.resolveProperty(fixture, canonicalPropertyName(propertyName))
-            ?: return Resolution(null, propertyName, Note.Unsupported("no $propertyName"))
+        val resolved = AttributeChannelWriter.resolveAttribute(fixture, canonicalAttributeName(attribute))
+            ?: return Resolution(null, attribute, Note.Unsupported("no $attribute"))
         return when (val raw = resolved.value) {
             is DmxSlider -> Resolution(
-                CueAssignmentResolver.PropertyValue.Slider(if (intent.on) raw.max else raw.min),
-                propertyName,
+                CueAssignmentResolver.AttributeValue.Slider(if (intent.on) raw.max else raw.min),
+                attribute,
                 Note.Exact,
             )
             is DmxFixtureSetting<*> -> {
                 val slots = raw.sortedValues
                 if (slots.isEmpty()) {
-                    return Resolution(null, propertyName, Note.Unsupported("$propertyName has no settings"))
+                    return Resolution(null, attribute, Note.Unsupported("$attribute has no settings"))
                 }
                 val slot = if (intent.on) slots.last() else slots.first()
                 Resolution(
-                    CueAssignmentResolver.PropertyValue.Setting(slot.level),
-                    propertyName,
+                    CueAssignmentResolver.AttributeValue.Setting(slot.level),
+                    attribute,
                     Note.Snapped(slot.name, 0.0),
                 )
             }
-            else -> Resolution(null, propertyName, Note.Unsupported("$propertyName is not a single channel"))
+            else -> Resolution(null, attribute, Note.Unsupported("$attribute is not a single channel"))
         }
     }
 

@@ -180,9 +180,9 @@ class LocateParkInteractionTest : RouteIntegrationTest() {
 
     private fun dimmerEffect(fixtureKey: String): FxInstance = sliderEffect(fixtureKey, "dimmer")
 
-    private fun sliderEffect(fixtureKey: String, propertyName: String): FxInstance = FxInstance(
+    private fun sliderEffect(fixtureKey: String, attribute: String): FxInstance = FxInstance(
         effect = SineSlider(),
-        target = SliderTarget(FxTargetRef.fixture(fixtureKey), propertyName),
+        target = SliderTarget(FxTargetRef.fixture(fixtureKey), attribute),
         timing = FxTiming(cycle = CycleLength.ONE_BEAT),
     )
 

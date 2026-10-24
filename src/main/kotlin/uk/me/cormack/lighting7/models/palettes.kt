@@ -203,7 +203,7 @@ class DaoPaletteRow(id: EntityID<Int>) : IntEntity(id) {
 data class PaletteRowDto(
     val targetType: String,
     val targetKey: String,
-    val propertyName: String,
+    val attribute: String,
     val value: String,
     val sortOrder: Int = 0,
     /**
@@ -337,7 +337,7 @@ class DaoPaletteFxEntity(id: EntityID<Int>) : IntEntity(id) {
 data class PaletteFxDto(
     val fxType: String,
     val family: String,
-    val propertyName: String? = null,
+    val attribute: String? = null,
     val cycle: Double,
     val blendMode: String,
     val order: String,

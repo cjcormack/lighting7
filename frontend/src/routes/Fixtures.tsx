@@ -29,10 +29,10 @@ import { useProjectQuery } from "../store/projects"
 import { CurrentProjectRedirect } from "../components/CurrentProjectRedirect"
 
 /** The page's Properties / Channels toggle, which every card follows. */
-type FixtureViewMode = 'properties' | 'channels'
+type FixtureViewMode = 'attributes' | 'channels'
 
 // Context for global view mode
-const ViewModeContext = createContext<FixtureViewMode>('properties')
+const ViewModeContext = createContext<FixtureViewMode>('attributes')
 const useViewMode = () => useContext(ViewModeContext)
 
 // Redirect component for /fixtures route
@@ -90,7 +90,7 @@ function FixturesContainer({ projectId }: { projectId: number }) {
   const { data: maybeFixtureList, isLoading } = useVisibleFixtureListQuery()
   const fixtureColours = useFixtureColourIndex(projectId)
   const [filter, setFilter] = useState("")
-  const [viewMode, setViewMode] = useState<FixtureViewMode>('properties')
+  const [viewMode, setViewMode] = useState<FixtureViewMode>('attributes')
 
   const fixtureList = useMemo(() => maybeFixtureList ?? [], [maybeFixtureList])
 
@@ -124,7 +124,7 @@ function FixturesContainer({ projectId }: { projectId: number }) {
           onValueChange={(value) => value && setViewMode(value as FixtureViewMode)}
           className="shrink-0"
         >
-          <ToggleGroupItem value="properties" aria-label="Show attributes" title="Attributes">
+          <ToggleGroupItem value="attributes" aria-label="Show attributes" title="Attributes">
             <Settings2 className="h-4 w-4" />
           </ToggleGroupItem>
           <ToggleGroupItem value="channels" aria-label="Show channels" title="Channels">

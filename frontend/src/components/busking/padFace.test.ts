@@ -38,7 +38,7 @@ describe('describePalette — around (fixture-fx-sheets plan D16)', () => {
         cycle: 0.5,
         blendMode,
         order: 'NORMAL',
-        parameters: { panCenter: centre, tiltCenter: centre, panRadius: '64', tiltRadius: '64' },
+        parameters: { panCentre: centre, tiltCentre: centre, panRadius: '64', tiltRadius: '64' },
         timingSource: 'BEAT',
       },
     }) as unknown as PaletteSummary

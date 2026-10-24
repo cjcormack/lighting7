@@ -23,7 +23,7 @@ import { tagClass, type FixtureColour } from '../../lib/fixtureColours'
 import { TagMark } from '../fixtureColours/ColourSwatches'
 import { buildCueRowCells, buildRowCells, useRowValues } from './useRowValues'
 import { useScopedRowValues } from './useScopedRowValues'
-import { parsePropertyMask } from '../../lib/attributeFamily'
+import { parseAttributeMask } from '../../lib/attributeFamily'
 import { AddToTargetsButton } from '../programmer/AddToTargetsButton'
 import { useLookRowStore } from '../programmer/LookRowStore'
 import { useFocusedPaletteLayer } from '../programmer/FocusedPaletteLayer'
@@ -674,7 +674,7 @@ const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
 /**
  * Which column *headers* the focused layer does not assert.
  *
- * Derived from the layer's `propertyMask` and the column's own canonical category, because a header
+ * Derived from the layer's `attributeMask` and the column's own canonical category, because a header
  * has no fixture to classify against — the cells beneath it still use each resolution's real
  * descriptor, so one column carrying different property kinds across fixture types is classified
  * per fixture where it matters. Empty outside layer scope, so the two plain list routes are
@@ -683,11 +683,11 @@ const NO_INERT_COLUMNS: ReadonlySet<ColumnKey> = new Set()
 function useInertColumns(visibleColumns: readonly ColumnKey[]): ReadonlySet<ColumnKey> {
   const scope = useProgrammerScope()
   const store = useLookRowStore()
-  const mask = store?.propertyMask
+  const mask = store?.attributeMask
   const inLayerScope = scope?.kind === 'layer'
   return useMemo(() => {
     if (!inLayerScope) return NO_INERT_COLUMNS
-    const families = parsePropertyMask(mask)
+    const families = parseAttributeMask(mask)
     if (families.length === 0) return NO_INERT_COLUMNS
     return new Set(visibleColumns.filter((col) => !families.includes(columnFamily(col))))
   }, [inLayerScope, mask, visibleColumns])
@@ -698,8 +698,8 @@ const NO_COLOURS: ReadonlyMap<string, FixtureColour> = new Map()
 /** Name-cell indent per nesting depth (member rows 1, element rows 2). */
 const INDENT_CLASS = ['', 'ml-5', 'ml-10']
 
-const programmerHolds = (headKey: string, propertyName: string) =>
-  lightingApi.programmer.getKeyState(headKey, propertyName).entry != null
+const programmerHolds = (headKey: string, attribute: string) =>
+  lightingApi.programmer.getKeyState(headKey, attribute).entry != null
 
 /** Stable identity for the ownership-off path, so the hook's memos never churn. */
 const EMPTY_CELLS: RowCell[] = []
@@ -1003,7 +1003,7 @@ const RowView = React.memo(function RowView({
               // rounding of it that nobody checked against the badge's own size. Any new mark has
               // to fit `right-1` plus its own width inside this number, or widen both together.
               //
-              // It goes on the *wrapper* rather than inside `PropertyCell`: padding is inside the
+              // It goes on the *wrapper* rather than inside `AttributeCell`: padding is inside the
               // border box, so the ownership ring and the selection outline still trace the full
               // cell, and absolutely-positioned marks still measure `right` from the same edge
               // they always did. Only the content moves. That is the same choice
@@ -1068,7 +1068,7 @@ const RowView = React.memo(function RowView({
                 {fxDivision}
               </span>
             )}
-            <PropertyCell
+            <AttributeCell
               cell={cell}
               label={columnLabel(col)}
               // The staged overlay is applied to whatever the scope resolved, not only to the live
@@ -1210,7 +1210,7 @@ function OwnerJumpOverlay({ owned }: { owned?: CellOwnership }) {
   )
 }
 
-function PropertyCell({
+function AttributeCell({
   cell,
   label,
   value,

@@ -20,7 +20,7 @@ export interface TimelineColumn {
   name: string
   /** What it is on — the target, *own fixtures*, a scenery element's kind. */
   sub: string
-  /** Attribute families (`PropertyMaskGroup` names) it touches; empty for scenery. */
+  /** Attribute families (`AttributeFamily` names) it touches; empty for scenery. */
   families: string[]
   /** Every fixture key any of its cells reaches. */
   heads: string[]
@@ -28,7 +28,7 @@ export interface TimelineColumn {
   sourceId: number | null
   /** The one target a Look or palette column is on, or null for its own fixtures. */
   target: CueTarget | null
-  effect?: { fxType: string; propertyName: string | null; targetType: string; targetKey: string }
+  effect?: { fxType: string; attribute: string | null; targetType: string; targetKey: string }
   elementUuid?: string
 }
 

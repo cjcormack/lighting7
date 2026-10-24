@@ -195,7 +195,7 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         val pulse = Json.encodeToJsonElement(
             CueAdHocFxDto(
                 targetType = "fixture", targetKey = "foh-1", fxType = "Pulse", family = "intensity",
-                propertyName = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
+                attribute = "dimmer", cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
             ),
         ).jsonObject
         val oldField = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
@@ -213,6 +213,25 @@ class CueErrorHandlingTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.BadRequest, oldLayer.status, oldLayer.bodyAsText())
         assertTrue("templateId" in oldLayer.body<ErrorResponse>().error, oldLayer.body<ErrorResponse>().error)
+
+        // A row naming its attribute by the old field would decode with none, and a hook carrying a
+        // field it does not take is refused the same way.
+        for ((list, item, old) in listOf(
+            Triple("attributeAssignments", """[{"targetType":"fixture","targetKey":"foh-1","propertyName":"dimmer","value":"200"}]""", "propertyName"),
+            Triple("triggers", """[{"triggerType":"ACTIVATION","scriptId":1,"scriptName":"Go"}]""", "scriptName"),
+        )) {
+            val refused = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+                contentType(ContentType.Application.Json)
+                setBody(buildJsonObject { put(list, Json.parseToJsonElement(item)) })
+            }
+            assertEquals(HttpStatusCode.BadRequest, refused.status, refused.bodyAsText())
+            assertTrue(old in refused.body<ErrorResponse>().error, refused.body<ErrorResponse>().error)
+        }
+        val oldAssignments = client.patch("/api/rest/projects/$projectId/cues/${cue.id}") {
+            contentType(ContentType.Application.Json)
+            setBody(buildJsonObject { put("propertyAssignments", JsonArray(emptyList())) })
+        }
+        assertEquals(HttpStatusCode.BadRequest, oldAssignments.status, oldAssignments.bodyAsText())
     }
 
     @Test

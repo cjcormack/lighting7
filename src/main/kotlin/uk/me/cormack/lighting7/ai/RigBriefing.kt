@@ -19,7 +19,7 @@ import uk.me.cormack.lighting7.fixture.lantern.LanternLibrary
 import uk.me.cormack.lighting7.fixture.lantern.effectiveKind
 import uk.me.cormack.lighting7.fx.genericColourRows
 import uk.me.cormack.lighting7.models.*
-import uk.me.cormack.lighting7.routes.SliderPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SliderAttributeDescriptor
 import uk.me.cormack.lighting7.show.beamDirection
 import uk.me.cormack.lighting7.state.State
 import uk.me.cormack.lighting7.venue.ShowOverrides
@@ -188,7 +188,7 @@ class RigBriefing(private val state: State) {
             "PaletteSteps steps through generic value palettes of one family (`palettes`: two or more " +
                 "`pal:{uuid}`, comma-separated) — store it with that family (intensity, colour, " +
                 "position or beam). SlotSteps steps one setting's options by name (`slots`, e.g. " +
-                "`Gobo 3,Gobo 5`) — name the setting as its propertyName, and store it as beam. Where an " +
+                "`Gobo 3,Gobo 5`) — name the setting as its attribute, and store it as beam. Where an " +
                 "effect's line names a cycle or direction, that is what a new one runs at unless asked " +
                 "otherwise.",
         )
@@ -201,7 +201,7 @@ class RigBriefing(private val state: State) {
         if (activeFx.isNotEmpty()) {
             sb.appendLine("Active FX: ${activeFx.size}")
             for (effect in activeFx.take(20)) {
-                sb.appendLine("  - ${effect.fxTypeId} on ${briefingTargetOf(effect)}.${effect.target.propertyName}" +
+                sb.appendLine("  - ${effect.fxTypeId} on ${briefingTargetOf(effect)}.${effect.target.attribute}" +
                         // On Seconds (venue-visit plan D7) the division is a cycle in seconds, not beats.
                         (if (effect.onSeconds) " (seconds=" else " (beat=") +
                         "${effect.timing.cycle}, blend=${effect.blendMode}" +
@@ -379,7 +379,7 @@ class RigBriefing(private val state: State) {
         sb.appendLine("- For group effects, use order=NORMAL for chases, UNIFIED for all-together")
         sb.appendLine("- **Timing**: `timing` says what `cycle` measures. `CYCLE`: the whole effect completes in one cycle. `HEAD`: each step takes one cycle, so the whole effect takes cycle × steps. Each effect type sets its own default: every built-in is `CYCLE`; a user effect that steps (a chase) may default to `HEAD`. Set `timing` on an effect to override it.")
         sb.appendLine("- DMX values range 0-255")
-        sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look's values always name their own fixtures or groups (create_look's `values`, e.g. the front-wash group at 'pct:70'), so editing a look (update_look) moves every cue layering it, and delete_look removes one, refused while a cue layers it unless forced; list_fixture_types with properties: true names what each type can be set to. A look's *effects* name their own targets as well — a fixture, a group, or several as one effect, taken as create_cue's ad-hoc effects take them. A look always lands whole: pressed (apply_look) or layered in a cue, it lands its own values, effects and scenery, never narrower and never wider, so a cue layer of a look names no targets. A value you want to point at a selection is a *palette*, not a look — and so is a single named effect you want to point at a selection: a palette holds values **or** one effect, never both, so a colour plus a chase is a look and 'a slow amber breathe on the selection' is an effect palette. Create either with create_palette.")
+        sb.appendLine("- **Looks and layers**: A *look* is a named, reusable bundle of static values and effects. A *layer* applies one look inside a cue, at a position in the cue's stack. A look's values always name their own fixtures or groups (create_look's `values`, e.g. the front-wash group at 'pct:70'), so editing a look (update_look) moves every cue layering it, and delete_look removes one, refused while a cue layers it unless forced; list_fixture_types with attributes: true names what each type can be set to. A look's *effects* name their own targets as well — a fixture, a group, or several as one effect, taken as create_cue's ad-hoc effects take them. A look always lands whole: pressed (apply_look) or layered in a cue, it lands its own values, effects and scenery, never narrower and never wider, so a cue layer of a look names no targets. A value you want to point at a selection is a *palette*, not a look — and so is a single named effect you want to point at a selection: a palette holds values **or** one effect, never both, so a colour plus a chase is a look and 'a slow amber breathe on the selection' is an effect palette. Create either with create_palette.")
         sb.appendLine("- **Layer order**: within a cue, later layers override earlier ones for the same fixture and property — for *every* attribute, intensity included. This is not HTP: a later dim layer really does dim. The cue's own local values always win over every layer. Per-layer blendMode (MAX/MIN/MULTIPLY/ADDITIVE) and amount (0..1) modify how a layer mixes over what is beneath it.")
         sb.appendLine("- **One limit worth knowing**: effects sit above static values regardless of layer order, because effects are a higher composition layer than values. So a later layer setting colour statically will not beat an earlier layer running a colour effect.")
         sb.appendLine("- **Cues**: A cue is an ordered stack of layers — each applying a look, or a palette by paletteId (a generic one needs layer targets) — plus its own local values (create_cue / build_cue_stack's `values`, in create_look's grammar) and ad-hoc effects. Multiple cues can run concurrently. apply_cue holds a cue loose — live above every running stack, the newest apply on top — without moving any stack; applying a cue already held loose only puts it back on top. stop_cue lets that hold go, and the cue comes off unless a running stack also holds it (stop a stack with deactivate_cue_stack). apply_cue with replaceAll=true lets every other loose cue go first; stacks are never touched. Looks are read fresh at apply time, so edits to a look are always reflected.")
@@ -538,7 +538,7 @@ class RigBriefing(private val state: State) {
         val info = FixtureTypeRegistry.typeInfoForKey(typeKey) ?: return false
         val kind = effectiveKind(typeKey, kindOverride, lanternType) ?: info.kind
         return kind == FixtureKind.MOVING_HEAD || kind == FixtureKind.SCANNER ||
-            info.properties.any { it is SliderPropertyDescriptor && it.axis == "TILT" }
+            info.attributes.any { it is SliderAttributeDescriptor && it.axis == "TILT" }
     }
 
     /**
@@ -603,8 +603,8 @@ class RigBriefing(private val state: State) {
 
     private fun describeMedia(media: FittedMedia?): String {
         if (media == null || media.isEmpty) return "stock"
-        return media.slots.toSortedMap().entries.joinToString(", ") { (property, options) ->
-            property + " " + options.toSortedMap().entries.joinToString(", ") { (option, slot) ->
+        return media.slots.toSortedMap().entries.joinToString(", ") { (attribute, options) ->
+            attribute + " " + options.toSortedMap().entries.joinToString(", ") { (option, slot) ->
                 val content = slot.gel?.let { code -> GelLibrary.byCode(code)?.let { "$code ${it.name}" } ?: code }
                     ?: slot.gobo?.let { "gobo $it" }
                     ?: "empty"

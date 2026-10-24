@@ -17,17 +17,17 @@ class BundledEmitterNamesTest {
     @Test
     fun `every bundled emitter is named by its category`() {
         val expected = mapOf(
-            PropertyCategory.WHITE to "white",
-            PropertyCategory.AMBER to "amber",
-            PropertyCategory.UV to "uv",
+            AttributeCategory.WHITE to "white",
+            AttributeCategory.AMBER to "amber",
+            AttributeCategory.UV to "uv",
         )
         var seen = 0
         for (type in FixtureTypeRegistry.allTypes) {
             val fixture = FixtureTypeRegistry.instantiateByTypeKey(type.typeKey, Universe(0, 0), "probe", "Probe", 1)
             for ((category, name) in expected) {
-                val property = fixture.bundledProperty(category) ?: continue
+                val attribute = fixture.bundledAttribute(category) ?: continue
                 seen++
-                assertEquals(name, property.name, "${type.typeKey}: its bundled ${category.name.lowercase()} must be named '$name'")
+                assertEquals(name, attribute.name, "${type.typeKey}: its bundled ${category.name.lowercase()} must be named '$name'")
             }
         }
         assertEquals(true, seen > 0, "at least one fixture type bundles an emitter")

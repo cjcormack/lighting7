@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * `docs/plans/completed/control-surface-plan.md` §"Phase 7" for the sibling binding-health pattern this
  * intentionally mirrors — both subsystems consume the same ADT via
  * [uk.me.cormack.lighting7.fx.PersistedFixtureReferenceValidator] and [uk.me.cormack.lighting7.midi.BindingHealthEvaluator].
- * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingProperty]; the
+ * Cue consumers see [Ok] / [MissingFixture] / [MissingGroup] / [MissingAttribute]; the
  * binding-specific variants are produced only by the surface evaluator.
  *
  * Two reference variants for the old `ref:` value grammar (a named palette, which became a Look)
@@ -40,12 +40,12 @@ sealed class AssignmentHealth {
     data class MissingGroup(val groupName: String) : AssignmentHealth()
 
     /**
-     * The target exists, but [propertyName] is not a known annotated property on it.
+     * The target exists, but [attribute] is not a known annotated property on it.
      * [targetKey] echoes the original fixture / group key for UI context.
      */
     @Serializable
-    @SerialName("missingProperty")
-    data class MissingProperty(val targetKey: String, val propertyName: String) : AssignmentHealth()
+    @SerialName("missingAttribute")
+    data class MissingAttribute(val targetKey: String, val attribute: String) : AssignmentHealth()
 
     /**
      * A cue stack referenced by a `cueStackGo` / `cueStackBack` / `cueStackPause` / `stackFxAmount` binding
@@ -80,14 +80,14 @@ sealed class AssignmentHealth {
     data class MissingSpeedMaster(val masterUuid: String) : AssignmentHealth()
 
     /**
-     * A `selectionProperty` binding names a property no fixture in the patch declares as a
+     * A `selectionAttribute` binding names a property no fixture in the patch declares as a
      * continuous (slider / colour) property, so no selection could ever give it something to
      * write. Control-surface-only. A property *some* fixtures lack is not this: the write
      * simply skips those heads.
      */
     @Serializable
-    @SerialName("unknownProperty")
-    data class UnknownProperty(val propertyName: String) : AssignmentHealth()
+    @SerialName("unknownAttribute")
+    data class UnknownAttribute(val attribute: String) : AssignmentHealth()
 
     /**
      * A `applyLook` binding names a Look that no longer exists in the project. Control-surface-only,
@@ -158,14 +158,14 @@ fun describeAssignmentHealth(health: AssignmentHealth): String = when (health) {
     is AssignmentHealth.Ok -> "ok"
     is AssignmentHealth.MissingFixture -> "missing fixture '${health.fixtureKey}'"
     is AssignmentHealth.MissingGroup -> "missing group '${health.groupName}'"
-    is AssignmentHealth.MissingProperty ->
-        "missing property '${health.propertyName}' on '${health.targetKey}'"
+    is AssignmentHealth.MissingAttribute ->
+        "missing property '${health.attribute}' on '${health.targetKey}'"
     is AssignmentHealth.MissingStack -> "missing cue stack id=${health.stackId}"
     is AssignmentHealth.MissingCue -> "missing cue id=${health.cueId}"
     is AssignmentHealth.UnknownBank ->
         "unknown bank '${health.bankId}' for device '${health.deviceTypeKey}'"
     is AssignmentHealth.MissingSpeedMaster -> "missing speed master ${health.masterUuid}"
-    is AssignmentHealth.UnknownProperty -> "no patched fixture has property '${health.propertyName}'"
+    is AssignmentHealth.UnknownAttribute -> "no patched fixture has property '${health.attribute}'"
     is AssignmentHealth.UnknownTarget -> "unknown binding target type '${health.targetType}'"
     is AssignmentHealth.MissingLook -> "missing Look ${health.lookUuid}"
     is AssignmentHealth.MissingPalette -> "missing palette ${health.paletteUuid}"

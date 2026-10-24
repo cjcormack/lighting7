@@ -1,0 +1,19 @@
+{
+  "name": "Wash",
+  "sortOrder": 1,
+  "tiles": [
+    {
+      "groupUuid": "41fb9017-1c35-43c9-95a1-5c3fdddd27ad",
+      "label": "Front",
+      "sortOrder": 0,
+      "uuid": "f04af4a0-e2d6-4f3c-a1dd-3c4fc64133c5"
+    },
+    {
+      "cellMode": "WHOLE",
+      "patchUuid": "c585e618-1889-4c66-bd16-b73b9b677ba2",
+      "sortOrder": 1,
+      "uuid": "c03124dd-b7fd-4912-93c8-ef27ee0a98e9"
+    }
+  ],
+  "uuid": "71d15a5a-5eae-43d3-8343-b70b618d637c"
+}

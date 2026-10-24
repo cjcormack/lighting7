@@ -1,8 +1,8 @@
 import type { ChannelSource } from '../api/channelSource'
 import type {
   FixtureTravel,
-  PropertyDescriptor,
-  SliderPropertyDescriptor,
+  AttributeDescriptor,
+  SliderAttributeDescriptor,
   TimingRole,
 } from '../store/fixtures'
 
@@ -196,9 +196,9 @@ const ROLE_FAMILIES: Record<TimingRole, readonly TravelFamily[]> = {
 
 /** A fixture's own timing channels, by the family each stretches. */
 export interface TimingChannels {
-  position?: SliderPropertyDescriptor
-  beam?: SliderPropertyDescriptor
-  colour?: SliderPropertyDescriptor
+  position?: SliderAttributeDescriptor
+  beam?: SliderAttributeDescriptor
+  colour?: SliderAttributeDescriptor
 }
 
 export const NO_TIMING: Readonly<TimingChannels> = {}
@@ -207,9 +207,9 @@ export const NO_TIMING: Readonly<TimingChannels> = {}
  * The fixture's timing channels (`timing` on a slider): the first that stretches each family. A desk
  * that predates the vocabulary sends none, and every family moves at the type's speed.
  */
-export function findTimingChannels(properties: readonly PropertyDescriptor[] | undefined): TimingChannels {
+export function findTimingChannels(attributes: readonly AttributeDescriptor[] | undefined): TimingChannels {
   let found: TimingChannels | null = null
-  for (const p of properties ?? []) {
+  for (const p of attributes ?? []) {
     if (p.type !== 'slider' || p.timing == null) continue
     const families = ROLE_FAMILIES[p.timing]
     if (families == null) continue
@@ -223,7 +223,7 @@ export function findTimingChannels(properties: readonly PropertyDescriptor[] | u
  * A timing channel's duration for a move planned at [raw]: `raw × secondsPerStep`, or `null` — "the
  * type's own speed" — at 0, from its `timingFastFrom` band, or with no channel at all.
  */
-export function timedSeconds(prop: SliderPropertyDescriptor | undefined, raw: number): number | null {
+export function timedSeconds(prop: SliderAttributeDescriptor | undefined, raw: number): number | null {
   if (prop == null || prop.timingSecondsPerStep == null) return null
   if (raw <= 0) return null
   if (prop.timingFastFrom != null && raw >= prop.timingFastFrom) return null

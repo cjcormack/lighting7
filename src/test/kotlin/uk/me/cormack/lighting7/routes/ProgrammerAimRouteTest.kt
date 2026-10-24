@@ -125,9 +125,9 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
     }
 
     /** The winning programmer value for (fixture, property), or null. */
-    private fun entry(key: String, property: String): CueAssignmentResolver.PropertyValue? =
+    private fun entry(key: String, attribute: String): CueAssignmentResolver.AttributeValue? =
         state.show.programmerStore.entries()
-            .firstOrNull { it.fixtureKey == key && it.propertyName == property }
+            .firstOrNull { it.fixtureKey == key && it.attribute == attribute }
             ?.slots?.firstOrNull()?.value?.resolved
 
     /** The drawn beam of a 540°/210° spot aimed at [panDeg] / [tiltDeg] travel, as a stage direction. */
@@ -153,9 +153,9 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertEquals(105.0, out.written.single().tiltDeg)
         // Mid-travel is DMX 127.5 on each axis: coarse 127, fine 128 — 16-bit, not rounded to a coarse step.
         assertEquals("127,127", out.written.single().value)
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(128u), entry("spot-fine", "panFine"))
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(128u), entry("spot-fine", "tiltFine"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(127u, 127u), entry("spot-fine", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(128u), entry("spot-fine", "panFine"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(128u), entry("spot-fine", "tiltFine"))
     }
 
     @Test
@@ -400,7 +400,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         client.jogRig()
         fun sourceGroup(key: String) = state.show.programmerStore.entries()
-            .first { it.fixtureKey == key && it.propertyName == "position" }.slots.first().sourceGroup
+            .first { it.fixtureKey == key && it.attribute == "position" }.slots.first().sourceGroup
         client.run(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 0.2, dy = 0.0))
         assertNull(sourceGroup("spot-fine"))
         client.run(AimRequest(targets = listOf(fixture("spot-fine")), mode = "JOG", dx = 0.2, dy = 0.0, groups = listOf("spots")))
@@ -425,7 +425,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
 
     private fun stageFan(x: Double?, y: Double?, base: List<FanBaseDto>? = null, near: List<AimNearDto>? = null) =
         FanRequest(
-            targets = jogFrom.keys.map(::fixture), property = "position", mode = "ABOUT",
+            targets = jogFrom.keys.map(::fixture), attribute = "position", mode = "ABOUT",
             fan = FanAmountDto(x = x, y = y), base = base, near = near,
         )
 
@@ -528,7 +528,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertTrue(wet.success, wet.result)
         assertFalse(wet.json()["dryRun"]!!.jsonPrimitive.boolean)
         assertEquals("par-1", wet.json()["skipped"]!!.jsonArray.single().jsonObject["target"]!!.jsonPrimitive.content)
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(127u, 127u), entry("spot-fine", "position"))
     }
 
     @Test
@@ -552,7 +552,7 @@ class ProgrammerAimRouteTest : RouteIntegrationTest() {
         assertEquals("position" to "pos:-1,-1", rows.getValue("spot-fine"))
         assertTrue(rows.getValue("spot-coarse").second.startsWith("pos:"), rows.toString())
         // And the programmer was written, as without it.
-        assertEquals(CueAssignmentResolver.PropertyValue.Position(127u, 127u), entry("spot-fine", "position"))
+        assertEquals(CueAssignmentResolver.AttributeValue.Position(127u, 127u), entry("spot-fine", "position"))
     }
 
     @Test

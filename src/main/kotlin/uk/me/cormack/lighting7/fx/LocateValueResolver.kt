@@ -2,9 +2,9 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.StrobeKind
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureColourSettingValue
@@ -21,7 +21,7 @@ import uk.me.cormack.lighting7.fixture.media.OPEN_WHITE
 import uk.me.cormack.lighting7.fixture.media.colourOf
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
 import uk.me.cormack.lighting7.fixture.locate.UnitLocate
-import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.attribute.Strobe
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.show.focusRange
 import uk.me.cormack.lighting7.show.middleDmx
@@ -40,14 +40,14 @@ import kotlin.math.roundToInt
  * prism out, iris/frost open, zoom mid, focus at the middle *distance* of a declared range
  * (mid-DMX where none is declared), and every framing shutter out and square to the gate.
  * "Colour white" adapts to the engine: RGB mixers get full RGB *and* full white (the fan-out in
- * [PropertyChannelWriter.resolveColour] also zeroes amber/uv); colour wheels pick their open/white
+ * [AttributeChannelWriter.resolveColour] also zeroes amber/uv); colour wheels pick their open/white
  * slot — unless an RGB engine
  * coexists on the same target, in which case the wheel is *disengaged* (its off slot) so the
  * RGB white wins. Standalone WHITE/AMBER/UV sliders go to full only when there is no RGB
  * engine to fan out from — white/amber-only blinders and UV cannons must still light.
  * Speed, macro, rotation and bare SETTING channels are left alone.
  *
- * Values are expressed as [CueAssignmentResolver.PropertyValue]s for the FX engine's Layer-4 write
+ * Values are expressed as [CueAssignmentResolver.AttributeValue]s for the FX engine's Layer-4 write
  * path, so locate participates in the normal layer cascade (park still wins, clearing falls
  * back to cue/baseline). Pan/tilt use the synthetic `"position"` property — the same name cue
  * assignments use — so a cue's position correctly reasserts itself when locate is released.
@@ -65,15 +65,15 @@ object LocateValueResolver {
     /** One property write for a locate: which target to write on, and what to assert. */
     data class LocateAssignment(
         val target: GroupableFixture,
-        val propertyName: String,
-        val value: CueAssignmentResolver.PropertyValue,
+        val attribute: String,
+        val value: CueAssignmentResolver.AttributeValue,
     )
 
     /** Locate white: full RGB *and* full white — covers RGB-only and white-engine fixtures. */
     private val LOCATE_WHITE = ExtendedColour(Color.WHITE, white = 255u)
 
     /** Parent channels a single-element locate must still raise for the head to emit light. */
-    private val PARENT_MASTER_CATEGORIES = setOf(PropertyCategory.DIMMER, PropertyCategory.STROBE)
+    private val PARENT_MASTER_CATEGORIES = setOf(AttributeCategory.DIMMER, AttributeCategory.STROBE)
 
     /**
      * [media] is the fixture's fitted media (`Fixtures.fittedMediaFor`): Locate's white frame is the
@@ -117,25 +117,25 @@ object LocateValueResolver {
         if (target !is WithPosition) return null
         val pan = target.pan as? DmxSlider ?: return null
         val tilt = target.tilt as? DmxSlider ?: return null
-        val properties = PropertyChannelWriter.resolvedProperties(target)
-        fun fine(category: PropertyCategory) = properties.firstOrNull { it.category == category }
-            ?.let { property -> (property.value as? DmxSlider)?.let { property.name to it } }
-        return LocateAxes(pan, tilt, fine(PropertyCategory.PAN_FINE), fine(PropertyCategory.TILT_FINE))
+        val attributes = AttributeChannelWriter.resolvedAttributes(target)
+        fun fine(category: AttributeCategory) = attributes.firstOrNull { it.category == category }
+            ?.let { attribute -> (attribute.value as? DmxSlider)?.let { attribute.name to it } }
+        return LocateAxes(pan, tilt, fine(AttributeCategory.PAN_FINE), fine(AttributeCategory.TILT_FINE))
     }
 
     private fun resolveSingle(
         target: GroupableFixture,
-        onlyCategories: Set<PropertyCategory>? = null,
+        onlyCategories: Set<AttributeCategory>? = null,
         media: FittedMedia? = null,
         stored: UnitLocate? = null,
     ): List<LocateAssignment> {
-        val properties = PropertyChannelWriter.resolvedProperties(target)
-        val hasRgbEngine = properties.any {
-            it.category == PropertyCategory.COLOUR && it.value is DmxColour
+        val attributes = AttributeChannelWriter.resolvedAttributes(target)
+        val hasRgbEngine = attributes.any {
+            it.category == AttributeCategory.COLOUR && it.value is DmxColour
         }
 
         // Candidates carry their backing so channel collisions can be resolved below.
-        val candidates = mutableListOf<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>>()
+        val candidates = mutableListOf<Pair<AttributeChannelWriter.NamedAttribute, CueAssignmentResolver.AttributeValue>>()
 
         // A stored locate is the unit's own only where it pans and tilts on DMX channels — the units
         // `StoredLocate.unitsOf` offers — and is kept inside each slider's range.
@@ -146,27 +146,27 @@ object LocateValueResolver {
                 ?: (target.pan as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
             val tilt = storedAxes?.let { (s, axes) -> clampTo(s.tilt, axes.tilt) }
                 ?: (target.tilt as? DmxSlider)?.let(::midValue) ?: 128u.toUByte()
-            candidates += PropertyChannelWriter.NamedProperty("position", PropertyCategory.OTHER, Unit) to
-                CueAssignmentResolver.PropertyValue.Position(pan, tilt)
+            candidates += AttributeChannelWriter.NamedAttribute("position", AttributeCategory.OTHER, Unit) to
+                CueAssignmentResolver.AttributeValue.Position(pan, tilt)
         }
 
-        val declared = declaredProperties(target)
-        for (property in properties) {
-            if (onlyCategories != null && property.category !in onlyCategories) continue
+        val declared = declaredAttributes(target)
+        for (attribute in attributes) {
+            if (onlyCategories != null && attribute.category !in onlyCategories) continue
             // WithPosition pan/tilt are covered by the synthetic "position" write above.
             if (target is WithPosition &&
-                (property.category == PropertyCategory.PAN || property.category == PropertyCategory.TILT)
+                (attribute.category == AttributeCategory.PAN || attribute.category == AttributeCategory.TILT)
             ) {
                 continue
             }
-            val value = storedAxes?.let { (s, axes) -> storedFineFor(property, s, axes) }
-                ?: locateValueFor(property.name, property.category, property.value, hasRgbEngine, declared[property.name], media)
+            val value = storedAxes?.let { (s, axes) -> storedFineFor(attribute, s, axes) }
+                ?: locateValueFor(attribute.name, attribute.category, attribute.value, hasRgbEngine, declared[attribute.name], media)
                 ?: continue
-            candidates += property to value
+            candidates += attribute to value
         }
 
-        return dedupeByChannel(candidates).map { (property, value) ->
-            LocateAssignment(target, property.name, value)
+        return dedupeByChannel(candidates).map { (attribute, value) ->
+            LocateAssignment(target, attribute.name, value)
         }
     }
 
@@ -174,104 +174,104 @@ object LocateValueResolver {
      * The annotations [target]'s properties were declared with, by name — a focus's range lives
      * there. The class catalogue's own index, cached per class, for a fixture and a cell alike.
      */
-    private fun declaredProperties(target: GroupableFixture): Map<String, Fixture.Property> = when (target) {
-        is Fixture, is FixtureElement<*> -> FixturePropertyCatalogue.of(target::class).byName
+    private fun declaredAttributes(target: GroupableFixture): Map<String, Fixture.Attribute> = when (target) {
+        is Fixture, is FixtureElement<*> -> FixtureAttributeCatalogue.of(target::class).byName
         else -> emptyMap()
     }
 
     private fun locateValueFor(
-        propertyName: String,
-        category: PropertyCategory,
+        attribute: String,
+        category: AttributeCategory,
         backing: Any,
         hasRgbEngine: Boolean,
-        declared: Fixture.Property?,
+        declared: Fixture.Attribute?,
         media: FittedMedia?,
-    ): CueAssignmentResolver.PropertyValue? =
+    ): CueAssignmentResolver.AttributeValue? =
         when (category) {
-            PropertyCategory.DIMMER ->
-                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.max) }
+            AttributeCategory.DIMMER ->
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.AttributeValue.Slider(it.max) }
 
             // Only reached on fixtures without WithPosition (e.g. a lone axis channel).
-            PropertyCategory.PAN, PropertyCategory.TILT ->
-                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(midValue(it)) }
+            AttributeCategory.PAN, AttributeCategory.TILT ->
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.AttributeValue.Slider(midValue(it)) }
 
-            PropertyCategory.PAN_FINE, PropertyCategory.TILT_FINE ->
-                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(0u) }
+            AttributeCategory.PAN_FINE, AttributeCategory.TILT_FINE ->
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.AttributeValue.Slider(0u) }
 
             // Any Strobe channel knows its shutter-open level; coerce because the raw value
             // bypasses the slider's own clamp, and a fullOnValue above a fenced-off max must
             // not drive into lamp/reset bands the setter would have refused.
-            PropertyCategory.STROBE -> when (backing) {
+            AttributeCategory.STROBE -> when (backing) {
                 is DmxSlider -> if (backing is Strobe) {
-                    CueAssignmentResolver.PropertyValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
+                    CueAssignmentResolver.AttributeValue.Slider(backing.fullOnValue.coerceIn(backing.min, backing.max))
                 } else null
                 // A setting-backed shutter (fixture optics plan D12): its first OPEN position.
                 is DmxFixtureSetting<*> -> backing.sortedValues
                     .firstOrNull { (it as? DmxFixtureStrobeSettingValue)?.strobeKind == StrobeKind.OPEN }
-                    ?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                    ?.let { CueAssignmentResolver.AttributeValue.Setting(it.level) }
                 else -> null
             }
 
-            PropertyCategory.COLOUR -> when (backing) {
-                is DmxColour -> CueAssignmentResolver.PropertyValue.Colour(LOCATE_WHITE)
+            AttributeCategory.COLOUR -> when (backing) {
+                is DmxColour -> CueAssignmentResolver.AttributeValue.Colour(LOCATE_WHITE)
                 is DmxFixtureSetting<*> -> {
                     // With an RGB engine on the same target the wheel must be *disengaged*,
                     // not set to a white preset — its macro slots override the RGB channels.
-                    val slot = if (hasRgbEngine) disengagedSetting(backing) else whiteSetting(backing, propertyName, media)
-                    slot?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                    val slot = if (hasRgbEngine) disengagedSetting(backing) else whiteSetting(backing, attribute, media)
+                    slot?.let { CueAssignmentResolver.AttributeValue.Setting(it.level) }
                 }
                 else -> null
             }
 
-            PropertyCategory.GOBO -> when (backing) {
+            AttributeCategory.GOBO -> when (backing) {
                 is DmxFixtureSetting<*> ->
-                    openGoboSetting(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
-                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(backing.min)
+                    openGoboSetting(backing)?.let { CueAssignmentResolver.AttributeValue.Setting(it.level) }
+                is DmxSlider -> CueAssignmentResolver.AttributeValue.Slider(backing.min)
                 else -> null
             }
 
-            PropertyCategory.PRISM -> when (backing) {
+            AttributeCategory.PRISM -> when (backing) {
                 is DmxFixtureSetting<*> ->
-                    prismOutSetting(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
-                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(backing.min)
+                    prismOutSetting(backing)?.let { CueAssignmentResolver.AttributeValue.Setting(it.level) }
+                is DmxSlider -> CueAssignmentResolver.AttributeValue.Slider(backing.min)
                 else -> null
             }
 
-            PropertyCategory.IRIS, PropertyCategory.FROST ->
-                (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.min) }
+            AttributeCategory.IRIS, AttributeCategory.FROST ->
+                (backing as? DmxSlider)?.let { CueAssignmentResolver.AttributeValue.Slider(it.min) }
 
-            PropertyCategory.ZOOM -> when (backing) {
-                is DmxSlider -> CueAssignmentResolver.PropertyValue.Slider(midValue(backing))
+            AttributeCategory.ZOOM -> when (backing) {
+                is DmxSlider -> CueAssignmentResolver.AttributeValue.Slider(midValue(backing))
                 // A stepped zoom (fixture-optics plan D2): the step nearest its middle angle, the
                 // first in level order on a tie — the Robe's 18°, not its focus-corrected twin.
-                is DmxFixtureSetting<*> -> middleZoomStep(backing)?.let { CueAssignmentResolver.PropertyValue.Setting(it.level) }
+                is DmxFixtureSetting<*> -> middleZoomStep(backing)?.let { CueAssignmentResolver.AttributeValue.Setting(it.level) }
                 else -> null
             }
 
             // A declared range is linear in 1 / distance, so mid-DMX is near its near end (3.8 m on a
             // Revolution's 2–40 m): park at the range's middle distance instead. Undeclared, mid-DMX.
-            PropertyCategory.FOCUS -> (backing as? DmxSlider)?.let { slider ->
+            AttributeCategory.FOCUS -> (backing as? DmxSlider)?.let { slider ->
                 val range = declared?.focusRange(slider)
-                CueAssignmentResolver.PropertyValue.Slider(range?.middleDmx()?.toUByte() ?: midValue(slider))
+                CueAssignmentResolver.AttributeValue.Slider(range?.middleDmx()?.toUByte() ?: midValue(slider))
             }
 
             // A framing shutter out: DMX min, its depth 0 — DMX max where the slider is inverted.
-            PropertyCategory.SHUTTER -> (backing as? DmxSlider)?.let { slider ->
-                CueAssignmentResolver.PropertyValue.Slider(if (declared?.inverted == true) slider.max else slider.min)
+            AttributeCategory.SHUTTER -> (backing as? DmxSlider)?.let { slider ->
+                CueAssignmentResolver.AttributeValue.Slider(if (declared?.inverted == true) slider.max else slider.min)
             }
 
             // A blade square to the gate: the DMX for 0°, solved through its declared angles (128 on
             // the Revolution's ±45°). Mid-DMX where it declares none.
-            PropertyCategory.SHUTTER_ROTATION -> (backing as? DmxSlider)?.let { slider ->
-                CueAssignmentResolver.PropertyValue.Slider(declared?.let { squareDmx(it, slider) } ?: midValue(slider))
+            AttributeCategory.SHUTTER_ROTATION -> (backing as? DmxSlider)?.let { slider ->
+                CueAssignmentResolver.AttributeValue.Slider(declared?.let { squareDmx(it, slider) } ?: midValue(slider))
             }
 
             // Standalone white/amber/UV engines with no RGB property to fan out from — the
             // whole light output of white/amber blinders and UV cannons. With an RGB engine
             // present these are written (or zeroed) by the Colour fan-out instead.
-            PropertyCategory.WHITE, PropertyCategory.AMBER, PropertyCategory.UV ->
+            AttributeCategory.WHITE, AttributeCategory.AMBER, AttributeCategory.UV ->
                 if (!hasRgbEngine) {
-                    (backing as? DmxSlider)?.let { CueAssignmentResolver.PropertyValue.Slider(it.max) }
+                    (backing as? DmxSlider)?.let { CueAssignmentResolver.AttributeValue.Slider(it.max) }
                 } else null
 
             else -> null
@@ -283,50 +283,50 @@ object LocateValueResolver {
      * the shutter-open level is the authoritative "steady full output" value.
      */
     private fun dedupeByChannel(
-        candidates: List<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>>,
-    ): List<Pair<PropertyChannelWriter.NamedProperty, CueAssignmentResolver.PropertyValue>> {
-        fun channelOf(property: PropertyChannelWriter.NamedProperty): Pair<Universe, Int>? =
-            when (val backing = property.value) {
+        candidates: List<Pair<AttributeChannelWriter.NamedAttribute, CueAssignmentResolver.AttributeValue>>,
+    ): List<Pair<AttributeChannelWriter.NamedAttribute, CueAssignmentResolver.AttributeValue>> {
+        fun channelOf(attribute: AttributeChannelWriter.NamedAttribute): Pair<Universe, Int>? =
+            when (val backing = attribute.value) {
                 is DmxSlider -> backing.universe to backing.channelNo
                 is DmxFixtureSetting<*> -> backing.universe to backing.channelNo
                 else -> null
             }
 
         val strobeChannels = candidates
-            .filter { (property, _) -> property.category == PropertyCategory.STROBE }
-            .mapNotNullTo(HashSet()) { (property, _) -> channelOf(property) }
+            .filter { (attribute, _) -> attribute.category == AttributeCategory.STROBE }
+            .mapNotNullTo(HashSet()) { (attribute, _) -> channelOf(attribute) }
 
         val claimed = HashSet<Pair<Universe, Int>>()
-        return candidates.filter { (property, _) ->
-            val channel = channelOf(property) ?: return@filter true
-            if (property.category != PropertyCategory.STROBE && channel in strobeChannels) {
+        return candidates.filter { (attribute, _) ->
+            val channel = channelOf(attribute) ?: return@filter true
+            if (attribute.category != AttributeCategory.STROBE && channel in strobeChannels) {
                 return@filter false
             }
             claimed.add(channel)
         }
     }
 
-    /** A stored locate's fine byte for [property] where it is the unit's fine pan or tilt: 0 where none is stored. */
+    /** A stored locate's fine byte for [attribute] where it is the unit's fine pan or tilt: 0 where none is stored. */
     private fun storedFineFor(
-        property: PropertyChannelWriter.NamedProperty,
+        attribute: AttributeChannelWriter.NamedAttribute,
         stored: UnitLocate,
         axes: LocateAxes,
-    ): CueAssignmentResolver.PropertyValue? {
-        val (fine, value) = when (property.name) {
+    ): CueAssignmentResolver.AttributeValue? {
+        val (fine, value) = when (attribute.name) {
             axes.panFine?.first -> axes.panFine.second to stored.panFine
             axes.tiltFine?.first -> axes.tiltFine.second to stored.tiltFine
             else -> return null
         }
-        return CueAssignmentResolver.PropertyValue.Slider(clampTo(value ?: 0, fine))
+        return CueAssignmentResolver.AttributeValue.Slider(clampTo(value ?: 0, fine))
     }
 
     /**
-     * Where a unit whose pan declares its front (`@FixtureProperty.forwardDeg`) locates when it has no
+     * Where a unit whose pan declares its front (`@FixtureAttribute.forwardDeg`) locates when it has no
      * stored locate: pan at the front, fine included, so tilt swings up and downstage as on any other
      * mover; tilt in the middle. Null for every other unit, which centres both axes.
      */
     private fun frontLocate(target: GroupableFixture): UnitLocate? {
-        val pan = declaredProperties(target).values.firstOrNull { it.category == PropertyCategory.PAN } ?: return null
+        val pan = declaredAttributes(target).values.firstOrNull { it.category == AttributeCategory.PAN } ?: return null
         val forward = pan.forwardDeg ?: return null
         if (pan.degMin == null || pan.degMax == null || pan.degMin == pan.degMax) return null
         val axes = axesOf(target) ?: return null
@@ -347,7 +347,7 @@ object LocateValueResolver {
      * `degMin..degMax`, honouring `inverted`, rounded to the slider's step and kept inside its range
      * (so a range that never reaches 0° parks at its nearer end). Null where no range is declared.
      */
-    private fun squareDmx(declared: Fixture.Property, slider: DmxSlider): UByte? {
+    private fun squareDmx(declared: Fixture.Attribute, slider: DmxSlider): UByte? {
         val degMin = declared.degMin ?: return null
         val degMax = declared.degMax ?: return null
         if (degMin == degMax) return null
@@ -363,12 +363,12 @@ object LocateValueResolver {
      * where it has some, else the stock ([colourOf]) — else an OPEN/WHITE name the unit has not
      * fitted a gel into.
      */
-    private fun whiteSetting(setting: DmxFixtureSetting<*>, propertyName: String, media: FittedMedia?): DmxFixtureSettingValue? =
+    private fun whiteSetting(setting: DmxFixtureSetting<*>, attribute: String, media: FittedMedia?): DmxFixtureSettingValue? =
         setting.sortedValues.firstOrNull {
-            media.colourOf(propertyName, it)?.equals(OPEN_WHITE, ignoreCase = true) == true
+            media.colourOf(attribute, it)?.equals(OPEN_WHITE, ignoreCase = true) == true
         } ?: setting.sortedValues.firstOrNull {
             (it.name.contains("OPEN", ignoreCase = true) || it.name.contains("WHITE", ignoreCase = true)) &&
-                media?.slot(propertyName, it.name)?.gel == null
+                media?.slot(attribute, it.name)?.gel == null
         }
 
     /** A stepped zoom's step nearest the middle of its angles; null where no option declares one. */

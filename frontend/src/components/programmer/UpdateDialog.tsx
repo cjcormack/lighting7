@@ -299,7 +299,7 @@ function ChecklistView({
             {checklist.unattributed.length === 1 ? '' : 's'} sitting over the baseline (
             {checklist.unattributed
               .slice(0, 4)
-              .map((key) => `${key.targetKey}.${key.propertyName}`)
+              .map((key) => `${key.targetKey}.${key.attribute}`)
               .join(', ')}
             {checklist.unattributed.length > 4 ? '…' : ''}). Record these into a new cue instead.
           </p>
@@ -337,7 +337,7 @@ function ChecklistRow({
           {cue.keyCount} value{cue.keyCount === 1 ? '' : 's'} overridden ·{' '}
           {cue.sample
             .slice(0, 3)
-            .map((key) => `${key.targetKey}.${key.propertyName}`)
+            .map((key) => `${key.targetKey}.${key.attribute}`)
             .join(', ')}
           {cue.keyCount > 3 ? '…' : ''}
         </span>

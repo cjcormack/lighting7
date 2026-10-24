@@ -650,7 +650,7 @@ on one. Offering the level effects on beam sliders was declined (effects plan D6
 built-ins.
 
 The shape, if it fires: either another built-in for the property asked for, the D6 way, or the level
-built-ins declaring the `slider` sentinel (`fxTargetProperties.ts`), which offers them on every extra
+built-ins declaring the `slider` sentinel (`fxTargetAttributes.ts`), which offers them on every extra
 slider and puts the *On* row in the picker.
 
 **Trigger**: an operator wants to breathe prism or a fixture's own speed channel.
@@ -1568,7 +1568,7 @@ once is a mixing problem the fixture's own manual barely addresses.
 
 **A palette cannot hold a colour temperature** · Ready · venue-visit plan S9, 2026-10-15
 
-A warm/cold white head takes a colour as its nearest mix (D8, `fixture/property/WhiteMix.kt`), and its
+A warm/cold white head takes a colour as its nearest mix (D8, `fixture/attribute/WhiteMix.kt`), and its
 Colour cell edits a warmth — but a palette still stores only a hex. "3200 K" saved from the blinder is
 saved as the colour that mix makes, and lands on an RGB head as that RGB, not as a 3200 K white.
 
@@ -3217,7 +3217,7 @@ file's git history; durable mechanism notes belong in `docs/*-engineering.md`.
   `IllegalArgumentException` every existing caller already maps to a 400: session 2 got a coded
   refusal by duplicating each strip rule into `validateRequestShape`, and four more rules would
   have meant four more copies — midi-surface plan session 4
-- `FU-FE-USE-TARGET-PROPERTIES` — extracted to `hooks/useTargetProperties.ts` when the MIDI
+- `FU-FE-USE-TARGET-PROPERTIES` — extracted to `hooks/useTargetAttributes.ts` when the MIDI
   surface library's per-target property chips became the next consumer. It says five call sites
   and meant **three**: `PropertyAssignmentsList`, `PresetEditor` and `PresetLivePreview` went with
   the presets and the busking target panel with the busk sidebar, leaving `FixtureContent`,

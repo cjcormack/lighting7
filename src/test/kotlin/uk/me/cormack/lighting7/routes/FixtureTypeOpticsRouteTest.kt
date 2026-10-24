@@ -27,11 +27,11 @@ class FixtureTypeOpticsRouteTest : RouteIntegrationTest() {
         val robe = types.getValue("robe-color-spot-575-mode-2")
         assertNull(robe.fieldDeg)
 
-        val settings = robe.properties.filterIsInstance<SettingPropertyDescriptor>().associateBy { it.name }
+        val settings = robe.attributes.filterIsInstance<SettingAttributeDescriptor>().associateBy { it.name }
         assertEquals(listOf(15.0, 18.0, 22.0, 15.0, 18.0, 22.0), settings.getValue("zoom").options.map { it.zoomDeg })
         assertEquals(true, settings.getValue("colour2").options.single { it.name == "SCROLL_CW" }.noColour)
 
-        val iris = robe.properties.filterIsInstance<SliderPropertyDescriptor>().single { it.name == "iris" }
+        val iris = robe.attributes.filterIsInstance<SliderAttributeDescriptor>().single { it.name == "iris" }
         assertEquals(1, iris.activeMin)
         assertEquals(179, iris.activeMax)
     }
@@ -44,7 +44,7 @@ class FixtureTypeOpticsRouteTest : RouteIntegrationTest() {
         val rev = types.getValue("etc-source4-revolution-base-frame")
         assertEquals(90.0, rev.travel?.panDegPerS)
         assertEquals(2500, rev.travel?.colourMs)
-        val timing = rev.properties.filterIsInstance<SliderPropertyDescriptor>().filter { it.timing != null }.associateBy { it.name }
+        val timing = rev.attributes.filterIsInstance<SliderAttributeDescriptor>().filter { it.timing != null }.associateBy { it.name }
         assertEquals(mapOf("focusTime" to "POSITION", "colTime" to "COLOUR", "beamTime" to "BEAM"), timing.mapValues { it.value.timing })
         assertEquals(255, timing.getValue("focusTime").timingFastFrom)
         assertNull(types.getValue("hex").travel)

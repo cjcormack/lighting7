@@ -18,13 +18,13 @@ import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.IncludedTarget
 import uk.me.cormack.lighting7.fx.LookFxSettings
 import uk.me.cormack.lighting7.fx.lookFxSettings
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.maskGroupForProperty
-import uk.me.cormack.lighting7.fx.parseMaskGroups
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.fx.familyForAttribute
+import uk.me.cormack.lighting7.fx.parseFamilies
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
@@ -49,7 +49,7 @@ private val logger = LoggerFactory.getLogger("lookRecord")
  *
  * ## The mask stops being implicit
  *
- * A palette's *type was* its mask — `PaletteType` is a `typealias` of [PropertyMaskGroup], so a
+ * A palette's *type was* its mask — `PaletteType` is a `typealias` of [AttributeFamily], so a
  * COLOUR palette recorded colour and nothing else with no argument to get wrong. **A Look has no
  * type**: its families are derived from whatever rows it holds, so one Look can legitimately span
  * colour and position. The mask therefore becomes an explicit request field, and null means "record
@@ -109,7 +109,7 @@ internal fun writeRecordingIntoLook(
     var removed = 0
 
     /** The stored shape of a collapsed row: its parent and cell when it names a cell. */
-    fun shape(row: CuePropertyAssignmentDto): Pair<String, String?> {
+    fun shape(row: CueAttributeAssignmentDto): Pair<String, String?> {
         // Fixture rows only, the same guard [elementParentsOf] applies: a group whose name happened
         // to equal an element key elsewhere in the recording must not be rewritten as a cell.
         if (row.targetType != TargetRef.Fixture.TYPE) return row.targetKey to null
@@ -121,14 +121,14 @@ internal fun writeRecordingIntoLook(
     val existingByKey = existing.associateBy { it.rowKey }
 
     /** Everything a recorded row sets but its key, whether written over a stored row or inserted. */
-    fun DaoLookRow.take(row: CuePropertyAssignmentDto, sortOrder: Int) {
-        attribute = canonicalPropertyName(row.propertyName)
+    fun DaoLookRow.take(row: CueAttributeAssignmentDto, sortOrder: Int) {
+        attribute = canonicalAttributeName(row.attribute)
         value = row.value
         fadeDuration = null
         this.sortOrder = sortOrder
     }
 
-    fun insert(row: CuePropertyAssignmentDto, sortOrder: Int) {
+    fun insert(row: CueAttributeAssignmentDto, sortOrder: Int) {
         val (parentKey, cellKey) = shape(row)
         DaoLookRow.new {
             this.look = look
@@ -139,9 +139,9 @@ internal fun writeRecordingIntoLook(
         }
     }
 
-    fun keyOf(row: CuePropertyAssignmentDto): LookRowKey {
+    fun keyOf(row: CueAttributeAssignmentDto): LookRowKey {
         val (parentKey, cellKey) = shape(row)
-        return lookRowKey(row.targetType, parentKey, cellKey, row.propertyName)
+        return lookRowKey(row.targetType, parentKey, cellKey, row.attribute)
     }
 
     when (mode) {
@@ -236,7 +236,7 @@ internal fun removeClearedFromLook(
  * Is a stored Look row inside the remit of a recording made with [mask] and [scope]?
  *
  * Null on either axis means unrestricted. A row whose target or property no longer resolves answers
- * **false** — "leave alone" — matching [maskGroupForRow]'s documented reading for the destructive
+ * **false** — "leave alone" — matching [familyForRow]'s documented reading for the destructive
  * `UPDATE_EXISTING` pass: a row we cannot classify is a row we must not delete.
  *
  * An **element row** is in scope when the scope covers its cell — the cell itself, or its parent,
@@ -250,7 +250,7 @@ internal fun removeClearedFromLook(
  */
 internal fun lookRowInRemit(
     fixtures: Fixtures,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     scope: Set<String>?,
 ): (DaoLookRow) -> Boolean {
     val coverage = TargetCoverage { fixtures }
@@ -264,12 +264,12 @@ internal fun lookRowInRemit(
             val inScope = scopeTargets == null ||
                 coverage.covers(scopeTargets, CueTargetDto(TargetRef.Fixture.TYPE, elementKey))
             val element = runCatching { fixtures.untypedGroupableFixture(elementKey) }.getOrNull()
-            inScope && element != null && maskAllows(mask, maskGroupForProperty(element, row.attribute))
+            inScope && element != null && maskAllows(mask, familyForAttribute(element, row.attribute))
         } else if (!targetInScope(fixtures, target, scope)) {
             false
         } else {
             val fixture = referenceFixtureOf(fixtures, target)
-            fixture != null && maskAllows(mask, maskGroupForProperty(fixture, row.attribute))
+            fixture != null && maskAllows(mask, familyForAttribute(fixture, row.attribute))
         }
     }
 }
@@ -299,7 +299,7 @@ internal data class ProgrammerRecordLookRequest(
     /** [RecordSource] name. Defaults to TOUCHED — what the operator actually edited. */
     val source: String = "TOUCHED",
     /**
-     * [PropertyMaskGroup] names to record. Null or empty records every family.
+     * [AttributeFamily] names to record. Null or empty records every family.
      *
      * Explicit because a Look has no type to imply it — see the file's class doc.
      */
@@ -378,7 +378,7 @@ internal suspend fun RoutingContext.handleProgrammerRecordLook(state: State) {
         HttpStatusCode.BadRequest, ErrorResponse("Unknown record source '${request.source}'"),
     )
     val mask = try {
-        parseMaskGroups(request.mask)
+        parseFamilies(request.mask)
     } catch (e: IllegalArgumentException) {
         return call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
     }
@@ -434,7 +434,7 @@ internal fun performProgrammerRecordLook(
     lookId: Int?,
     name: String?,
     notes: String?,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     targets: List<CueTargetDto>?,
     fxIds: List<Long>,
     scenery: Boolean,
@@ -571,7 +571,7 @@ internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordM
 
     fun DaoLookFxEntity.take(effect: FxInstance, sortOrder: Int) {
         family = recordedFxFamily(effect)
-        attribute = effect.target.propertyName
+        attribute = effect.target.attribute
         takeSettings(effect.lookFxSettings())
         this.sortOrder = sortOrder
     }
@@ -583,7 +583,7 @@ internal fun writeLookFx(look: DaoLook, effects: List<FxInstance>, mode: RecordM
     val pairing = pairByKey(
         if (replace) look.fxInOrder() else emptyList(), effects,
         { it.fxKey },
-        { lookFxKey(targetTypeOf(it), it.target.targetKey, it.target.propertyName, it.lookFxSettings().fxType) },
+        { lookFxKey(targetTypeOf(it), it.target.targetKey, it.target.attribute, it.lookFxSettings().fxType) },
     )
     pairing.unmatched.forEach { it.delete() }
     if (effects.isEmpty()) return
@@ -733,7 +733,7 @@ private fun resolveLookTarget(
  * The running programmer-band effects Include spawned from [lookId]'s effects, under [mask] — the
  * family of the property each drives, as Include masked it.
  */
-private fun includedLookFxOf(state: State, lookId: Int, mask: Set<PropertyMaskGroup>?): List<FxInstance> =
+private fun includedLookFxOf(state: State, lookId: Int, mask: Set<AttributeFamily>?): List<FxInstance> =
     state.show.fxEngine.inStoredApplyOrder(
         state.show.fxEngine.getActiveFx().filter { effect ->
             if (effect.includedLookFx?.lookId != lookId || !FxEngine.isProgrammerFxPriority(effect.priority) || effect.leaving) {
@@ -742,7 +742,7 @@ private fun includedLookFxOf(state: State, lookId: Int, mask: Set<PropertyMaskGr
             if (mask == null) return@filter true
             val reference = state.show.fxEngine.fixtureKeysCoveredBy(effect).firstOrNull()
                 ?.let { runCatching { state.show.fixtures.untypedGroupableFixture(it) }.getOrNull() }
-            maskAllows(mask, reference?.let { maskGroupForProperty(it, effect.target.propertyName) })
+            maskAllows(mask, reference?.let { familyForAttribute(it, effect.target.attribute) })
         },
     )
 
@@ -774,7 +774,7 @@ internal fun updateIncludedLook(
     state: State,
     project: DaoProject,
     includeTarget: IncludedTarget,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     /** Write back the Look's included effects the operator changed, as a cue Update writes its FX. */
     includeFx: Boolean = true,
 ): UpdateCoreResult {

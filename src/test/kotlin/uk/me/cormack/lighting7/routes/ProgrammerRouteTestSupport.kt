@@ -10,7 +10,7 @@ import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.LookFxDto
 import uk.me.cormack.lighting7.models.LookRowDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 
 /**
  * A minimal ad-hoc effect for a test cue. Wraps [CueAdHocFxDto]'s wide constructor so the
@@ -20,7 +20,7 @@ data class CueAdHocFxSpec(
     val targetType: String,
     val targetKey: String,
     val fxType: String,
-    val propertyName: String,
+    val attribute: String,
     val category: String = "intensity",
     val cycle: Double = 1.0,
 )
@@ -43,7 +43,7 @@ object ProgrammerRouteTestSupport {
         client: HttpClient,
         projectId: Int,
         name: String,
-        rows: List<CuePropertyAssignmentDto> = emptyList(),
+        rows: List<CueAttributeAssignmentDto> = emptyList(),
         adHoc: List<CueAdHocFxSpec> = emptyList(),
         stackId: Int? = null,
         layers: List<CueLayerDto> = emptyList(),
@@ -55,7 +55,7 @@ object ProgrammerRouteTestSupport {
                 NewCue(
                     name = name,
                     cueStackId = stack,
-                    propertyAssignments = rows,
+                    attributeAssignments = rows,
                     adHocFx = adHoc.map { it.toDto() },
                     layers = layers,
                 )
@@ -85,8 +85,8 @@ object ProgrammerRouteTestSupport {
         setBody(
             CreateLookRequest(
                 name = name,
-                rows = rows.entries.mapIndexed { index, (property, value) ->
-                    LookRowDto(targetType, targetKey, property, value, sortOrder = index)
+                rows = rows.entries.mapIndexed { index, (attribute, value) ->
+                    LookRowDto(targetType, targetKey, attribute, value, sortOrder = index)
                 },
                 fx = effects,
             )
@@ -98,7 +98,7 @@ object ProgrammerRouteTestSupport {
         targetKey = targetKey,
         fxType = fxType,
         family = category,
-        propertyName = propertyName,
+        attribute = attribute,
         cycle = cycle,
         blendMode = "OVERRIDE",
         order = "NORMAL",

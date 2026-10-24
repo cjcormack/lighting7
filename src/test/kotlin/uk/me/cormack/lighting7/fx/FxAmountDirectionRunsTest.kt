@@ -87,7 +87,7 @@ class FxAmountDirectionRunsTest {
     }
 
     private fun Rig.programmerDimmer(key: String, level: UByte) =
-        programmer.put(ProgrammerOwner.WEB, key, "dimmer", CueAssignmentResolver.PropertyValue.Slider(level))
+        programmer.put(ProgrammerOwner.WEB, key, "dimmer", CueAssignmentResolver.AttributeValue.Slider(level))
 
     // ─── Size (D2, P3) ─────────────────────────────────────────────────────
 
@@ -147,12 +147,12 @@ class FxAmountDirectionRunsTest {
     fun `an Around circle at 50 percent has half the radius about the position underneath`() {
         val circle = registry.createFx(
             "Circle",
-            mapOf("panCenter" to "128", "tiltCenter" to "128", "panRadius" to "64", "tiltRadius" to "64"),
+            mapOf("panCentre" to "128", "tiltCentre" to "128", "panRadius" to "64", "tiltRadius" to "64"),
         )
         fun positionAt(size: Double, n: Long): Pair<Int, Int> {
             val rig = newRig()
             rig.programmer.put(
-                ProgrammerOwner.WEB, "spot", "position", CueAssignmentResolver.PropertyValue.Position(100u, 100u),
+                ProgrammerOwner.WEB, "spot", "position", CueAssignmentResolver.AttributeValue.Position(100u, 100u),
             )
             rig.engine.addFx(
                 bandEffect(circle, PositionTarget("spot"), BlendMode.ADDITIVE) { it.copy(amount = size) },
@@ -174,7 +174,7 @@ class FxAmountDirectionRunsTest {
         val rig = newRig()
         rig.programmer.put(
             ProgrammerOwner.WEB, "hex-a", "rgbColour",
-            CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(200, 0, 100), 0u, 0u, 0u)),
+            CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(200, 0, 100), 0u, 0u, 0u)),
         )
         val blue = object : Fx {
             override val name = "Blue"
@@ -320,7 +320,7 @@ class FxAmountDirectionRunsTest {
         effect.programmerLayerFxKey = ProgrammerLayerFxKey(
             layerId = 7,
             effect = StoredFx(
-                fxType = "Level", family = "intensity", propertyName = "dimmer",
+                fxType = "Level", family = "intensity", attribute = "dimmer",
                 cycle = CycleLength.ONE_BEAT, blendMode = "OVERRIDE", order = "NORMAL",
                 phaseOffset = 0.0, elementMode = null, elementFilter = null, timing = null,
                 parameters = emptyMap(), speedMasterUuid = null, rateSpeedMasterUuid = null, runs = 1,

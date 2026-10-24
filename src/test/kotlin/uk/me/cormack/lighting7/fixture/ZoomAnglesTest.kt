@@ -6,7 +6,7 @@ import uk.me.cormack.lighting7.fixture.dmx.DmxFixtureZoomSettingValue
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.dmx.RobeColorSpot575Fixture
 import uk.me.cormack.lighting7.fixture.group.MultiElementFixture
-import uk.me.cormack.lighting7.routes.SettingPropertyDescriptor
+import uk.me.cormack.lighting7.routes.SettingAttributeDescriptor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -15,7 +15,7 @@ import kotlin.test.assertTrue
 
 /**
  * A ZOOM channel's angles (fixture optics plan D2), in either of its two forms: a **slider** declares
- * the full beam angle at DMX min and max (`@FixtureProperty(degMin =, degMax =)`), a **stepped zoom**
+ * the full beam angle at DMX min and max (`@FixtureAttribute(degMin =, degMax =)`), a **stepped zoom**
  * is a setting whose every option carries its angle (`DmxFixtureZoomSettingValue.zoomDeg`). A zoom
  * that declares neither is silently inert — the view keeps the family's fixed angle — which is how
  * the Source Four Revolution's went unnoticed. [FocusRangeTest] closes the same hole for focus.
@@ -40,8 +40,8 @@ class ZoomAnglesTest {
                 }
             }
             for ((where, owner) in lenses) {
-                for (p in FixturePropertyCatalogue.of(owner::class).all) {
-                    if (p.category != PropertyCategory.ZOOM || p.fineOf != null) continue
+                for (p in FixtureAttributeCatalogue.of(owner::class).all) {
+                    if (p.category != AttributeCategory.ZOOM || p.fineOf != null) continue
                     when (val backing = p.classProperty.getter.call(owner)) {
                         is DmxSlider -> {
                             sliders++
@@ -76,7 +76,7 @@ class ZoomAnglesTest {
     @Test
     fun `only a zoom setting's options carry zoomDeg on the wire`() {
         for (type in FixtureTypeRegistry.allTypes) {
-            for (setting in type.properties.filterIsInstance<SettingPropertyDescriptor>()) {
+            for (setting in type.attributes.filterIsInstance<SettingAttributeDescriptor>()) {
                 if (setting.category == "zoom") continue
                 assertTrue(
                     setting.options.all { it.zoomDeg == null },
@@ -89,7 +89,7 @@ class ZoomAnglesTest {
     @Test
     fun `the Robe's stepped zoom reaches the descriptor, 15, 18 and 22 degrees with and without focus correction`() {
         val robe = RobeColorSpot575Fixture.Mode2Ch(universe, "spot-1", "Spot 1", 1)
-        val zoom = robe.generatePropertyDescriptors().filterIsInstance<SettingPropertyDescriptor>().single { it.name == "zoom" }
+        val zoom = robe.generateAttributeDescriptors().filterIsInstance<SettingAttributeDescriptor>().single { it.name == "zoom" }
         assertEquals("zoom", zoom.category)
         assertEquals(
             listOf(0 to 15.0, 40 to 18.0, 80 to 22.0, 128 to 15.0, 170 to 18.0, 220 to 22.0),

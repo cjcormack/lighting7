@@ -9,15 +9,15 @@ import { lightingApi } from '@/api/lightingApi'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import {
   compatibleFxFor,
-  extraSliderPropertiesFor,
+  extraSliderAttributesFor,
   groupMemberFixtures,
-  propertyNamesFor,
-  resolveFxProperty,
-  settingPropertiesFor,
+  attributesFor,
+  resolveFxAttribute,
+  settingAttributesFor,
   SETTING_SENTINEL,
   SLIDER_SENTINEL,
-  type FxPropertyTarget,
-} from '@/lib/fxTargetProperties'
+  type FxAttributeTarget,
+} from '@/lib/fxTargetAttributes'
 import { fxCreateAddition, type FxCreateTarget } from '@/lib/fxCreateRequest'
 import {
   useActiveFxQuery,
@@ -77,11 +77,11 @@ export type FxTarget =
 export interface DraftFxPick {
   fxType: string
   family: string
-  propertyName: string
+  attribute: string
   cycle: number
   /** Its type's own Direction — Bounce for the FX that bounce (terminology plan D24). */
   direction: FxDirection
-  /** The master tagged for the family's usage (D16); absent on a wall-clock effect, which starts on its own Seconds. */
+  /** The master tagged with the family (D16); absent on a wall-clock effect, which starts on its own Seconds. */
   speedMasterUuid?: string | null
   blendMode: string
   parameters: Record<string, string>
@@ -92,7 +92,7 @@ export interface DraftFxPick {
 export interface AuditionedFx {
   fxId: number
   fxType: string
-  propertyName: string
+  attribute: string
 }
 
 /**
@@ -117,7 +117,7 @@ export interface AuditionedFx {
 export function FxPicker({
   target,
   initialFamily,
-  preferredProperty,
+  preferredAttribute,
   current,
   onCurrent,
   onEdit,
@@ -141,7 +141,7 @@ export function FxPicker({
   /** The row the sheet came from, as a picker family. */
   initialFamily?: PickerFamily | null
   /** The property that row writes, preferred over the effect's first compatible one. */
-  preferredProperty?: string | null
+  preferredAttribute?: string | null
   /** The effect this session has started, if any. Unused in [draft]. */
   current?: AuditionedFx | null
   onCurrent?: (next: AuditionedFx | null) => void
@@ -156,7 +156,7 @@ export function FxPicker({
    * [draft.current], the one this session picked. No socket is needed.
    */
   draft?: {
-    current: { fxType: string; propertyName: string } | null
+    current: { fxType: string; attribute: string } | null
     onPick: (pick: DraftFxPick) => void
   }
 }) {
@@ -171,8 +171,8 @@ export function FxPicker({
   const [removeFx] = useRemoveFxMutation()
   const [removeGroupFx] = useRemoveGroupFxMutation()
 
-  const propertyTarget = useMemo(
-    (): FxPropertyTarget =>
+  const attributeTarget = useMemo(
+    (): FxAttributeTarget =>
       target.type === 'fixture'
         ? { type: 'fixture', fixture: target.fixture }
         : target.type === 'selection'
@@ -180,7 +180,7 @@ export function FxPicker({
           : { type: 'group', capabilities: target.group.capabilities, members: groupMemberFixtures(fixtures, target.group.name) },
     [target, fixtures],
   )
-  const targetNames = useMemo(() => propertyNamesFor([propertyTarget]), [propertyTarget])
+  const targetNames = useMemo(() => attributesFor([attributeTarget]), [attributeTarget])
   // Palette Steps names no property of its own — it steps whichever its palettes name — so it is
   // never offered through the library's property match, only through [stepOffers] below.
   const compatible = useMemo(
@@ -196,8 +196,8 @@ export function FxPicker({
   const stepOffers = useMemo(() => {
     if (paletteStepsEntry == null) return new Map<PickerFamily, PaletteStepsOffer>()
     const has = (name: string) => targetNames.has(name) || (name === 'rgbColour' && targetNames.has('colour'))
-    return new Map(paletteStepsOffers(templates ?? [], has, preferredProperty).map((o): [PickerFamily, PaletteStepsOffer] => [o.family, o]))
-  }, [paletteStepsEntry, templates, targetNames, preferredProperty])
+    return new Map(paletteStepsOffers(templates ?? [], has, preferredAttribute).map((o): [PickerFamily, PaletteStepsOffer] => [o.family, o]))
+  }, [paletteStepsEntry, templates, targetNames, preferredAttribute])
   const byFamily = useMemo(() => {
     const grouped = new Map<PickerFamily, FxLibraryEntry[]>()
     for (const entry of compatible) {
@@ -210,20 +210,20 @@ export function FxPicker({
     return grouped
   }, [compatible, paletteStepsEntry, stepOffers])
 
-  const settingProps = settingPropertiesFor([propertyTarget])
-  const isSettingRow = preferredProperty != null && settingProps.some((p) => p.name === preferredProperty)
+  const settingProps = settingAttributesFor([attributeTarget])
+  const isSettingRow = preferredAttribute != null && settingProps.some((p) => p.name === preferredAttribute)
   const firstFamily = PICKER_FAMILIES.find((f) => (byFamily.get(f)?.length ?? 0) > 0) ?? 'INTENSITY'
   // A Beam row opens on Beam where a beam effect drives its property — a beam built-in's own, Slot
   // Steps' on a setting, Palette Steps' over that property's palettes — and otherwise (prism without
   // slots or palettes) on Controls, where the effects that can take it are.
   const openingFamily =
     initialFamily === 'BEAM' &&
-    preferredProperty != null &&
+    preferredAttribute != null &&
     !(byFamily.get('BEAM') ?? []).some((e) =>
       isPaletteSteps(e.name)
-        ? stepOffers.get('BEAM')?.propertyName === preferredProperty
-        : e.compatibleProperties.includes(preferredProperty) ||
-          (isSettingRow && e.compatibleProperties.includes(SETTING_SENTINEL)),
+        ? stepOffers.get('BEAM')?.attribute === preferredAttribute
+        : e.compatibleAttributes.includes(preferredAttribute) ||
+          (isSettingRow && e.compatibleAttributes.includes(SETTING_SENTINEL)),
     )
       ? 'CONTROLS'
       : initialFamily
@@ -250,18 +250,18 @@ export function FxPicker({
   const busy = useRef(false)
   const [pending, setPending] = useState(false)
 
-  const propertyFor = (entry: FxLibraryEntry, pick = chosen): string | null => {
-    if (isPaletteSteps(entry.name)) return stepOffers.get(family)?.propertyName ?? null
+  const attributeFor = (entry: FxLibraryEntry, pick = chosen): string | null => {
+    if (isPaletteSteps(entry.name)) return stepOffers.get(family)?.attribute ?? null
     if (
-      preferredProperty != null &&
-      entry.compatibleProperties.includes(preferredProperty) &&
-      targetNames.has(preferredProperty)
+      preferredAttribute != null &&
+      entry.compatibleAttributes.includes(preferredAttribute) &&
+      targetNames.has(preferredAttribute)
     ) {
-      return preferredProperty
+      return preferredAttribute
     }
     // A setting row takes an effect offered through the setting sentinel (Slot Steps) itself.
-    if (isSettingRow && pick.setting == null && entry.compatibleProperties.includes(SETTING_SENTINEL)) {
-      return preferredProperty
+    if (isSettingRow && pick.setting == null && entry.compatibleAttributes.includes(SETTING_SENTINEL)) {
+      return preferredAttribute
     }
     // Slot Steps from anywhere else starts on a gobo wheel where the head has one (Chris's call,
     // the palette editor's own default), else the first setting; the *On* row moves it.
@@ -269,14 +269,14 @@ export function FxPicker({
       const gobo = settingProps.find((p) => p.category === 'gobo')
       if (gobo != null) return gobo.name
     }
-    return resolveFxProperty(propertyTarget, entry, pick)
+    return resolveFxAttribute(attributeTarget, entry, pick)
   }
 
   /**
    * The effect's starting spec, with the step lists filled so a tap shows it stepping: Palette
    * Steps through the family's palettes, Slot Steps through the setting's first slots past its open.
    */
-  const specFor = (entry: FxLibraryEntry, propertyName: string) => {
+  const specFor = (entry: FxLibraryEntry, attribute: string) => {
     const spec = startingSpec(entry)
     if (isPaletteSteps(entry.name)) {
       const offer = stepOffers.get(family)
@@ -284,7 +284,7 @@ export function FxPicker({
         spec.parameters = { ...spec.parameters, palettes: serializeStepList(offer.palettes.map((p) => `pal:${p.uuid}`)) }
       }
     } else if (isSlotSteps(entry.name)) {
-      spec.parameters = { ...spec.parameters, slots: seedSlots(settingProps.find((p) => p.name === propertyName)) }
+      spec.parameters = { ...spec.parameters, slots: seedSlots(settingProps.find((p) => p.name === attribute)) }
     }
     return spec
   }
@@ -297,14 +297,14 @@ export function FxPicker({
 
   const start = async (entry: FxLibraryEntry, pick = chosen) => {
     if (busy.current) return
-    const propertyName = propertyFor(entry, pick)
-    if (propertyName == null) return
-    const spec = specFor(entry, propertyName)
+    const attribute = attributeFor(entry, pick)
+    if (attribute == null) return
+    const spec = specFor(entry, attribute)
 
     if (draft != null) {
       if (
         draft.current != null &&
-        draft.current.propertyName === propertyName &&
+        draft.current.attribute === attribute &&
         normalizeFxName(draft.current.fxType) === normalizeFxName(entry.name)
       ) {
         return
@@ -312,9 +312,9 @@ export function FxPicker({
       draft.onPick({
         fxType: entry.name,
         family: categoryOf(entry),
-        propertyName,
+        attribute,
         // A new effect runs at its type's own cycle and Direction on the master tagged for its
-        // family's usage (D16), as below.
+        // family (D16), as below.
         cycle: newFxDivision(entry),
         direction: newFxDirection(entry),
         ...(entry.timingSource === 'WALL_CLOCK' ? {} : { speedMasterUuid: masterForCategory(categoryOf(entry)) }),
@@ -325,7 +325,7 @@ export function FxPicker({
       return
     }
 
-    if (running != null && running.propertyName === propertyName) {
+    if (running != null && running.attribute === attribute) {
       if (normalizeFxName(running.fxType) === normalizeFxName(entry.name)) return
       // A swap across units (a beat effect for a wall-clock flicker) would carry the number across
       // them — 16 beats becoming 16 seconds — so it lands on the new type's own cycle; a swap within
@@ -360,9 +360,9 @@ export function FxPicker({
       }
       const request = {
         fxType: entry.name,
-        propertyName,
+        attribute,
         // A new effect runs at its type's own cycle (one bar but for the FX that bounce) on the
-        // master tagged for its family's usage, else master 1 (venue-visit plan D16) — stamped
+        // master tagged with its family, else master 1 (venue-visit plan D16) — stamped
         // here, as the palette editor stamps one, so a null still means master 1 everywhere. A
         // wall-clock effect starts on its own Seconds.
         cycle: newFxDivision(entry),
@@ -389,7 +389,7 @@ export function FxPicker({
         // leaves nothing auditioned.
         .catch(() => null)
       if (created) setJustStarted(created.fxId)
-      onCurrent?.(created ? { fxId: created.fxId, fxType: entry.name, propertyName } : null)
+      onCurrent?.(created ? { fxId: created.fxId, fxType: entry.name, attribute } : null)
     } finally {
       busy.current = false
       setPending(false)
@@ -409,13 +409,13 @@ export function FxPicker({
       : undefined
   // The *On* row: an effect offered through a sentinel names no property of its own, so where the
   // target has several it could land on, the operator picks — and the pick restarts it there.
-  const sliderProps = extraSliderPropertiesFor([propertyTarget])
+  const sliderProps = extraSliderAttributesFor([attributeTarget])
   const sentinel =
     currentEntry == null || shown == null
       ? null
-      : currentEntry.compatibleProperties.includes(SETTING_SENTINEL) && settingProps.some((p) => p.name === shown.propertyName)
+      : currentEntry.compatibleAttributes.includes(SETTING_SENTINEL) && settingProps.some((p) => p.name === shown.attribute)
         ? { kind: 'setting' as const, options: settingProps }
-        : currentEntry.compatibleProperties.includes(SLIDER_SENTINEL) && sliderProps.some((p) => p.name === shown.propertyName)
+        : currentEntry.compatibleAttributes.includes(SLIDER_SENTINEL) && sliderProps.some((p) => p.name === shown.attribute)
           ? { kind: 'slider' as const, options: sliderProps }
           : null
 
@@ -480,7 +480,7 @@ export function FxPicker({
         <div className="flex flex-col gap-1">
           <EditorLabel>On</EditorLabel>
           <Select
-            value={shown.propertyName}
+            value={shown.attribute}
             disabled={(draft == null && !connected) || pending}
             onValueChange={(name) => {
               const pick = sentinel.kind === 'setting' ? { ...chosen, setting: name } : { ...chosen, slider: name }

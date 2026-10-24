@@ -4,7 +4,7 @@ name: Lightning Strike
 family: intensity
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [dimmer]
+compatibleAttributes: [dimmer]
 parameters:
   - name: maxBrightness
     type: ubyte

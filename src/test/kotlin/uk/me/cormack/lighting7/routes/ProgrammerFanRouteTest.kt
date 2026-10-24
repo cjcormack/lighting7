@@ -14,7 +14,7 @@ import io.ktor.server.testing.testApplication
 import org.jetbrains.exposed.v1.core.eq
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import org.junit.Test
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
 import uk.me.cormack.lighting7.fx.ProgrammerWriter
@@ -82,7 +82,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         return resp.body<PaletteDto>().uuid
     }
 
-    private fun entries() = state.show.programmerStore.entries().map { it.fixtureKey to it.propertyName }.toSet()
+    private fun entries() = state.show.programmerStore.entries().map { it.fixtureKey to it.attribute }.toSet()
 
     @Test
     fun `a group spreads in member order and every head lands as a programmer entry`() = testApplication {
@@ -90,12 +90,12 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val out = client.run(
-            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100"),
+            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100"),
         )
         assertEquals(listOf("hex-1", "hex-2", "hex-3"), out.written.map { it.target.key })
         // The literal each head got — a byte on a 0–255 dimmer — never the `pct:` intent.
         assertEquals(listOf("0", "128", "255"), out.written.map { it.value })
-        assertEquals(listOf("dimmer", "dimmer", "dimmer"), out.written.map { it.propertyName })
+        assertEquals(listOf("dimmer", "dimmer", "dimmer"), out.written.map { it.attribute })
         assertTrue(out.skipped.isEmpty())
         assertEquals(setOf("hex-1" to "dimmer", "hex-2" to "dimmer", "hex-3" to "dimmer"), entries())
     }
@@ -115,13 +115,13 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         assertEquals(HttpStatusCode.OK, rig.status, rig.bodyAsText())
 
         val out = client.run(
-            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100"),
+            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100"),
         )
         assertEquals(listOf("hex-3", "hex-2", "hex-1"), out.written.map { it.target.key })
         assertEquals(listOf("0", "128", "255"), out.written.map { it.value })
 
         val reversed = client.run(
-            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100", order = "REVERSE"),
+            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100", order = "REVERSE"),
         )
         assertEquals(listOf("255", "128", "0"), reversed.written.map { it.value })
     }
@@ -141,34 +141,34 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         }
         assertEquals(HttpStatusCode.OK, rig.status, rig.bodyAsText())
 
-        val one = client.run(FanRequest(targets = listOf(group("front-wash")), property = "dimmer", from = "pct:0", to = "pct:100"))
+        val one = client.run(FanRequest(targets = listOf(group("front-wash")), attribute = "dimmer", from = "pct:0", to = "pct:100"))
         assertEquals(listOf("hex-1", "hex-2"), one.written.map { it.target.key })
         assertEquals(listOf("0", "255"), one.written.map { it.value })
 
         // Anything more than the one group is rig order again.
         val more = client.run(
-            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100"),
+            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100"),
         )
         assertEquals(listOf("hex-2", "hex-1", "hex-3"), more.written.map { it.target.key })
     }
 
     @Test
-    fun `a head lacking the property is skipped by name and the rest land`() = testApplication {
+    fun `a head lacking the attribute is skipped by name and the rest land`() = testApplication {
         seed()
         mountTestApp(state)
         val client = jsonClient()
         val out = client.run(
-            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2")), property = "position", from = "deg:0,0", to = "deg:90,45"),
+            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2")), attribute = "position", from = "deg:0,0", to = "deg:90,45"),
         )
         assertTrue(out.written.isEmpty())
         assertEquals(listOf("hex-1", "hex-2"), out.skipped.map { it.target.key })
         assertTrue(out.skipped.all { it.reason.isNotBlank() })
-        val gone = client.run(FanRequest(targets = listOf(fixture("nope")), property = "dimmer", from = "pct:0", to = "pct:100"))
+        val gone = client.run(FanRequest(targets = listOf(fixture("nope")), attribute = "dimmer", from = "pct:0", to = "pct:100"))
         assertEquals(listOf("not patched"), gone.skipped.map { it.reason })
     }
 
     @Test
-    fun `a skipped head consumes no position on the curve — the spread runs over the heads that can take the property`() = testApplication {
+    fun `a skipped head consumes no position on the curve — the spread runs over the heads that can take the attribute`() = testApplication {
         seed()
         mountTestApp(state)
         val client = jsonClient()
@@ -178,11 +178,11 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val mixed = client.run(
             FanRequest(
                 targets = listOf(fixture("hex-1"), fixture("spot-1"), fixture("hex-2"), fixture("spot-2")),
-                property = "position", from = "pos:-128,-128", to = "pos:127,127",
+                attribute = "position", from = "pos:-128,-128", to = "pos:127,127",
             ),
         )
         val alone = client.run(
-            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "pos:-128,-128", to = "pos:127,127"),
+            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), attribute = "position", from = "pos:-128,-128", to = "pos:127,127"),
         )
         assertEquals(listOf("spot-1", "spot-2"), mixed.written.map { it.target.key })
         assertEquals(alone.written.map { it.value }, mixed.written.map { it.value })
@@ -198,7 +198,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val red = client.createPalette("red", "#ff0000")
         val blue = client.createPalette("blue", "#0000ff")
         val out = client.run(
-            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), property = "rgbColour", from = "pal:$red", to = "pal:$blue"),
+            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2"), fixture("hex-3")), attribute = "rgbColour", from = "pal:$red", to = "pal:$blue"),
         )
         assertEquals(3, out.written.size)
         // Literals in the Look row grammar: pure red and pure blue have no neutral to extract, so
@@ -212,7 +212,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
 
         // A bare hex reads as RGB_ONLY, as every other reader reads it: under EXTRACT the 0x44
         // neutral would have moved to the white emitter and the literal read `#bb4400;w68`.
-        val literal = client.run(FanRequest(targets = listOf(fixture("hex-1")), property = "rgbColour", from = "#ff8844", to = "#ff8844"))
+        val literal = client.run(FanRequest(targets = listOf(fixture("hex-1")), attribute = "rgbColour", from = "#ff8844", to = "#ff8844"))
         assertEquals("#ff8844", literal.written.single().value)
     }
 
@@ -223,26 +223,26 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         // A colour with a neutral, so the hex head's extracted white rides the literal as `;wNN`.
         val colour = client.run(
-            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2")), property = "rgbColour", from = "#ff8844;policy=extract", to = "#ff8844;policy=extract"),
+            FanRequest(targets = listOf(fixture("hex-1"), fixture("hex-2")), attribute = "rgbColour", from = "#ff8844;policy=extract", to = "#ff8844;policy=extract"),
         )
         assertEquals(listOf("#bb4400;w68", "#bb4400;w68"), colour.written.map { it.value })
         for (write in colour.written) {
             // The client's `parseProgrammerValue` grammar for a colour: `#rrggbb` then `;w` / `;a` / `;uv` tags.
             assertTrue(Regex("^#[0-9a-f]{6}(;(w|a|uv)\\d{1,3})*$").matches(write.value), write.value)
-            val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, write.propertyName, write.value)
+            val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, write.attribute, write.value)
             assertNotNull(parsed, write.value)
             assertEquals(write.value, parsed.serialize(), "round-trips through the parser Look rows use")
         }
-        val level = client.run(FanRequest(targets = listOf(fixture("hex-1")), property = "white", from = "dmx:40", to = "dmx:40"))
+        val level = client.run(FanRequest(targets = listOf(fixture("hex-1")), attribute = "white", from = "dmx:40", to = "dmx:40"))
         assertEquals("40", level.written.single().value)
-        assertNotNull(CueAssignmentResolver.parseAssignmentValue(PropertyCategory.WHITE, "white", "40"))
+        assertNotNull(CueAssignmentResolver.parseAssignmentValue(AttributeCategory.WHITE, "white", "40"))
         // A position is `pan,tilt`, each a byte, under the `position` name the parser keys on.
         val position = client.run(
-            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "deg:270,105", to = "deg:540,210"),
+            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), attribute = "position", from = "deg:270,105", to = "deg:540,210"),
         )
         assertEquals(listOf("128,128", "255,255"), position.written.map { it.value })
         for (write in position.written) {
-            val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.PAN, write.propertyName, write.value)
+            val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.PAN, write.attribute, write.value)
             assertNotNull(parsed, write.value)
             assertEquals(write.value, parsed.serialize())
         }
@@ -254,22 +254,22 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         // write arm writes the typed slot and answers its byte; the answer-only arm answers the
         // same byte, which a Look row holds and the cook reads back as that slot
         // (`Fixture.Property.settingBacked`) — not as the hex shorthand (`"14"` → white).
-        val wheel = client.run(FanRequest(targets = listOf(fixture("spot-1")), property = "rgbColour", from = "#ff0000", to = "#ff0000"))
+        val wheel = client.run(FanRequest(targets = listOf(fixture("spot-1")), attribute = "rgbColour", from = "#ff0000", to = "#ff0000"))
         assertEquals(listOf("14"), wheel.written.map { it.value }, "the RED slot's level, written as a typed Setting")
         assertTrue(entries().contains("spot-1" to "colourWheel"), "the slot landed as a typed programmer entry")
         val before = entries()
         val wheelDraft = client.run(
-            FanRequest(targets = listOf(fixture("spot-1"), fixture("mac-1"), fixture("hex-1")), property = "rgbColour", from = "#ff0000", to = "#ff0000", write = false),
+            FanRequest(targets = listOf(fixture("spot-1"), fixture("mac-1"), fixture("hex-1")), attribute = "rgbColour", from = "#ff0000", to = "#ff0000", write = false),
         )
         assertTrue(wheelDraft.skipped.isEmpty(), "no wheel head is skipped: ${wheelDraft.skipped}")
         assertEquals(
             mapOf("spot-1" to ("colourWheel" to "14"), "mac-1" to ("colourWheel" to "176"), "hex-1" to ("rgbColour" to "#ff0000")),
-            wheelDraft.written.associate { it.target.key to (it.propertyName to it.value) },
+            wheelDraft.written.associate { it.target.key to (it.attribute to it.value) },
             "the MAC 250's RED slot is 176 on its wheel",
         )
-        for (write in wheelDraft.written.filter { it.propertyName == "colourWheel" }) {
-            val parsed = CueAssignmentResolver.parseAssignmentValue(PropertyCategory.COLOUR, write.propertyName, write.value, settingBacked = true)
-            assertEquals(CueAssignmentResolver.PropertyValue.Setting(write.value.toUByte()), parsed, "a Look row reads it back as the slot")
+        for (write in wheelDraft.written.filter { it.attribute == "colourWheel" }) {
+            val parsed = CueAssignmentResolver.parseAssignmentValue(AttributeCategory.COLOUR, write.attribute, write.value, settingBacked = true)
+            assertEquals(CueAssignmentResolver.AttributeValue.Setting(write.value.toUByte()), parsed, "a Look row reads it back as the slot")
         }
         assertEquals(before, entries(), "write = false lands nothing")
     }
@@ -280,7 +280,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val out = client.run(
-            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100", write = false),
+            FanRequest(targets = listOf(group("front-wash"), fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100", write = false),
         )
         assertEquals(listOf("hex-1", "hex-2", "hex-3"), out.written.map { it.target.key })
         assertEquals(listOf("0", "128", "255"), out.written.map { it.value })
@@ -288,28 +288,28 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         assertTrue(entries().isEmpty(), "nothing lands in the programmer under write = false")
         // The skips are the same walk: a head without the property is still named.
         val skipped = client.run(
-            FanRequest(targets = listOf(fixture("hex-1")), property = "position", from = "deg:0,0", to = "deg:90,45", write = false),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "position", from = "deg:0,0", to = "deg:90,45", write = false),
         )
         assertEquals(listOf("hex-1"), skipped.skipped.map { it.target.key })
         assertTrue(entries().isEmpty())
         // And the default — the busk tab's request, which never names the field — still writes.
-        client.run(FanRequest(targets = listOf(fixture("hex-3")), property = "dimmer", from = "pct:0", to = "pct:100"))
+        client.run(FanRequest(targets = listOf(fixture("hex-3")), attribute = "dimmer", from = "pct:0", to = "pct:100"))
         assertEquals(setOf("hex-3" to "dimmer"), entries())
     }
 
     @Test
-    fun `the selection's mask keeps a property outside it from landing`() = testApplication {
+    fun `the selection's mask keeps an attribute outside it from landing`() = testApplication {
         seed()
         mountTestApp(state)
         val client = jsonClient()
         val out = client.run(
-            FanRequest(targets = listOf(fixture("hex-1")), families = listOf("POSITION"), property = "dimmer", from = "pct:0", to = "pct:100"),
+            FanRequest(targets = listOf(fixture("hex-1")), families = listOf("POSITION"), attribute = "dimmer", from = "pct:0", to = "pct:100"),
         )
         assertTrue(out.written.isEmpty())
         assertEquals(listOf("INTENSITY"), out.skippedFamilies)
         assertTrue(entries().isEmpty())
         val inside = client.run(
-            FanRequest(targets = listOf(fixture("hex-1")), families = listOf("INTENSITY", "COLOUR"), property = "dimmer", from = "pct:0", to = "pct:100"),
+            FanRequest(targets = listOf(fixture("hex-1")), families = listOf("INTENSITY", "COLOUR"), attribute = "dimmer", from = "pct:0", to = "pct:100"),
         )
         assertEquals(1, inside.written.size)
         assertTrue(inside.skippedFamilies.isEmpty())
@@ -321,13 +321,13 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val cells = client.run(
-            FanRequest(targets = listOf(fixture("bar-1")), property = "rgbColour", from = "#ff0000", to = "#0000ff", over = "CELLS"),
+            FanRequest(targets = listOf(fixture("bar-1")), attribute = "rgbColour", from = "#ff0000", to = "#0000ff", over = "CELLS"),
         )
         assertEquals((0 until 12).map { "bar-1.pixel-$it" }, cells.written.map { it.target.key })
         assertEquals(12, entries().count { it.first.startsWith("bar-1.pixel-") })
 
         val heads = client.run(
-            FanRequest(targets = listOf(fixture("bar-1"), fixture("hex-1")), property = "rgbColour", from = "#ff0000", to = "#0000ff", over = "HEADS"),
+            FanRequest(targets = listOf(fixture("bar-1"), fixture("hex-1")), attribute = "rgbColour", from = "#ff0000", to = "#0000ff", over = "HEADS"),
         )
         // The bar is **one step** over HEADS. It has no colour of its own in pixel mode, so the step
         // lands on every cell that carries it — all twelve at the step's one value — where it used to
@@ -352,7 +352,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         // D3: a pos: spread is a fraction of each head's own travel, so two movers take the same
         // bytes — one unit a DMX step about 128 — whatever their annotated degrees.
         val out = client.run(
-            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), property = "position", from = "pos:-20,0", to = "pos:20,10"),
+            FanRequest(targets = listOf(fixture("spot-1"), fixture("spot-2")), attribute = "position", from = "pos:-20,0", to = "pos:20,10"),
         )
         assertEquals(listOf("108,128", "148,138"), out.written.map { it.value })
     }
@@ -363,25 +363,25 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val cases = listOf(
-            FanRequest(targets = listOf(fixture("hex-1")), property = "gobo", from = "pct:0", to = "pct:1"),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "#ff0000", to = "pct:1"),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", curve = "ZIGZAG"),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", order = "SIDEWAYS"),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", over = "PIXELS"),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", from = "pct:0", to = "pct:1", runs = 0),
-            FanRequest(targets = listOf(fixture("hex-1")), property = "rgbColour", from = "pal:00000000-0000-0000-0000-000000000000", to = "#000000"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "gobo", from = "pct:0", to = "pct:1"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", from = "#ff0000", to = "pct:1"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", from = "pct:0", to = "pct:1", curve = "ZIGZAG"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", from = "pct:0", to = "pct:1", order = "SIDEWAYS"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", from = "pct:0", to = "pct:1", over = "PIXELS"),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", from = "pct:0", to = "pct:1", runs = 0),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "rgbColour", from = "pal:00000000-0000-0000-0000-000000000000", to = "#000000"),
             // One position unit per spread: a lerp from a step to a degree is a number in neither.
-            FanRequest(targets = listOf(fixture("spot-1")), property = "position", from = "pos:0,0", to = "deg:540,210"),
+            FanRequest(targets = listOf(fixture("spot-1")), attribute = "position", from = "pos:0,0", to = "deg:540,210"),
         )
         for (bad in cases) {
             val resp = client.post(bad)
             assertEquals(HttpStatusCode.BadRequest, resp.status, resp.bodyAsText())
             assertEquals(CODE_FAN_INVALID, resp.body<ErrorResponse>().code, bad.toString())
         }
-        val empty = client.post(FanRequest(property = "dimmer", from = "pct:0", to = "pct:1"))
+        val empty = client.post(FanRequest(attribute = "dimmer", from = "pct:0", to = "pct:1"))
         assertEquals(HttpStatusCode.BadRequest, empty.status)
         assertEquals(CODE_FAN_NEEDS_SELECTION, empty.body<ErrorResponse>().code)
-        val mask = client.post(FanRequest(targets = listOf(fixture("hex-1")), families = listOf("WIBBLE"), property = "dimmer", from = "pct:0", to = "pct:1"))
+        val mask = client.post(FanRequest(targets = listOf(fixture("hex-1")), families = listOf("WIBBLE"), attribute = "dimmer", from = "pct:0", to = "pct:1"))
         assertEquals(HttpStatusCode.BadRequest, mask.status)
     }
 
@@ -401,7 +401,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
     private fun fan(pan: Int? = null, tilt: Int? = null, base: Map<String, String>? = null, write: Boolean = true, targets: List<CueTargetDto> = movers.map(::fixture)) =
         FanRequest(
             targets = targets,
-            property = "position",
+            attribute = "position",
             mode = "ABOUT",
             fan = FanAmountDto(pan, tilt),
             base = base?.map { (key, value) -> FanBaseDto(fixture(key), value) },
@@ -429,7 +429,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
         // Blind: Local holds the new position, the stage does not show it.
         state.show.fxEngine.programmer.setBlind(true)
-        client.run(FanRequest(targets = movers.map(::fixture), property = "position", from = "pos:0,-20", to = "pos:0,-20"))
+        client.run(FanRequest(targets = movers.map(::fixture), attribute = "position", from = "pos:0,-20", to = "pos:0,-20"))
         assertNotEquals("128,108", stagePosition("spot-2"), "Blind keeps Local off the stage")
         val out = client.run(fan(tilt = 10))
         assertEquals(listOf("128,108", "128,108", "128,108"), out.base.map { it.value })
@@ -445,11 +445,11 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         seed()
         mountTestApp(state)
         val client = jsonClient()
-        client.run(FanRequest(targets = movers.map(::fixture), property = "position", from = "pos:-28,-28", to = "pos:-28,-28"))
+        client.run(FanRequest(targets = movers.map(::fixture), attribute = "position", from = "pos:-28,-28", to = "pos:-28,-28"))
         val spot1 = state.show.fixtures.untypedGroupableFixture("spot-1")
-        state.show.fxEngine.programmer.writeProperties(
+        state.show.fxEngine.programmer.writeAttributes(
             ProgrammerOwner.WEB,
-            listOf(ProgrammerWriter.PropertyWrite(spot1, "pan", CueAssignmentResolver.PropertyValue.Slider(150u))),
+            listOf(ProgrammerWriter.AttributeWrite(spot1, "pan", CueAssignmentResolver.AttributeValue.Slider(150u))),
         )
         val out = client.run(fan(pan = 10, targets = listOf(fixture("spot-1"), fixture("spot-2"))))
         assertEquals(listOf("150,100", "100,100"), out.base.map { it.value })
@@ -460,7 +460,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         seed()
         mountTestApp(state)
         val client = jsonClient()
-        client.run(FanRequest(targets = movers.map(::fixture), property = "position", from = "pos:0,-20", to = "pos:0,-20"))
+        client.run(FanRequest(targets = movers.map(::fixture), attribute = "position", from = "pos:0,-20", to = "pos:0,-20"))
         val stage = stagePosition("spot-2")
         val out = client.run(fan(pan = 10, base = mapOf("spot-1" to "90,90"), write = false, targets = listOf(fixture("spot-1"), fixture("spot-2"))))
         assertEquals(listOf("90,90", stage), out.base.map { it.value })
@@ -497,11 +497,11 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         val client = jsonClient()
         val cases = listOf(
-            FanRequest(targets = listOf(fixture("hex-1")), property = "dimmer", mode = "ABOUT", fan = FanAmountDto(pan = 10)),
+            FanRequest(targets = listOf(fixture("hex-1")), attribute = "dimmer", mode = "ABOUT", fan = FanAmountDto(pan = 10)),
             fan(),
             fan(pan = 128),
             fan(pan = 10, base = mapOf("spot-1" to "#ff0000")),
-            FanRequest(targets = listOf(fixture("spot-1")), property = "position", mode = "SIDEWAYS", fan = FanAmountDto(pan = 10)),
+            FanRequest(targets = listOf(fixture("spot-1")), attribute = "position", mode = "SIDEWAYS", fan = FanAmountDto(pan = 10)),
         )
         for (bad in cases) {
             val resp = client.post(bad)
@@ -534,7 +534,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val out = client.run(
             FanRequest(
                 targets = listOf(fixture("shehds-1"), fixture("shehds-2")),
-                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+                attribute = "rgbColour", from = "#ff0000", to = "#0000ff",
             ),
         )
 
@@ -556,7 +556,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val out = client.run(
-            FanRequest(targets = listOf(group("washes")), property = "rgbColour", from = "#ff0000", to = "#0000ff"),
+            FanRequest(targets = listOf(group("washes")), attribute = "rgbColour", from = "#ff0000", to = "#0000ff"),
         )
 
         assertEquals(zones("shehds-1") + zones("shehds-2"), out.written.map { it.target.key })
@@ -577,7 +577,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val out = client.run(
             FanRequest(
                 targets = listOf(fixture("shehds-1.zone-1"), fixture("shehds-1.zone-3")),
-                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+                attribute = "rgbColour", from = "#ff0000", to = "#0000ff",
             ),
         )
 
@@ -587,7 +587,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a property the Shehds carries itself stays on the parent over HEADS`() = testApplication {
+    fun `an attribute the Shehds carries itself stays on the parent over HEADS`() = testApplication {
         seedShehds()
         mountTestApp(state)
         val client = jsonClient()
@@ -595,7 +595,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val out = client.run(
             FanRequest(
                 targets = listOf(fixture("shehds-1"), fixture("shehds-2")),
-                property = "dimmer", from = "pct:0", to = "pct:100",
+                attribute = "dimmer", from = "pct:0", to = "pct:100",
             ),
         )
 
@@ -611,7 +611,7 @@ class ProgrammerFanRouteTest : RouteIntegrationTest() {
         val out = client.run(
             FanRequest(
                 targets = listOf(fixture("shehds-1.zone-2"), fixture("shehds-1"), fixture("shehds-2")),
-                property = "rgbColour", from = "#ff0000", to = "#0000ff",
+                attribute = "rgbColour", from = "#ff0000", to = "#0000ff",
             ),
         )
 

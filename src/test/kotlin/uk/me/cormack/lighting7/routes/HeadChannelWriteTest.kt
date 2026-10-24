@@ -10,16 +10,16 @@ import io.ktor.server.testing.testApplication
 import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.CueApplyData
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.ProgrammerOwner
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.fx.ProvenanceSource
 import uk.me.cormack.lighting7.fx.buildCueAssignmentsForCue
 import uk.me.cormack.lighting7.models.AssignmentHealth
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.plugins.UpdateChannelInMessage
 import uk.me.cormack.lighting7.plugins.buildChannelMappingMessage
 import uk.me.cormack.lighting7.plugins.handleUpdateChannel
@@ -41,7 +41,7 @@ import kotlin.test.assertTrue
  * The desk's covering lookup (`CascadePublisher.resolveChannelCoveringKey`) used to walk only the
  * owning fixture's own properties, so on a bar that keeps its channels on its heads every head
  * channel resolved to nothing: `updateChannel` held a raw byte in the sideband, Record dropped it
- * as `NO_BACKING_PROPERTY`, Clear and Blind sent it to DMX 0 instead of the layer beneath, and
+ * as `NO_BACKING_ATTRIBUTE`, Clear and Blind sent it to DMX 0 instead of the layer beneath, and
  * provenance named no key. Each test below pins one of those readers.
  *
  * The bar is `led-lightbar-12-pixel-48ch` at channel 1 — twelve RGBW heads, four channels each, the
@@ -71,15 +71,15 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
             listOf(
                 CueAssignmentResolver.Assignment(
                     cueId = 993, priority = 10, fadeWeight = 1.0,
-                    targetKey = head, targetIsGroup = false, propertyName = "rgbColour",
-                    category = PropertyCategory.COLOUR,
-                    value = CueAssignmentResolver.PropertyValue.Colour(ExtendedColour(Color(50, 0, 0))),
+                    targetKey = head, targetIsGroup = false, attribute = "rgbColour",
+                    category = AttributeCategory.COLOUR,
+                    value = CueAssignmentResolver.AttributeValue.Colour(ExtendedColour(Color(50, 0, 0))),
                 ),
                 CueAssignmentResolver.Assignment(
                     cueId = 993, priority = 10, fadeWeight = 1.0,
-                    targetKey = "bar.pixel-3", targetIsGroup = false, propertyName = "white",
-                    category = PropertyCategory.WHITE,
-                    value = CueAssignmentResolver.PropertyValue.Slider(70u),
+                    targetKey = "bar.pixel-3", targetIsGroup = false, attribute = "white",
+                    category = AttributeCategory.WHITE,
+                    value = CueAssignmentResolver.AttributeValue.Slider(70u),
                 ),
             ),
         )
@@ -97,14 +97,14 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
 
         // One walk per register version, shared by the covering lookup and the mapping frame.
         val fixtures = state.show.fixtures
-        val index = PropertyChannelWriter.channelKeyIndex(fixtures)
+        val index = AttributeChannelWriter.channelKeyIndex(fixtures)
         buildChannelMappingMessage(fixtures)
-        assertSame(index, PropertyChannelWriter.channelKeyIndex(fixtures), "the mapping frame reused the walk")
+        assertSame(index, AttributeChannelWriter.channelKeyIndex(fixtures), "the mapping frame reused the walk")
 
         // A patch edit must not leave it stale.
         LocateTestSupport.seedHex(state, projectId, "hex-1", 60)
         assertEquals(CueAssignmentResolver.Key.fixture("hex-1", "dimmer"), cascade.resolveChannelCoveringKey(0, 60))
-        assertNotSame(index, PropertyChannelWriter.channelKeyIndex(fixtures))
+        assertNotSame(index, AttributeChannelWriter.channelKeyIndex(fixtures))
     }
 
     @Test
@@ -114,14 +114,14 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
 
         busk(12, 200u)
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(200u),
+            CueAssignmentResolver.AttributeValue.Slider(200u),
             state.show.programmerStore.get(head, "white")?.value?.resolved,
             "the head's white is its own slider",
         )
 
         busk(9, 180u)
         val colour = state.show.programmerStore.get(head, "rgbColour")?.value?.resolved
-            as? CueAssignmentResolver.PropertyValue.Colour
+            as? CueAssignmentResolver.AttributeValue.Colour
         assertNotNull(colour, "red lifts to the head's rgbColour, not a raw sideband byte")
         assertEquals(180, colour.value.color.red)
         assertEquals(200u.toUByte(), colour.value.white, "the head's white is read, not taken as 0")
@@ -144,8 +144,8 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
         )
 
         val entries = state.show.fxEngine.provenance.compute()
-        fun sourceOf(target: String, property: String) =
-            entries.singleOrNull { it.targetKey == target && it.propertyName == property }?.source
+        fun sourceOf(target: String, attribute: String) =
+            entries.singleOrNull { it.targetKey == target && it.attribute == attribute }?.source
         assertEquals(ProvenanceSource.PROGRAMMER, sourceOf(head, "rgbColour"))
         assertEquals(ProvenanceSource.PROGRAMMER, sourceOf("bar.pixel-3", "white"), "the sideband slot's head")
     }
@@ -169,7 +169,7 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
         ).body()
 
         assertTrue(response.skipped.isEmpty(), "nothing skipped: ${response.skipped}")
-        val rows = response.cue.propertyAssignments.associateBy { it.targetKey to it.propertyName }
+        val rows = response.cue.attributeAssignments.associateBy { it.targetKey to it.attribute }
         assertEquals(setOf(head to "rgbColour", head to "white", "bar.pixel-3" to "rgbColour"), rows.keys)
         assertTrue(rows.values.all { it.targetType == "fixture" }, "a cell is a fixture-typed target")
         assertTrue(rows.values.all { it.health == AssignmentHealth.Ok }, "a head row is healthy: ${rows.values}")
@@ -196,8 +196,8 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
             ),
         ).body()
 
-        val row = response.cue.propertyAssignments.singleOrNull { it.targetKey == head && it.propertyName == "white" }
-        assertEquals("200", row?.value, "rows: ${response.cue.propertyAssignments}")
+        val row = response.cue.attributeAssignments.singleOrNull { it.targetKey == head && it.attribute == "white" }
+        assertEquals("200", row?.value, "rows: ${response.cue.attributeAssignments}")
     }
 
     @Test
@@ -209,12 +209,12 @@ class HeadChannelWriteTest : RouteIntegrationTest() {
             state.show.fixtures,
             CueApplyData(
                 cueId = 7, cueName = "cells", adHocFx = emptyList(),
-                propertyAssignments = listOf(CuePropertyAssignmentDto("fixture", head, "white", "120")),
+                attributeAssignments = listOf(CueAttributeAssignmentDto("fixture", head, "white", "120")),
             ),
         )
         val row = built.single()
         assertEquals(head, row.targetKey)
-        assertEquals(CueAssignmentResolver.PropertyValue.Slider(120u), row.value)
+        assertEquals(CueAssignmentResolver.AttributeValue.Slider(120u), row.value)
     }
 
     @Test

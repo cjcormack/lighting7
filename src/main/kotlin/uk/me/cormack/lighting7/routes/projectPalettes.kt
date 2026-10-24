@@ -33,23 +33,23 @@ import uk.me.cormack.lighting7.fixture.group.FixtureElement
 import uk.me.cormack.lighting7.models.LayerSource
 import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.FxRegistry
-import uk.me.cormack.lighting7.fx.FX_PROPERTY_SENTINELS
+import uk.me.cormack.lighting7.fx.FX_ATTRIBUTE_SENTINELS
 import uk.me.cormack.lighting7.fx.PALETTE_STEPS_ID
 import uk.me.cormack.lighting7.fx.PaletteStepsShape
 import uk.me.cormack.lighting7.fx.SLOT_STEPS_ID
 import uk.me.cormack.lighting7.fx.PaletteRegistry
 import uk.me.cormack.lighting7.fx.PaletteSource
 import uk.me.cormack.lighting7.fx.paletteStepsShape
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.PaletteSnapshot
 import uk.me.cormack.lighting7.fx.PaletteFanOut
 import uk.me.cormack.lighting7.fx.PaletteIntent
-import uk.me.cormack.lighting7.fx.PaletteProperty
+import uk.me.cormack.lighting7.fx.PaletteAttribute
 import uk.me.cormack.lighting7.fx.PaletteResolver
 import uk.me.cormack.lighting7.fx.WhitePolicy
-import uk.me.cormack.lighting7.fx.maskGroupForFxFamily
+import uk.me.cormack.lighting7.fx.attributeFamilyForFxFamily
 import uk.me.cormack.lighting7.fx.parsePaletteIntent
 import uk.me.cormack.lighting7.fx.serializePaletteColourRef
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
@@ -89,7 +89,7 @@ internal const val CODE_PALETTE_IN_USE = "PALETTE_IN_USE"
 internal const val CODE_PALETTE_OUTSIDE_MASK = "PALETTE_OUTSIDE_MASK"
 
 /** The refusal's text, shared by every door so a button's log line and a pad's toast agree. */
-internal fun paletteOutsideMaskMessage(name: String, family: PropertyMaskGroup?, mask: Set<PropertyMaskGroup>): String {
+internal fun paletteOutsideMaskMessage(name: String, family: AttributeFamily?, mask: Set<AttributeFamily>): String {
     val masked = describeFamilies(mask)
     return if (family == null) {
         "'$name' names no known attribute, so it cannot land on a selection masked to $masked"
@@ -125,14 +125,14 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
         withProject(state, resource.projectId) { project ->
             val familyFilter = resource.family?.trim()?.takeIf { it.isNotEmpty() }
             val parsedFamily = familyFilter?.let { raw ->
-                PropertyMaskGroup.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
+                AttributeFamily.entries.firstOrNull { it.name.equals(raw, ignoreCase = true) }
             }
             if (familyFilter != null && parsedFamily == null) {
                 call.respond(
                     HttpStatusCode.BadRequest,
                     ErrorResponse(
                         "Unknown family '$familyFilter' — expected one of " +
-                            PropertyMaskGroup.entries.joinToString { it.name },
+                            AttributeFamily.entries.joinToString { it.name },
                     ),
                 )
                 return@withProject
@@ -397,7 +397,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<ApplyPaletteRequest>()
             val families = try {
-                parseMaskGroups(request.families)
+                parseFamilies(request.families)
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
@@ -434,14 +434,14 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
         withCurrentProject(state, resource.parent.projectId) { project ->
             val request = call.receive<TogglePaletteRequest>()
             val families = try {
-                parseMaskGroups(request.families)
+                parseFamilies(request.families)
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
             }
             // Source *and* mask in one transaction: the mask is derived by the same [familyOf]
             // `toDto` uses for `family`, so the layer cannot be masked to something the template
-            // list never showed. Deriving it here rather than trusting `request.propertyMask` is
+            // list never showed. Deriving it here rather than trusting `request.attributeMask` is
             // also what gives the response an independent answer to report: an echo could never
             // disagree with the caller.
             //
@@ -480,7 +480,7 @@ internal fun Route.routeApiRestProjectPalettes(state: State) {
                 val outcome = state.show.programmerLayerStack.toggle(
                     source = source,
                     targets = targets,
-                    propertyMask = derivedMask,
+                    attributeMask = derivedMask,
                     fadeMs = request.fadeMs ?: 0,
                 )
                 // The tap door of the press log — the **on** arm only. A second press
@@ -820,7 +820,7 @@ internal data class ApplyPaletteRequest(
     val targets: List<PaletteTargetDto> = emptyList(),
     val fadeMs: Long? = null,
     /**
-     * The selection's attribute mask (`PropertyMaskGroup` names); absent is every attribute, an
+     * The selection's attribute mask (`AttributeFamily` names); absent is every attribute, an
      * unknown name is 400. A template whose family is outside it is refused
      * (`PALETTE_OUTSIDE_MASK`) rather than applied — multi-screen plan D5.
      */
@@ -851,7 +851,7 @@ internal data class ApplyPaletteResponse(
      */
     val fxIds: List<Long> = emptyList(),
     /**
-     * Each head's literal for a **value** palette, in the Look row grammar (`PropertyValue.serialize()`)
+     * Each head's literal for a **value** palette, in the Look row grammar (`AttributeValue.serialize()`)
      * and on the property it landed on — Spread's answer shape. With `write` false this is all the
      * route did, and [written] counts what it would have written.
      */
@@ -861,7 +861,7 @@ internal data class ApplyPaletteResponse(
 @Serializable
 internal data class PaletteSkipDto(
     val fixtureKey: String,
-    val propertyName: String,
+    val attribute: String,
     val reason: String,
 )
 
@@ -872,9 +872,9 @@ internal data class TogglePaletteRequest(
      * What the caller *believed* it was masking to. Advisory: the mask actually applied is derived
      * from the template's rows server-side, because the mask a template layer wants is a fact about
      * the template rather than about the press. Stating it anyway is what lets a client and server
-     * that disagree show up in [TogglePaletteResponse.propertyMask] instead of silently on the rig.
+     * that disagree show up in [TogglePaletteResponse.attributeMask] instead of silently on the rig.
      */
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     /** The selection's attribute mask, as on [ApplyPaletteRequest.families]; same refusal. */
     val families: List<String>? = null,
     /**
@@ -894,7 +894,7 @@ internal data class TogglePaletteResponse(
      * only for a template whose rows name no known property. Compare against what was sent: this is
      * the *server's* answer, not an echo, so the two genuinely can differ.
      */
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     /**
      * How many other palettes' layers this press took the pressed heads off — the palettes of its
      * family and kind it replaces (apply-model D2, D6). Always 0 on a `removed`.
@@ -921,9 +921,9 @@ internal data class PaletteResolutionDto(
     val fixtureKey: String,
     val fixtureName: String,
     val typeKey: String,
-    val propertyName: String,
-    /** The property the value actually landed on — differs from [propertyName] on a colour wheel. */
-    val resolvedPropertyName: String,
+    val attribute: String,
+    /** The property the value actually landed on — differs from [attribute] on a colour wheel. */
+    val resolvedAttributeName: String,
     /** `EXACT` | `CLAMPED` | `SNAPPED` | `DEGRADED` | `UNSUPPORTED`. */
     val outcome: String,
     /** Operator-facing detail: the clamp, the slot name, or the reason. Null for an exact resolve. */
@@ -986,7 +986,7 @@ private sealed interface CopyPaletteOutcome {
  * A **value** template's rows:
  *  1. **Exactly one family.** This is what makes a template a template — `TwoThings` calls it the
  *     single real backend ask — and it is enforced here because there is no column to constrain.
- *  2. **A closed property vocabulary** ([PaletteProperty]), which is where "a template cannot carry
+ *  2. **A closed property vocabulary** ([PaletteAttribute]), which is where "a template cannot carry
  *     a gobo" actually lives. A slotted role is refused by name.
  *  3. **The intent must parse, and match the property's shape.** A `deg:` value on a dimmer is a
  *     client bug, and storing it would produce a row that resolves to nothing on every head.
@@ -1056,9 +1056,9 @@ internal fun performPaletteCreate(
  * The family a set of contents is in — [DaoPalette.familyOf] for contents that are not yet a
  * row. Null when nothing in them names a family, which the write boundary refuses anyway.
  */
-internal fun contentsFamily(rows: List<PaletteRowDto>, effect: PaletteFxDto?): PropertyMaskGroup? =
-    rows.firstNotNullOfOrNull { PaletteProperty.ofOrNull(it.propertyName)?.family }
-        ?: effect?.let { maskGroupForFxFamily(it.family) }
+internal fun contentsFamily(rows: List<PaletteRowDto>, effect: PaletteFxDto?): AttributeFamily? =
+    rows.firstNotNullOfOrNull { PaletteAttribute.ofOrNull(it.attribute)?.family }
+        ?: effect?.let { attributeFamilyForFxFamily(it.family) }
 
 /**
  * A trigger's name is refused as a trigger (stage-view plan session 9), not with the slotted-property
@@ -1066,15 +1066,15 @@ internal fun contentsFamily(rows: List<PaletteRowDto>, effect: PaletteFxDto?): P
  * Thrown as [TriggerNotStorableException] by [validatePaletteContents], so a template answers
  * `TRIGGER_NOT_STORABLE` as a Look and a cue do.
  */
-private fun triggerPaletteRefusal(propertyName: String): String? =
-    FixtureTriggers.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
+private fun triggerPaletteRefusal(attribute: String): String? =
+    FixtureTriggers.allReservedNames.firstOrNull { it.equals(attribute.trim(), ignoreCase = true) }?.let {
         "A palette cannot hold '$it' — it is a one-shot trigger or its arm, which fires as an event " +
             "(a cue's Events, the cannon's panel, a MIDI FireTrigger) while the desk is armed, and is never a stored value"
     }
 
 /** A fixture command's name, refused as a command (fixture optics plan session 7) — [triggerPaletteRefusal]'s twin. */
-private fun commandPaletteRefusal(propertyName: String): String? =
-    FixtureCommands.allReservedNames.firstOrNull { it.equals(propertyName.trim(), ignoreCase = true) }?.let {
+private fun commandPaletteRefusal(attribute: String): String? =
+    FixtureCommands.allReservedNames.firstOrNull { it.equals(attribute.trim(), ignoreCase = true) }?.let {
         "A palette cannot hold '$it' — it is a fixture command, which runs from the fixture panel's " +
             "Commands menu behind a confirm, and is never a stored value"
     }
@@ -1105,7 +1105,7 @@ internal fun validatePaletteContents(
     if (rows.isEmpty() && effect == null) return "A palette must hold at least one value"
     if (effect != null) return validatePaletteFx(effect, registry, ownUuid, templates)
 
-    val families = LinkedHashSet<PropertyMaskGroup>()
+    val families = LinkedHashSet<AttributeFamily>()
     for (row in rows) {
         if (row.targetType != DEFERRED_TARGET_TYPE) {
             val target = TargetRef.ofOrNull(row.targetType, row.targetKey)
@@ -1113,19 +1113,19 @@ internal fun validatePaletteContents(
                 return "A palette row targets a fixture or nothing at all, not '${row.targetType}'"
             }
         }
-        val property = PaletteProperty.ofOrNull(row.propertyName)
-            ?: triggerPaletteRefusal(row.propertyName)?.let { throw TriggerNotStorableException(it) }
-            ?: commandPaletteRefusal(row.propertyName)?.let { throw CommandNotStorableException(it) }
-            ?: return "A palette cannot hold '${row.propertyName}' — " +
+        val attribute = PaletteAttribute.ofOrNull(row.attribute)
+            ?: triggerPaletteRefusal(row.attribute)?.let { throw TriggerNotStorableException(it) }
+            ?: commandPaletteRefusal(row.attribute)?.let { throw CommandNotStorableException(it) }
+            ?: return "A palette cannot hold '${row.attribute}' — " +
                 "slotted properties (gobo, colour wheel, macros) are per-model, so they live in a " +
                 "recorded look. Palettes hold: " +
-                PaletteProperty.entries.joinToString { it.propertyName }
+                PaletteAttribute.entries.joinToString { it.attribute }
         val intent = parsePaletteIntent(row.value)
-            ?: return "'${row.value}' is not a palette value for ${property.propertyName}"
-        if (!property.accepts(intent)) {
-            return "'${row.value}' is the wrong kind of value for ${property.propertyName}"
+            ?: return "'${row.value}' is not a palette value for ${attribute.attribute}"
+        if (!attribute.accepts(intent)) {
+            return "'${row.value}' is the wrong kind of value for ${attribute.attribute}"
         }
-        families.add(property.family)
+        families.add(attribute.family)
     }
     if (families.size > 1) {
         return "A palette holds exactly one attribute family, but these rows span " +
@@ -1151,10 +1151,10 @@ internal fun validatePaletteContents(
 private fun duplicateRow(rows: List<PaletteRowDto>): String? {
     val seen = HashSet<Pair<String, String>>()
     for (row in rows) {
-        val property = PaletteProperty.ofOrNull(row.propertyName) ?: continue
+        val attribute = PaletteAttribute.ofOrNull(row.attribute) ?: continue
         val target = if (row.isDeferred) "" else row.targetKey
-        if (!seen.add(property.propertyName to target)) {
-            return "This palette sets ${property.propertyName} twice" +
+        if (!seen.add(attribute.attribute to target)) {
+            return "This palette sets ${attribute.attribute} twice" +
                 (if (target.isEmpty()) "" else " on '$target'") +
                 " — a palette holds one value per property, and the second would silently lose."
         }
@@ -1179,12 +1179,12 @@ private fun duplicateRow(rows: List<PaletteRowDto>): String? {
  */
 private fun conflictingWhitePolicy(rows: List<PaletteRowDto>): String? {
     val emitters = rows.filter {
-        PaletteProperty.ofOrNull(it.propertyName)
-            .let { p -> p == PaletteProperty.WHITE || p == PaletteProperty.AMBER }
+        PaletteAttribute.ofOrNull(it.attribute)
+            .let { p -> p == PaletteAttribute.WHITE || p == PaletteAttribute.AMBER }
     }
     if (emitters.isEmpty()) return null
     val deriving = rows.filter { row ->
-        PaletteProperty.ofOrNull(row.propertyName) == PaletteProperty.COLOUR &&
+        PaletteAttribute.ofOrNull(row.attribute) == PaletteAttribute.COLOUR &&
             (parsePaletteIntent(row.value) as? PaletteIntent.Colour)
                 ?.policy.let { it != null && it != WhitePolicy.RGB_ONLY }
     }
@@ -1201,7 +1201,7 @@ private fun conflictingWhitePolicy(rows: List<PaletteRowDto>): String? {
         for (colour in deriving) {
             if (!emitter.isDeferred && !colour.isDeferred && emitter.targetKey != colour.targetKey) continue
             val policy = (parsePaletteIntent(colour.value) as? PaletteIntent.Colour)?.policy ?: continue
-            val name = PaletteProperty.ofOrNull(emitter.propertyName)?.propertyName ?: emitter.propertyName
+            val name = PaletteAttribute.ofOrNull(emitter.attribute)?.attribute ?: emitter.attribute
             return "This palette sets $name directly, so the colour's '${policy.token}' policy has " +
                 "nothing left to do — it drives the same emitter. Set the colour to 'rgbonly', or " +
                 "drop the $name row."
@@ -1226,7 +1226,7 @@ private fun validatePaletteFx(
     // Rule 2 (D4): the family is the effect library's own category, through the same map a Look's
     // derived families use. `controls` has no tempo, so names none; a beam effect (effects plan
     // D6) is a Beam palette.
-    val family = maskGroupForFxFamily(effect.family)
+    val family = attributeFamilyForFxFamily(effect.family)
         ?: return "A palette cannot hold a '${effect.family}' effect — an effect palette is " +
             "banked by family, and that category has none. Effect palettes are: " +
             PALETTE_FX_FAMILIES.joinToString { it.name }
@@ -1249,16 +1249,16 @@ private fun validatePaletteFx(
     // A palette's beam effect lands, on a press, on the property the effect names or else the one
     // its registration declares, so a script-registered one must declare exactly one, by name.
     // Slot Steps declares only the `setting` sentinel — its slots are one setting's options, and
-    // which setting is the palette's to name (`propertyName`, the setting it steps).
-    if (family == PropertyMaskGroup.BEAM && registration.id != PALETTE_STEPS_ID) {
-        val named = effect.propertyName?.takeIf { it.isNotBlank() }
-            ?: registration.compatibleProperties.singleOrNull()?.takeUnless { it in FX_PROPERTY_SENTINELS }
+    // which setting is the palette's to name (`attribute`, the setting it steps).
+    if (family == AttributeFamily.BEAM && registration.id != PALETTE_STEPS_ID) {
+        val named = effect.attribute?.takeIf { it.isNotBlank() }
+            ?: registration.compatibleAttributes.singleOrNull()?.takeUnless { it in FX_ATTRIBUTE_SENTINELS }
         if (named == null) {
             return if (registration.id == SLOT_STEPS_ID) {
                 "Slot Steps in a palette must name the setting it steps — a gobo or colour wheel"
             } else {
                 "A Beam palette's effect must drive one named property — '${effect.fxType}' " +
-                    "declares ${registration.compatibleProperties.joinToString().ifEmpty { "none" }}"
+                    "declares ${registration.compatibleAttributes.joinToString().ifEmpty { "none" }}"
             }
         }
     }
@@ -1322,10 +1322,10 @@ private fun validatePaletteSteps(parameter: String?, templates: PaletteRegistry?
 
 /** The families an effect template can be banked under (D4): every family an effect category names. */
 private val PALETTE_FX_FAMILIES = setOf(
-    PropertyMaskGroup.INTENSITY,
-    PropertyMaskGroup.COLOUR,
-    PropertyMaskGroup.POSITION,
-    PropertyMaskGroup.BEAM,
+    AttributeFamily.INTENSITY,
+    AttributeFamily.COLOUR,
+    AttributeFamily.POSITION,
+    AttributeFamily.BEAM,
 )
 
 /** Must be called inside a transaction. */
@@ -1333,15 +1333,15 @@ private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
     // No row may name a one-shot trigger (stage-view plan session 9, D15); a generic row lands on the
     // selection, so it is checked against every trigger name there is.
     // The index is queries; build it only when some name could be refused at all.
-    if (rows.any { TriggerIndex.mayRefuse(it.propertyName) }) {
+    if (rows.any { TriggerIndex.mayRefuse(it.attribute) }) {
         TriggerIndex.of(template.project).check(
-            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.propertyName, "rows[$i]") },
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.attribute, "rows[$i]") },
         )
     }
     // Nor a fixture command (fixture optics plan session 7).
-    if (rows.any { CommandIndex.mayRefuse(it.propertyName) }) {
+    if (rows.any { CommandIndex.mayRefuse(it.attribute) }) {
         CommandIndex.of(template.project).check(
-            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.propertyName, "rows[$i]") },
+            rows.mapIndexed { i, r -> TriggerIndex.RowRef(r.targetType, r.targetKey, r.attribute, "rows[$i]") },
         )
     }
     for ((index, row) in rows.withIndex()) {
@@ -1349,7 +1349,7 @@ private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
             this.palette = template
             targetType = row.targetType
             targetKey = if (row.targetType == DEFERRED_TARGET_TYPE) "" else row.targetKey
-            attribute = row.propertyName
+            attribute = row.attribute
             value = row.value
             sortOrder = if (row.sortOrder != 0) row.sortOrder else index
         }
@@ -1367,14 +1367,14 @@ private fun createPaletteRows(template: DaoPalette, rows: List<PaletteRowDto>) {
  */
 private fun createPaletteFx(template: DaoPalette, effect: PaletteFxDto, uuid: java.util.UUID? = null) {
     // A template's effect has no target of its own: it lands on the selection.
-    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
-    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.propertyName, "effect")))
+    TriggerIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "effect")))
+    CommandIndex.EMPTY.check(listOf(TriggerIndex.RowRef(null, null, effect.attribute, "effect")))
     DaoPaletteFxEntity.new {
         if (uuid != null) this.uuid = uuid
         this.palette = template
         fxType = effect.fxType
         family = effect.family
-        attribute = effect.propertyName
+        attribute = effect.attribute
         cycle = effect.cycle
         blendMode = effect.blendMode
         order = effect.order
@@ -1512,7 +1512,7 @@ internal fun paletteUsageFor(paletteIds: Collection<Int>): Map<Int, PaletteUsage
 internal fun DaoPaletteRow.toDto() = PaletteRowDto(
     targetType = targetType,
     targetKey = targetKey,
-    propertyName = attribute,
+    attribute = attribute,
     value = value,
     sortOrder = sortOrder,
 )
@@ -1527,7 +1527,7 @@ internal fun DaoPaletteRow.toDto() = PaletteRowDto(
 internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
     fxType = fxType,
     family = family,
-    propertyName = attribute,
+    attribute = attribute,
     cycle = cycle,
     blendMode = blendMode,
     order = order,
@@ -1565,7 +1565,7 @@ internal fun DaoPaletteFxEntity.toDto(registry: FxRegistry) = PaletteFxDto(
  *
  * Must be called inside a transaction.
  */
-internal fun DaoPalette.familyOf(): PropertyMaskGroup? =
+internal fun DaoPalette.familyOf(): AttributeFamily? =
     // `sortedBy` rather than Exposed's `orderBy`: this is called from `toDto` *after* the rows have
     // been loaded, and re-ordering a loaded `SizedIterable` throws "Can't order already loaded
     // data". A template has a handful of rows, so sorting them in memory costs nothing and leaves
@@ -1575,13 +1575,13 @@ internal fun DaoPalette.familyOf(): PropertyMaskGroup? =
 /**
  * The bundled emitters this template's rows name outright — `PaletteDto.requiredEmitters`.
  *
- * In [PaletteProperty.EMITTERS] order rather than row order, so the wire form has one spelling and
+ * In [PaletteAttribute.EMITTERS] order rather than row order, so the wire form has one spelling and
  * a client can compare two templates' requirements without sorting. Must be called inside a
  * transaction.
  */
 internal fun DaoPalette.requiredEmittersOf(): List<String> {
-    val named = rows.mapNotNull { PaletteProperty.ofOrNull(it.attribute) }.toSet()
-    return PaletteProperty.EMITTERS.filter { it in named }.map { it.propertyName }
+    val named = rows.mapNotNull { PaletteAttribute.ofOrNull(it.attribute) }.toSet()
+    return PaletteAttribute.EMITTERS.filter { it in named }.map { it.attribute }
 }
 
 /**
@@ -1674,7 +1674,7 @@ private fun resolvePaletteAgainstPatch(
                 is TargetRef.Fixture -> candidates.filter { it.key == target.key }
                 else -> candidates
             }
-            (row to intent) to forThisRow.flatMap { PaletteFanOut.headsFor(it, row.propertyName, fittedMediaFor) }
+            (row to intent) to forThisRow.flatMap { PaletteFanOut.headsFor(it, row.attribute, fittedMediaFor) }
         }
 
     // The whole-template colour rule, per landing head, before any row is reported. A head that
@@ -1687,7 +1687,7 @@ private fun resolvePaletteAgainstPatch(
         for ((rowIntent, heads) in landings) {
             for (head in heads) {
                 applicableByHead.getOrPut(head.targetKey) { head to ArrayList() }
-                    .second.add(rowIntent.first.propertyName to rowIntent.second)
+                    .second.add(rowIntent.first.attribute to rowIntent.second)
             }
         }
         for ((key, headRows) in applicableByHead) {
@@ -1698,9 +1698,9 @@ private fun resolvePaletteAgainstPatch(
     val entries = ArrayList<PaletteResolutionDto>()
     for ((rowIntent, heads) in landings) {
         val (row, intent) = rowIntent
-        val isColourRow = PaletteProperty.ofOrNull(row.propertyName)?.family == PropertyMaskGroup.COLOUR
+        val isColourRow = PaletteAttribute.ofOrNull(row.attribute)?.family == AttributeFamily.COLOUR
         for (head in heads.distinctBy { it.targetKey }) {
-            val resolution = PaletteResolver.resolve(head, row.propertyName, intent, PaletteFanOut.mediaOf(head, fittedMediaFor))
+            val resolution = PaletteResolver.resolve(head, row.attribute, intent, PaletteFanOut.mediaOf(head, fittedMediaFor))
             val requirement = if (isColourRow) colourRequirement[head.targetKey] else null
             // A head with nothing in this family was never a candidate — omitted rather than listed
             // as a failure, which is what the resolver's own `NotACandidate` arm says. It used to be
@@ -1731,8 +1731,8 @@ private fun resolvePaletteAgainstPatch(
                         fixture?.fixtureName ?: head.displayName
                     },
                     typeKey = fixture?.typeKey ?: "",
-                    propertyName = row.propertyName,
-                    resolvedPropertyName = resolution.propertyName,
+                    attribute = row.attribute,
+                    resolvedAttributeName = resolution.attribute,
                     outcome = outcome,
                     detail = detail,
                     deltaE = deltaE,

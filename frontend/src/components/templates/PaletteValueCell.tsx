@@ -113,8 +113,8 @@ export const PaletteValueCell = memo(function PaletteValueCell({
     onOpen: reset,
   })
 
-  const onChange = useCallback((propertyName: string, intent: PaletteIntent | null) => {
-    setDraft((prev) => withIntent(prev, propertyName, intent))
+  const onChange = useCallback((attribute: string, intent: PaletteIntent | null) => {
+    setDraft((prev) => withIntent(prev, attribute, intent))
   }, [])
 
   const empty = paletteValuesEmpty(family, draft)

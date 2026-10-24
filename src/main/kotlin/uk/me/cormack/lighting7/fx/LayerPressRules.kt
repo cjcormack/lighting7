@@ -73,6 +73,6 @@ internal class LayerPressRules(
         unTargeted.associateWith(::perFixtureRowTargets)
 
     /** A palette's family, and whether it holds an effect rather than values. */
-    private fun paletteKind(uuid: UUID): Pair<PropertyMaskGroup, Boolean>? =
+    private fun paletteKind(uuid: UUID): Pair<AttributeFamily, Boolean>? =
         paletteRegistry().snapshot(uuid)?.let { snapshot -> snapshot.familyOf()?.let { it to (snapshot.effect != null) } }
 }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { FX_PROPERTY_SENTINELS } from '@/lib/fxTargetProperties'
+import { FX_ATTRIBUTE_SENTINELS } from '@/lib/fxTargetAttributes'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { useVisibleFixtureListQuery } from '@/store/fixtures'
@@ -9,7 +9,7 @@ import { fxSpeedLabel } from '@/components/fx/fxConstants'
 import { isPaletteRef, resolveColourToHex } from '@/components/fx/colourUtils'
 import { useColourPalettes } from '@/components/fx/FxColourPalettes'
 import { fixturesSupportingFamily, type AttributeFamily } from '@/lib/attributeFamily'
-import { propertyNamesFor } from '@/lib/fxTargetProperties'
+import { attributesFor } from '@/lib/fxTargetAttributes'
 import type { FxLibraryEntry } from '@/store/fixtureFx'
 import type { PaletteFx } from '@/api/palettesApi'
 
@@ -72,17 +72,17 @@ export function PaletteRunsOn({
 
   // A beam effect drives the property the palette names (Slot Steps' setting) or else the one it
   // declares, so it runs on the heads that have that one — never a sentinel, which names none.
-  const declared = entry?.compatibleProperties.length === 1 ? entry.compatibleProperties[0] : null
-  const beamProperty =
+  const declared = entry?.compatibleAttributes.length === 1 ? entry.compatibleAttributes[0] : null
+  const beamAttribute =
     family === 'BEAM'
-      ? (effect.propertyName || (declared != null && !FX_PROPERTY_SENTINELS.has(declared) ? declared : null))
+      ? (effect.attribute || (declared != null && !FX_ATTRIBUTE_SENTINELS.has(declared) ? declared : null))
       : null
   const heads = useMemo(
     () =>
-      beamProperty == null
+      beamAttribute == null
         ? fixturesSupportingFamily(fixtures, family)
-        : (fixtures ?? []).filter((fixture) => propertyNamesFor([{ type: 'fixture', fixture }]).has(beamProperty)).length,
-    [fixtures, family, beamProperty],
+        : (fixtures ?? []).filter((fixture) => attributesFor([{ type: 'fixture', fixture }]).has(beamAttribute)).length,
+    [fixtures, family, beamAttribute],
   )
   // Timed in seconds: a wall-clock effect, or a beat effect on Seconds (D7) — its cycle is what the
   // strip is, with no beat ruler under it.
@@ -143,7 +143,7 @@ export function PaletteRunsOn({
       </div>
       <div className="rounded-md border p-3 space-y-2">
         <p className="text-[11px]">
-          {beamProperty != null ? `Any fixture with ${beamProperty}.` : DESCRIPTION[family]} The same FX on every
+          {beamAttribute != null ? `Any fixture with ${beamAttribute}.` : DESCRIPTION[family]} The same FX on every
           head, its phase spread by its Order.
         </p>
 

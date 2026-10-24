@@ -57,7 +57,7 @@ class McpUndeclaredArgumentTest : RouteIntegrationTest() {
 
     @Test
     fun `an old field inside an FX item is refused with its path`() {
-        val fx = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","propertyName":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{},"size":0.5}"""
+        val fx = """{"targetType":"fixture","targetKey":"foh-1","fxType":"Pulse","family":"intensity","attribute":"dimmer","cycle":1.0,"blendMode":"OVERRIDE","parameters":{},"size":0.5}"""
         val result = callTool("create_look", """{"name":"Throb","fx":[$fx]}""")
         assertTrue(result.isError(), result.text())
         assertTrue("'fx[0].size' is not an argument of create_look" in result.text(), result.text())
@@ -79,6 +79,20 @@ class McpUndeclaredArgumentTest : RouteIntegrationTest() {
             assertFalse("reconnect" in result.text(), "$tool: a retired argument is no sign of a stale tool list")
         }
     }
+
+    @Test
+    fun `an old attribute argument is refused, naming what replaced it`() {
+        for ((tool, args, path, now) in listOf(
+            Quad("set_programmer", """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"200"}]}""", "values[0].propertyName", "attribute"),
+            Quad("list_fixture_types", """{"properties":true}""", "properties", "attributes"),
+        )) {
+            val result = callTool(tool, args)
+            assertTrue(result.isError(), "$tool: ${result.text()}")
+            assertTrue("'$path' is not an argument of $tool: it is '$now' now" in result.text(), "$tool → ${result.text()}")
+        }
+    }
+
+    private data class Quad(val tool: String, val args: String, val path: String, val now: String)
 
     @Test
     fun `a tool left to check its own arguments does, every problem at once`() {

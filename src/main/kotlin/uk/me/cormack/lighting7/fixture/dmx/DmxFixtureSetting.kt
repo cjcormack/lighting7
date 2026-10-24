@@ -11,7 +11,7 @@ interface DmxFixtureSettingValue: FixtureSettingValue {
     val level: UByte
 
     /**
-     * On a loadable setting (`@FixtureProperty(media =)`), whether this option is a slot something
+     * On a loadable setting (`@FixtureAttribute(media =)`), whether this option is a slot something
      * can be loaded into. An open hole in a wheel, or a media frame's out position, is not: nothing
      * fitted there would ever reach the beam. Unread on every other setting.
      */
@@ -68,7 +68,7 @@ interface DmxFixtureRingSettingValue : DmxFixtureSettingValue {
 /**
  * A position of a **setting-backed STROBE channel** (fixture optics plan D12): what its band does
  * to the light — the option's band runs from its level to the next option's. The same vocabulary a
- * STROBE slider declares per band with `@FixtureProperty(strobe = […])` ([StrobeBand]): a flashing
+ * STROBE slider declares per band with `@FixtureAttribute(strobe = […])` ([StrobeBand]): a flashing
  * kind ([StrobeKind.flashes]) declares its rate, [hzMin] at the band's first value and [hzMax] at
  * its last (`hzMin <= hzMax`, swapped where [strobeInverted]); [StrobeKind.CLOSED] and
  * [StrobeKind.OPEN] declare none. `StrobeBandsTest` enforces it on every STROBE setting.

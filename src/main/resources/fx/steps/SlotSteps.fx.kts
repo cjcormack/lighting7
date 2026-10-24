@@ -4,7 +4,7 @@ name: Slot Steps
 family: steps
 outputType: STEPS
 fxMode: STANDARD
-compatibleProperties: [setting]
+compatibleAttributes: [setting]
 parameters:
   - name: slots
     type: slotList

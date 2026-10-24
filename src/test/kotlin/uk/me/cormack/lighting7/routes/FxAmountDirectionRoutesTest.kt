@@ -60,7 +60,7 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
 
         val id = jsonClient().add(
             AddFxRequest(
-                fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
+                fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer",
                 amount = 0.4, direction = "bounce", runs = 3,
             ),
         ).body<AddFxResponse>().fxId
@@ -82,10 +82,10 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         for (request in listOf(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", amount = 1.5),
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", amount = -0.1),
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", direction = "SIDEWAYS"),
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", runs = 0),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", amount = 1.5),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", amount = -0.1),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", direction = "SIDEWAYS"),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", runs = 0),
         )) {
             assertEquals(HttpStatusCode.BadRequest, client.add(request).status, request.toString())
         }
@@ -97,7 +97,7 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
-        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer"))
+        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
         val before = effect(id)
 
@@ -132,7 +132,7 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
         fun look(name: String, effect: LookFxDto) = CreateLookRequest(name = name, fx = listOf(effect))
         val pulse = LookFxDto(
             targetType = "fixture", targetKey = "hex-1", fxType = "Pulse", family = "intensity",
-            propertyName = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
+            attribute = "dimmer", cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
         )
 
         val created = client.post(base) {
@@ -163,7 +163,7 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", propertyName = "dimmer", cycle = 1.0,
+            fxType = "Pulse", family = "intensity", attribute = "dimmer", cycle = 1.0,
             blendMode = "OVERRIDE", order = "NORMAL", amount = 0.3, direction = "BOUNCE", runs = 4,
         )
         val target = FxTargetFactory.forFixture("hex-1", "dimmer", null, state.show.fixtures.untypedGroupableFixture("hex-1"))
@@ -206,7 +206,7 @@ class FxAmountDirectionRoutesTest : RouteIntegrationTest() {
         val stackId = ProgrammerRouteTestSupport.createStack(client, projectId, "stack-a")
         val added = client.add(
             AddFxRequest(
-                fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer",
+                fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer",
                 amount = 0.7, direction = "BACKWARD", runs = 5, programmerOwned = true,
             ),
         )

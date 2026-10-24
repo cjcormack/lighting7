@@ -12,7 +12,7 @@ import { SpeedMasterSelect } from "@/components/fx/SpeedMasterSelect"
 import { useGroupListQuery } from "@/store/groups"
 import { usePatchListQuery } from "@/store/patches"
 import { useProjectCueStackListQuery } from "@/store/cueStacks"
-import { useRigProperties, useTargetProperties, type AvailableProperty } from "@/hooks/useTargetProperties"
+import { useRigAttributes, useTargetAttributes, type AvailableAttribute } from "@/hooks/useTargetAttributes"
 import {
   COLOUR_AXES,
   COLOUR_AXIS_LONG_LABELS,
@@ -77,9 +77,9 @@ interface BindingTargetPickerProps {
 type TargetKind = Exclude<BindingTarget["type"], "strip" | "unknown">
 
 const CONTINUOUS_KINDS: TargetKind[] = [
-  "fixtureProperty",
-  "groupProperty",
-  "selectionProperty",
+  "fixtureAttribute",
+  "groupAttribute",
+  "selectionAttribute",
   "selectionFan",
   "speedMasterBpm",
   "grandMasterFader",
@@ -117,9 +117,9 @@ const BUTTON_KINDS: TargetKind[] = [
 ]
 
 const KIND_LABELS: Record<TargetKind, string> = {
-  fixtureProperty: "Fixture attribute",
-  groupProperty: "Group attribute",
-  selectionProperty: "Selection — attribute",
+  fixtureAttribute: "Fixture attribute",
+  groupAttribute: "Group attribute",
+  selectionAttribute: "Selection — attribute",
   selectionFan: "Selection — fan",
   cueStackGo: "Cue stack — Go",
   cueStackBack: "Cue stack — Back",
@@ -172,7 +172,7 @@ export function BindingTargetPicker({
   // The rig union is the only vocabulary a target-*less* binding has: neither a selection property
   // nor an encoder bank names a head to ask. A property no selected head declares simply drops its
   // move (D3), which is a fact about the selection rather than a bad binding.
-  const rigProperties = useRigProperties()
+  const rigAttributes = useRigAttributes()
   // The four uuid-addressed variants need a library to pick from; one owner for the lists and for
   // the name they resolve to, shared with the inspector's binding card.
   const records = useRecordBindingOptions(projectId)
@@ -191,9 +191,9 @@ export function BindingTargetPicker({
     () => (groups ?? []).map((g) => g.name),
     [groups],
   )
-  const continuousProperties = useMemo(
-    () => rigProperties.filter((p) => p.continuous),
-    [rigProperties],
+  const continuousAttributes = useMemo(
+    () => rigAttributes.filter((p) => p.continuous),
+    [rigAttributes],
   )
 
   // A strip row edits its group and nothing else — that is what the inspector's *Change group*
@@ -243,7 +243,7 @@ export function BindingTargetPicker({
           fixtureOptions={fixtureOptions}
           groupOptions={groupOptions}
           stacks={stacks ?? []}
-          properties={continuousProperties}
+          attributes={continuousAttributes}
           records={records}
         />
       ) : (
@@ -257,9 +257,9 @@ export function BindingTargetPicker({
       {/* D10: a selection property arms takeover exactly as a fixed one does — against the
           selection's common value, and against nothing when it is mixed. */}
       {continuous &&
-        (value.type === "fixtureProperty" ||
-          value.type === "groupProperty" ||
-          value.type === "selectionProperty") && (
+        (value.type === "fixtureAttribute" ||
+          value.type === "groupAttribute" ||
+          value.type === "selectionAttribute") && (
         <div className="space-y-1.5">
           <Label className="text-xs">Takeover policy</Label>
           <Select
@@ -361,32 +361,32 @@ function ColourAxisField({
 /**
  * The axis field for a fixture or group target, whose property is a free-text `Input` rather than
  * a pick from a list — so whether it names a colour is a per-target lookup, and `TargetBody` is an
- * if-chain a hook cannot sit inside. A component so `useTargetProperties` can be called once, here.
+ * if-chain a hook cannot sit inside. A component so `useTargetAttributes` can be called once, here.
  */
 function TargetAxisField({
   target,
-  propertyName,
+  attribute,
   value,
   onChange,
 }: {
   target: { type: "fixture" | "group"; key: string }
-  propertyName: string
+  attribute: string
   value: ColourAxis | null | undefined
   onChange: (axis: ColourAxis) => void
 }) {
-  const { properties } = useTargetProperties(target)
-  if (properties.find((p) => p.name === propertyName)?.type !== "colour") return null
+  const { attributes } = useTargetAttributes(target)
+  if (attributes.find((p) => p.name === attribute)?.type !== "colour") return null
   return <ColourAxisField value={value} onChange={onChange} />
 }
 
-function PropertyField({
+function AttributeField({
   value,
   onChange,
-  properties,
+  attributes,
 }: {
   value: string
   onChange: (v: string) => void
-  properties: { name: string; displayName: string }[]
+  attributes: { name: string; displayName: string }[]
 }) {
   return (
     <div className="space-y-1.5">
@@ -394,7 +394,7 @@ function PropertyField({
       <Select value={value} onValueChange={onChange}>
         <SelectTrigger><SelectValue placeholder="Select…" /></SelectTrigger>
         <SelectContent>
-          {properties.map((p) => (
+          {attributes.map((p) => (
             <SelectItem key={p.name} value={p.name}>{p.displayName}</SelectItem>
           ))}
         </SelectContent>
@@ -410,7 +410,7 @@ function TargetBody({
   fixtureOptions,
   groupOptions,
   stacks,
-  properties,
+  attributes,
   records,
 }: {
   kind: TargetKind
@@ -420,22 +420,22 @@ function TargetBody({
   fixtureOptions: { key: string; label: string }[]
   groupOptions: string[]
   stacks: { id: number; name: string }[]
-  properties: AvailableProperty[]
+  attributes: AvailableAttribute[]
 }) {
   // Changing the property drops the axis: a colour → dimmer edit that kept `saturation` would save
   // a 400 (`BINDING_AXIS_NEEDS_COLOUR`), and hue is the right default for a colour anyway. Changing
   // the *fixture* or *group* drops it for the same reason — the same property name is a colour on
   // one head and a slider on the next, so the swap can strand an axis the axis field then hides.
-  const isColour = (name: string) => properties.find((p) => p.name === name)?.type === "colour"
-  if (kind === "selectionProperty" && value.type === "selectionProperty") {
+  const isColour = (name: string) => attributes.find((p) => p.name === name)?.type === "colour"
+  if (kind === "selectionAttribute" && value.type === "selectionAttribute") {
     return (
       <div className="space-y-2">
-        <PropertyField
-          value={value.propertyName}
-          onChange={(propertyName) => onChange(withAxis({ ...value, propertyName }, null))}
-          properties={properties}
+        <AttributeField
+          value={value.attribute}
+          onChange={(attribute) => onChange(withAxis({ ...value, attribute }, null))}
+          attributes={attributes}
         />
-        {isColour(value.propertyName) && (
+        {isColour(value.attribute) && (
           <ColourAxisField
             value={value.colourAxis}
             onChange={(axis) => onChange(withAxis(value, axis))}
@@ -474,12 +474,12 @@ function TargetBody({
   if (kind === "encoderBankSet" && value.type === "encoderBankSet") {
     return (
       <div className="space-y-2">
-        <PropertyField
-          value={value.propertyName}
-          onChange={(propertyName) => onChange(withAxis({ ...value, propertyName }, null))}
-          properties={properties}
+        <AttributeField
+          value={value.attribute}
+          onChange={(attribute) => onChange(withAxis({ ...value, attribute }, null))}
+          attributes={attributes}
         />
-        {isColour(value.propertyName) && (
+        {isColour(value.attribute) && (
           <ColourAxisField
             value={value.colourAxis}
             onChange={(axis) => onChange(withAxis(value, axis))}
@@ -521,7 +521,7 @@ function TargetBody({
     )
   }
   if (kind === "clearSelection" || kind === "locateSelection") return null
-  if (kind === "fixtureProperty" && value.type === "fixtureProperty") {
+  if (kind === "fixtureAttribute" && value.type === "fixtureAttribute") {
     return (
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
@@ -541,21 +541,21 @@ function TargetBody({
         <div className="space-y-1.5">
           <Label className="text-xs">Attribute</Label>
           <Input
-            value={value.propertyName}
-            onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
+            value={value.attribute}
+            onChange={(e) => onChange(withAxis({ ...value, attribute: e.target.value }, null))}
             placeholder="dimmer"
           />
         </div>
         <TargetAxisField
           target={{ type: "fixture", key: value.fixtureKey }}
-          propertyName={value.propertyName}
+          attribute={value.attribute}
           value={value.colourAxis}
           onChange={(axis) => onChange(withAxis(value, axis))}
         />
       </div>
     )
   }
-  if (kind === "groupProperty" && value.type === "groupProperty") {
+  if (kind === "groupAttribute" && value.type === "groupAttribute") {
     return (
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1.5">
@@ -575,14 +575,14 @@ function TargetBody({
         <div className="space-y-1.5">
           <Label className="text-xs">Attribute</Label>
           <Input
-            value={value.propertyName}
-            onChange={(e) => onChange(withAxis({ ...value, propertyName: e.target.value }, null))}
+            value={value.attribute}
+            onChange={(e) => onChange(withAxis({ ...value, attribute: e.target.value }, null))}
             placeholder="dimmer"
           />
         </div>
         <TargetAxisField
           target={{ type: "group", key: value.groupName }}
-          propertyName={value.propertyName}
+          attribute={value.attribute}
           value={value.colourAxis}
           onChange={(axis) => onChange(withAxis(value, axis))}
         />
@@ -664,7 +664,7 @@ function TargetBody({
           fixtureOptions={fixtureOptions}
           groupOptions={groupOptions}
           stacks={stacks}
-          properties={properties}
+          attributes={attributes}
           records={records}
         />
         <div className="space-y-1.5">
@@ -972,10 +972,10 @@ function defaultForKind(
   stacks: { id: number; name: string }[] = [],
 ): BindingTarget {
   switch (kind) {
-    case "fixtureProperty":
-      return { type: "fixtureProperty", fixtureKey: fixtures[0]?.key ?? "", propertyName: "dimmer" }
-    case "groupProperty":
-      return { type: "groupProperty", groupName: groups[0] ?? "", propertyName: "dimmer" }
+    case "fixtureAttribute":
+      return { type: "fixtureAttribute", fixtureKey: fixtures[0]?.key ?? "", attribute: "dimmer" }
+    case "groupAttribute":
+      return { type: "groupAttribute", groupName: groups[0] ?? "", attribute: "dimmer" }
     case "cueStackGo":
       return { type: "cueStackGo", stackId: stacks[0]?.id ?? 0 }
     case "cueStackBack":
@@ -991,7 +991,7 @@ function defaultForKind(
     case "flash":
       return {
         type: "flash",
-        target: { type: "groupProperty", groupName: groups[0] ?? "", propertyName: "dimmer" },
+        target: { type: "groupAttribute", groupName: groups[0] ?? "", attribute: "dimmer" },
         max: 255,
       }
     case "blackout":
@@ -1004,14 +1004,14 @@ function defaultForKind(
       return { type: "stackFxAmount", stackId: stacks[0]?.id ?? 0 }
     case "setBank":
       return { type: "setBank", deviceTypeKey: "", bank: "" }
-    // `dimmer` is `EncoderBankState.DEFAULT_PROPERTY` and the one property every rig has, so both
+    // `dimmer` is `EncoderBankState.DEFAULT_ATTRIBUTE` and the one property every rig has, so both
     // of these start somewhere the desk can already dispatch.
-    case "selectionProperty":
-      return { type: "selectionProperty", propertyName: "dimmer" }
+    case "selectionAttribute":
+      return { type: "selectionAttribute", attribute: "dimmer" }
     case "selectionFan":
       return { type: "selectionFan", axis: "PAN" }
     case "encoderBankSet":
-      return { type: "encoderBankSet", propertyName: "dimmer" }
+      return { type: "encoderBankSet", attribute: "dimmer" }
     case "selectTarget":
       return {
         type: "selectTarget",

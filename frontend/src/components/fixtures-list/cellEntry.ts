@@ -52,7 +52,7 @@ export type { CellActionCopy, CellKeyboardPermission } from '../sheet/cellEntry'
  * rely on there being no cells to type at. And `useCellWriters` has no arm for Output or for a focused
  * *template* layer — `ProgrammerGrid` supplies a `live` context for both — so a commit taken in
  * either would put literals into Local under a grid drawing itself as a read. That is the hole
- * `PropertyCell`'s `disabled` and `SpreadPopover`'s template gate each close for their own path, and
+ * `AttributeCell`'s `disabled` and `SpreadPopover`'s template gate each close for their own path, and
  * this closes it for the keyboard and the bar.
  *
  *  - **Local**, or no scope at all — the two plain list routes, whose cells write straight to the

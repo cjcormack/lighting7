@@ -250,16 +250,16 @@ class SurfaceInputRouter(
             binding.id, binding.controlId, value7Bit.toInt(), binding.target::class.simpleName,
         )
         when (val target = binding.target) {
-            is BindingTarget.FixtureProperty ->
-                actions.writeFixtureProperty(target.fixtureKey, target.propertyName, value7Bit, target.colourAxis)
-            is BindingTarget.GroupProperty ->
-                actions.writeGroupProperty(target.groupName, target.propertyName, value7Bit, target.colourAxis)
+            is BindingTarget.FixtureAttribute ->
+                actions.writeFixtureAttribute(target.fixtureKey, target.attribute, value7Bit, target.colourAxis)
+            is BindingTarget.GroupAttribute ->
+                actions.writeGroupAttribute(target.groupName, target.attribute, value7Bit, target.colourAxis)
             is BindingTarget.SpeedMasterBpm ->
                 actions.writeSpeedMasterBpm(target.masterUuid, target.minBpm, target.maxBpm, value7Bit)
             BindingTarget.GrandMasterFader -> actions.writeGrandMaster(value7Bit)
             is BindingTarget.StackFxAmount -> actions.writeStackFxAmount(target.stackId, target.stackUuid, value7Bit)
-            is BindingTarget.SelectionProperty ->
-                actions.writeSelectionProperty(target.propertyName, value7Bit, target.colourAxis)
+            is BindingTarget.SelectionAttribute ->
+                actions.writeSelectionAttribute(target.attribute, value7Bit, target.colourAxis)
             is BindingTarget.SelectionFan -> actions.writeSelectionFan(target.axis, value7Bit)
             is BindingTarget.Strip -> logger.warn(
                 "Strip binding {} reached continuous dispatch — resolve should have derived it",
@@ -296,7 +296,7 @@ class SurfaceInputRouter(
             // Applies to the device the button is on, so the payload names no device and a
             // button can never be stranded pointing at a surface that isn't attached.
             is BindingTarget.EncoderBankSet ->
-                encoderBankState.set(deviceTypeKey, EncoderBankSelection(target.propertyName, target.colourAxis))
+                encoderBankState.set(deviceTypeKey, EncoderBankSelection(target.attribute, target.colourAxis))
             // Never dispatched: resolve() derives a strip to the target of the control the event
             // arrived on. Reaching here means the strip arm failed to fire.
             is BindingTarget.Strip -> logger.warn(
@@ -346,11 +346,11 @@ class SurfaceInputRouter(
                 if (!newlyPressed) return  // retrigger while held
                 val max = target.max.toUByte()
                 when (val inner = target.target) {
-                    is BindingTarget.FixtureProperty -> actions.flashFixturePropertyPress(
-                        inner.fixtureKey, inner.propertyName, max,
+                    is BindingTarget.FixtureAttribute -> actions.flashFixtureAttributePress(
+                        inner.fixtureKey, inner.attribute, max,
                     )
-                    is BindingTarget.GroupProperty -> actions.flashGroupPropertyPress(
-                        inner.groupName, inner.propertyName, max,
+                    is BindingTarget.GroupAttribute -> actions.flashGroupAttributePress(
+                        inner.groupName, inner.attribute, max,
                     )
                     else -> {
                         // Forbidden by Flash's init block — defensive log.
@@ -358,21 +358,21 @@ class SurfaceInputRouter(
                     }
                 }
             }
-            is BindingTarget.FixtureProperty,
-            is BindingTarget.GroupProperty,
-            is BindingTarget.SelectionProperty,
+            is BindingTarget.FixtureAttribute,
+            is BindingTarget.GroupAttribute,
+            is BindingTarget.SelectionAttribute,
                 -> {
                 // A button press on a continuous target = write full value (max "1" in 7-bit).
                 // Behaves like a momentary full-on without release handling. v1 design choice:
                 // these targets on buttons are equivalent to Flash with max=255 but without the
                 // release step — operator should use Flash if they want that semantics.
                 when (target) {
-                    is BindingTarget.FixtureProperty ->
-                        actions.writeFixtureProperty(target.fixtureKey, target.propertyName, 127u, target.colourAxis)
-                    is BindingTarget.GroupProperty ->
-                        actions.writeGroupProperty(target.groupName, target.propertyName, 127u, target.colourAxis)
-                    is BindingTarget.SelectionProperty ->
-                        actions.writeSelectionProperty(target.propertyName, 127u, target.colourAxis)
+                    is BindingTarget.FixtureAttribute ->
+                        actions.writeFixtureAttribute(target.fixtureKey, target.attribute, 127u, target.colourAxis)
+                    is BindingTarget.GroupAttribute ->
+                        actions.writeGroupAttribute(target.groupName, target.attribute, 127u, target.colourAxis)
+                    is BindingTarget.SelectionAttribute ->
+                        actions.writeSelectionAttribute(target.attribute, 127u, target.colourAxis)
                 }
             }
         }
@@ -409,11 +409,11 @@ class SurfaceInputRouter(
         if (target !is BindingTarget.Flash) return
         if (!flashTracker.clearPress(binding.id)) return
         when (val inner = target.target) {
-            is BindingTarget.FixtureProperty -> actions.flashFixturePropertyRelease(
-                inner.fixtureKey, inner.propertyName,
+            is BindingTarget.FixtureAttribute -> actions.flashFixtureAttributeRelease(
+                inner.fixtureKey, inner.attribute,
             )
-            is BindingTarget.GroupProperty -> actions.flashGroupPropertyRelease(
-                inner.groupName, inner.propertyName,
+            is BindingTarget.GroupAttribute -> actions.flashGroupAttributeRelease(
+                inner.groupName, inner.attribute,
             )
             else -> Unit
         }

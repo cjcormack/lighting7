@@ -152,12 +152,12 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
             )
         }
         .partition {
-            engine.programmer.publishability(it.target, it.propertyName) ==
+            engine.programmer.publishability(it.target, it.attribute) ==
                 ProgrammerWriter.Publishability.PUBLISHABLE
         }
     if (assignments.isEmpty()) {
         val parkMasked = unpublishable.any {
-            engine.programmer.publishability(it.target, it.propertyName) ==
+            engine.programmer.publishability(it.target, it.attribute) ==
                 ProgrammerWriter.Publishability.PARK_MASKED
         }
         return LocateApplyResult(emptyList(), parkMasked = parkMasked)
@@ -172,22 +172,22 @@ private fun applyLocate(state: State, target: TargetRef): LocateApplyResult {
     val sourceGroup = (target as? TargetRef.Group)?.key
 
     val writes = try {
-        engine.programmer.writeProperties(
+        engine.programmer.writeAttributes(
             ProgrammerOwner.LOCATE,
             assignments.map {
-                ProgrammerWriter.PropertyWrite(it.target, it.propertyName, it.value, sourceGroup)
+                ProgrammerWriter.AttributeWrite(it.target, it.attribute, it.value, sourceGroup)
             },
             // Momentary owner: don't absorb the sideband — release must reveal what was
             // under it (an unpark hand-down, a raw channel write).
             absorbSideband = false,
         ).zip(assignments) { resolved, assignment ->
             if (resolved.isEmpty()) null
-            else LocateManager.LocateWrite(assignment.target.targetKey, assignment.propertyName)
+            else LocateManager.LocateWrite(assignment.target.targetKey, assignment.attribute)
         }.filterNotNull()
     } catch (_: Exception) {
         // The store puts may have landed before the publish failed — record every assignment
         // so toggle-off can still release them (releasing a never-written property is a no-op).
-        assignments.map { LocateManager.LocateWrite(it.target.targetKey, it.propertyName) }
+        assignments.map { LocateManager.LocateWrite(it.target.targetKey, it.attribute) }
     }
     return LocateApplyResult(writes.distinct())
 }
@@ -229,11 +229,11 @@ private fun clearLocateWrites(state: State, writes: List<LocateManager.LocateWri
         } catch (_: IllegalStateException) {
             return@mapNotNull null
         }
-        fixture to write.propertyName
+        fixture to write.attribute
     }
     if (clears.isEmpty()) return
     try {
-        state.show.fxEngine.programmer.clearProperties(ProgrammerOwner.LOCATE, clears)
+        state.show.fxEngine.programmer.clearAttributes(ProgrammerOwner.LOCATE, clears)
     } catch (_: Exception) {
         // Bookkeeping is already updated; a throw here would strand the manager mid-toggle.
         // Unpublished channels cascade on the next effect tick or cue-layer republish.

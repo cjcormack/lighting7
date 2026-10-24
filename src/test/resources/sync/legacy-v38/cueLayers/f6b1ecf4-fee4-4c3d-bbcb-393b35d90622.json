@@ -1,0 +1,13 @@
+{
+  "attributeMask": "COLOUR",
+  "cueUuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220",
+  "paletteUuid": "28331295-cc48-4af6-9fc9-8c12c81e8f26",
+  "sortOrder": 4,
+  "targets": [
+    {
+      "key": "hex-2",
+      "type": "fixture"
+    }
+  ],
+  "uuid": "f6b1ecf4-fee4-4c3d-bbcb-393b35d90622"
+}

@@ -51,7 +51,7 @@ data class FxRegistration(
     /** Parameter schema for UI and API */
     val parameters: List<ParameterInfo> = emptyList(),
     /** Which fixture properties this effect can target */
-    val compatibleProperties: List<String>,
+    val compatibleAttributes: List<String>,
     /** Whether this is built-in or user-created */
     val source: FxSource = FxSource.BUILT_IN,
     /** Database ID of the fx_definition (for USER source) */
@@ -80,7 +80,7 @@ data class FxTypeInfo(
     val outputType: String,
     val fxMode: String = "STANDARD",
     val parameters: List<ParameterInfo>,
-    val compatibleProperties: List<String>,
+    val compatibleAttributes: List<String>,
     val source: String? = null,
     val sourceDefinitionId: Int? = null,
     val script: String? = null,
@@ -188,7 +188,7 @@ class FxRegistry {
                     outputType = reg.outputType.name,
                     fxMode = reg.fxMode.name,
                     parameters = reg.parameters,
-                    compatibleProperties = reg.compatibleProperties,
+                    compatibleAttributes = reg.compatibleAttributes,
                     source = reg.source.name,
                     sourceDefinitionId = reg.sourceDefinitionId,
                     script = reg.script,

@@ -12,9 +12,9 @@ import {
   isCompleteSpreadEndpoint,
   serializeSpreadEndpoint,
   spreadEditorKind,
-  spreadPropertiesFor,
+  spreadAttributesFor,
 } from './spreadIntent'
-import { PALETTE_PROPERTIES, parsePaletteIntent, serializePaletteIntent, palettePropertyFor } from './paletteIntent'
+import { PALETTE_ATTRIBUTES, parsePaletteIntent, serializePaletteIntent, paletteAttributeFor } from './paletteIntent'
 import { serializePaletteRef } from '@/components/fx/colourUtils'
 
 /**
@@ -46,33 +46,33 @@ describe('spreadIntent', () => {
   })
 
   it('offers the palette vocabulary per family, minus the switch', () => {
-    const offered = (['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'] as const).flatMap((family) => spreadPropertiesFor(family))
-    const expected = PALETTE_PROPERTIES.filter((p) => p.intent !== 'switch')
-    expect(offered.map((p) => p.propertyName).sort()).toEqual(expected.map((p) => p.propertyName).sort())
-    expect(offered.some((p) => p.propertyName === 'prism')).toBe(false)
+    const offered = (['INTENSITY', 'POSITION', 'COLOUR', 'BEAM'] as const).flatMap((family) => spreadAttributesFor(family))
+    const expected = PALETTE_ATTRIBUTES.filter((p) => p.intent !== 'switch')
+    expect(offered.map((p) => p.attribute).sort()).toEqual(expected.map((p) => p.attribute).sort())
+    expect(offered.some((p) => p.attribute === 'prism')).toBe(false)
     // The first of each family is the default the tab lands on.
-    expect(spreadPropertiesFor('INTENSITY')[0].propertyName).toBe('dimmer')
-    expect(spreadPropertiesFor('COLOUR')[0].propertyName).toBe('rgbColour')
-    expect(spreadPropertiesFor('POSITION')[0].propertyName).toBe('position')
-    expect(spreadPropertiesFor('BEAM')[0].propertyName).toBe('zoom')
+    expect(spreadAttributesFor('INTENSITY')[0].attribute).toBe('dimmer')
+    expect(spreadAttributesFor('COLOUR')[0].attribute).toBe('rgbColour')
+    expect(spreadAttributesFor('POSITION')[0].attribute).toBe('position')
+    expect(spreadAttributesFor('BEAM')[0].attribute).toBe('zoom')
   })
 
   it('gives each property the editor of its intent, and defaults its endpoints in that shape', () => {
-    for (const property of PALETTE_PROPERTIES.filter((p) => p.intent !== 'switch')) {
-      const kind = spreadEditorKind(property)
-      expect(kind).toBe(property.intent)
-      const { from, to } = defaultSpreadEndpoints(property)
+    for (const attribute of PALETTE_ATTRIBUTES.filter((p) => p.intent !== 'switch')) {
+      const kind = spreadEditorKind(attribute)
+      expect(kind).toBe(attribute.intent)
+      const { from, to } = defaultSpreadEndpoints(attribute)
       expect(from.kind).toBe(kind)
       expect(to.kind).toBe(kind)
       expect(isCompleteSpreadEndpoint(from)).toBe(true)
       expect(isCompleteSpreadEndpoint(to)).toBe(true)
     }
     // An emitter's default runs the whole byte; a level the whole percent.
-    expect(defaultSpreadEndpoints(palettePropertyFor('white')!)).toEqual({ from: { kind: 'level', value: 0 }, to: { kind: 'level', value: 255 } })
-    expect(defaultSpreadEndpoints(palettePropertyFor('dimmer')!)).toEqual({ from: { kind: 'percent', value: 0 }, to: { kind: 'percent', value: 100 } })
+    expect(defaultSpreadEndpoints(paletteAttributeFor('white')!)).toEqual({ from: { kind: 'level', value: 0 }, to: { kind: 'level', value: 255 } })
+    expect(defaultSpreadEndpoints(paletteAttributeFor('dimmer')!)).toEqual({ from: { kind: 'percent', value: 0 }, to: { kind: 'percent', value: 100 } })
     // A position is centre-relative (venue-visit plan D3), so the default swings about 0 — the
     // centre of travel on every head.
-    expect(defaultSpreadEndpoints(palettePropertyFor('position')!)).toEqual({
+    expect(defaultSpreadEndpoints(paletteAttributeFor('position')!)).toEqual({
       from: { kind: 'position', pan: -16, tilt: 0, unit: 'centre' },
       to: { kind: 'position', pan: 16, tilt: 0, unit: 'centre' },
     })

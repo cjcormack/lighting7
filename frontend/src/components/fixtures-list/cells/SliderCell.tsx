@@ -119,7 +119,7 @@ export const SliderCell = memo(function SliderCell({
   sourceKeys,
 }: SliderCellProps) {
   const first = resolutions[0]
-  const range = first.kind === 'slider' ? { min: first.property.min, max: first.property.max } : { min: 0, max: 255 }
+  const range = first.kind === 'slider' ? { min: first.attribute.min, max: first.attribute.max } : { min: 0, max: 255 }
   const current = value.max
 
   const commit = useCallback(
@@ -154,12 +154,12 @@ export const SliderCell = memo(function SliderCell({
   // The read-out: the byte, and whether every head in the batch takes the same range of them.
   const heads = batch ?? { count: 1, skipped: 0, resolutions }
   const sliderHeads = heads.resolutions.filter((r) => r.kind === 'slider')
-  const sameRange = sliderHeads.every((r) => r.property.min === range.min && r.property.max === range.max)
+  const sameRange = sliderHeads.every((r) => r.attribute.min === range.min && r.attribute.max === range.max)
   const rangeLine =
     `${current} of 255 · ${range.min}–${range.max}` +
     (heads.count > 1 ? (sameRange ? ' on every head' : ' on the first head · ranges differ') : '')
   const skipped = skippedLine(heads.skipped, label.toLowerCase())
-  const family = first.kind === 'slider' ? familyForCategory(first.property.category) : 'INTENSITY'
+  const family = first.kind === 'slider' ? familyForCategory(first.attribute.category) : 'INTENSITY'
   const bandTargets = heads.targets ?? NO_TARGETS
   const save = usePaletteSave(projectId, family, bandTargets)
 
@@ -222,7 +222,7 @@ export const SliderCell = memo(function SliderCell({
         <PaletteBands
           projectId={projectId}
           family={family}
-          property={first.kind === 'slider' ? first.property.name : ''}
+          attribute={first.kind === 'slider' ? first.attribute.name : ''}
           targets={bandTargets}
           onSave={save.onSave}
         >

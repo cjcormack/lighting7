@@ -60,7 +60,7 @@ const FLICKER: FxLibraryEntry = {
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
   timingSource: 'WALL_CLOCK',
-  compatibleProperties: ['dimmer'],
+  compatibleAttributes: ['dimmer'],
   parameters: [
     { name: 'flickerDurationMs', type: 'int', defaultValue: '200', description: 'How long one flicker lasts' },
     { name: 'max', type: 'ubyte', defaultValue: '255', description: 'The brightest a flicker reaches' },
@@ -101,7 +101,7 @@ function fields(entry: FxLibraryEntry, d: FxDraft, scope: FxScope = SCOPE) {
       draft={d}
       scope={scope}
       extendedChannels={undefined}
-      settingProperty={undefined}
+      settingAttribute={undefined}
       readOnly={false}
       set={set}
       setParam={setParam}

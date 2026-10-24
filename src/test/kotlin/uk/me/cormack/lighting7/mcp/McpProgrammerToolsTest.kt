@@ -72,7 +72,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     private fun programmerEntries(): List<Triple<String, String, String>> =
         ok("get_current_state", """{"include":["programmer"]}""")["programmer"]!!.jsonObject["entries"]!!.jsonArray.map {
             val entry = it.jsonObject
-            Triple(entry["targetKey"]!!.jsonPrimitive.content, entry["propertyName"]!!.jsonPrimitive.content, entry["value"]!!.jsonPrimitive.content)
+            Triple(entry["targetKey"]!!.jsonPrimitive.content, entry["attribute"]!!.jsonPrimitive.content, entry["value"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -80,7 +80,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         patchRig()
         val set = ok(
             "set_programmer",
-            """{"targets":[{"type":"group","key":"FOH"},{"type":"fixture","key":"foh-3"}],"values":[{"propertyName":"dimmer","value":"pct:50"}]}""",
+            """{"targets":[{"type":"group","key":"FOH"},{"type":"fixture","key":"foh-3"}],"values":[{"attribute":"dimmer","value":"pct:50"}]}""",
         )
         assertEquals(3, set["written"]!!.jsonArray.size, "$set")
         assertEquals(listOf(128, 128, 128), listOf(level(1), level(2), level(3)))
@@ -112,7 +112,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         assertTrue(patched.success, patched.result)
         val set = ok(
             "set_programmer",
-            """{"targets":[{"type":"fixture","key":"shehds-1"}],"values":[{"propertyName":"rgbColour","value":"#0000ff"}]}""",
+            """{"targets":[{"type":"fixture","key":"shehds-1"}],"values":[{"attribute":"rgbColour","value":"#0000ff"}]}""",
         )
         assertEquals(
             listOf("shehds-1.zone-1", "shehds-1.zone-2", "shehds-1.zone-3"),
@@ -128,21 +128,21 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         patchRig()
         val set = ok(
             "set_programmer",
-            """{"targets":[{"type":"fixture","key":"foh-1"},{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"rgbColour","value":"#ff0000"}]}""",
+            """{"targets":[{"type":"fixture","key":"foh-1"},{"type":"fixture","key":"hex-1"}],"values":[{"attribute":"rgbColour","value":"#ff0000"}]}""",
         )
         assertEquals(listOf("hex-1"), set["written"]!!.jsonArray.map { it.jsonObject["targetKey"]!!.jsonPrimitive.content })
         val skip = set["skipped"]!!.jsonArray.single().jsonObject
         assertEquals("foh-1", skip["targetKey"]!!.jsonPrimitive.content)
-        assertEquals("rgbColour", skip["propertyName"]!!.jsonPrimitive.content)
+        assertEquals("rgbColour", skip["attribute"]!!.jsonPrimitive.content)
 
         ok("clear_programmer", "{}")
         for ((arguments, expected) in listOf(
-            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"gobo","value":"cone"}]}""" to "no selected head can take gobo",
-            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"#ff0000"}]}""" to "is not a value dimmer takes",
-            """{"targets":[{"type":"fixture","key":"nope"}],"values":[{"propertyName":"dimmer","value":"pct:50"}]}""" to "no fixture 'nope'",
-            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"pct:50"},{"propertyName":"dimmer","value":"pct:10"}]}""" to "already set by values[0]",
-            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"pct:50"}],"fadeSeconds":-1}""" to "fadeSeconds must be between",
-            """{"values":[{"propertyName":"dimmer","value":"pct:50"}]}""" to "Missing 'targets'",
+            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"gobo","value":"cone"}]}""" to "no selected head can take gobo",
+            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"dimmer","value":"#ff0000"}]}""" to "is not a value dimmer takes",
+            """{"targets":[{"type":"fixture","key":"nope"}],"values":[{"attribute":"dimmer","value":"pct:50"}]}""" to "no fixture 'nope'",
+            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"dimmer","value":"pct:50"},{"attribute":"dimmer","value":"pct:10"}]}""" to "already set by values[0]",
+            """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"dimmer","value":"pct:50"}],"fadeSeconds":-1}""" to "fadeSeconds must be between",
+            """{"values":[{"attribute":"dimmer","value":"pct:50"}]}""" to "Missing 'targets'",
         )) {
             val refused = call("set_programmer", arguments)
             assertFalse(refused.success, arguments)
@@ -173,19 +173,19 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         // Hex: R G B on 11-13, amber 14, white 15, UV 16. MAC: colour wheel 32, gobo 33, pan 37, tilt 39.
         fun hex() = (11..16).map(::level)
 
-        val colour = ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"rgbColour","value":"#ff8000;w120;uv40"}]}""")
+        val colour = ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"attribute":"rgbColour","value":"#ff8000;w120;uv40"}]}""")
         assertEquals("#ff8000;w120;uv40", colour["written"]!!.jsonArray.single().jsonObject["value"]!!.jsonPrimitive.content)
         assertEquals(listOf(255, 128, 0, 0, 120, 40), hex())
 
         // A colour carries its emitters, so a later one resets them; an emitter beside it in the same call wins.
-        ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"amber","value":"dmx:90"},{"propertyName":"rgbColour","value":"#00ff00"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"attribute":"amber","value":"dmx:90"},{"attribute":"rgbColour","value":"#00ff00"}]}""")
         assertEquals(listOf(0, 255, 0, 90, 0, 0), hex())
 
         ok(
             "set_programmer",
             """{"targets":[{"type":"fixture","key":"mac-1"}],"values":[
-                {"propertyName":"pan","value":"dmx:10"},{"propertyName":"tilt","value":"pct:25"},
-                {"propertyName":"rgbColour","value":"#ff0000;w128"},{"propertyName":"gobo","value":"cone"}
+                {"attribute":"pan","value":"dmx:10"},{"attribute":"tilt","value":"pct:25"},
+                {"attribute":"rgbColour","value":"#ff0000;w128"},{"attribute":"gobo","value":"cone"}
             ]}""",
         )
         assertEquals(listOf(10, 64), listOf(level(37), level(39)))
@@ -197,7 +197,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         )
 
         for (value in listOf("#ff0000;w300", "#ff0000;w1;w2", "#ff0000;sparkle", "#ff0000;policy=loud", "red;w10")) {
-            val refused = call("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"propertyName":"rgbColour","value":"$value"}]}""")
+            val refused = call("set_programmer", """{"targets":[{"type":"fixture","key":"hex-1"}],"values":[{"attribute":"rgbColour","value":"$value"}]}""")
             assertFalse(refused.success, value)
             assertTrue("is not a value rgbColour takes" in refused.description, "$value → ${refused.description}")
         }
@@ -207,7 +207,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `a malformed or empty targets never widens to the whole programmer, and a null fade is no fade`() {
         patchRig()
-        ok("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":"dimmer","value":"pct:50"}],"fadeSeconds":null}""")
+        ok("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"attribute":"dimmer","value":"pct:50"}],"fadeSeconds":null}""")
         assertEquals(listOf(128, 128), listOf(level(1), level(2)))
 
         for ((name, arguments, expected) in listOf(
@@ -218,7 +218,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
             Triple("record_look", """{"name":{"text":"Wide"}}""", "'name' must be a string"),
             Triple("record_look", """{"name":"Wide","mask":"COLOUR"}""", "'mask' must be an array"),
             Triple("apply_palette", """{"paletteName":["Half"]}""", "'paletteName' must be a string"),
-            Triple("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":{},"value":"pct:10"}]}""", "'propertyName' must be a string"),
+            Triple("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"attribute":{},"value":"pct:10"}]}""", "'attribute' must be a string"),
             Triple("set_blind", """{"blind":"yes"}""", "'blind' must be true or false"),
         )) {
             val refused = call(name, arguments)
@@ -236,13 +236,13 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `a group write records back through record_cue as one group row`() {
         patchRig()
-        ok("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":"dimmer","value":"pct:50"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"group","key":"FOH"}],"values":[{"attribute":"dimmer","value":"pct:50"}]}""")
         val stackId = ok("create_cue_stack", """{"name":"Main"}""")["stackId"]!!.jsonPrimitive.int
         val recorded = ok("record_cue", """{"cueStackId":$stackId,"name":"Q1"}""")
         val cueId = recorded["cueId"]!!.jsonPrimitive.int
 
         val rows = transaction(state.database) {
-            DaoCue[cueId].propertyAssignments.map { listOf(it.targetType, it.targetKey, it.attribute, it.value) }
+            DaoCue[cueId].attributeAssignments.map { listOf(it.targetType, it.targetKey, it.attribute, it.value) }
         }
         assertEquals(listOf(listOf("group", "FOH", "dimmer", "128")), rows)
     }
@@ -250,12 +250,12 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `Blind keeps the stage as it was while the programmer holds and takes values`() {
         patchRig()
-        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"dmx:200"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"dimmer","value":"dmx:200"}]}""")
         assertEquals(200, level(1))
 
         assertEquals("true", ok("set_blind", """{"blind":true}""")["blind"]!!.jsonPrimitive.content)
         assertEquals(0, level(1), "the programmer is off stage")
-        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-2"}],"values":[{"propertyName":"dimmer","value":"dmx:100"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-2"}],"values":[{"attribute":"dimmer","value":"dmx:100"}]}""")
         assertEquals(0, level(2), "a value set blind is held, not shown")
         assertEquals(
             setOf(Triple("foh-1", "dimmer", "200"), Triple("foh-2", "dimmer", "100")),
@@ -286,7 +286,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `apply_palette puts on a layer that toggles, or literals with asValues`() {
         patchRig()
-        ok("create_palette", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
+        ok("create_palette", """{"name":"Half","rows":[{"attribute":"dimmer","value":"pct:50"}]}""")
 
         val bare = call("apply_palette", """{"paletteName":"Half"}""")
         assertFalse(bare.success)
@@ -321,7 +321,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         patchRig()
         val paletteId = ok(
             "create_palette",
-            """{"name":"Special","rows":[{"targetKey":"foh-3","propertyName":"dimmer","value":"pct:100"}]}""",
+            """{"name":"Special","rows":[{"targetKey":"foh-3","attribute":"dimmer","value":"pct:100"}]}""",
         )["paletteId"]!!.jsonPrimitive.int
         ok("apply_palette", """{"paletteId":$paletteId}""")
         assertEquals(listOf(0, 0, 255), listOf(level(1), level(2), level(3)))
@@ -334,7 +334,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
     @Test
     fun `apply_palette refuses the retired mode rather than guessing`() {
         patchRig()
-        ok("create_palette", """{"name":"Half","rows":[{"propertyName":"dimmer","value":"pct:50"}]}""")
+        ok("create_palette", """{"name":"Half","rows":[{"attribute":"dimmer","value":"pct:50"}]}""")
 
         val old = call("apply_palette", """{"paletteName":"Half","targets":[{"type":"group","key":"FOH"}],"mode":"LITERALS"}""")
 
@@ -348,9 +348,9 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
         patchRig()
         ok(
             "set_programmer",
-            """{"targets":[{"type":"group","key":"FOH"}],"values":[{"propertyName":"dimmer","value":"pct:50"}]}""",
+            """{"targets":[{"type":"group","key":"FOH"}],"values":[{"attribute":"dimmer","value":"pct:50"}]}""",
         )
-        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-3"}],"values":[{"propertyName":"dimmer","value":"dmx:200"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-3"}],"values":[{"attribute":"dimmer","value":"dmx:200"}]}""")
 
         val created = ok(
             "record_look",
@@ -366,13 +366,13 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
             expected,
             created["rows"]!!.jsonArray.map {
                 val row = it.jsonObject
-                LookRowDto(row["targetType"]!!.jsonPrimitive.content, row["targetKey"]!!.jsonPrimitive.content, row["propertyName"]!!.jsonPrimitive.content, row["value"]!!.jsonPrimitive.content)
+                LookRowDto(row["targetType"]!!.jsonPrimitive.content, row["targetKey"]!!.jsonPrimitive.content, row["attribute"]!!.jsonPrimitive.content, row["value"]!!.jsonPrimitive.content)
             }.toSet(),
             "the answer carries the Look's rows",
         )
 
         val lookId = created["lookId"]!!.jsonPrimitive.int
-        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-3"}],"values":[{"propertyName":"dimmer","value":"dmx:100"}]}""")
+        ok("set_programmer", """{"targets":[{"type":"fixture","key":"foh-3"}],"values":[{"attribute":"dimmer","value":"dmx:100"}]}""")
         val merged = ok("record_look", """{"mode":"MERGE","lookId":$lookId,"targets":[{"type":"fixture","key":"foh-3"}]}""")
         assertEquals("false", merged["created"]!!.jsonPrimitive.content)
         assertEquals(
@@ -405,7 +405,7 @@ class McpProgrammerToolsTest : RouteIntegrationTest() {
             )
         }!!["result"]!!.jsonObject
 
-        val set = callAs("set_programmer", """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"propertyName":"dimmer","value":"pct:100"}]}""")
+        val set = callAs("set_programmer", """{"targets":[{"type":"fixture","key":"foh-1"}],"values":[{"attribute":"dimmer","value":"pct:100"}]}""")
         assertEquals("false", set["isError"]!!.jsonPrimitive.content, "$set")
         assertEquals(255, level(1))
         val record = callAs("record_look", """{"name":"Test"}""")

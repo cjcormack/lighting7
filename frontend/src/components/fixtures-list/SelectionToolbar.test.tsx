@@ -44,7 +44,7 @@ function toolbar() {
   return render(
     <SelectionToolbar
       locateTargets={[{ type: 'fixture', key: 'hex-1' }]}
-      targets={[{ key: 'hex-1', properties: [] }]}
+      targets={[{ key: 'hex-1', attributes: [] }]}
       onClear={() => {}}
       actions={<button type="button">Set</button>}
     />,

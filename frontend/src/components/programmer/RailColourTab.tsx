@@ -69,9 +69,9 @@ export const RailColourTab = memo(function RailColourTab({ projectId }: { projec
   const batch = useMarqueeColourBatch(marquee)
   const targets = useMemo(() => colourTargetsOf(batch?.targets ?? NO_TARGETS), [batch])
   const resolutions = batch?.resolutions ?? NO_RESOLUTIONS
-  const hasWhite = resolutions.some((r) => r.kind === 'colour' && r.property.whiteChannel != null)
-  const hasAmber = resolutions.some((r) => r.kind === 'colour' && r.property.amberChannel != null)
-  const hasUv = resolutions.some((r) => r.kind === 'colour' && r.property.uvChannel != null)
+  const hasWhite = resolutions.some((r) => r.kind === 'colour' && r.attribute.whiteChannel != null)
+  const hasAmber = resolutions.some((r) => r.kind === 'colour' && r.attribute.amberChannel != null)
+  const hasUv = resolutions.some((r) => r.kind === 'colour' && r.attribute.uvChannel != null)
 
   const readOnly = marquee != null && !marquee.permission.entry
   const refusal = readOnly ? cellActionCopy(scope, focusedPalette, targets.length).setTitle : null

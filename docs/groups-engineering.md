@@ -607,7 +607,7 @@ The `generateGroupPropertyDescriptors()` extension function collects property de
 group members and combines them:
 
 ```kotlin
-// Extension function in fixture/group/GroupPropertyAggregation.kt
+// Extension function in fixture/group/GroupAttributeAggregation.kt
 fun FixtureGroup<*>.generateGroupPropertyDescriptors(): List<GroupPropertyDescriptor>
 
 // Returns descriptors with memberChannels list for each property

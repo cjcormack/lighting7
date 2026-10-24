@@ -63,10 +63,10 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         state.show.fixtures.patchListChanged()
     }
 
-    private suspend fun HttpClient.palette(name: String, value: String = "#8f7bff", property: String = "rgbColour"): Int =
+    private suspend fun HttpClient.palette(name: String, value: String = "#8f7bff", attribute: String = "rgbColour"): Int =
         post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", property, value))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, value))))
         }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<PaletteDto>().id
 
     private suspend fun HttpClient.look(name: String): Int =
@@ -145,7 +145,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val warm = client.look("Warm")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", layers = listOf(
-            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, attributeMask = "COLOUR"),
         ))
         val q2 = client.cue(act, "Q2", layers = listOf(CueLayerDto(lookId = warm)))
         val from = client.details(q1).layers.single().id!!
@@ -172,7 +172,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val lavender = client.palette("Lavender")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1", layers = listOf(
-            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR"),
+            CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, attributeMask = "COLOUR"),
         ))
         val stored = client.details(q1).layers.single()
 
@@ -269,13 +269,13 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
 
         client.edit(act, buildJsonObject {
             put("op", "layerSettings"); put("cueId", q1); put("layerId", layer.id!!)
-            putJsonObject("fields") { put("amount", 0.5); put("blendMode", "ADDITIVE"); put("propertyMask", "COLOUR"); put("stomp", true); put("delayMs", 500) }
+            putJsonObject("fields") { put("amount", 0.5); put("blendMode", "ADDITIVE"); put("attributeMask", "COLOUR"); put("stomp", true); put("delayMs", 500) }
         })
         val written = client.details(q1).layers.single()
         assertEquals(layer.uuid, written.uuid)
         assertEquals(0.5, written.amount)
         assertEquals("ADDITIVE", written.blendMode)
-        assertEquals("COLOUR", written.propertyMask)
+        assertEquals("COLOUR", written.attributeMask)
         assertTrue(written.stomp)
         assertEquals(500L, written.delayMs)
 
@@ -299,7 +299,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         val amber = client.palette("Amber", "#ffb000")
         val warm = client.look("Warm")
         val act = client.stack("Act 1")
-        val lavenderOnHex1 = CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, propertyMask = "COLOUR")
+        val lavenderOnHex1 = CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), amount = 0.6, attributeMask = "COLOUR")
         val q2 = client.cue(act, "Q2", layers = listOf(lavenderOnHex1, CueLayerDto(lookId = warm)))
         val q5 = client.cue(act, "Q5", layers = listOf(
             CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1"))),
@@ -398,11 +398,11 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
             act, "Q1",
             layers = listOf(
                 CueLayerDto(lookId = warm, amount = 0.8, sortOrder = 0),
-                CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), propertyMask = "COLOUR", sortOrder = 1),
+                CueLayerDto(paletteId = lavender, targets = listOf(CueTargetDto("fixture", "hex-1")), attributeMask = "COLOUR", sortOrder = 1),
             ),
             effects = listOf(
                 CueAdHocFxDto(
-                    targetType = "group", targetKey = "wash", fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                    targetType = "group", targetKey = "wash", fxType = "Pulse", family = "intensity", attribute = "dimmer",
                     cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL",
                 ),
             ),
@@ -438,7 +438,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val half = client.palette("Half", "pct:50", property = "dimmer")
+        val half = client.palette("Half", "pct:50", attribute = "dimmer")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1")
         val entry = client.details(q1).entries.single().entryId
@@ -461,7 +461,7 @@ class CueStackTimelineEditRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val half = client.palette("Half", "pct:50", property = "dimmer")
+        val half = client.palette("Half", "pct:50", attribute = "dimmer")
         val act = client.stack("Act 1")
         val q1 = client.cue(act, "Q1")
         state.show.cueStackManager.activateEntry(state, act, client.details(q1).entries.single().entryId)

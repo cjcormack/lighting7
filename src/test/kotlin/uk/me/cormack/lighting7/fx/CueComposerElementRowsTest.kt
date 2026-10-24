@@ -38,7 +38,7 @@ class CueComposerElementRowsTest {
 
     private fun elementRow(index: Int, value: String) = LookRowEntry(
         target = TargetRef.Fixture("bar-1"),
-        propertyName = "rgbColour",
+        attribute = "rgbColour",
         value = value,
         elementKey = "bar-1.pixel-$index",
     )
@@ -89,9 +89,9 @@ class CueComposerElementRowsTest {
     )
 
     private fun colourAt(rows: List<CueAssignmentResolver.Assignment>, key: String): ExtendedColour {
-        val row = rows.single { it.targetKey == key && it.propertyName == "rgbColour" }
+        val row = rows.single { it.targetKey == key && it.attribute == "rgbColour" }
         assertTrue(!row.targetIsGroup)
-        return assertIs<CueAssignmentResolver.PropertyValue.Colour>(row.value).value
+        return assertIs<CueAssignmentResolver.AttributeValue.Colour>(row.value).value
     }
 
     @Test
@@ -102,7 +102,7 @@ class CueComposerElementRowsTest {
         assertEquals(setOf("bar-1.pixel-2", "bar-1.pixel-5"), result.rows.map { it.targetKey }.toSet())
         assertEquals(Color.RED, colourAt(result.rows, "bar-1.pixel-2").color)
         assertEquals(Color.GREEN, colourAt(result.rows, "bar-1.pixel-5").color)
-        assertTrue(FxEngine.PropertyKey("bar-1.pixel-2", "rgbColour") in result.assertedKeys, "asserted under the cell's key")
+        assertTrue(FxEngine.TargetAttribute("bar-1.pixel-2", "rgbColour") in result.assertedKeys, "asserted under the cell's key")
     }
 
     @Test
@@ -123,7 +123,7 @@ class CueComposerElementRowsTest {
 
     /** A per-fixture palette with a colour row on each of [cells]. */
     private fun cellPalette(vararg cells: Int) = template(
-        *cells.map { PaletteRowEntry(target = TargetRef.Fixture("bar-1.pixel-$it"), propertyName = "rgbColour", value = "#FF0000;policy=extract") }
+        *cells.map { PaletteRowEntry(target = TargetRef.Fixture("bar-1.pixel-$it"), attribute = "rgbColour", value = "#FF0000;policy=extract") }
             .toTypedArray(),
     )
 
@@ -143,7 +143,7 @@ class CueComposerElementRowsTest {
 
     @Test
     fun `a generic template row fans over cell targets and resolves on the cell's own emitters`() {
-        val amber = template(PaletteRowEntry(target = null, propertyName = "rgbColour", value = "#FF9D4A;policy=extract"))
+        val amber = template(PaletteRowEntry(target = null, attribute = "rgbColour", value = "#FF9D4A;policy=extract"))
         val result = cook(rig(), paletteLayer(amber, targets = listOf(cell(2), cell(5))), template = amber)
 
         assertEquals(setOf("bar-1.pixel-2", "bar-1.pixel-5"), result.rows.map { it.targetKey }.toSet())

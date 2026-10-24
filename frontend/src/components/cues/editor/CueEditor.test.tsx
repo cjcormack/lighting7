@@ -77,7 +77,7 @@ function makeCue(over: Partial<Cue> = {}): Cue {
     name: 'Tabs out',
     layers: [],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [],
     cueStackId: 7,
     cueStackName: 'Act 1',

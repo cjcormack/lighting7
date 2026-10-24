@@ -1,7 +1,7 @@
 import type { PaletteSummary } from '@/api/palettesApi'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import type { AttributeFamily } from './attributeFamily'
-import { palettePropertiesForFamily, palettePropertyFor } from './paletteIntent'
+import { paletteAttributesForFamily, paletteAttributeFor } from './paletteIntent'
 
 /**
  * Palette Steps and Slot Steps on this side (effects plan D8, §3.6, §4.4): which palettes a step
@@ -38,7 +38,7 @@ export function isSlotSteps(fxType: string | null | undefined): boolean {
   return fxType != null && fxType.replace(/[\s_]/g, '').toLowerCase() === SLOT_STEPS.toLowerCase()
 }
 
-/** The effect category a family is offered under — the desk's `fxFamilyForMaskGroup`. */
+/** The effect category a family is offered under — the desk's `fxFamilyForAttributeFamily`. */
 export function categoryForFamily(family: AttributeFamily): string {
   switch (family) {
     case 'INTENSITY':
@@ -57,23 +57,23 @@ export function isSteppablePalette(template: PaletteSummary): boolean {
   return template.isGeneric && template.kind === 'value' && template.family != null
 }
 
-/** Whether [template]'s rows name [propertyName] — for colour, any colour palette does. */
-function palettesNames(template: PaletteSummary, propertyName: string): boolean {
-  const property = palettePropertyFor(propertyName)
-  if (property?.family === 'COLOUR') return template.family === 'COLOUR'
-  return (template.rows ?? []).some((row) => palettePropertyFor(row.propertyName)?.propertyName === property?.propertyName)
+/** Whether [template]'s rows name [attribute] — for colour, any colour palette does. */
+function palettesNames(template: PaletteSummary, attribute: string): boolean {
+  const known = paletteAttributeFor(attribute)
+  if (known?.family === 'COLOUR') return template.family === 'COLOUR'
+  return (template.rows ?? []).some((row) => paletteAttributeFor(row.attribute)?.attribute === known?.attribute)
 }
 
 /**
- * The palettes of [family] a Palette Steps on [propertyName] may step, in library order (by name):
+ * The palettes of [family] a Palette Steps on [attribute] may step, in library order (by name):
  * steppable, of the family, and naming the property — any colour palette, for colour.
  */
 export function stepPalettesFor(
   templates: readonly PaletteSummary[],
   family: AttributeFamily,
-  propertyName: string,
+  attribute: string,
 ): PaletteSummary[] {
-  return templates.filter((t) => isSteppablePalette(t) && t.family === family && palettesNames(t, propertyName))
+  return templates.filter((t) => isSteppablePalette(t) && t.family === family && palettesNames(t, attribute))
 }
 
 /** The palettes a Palette Steps `palettes` parameter names, found in [templates]; a name not found is left out. */
@@ -92,16 +92,16 @@ function namedPalettes(parameter: string | undefined, templates: readonly Palett
  * desk reads it off the palettes); Slot Steps is Beam and names the setting it steps.
  */
 export type StepPaletteShape =
-  | { family: AttributeFamily; fxFamily: string; propertyName: string | null; reason?: undefined }
+  | { family: AttributeFamily; fxFamily: string; attribute: string | null; reason?: undefined }
   | { reason: string }
 
 export function stepFxPaletteShape(
-  effect: { fxType: string; parameters?: Record<string, string>; propertyName?: string | null },
+  effect: { fxType: string; parameters?: Record<string, string>; attribute?: string | null },
   templates: readonly PaletteSummary[] | undefined,
 ): StepPaletteShape | null {
   if (isSlotSteps(effect.fxType)) {
-    return effect.propertyName
-      ? { family: 'BEAM', fxFamily: categoryForFamily('BEAM'), propertyName: effect.propertyName }
+    return effect.attribute
+      ? { family: 'BEAM', fxFamily: categoryForFamily('BEAM'), attribute: effect.attribute }
       : { reason: 'This Slot Steps names no setting, so a palette of it would not know which to step.' }
   }
   if (!isPaletteSteps(effect.fxType)) return null
@@ -112,7 +112,7 @@ export function stepFxPaletteShape(
   if (family == null || palettes.length < 2) {
     return { reason: 'Its palettes are not two or more of one family any more, so its family cannot be read.' }
   }
-  return { family, fxFamily: categoryForFamily(family), propertyName: null }
+  return { family, fxFamily: categoryForFamily(family), attribute: null }
 }
 
 /**
@@ -122,27 +122,27 @@ export function stepFxPaletteShape(
  */
 export interface PaletteStepsOffer {
   family: AttributeFamily
-  propertyName: string
+  attribute: string
   palettes: PaletteSummary[]
 }
 
 export function paletteStepsOffers(
   templates: readonly PaletteSummary[],
-  targetHas: (propertyName: string) => boolean,
+  targetHas: (attribute: string) => boolean,
   preferred?: string | null,
 ): PaletteStepsOffer[] {
   const offers: PaletteStepsOffer[] = []
   for (const family of ['INTENSITY', 'COLOUR', 'POSITION', 'BEAM'] as const) {
-    const candidates = family === 'COLOUR' ? ['rgbColour'] : palettePropertiesForFamily(family).map((p) => p.propertyName)
+    const candidates = family === 'COLOUR' ? ['rgbColour'] : paletteAttributesForFamily(family).map((p) => p.attribute)
     const ordered =
-      preferred != null && candidates.includes(palettePropertyFor(preferred)?.propertyName ?? '')
-        ? [palettePropertyFor(preferred)!.propertyName, ...candidates]
+      preferred != null && candidates.includes(paletteAttributeFor(preferred)?.attribute ?? '')
+        ? [paletteAttributeFor(preferred)!.attribute, ...candidates]
         : candidates
-    for (const propertyName of ordered) {
-      if (!targetHas(propertyName)) continue
-      const palettes = stepPalettesFor(templates, family, propertyName)
+    for (const attribute of ordered) {
+      if (!targetHas(attribute)) continue
+      const palettes = stepPalettesFor(templates, family, attribute)
       if (palettes.length >= 2) {
-        offers.push({ family, propertyName, palettes })
+        offers.push({ family, attribute, palettes })
         break
       }
     }
@@ -175,7 +175,7 @@ export function normaliseSlotName(name: string): string {
 }
 
 /** The option a stored slot name means on [setting], or undefined where it has none. */
-export function slotOption(setting: SettingPropertyDescriptor | undefined, name: string) {
+export function slotOption(setting: SettingAttributeDescriptor | undefined, name: string) {
   const wanted = normaliseSlotName(name)
   return setting?.options.find((o) => normaliseSlotName(o.name) === wanted || normaliseSlotName(o.displayName) === wanted)
 }
@@ -186,12 +186,12 @@ export function slotOption(setting: SettingPropertyDescriptor | undefined, name:
  * models share kept once (the desk matches a slot by name on each head, ignoring case, spaces and
  * underscores) — so a name only some heads have is offered, and one no head has reads as missing.
  */
-export function rigSettingUnion(fixtures: readonly { properties?: readonly { type: string; name: string }[] }[]): SettingPropertyDescriptor[] {
-  const byName = new Map<string, SettingPropertyDescriptor>()
+export function rigSettingUnion(fixtures: readonly { attributes?: readonly { type: string; name: string }[] }[]): SettingAttributeDescriptor[] {
+  const byName = new Map<string, SettingAttributeDescriptor>()
   for (const fixture of fixtures) {
-    for (const p of fixture.properties ?? []) {
+    for (const p of fixture.attributes ?? []) {
       if (p.type !== 'setting') continue
-      const setting = p as SettingPropertyDescriptor
+      const setting = p as SettingAttributeDescriptor
       const known = byName.get(setting.name)
       if (known == null) {
         byName.set(setting.name, { ...setting, options: [...setting.options] })
@@ -213,7 +213,7 @@ export function rigSettingUnion(fixtures: readonly { properties?: readonly { typ
  * The slots a new Slot Steps starts on, so a tap shows it stepping: the setting's first two options
  * past its first (its open or white slot) where it has three or more.
  */
-export function seedSlots(setting: SettingPropertyDescriptor | undefined): string {
+export function seedSlots(setting: SettingAttributeDescriptor | undefined): string {
   const options = setting?.options ?? []
   const from = options.length >= 3 ? 1 : 0
   return serializeStepList(options.slice(from, from + 2).map((o) => o.name))

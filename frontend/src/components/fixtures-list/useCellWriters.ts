@@ -13,15 +13,15 @@ import { useCueRowStore, type CueRowStoreValue } from '../cues/editor/CueRowStor
 import type { CueRowTargetType } from '../cues/editor/cueRowDraft'
 import { getProgrammerFadeMs } from '../../lib/programmerFade'
 import type { PlannedWrite } from './rowModel'
-import type { ChannelRef, ColourPropertyDescriptor, WhiteMixPropertyDescriptor } from '../../store/fixtures'
+import type { ChannelRef, ColourAttributeDescriptor, WhiteMixAttributeDescriptor } from '../../store/fixtures'
 
 export interface CellWriters {
-  /** `propertyName` is the backend's own name for the property behind `ref`. */
-  writeSlider(fixtureKey: string, propertyName: string, ref: ChannelRef, value: number): void
-  /** A white-mix [property] takes the RGB alone; the desk lands it as the whites' nearest mix. */
+  /** `attribute` is the backend's own name for the property behind `ref`. */
+  writeSlider(fixtureKey: string, attribute: string, ref: ChannelRef, value: number): void
+  /** A white-mix [attribute] takes the RGB alone; the desk lands it as the whites' nearest mix. */
   writeColour(
     fixtureKey: string,
-    property: ColourPropertyDescriptor | WhiteMixPropertyDescriptor,
+    attribute: ColourAttributeDescriptor | WhiteMixAttributeDescriptor,
     r: number,
     g: number,
     b: number,
@@ -30,7 +30,7 @@ export interface CellWriters {
     uv?: number,
   ): void
   /** Omitted axes are left untouched (live) or filled from the fixture's
-   *  current value (cue mode needs both for setProperty('position')). */
+   *  current value (cue mode needs both for setAttribute('position')). */
   writePosition(
     fixtureKey: string,
     pan: ChannelRef,
@@ -38,9 +38,9 @@ export interface CellWriters {
     panValue: number | undefined,
     tiltValue: number | undefined,
     /** Property names for the pan/tilt axes when they are separate sliders. */
-    axisProperties?: { pan?: string; tilt?: string },
+    axisAttributes?: { pan?: string; tilt?: string },
   ): void
-  writeSetting(fixtureKey: string, propertyName: string, ref: ChannelRef, level: number): void
+  writeSetting(fixtureKey: string, attribute: string, ref: ChannelRef, level: number): void
   /**
    * Take a property out of Local — the marquee's Backspace. In a cue context it takes the cue's own
    * row away (`CueRowStore.removeValue`). A Look layer's row draft has no removal (`LookRowStore`
@@ -48,7 +48,7 @@ export interface CellWriters {
    * the key there. A no-op rather than a throw because the writers are one object serving every
    * cell, and the gate belongs where the gesture is.
    */
-  clearValue(fixtureKey: string, propertyName: string): void
+  clearValue(fixtureKey: string, attribute: string): void
 }
 
 /**
@@ -80,14 +80,14 @@ export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): 
   switch (commit.kind) {
     case 'slider':
       if (resolution.kind === 'slider') {
-        writers.writeSlider(target.key, resolution.property.name, resolution.property.channel, commit.value)
+        writers.writeSlider(target.key, resolution.attribute.name, resolution.attribute.channel, commit.value)
       }
       break
     case 'colour':
       if (resolution.kind === 'colour' || resolution.kind === 'white-mix') {
         writers.writeColour(
           target.key,
-          resolution.property,
+          resolution.attribute,
           commit.r,
           commit.g,
           commit.b,
@@ -107,9 +107,9 @@ export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): 
           commit.tilt,
           // Present only when the position was paired from two axis sliders; a real
           // `position` descriptor writes both axes as one entry instead.
-          resolution.property
+          resolution.attribute
             ? undefined
-            : { pan: resolution.panProperty?.name, tilt: resolution.tiltProperty?.name },
+            : { pan: resolution.panAttribute?.name, tilt: resolution.tiltAttribute?.name },
         )
       }
       break
@@ -117,8 +117,8 @@ export function applyPlannedWrite(writers: CellWriters, planned: PlannedWrite): 
       if (resolution.kind === 'setting' || resolution.kind === 'colour-setting') {
         writers.writeSetting(
           target.key,
-          resolution.property.name,
-          resolution.property.channel,
+          resolution.attribute.name,
+          resolution.attribute.channel,
           commit.level,
         )
       }
@@ -143,37 +143,37 @@ export function useCellWriters(): CellWriters {
 
     const writeChannelValue = (
       fixtureKey: string,
-      propertyName: string,
+      attribute: string,
       ref: ChannelRef,
       value: number,
     ) => {
       if (setLookValue) {
-        setLookValue(fixtureKey, propertyName, serializeLevel(value))
+        setLookValue(fixtureKey, attribute, serializeLevel(value))
         return
       }
-      lightingApi.programmer.set('fixture', fixtureKey, propertyName, serializeLevel(value))
+      lightingApi.programmer.set('fixture', fixtureKey, attribute, serializeLevel(value))
     }
 
     return {
       writeSlider: writeChannelValue,
       writeSetting: writeChannelValue,
 
-      clearValue(fixtureKey, propertyName) {
+      clearValue(fixtureKey, attribute) {
         if (setLookValue) return
         // By the programmer fade, read at press time — the same store the action bar's Clear and
         // Blind fade by. A release that snapped while the two beside it faded would make the
         // keyboard the odd one out.
-        lightingApi.programmer.clearEntry('fixture', fixtureKey, propertyName, getProgrammerFadeMs())
+        lightingApi.programmer.clearEntry('fixture', fixtureKey, attribute, getProgrammerFadeMs())
       },
 
-      writeColour(fixtureKey, property, r, g, b, w, a, uv) {
-        if (property.type === 'whiteMix') {
+      writeColour(fixtureKey, attribute, r, g, b, w, a, uv) {
+        if (attribute.type === 'whiteMix') {
           // Only the RGB lands on a white mix: a white component folds into it, as on a head
           // without a white channel (below), and amber and UV have nowhere to go.
           const white = w ?? 0
           const rgb = { r: Math.max(r, white), g: Math.max(g, white), b: Math.max(b, white) }
-          if (setLookValue) setLookValue(fixtureKey, property.name, serializeColour(rgb.r, rgb.g, rgb.b))
-          else lightingApi.programmer.setColour('fixture', fixtureKey, property.name, rgb)
+          if (setLookValue) setLookValue(fixtureKey, attribute.name, serializeColour(rgb.r, rgb.g, rgb.b))
+          else lightingApi.programmer.setColour('fixture', fixtureKey, attribute.name, rgb)
           return
         }
         if (setLookValue) {
@@ -181,7 +181,7 @@ export function useCellWriters(): CellWriters {
           // bake in the current stage state of a fixture the layer may not even target: an
           // undefined component is one the caller did not set, and `serializeColour` elides a
           // zero, so the row stays as narrow as the edit was.
-          setLookValue(fixtureKey, property.name, serializeColour(r, g, b, w, a, uv))
+          setLookValue(fixtureKey, attribute.name, serializeColour(r, g, b, w, a, uv))
           return
         }
         // A batch commit's white component was chosen against a fixture that
@@ -189,7 +189,7 @@ export function useCellWriters(): CellWriters {
         // 0,0,0,w=255). A target without one would otherwise get its RGB
         // zeroed and the white silently skipped — i.e. go black instead of
         // white — so fold the undeliverable white back into RGB.
-        if (w !== undefined && w > 0 && !property.whiteChannel) {
+        if (w !== undefined && w > 0 && !attribute.whiteChannel) {
           r = Math.max(r, w)
           g = Math.max(g, w)
           b = Math.max(b, w)
@@ -203,29 +203,29 @@ export function useCellWriters(): CellWriters {
         // white/amber/UV emitters on every RGBW fixture they touched.
         const current = (ref?: ChannelRef) =>
           ref ? lightingApi.channels.get(ref.universe, ref.channelNo) : undefined
-        lightingApi.programmer.setColour('fixture', fixtureKey, property.name, {
+        lightingApi.programmer.setColour('fixture', fixtureKey, attribute.name, {
           r,
           g,
           b,
-          w: property.whiteChannel ? (w ?? current(property.whiteChannel)) : undefined,
-          a: property.amberChannel ? (a ?? current(property.amberChannel)) : undefined,
-          uv: property.uvChannel ? (uv ?? current(property.uvChannel)) : undefined,
+          w: attribute.whiteChannel ? (w ?? current(attribute.whiteChannel)) : undefined,
+          a: attribute.amberChannel ? (a ?? current(attribute.amberChannel)) : undefined,
+          uv: attribute.uvChannel ? (uv ?? current(attribute.uvChannel)) : undefined,
         })
       },
 
-      writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisProperties) {
+      writePosition(fixtureKey, pan, tilt, panValue, tiltValue, axisAttributes) {
         if (panValue === undefined && tiltValue === undefined) return
         if (setLookValue) {
           // Separate axis sliders write the axis that moved and leave the other row alone; a real
           // `position` descriptor is one atomic row, so a single-axis nudge has to supply both —
           // and takes the other from the *draft or the Look*, never from the wire, for the reason
           // `writeColour` gives above.
-          if (axisProperties) {
-            if (panValue !== undefined && axisProperties.pan) {
-              setLookValue(fixtureKey, axisProperties.pan, serializeLevel(panValue))
+          if (axisAttributes) {
+            if (panValue !== undefined && axisAttributes.pan) {
+              setLookValue(fixtureKey, axisAttributes.pan, serializeLevel(panValue))
             }
-            if (tiltValue !== undefined && axisProperties.tilt) {
-              setLookValue(fixtureKey, axisProperties.tilt, serializeLevel(tiltValue))
+            if (tiltValue !== undefined && axisAttributes.tilt) {
+              setLookValue(fixtureKey, axisAttributes.tilt, serializeLevel(tiltValue))
             }
             return
           }
@@ -240,23 +240,23 @@ export function useCellWriters(): CellWriters {
           )
           return
         }
-        if (axisProperties) {
+        if (axisAttributes) {
           // Separate pan/tilt sliders: write only the axis that moved. Folding them into a
           // `position` entry would freeze the other axis into the programmer — the reason
           // the backend keeps raw pan/tilt in its channel sideband.
-          if (panValue !== undefined && axisProperties.pan) {
+          if (panValue !== undefined && axisAttributes.pan) {
             lightingApi.programmer.set(
               'fixture',
               fixtureKey,
-              axisProperties.pan,
+              axisAttributes.pan,
               serializeLevel(panValue),
             )
           }
-          if (tiltValue !== undefined && axisProperties.tilt) {
+          if (tiltValue !== undefined && axisAttributes.tilt) {
             lightingApi.programmer.set(
               'fixture',
               fixtureKey,
-              axisProperties.tilt,
+              axisAttributes.tilt,
               serializeLevel(tiltValue),
             )
           }
@@ -308,35 +308,35 @@ const NO_WRITERS: CellWriters = {
  * would land — never the wire. Clear takes the own row away, so the layer under it shows again.
  */
 export function cueCellWriters(store: CueRowStoreValue, targetType: CueRowTargetType): CellWriters {
-  const set = (key: string, propertyName: string, value: string) => store.setValue(targetType, key, propertyName, value)
-  const writeLevel = (key: string, propertyName: string, _ref: ChannelRef, value: number) =>
-    set(key, propertyName, serializeLevel(value))
+  const set = (key: string, attribute: string, value: string) => store.setValue(targetType, key, attribute, value)
+  const writeLevel = (key: string, attribute: string, _ref: ChannelRef, value: number) =>
+    set(key, attribute, serializeLevel(value))
   return {
     writeSlider: writeLevel,
     writeSetting: writeLevel,
-    clearValue(key, propertyName) {
-      store.removeValue(targetType, key, propertyName)
+    clearValue(key, attribute) {
+      store.removeValue(targetType, key, attribute)
     },
-    writeColour(key, property, r, g, b, w, a, uv) {
-      if (property.type === 'whiteMix') {
+    writeColour(key, attribute, r, g, b, w, a, uv) {
+      if (attribute.type === 'whiteMix') {
         const white = w ?? 0
-        set(key, property.name, serializeColour(Math.max(r, white), Math.max(g, white), Math.max(b, white)))
+        set(key, attribute.name, serializeColour(Math.max(r, white), Math.max(g, white), Math.max(b, white)))
         return
       }
       // A head with no white channel takes a white component as RGB, as the live arm folds it: the
       // desk writes a stored colour verbatim per head and drops a white it has nowhere to send, so
       // the picker's pure white (0,0,0 + w 255) would land black.
-      if (w !== undefined && w > 0 && !property.whiteChannel) {
-        set(key, property.name, serializeColour(Math.max(r, w), Math.max(g, w), Math.max(b, w), undefined, a, uv))
+      if (w !== undefined && w > 0 && !attribute.whiteChannel) {
+        set(key, attribute.name, serializeColour(Math.max(r, w), Math.max(g, w), Math.max(b, w), undefined, a, uv))
         return
       }
-      set(key, property.name, serializeColour(r, g, b, w, a, uv))
+      set(key, attribute.name, serializeColour(r, g, b, w, a, uv))
     },
-    writePosition(key, _pan, _tilt, panValue, tiltValue, axisProperties) {
+    writePosition(key, _pan, _tilt, panValue, tiltValue, axisAttributes) {
       if (panValue === undefined && tiltValue === undefined) return
-      if (axisProperties) {
-        if (panValue !== undefined && axisProperties.pan) set(key, axisProperties.pan, serializeLevel(panValue))
-        if (tiltValue !== undefined && axisProperties.tilt) set(key, axisProperties.tilt, serializeLevel(tiltValue))
+      if (axisAttributes) {
+        if (panValue !== undefined && axisAttributes.pan) set(key, axisAttributes.pan, serializeLevel(panValue))
+        if (tiltValue !== undefined && axisAttributes.tilt) set(key, axisAttributes.tilt, serializeLevel(tiltValue))
         return
       }
       const stored = store.composedValue(targetType, key, 'position')
@@ -356,9 +356,9 @@ export function lookPositionOf(store: ReturnType<typeof useLookRowStore>, target
 function lookRowValueOf(
   store: ReturnType<typeof useLookRowStore>,
   targetKey: string,
-  propertyName: string,
+  attribute: string,
 ): string | undefined {
-  const staged = store?.serverRows.get(lookRowKey(targetKey, propertyName))
+  const staged = store?.serverRows.get(lookRowKey(targetKey, attribute))
   if (!staged) return undefined
   return staged.kind === 'position' ? serializePosition(staged.pan, staged.tilt) : undefined
 }

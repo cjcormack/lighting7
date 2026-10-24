@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fixture.trait.WithStrobe
@@ -24,7 +24,7 @@ import uk.me.cormack.lighting7.fixture.trait.WithStrobe
  *
  * Discharge-lamp safety: lamp on/off and the seven reset bands all live on
  * **channel 6 (Control)** — not the shutter channel as on the MAC 250.
- * Channel 6 is therefore not exposed as a `@FixtureProperty` so FX can't
+ * Channel 6 is therefore not exposed as a `@FixtureAttribute` so FX can't
  * target it; lamp and resets are fixture commands on [Mode2Ch] (fixture
  * optics plan session 7), held by the desk, which owns the channel. The
  * strobe channel (ch 18) is separately clamped to its safe band.
@@ -320,18 +320,18 @@ sealed class RobeColorSpot575Fixture(
             Mode2Ch(this, transaction)
 
         // Pan 530° and tilt 280° (user manual v1.4, technical specifications).
-        @FixtureProperty("Pan (coarse)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 530.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 280.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
         // Not a timing channel (fixture optics plan D14). 0 is tracking at full speed; 1–255 is a speed
@@ -339,59 +339,59 @@ sealed class RobeColorSpot575Fixture(
         // 25.5 s" in its Time mode, a menu setting the desk cannot see. Neither can be drawn without a
         // guess, so the view moves the head at the type's travel (its fastest) whatever this holds:
         // early, never late. FU-MANUAL-S8-TRAVEL measures it.
-        @FixtureProperty("Pan/tilt speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt speed", category = AttributeCategory.SPEED)
         val panTiltSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
         // Ch 6 (Control) intentionally not exposed — see class doc.
 
-        @FixtureProperty("Colour wheel 1", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour wheel 1", category = AttributeCategory.COLOUR)
         val colour1 = DmxFixtureSetting(
             transaction, universe, firstChannel + 6, Colour1.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Colour wheel 2", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour wheel 2", category = AttributeCategory.COLOUR)
         val colour2 = DmxFixtureSetting(
             transaction, universe, firstChannel + 7, Colour2.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Static gobo wheel", category = PropertyCategory.GOBO)
+        @FixtureAttribute("Static gobo wheel", category = AttributeCategory.GOBO)
         val staticGobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 8, StaticGobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Rotating gobo wheel", category = PropertyCategory.GOBO)
+        @FixtureAttribute("Rotating gobo wheel", category = AttributeCategory.GOBO)
         val rotatingGobo = DmxFixtureSetting(
             transaction, universe, firstChannel + 9, RotGobo.entries.toTypedArray(),
         )
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Gobo indexing/rotation (semantics depend on rotating gobo wheel mode)",
-            category = PropertyCategory.GOBO_ROTATION,
+            category = AttributeCategory.GOBO_ROTATION,
         )
         val goboRotation: Slider = DmxSlider(transaction, universe, firstChannel + 10)
 
-        @FixtureProperty("Prism", category = PropertyCategory.PRISM)
+        @FixtureAttribute("Prism", category = AttributeCategory.PRISM)
         val prism = DmxFixtureSetting(
             transaction, universe, firstChannel + 11, Prism.entries.toTypedArray(),
         )
 
-        @FixtureProperty(
+        @FixtureAttribute(
             "Prism rotation (0 no rot, 1–127 CW fast→slow, 128–129 stop, 130–255 CCW slow→fast)",
-            category = PropertyCategory.PRISM_ROTATION,
+            category = AttributeCategory.PRISM_ROTATION,
         )
         val prismRotation: Slider = DmxSlider(transaction, universe, firstChannel + 12)
 
         // DMX chart: 0 open, 1–179 frost 0→100%, then 100% frost, pulses and ramps — effects the
         // view does not draw, so it holds full frost above 179.
-        @FixtureProperty("Frost", category = PropertyCategory.FROST, activeMin = 1, activeMax = 179)
+        @FixtureAttribute("Frost", category = AttributeCategory.FROST, activeMin = 1, activeMax = 179)
         val frost: Slider = DmxSlider(transaction, universe, firstChannel + 13)
 
         // DMX chart: 0 open, 1–179 max→min diameter, 180–191 closed, then pulses — held at the
         // smallest diameter above 179.
-        @FixtureProperty("Iris", category = PropertyCategory.IRIS, activeMin = 1, activeMax = 179)
+        @FixtureAttribute("Iris", category = AttributeCategory.IRIS, activeMin = 1, activeMax = 179)
         val iris: Slider = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Zoom", category = PropertyCategory.ZOOM)
+        @FixtureAttribute("Zoom", category = AttributeCategory.ZOOM)
         val zoom = DmxFixtureSetting(
             transaction, universe, firstChannel + 15, Zoom.entries.toTypedArray(),
         )
@@ -399,9 +399,9 @@ sealed class RobeColorSpot575Fixture(
         // Estimate: Robe publishes only "coarse focus, proportional" (ColorSpot 575 AT DMX chart
         // v1.0). Near is the manual's 2 m minimum distance to a lit surface (user manual v1.4);
         // far → near as Robe's later charts run; infinity is the Stage view's 40 m longest throw.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Focus",
-            category = PropertyCategory.FOCUS,
+            category = AttributeCategory.FOCUS,
             focusNearM = 2.0,
             focusFarM = 40.0,
             inverted = true,
@@ -423,8 +423,8 @@ sealed class RobeColorSpot575Fixture(
          * Estimate: the pulses at 0.5–2 Hz, the random strobe at the strobe's 1–10 Hz. Checked on
          * the rig by FU-MANUAL-S6-STROBE.
          */
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 31, StrobeKind.CLOSED),
                 StrobeBand(32, 63, StrobeKind.OPEN),
@@ -445,7 +445,7 @@ sealed class RobeColorSpot575Fixture(
             max = STROBE_BAND_MAX,
         )
 
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(transaction, universe, firstChannel + 18)
 
         private val controlChannel = firstChannel + 5

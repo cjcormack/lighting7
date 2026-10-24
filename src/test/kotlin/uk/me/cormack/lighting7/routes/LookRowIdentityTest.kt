@@ -45,7 +45,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
 
     private val pulse = LookFxDto(
         targetType = "fixture", targetKey = "hex-1",
-        fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+        fxType = "Pulse", family = "intensity", attribute = "dimmer",
         cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
     )
 
@@ -83,14 +83,14 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         assertEquals(effectBefore, fxUuids(lookId).single(), "the effect on the same property is edited in place")
 
         val details = response.body<LookDetails>()
-        val uv = details.rows.single { it.propertyName == "uv" }
+        val uv = details.rows.single { it.attribute == "uv" }
         assertEquals("99", uv.value)
         assertEquals(400L, uv.fadeDurationMs)
         assertEquals(2.0, details.fx.single().cycle)
     }
 
     @Test
-    fun `a key held twice pairs in order, and a property's other spelling is the same key`() = testApplication {
+    fun `a key held twice pairs in order, and an attribute's other spelling is the same key`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val lookId = client.createLook(
@@ -116,7 +116,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `an effect swapped for another type on the same property is a new effect`() = testApplication {
+    fun `an effect swapped for another type on the same attribute is a new effect`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val lookId = client.createLook(emptyList(), listOf(pulse))
@@ -149,7 +149,7 @@ class LookRowIdentityTest : RouteIntegrationTest() {
         assertEquals(expected, after)
     }
 
-    private data class Row(val targetKey: String, val propertyName: String)
+    private data class Row(val targetKey: String, val attribute: String)
 
     private fun rowUuids(lookId: Int): Map<Row, UUID> = transaction(state.database) {
         DaoLook[lookId].rows.associate { Row(it.targetKey, it.attribute) to it.uuid }

@@ -10,7 +10,7 @@ export function BeamControls({
   onChange,
 }: {
   values: PaletteValues
-  onChange: (propertyName: string, intent: PaletteIntent | null) => void
+  onChange: (attribute: string, intent: PaletteIntent | null) => void
 }) {
   const prism = values.prism?.kind === 'switch' ? values.prism.on : null
 

@@ -39,13 +39,13 @@ export interface LookRowStoreValue {
   /** Uncommitted edits, overlaid on `serverRows` by the read path. */
   draft: LookRowDraft
   /** Set one cell's value and schedule the save. Canonical assignment string. */
-  setValue: (targetKey: string, propertyName: string, value: string) => void
+  setValue: (targetKey: string, attribute: string, value: string) => void
   /** Fixture keys the layer asserts on. `null` means "the Look's own targets", i.e. all of them. */
   targetedKeys: ReadonlySet<string> | null
   /** The layer's target list verbatim, so a row can append to it without re-reading the stack. */
   targets: readonly CueTarget[]
-  /** The layer's `propertyMask`, verbatim — callers parse it with `parsePropertyMask`. */
-  propertyMask: string | null | undefined
+  /** The layer's `attributeMask`, verbatim — callers parse it with `parseAttributeMask`. */
+  attributeMask: string | null | undefined
   /**
    * Rows that name no target of their own. They compose against whatever the applying layer
    * targets, so they cannot be drawn as a value on any one fixture's row — the grid lists them
@@ -187,7 +187,7 @@ export function LookRowStoreProvider({
   targetedKeysRef.current = targetedKeys
 
   const setValue = useCallback(
-    (targetKey: string, propertyName: string, value: string) => {
+    (targetKey: string, attribute: string, value: string) => {
       // **The write guard, not just the paint guard.** Untargeted cells are drawn
       // `pointer-events-none`, which stops a *click* — but the marquee selects by rectangle, off the
       // rows wrapper, so a drag across the grid can still put untargeted cells in the batch and one
@@ -195,7 +195,7 @@ export function LookRowStoreProvider({
       // explicit press (`AddToTargetsButton`), never a side effect of a drag.
       const targeted = targetedKeysRef.current
       if (targeted && !targeted.has(targetKey)) return
-      draft.set(targetKey, propertyName, value)
+      draft.set(targetKey, attribute, value)
       writesRef.current += 1
       setSaveState('dirty')
       // Debounce with a ceiling. The cadence is not only a network question: each save republishes
@@ -221,7 +221,7 @@ export function LookRowStoreProvider({
     const committed = new Map<string, string>()
     for (const row of look.rows) {
       if (row.targetType === 'fixture' && !row.elementKey) {
-        committed.set(lookRowKey(row.targetKey, row.propertyName), row.value)
+        committed.set(lookRowKey(row.targetKey, row.attribute), row.value)
       }
     }
     draft.reconcile(committed)
@@ -249,7 +249,7 @@ export function LookRowStoreProvider({
       setValue,
       targetedKeys,
       targets: layer.targets,
-      propertyMask: layer.propertyMask,
+      attributeMask: layer.attributeMask,
       deferredRows: (look?.rows ?? []).filter((r) => r.targetType === DEFERRED_TARGET_TYPE),
       elementRows: (look?.rows ?? []).filter(
         (r) => r.targetType !== DEFERRED_TARGET_TYPE && !!r.elementKey,
@@ -283,12 +283,12 @@ function buildServerRows(
       const staged = parseProgrammerValue(row.value)
       if (!staged) continue
       if (pass === 'fixture') {
-        out.set(lookRowKey(row.targetKey, row.propertyName), staged)
+        out.set(lookRowKey(row.targetKey, row.attribute), staged)
         continue
       }
       for (const fixture of fixtures ?? []) {
         if (fixture.groups.includes(row.targetKey)) {
-          out.set(lookRowKey(fixture.key, row.propertyName), staged)
+          out.set(lookRowKey(fixture.key, row.attribute), staged)
         }
       }
     }

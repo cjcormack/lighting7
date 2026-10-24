@@ -19,7 +19,7 @@ import uk.me.cormack.lighting7.fixture.FixtureType
  *
  * **Safety**: each fire spends a physical cartridge, so the two outputs are
  * [one-shot triggers][FixtureTrigger] and the master is their arm (stage-view plan session 9,
- * D15, D16) — none of the three is a `@FixtureProperty`. No Look, template, cue row, effect,
+ * D15, D16) — none of the three is a `@FixtureAttribute`. No Look, template, cue row, effect,
  * programmer value or Record can hold one, nothing composes or crossfades them, and the desk owns
  * all three channels: the outputs sit idle except for one ~300 ms pulse per fire, and the master
  * follows the desk's arm. A fire is a cue event, the cannon's hold-to-fire button or a MIDI

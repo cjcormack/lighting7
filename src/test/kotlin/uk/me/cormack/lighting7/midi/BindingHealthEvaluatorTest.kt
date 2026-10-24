@@ -57,8 +57,8 @@ class BindingHealthEvaluatorTest {
         validSpeedMasterUuids = validSpeedMasterUuids,
         validStackUuids = setOf(liveStack),
         validCueUuids = setOf(liveCue),
-        selectionProperties = BindingHealthEvaluator.selectionPropertiesOf(fixtures),
-        colourProperties = BindingHealthEvaluator.colourPropertiesOf(fixtures),
+        selectionAttributes = BindingHealthEvaluator.selectionAttributesOf(fixtures),
+        colourAttributes = BindingHealthEvaluator.colourAttributesOf(fixtures),
         validLookUuids = setOf(liveLook),
         validPaletteUuids = setOf(livePalette),
         validPadUuids = setOf(livePad),
@@ -122,7 +122,7 @@ class BindingHealthEvaluatorTest {
     @Test
     fun `a hand drop addresses nothing and so can never be dead`() {
         // Whether the hand holds anything is a fact about this second, not about the binding — the
-        // same line `SelectionProperty` draws with an empty selection.
+        // same line `SelectionAttribute` draws with an empty selection.
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.HandDrop, context()))
     }
 
@@ -171,12 +171,12 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `SelectionProperty is healthy for a property some patched fixture can take on a fader`() {
+    fun `SelectionAttribute is healthy for an attribute some patched fixture can take on a fader`() {
         val ctx = context()
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("dimmer"), ctx))
-        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("rgbColour"), ctx))
-        val dead = BindingHealthEvaluator.evaluate(BindingTarget.SelectionProperty("tilt"), ctx)
-        assertEquals(AssignmentHealth.UnknownProperty("tilt"), dead)
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("dimmer"), ctx))
+        assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("rgbColour"), ctx))
+        val dead = BindingHealthEvaluator.evaluate(BindingTarget.SelectionAttribute("tilt"), ctx)
+        assertEquals(AssignmentHealth.UnknownAttribute("tilt"), dead)
     }
 
     @Test
@@ -201,7 +201,7 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `a strip is judged by its target alone, not by the properties it derives`() {
+    fun `a strip is judged by its target alone, not by the attributes it derives`() {
         val ctx = context()
         assertEquals(
             AssignmentHealth.Ok,
@@ -218,11 +218,11 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `EncoderBankSet needs a property some patched fixture can take`() {
+    fun `EncoderBankSet needs an attribute some patched fixture can take`() {
         val ctx = context()
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("dimmer"), ctx))
         assertEquals(
-            AssignmentHealth.UnknownProperty("tilt"),
+            AssignmentHealth.UnknownAttribute("tilt"),
             BindingHealthEvaluator.evaluate(BindingTarget.EncoderBankSet("tilt"), ctx),
         )
     }
@@ -247,18 +247,18 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `FixtureProperty with live fixture + valid property is Ok`() {
+    fun `FixtureAttribute with live fixture + valid attribute is Ok`() {
         val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.FixtureProperty("hex-1", "dimmer"),
+            BindingTarget.FixtureAttribute("hex-1", "dimmer"),
             context(),
         )
         assertEquals(AssignmentHealth.Ok, health)
     }
 
     @Test
-    fun `FixtureProperty with renamed fixture returns MissingFixture`() {
+    fun `FixtureAttribute with renamed fixture returns MissingFixture`() {
         val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.FixtureProperty("hex-renamed", "dimmer"),
+            BindingTarget.FixtureAttribute("hex-renamed", "dimmer"),
             context(),
         )
         val missing = assertIs<AssignmentHealth.MissingFixture>(health)
@@ -266,9 +266,9 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `GroupProperty with unknown group returns MissingGroup`() {
+    fun `GroupAttribute with unknown group returns MissingGroup`() {
         val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.GroupProperty("vanished", "dimmer"),
+            BindingTarget.GroupAttribute("vanished", "dimmer"),
             context(),
         )
         val missing = assertIs<AssignmentHealth.MissingGroup>(health)
@@ -276,14 +276,14 @@ class BindingHealthEvaluatorTest {
     }
 
     @Test
-    fun `GroupProperty with removed property returns MissingProperty`() {
+    fun `GroupAttribute with removed attribute returns MissingAttribute`() {
         val health = BindingHealthEvaluator.evaluate(
-            BindingTarget.GroupProperty("front-wash", "doesNotExist"),
+            BindingTarget.GroupAttribute("front-wash", "doesNotExist"),
             context(),
         )
-        val missing = assertIs<AssignmentHealth.MissingProperty>(health)
+        val missing = assertIs<AssignmentHealth.MissingAttribute>(health)
         assertEquals("front-wash", missing.targetKey)
-        assertEquals("doesNotExist", missing.propertyName)
+        assertEquals("doesNotExist", missing.attribute)
     }
 
     @Test
@@ -347,10 +347,10 @@ class BindingHealthEvaluatorTest {
 
     @Test
     fun `Flash recurses on the inner target — dead inner propagates`() {
-        val flashOk = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-1", "dimmer"))
+        val flashOk = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-1", "dimmer"))
         assertEquals(AssignmentHealth.Ok, BindingHealthEvaluator.evaluate(flashOk, context()))
 
-        val flashDead = BindingTarget.Flash(BindingTarget.FixtureProperty("hex-gone", "dimmer"))
+        val flashDead = BindingTarget.Flash(BindingTarget.FixtureAttribute("hex-gone", "dimmer"))
         val health = BindingHealthEvaluator.evaluate(flashDead, context())
         assertIs<AssignmentHealth.MissingFixture>(health)
     }

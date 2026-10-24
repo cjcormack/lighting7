@@ -24,8 +24,8 @@ import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
 import uk.me.cormack.lighting7.fx.TargetCoverage
-import uk.me.cormack.lighting7.fx.parseMaskGroups
-import uk.me.cormack.lighting7.fx.toPropertyMask
+import uk.me.cormack.lighting7.fx.parseFamilies
+import uk.me.cormack.lighting7.fx.toAttributeMask
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.state.State
 import java.util.UUID
@@ -270,9 +270,9 @@ private class TimelineBatch(
         val mask = when {
             to is PressedRecord.Palette -> to.family?.name
             from.source.isPalette -> null
-            else -> fromLayer.propertyMask
+            else -> fromLayer.attributeMask
         }
-        val on = decide(to, listOfNotNull(toTarget), afterOff, fromLayer.copy(propertyMask = mask), problem) ?: return
+        val on = decide(to, listOfNotNull(toTarget), afterOff, fromLayer.copy(attributeMask = mask), problem) ?: return
         val next = when (val result = on.result) {
             is LayerPress.Result.Removed -> afterOff
             is LayerPress.Result.Applied -> {
@@ -455,15 +455,15 @@ private class TimelineBatch(
                         else -> out = out.copy(blendMode = blend)
                     }
                 }
-                "propertyMask" -> {
+                "attributeMask" -> {
                     val names = primitive?.takeIf { it.isString }?.contentOrNull?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
                     when {
-                        isNull -> out = out.copy(propertyMask = null)
-                        names == null -> found += "fields.propertyMask must be a mask or null"
+                        isNull -> out = out.copy(attributeMask = null)
+                        names == null -> found += "fields.attributeMask must be a mask or null"
                         else -> try {
-                            out = out.copy(propertyMask = parseMaskGroups(names)?.toPropertyMask())
+                            out = out.copy(attributeMask = parseFamilies(names)?.toAttributeMask())
                         } catch (e: IllegalArgumentException) {
-                            found += "fields.propertyMask: ${e.message}"
+                            found += "fields.attributeMask: ${e.message}"
                         }
                     }
                 }
@@ -494,7 +494,7 @@ private class TimelineBatch(
         val RESTORED_SCENERY_KEYS = setOf("elementUuid", "state", "transitionMs")
         val OP_KINDS = listOf("layerOn", "layerOff", "layerSettings", "replace", "scenerySet", "sceneryClear", "restore")
         val LAYER_FIELDS = listOf(
-            "enabled", "amount", "blendMode", "propertyMask", "stomp",
+            "enabled", "amount", "blendMode", "attributeMask", "stomp",
             "delayMs", "intervalMs", "randomWindowMs", "speedMasterUuid", "rateSpeedMasterUuid",
         )
     }

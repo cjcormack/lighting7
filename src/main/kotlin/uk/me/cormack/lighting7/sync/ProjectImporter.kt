@@ -34,7 +34,7 @@ import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.DaoLookFxEntity
 import uk.me.cormack.lighting7.models.DaoLookRow
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoFixturePatchPlacement
 import uk.me.cormack.lighting7.models.deletePlacementsOf
 import uk.me.cormack.lighting7.models.DaoCueSlot
@@ -114,7 +114,7 @@ import uk.me.cormack.lighting7.models.DaoPaletteFxEntity
 import uk.me.cormack.lighting7.models.DaoPaletteRow
 import uk.me.cormack.lighting7.sync.dto.PaletteJson
 import uk.me.cormack.lighting7.sync.dto.CueLayerJson
-import uk.me.cormack.lighting7.sync.dto.CuePropertyAssignmentJson
+import uk.me.cormack.lighting7.sync.dto.CueAttributeAssignmentJson
 import uk.me.cormack.lighting7.sync.dto.BuskPageJson
 import uk.me.cormack.lighting7.sync.dto.BuskRigRowJson
 import uk.me.cormack.lighting7.sync.dto.CueSlotJson
@@ -307,7 +307,7 @@ import uk.me.cormack.lighting7.routes.renumberAutoEntries
 // v4 added `promptScripts/{hash}.pdf` binary blobs to the repo; the writer emitting 4 was what
 // made a pre-v4 install refuse a v4 repo (it lacked the wipe-preserve logic and would delete the
 // PDFs, reverting them onto peers).
-internal const val SUPPORTED_FORMAT_VERSION = 38
+internal const val SUPPORTED_FORMAT_VERSION = 39
 internal const val MIN_SUPPORTED_FORMAT_VERSION = 5
 
 /**
@@ -733,7 +733,7 @@ class ProjectImporter(private val state: State) {
         val legacyPlaces = ArrayList<PendingEntry>()
         val cueMap = importCues(sourceDir, project, cueStackMap, elementMap, patchMap, formatVersion, legacyPlaces)
         val (entryMap, numberClashes) = importCueStackEntries(sourceDir, cueStackMap, cueMap, legacyPlaces)
-        importCuePropertyAssignments(sourceDir, cueMap)
+        importCueAttributeAssignments(sourceDir, cueMap)
         importCueLayers(sourceDir, cueMap, lookMap, paletteMap)
         importCueAdHocFx(sourceDir, cueMap, legacy)
         importCueTriggers(sourceDir, cueMap, scriptMap)
@@ -1579,14 +1579,14 @@ class ProjectImporter(private val state: State) {
         return clashes.sortedWith(compareBy({ it.stack }, { it.number }, { it.entryUuid }))
     }
 
-    private fun importCuePropertyAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
+    private fun importCueAttributeAssignments(dir: Path, cueMap: Map<UUID, DaoCue>) {
         readDir(dir.resolve("cueAttributeAssignments")) { json ->
-            val a = canonicalDecode(CuePropertyAssignmentJson.serializer(), json)
+            val a = canonicalDecode(CueAttributeAssignmentJson.serializer(), json)
             val cueUuid = UUID.fromString(a.cueUuid)
             val cue = cueMap[cueUuid]
                 ?: throw ImportError.invalidArchive("Property assignment ${a.uuid} references unknown cue $cueUuid")
             val uuid = UUID.fromString(a.uuid)
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = a.targetType
                 targetKey = a.targetKey

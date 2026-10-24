@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fx
 import uk.me.cormack.lighting7.fixture.Fixture
 import uk.me.cormack.lighting7.fixture.group.FixtureGroup
 import uk.me.cormack.lighting7.fixture.group.detectCapabilities
-import uk.me.cormack.lighting7.fixture.group.fixturesSupportProperty
+import uk.me.cormack.lighting7.fixture.group.fixturesSupportAttribute
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.FxTargetsRef
 import uk.me.cormack.lighting7.models.LookFxSpec
@@ -39,35 +39,35 @@ internal object FxSpawner {
         target: FxTargetsRef,
         fxSpec: LookFxSpec,
     ): FxTarget? {
-        // A recorded row's own `propertyName` wins, and rows recorded while sweep item A11 was live
+        // A recorded row's own `attribute` wins, and rows recorded while sweep item A11 was live
         // carry `"pan"` for a position effect. The registration's output type is what lets
         // FxTargetFactory read that as the position pair rather than a dead SliderTarget.
         val registration = state.show.fxRegistry.getRegistration(fxSpec.fxType)
         val outputType = registration?.outputType
         // Read only when the spec names no property: Palette Steps' reads its palettes.
-        val drivenProperty by lazy { drivenPropertyOf(state, registration, fxSpec) }
+        val drivenAttribute by lazy { drivenAttributeOf(state, registration, fxSpec) }
         val single = when (target) {
             is FxTargetsRef.Selection -> {
-                val propertyName = fxSpec.propertyName
-                    ?: resolveFxPropertyForFixtureInCue(fxSpec, registration, drivenProperty)
+                val attribute = fxSpec.attribute
+                    ?: resolveFxAttributeForFixtureInCue(fxSpec, registration, drivenAttribute)
                     ?: return null
-                return createSelectionTarget(state, target, propertyName, outputType)
+                return createSelectionTarget(state, target, attribute, outputType)
             }
             is FxTargetsRef.Single -> target.target
         }
         return when (single) {
             is TargetRef.Group -> {
                 val group = state.show.fixtures.untypedGroup(single.key)
-                val propertyName = fxSpec.propertyName
-                    ?: resolveFxPropertyForCue(fxSpec, registration, group, drivenProperty)
+                val attribute = fxSpec.attribute
+                    ?: resolveFxAttributeForCue(fxSpec, registration, group, drivenAttribute)
                     ?: return null
-                createGroupTargetForCue(state, single, propertyName, outputType)
+                createGroupTargetForCue(state, single, attribute, outputType)
             }
             is TargetRef.Fixture -> {
-                val propertyName = fxSpec.propertyName
-                    ?: resolveFxPropertyForFixtureInCue(fxSpec, registration, drivenProperty)
+                val attribute = fxSpec.attribute
+                    ?: resolveFxAttributeForFixtureInCue(fxSpec, registration, drivenAttribute)
                     ?: return null
-                createFixtureTargetForCue(single.key, propertyName, state, outputType)
+                createFixtureTargetForCue(single.key, attribute, state, outputType)
             }
         }
     }
@@ -80,64 +80,64 @@ internal object FxSpawner {
     fun createSelectionTarget(
         state: State,
         selection: FxTargetsRef.Selection,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
     ): FxTarget =
-        FxTargetFactory.forSelection(selection, propertyName, outputType, state.show.fixtures.referenceFixtureFor(selection, propertyName))
+        FxTargetFactory.forSelection(selection, attribute, outputType, state.show.fixtures.referenceFixtureFor(selection, attribute))
 
     /**
      * The one property an effect drives where its stored category cannot say, for a spec stored
-     * without a `propertyName` — an effect palette's, or any other that names none: a beam built-in's
+     * without an `attribute` — an effect palette's, or any other that names none: a beam built-in's
      * declared one (effects plan D6), and Palette Steps' from its palettes (§3.6), which may step
      * a strobe in an Intensity palette or a frost in a Beam one. Never a sentinel (`setting`,
      * `slider`), which names no property: Slot Steps is stored with its setting's name.
      */
-    private fun drivenPropertyOf(state: State, registration: FxRegistration?, fxSpec: LookFxSpec): String? =
+    private fun drivenAttributeOf(state: State, registration: FxRegistration?, fxSpec: LookFxSpec): String? =
         when (registration?.id) {
             null -> null
             PALETTE_STEPS_ID -> paletteStepsShape(
                 PaletteSource(state.show.paletteRegistry).paletteStepsOf(fxSpec.parameters["palettes"]),
-            ).getOrNull()?.property
-            else -> registration.compatibleProperties.singleOrNull()?.takeUnless { it in FX_PROPERTY_SENTINELS }
+            ).getOrNull()?.attribute
+            else -> registration.compatibleAttributes.singleOrNull()?.takeUnless { it in FX_ATTRIBUTE_SENTINELS }
         }
 
     /**
      * A beam effect (effects plan D6) and Palette Steps (§3.6) drive one property, so a spec stored
-     * without a `propertyName` — an effect palette's, or any other that names none — lands on
-     * [drivenProperty], on a group only where every member has it.
+     * without an `attribute` — an effect palette's, or any other that names none — lands on
+     * [drivenAttribute], on a group only where every member has it.
      */
-    private fun resolveFxPropertyForCue(
+    private fun resolveFxAttributeForCue(
         fxSpec: LookFxSpec,
         registration: FxRegistration?,
         group: FixtureGroup<*>,
-        drivenProperty: String?,
+        drivenAttribute: String?,
     ): String? {
         if (registration?.id == PALETTE_STEPS_ID) {
-            return drivenProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
+            return drivenAttribute?.takeIf { fixturesSupportAttribute(group.fixtures, it) }
         }
         val capabilities = group.detectCapabilities()
         return when (fxSpec.family) {
             "intensity" -> if ("dimmer" in capabilities) "dimmer" else null
             "colour" -> if ("colour" in capabilities) "colour" else null
             "position" -> if ("position" in capabilities) "position" else null
-            "beam" -> drivenProperty?.takeIf { fixturesSupportProperty(group.fixtures, it) }
-            "controls", "setting" -> fxSpec.propertyName
+            "beam" -> drivenAttribute?.takeIf { fixturesSupportAttribute(group.fixtures, it) }
+            "controls", "setting" -> fxSpec.attribute
             else -> null
         }
     }
 
-    private fun resolveFxPropertyForFixtureInCue(
+    private fun resolveFxAttributeForFixtureInCue(
         fxSpec: LookFxSpec,
         registration: FxRegistration?,
-        drivenProperty: String?,
+        drivenAttribute: String?,
     ): String? {
-        if (registration?.id == PALETTE_STEPS_ID) return drivenProperty
+        if (registration?.id == PALETTE_STEPS_ID) return drivenAttribute
         return when (fxSpec.family) {
             "intensity" -> "dimmer"
             "colour" -> "colour"
             "position" -> "position"
-            "beam" -> drivenProperty
-            "controls", "setting" -> fxSpec.propertyName
+            "beam" -> drivenAttribute
+            "controls", "setting" -> fxSpec.attribute
             else -> null
         }
     }
@@ -145,16 +145,16 @@ internal object FxSpawner {
     private fun createGroupTargetForCue(
         state: State,
         group: TargetRef.Group,
-        propertyName: String,
+        attribute: String,
         outputType: FxOutputType?,
     ): FxTarget = FxTargetFactory.forGroup(
-        group.key, propertyName, outputType,
-        state.show.fixtures.referenceFixtureFor(FxTargetsRef.Single(group), propertyName) as? Fixture,
+        group.key, attribute, outputType,
+        state.show.fixtures.referenceFixtureFor(FxTargetsRef.Single(group), attribute) as? Fixture,
     )
 
     private fun createFixtureTargetForCue(
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         state: State,
         outputType: FxOutputType?,
     ): FxTarget {
@@ -163,7 +163,7 @@ internal object FxSpawner {
         val fixture = try {
             state.show.fixtures.untypedGroupableFixture(fixtureKey)
         } catch (_: Exception) { null }
-        return FxTargetFactory.forFixture(fixtureKey, propertyName, outputType, fixture)
+        return FxTargetFactory.forFixture(fixtureKey, attribute, outputType, fixture)
     }
 
     /**

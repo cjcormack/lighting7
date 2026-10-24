@@ -537,9 +537,9 @@ export function lightingApiMock() {
         lastIncluded: () => programmerWs.state.lastIncluded,
         // The programmer's scenery has its own frame and subscription; the mock holds none.
         scenery: () => ({ projectId: null, elements: [] }),
-        getKeyState: (targetKey: string, propertyName: string) => ({
-          entry: programmerWs.state.entries.get(`${targetKey}|${propertyName}`),
-          provenance: programmerWs.state.provenance.get(`${targetKey}|${propertyName}`),
+        getKeyState: (targetKey: string, attribute: string) => ({
+          entry: programmerWs.state.entries.get(`${targetKey}|${attribute}`),
+          provenance: programmerWs.state.provenance.get(`${targetKey}|${attribute}`),
         }),
         subscribe: (fn: (state: unknown) => void) => {
           programmerWs.callbacks.push(fn)
@@ -571,8 +571,8 @@ export function lightingApiMock() {
         clearScenery: () => {},
         // The two request/reply frames (fixture-fx-sheets W1, W2) answer promises. A test that cares
         // about the answer spies on these; the defaults are an empty stack and an empty release.
-        keyStack: (targetType: string, targetKey: string, propertyName: string) =>
-          Promise.resolve({ targetType, targetKey, propertyName, blind: false, stacks: [] }),
+        keyStack: (targetType: string, targetKey: string, attribute: string) =>
+          Promise.resolve({ targetType, targetKey, attribute, blind: false, stacks: [] }),
         clearTarget: (targetType: string, targetKey: string) =>
           Promise.resolve({ targetType, targetKey, values: 0, fx: 0, partial: [] }),
       },

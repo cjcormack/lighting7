@@ -11,7 +11,7 @@ import { formatError } from '@/lib/formatError'
  * fallback. The middleware stays silent on those endpoints, or it would say it a second time,
  * generically. `rigWriteFailureMessage` in `store/busk.ts` is the pattern.
  *
- * [key] is the toast's id — `speed-masters:usage` — so a batch of four refused writes in one column
+ * [key] is the toast's id — `speed-masters:family` — so a batch of four refused writes in one column
  * replaces rather than stacks, while a refusal in another column still gets its own say.
  */
 export function reportSheetWriteFailure(

@@ -63,7 +63,7 @@ describe('patchAtPlacement', () => {
 
 describe('patchAtPlacement media', () => {
   // Fitted media layers option by option (fixture optics session 3): the placement's slot, else
-  // the patch's — the stock below both is the overlay's (`fittedProperties`).
+  // the patch's — the stock below both is the overlay's (`fittedAttributes`).
   it("lays the placement's fitted slots over the patch's, slot by slot", () => {
     const patch = { ...base, media: { slots: { gelScroller: { L201: { gel: 'R26' }, R25: { gel: 'R80' } } } } }
     const placement = { ...sr, media: { slots: { gelScroller: { L201: { gel: 'L106' } }, mediaFrame: { IN: { gel: 'L202' } } } } }

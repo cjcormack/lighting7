@@ -430,7 +430,7 @@ function RecordableFx({
           />
           <span className="truncate">{effect.fxType}</span>
           <span className="shrink-0 font-mono text-xs text-muted-foreground">
-            → {effect.propertyName}
+            → {effect.attribute}
           </span>
         </label>
       ))}

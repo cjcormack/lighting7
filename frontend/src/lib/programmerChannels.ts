@@ -1,5 +1,5 @@
 import { parseProgrammerEntryValue, type ProgrammerParsedValue } from './programmerValue'
-import type { ChannelRef, Fixture, PropertyDescriptor } from '../store/fixtures'
+import type { ChannelRef, Fixture, AttributeDescriptor } from '../store/fixtures'
 import { whiteLevelsFor } from './whiteMix'
 
 /**
@@ -14,7 +14,7 @@ import { whiteLevelsFor } from './whiteMix'
  * sideband slots underneath a deliberate property write. So the sideband supplements this
  * resolution and is never a substitute for it.
  *
- * The value→channel mapping mirrors `PropertyChannelWriter` in lighting7. Keep the two in step —
+ * The value→channel mapping mirrors `AttributeChannelWriter` in lighting7. Keep the two in step —
  * this is the client-side twin and the backend remains the reference.
  */
 
@@ -32,7 +32,7 @@ export function channelMapKey(ref: ChannelRef): string {
 /** The minimum a programmer entry must expose to be resolvable. */
 export interface ResolvableEntry {
   targetKey: string
-  propertyName: string
+  attribute: string
   value: string
   resolvedValue?: string
 }
@@ -48,18 +48,18 @@ export interface SidebandChannel {
  * Every property descriptor addressable by a programmer entry, keyed by the entry's `targetKey`.
  *
  * Both fixture keys and **element** keys are present: a multi-head fixture's entries are keyed by
- * element key, not fixture key, so a map built from `Fixture.properties` alone would silently drop
+ * element key, not fixture key, so a map built from `Fixture.attributes` alone would silently drop
  * every per-head write on a moving-head bar.
  */
-export type DescriptorsByTarget = ReadonlyMap<string, readonly PropertyDescriptor[]>
+export type DescriptorsByTarget = ReadonlyMap<string, readonly AttributeDescriptor[]>
 
 /** Build the lookup [DescriptorsByTarget] wants from the fixture list a stage view already has. */
 export function descriptorsByTarget(fixtures: Iterable<Fixture>): DescriptorsByTarget {
-  const out = new Map<string, readonly PropertyDescriptor[]>()
+  const out = new Map<string, readonly AttributeDescriptor[]>()
   for (const fixture of fixtures) {
-    out.set(fixture.key, fixture.properties)
+    out.set(fixture.key, fixture.attributes)
     for (const element of fixture.elements ?? []) {
-      out.set(element.key, element.properties)
+      out.set(element.key, element.attributes)
     }
   }
   return out
@@ -75,19 +75,19 @@ export function descriptorsByTarget(fixtures: Iterable<Fixture>): DescriptorsByT
  * something this property cannot render, and guessing would be worse than showing nothing.
  */
 export function resolveEntryChannels(
-  descriptors: readonly PropertyDescriptor[] | undefined,
+  descriptors: readonly AttributeDescriptor[] | undefined,
   entry: ResolvableEntry,
 ): ResolvedChannel[] {
   if (!descriptors) return []
   const parsed = parseProgrammerEntryValue(entry)
   if (!parsed) return []
-  const descriptor = descriptors.find((d) => d.name === entry.propertyName)
+  const descriptor = descriptors.find((d) => d.name === entry.attribute)
   if (!descriptor) return []
   return channelsFor(descriptor, parsed)
 }
 
 function channelsFor(
-  descriptor: PropertyDescriptor,
+  descriptor: AttributeDescriptor,
   parsed: ProgrammerParsedValue,
 ): ResolvedChannel[] {
   switch (descriptor.type) {
@@ -120,7 +120,7 @@ function channelsFor(
       }
       return out
     }
-    // The colour's nearest mix of the two whites, as the desk writes it (`PropertyChannelWriter`).
+    // The colour's nearest mix of the two whites, as the desk writes it (`AttributeChannelWriter`).
     case 'whiteMix': {
       if (parsed.kind !== 'colour') return []
       const levels = whiteLevelsFor(descriptor, [parsed.r, parsed.g, parsed.b])
@@ -130,7 +130,7 @@ function channelsFor(
       ]
     }
     // Coarse axes only. A position assignment writes no fine channels on the backend either
-    // (`PropertyChannelWriter.resolvePosition`), so emitting them here would make the preview
+    // (`AttributeChannelWriter.resolvePosition`), so emitting them here would make the preview
     // disagree with what the same value produces on the wire.
     case 'position':
       return parsed.kind === 'position'

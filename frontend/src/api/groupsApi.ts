@@ -85,7 +85,7 @@ export interface ApplyFxRequest {
    * spelling to keep in step.
    */
   fxType: string
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: BlendMode
   order: SpreadOrder
@@ -126,7 +126,7 @@ export interface ApplyFxResponse {
 export interface GroupActiveFx {
   id: number
   fxType: string
-  propertyName: string
+  attribute: string
   cycle: number
   blendMode: BlendMode
   order: SpreadOrder
@@ -161,14 +161,14 @@ export interface GroupActiveFx {
 
 // === Group Property Types ===
 
-export type GroupPropertyDescriptor =
-  | GroupSliderPropertyDescriptor
-  | GroupColourPropertyDescriptor
-  | GroupWhiteMixPropertyDescriptor
-  | GroupPositionPropertyDescriptor
-  | GroupSettingPropertyDescriptor
+export type GroupAttributeDescriptor =
+  | GroupSliderAttributeDescriptor
+  | GroupColourAttributeDescriptor
+  | GroupWhiteMixAttributeDescriptor
+  | GroupPositionAttributeDescriptor
+  | GroupSettingAttributeDescriptor
 
-export interface GroupSliderPropertyDescriptor {
+export interface GroupSliderAttributeDescriptor {
   type: 'slider'
   name: string
   displayName: string
@@ -188,7 +188,7 @@ export interface MemberColourChannels {
   uvChannel?: ChannelRef
 }
 
-export interface GroupColourPropertyDescriptor {
+export interface GroupColourAttributeDescriptor {
   type: 'colour'
   name: string
   displayName: string
@@ -203,7 +203,7 @@ export interface MemberWhiteMixChannels {
 }
 
 /** The "all heads" form of a warm/cold white pair (venue-visit plan D8) — the blinder's cells. */
-export interface GroupWhiteMixPropertyDescriptor {
+export interface GroupWhiteMixAttributeDescriptor {
   type: 'whiteMix'
   name: string
   displayName: string
@@ -223,7 +223,7 @@ export interface MemberPositionChannels {
   tiltMax: number
 }
 
-export interface GroupPositionPropertyDescriptor {
+export interface GroupPositionAttributeDescriptor {
   type: 'position'
   name: string
   displayName: string
@@ -243,7 +243,7 @@ export interface SettingOption {
   colourPreview?: string
 }
 
-export interface GroupSettingPropertyDescriptor {
+export interface GroupSettingAttributeDescriptor {
   type: 'setting'
   name: string
   displayName: string

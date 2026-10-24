@@ -23,25 +23,25 @@ export type ColourAxis = "hue" | "hueFine" | "saturation" | "brightness"
  * `lib/surfaceResolve.ts` when it derives a strip's encoder.
  */
 export interface EncoderBankSelection {
-  propertyName: string
+  attribute: string
   colourAxis?: ColourAxis | null
 }
 
 /** Continuous target: fixture property driven by a fader/encoder. */
-export interface FixturePropertyTarget {
-  type: "fixtureProperty"
+export interface FixtureAttributeTarget {
+  type: "fixtureAttribute"
   fixtureKey: string
-  propertyName: string
+  attribute: string
   /** On a colour property, which axis; absent is hue. Refused by name on anything else. */
   colourAxis?: ColourAxis | null
 }
 
 /** Continuous target: fixture-group property driven by a fader/encoder. */
-export interface GroupPropertyTarget {
-  type: "groupProperty"
+export interface GroupAttributeTarget {
+  type: "groupAttribute"
   groupName: string
-  propertyName: string
-  /** As on {@link FixturePropertyTarget}; a member on which the property is not a colour is skipped. */
+  attribute: string
+  /** As on {@link FixtureAttributeTarget}; a member on which the property is not a colour is skipped. */
   colourAxis?: ColourAxis | null
 }
 
@@ -86,10 +86,10 @@ export interface FireTriggerTarget {
   trigger: string
 }
 
-/** Flash wraps either a FixtureProperty or GroupProperty continuous target. */
+/** Flash wraps either a FixtureAttribute or GroupAttribute continuous target. */
 export interface FlashTarget {
   type: "flash"
-  target: FixturePropertyTarget | GroupPropertyTarget
+  target: FixtureAttributeTarget | GroupAttributeTarget
   max?: number
 }
 
@@ -154,10 +154,10 @@ export interface SpeedMasterTapTarget {
  * to its members. An empty selection drops the write rather than widening it to everything, and
  * the control reads as the legend's "no selection" state.
  */
-export interface SelectionPropertyTarget {
-  type: "selectionProperty"
-  propertyName: string
-  /** As on {@link FixturePropertyTarget}; judged against the rig's colour vocabulary at bind time. */
+export interface SelectionAttributeTarget {
+  type: "selectionAttribute"
+  attribute: string
+  /** As on {@link FixtureAttributeTarget}; judged against the rig's colour vocabulary at bind time. */
   colourAxis?: ColourAxis | null
 }
 
@@ -214,12 +214,12 @@ export interface StripTarget {
 }
 
 /**
- * Point the device's strip encoders at `propertyName` on press. Applies to the device the button
+ * Point the device's strip encoders at `attribute` on press. Applies to the device the button
  * is on, so the payload names no device; the LED is lit while this is that device's bank.
  */
 export interface EncoderBankSetTarget {
   type: "encoderBankSet"
-  propertyName: string
+  attribute: string
   /**
    * Which axis of a colour property the bank points the encoders at; absent is hue. The LED
    * lights when the property **and** the axis match the device's bank.
@@ -373,8 +373,8 @@ export interface UnknownTarget {
 }
 
 export type BindingTarget =
-  | FixturePropertyTarget
-  | GroupPropertyTarget
+  | FixtureAttributeTarget
+  | GroupAttributeTarget
   | CueStackGoTarget
   | CueStackBackTarget
   | CueStackPauseTarget
@@ -388,7 +388,7 @@ export type BindingTarget =
   | SetBankTarget
   | SpeedMasterBpmTarget
   | SpeedMasterTapTarget
-  | SelectionPropertyTarget
+  | SelectionAttributeTarget
   | SelectionFanTarget
   | SelectTargetTarget
   | ClearSelectionTarget
@@ -427,7 +427,7 @@ export type BindingHealth =
   | { type: "ok" }
   | { type: "missingFixture"; fixtureKey: string }
   | { type: "missingGroup"; groupName: string }
-  | { type: "missingProperty"; targetKey: string; propertyName: string }
+  | { type: "missingAttribute"; targetKey: string; attribute: string }
   // Two `ref:` variants used to sit here — carried not because a control surface could hold a
   // reference value, but because this type is the superset `describeHealth` switches over. They
   // retired with the grammar in session 4.
@@ -437,7 +437,7 @@ export type BindingHealth =
   | { type: "missingSpeedMaster"; masterUuid: string }
   // A selection or encoder-bank property no fixture in the patch declares. It names the property
   // and no target, because there is no target: what makes it dead is the patch, not a reference.
-  | { type: "unknownProperty"; propertyName: string }
+  | { type: "unknownAttribute"; attribute: string }
   // The record variants. Keyed by uuid because that is what the binding carries.
   | { type: "missingLook"; lookUuid: string }
   | { type: "missingPalette"; paletteUuid: string }
@@ -732,7 +732,7 @@ export interface SurfacesWsApi {
    */
   subscribeControls(fn: (controls: SurfaceControlStates) => void): Subscription
   /** What each device's strip encoders drive, `deviceTypeKey` → selection; absent is `dimmer`. */
-  subscribeEncoderBanks(fn: (properties: Record<string, EncoderBankSelection>) => void): Subscription
+  subscribeEncoderBanks(fn: (attributes: Record<string, EncoderBankSelection>) => void): Subscription
 
   // The last snapshot of each cached stream, or null before its first frame. `subscribeX`
   // already replays that snapshot synchronously to a new subscriber; these exist so a reader
@@ -799,7 +799,7 @@ type InboundMessage =
   | ({ type: "surfacePickup.changed" } & PickupChange)
   | { type: "surfaceControls.state"; displayKey: string; controls: Record<string, ControlState> }
   | { type: "surfaceControls.changed"; displayKey: string; controls: Record<string, ControlState> }
-  | { type: "surfaceEncoderBank.state"; properties: Record<string, EncoderBankSelection> }
+  | { type: "surfaceEncoderBank.state"; attributes: Record<string, EncoderBankSelection> }
   | ({ type: "surfaceBank.bindingsChanged" } & BindingsChangeEvent)
   | ({ type: "surfaceScaler.state" } & ScalerState)
   | ({ type: "surfaceLearn.started" } & LearnStartedEvent)
@@ -886,8 +886,8 @@ export function createSurfacesWsApi(conn: InternalApiConnection): SurfacesWsApi 
         break
       }
       case "surfaceEncoderBank.state":
-        lastEncoderBanks = parsed.properties
-        encoderBanks.notify(parsed.properties)
+        lastEncoderBanks = parsed.attributes
+        encoderBanks.notify(parsed.attributes)
         break
       case "surfacePickup.changed":
         pickup.notify({

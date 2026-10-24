@@ -45,8 +45,8 @@ import { MaskPicker, useMaskDraft } from '@/components/programmer/maskPicker'
 import {
   FAMILY_LABELS,
   formatFamilyList,
-  parsePropertyMask,
-  serializePropertyMask,
+  parseAttributeMask,
+  serializeAttributeMask,
 } from '@/lib/attributeFamily'
 import { LookNameBadge } from '@/components/looks/LookNameBadge'
 import type { CueTarget } from '@/api/cuesApi'
@@ -74,7 +74,7 @@ export interface LookStackLayer {
   source?: LayerSource | null
   enabled?: boolean
   targets: CueTarget[]
-  propertyMask?: string | null
+  attributeMask?: string | null
   blendMode?: string
   amount?: number
   stomp?: boolean
@@ -106,7 +106,7 @@ export interface LayerHandlers {
   onSetEnabled: (index: number, enabled: boolean) => void
   onSetAmount: (index: number, amount: number) => void
   onSetBlendMode: (index: number, blendMode: string) => void
-  onSetPropertyMask: (index: number, propertyMask: string | null) => void
+  onSetAttributeMask: (index: number, attributeMask: string | null) => void
   onSetStomp: (index: number, stomp: boolean) => void
   /**
    * Point the value grid at this layer's Look.
@@ -423,7 +423,7 @@ export function LayerRow({
 
           {readOnly ? (
             <>
-              {layer.propertyMask && (
+              {layer.attributeMask && (
                 <Badge
                   variant="outline"
                   className="shrink-0 px-1.5 py-0 text-[10px]"
@@ -432,7 +432,7 @@ export function LayerRow({
                   {/* The same label the editable trigger shows, not the raw wire string. Wording one
                       surface `[COLOUR]` and the other `[Colour]` would undo the reason this row is
                       shared between them. */}
-                  [{formatFamilyList(parsePropertyMask(layer.propertyMask))}]
+                  [{formatFamilyList(parseAttributeMask(layer.attributeMask))}]
                 </Badge>
               )}
               {layer.blendMode && layer.blendMode !== 'OVERRIDE' && (
@@ -444,9 +444,9 @@ export function LayerRow({
           ) : (
             <LayerBlendMaskPopover
               blendMode={layer.blendMode ?? 'OVERRIDE'}
-              propertyMask={layer.propertyMask ?? null}
+              attributeMask={layer.attributeMask ?? null}
               onSetBlendMode={(mode) => handlers?.onSetBlendMode(index, mode)}
-              onSetPropertyMask={(mask) => handlers?.onSetPropertyMask(index, mask)}
+              onSetAttributeMask={(mask) => handlers?.onSetAttributeMask(index, mask)}
               timing={handlers?.onSetTiming != null ? layer : undefined}
               onSetTiming={(timing) => handlers?.onSetTiming?.(index, timing)}
             />
@@ -607,9 +607,9 @@ export function LayerSettingsPopover({
         </div>
         <BlendMaskFields
           blendMode={layer.blendMode ?? 'OVERRIDE'}
-          propertyMask={layer.propertyMask ?? null}
+          attributeMask={layer.attributeMask ?? null}
           onSetBlendMode={(mode) => handlers.onSetBlendMode(index, mode)}
-          onSetPropertyMask={(mask) => handlers.onSetPropertyMask(index, mask)}
+          onSetAttributeMask={(mask) => handlers.onSetAttributeMask(index, mask)}
         />
         <div className="flex items-center justify-between gap-2">
           <StompButton
@@ -805,21 +805,21 @@ function SortableRow({
  */
 function LayerBlendMaskPopover({
   blendMode,
-  propertyMask,
+  attributeMask,
   onSetBlendMode,
-  onSetPropertyMask,
+  onSetAttributeMask,
   timing,
   onSetTiming,
 }: {
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   onSetBlendMode: (blendMode: string) => void
-  onSetPropertyMask: (propertyMask: string | null) => void
+  onSetAttributeMask: (attributeMask: string | null) => void
   /** The layer's timing and masters, drawn under the blend and mask — a cue layer's only. */
   timing?: LayerTiming
   onSetTiming?: (timing: LayerTiming) => void
 }) {
-  const families = parsePropertyMask(propertyMask)
+  const families = parseAttributeMask(attributeMask)
   const masked = families.length > 0
   const nonDefaultBlend = blendMode !== 'OVERRIDE'
   const label = masked
@@ -855,9 +855,9 @@ function LayerBlendMaskPopover({
       >
         <BlendMaskFields
           blendMode={blendMode}
-          propertyMask={propertyMask}
+          attributeMask={attributeMask}
           onSetBlendMode={onSetBlendMode}
-          onSetPropertyMask={onSetPropertyMask}
+          onSetAttributeMask={onSetAttributeMask}
         />
         {timing != null && onSetTiming != null && (
           <div className="space-y-1.5 border-t pt-3">
@@ -873,14 +873,14 @@ function LayerBlendMaskPopover({
 /** The blend select and the mask picker — the body of both densities' popovers. */
 function BlendMaskFields({
   blendMode,
-  propertyMask,
+  attributeMask,
   onSetBlendMode,
-  onSetPropertyMask,
+  onSetAttributeMask,
 }: {
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   onSetBlendMode: (blendMode: string) => void
-  onSetPropertyMask: (propertyMask: string | null) => void
+  onSetAttributeMask: (attributeMask: string | null) => void
 }) {
   return (
     <>
@@ -904,7 +904,7 @@ function BlendMaskFields({
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs">Asserts</Label>
-        <LayerMaskPicker propertyMask={propertyMask} onSetPropertyMask={onSetPropertyMask} />
+        <LayerMaskPicker attributeMask={attributeMask} onSetAttributeMask={onSetAttributeMask} />
       </div>
     </>
   )
@@ -912,21 +912,21 @@ function BlendMaskFields({
 
 /**
  * A layer's mask, written on every change. `MaskPicker` speaks families and the wire a
- * comma-separated string; `serializePropertyMask` folds both "none" and "all four" to null, so an
+ * comma-separated string; `serializeAttributeMask` folds both "none" and "all four" to null, so an
  * unmasked layer has exactly one representation. `useMaskDraft` holds the picker's own state over
  * that fold — switched off with all four ticked writes nothing and stays off, and nothing ticked
  * is never written — so *All attributes* does not switch itself back on under the pointer.
  */
 function LayerMaskPicker({
-  propertyMask,
-  onSetPropertyMask,
+  attributeMask,
+  onSetAttributeMask,
 }: {
-  propertyMask: string | null
-  onSetPropertyMask: (propertyMask: string | null) => void
+  attributeMask: string | null
+  onSetAttributeMask: (attributeMask: string | null) => void
 }) {
-  const stored = parsePropertyMask(propertyMask)
+  const stored = parseAttributeMask(attributeMask)
   const [draft, setDraft] = useMaskDraft(stored.length > 0 ? stored : null, (families) =>
-    onSetPropertyMask(serializePropertyMask(families ?? [])),
+    onSetAttributeMask(serializeAttributeMask(families ?? [])),
   )
   return <MaskPicker value={draft} onChange={setDraft} />
 }

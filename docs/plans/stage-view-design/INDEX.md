@@ -448,7 +448,7 @@ distracting, especially because they stay lit with the dimmer at zero.
       - DMX zoom is rendered (`dmxToDegrees` on the zoom channel, `FixtureModel.tsx:709`). So is DMX
         focus, as a focal distance plus edge softness (`beamOptics.ts:264-295`). That covers the
         Source Four Revolution, Robe 575, MAC 250 and Shehds.
-      - `IRIS` and `FROST` are property categories (`FixtureProperty.kt:52-53`), and the Revolution
+      - `IRIS` and `FROST` are property categories (`FixtureAttribute.kt:52-53`), and the Revolution
         has an iris channel (`Source4RevolutionFixture.kt:172-173`). Neither is drawn.
       - There are no shutters or barn doors anywhere, backend or frontend.
       - Conventionals have no zoom or focus at all, because on a real lantern they are knobs, not
@@ -553,7 +553,7 @@ The first idea was to make a tab a fixture with an `open` slider, so Looks, cues
 busk pads and MIDI would all work for free. The composition research rules it out:
 
 - **Everything below the resolver is a DMX channel write.** `PropertyChannelWriter` handles
-  sliders, colours and settings and nothing else (`fx/PropertyChannelWriter.kt:56-101`).
+  sliders, colours and settings and nothing else (`fx/AttributeChannelWriter.kt:56-101`).
 - **It needs real channels.** A scenery fixture would need a universe, channels and no overlap.
   An ArtNet universe would transmit it. The `MOCK` controller has no fades and never sends live
   channel deltas. It also keeps an unbounded write log.
@@ -562,7 +562,7 @@ busk pads and MIDI would all work for free. The composition research rules it ou
   - SETTING snaps at 50% of a crossfade.
   - FOCUS, ZOOM, IRIS and PAN already mean something to the 3D view.
   - SETTING / OTHER also fall into the Beam mask family, so a Beam-masked Record would sweep
-    scenery with the lighting (`fx/PropertyMask.kt:65-67`).
+    scenery with the lighting (`fx/AttributeMask.kt:65-67`).
 - **Templates cannot hold it.** Their property vocabulary is closed (`fx/TemplateIntent.kt:230-249`).
 - **Cues do not track.** "Non-tracking: cues are complete states"
   (`lighting-composition-model.md`). A tab closed in cue 14 would open again at cue 15 unless every
@@ -660,7 +660,7 @@ It deliberately implements no FX trait, so a tempo effect cannot fire it
 - **Its three channels are plain `OTHER` sliders, which leaves holes:**
   - A Look row, a cue's local rows or a programmer value can hold `output1 = 255`, and it will
     fire whenever that record is recalled.
-  - `OTHER` falls into the Beam mask family (`fx/PropertyMask.kt:65-67`), so a Beam-masked Record
+  - `OTHER` falls into the Beam mask family (`fx/AttributeMask.kt:65-67`), so a Beam-masked Record
     sweeps a raised trigger into a cue.
   - A cue crossfade takes an LTP slider through 51 part-way. Nothing marks this as the one fixture
     where that is not a fade.

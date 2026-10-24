@@ -29,7 +29,7 @@ import {
 import { useFxRinged } from './fxSelection'
 import { LENS_CHIP_FACE, lensChipTone } from './lensChip'
 import type { Row } from './rowModel'
-import type { CellPropertyKey } from './useRowValues'
+import type { CellAttributeKey } from './useRowValues'
 
 /**
  * **The FX lens** (tables-colours plan D3): a Values cell an effect drives carries a violet chip
@@ -61,16 +61,16 @@ export const LENS_REASON_WORDS: Readonly<Record<LensHeldReason, string>> = {
 /** What the lens reads of the desk at render — the programmer's keys, Blind and the stacks' FX amount. */
 export interface LensDesk {
   blind: boolean
-  holds: (headKey: string, propertyName: string) => boolean
+  holds: (headKey: string, attribute: string) => boolean
   /** The source provenance names on a key, or null. */
-  source: (headKey: string, propertyName: string) => string | null
+  source: (headKey: string, attribute: string) => string | null
   stackFxAmount: (stackId: number) => number
 }
 
 const liveDesk = (): LensDesk => ({
   blind: lightingApi.programmer.isBlind(),
-  holds: (head, property) => lightingApi.programmer.getKeyState(head, property).entry != null,
-  source: (head, property) => lightingApi.programmer.getKeyState(head, property).provenance?.source ?? null,
+  holds: (head, attribute) => lightingApi.programmer.getKeyState(head, attribute).entry != null,
+  source: (head, attribute) => lightingApi.programmer.getKeyState(head, attribute).provenance?.source ?? null,
   stackFxAmount: (stackId) => stackFxAmountOf(lightingApi.stackFxAmount.get(), stackId),
 })
 
@@ -88,7 +88,7 @@ export function lensHeldReason(effect: ActiveFx, heads: readonly string[], desk:
   const mine = heads.filter((head) => isHeldBack(effect, head, desk.holds, desk.blind)).length
   if (mine > 0) return { reason: 'PROGRAMMER', on: mine }
   if (!couldPaint(effect, desk)) return null
-  const stomped = heads.filter((head) => desk.source(head, effect.propertyName) === 'CUE').length
+  const stomped = heads.filter((head) => desk.source(head, effect.attribute) === 'CUE').length
   return stomped > 0 ? { reason: 'STOMP', on: stomped } : null
 }
 
@@ -212,7 +212,7 @@ export function CellFxLens({
   selection,
   fallback,
 }: {
-  keys: readonly CellPropertyKey[]
+  keys: readonly CellAttributeKey[]
   /** The heads a split edit is for — the cell's batch, read at the click. */
   selection: () => readonly CueTarget[] | undefined
   fallback: ReactNode
@@ -226,7 +226,7 @@ export function CellFxLens({
   const index = actions.store.get()
   const lines = effects.map((effect) => {
     const heads = keys
-      .filter((k) => k.propertyName === effect.propertyName && index.byKey.get(cellFxKey(k.targetKey, k.propertyName))?.some((e) => e.id === effect.id))
+      .filter((k) => k.attribute === effect.attribute && index.byKey.get(cellFxKey(k.targetKey, k.attribute))?.some((e) => e.id === effect.id))
       .map((k) => k.targetKey)
     return { effect, heads, held: lensHeldReason(effect, heads, desk) }
   })
@@ -235,7 +235,7 @@ export function CellFxLens({
   const title = [
     ...lines.map(({ effect, heads, held }) =>
       [
-        `${effect.fxType} · ${effect.propertyName} · ${lensDivision(effect)}`,
+        `${effect.fxType} · ${effect.attribute} · ${lensDivision(effect)}`,
         !effect.isRunning ? 'paused' : null,
         held == null ? null : `${LENS_REASON_WORDS[held.reason]}${heads.length > 1 ? ` on ${held.on} of ${heads.length}` : ''}`,
       ]

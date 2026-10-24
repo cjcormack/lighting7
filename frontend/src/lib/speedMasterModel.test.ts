@@ -16,18 +16,18 @@ import {
   formatFollowRatio,
   isFollowing,
   resolveSpeedMasterForFamily,
-  usageLabel,
+  masterFamilyLabel,
 } from './speedMasterModel'
 import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
 
-describe('usage vocabulary vs the effect library', () => {
+describe('family vocabulary vs the effect library', () => {
   it('names only categories the effect library actually has', () => {
-    // Not a coincidence to be kept in step by hand — a master's usage *is* an effect
-    // `category`, because routing is the literal comparison `usage === effect.category`. A
-    // usage naming a category no effect carries could never match anything, and the operator
+    // Not a coincidence to be kept in step by hand — a master's family *is* an effect
+    // `category`, because routing is the literal comparison `family === effect.category`. A
+    // family naming a category no effect carries could never match anything, and the operator
     // would be offered a routing rule that silently does nothing.
-    for (const usage of SPEED_MASTER_FAMILIES) {
-      expect(FX_FAMILY_INFO[usage]).toBeDefined()
+    for (const family of SPEED_MASTER_FAMILIES) {
+      expect(FX_FAMILY_INFO[family]).toBeDefined()
     }
   })
 
@@ -40,11 +40,11 @@ describe('usage vocabulary vs the effect library', () => {
     expect(SPEED_MASTER_FAMILIES).not.toContain('steps')
   })
 
-  it('labels a usage the way the effect library labels the category', () => {
-    expect(usageLabel('position')).toBe(FX_FAMILY_INFO.position.label)
+  it('labels a family the way the effect library labels the category', () => {
+    expect(masterFamilyLabel('position')).toBe(FX_FAMILY_INFO.position.label)
     // A category minted by someone's own .fx.kts has no entry; print it rather than nothing.
-    expect(usageLabel('sparkle')).toBe('sparkle')
-    expect(usageLabel(null)).toBeNull()
+    expect(masterFamilyLabel('sparkle')).toBe('sparkle')
+    expect(masterFamilyLabel(null)).toBeNull()
   })
 })
 

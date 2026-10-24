@@ -112,7 +112,7 @@ Fixtures compose capabilities through trait interfaces (in `fixture/trait/`):
 
 ## Property Interfaces
 
-Properties (in `fixture/property/`) provide a unified interface for fixture and group control:
+Properties (in `fixture/attribute/`) provide a unified interface for fixture and group control:
 
 ### Slider
 
@@ -211,7 +211,7 @@ A head with a warm and a cold white and no RGB â€” the 2-cell blinder's cells â€
 the nearest mix of its two whites (venue-visit plan D8). `DmxWhiteMixColour` is a `Colour` over the
 head's own two white `DmxSlider`s, named `rgbColour` like any colour so palettes, cues, Looks, the
 programmer's `setColour`, Spread and colour effects all reach it; the sliders stay as properties for
-direct control. The mapping is `fixture/property/WhiteMix.kt`, a small colour-temperature model built
+direct control. The mapping is `fixture/attribute/WhiteMix.kt`, a small colour-temperature model built
 for reuse by a second WW/CW type:
 
 - **The whites** are each the black body at the type's declared temperature, seen against the
@@ -1273,7 +1273,7 @@ beamBar.setAllHeadsColour(SlenderBeamBarQuadFixture.Colour.BLUE)
 | `Fixture.kt` | Sealed base class |
 | `DmxFixture.kt` | DMX-specific base with addressing |
 | `FixtureType.kt` | Class annotation |
-| `FixtureProperty.kt` | Property annotation |
+| `FixtureAttribute.kt` | Property annotation |
 | `property/Slider.kt` | Single-value interface, AggregateSlider |
 | `property/Colour.kt` | RGB colour interface, AggregateColour |
 | `property/Position.kt` | Position interface |

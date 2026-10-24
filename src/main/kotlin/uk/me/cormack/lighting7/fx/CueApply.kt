@@ -10,9 +10,9 @@ import org.jetbrains.exposed.v1.dao.with
 import org.slf4j.LoggerFactory
 import uk.me.cormack.lighting7.fixture.CompositionRule
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.FixturePropertyCatalogue
+import uk.me.cormack.lighting7.fixture.FixtureAttributeCatalogue
 import uk.me.cormack.lighting7.fixture.GroupableFixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.models.*
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.state.State
@@ -32,9 +32,9 @@ private val logger = LoggerFactory.getLogger("cueApply")
  * (`fx/CueHolds.kt`).
  *
  * `fx/` no longer *imports* `routes/` after this, but it is not yet free of it: the descriptor
- * family `detectCapabilities` inspects (`GroupSliderPropertyDescriptor` and friends) is declared in
+ * family `detectCapabilities` inspects (`GroupSliderAttributeDescriptor` and friends) is declared in
  * terms of `routes.ChannelRef`, so the dependency survives transitively through
- * `fixture/group/GroupProperties.kt`. Relocating `PropertyDescriptor`/`ChannelRef` out of `routes/`
+ * `fixture/group/GroupAttributes.kt`. Relocating `AttributeDescriptor`/`ChannelRef` out of `routes/`
  * is its own job and E2 does not do it.
  */
 internal data class CueApplyData(
@@ -46,7 +46,7 @@ internal data class CueApplyData(
      * uuid is carried so the uuid-keyed [LookRegistry] needs no second DB hit at apply time.
      */
     val layers: List<CookLayer> = emptyList(),
-    val propertyAssignments: List<CuePropertyAssignmentDto> = emptyList(),
+    val attributeAssignments: List<CueAttributeAssignmentDto> = emptyList(),
     val triggers: List<CueTriggerDto> = emptyList(),
     val autoAdvance: Boolean = false,
     val autoAdvanceDelayMs: Long? = null,
@@ -84,7 +84,7 @@ private val CUE_APPLY_RELATIONS: Array<KProperty1<out Entity<*>, Any?>> = arrayO
     DaoCueLayer::look,
     DaoCueLayer::palette,
     DaoCue::adHocFx,
-    DaoCue::propertyAssignments,
+    DaoCue::attributeAssignments,
     DaoCue::triggers,
     DaoCueTrigger::script,
 )
@@ -168,7 +168,7 @@ private fun DaoCue.toCueApplyData(placement: EntryPlacement?): CueApplyData = Cu
     // In stored order, rows tied on it in id order: the order the cue spawns them, so the order they apply.
     adHocFx = adHocFx.sortedWith(compareBy({ it.sortOrder }, { it.id.value })).map { it.toDto() },
     layers = layers.sortedBy { it.sortOrder }.mapNotNull { it.toCookLayer() },
-    propertyAssignments = propertyAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
+    attributeAssignments = attributeAssignments.sortedBy { it.sortOrder }.map { it.toDto() },
     triggers = triggers.sortedBy { it.sortOrder }.map { trigger ->
         CueTriggerDto(
             triggerType = trigger.triggerType.name,
@@ -202,7 +202,7 @@ internal fun DaoCueLayer.toCookLayer(): CookLayer? = CookLayer(
     sortOrder = sortOrder,
     enabled = enabled,
     targets = targets,
-    propertyMask = attributeMask,
+    attributeMask = attributeMask,
     blendMode = blendMode,
     amount = amount,
     stomp = stomp,
@@ -261,7 +261,7 @@ internal fun buildStompOverlap(
     fixtures: Fixtures,
     cueData: CueApplyData,
     cooked: CookResult,
-): Set<FxEngine.PropertyKey> {
+): Set<FxEngine.TargetAttribute> {
     val fromAssignments = buildStompOverlapFromAssignments(fixtures, cueData)
     if (cooked.assertedKeys.isEmpty()) return fromAssignments
     if (fromAssignments.isEmpty()) return cooked.assertedKeys
@@ -278,36 +278,36 @@ internal fun buildStompOverlap(
 internal fun buildStompOverlapFromAssignments(
     fixtures: Fixtures,
     cueData: CueApplyData,
-): Set<FxEngine.PropertyKey> {
-    if (cueData.propertyAssignments.isEmpty()) return emptySet()
-    val out = HashSet<FxEngine.PropertyKey>()
-    for (assignment in cueData.propertyAssignments) {
-        val canonical = canonicalPropertyName(assignment.propertyName)
+): Set<FxEngine.TargetAttribute> {
+    if (cueData.attributeAssignments.isEmpty()) return emptySet()
+    val out = HashSet<FxEngine.TargetAttribute>()
+    for (assignment in cueData.attributeAssignments) {
+        val canonical = canonicalAttributeName(assignment.attribute)
         when (val target = assignment.target) {
             is TargetRef.Group -> {
-                out.add(FxEngine.PropertyKey(target.key, canonical))
+                out.add(FxEngine.TargetAttribute(target.key, canonical))
                 val members = try {
                     fixtures.untypedGroup(target.key).fixtures
                 } catch (_: IllegalStateException) { emptyList() }
                 for (member in members) {
-                    if (member is Fixture) out.add(FxEngine.PropertyKey(member.key, canonical))
+                    if (member is Fixture) out.add(FxEngine.TargetAttribute(member.key, canonical))
                 }
             }
             is TargetRef.Fixture -> {
-                out.add(FxEngine.PropertyKey(target.key, canonical))
+                out.add(FxEngine.TargetAttribute(target.key, canonical))
             }
         }
     }
     return out
 }
 
-// Canonical form for property names is defined in [uk.me.cormack.lighting7.fx.canonicalPropertyName]
+// Canonical form for property names is defined in [uk.me.cormack.lighting7.fx.canonicalAttributeName]
 // — shared with [PersistedFixtureReferenceValidator] so route handlers and validation
 // don't drift apart on the aliasing rule.
 
 /**
  * Fixture property lookup used when building Layer 4 assignments. Returns the resolved
- * category / composition override for [propertyName] on [fixture], or null if the name is
+ * category / composition override for [attribute] on [fixture], or null if the name is
  * not a known annotated property.
  *
  * Handles the synthetic aliases the target-resolution code already understands:
@@ -315,52 +315,52 @@ internal fun buildStompOverlapFromAssignments(
  * For these names [fixture] is consulted only to verify the capability exists.
  *
  * The name is canonicalised unconditionally, which is sound because no property may be named an
- * alias (`FixturePropertyNameAliasTest`): a colour wheel is `colourWheel`, never `colour`.
+ * alias (`FixtureAttributeNameAliasTest`): a colour wheel is `colourWheel`, never `colour`.
  */
 internal fun fixtureCategoryFor(
     fixture: GroupableFixture,
-    propertyName: String,
-): Pair<PropertyCategory, CompositionRule>? {
-    // The class catalogue rather than `Fixture.fixtureProperty`, so an element (a cell) answers
-    // from its own `@FixtureProperty` members — the cook composes a Look's element rows onto it.
-    val byName = FixturePropertyCatalogue.of(fixture::class).byName
-    val canonical = canonicalPropertyName(propertyName)
+    attribute: String,
+): Pair<AttributeCategory, CompositionRule>? {
+    // The class catalogue rather than `Fixture.fixtureAttribute`, so an element (a cell) answers
+    // from its own `@FixtureAttribute` members — the cook composes a Look's element rows onto it.
+    val byName = FixtureAttributeCatalogue.of(fixture::class).byName
+    val canonical = canonicalAttributeName(attribute)
     if (canonical.equals("position", ignoreCase = true)) {
         // Synthetic compound of PAN + TILT. Composition defaults to the PAN category's rule;
         // any override on the pan property is honoured.
         val panProp = byName["pan"]
-        return panProp?.let { it.category to it.composition } ?: (PropertyCategory.PAN to CompositionRule.UNSET)
+        return panProp?.let { it.category to it.composition } ?: (AttributeCategory.PAN to CompositionRule.UNSET)
     }
     val prop = byName[canonical] ?: return null
     return prop.category to prop.composition
 }
 
 /**
- * Whether [propertyName] on [fixture] is a slot channel ([Fixture.Property.settingBacked]), looked
+ * Whether [attribute] on [fixture] is a slot channel ([Fixture.Property.settingBacked]), looked
  * up by its canonical name as [fixtureCategoryFor] does. What a COLOUR property's stored value means
  * depends on it: a colour wheel's or gel scroller's row is a level.
  */
-internal fun isSettingBacked(fixture: GroupableFixture, propertyName: String): Boolean =
-    FixturePropertyCatalogue.of(fixture::class).byName[canonicalPropertyName(propertyName)]?.settingBacked == true
+internal fun isSettingBacked(fixture: GroupableFixture, attribute: String): Boolean =
+    FixtureAttributeCatalogue.of(fixture::class).byName[canonicalAttributeName(attribute)]?.settingBacked == true
 
 /**
- * [propertyName]'s part in [fixture]'s `bundleWithColour` bundle — the role
+ * [attribute]'s part in [fixture]'s `bundleWithColour` bundle — the role
  * [CueAssignmentResolver.Assignment.bundleRole] carries into composition. From the class catalogue,
- * so an element (a head) answers from its own `@FixtureProperty` members. A class with no bundled
+ * so an element (a head) answers from its own `@FixtureAttribute` members. A class with no bundled
  * emitter has no bundle, so its colour is not [CueAssignmentResolver.BundleRole.COLOUR] either.
  */
-internal fun bundleRoleOf(fixture: GroupableFixture, propertyName: String): CueAssignmentResolver.BundleRole? {
-    val catalogue = FixturePropertyCatalogue.of(fixture::class)
+internal fun bundleRoleOf(fixture: GroupableFixture, attribute: String): CueAssignmentResolver.BundleRole? {
+    val catalogue = FixtureAttributeCatalogue.of(fixture::class)
     if (catalogue.bundledByCategory.isEmpty()) return null
     return when {
-        catalogue.byName[propertyName]?.bundleWithColour == true -> CueAssignmentResolver.BundleRole.EMITTER
-        propertyName == catalogue.colour?.name -> CueAssignmentResolver.BundleRole.COLOUR
+        catalogue.byName[attribute]?.bundleWithColour == true -> CueAssignmentResolver.BundleRole.EMITTER
+        attribute == catalogue.colour?.name -> CueAssignmentResolver.BundleRole.COLOUR
         else -> null
     }
 }
 
 /**
- * Build the flat [CueAssignmentResolver.Assignment] list for a single cue's [propertyAssignments],
+ * Build the flat [CueAssignmentResolver.Assignment] list for a single cue's [attributeAssignments],
  * expanding group targets to per-member rows. Member rows produced by a group expansion carry
  * `targetIsGroup = true` so the resolver's specificity rule can drop them when the same cue
  * also asserts a direct fixture-level row on the same (fixtureKey, property).
@@ -379,12 +379,12 @@ internal fun buildCueAssignmentsForCue(
     fixtures: Fixtures,
     cueData: CueApplyData,
 ): List<CueAssignmentResolver.Assignment> {
-    if (cueData.propertyAssignments.isEmpty()) return emptyList()
+    if (cueData.attributeAssignments.isEmpty()) return emptyList()
     val priority = cueDerivedPriority(cueData)
-    val out = ArrayList<CueAssignmentResolver.Assignment>(cueData.propertyAssignments.size * 2)
+    val out = ArrayList<CueAssignmentResolver.Assignment>(cueData.attributeAssignments.size * 2)
 
-    for (assignment in cueData.propertyAssignments) {
-        val canonical = canonicalPropertyName(assignment.propertyName)
+    for (assignment in cueData.attributeAssignments) {
+        val canonical = canonicalAttributeName(assignment.attribute)
         val target = assignment.target
 
         // Resolve a reference fixture for category lookup and, for groups, the members.
@@ -396,7 +396,7 @@ internal fun buildCueAssignmentsForCue(
                 val group = try {
                     fixtures.untypedGroup(target.key)
                 } catch (_: IllegalStateException) {
-                    logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
+                    logger.warn("cue {}: group '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.attribute)
                     continue
                 }
                 members = group.fixtures.filterIsInstance<Fixture>()
@@ -413,7 +413,7 @@ internal fun buildCueAssignmentsForCue(
                 referenceFixture = try {
                     fixtures.untypedGroupableFixture(target.key)
                 } catch (_: IllegalStateException) {
-                    logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.propertyName)
+                    logger.warn("cue {}: fixture '{}' missing — skipping assignment for {}", cueData.cueId, target.key, assignment.attribute)
                     continue
                 }
                 members = emptyList()
@@ -426,16 +426,16 @@ internal fun buildCueAssignmentsForCue(
             key: String,
             fixture: GroupableFixture,
             isGroup: Boolean,
-            category: PropertyCategory,
+            category: AttributeCategory,
             override: CompositionRule,
-            value: CueAssignmentResolver.PropertyValue,
+            value: CueAssignmentResolver.AttributeValue,
         ) = CueAssignmentResolver.Assignment(
             cueId = cueData.cueId,
             priority = priority,
             fadeWeight = 1.0,
             targetKey = key,
             targetIsGroup = isGroup,
-            propertyName = canonical,
+            attribute = canonical,
             category = category,
             compositionOverride = override,
             value = value,
@@ -456,14 +456,14 @@ internal fun buildCueAssignmentsForCue(
         // head. A row's value is always a literal now, so one parse against the reference fixture
         // serves the whole target.
         val (category, override) = fixtureCategoryFor(referenceFixture, canonical) ?: run {
-            logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.propertyName, target.key)
+            logger.warn("cue {}: property '{}' not found on '{}' — skipping", cueData.cueId, assignment.attribute, target.key)
             continue
         }
 
         val parsed = CueAssignmentResolver.parseAssignmentValue(
             category, canonical, assignment.value, settingBacked = isSettingBacked(referenceFixture, canonical),
         ) ?: run {
-            logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.propertyName)
+            logger.warn("cue {}: invalid value '{}' for {}.{} — skipping", cueData.cueId, assignment.value, target.key, assignment.attribute)
             continue
         }
 

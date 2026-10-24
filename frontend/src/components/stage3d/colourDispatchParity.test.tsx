@@ -11,16 +11,16 @@ import { ChannelSourceProvider } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
 import {
   findColourSource,
-  findDimmerProperty,
+  findDimmerAttribute,
   findGroupColourSource,
-  findStrobeProperties,
+  findStrobeAttributes,
   resolveFixtureKind,
   type Fixture,
   type FixtureTypeInfo,
 } from '../../store/fixtures'
 import type { FixturePatch } from '../../api/patchApi'
 import { findGel, indexGels, type Gel } from '../../lib/gels'
-import { colourFilters, fittedProperties, type FittedMedia } from '../../lib/fittedMedia'
+import { colourFilters, fittedAttributes, type FittedMedia } from '../../lib/fittedMedia'
 import gelsJson from '../../../../src/main/resources/gels.json'
 import lanternsJson from '../../../../src/main/resources/lanterns/library.json'
 import { indexLanterns, type Lantern } from '../../lib/lanterns'
@@ -30,7 +30,7 @@ import { BAND_STEP_S, ColourBandClockContext, type ColourBandClock } from '../..
 import { createColourTicker, type ColourTicker } from './colourTicker'
 import { FLASH_S, SHIMMER_DEPTH, SHIMMER_LEVEL } from '../../lib/strobeBands'
 
-// usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
+// useAttributeValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 
@@ -122,8 +122,8 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
   // The derivation FixtureModel performs before handing ColourSync its props. Duplicated here
   // rather than exported, because the seam under test is the *dispatch*, not the lookups.
   const { patch, fixture, fixtureType } = scenario
-  const properties = fittedProperties(fixture?.properties, patch.media, GELS)
-  const colourSource = properties ? findColourSource(properties) : undefined
+  const attributes = fittedAttributes(fixture?.attributes, patch.media, GELS)
+  const colourSource = attributes ? findColourSource(attributes) : undefined
   const gel = !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(GELS, patch.gelCode) : null
   const lamp = colourSource
     ? null
@@ -140,9 +140,9 @@ function resolve3D(scenario: Scenario, timeS = 0): Resolved {
         colourSource={colourSource}
         gel={gel}
         lamp={lamp}
-        filters={colourFilters(properties, colourSource)}
-        dimmerProp={findDimmerProperty(properties)}
-        strobes={findStrobeProperties(properties)}
+        filters={colourFilters(attributes, colourSource)}
+        dimmerProp={findDimmerAttribute(attributes)}
+        strobes={findStrobeAttributes(attributes)}
         lensRef={{ current: null }}
         colorStateRef={colorStateRef}
         ticker={tickerAt(timeS)}
@@ -218,8 +218,8 @@ const ROBE = makeFixture('robe-1', [DIMMER, ROBE_WHEEL_1, ROBE_WHEEL_2])
 // with its own colour — behind one lens, and a master dimmer on the fixture.
 const ZONES = [11, 15, 19].map((first) => colourProp('rgbColour', chan(first), chan(first + 1), chan(first + 2), { whiteChannel: chan(first + 3) }))
 const ZONED_WASH = makeFixture('wash-1', [DIMMER], {
-  elements: ZONES.map((zone, i) => ({ index: i, key: `wash-1.zone-${i + 1}`, displayName: `Zone ${i + 1}`, properties: [zone] })),
-  elementGroupProperties: [
+  elements: ZONES.map((zone, i) => ({ index: i, key: `wash-1.zone-${i + 1}`, displayName: `Zone ${i + 1}`, attributes: [zone] })),
+  elementGroupAttributes: [
     {
       type: 'colour',
       name: 'rgbColour',
@@ -531,8 +531,8 @@ describe('the 3D dispatch asks for frames only while a band animates', () => {
   }
 
   function mount(source: ChannelSource, ticker: ColourTicker) {
-    const properties = ROBE.properties
-    const colourSource = findColourSource(properties)
+    const attributes = ROBE.attributes
+    const colourSource = findColourSource(attributes)
     const colorStateRef = { current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 } }
     const view = render(
       <ChannelSourceProvider source={source}>
@@ -540,9 +540,9 @@ describe('the 3D dispatch asks for frames only while a band animates', () => {
           hasFixture
           colourSource={colourSource}
           gel={null}
-          filters={colourFilters(properties, colourSource)}
-          dimmerProp={findDimmerProperty(properties)}
-          strobes={findStrobeProperties(properties)}
+          filters={colourFilters(attributes, colourSource)}
+          dimmerProp={findDimmerAttribute(attributes)}
+          strobes={findStrobeAttributes(attributes)}
           lensRef={{ current: null }}
           colorStateRef={colorStateRef}
           ticker={ticker}
@@ -759,8 +759,8 @@ describe('the 3D dispatch asks for frames only while a strobe flashes', () => {
     const invalidate = vi.fn()
     const ticker = createColourTicker(invalidate)
     const { source, set } = liveSource({ '0:1': 255, '0:5': 10, '0:12': 35 })
-    const properties = MAC.properties
-    const colourSource = findColourSource(properties)
+    const attributes = MAC.attributes
+    const colourSource = findColourSource(attributes)
     const colorStateRef = { current: { color: new Color('#000000'), coneOpacity: -1, poolOpacity: -1 } }
     const view = render(
       <ChannelSourceProvider source={source}>
@@ -768,9 +768,9 @@ describe('the 3D dispatch asks for frames only while a strobe flashes', () => {
           hasFixture
           colourSource={colourSource}
           gel={null}
-          filters={colourFilters(properties, colourSource)}
-          dimmerProp={findDimmerProperty(properties)}
-          strobes={findStrobeProperties(properties)}
+          filters={colourFilters(attributes, colourSource)}
+          dimmerProp={findDimmerAttribute(attributes)}
+          strobes={findStrobeAttributes(attributes)}
           lensRef={{ current: null }}
           colorStateRef={colorStateRef}
           ticker={ticker}

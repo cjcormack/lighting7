@@ -141,7 +141,7 @@ class FxLibraryMigrationTest {
     fun `a fresh database is already past the step`() {
         startDesk()
         stopDesk()
-        assertEquals(TERMINOLOGY_RENAMED_USER_VERSION, userVersion())
+        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
     }
 
     @Test
@@ -178,7 +178,7 @@ class FxLibraryMigrationTest {
             "a composite is filed under the family of the output it applied",
         )
         assertEquals(listOf("FX_CALC", "GENERAL"), query("SELECT script_type FROM scripts ORDER BY name") { it.getString(1) })
-        assertEquals(TERMINOLOGY_RENAMED_USER_VERSION, userVersion())
+        assertEquals(ATTRIBUTE_NAMES_USER_VERSION, userVersion())
 
         fun logged(vararg words: String) = assertTrue(logs.any { line -> words.all { it in line } }, "${words.toList()} in $logs")
         logged("Look 'S3 Old FX' in 'Experiment'", "Breathe is now Sine Wave")

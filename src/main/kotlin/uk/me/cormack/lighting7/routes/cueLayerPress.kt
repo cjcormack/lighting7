@@ -10,10 +10,10 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.exposed.v1.jdbc.transactions.transaction
 import uk.me.cormack.lighting7.fx.LayerPress
 import uk.me.cormack.lighting7.fx.LayerPressRules
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.TargetCoverage
 import uk.me.cormack.lighting7.fx.maskAllows
-import uk.me.cormack.lighting7.fx.parseMaskGroups
+import uk.me.cormack.lighting7.fx.parseFamilies
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DaoCue
@@ -55,7 +55,7 @@ internal fun Route.routeApiRestCueLayerPress(state: State) {
             }
             // A Look press ignores its targets and mask, so only a palette's are judged.
             val families = try {
-                if (request.paletteId != null) parseMaskGroups(request.families) else null
+                if (request.paletteId != null) parseFamilies(request.families) else null
             } catch (e: IllegalArgumentException) {
                 call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "Bad mask"))
                 return@withCurrentProject
@@ -102,7 +102,7 @@ internal fun pressCueLayer(
     project: DaoProject,
     cueId: Int,
     request: CueLayerPressRequest,
-    families: Set<PropertyMaskGroup>?,
+    families: Set<AttributeFamily>?,
 ): CueLayerPressOutcome {
     val coverage = TargetCoverage { state.show.fixtures }
     val rules = LayerPressRules({ state.show.paletteRegistry }, coverage)
@@ -137,7 +137,7 @@ internal fun pressCueLayer(
                 CueLayerPressResponse(
                     action = if (applied) "applied" else "removed",
                     released = (decided.result as? LayerPress.Result.Applied)?.released ?: 0,
-                    propertyMask = if (applied) decided.arriving.propertyMask else null,
+                    attributeMask = if (applied) decided.arriving.attributeMask else null,
                     cue = cue.toCueDetails(isCurrentProject = true, state.show.fixtures),
                 ),
                 stageChanged,
@@ -161,7 +161,7 @@ internal sealed interface PressedRecord {
         val source: LayerSource
     }
 
-    data class Palette(override val source: LayerSource, val family: PropertyMaskGroup?, val generic: Boolean) : Found
+    data class Palette(override val source: LayerSource, val family: AttributeFamily?, val generic: Boolean) : Found
 
     data class Look(val lookId: Int, override val source: LayerSource) : Found
 }
@@ -205,7 +205,7 @@ internal sealed interface CueLayerPressDecision {
 internal fun decideCueLayerPress(
     record: PressedRecord.Found,
     requested: List<CueTargetDto>,
-    families: Set<PropertyMaskGroup>?,
+    families: Set<AttributeFamily>?,
     layers: List<CueLayerDto>,
     rules: LayerPressRules,
     coverage: TargetCoverage,
@@ -226,7 +226,7 @@ internal fun decideCueLayerPress(
             if (!releasing && families != null && !maskAllows(families, record.family)) {
                 return CueLayerPressDecision.Refused(paletteOutsideMaskMessage(source.name, record.family, families), CODE_PALETTE_OUTSIDE_MASK)
             }
-            arriving = CueLayerDto(paletteId = source.id, targets = targets, propertyMask = record.family?.name, source = source.toDto())
+            arriving = CueLayerDto(paletteId = source.id, targets = targets, attributeMask = record.family?.name, source = source.toDto())
         }
         // A Look lands whole: no targets and no mask, whatever the press carries (D1, D3).
         is PressedRecord.Look -> arriving = CueLayerDto(lookId = record.lookId, source = source.toDto())
@@ -244,7 +244,7 @@ internal fun decideCueLayerPress(
 /** This layer carrying [from]'s settings — every field a cue layer has but its record and targets. */
 internal fun CueLayerDto.withSettingsOf(from: CueLayerDto): CueLayerDto = copy(
     enabled = from.enabled,
-    propertyMask = from.propertyMask,
+    attributeMask = from.attributeMask,
     blendMode = from.blendMode,
     amount = from.amount,
     stomp = from.stomp,
@@ -279,7 +279,7 @@ private class CueLayerOps(
 
     override fun sameSettings(layer: CueLayerDto, arriving: CueLayerDto) =
         layer.enabled == arriving.enabled &&
-            layer.propertyMask == arriving.propertyMask &&
+            layer.attributeMask == arriving.attributeMask &&
             layer.blendMode == arriving.blendMode &&
             layer.amount == arriving.amount &&
             layer.stomp == arriving.stomp &&
@@ -303,7 +303,7 @@ internal data class CueLayerPressRequest(
     val lookId: Int? = null,
     /** The heads a palette press lands on; none is a per-fixture palette's own. Ignored for a Look. */
     val targets: List<CueTargetDto> = emptyList(),
-    /** The selection's attribute mask (`PropertyMaskGroup` names); absent is every attribute. Ignored for a Look. */
+    /** The selection's attribute mask (`AttributeFamily` names); absent is every attribute. Ignored for a Look. */
     val families: List<String>? = null,
 )
 
@@ -314,7 +314,7 @@ internal data class CueLayerPressResponse(
     /** The other palettes' layers the press narrowed or dropped on its heads. */
     val released: Int = 0,
     /** The arriving layer's mask — a palette's family; none for a Look. */
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     /** Always empty: a Look press takes no mask (D3). Kept on the wire until the client stops reading it. */
     val skippedFamilies: List<String> = emptyList(),
     /** The cue as stored after the press. */

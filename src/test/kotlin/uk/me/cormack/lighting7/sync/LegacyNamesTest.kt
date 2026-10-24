@@ -326,5 +326,45 @@ class LegacyNamesTest {
         val snapshots = RecordHasher.fromBlobs(mapOf("templates/$red.json" to "{}", "tombstones/cueAdHocEffects/$blue.json" to "{}"))
         assertEquals(setOf(RecordKey("palettes", red), RecordKey("cueAdHocFx", blue)), snapshots.keys)
     }
+    @Test
+    fun `a surface binding's attribute targets take today's names, a flash's nested one too`() {
+        assertEquals("fixtureAttribute", LegacyNames.bindingType("fixtureProperty"))
+        assertEquals("groupAttribute", LegacyNames.bindingType("groupProperty"))
+        assertEquals("selectionAttribute", LegacyNames.bindingType("selectionProperty"))
+        assertEquals(
+            """{"type":"fixtureAttribute","fixtureKey":"hex-1","attribute":"dimmer"}""",
+            LegacyNames.bindingPayload("""{"type":"fixtureProperty","fixtureKey":"hex-1","propertyName":"dimmer"}"""),
+        )
+        assertEquals(
+            """{"type":"encoderBankSet","attribute":"pan"}""",
+            LegacyNames.bindingPayload("""{"type":"encoderBankSet","propertyName":"pan"}"""),
+        )
+        assertEquals(
+            """{"type":"flash","target":{"type":"groupAttribute","groupName":"wash","attribute":"dimmer"},"max":200}""",
+            LegacyNames.bindingPayload("""{"type":"flash","target":{"type":"groupProperty","groupName":"wash","propertyName":"dimmer"},"max":200}"""),
+        )
+        val today = """{"type":"selectionAttribute","attribute":"pan"}"""
+        assertTrue(LegacyNames.bindingPayload(today) === today, "a payload in today's words keeps its bytes")
+    }
+
+    @Test
+    fun `only the position FX's centres take the UK spelling`() {
+        assertEquals(
+            mapOf("panCentre" to "100", "tiltCentre" to "140", "panRadius" to "30"),
+            LegacyNames.centreParameters("Circle", mapOf("panCenter" to "100", "tiltCenter" to "140", "panRadius" to "30")),
+        )
+        assertEquals(mapOf("panCentre" to "1"), LegacyNames.centreParameters("random_position", mapOf("panCenter" to "1")))
+        assertEquals(mapOf("panCenter" to "1"), LegacyNames.centreParameters("MyOrbit", mapOf("panCenter" to "1")))
+        assertEquals("'panCenter' is now 'panCentre'", LegacyNames.writeProblem("Figure8", mapOf("panCenter" to "128")))
+        assertNull(LegacyNames.writeProblem("Figure8", mapOf("panCentre" to "128")))
+    }
+
+    @Test
+    fun `an archived position FX's centres are read at today's names`() {
+        val look = """{"fx":[{"fxType":"Circle","parameters":{"panCenter":"100","tiltCenter":"140"},"uuid":"x"}],"name":"Swirl","uuid":"y"}"""
+        val read = canonicalJson.parseToJsonElement(LegacyNames.record("looks", look)).jsonObject
+        val parameters = read["fx"]!!.jsonArray.single().jsonObject["parameters"]!!.jsonObject
+        assertEquals(setOf("panCentre", "tiltCentre"), parameters.keys)
+    }
 }
 

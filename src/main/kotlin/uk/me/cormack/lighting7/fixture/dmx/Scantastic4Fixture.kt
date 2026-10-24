@@ -104,16 +104,16 @@ sealed class Scantastic4Fixture(
 
         val headName: String = "$fixtureName Scanner ${elementIndex + 1}"
 
-        @FixtureProperty("Scanner colour/pattern selector", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Scanner colour/pattern selector", category = AttributeCategory.SETTING)
         val colourPattern = if (hasColour) {
             DmxSlider(headTransaction, universe, headFirstChannel)
         } else null
 
-        @FixtureProperty("Scanner pan 0-180", category = PropertyCategory.PAN,
+        @FixtureAttribute("Scanner pan 0-180", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 180.0)
         override val pan = DmxSlider(headTransaction, universe, if (hasColour) headFirstChannel + 1 else headFirstChannel)
 
-        @FixtureProperty("Scanner tilt 0-90", category = PropertyCategory.TILT,
+        @FixtureAttribute("Scanner tilt 0-90", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 90.0)
         override val tilt = DmxSlider(headTransaction, universe, if (hasColour) headFirstChannel + 2 else headFirstChannel + 1)
 
@@ -166,14 +166,14 @@ sealed class Scantastic4Fixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode8Ch =
             Mode8Ch(this, transaction)
 
-        @FixtureProperty("Shutter (blackout/full on)", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
+        @FixtureAttribute("Shutter (blackout/full on)", category = AttributeCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
         // Estimate: no manual to hand — 0 open (what [Strobe.fullOn] writes), 1–255 strobe at 1–20 Hz.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 0, StrobeKind.OPEN),
                 StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -184,22 +184,22 @@ sealed class Scantastic4Fixture(
             strobeMin = 0u, strobeMax = 255u,
         )
 
-        @FixtureProperty("Colour/pattern selector 1", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
+        @FixtureAttribute("Colour/pattern selector 1", category = AttributeCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
         val colourPattern1 = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Colour/pattern selector 2", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Colour/pattern selector 2", category = AttributeCategory.SETTING)
         val colourPattern2 = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Auto scroll through patterns", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Auto scroll through patterns", category = AttributeCategory.SETTING)
         val autoScroll = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Auto scroll speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Auto scroll speed", category = AttributeCategory.SPEED)
         val autoScrollSpeed = DmxSlider(transaction, universe, firstChannel + 5)
 
-        @FixtureProperty("Movement macros", category = PropertyCategory.MOVEMENT_MACRO)
+        @FixtureAttribute("Movement macros", category = AttributeCategory.MOVEMENT_MACRO)
         val movementMacros = DmxSlider(transaction, universe, firstChannel + 6)
 
-        @FixtureProperty("Scanning speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Scanning speed", category = AttributeCategory.SPEED)
         val scanningSpeed = DmxSlider(transaction, universe, firstChannel + 7)
     }
 
@@ -292,14 +292,14 @@ sealed class Scantastic4Fixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode17Ch =
             Mode17Ch(this, transaction)
 
-        @FixtureProperty("Shutter (blackout/full on)", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
+        @FixtureAttribute("Shutter (blackout/full on)", category = AttributeCategory.SETTING, compactDisplay = CompactDisplayRole.PRIMARY)
         val shutter = DmxFixtureSetting(transaction, universe, firstChannel, Shutter.entries.toTypedArray())
 
         // Estimate: no manual to hand — 0 open (what [Strobe.fullOn] writes), 1–255 strobe at 1–20 Hz.
         // Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
+        @FixtureAttribute(
             "Strobe",
-            category = PropertyCategory.STROBE,
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 0, StrobeKind.OPEN),
                 StrobeBand(1, 255, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -310,16 +310,16 @@ sealed class Scantastic4Fixture(
             strobeMin = 0u, strobeMax = 255u,
         )
 
-        @FixtureProperty("Colour/pattern selector 1", category = PropertyCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
+        @FixtureAttribute("Colour/pattern selector 1", category = AttributeCategory.SETTING, compactDisplay = CompactDisplayRole.SECONDARY)
         val colourPattern1 = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Colour/pattern selector 2", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Colour/pattern selector 2", category = AttributeCategory.SETTING)
         val colourPattern2 = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Auto scroll through patterns", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Auto scroll through patterns", category = AttributeCategory.SETTING)
         val autoScroll = DmxSlider(transaction, universe, firstChannel + 4)
 
-        @FixtureProperty("Auto scroll speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Auto scroll speed", category = AttributeCategory.SPEED)
         val autoScrollSpeed = DmxSlider(transaction, universe, firstChannel + 5)
 
         override val elements: List<ScannerHead> = (0 until 4).map { idx ->
@@ -333,13 +333,13 @@ sealed class Scantastic4Fixture(
             return elements[index]
         }
 
-        @FixtureProperty("Movement macros", category = PropertyCategory.MOVEMENT_MACRO)
+        @FixtureAttribute("Movement macros", category = AttributeCategory.MOVEMENT_MACRO)
         val movementMacros = DmxSlider(transaction, universe, firstChannel + 14)
 
-        @FixtureProperty("Scanning speed", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Scanning speed", category = AttributeCategory.SPEED)
         val scanningSpeed = DmxSlider(transaction, universe, firstChannel + 15)
 
-        @FixtureProperty("Sound active", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Sound active", category = AttributeCategory.SETTING)
         val soundActive = DmxFixtureSetting(transaction, universe, firstChannel + 16, SoundActive.entries.toTypedArray())
     }
 }

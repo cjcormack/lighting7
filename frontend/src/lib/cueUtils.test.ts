@@ -85,7 +85,7 @@ describe('buildCueInput', () => {
     expect(layer.sortOrder).toBe(3)
     expect(layer.enabled).toBe(false)
     expect(layer.targets).toEqual([{ type: 'group', key: 'front-wash' }])
-    expect(layer.propertyMask).toBe('COLOUR,POSITION')
+    expect(layer.attributeMask).toBe('COLOUR,POSITION')
     expect(layer.blendMode).toBe('MULTIPLY')
     expect(layer.amount).toBe(0.5)
     expect(layer.stomp).toBe(true)
@@ -143,7 +143,7 @@ describe('buildCueInput', () => {
           targetKey: 'hex-1',
           fxType: 'Pulse',
           family: 'intensity',
-          propertyName: 'dimmer',
+          attribute: 'dimmer',
           cycle: 0.5,
           blendMode: 'OVERRIDE',
           order: 'NORMAL',
@@ -216,7 +216,7 @@ function cueWithOneLayer(): Cue {
         sortOrder: 3,
         enabled: false,
         targets: [{ type: 'group', key: 'front-wash' }],
-        propertyMask: 'COLOUR,POSITION',
+        attributeMask: 'COLOUR,POSITION',
         blendMode: 'MULTIPLY',
         amount: 0.5,
         stomp: true,
@@ -228,7 +228,7 @@ function cueWithOneLayer(): Cue {
       },
     ],
     adHocFx: [],
-    propertyAssignments: [],
+    attributeAssignments: [],
     triggers: [
       {
         triggerType: 'DEACTIVATION',

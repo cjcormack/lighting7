@@ -2,9 +2,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { CueEvent } from '@/api/cuesApi'
-import type { TriggerPropertyDescriptor } from '@/store/fixtures'
+import type { TriggerAttributeDescriptor } from '@/store/fixtures'
 
-const trigger = (name: string, label: string, ch: number): TriggerPropertyDescriptor => ({
+const trigger = (name: string, label: string, ch: number): TriggerAttributeDescriptor => ({
   type: 'trigger', name, displayName: `Tube ${label}`, category: 'trigger', label,
   channel: { universe: 0, channelNo: ch }, armChannel: { universe: 0, channelNo: 3 }, armName: 'master',
 })
@@ -21,8 +21,8 @@ vi.mock('@/store/fixtures', async (orig) => ({
   ...(await orig<typeof import('@/store/fixtures')>()),
   useFixtureTypeListQuery: () => ({
     data: [
-      { typeKey: 'equinox-twin-shot-mkii', properties: [trigger('output1', 'A', 1), trigger('output2', 'B', 2)] },
-      { typeKey: 'generic-dimmer', properties: [] },
+      { typeKey: 'equinox-twin-shot-mkii', attributes: [trigger('output1', 'A', 1), trigger('output2', 'B', 2)] },
+      { typeKey: 'generic-dimmer', attributes: [] },
     ],
   }),
 }))

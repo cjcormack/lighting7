@@ -1,13 +1,13 @@
 package uk.me.cormack.lighting7.routes
 
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.show.Fixtures
 
 /** The result of collapsing a recording into cue assignment rows. */
 data class CollapsedAssignments(
-    val rows: List<CuePropertyAssignmentDto>,
+    val rows: List<CueAttributeAssignmentDto>,
     /** How many of [rows] came out group-shaped — reported so the operator can see it happened. */
     val groupRows: Int,
     val skipped: List<RecordSkip>,
@@ -40,8 +40,8 @@ internal fun collapseRecordingToAssignments(
 ): CollapsedAssignments {
     if (entries.isEmpty()) return CollapsedAssignments(emptyList(), 0, emptyList())
 
-    val byKey = entries.associateBy { it.fixtureKey to it.propertyName }
-    val emitted = ArrayList<CuePropertyAssignmentDto>(entries.size)
+    val byKey = entries.associateBy { it.fixtureKey to it.attribute }
+    val emitted = ArrayList<CueAttributeAssignmentDto>(entries.size)
     val covered = HashSet<Pair<String, String>>()
     var groupRows = 0
 
@@ -49,11 +49,11 @@ internal fun collapseRecordingToAssignments(
     // rows it reads; a store walk has none, and a recording whose row order changed between
     // two identical Records would make cue diffs unreadable.
     val hints = entries
-        .mapNotNull { entry -> entry.sourceGroup?.let { it to entry.propertyName } }
+        .mapNotNull { entry -> entry.sourceGroup?.let { it to entry.attribute } }
         .distinct()
         .sortedWith(compareBy({ it.first }, { it.second }))
 
-    for ((groupKey, propertyName) in hints) {
+    for ((groupKey, attribute) in hints) {
         val members = try {
             fixtures.untypedGroup(groupKey).fixtures.filterIsInstance<Fixture>()
         } catch (_: IllegalStateException) {
@@ -65,38 +65,38 @@ internal fun collapseRecordingToAssignments(
         // group row would assert the same values twice. Harmless at compose time (the
         // specificity rule sorts it out) but it makes the cue card read as if two different
         // group decisions were made.
-        if (members.all { (it.key to propertyName) in covered }) continue
+        if (members.all { (it.key to attribute) in covered }) continue
 
-        val first = byKey[members.first().key to propertyName] ?: continue
+        val first = byKey[members.first().key to attribute] ?: continue
         // Value equality is the whole test now. It used to also compare palette identity, because
         // two members resolving to the same colour from *different* palettes were not uniform and
         // collapsing them would emit one group row referencing one of the two, silently rebinding
         // half the members. With the `ref:` grammar gone a row carries no identity beyond its value.
         val uniform = members.all { member ->
-            byKey[member.key to propertyName]?.value == first.value
+            byKey[member.key to attribute]?.value == first.value
         }
         if (!uniform) continue
 
         emitted.add(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = TargetRef.Group.TYPE,
                 targetKey = groupKey,
-                propertyName = propertyName,
+                attribute = attribute,
                 value = first.value.serialize(),
                 sortOrder = emitted.size,
             )
         )
         groupRows++
-        for (member in members) covered.add(member.key to propertyName)
+        for (member in members) covered.add(member.key to attribute)
     }
 
-    for (entry in entries.sortedWith(compareBy({ it.fixtureKey }, { it.propertyName }))) {
-        if ((entry.fixtureKey to entry.propertyName) in covered) continue
+    for (entry in entries.sortedWith(compareBy({ it.fixtureKey }, { it.attribute }))) {
+        if ((entry.fixtureKey to entry.attribute) in covered) continue
         emitted.add(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = TargetRef.Fixture.TYPE,
                 targetKey = entry.fixtureKey,
-                propertyName = entry.propertyName,
+                attribute = entry.attribute,
                 value = entry.value.serialize(),
                 sortOrder = emitted.size,
             )

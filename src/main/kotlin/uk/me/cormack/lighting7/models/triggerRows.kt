@@ -20,7 +20,7 @@ import uk.me.cormack.lighting7.fixture.TriggerIndex
  */
 fun stripTriggerRows(project: DaoProject): Int {
     val index = TriggerIndex.of(project)
-    fun refused(type: String?, key: String?, property: String?) = index.refusal(type, key, property, "") != null
+    fun refused(type: String?, key: String?, attribute: String?) = index.refusal(type, key, attribute, "") != null
 
     var stripped = 0
     val looks = DaoLook.find { DaoLooks.project eq project.id }.map { it.id }
@@ -43,7 +43,7 @@ fun stripTriggerRows(project: DaoProject): Int {
     }
     val cues = DaoCue.find { DaoCues.project eq project.id }.map { it.id }
     if (cues.isNotEmpty()) {
-        DaoCuePropertyAssignment.find { DaoCuePropertyAssignments.cue inList cues }
+        DaoCueAttributeAssignment.find { DaoCueAttributeAssignments.cue inList cues }
             .filter { refused(it.targetType, it.targetKey, it.attribute) }
             .forEach { it.delete(); stripped++ }
         DaoCueAdHocFxEntity.find { DaoCueAdHocFx.cue inList cues }

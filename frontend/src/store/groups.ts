@@ -9,7 +9,7 @@ import {
   ApplyFxRequest,
   ApplyFxResponse,
   GroupActiveFx,
-  GroupPropertyDescriptor,
+  GroupAttributeDescriptor,
 } from "../api/groupsApi"
 
 // `GroupList` freshness is not wired here: the group register only changes inside
@@ -39,8 +39,8 @@ export const groupsApi = restApi.injectEndpoints({
     }),
 
     // Get group properties (aggregated property descriptors for all members)
-    groupProperties: build.query<GroupPropertyDescriptor[], string>({
-      query: (name) => `groups/${encodeURIComponent(name)}/properties`,
+    groupAttributes: build.query<GroupAttributeDescriptor[], string>({
+      query: (name) => `groups/${encodeURIComponent(name)}/attributes`,
       providesTags: (_result, _error, name) => [{ type: 'GroupList', id: name }],
     }),
 
@@ -159,7 +159,7 @@ export const groupsApi = restApi.injectEndpoints({
 export const {
   useGroupListQuery,
   useGroupQuery,
-  useGroupPropertiesQuery,
+  useGroupAttributesQuery,
   useGroupActiveFxQuery,
   useApplyGroupFxMutation,
   usePauseGroupFxMutation,

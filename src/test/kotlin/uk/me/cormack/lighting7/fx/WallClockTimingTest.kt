@@ -31,7 +31,7 @@ class WallClockTimingTest {
             name = "Test Effect",
             family = "intensity",
             outputType = FxOutputType.SLIDER,
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.BEAT, reg.timingSource)
@@ -45,7 +45,7 @@ class WallClockTimingTest {
             family = "intensity",
             outputType = FxOutputType.SLIDER,
             timingSource = TimingSource.WALL_CLOCK,
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             factory = { _, _, _ -> SineSlider() },
         )
         assertEquals(TimingSource.WALL_CLOCK, reg.timingSource)
@@ -60,7 +60,7 @@ class WallClockTimingTest {
             family = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
         )
         assertEquals("BEAT", info.timingSource)
     }
@@ -72,7 +72,7 @@ class WallClockTimingTest {
             family = "intensity",
             outputType = "SLIDER",
             parameters = emptyList(),
-            compatibleProperties = listOf("dimmer"),
+            compatibleAttributes = listOf("dimmer"),
             timingSource = "WALL_CLOCK",
         )
         assertEquals("WALL_CLOCK", info.timingSource)
@@ -104,7 +104,7 @@ class WallClockTimingTest {
             |outputType: SLIDER
             |fxMode: STATEFUL
             |timingSource: WALL_CLOCK
-            |compatibleProperties: [dimmer]
+            |compatibleAttributes: [dimmer]
             |parameters: []
             |---*/
             |
@@ -126,7 +126,7 @@ class WallClockTimingTest {
             |category: dimmer
             |outputType: SLIDER
             |fxMode: STANDARD
-            |compatibleProperties: [dimmer]
+            |compatibleAttributes: [dimmer]
             |parameters: []
             |---*/
             |

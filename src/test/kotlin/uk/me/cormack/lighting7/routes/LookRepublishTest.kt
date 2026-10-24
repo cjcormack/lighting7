@@ -13,7 +13,7 @@ import uk.me.cormack.lighting7.models.CueStackType
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueLayer
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoLook
 import uk.me.cormack.lighting7.models.DaoLookRow
@@ -100,7 +100,7 @@ class LookRepublishTest : RouteIntegrationTest() {
                 name = "cue-$fixtureKey"
             }.inStack(stack, sortOrder = 0)
             if (lookUuid == null) {
-                DaoCuePropertyAssignment.new {
+                DaoCueAttributeAssignment.new {
                     this.cue = cue
                     targetType = "fixture"; targetKey = fixtureKey
                     attribute = "colour"
@@ -121,7 +121,7 @@ class LookRepublishTest : RouteIntegrationTest() {
         }
     }
 
-    private fun cueColour(fixtureKey: String): CueAssignmentResolver.PropertyValue.Colour {
+    private fun cueColour(fixtureKey: String): CueAssignmentResolver.AttributeValue.Colour {
         val value = state.show.fxEngine.layerResolver
             .currentCueLayerState[CueAssignmentResolver.Key.fixture(fixtureKey, "rgbColour")]
         return assertIs(value)
@@ -212,7 +212,7 @@ class LookRepublishTest : RouteIntegrationTest() {
 
         val lookUuid = seedLook("Warm Amber", mapOf("hex-1" to "#ff8800"))
         // A programmer *layer*, which is what carries a live dependency on a Look now — this used to
-        // be a `writeProgrammerProperty(..., paletteUuid = lookUuid)` ref slot.
+        // be a `writeProgrammerAttribute(..., paletteUuid = lookUuid)` ref slot.
         val look = transaction(state.database) {
             DaoLook.all().single { it.uuid == lookUuid }.let { Triple(it.id.value, it.uuid, it.name) }
         }
@@ -229,7 +229,7 @@ class LookRepublishTest : RouteIntegrationTest() {
         val slot = state.show.programmerStore.get("hex-1", "rgbColour")!!
         assertEquals(
             "#0000ff",
-            (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.toSerializedString(),
+            (slot.value.resolved as CueAssignmentResolver.AttributeValue.Colour).value.toSerializedString(),
         )
         assertTrue(state.show.programmerStore.blind)
     }

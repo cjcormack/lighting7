@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.trait
 
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 
 /**
  * Trait for targets that have a dedicated amber (A) colour channel.

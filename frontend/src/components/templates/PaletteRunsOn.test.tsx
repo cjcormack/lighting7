@@ -13,7 +13,7 @@ import type { PaletteFx } from '@/api/palettesApi'
  * readings are 60× apart, so guessing is worse than saying nothing.
  */
 const fixtures = [
-  { capabilities: ['dimmer', 'colour'], properties: [{ type: 'slider', name: 'zoom', category: 'zoom' }] },
+  { capabilities: ['dimmer', 'colour'], attributes: [{ type: 'slider', name: 'zoom', category: 'zoom' }] },
   { capabilities: ['dimmer', 'colour'] },
   { capabilities: ['dimmer'] },
   // Infrastructure: in the raw list, never counted — the two hooks disagree about it on purpose.
@@ -42,7 +42,7 @@ const beatEntry: FxLibraryEntry = {
   fxMode: 'STANDARD',
   timingSource: 'BEAT',
   parameters: [],
-  compatibleProperties: ['rgbColour'],
+  compatibleAttributes: ['rgbColour'],
 }
 
 function effect(over: Partial<PaletteFx> = {}): PaletteFx {
@@ -101,7 +101,7 @@ describe('PaletteRunsOn', () => {
   })
 
   it('counts the heads with a beam effect’s one property', () => {
-    const zoomWave: FxLibraryEntry = { ...beatEntry, name: 'Zoom Wave', family: 'beam', outputType: 'SLIDER', compatibleProperties: ['zoom'] }
+    const zoomWave: FxLibraryEntry = { ...beatEntry, name: 'Zoom Wave', family: 'beam', outputType: 'SLIDER', compatibleAttributes: ['zoom'] }
     render(<PaletteRunsOn family="BEAM" effect={effect({ fxType: 'Zoom Wave', family: 'beam' })} entry={zoomWave} />)
     expect(screen.getByText('1 head')).toBeTruthy()
     expect(screen.getByText(/Any fixture with zoom\./)).toBeTruthy()

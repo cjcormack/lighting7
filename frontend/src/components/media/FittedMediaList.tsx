@@ -1,5 +1,5 @@
 import type { FixturePatch } from '@/api/patchApi'
-import type { SettingPropertyDescriptor } from '@/store/fixtures'
+import type { SettingAttributeDescriptor } from '@/store/fixtures'
 import { useGelIndex } from '@/hooks/useGelIndex'
 import { findGel, type GelIndex } from '@/lib/gels'
 import { hasFittedMedia, mediaOver, type FittedMedia } from '@/lib/fittedMedia'
@@ -7,7 +7,7 @@ import { hasFittedMedia, mediaOver, type FittedMedia } from '@/lib/fittedMedia'
 interface FittedMediaListProps {
   patch: FixturePatch
   /** The type's loadable settings (`loadableSettings`). */
-  settings: readonly SettingPropertyDescriptor[]
+  settings: readonly SettingAttributeDescriptor[]
 }
 
 /**
@@ -48,7 +48,7 @@ function UnitMedia({
   gels,
 }: {
   media: FittedMedia | null
-  settings: readonly SettingPropertyDescriptor[]
+  settings: readonly SettingAttributeDescriptor[]
   gels: GelIndex
 }) {
   if (!hasFittedMedia(media)) return <p className="text-xs text-muted-foreground">Stock in every slot.</p>

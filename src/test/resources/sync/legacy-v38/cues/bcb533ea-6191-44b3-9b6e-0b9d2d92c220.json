@@ -1,0 +1,52 @@
+{
+  "events": [
+    {
+      "offsetMs": 600,
+      "patchUuid": "40838dbb-c96c-40e8-a49c-2d5fe9660907",
+      "trigger": "output1",
+      "uuid": "120c4466-898b-4184-b177-49bba8dd0dd4"
+    },
+    {
+      "offsetMs": 750,
+      "patchUuid": "40838dbb-c96c-40e8-a49c-2d5fe9660907",
+      "sortOrder": 1,
+      "trigger": "output2",
+      "uuid": "23af3703-c9a5-41bf-ae18-cedf18b63e79"
+    }
+  ],
+  "fadeCurve": "SINE_IN_OUT",
+  "fadeDurationMs": 1000,
+  "name": "open",
+  "notes": "house to half, then go",
+  "scenery": [
+    {
+      "elementUuid": "c314887e-693b-4ba6-81b8-a18843b93e52",
+      "state": {
+        "open": 0.0
+      },
+      "transitionMs": 4000,
+      "uuid": "51f29e41-8666-4e4a-848d-c029d7c54443"
+    },
+    {
+      "elementUuid": "61c4fc5c-8c17-4934-89d8-48e560c6320d",
+      "sortOrder": 1,
+      "state": {
+        "visible": false
+      },
+      "transitionMs": 1500,
+      "uuid": "6642e71c-1c23-45d5-a8f2-d13e0b2c3f0b"
+    }
+  ],
+  "speedMasters": [
+    {
+      "bpm": 132.0,
+      "speedMasterUuid": "be730ca9-bfca-42ad-a49f-5075526bddd7"
+    },
+    {
+      "bpm": 96.5,
+      "speedMasterUuid": "739f9da6-ac3c-4128-ad34-48dad89d43a6"
+    }
+  ],
+  "stomp": true,
+  "uuid": "bcb533ea-6191-44b3-9b6e-0b9d2d92c220"
+}

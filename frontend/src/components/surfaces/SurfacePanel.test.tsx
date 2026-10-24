@@ -123,8 +123,8 @@ const state = (over: Partial<ControlState> = {}): ControlState => ({
 })
 
 /** An encoder bank selection, `colourAxis` absent for hue. */
-const bank = (propertyName: string, colourAxis?: ColourAxis): EncoderBankSelection =>
-  colourAxis ? { propertyName, colourAxis } : { propertyName }
+const bank = (attribute: string, colourAxis?: ColourAxis): EncoderBankSelection =>
+  colourAxis ? { attribute, colourAxis } : { attribute }
 
 function renderPanel({
   bindings = [] as ControlSurfaceBinding[],
@@ -192,7 +192,7 @@ describe('SurfacePanel — what a control says it is', () => {
   it('marks a dead binding without hiding what it was', () => {
     renderPanel({
       bindings: [
-        binding(9, 'fader-1', { type: 'groupProperty', groupName: 'Gone', propertyName: 'dimmer' }, {
+        binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Gone', attribute: 'dimmer' }, {
           type: 'missingGroup',
           groupName: 'Gone',
         }),
@@ -215,7 +215,7 @@ describe('SurfacePanel — the target’s colour (tables-colours plan D8)', () =
       colours,
       bindings: [
         binding(9, 'strip-1', { type: 'strip', target: { type: 'group', key: 'Movers' } }),
-        binding(10, 'enc-9', { type: 'fixtureProperty', fixtureKey: 'bar.pixel-0', propertyName: 'colour' }),
+        binding(10, 'enc-9', { type: 'fixtureAttribute', fixtureKey: 'bar.pixel-0', attribute: 'colour' }),
       ],
     })
     // The strip's fader and encoder are the group's — its own colour, never a member's.
@@ -230,7 +230,7 @@ describe('SurfacePanel — the target’s colour (tables-colours plan D8)', () =
     renderPanel({
       colours,
       bindings: [
-        binding(9, 'fader-1', { type: 'groupProperty', groupName: 'Front', propertyName: 'dimmer' }),
+        binding(9, 'fader-1', { type: 'groupAttribute', groupName: 'Front', attribute: 'dimmer' }),
         binding(10, 'enc-9', { type: 'blackout' }),
       ],
     })

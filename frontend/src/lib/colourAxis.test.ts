@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { FixturePropertyTarget } from '@/api/surfacesApi'
+import type { FixtureAttributeTarget } from '@/api/surfacesApi'
 import {
   COLOUR_AXES,
   COLOUR_AXIS_LABELS,
@@ -46,7 +46,7 @@ describe('colourAxis', () => {
   })
 
   it('writes an axis onto a target, and leaves the field absent for hue', () => {
-    const base: FixturePropertyTarget = { type: 'fixtureProperty', fixtureKey: 'hex-1', propertyName: 'rgbColour' }
+    const base: FixtureAttributeTarget = { type: 'fixtureAttribute', fixtureKey: 'hex-1', attribute: 'rgbColour' }
     expect(withAxis(base, 'saturation')).toEqual({ ...base, colourAxis: 'saturation' })
     // Absent rather than null or 'hue': the form every pre-axis row has and the server writes.
     expect(withAxis(base, null)).toEqual(base)

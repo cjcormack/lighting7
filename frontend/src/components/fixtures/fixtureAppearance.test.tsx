@@ -10,7 +10,7 @@ import { ChannelSourceProvider } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
 import type { Fixture, FixtureTypeInfo } from '../../store/fixtures'
 import type { FixturePatch } from '../../api/patchApi'
-import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
+import type { GroupColourAttributeDescriptor } from '../../api/groupsApi'
 import {
   chan,
   colourProp,
@@ -19,7 +19,7 @@ import {
   sliderProp,
 } from '../../test/fixtureFactories'
 
-// usePropertyValues imports lightingApi for its writers, and the real module opens a WebSocket
+// useAttributeValues imports lightingApi for its writers, and the real module opens a WebSocket
 // at import time. The reads all go through the injected ChannelSource, not the mock.
 vi.mock('@/api/lightingApi', async () => (await import('@/test/backendMock')).lightingApiMock())
 // The served gel library (`GET /gels`), read from the resource the desk serves it from.
@@ -198,7 +198,7 @@ describe('FixtureAppearanceSource', () => {
   })
 
   it('emits per-pixel segments for a multi-element fixture', () => {
-    const groupColour: GroupColourPropertyDescriptor = {
+    const groupColour: GroupColourAttributeDescriptor = {
       type: 'colour',
       name: 'rgbColour',
       displayName: 'Colour',
@@ -207,10 +207,10 @@ describe('FixtureAppearanceSource', () => {
         { fixtureKey: 'fx-1.pixel-0', redChannel: chan(2), greenChannel: chan(3), blueChannel: chan(4) },
         { fixtureKey: 'fx-1.pixel-1', redChannel: chan(5), greenChannel: chan(6), blueChannel: chan(7) },
       ],
-    } as GroupColourPropertyDescriptor
+    } as GroupColourAttributeDescriptor
 
     const fixture = makeFixture('fx-1', [sliderProp('dimmer', 'dimmer', chan(1))], {
-      elementGroupProperties: [groupColour],
+      elementGroupAttributes: [groupColour],
     })
 
     // Pixel 0 full red, pixel 1 off, dimmer full.
@@ -222,7 +222,7 @@ describe('FixtureAppearanceSource', () => {
 
   it('does not treat a single-element group as a pixel strip', () => {
     // One member is not a bar; it should take the plain colour path so it draws as a dot.
-    const groupColour: GroupColourPropertyDescriptor = {
+    const groupColour: GroupColourAttributeDescriptor = {
       type: 'colour',
       name: 'rgbColour',
       displayName: 'Colour',
@@ -230,10 +230,10 @@ describe('FixtureAppearanceSource', () => {
       memberColourChannels: [
         { fixtureKey: 'fx-1.pixel-0', redChannel: chan(2), greenChannel: chan(3), blueChannel: chan(4) },
       ],
-    } as GroupColourPropertyDescriptor
+    } as GroupColourAttributeDescriptor
 
     const fixture = makeFixture('fx-1', [colourProp('rgbColour', chan(2), chan(3), chan(4))], {
-      elementGroupProperties: [groupColour],
+      elementGroupAttributes: [groupColour],
     })
     expect(appearanceOf({ '0:2': 255 }, fixture).segments).toBeUndefined()
   })

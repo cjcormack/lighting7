@@ -3,10 +3,10 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.DmxFixture
-import uk.me.cormack.lighting7.fixture.FixtureProperty
+import uk.me.cormack.lighting7.fixture.FixtureAttribute
 import uk.me.cormack.lighting7.fixture.FixtureType
-import uk.me.cormack.lighting7.fixture.PropertyCategory
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.AttributeCategory
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithUv
 
@@ -41,7 +41,7 @@ class UVFixture (
     // Its one channel is its intensity, so it is the fixture's DIMMER: everything that finds a
     // fixture's level by category — the Stage view, the busk rig, the intensity mask — finds it.
     // Category UV is a colour emitter beside an RGB head's (`bundleWithColour`), which this is not.
-    @FixtureProperty(category = PropertyCategory.DIMMER)
+    @FixtureAttribute(category = AttributeCategory.DIMMER)
     override val dimmer = DmxSlider(transaction, universe, firstChannel, max = maxDimmerLevel)
 
     override val uv: Slider

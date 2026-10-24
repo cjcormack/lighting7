@@ -38,7 +38,7 @@ import {
   followTargetOf,
   formatFollowRatio,
   leaderNameOf,
-  usageOptionLabel,
+  masterFamilyOptionLabel,
   type FollowRatio,
 } from '@/lib/speedMasterModel'
 import { formatBpm } from '../../hooks/useBpmDraft'
@@ -48,7 +48,7 @@ import { formatBpm } from '../../hooks/useBpmDraft'
  * of its own rather than `''`. It never reaches the wire — {@link familyToSend} maps it back to
  * the null the PUT wants.
  */
-const USAGE_NONE = '__none__'
+const FAMILY_NONE = '__none__'
 
 /**
  * Rename a master, note what it is for, and set the tempo it boots at.
@@ -59,7 +59,7 @@ const USAGE_NONE = '__none__'
  * control would make one silently overwrite the other, so the live tempo stays on the row
  * (and the strip) where tap is, and this sheet owns the stored default.
  *
- * It is also the only place the two routing facts are set — a master's **usage** (which
+ * It is also the only place the two routing facts are set — a master's **family** (which
  * category of busked effect defaults to it) and whether it **follows** another master at a
  * ratio. Both are deliberately here rather than on the performance surfaces: they are decisions
  * about how the show is wired, not knobs to reach for mid-cue, and the follow switch in
@@ -89,7 +89,7 @@ export function SpeedMasterDetailSheet({
   const [name, setName] = useState('')
   const [notes, setNotes] = useState('')
   const [startingBpm, setStartingBpm] = useState('')
-  const [usage, setUsage] = useState<string>(USAGE_NONE)
+  const [family, setFamily] = useState<string>(FAMILY_NONE)
   // null = manual. Held as the ratio itself rather than a mode flag plus a ratio, so there is
   // exactly one source of truth for "is this following" and the two cannot disagree.
   const [follow, setFollow] = useState<FollowRatio | null>(null)
@@ -138,7 +138,7 @@ export function SpeedMasterDetailSheet({
     setName(master.name)
     setNotes(master.notes ?? '')
     setStartingBpm(String(master.bpm))
-    setUsage(master.family ?? USAGE_NONE)
+    setFamily(master.family ?? FAMILY_NONE)
     setFollow(followRatioOf(master))
     setFollowTarget(followTargetOf(master))
   }, [master])
@@ -169,7 +169,7 @@ export function SpeedMasterDetailSheet({
   // server refuses it (400 SPEED_MASTER_FOLLOW_CYCLE). Offering a choice that can only fail is
   // worse than not offering it.
   const followTargetOptions = eligibleFollowTargets(bank, master)
-  const familyToSend = usage === USAGE_NONE ? null : usage
+  const familyToSend = family === FAMILY_NONE ? null : family
   const familyChanged = familyToSend !== (master.family ?? null)
   // A follower's tempo is derived, so its stored default is meaningless while linked and the
   // BPM field is not rendered at all — which also means it can never be dirty.
@@ -213,7 +213,7 @@ export function SpeedMasterDetailSheet({
       .unwrap()
       .then(() => onOpenChange(false))
       .catch(() => {
-        // Rendered inline below — a duplicate name, or a usage another master already claims,
+        // Rendered inline below — a duplicate name, or a family another master already claims,
         // is a 409 and nothing moved.
       })
   }
@@ -239,23 +239,23 @@ export function SpeedMasterDetailSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="speed-master-usage">Default usage</Label>
-            <Select value={usage} onValueChange={setUsage}>
-              <SelectTrigger id="speed-master-usage">
+            <Label htmlFor="speed-master-family">Default family</Label>
+            <Select value={family} onValueChange={setFamily}>
+              <SelectTrigger id="speed-master-family">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={USAGE_NONE}>Not routed</SelectItem>
+                <SelectItem value={FAMILY_NONE}>Not routed</SelectItem>
                 {SPEED_MASTER_FAMILIES.map((u) => (
                   <SelectItem key={u} value={u}>
-                    {usageOptionLabel(u)}
+                    {masterFamilyOptionLabel(u)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              A busked FX with no explicit speed master follows the master whose usage
-              matches its family. One master per usage — unmatched FX stay on Master 1.
+              A busked FX with no explicit speed master follows the master of its family.
+              One master per family — unmatched FX stay on Master 1.
             </p>
           </div>
 

@@ -6,14 +6,14 @@
 export function landValuesInLook(
   store: {
     targetedKeys: ReadonlySet<string> | null
-    setValue: (targetKey: string, propertyName: string, value: string) => void
+    setValue: (targetKey: string, attribute: string, value: string) => void
   },
-  values: readonly { target: { key: string }; propertyName: string; value: string }[],
+  values: readonly { target: { key: string }; attribute: string; value: string }[],
 ): number {
   let landed = 0
   for (const value of values) {
     if (store.targetedKeys != null && !store.targetedKeys.has(value.target.key)) continue
-    store.setValue(value.target.key, value.propertyName, value.value)
+    store.setValue(value.target.key, value.attribute, value.value)
     landed += 1
   }
   return landed

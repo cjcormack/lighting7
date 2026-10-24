@@ -238,7 +238,7 @@ export const PositionCell = memo(function PositionCell({
         <PaletteBands
           projectId={projectId}
           family="POSITION"
-          property="position"
+          attribute="position"
           targets={bandTargets}
           onSave={save.onSave}
           tools={

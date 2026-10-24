@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
-import type { CommandPropertyDescriptor } from '@/store/fixtures'
+import type { CommandAttributeDescriptor } from '@/store/fixtures'
 
 let resolveRun: ((value: { completed: boolean }) => void) | null = null
 const run = vi.fn(() => ({
@@ -21,7 +21,7 @@ vi.mock('sonner', () => ({ toast: { success: (...a: unknown[]) => toastSuccess(.
 
 import { FixtureCommandsMenu, alongsideSentence, holdLabel, parkedChannelOf } from './FixtureCommandsMenu'
 
-const command = (name: string, displayName: string, over: Partial<CommandPropertyDescriptor> = {}): CommandPropertyDescriptor => ({
+const command = (name: string, displayName: string, over: Partial<CommandAttributeDescriptor> = {}): CommandAttributeDescriptor => ({
   type: 'command', name, displayName, category: 'command',
   description: `${displayName} does its thing.`, holdMs: 3000, confirm: true,
   channel: { universe: 0, channelNo: 12 }, dedicated: true, ...over,

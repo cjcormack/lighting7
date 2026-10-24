@@ -2,7 +2,7 @@ package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.dmx.HexFixture
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.show.Fixtures
 import java.awt.Color
 import kotlin.test.Test
@@ -30,12 +30,12 @@ class BuildCueAssignmentsForCueTest {
         return fixtures
     }
 
-    private fun cueData(vararg assignments: CuePropertyAssignmentDto): CueApplyData =
+    private fun cueData(vararg assignments: CueAttributeAssignmentDto): CueApplyData =
         CueApplyData(
             cueId = 7,
             cueName = "test",
             adHocFx = emptyList(),
-            propertyAssignments = assignments.toList(),
+            attributeAssignments = assignments.toList(),
             cueStackId = 3,
             sortOrder = 2,
         )
@@ -44,20 +44,20 @@ class BuildCueAssignmentsForCueTest {
     fun `fixture target emits one Assignment with the correct category`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
-                propertyName = "dimmer",
+                attribute = "dimmer",
                 value = "180",
             ),
         ))
         assertEquals(1, out.size)
         val a = out.single()
         assertEquals("hex-1", a.targetKey)
-        assertEquals("dimmer", a.propertyName)
+        assertEquals("dimmer", a.attribute)
         assertEquals(7, a.cueId)
         assertEquals(false, a.targetIsGroup)
-        val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(a.value)
+        val v = assertIs<CueAssignmentResolver.AttributeValue.Slider>(a.value)
         assertEquals(180u.toUByte(), v.value)
         // Priority = cueStackId*1M + sortOrder*1K + 1 = 3_002_001
         assertEquals(3_002_001, a.priority)
@@ -67,10 +67,10 @@ class BuildCueAssignmentsForCueTest {
     fun `group target expands to per-member rows flagged as group-derived`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "group",
                 targetKey = "front-wash",
-                propertyName = "dimmer",
+                attribute = "dimmer",
                 value = "150",
             ),
         ))
@@ -78,7 +78,7 @@ class BuildCueAssignmentsForCueTest {
         assertTrue(out.all { it.targetIsGroup }, "member rows carry the group-derived flag")
         assertEquals(setOf("hex-1", "hex-2"), out.map { it.targetKey }.toSet())
         out.forEach {
-            val v = assertIs<CueAssignmentResolver.PropertyValue.Slider>(it.value)
+            val v = assertIs<CueAssignmentResolver.AttributeValue.Slider>(it.value)
             assertEquals(150u.toUByte(), v.value)
         }
     }
@@ -89,54 +89,54 @@ class BuildCueAssignmentsForCueTest {
         // direct fixture row wins on hex-1 (50); hex-2 keeps the group value (150).
         val fixtures = fixturesWithTwoHexesInAGroup()
         val rows = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(targetType = "group", targetKey = "front-wash",
-                propertyName = "dimmer", value = "150"),
-            CuePropertyAssignmentDto(targetType = "fixture", targetKey = "hex-1",
-                propertyName = "dimmer", value = "50"),
+            CueAttributeAssignmentDto(targetType = "group", targetKey = "front-wash",
+                attribute = "dimmer", value = "150"),
+            CueAttributeAssignmentDto(targetType = "fixture", targetKey = "hex-1",
+                attribute = "dimmer", value = "50"),
         ))
         val resolved = CueAssignmentResolver().resolve(rows)
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(50u),
+            CueAssignmentResolver.AttributeValue.Slider(50u),
             resolved[CueAssignmentResolver.Key.fixture("hex-1", "dimmer")],
             "fixture-level override wins",
         )
         assertEquals(
-            CueAssignmentResolver.PropertyValue.Slider(150u),
+            CueAssignmentResolver.AttributeValue.Slider(150u),
             resolved[CueAssignmentResolver.Key.fixture("hex-2", "dimmer")],
             "unaffected member keeps group value",
         )
     }
 
     @Test
-    fun `colour assignment produces a Colour PropertyValue`() {
+    fun `colour assignment produces a Colour AttributeValue`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
-                propertyName = "colour",
+                attribute = "colour",
                 value = "#00FF00",
             ),
         ))
         val a = out.single()
-        assertEquals("rgbColour", a.propertyName, "canonicalised to the property name ColourTarget uses")
-        assertIs<CueAssignmentResolver.PropertyValue.Colour>(a.value)
+        assertEquals("rgbColour", a.attribute, "canonicalised to the property name ColourTarget uses")
+        assertIs<CueAssignmentResolver.AttributeValue.Colour>(a.value)
     }
 
     @Test
     fun `missing fixture is logged and skipped, not thrown`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "does-not-exist",
-                propertyName = "dimmer",
+                attribute = "dimmer",
                 value = "100",
             ),
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
-                propertyName = "dimmer",
+                attribute = "dimmer",
                 value = "50",
             ),
         ))
@@ -145,13 +145,13 @@ class BuildCueAssignmentsForCueTest {
     }
 
     @Test
-    fun `unknown property name is skipped`() {
+    fun `unknown attribute name is skipped`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
-                propertyName = "nonsense",
+                attribute = "nonsense",
                 value = "100",
             ),
         ))
@@ -164,10 +164,10 @@ class BuildCueAssignmentsForCueTest {
         // through here would read as white — see `CueAssignmentResolver.parseAssignmentValue`.
         val fixtures = fixturesWithTwoHexesInAGroup()
         val out = buildCueAssignmentsForCue(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "fixture",
                 targetKey = "hex-1",
-                propertyName = "colour",
+                attribute = "colour",
                 value = "pal:2f1c8a3e-0000-4000-8000-000000000001",
             ),
         ))
@@ -175,7 +175,7 @@ class BuildCueAssignmentsForCueTest {
     }
 
     @Test
-    fun `empty propertyAssignments produces empty output`() {
+    fun `empty attributeAssignments produces empty output`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         assertTrue(buildCueAssignmentsForCue(fixtures, cueData()).isEmpty())
     }
@@ -184,19 +184,19 @@ class BuildCueAssignmentsForCueTest {
     fun `stomp overlap includes group name plus expanded member keys`() {
         val fixtures = fixturesWithTwoHexesInAGroup()
         val overlap = buildStompOverlapFromAssignments(fixtures, cueData(
-            CuePropertyAssignmentDto(
+            CueAttributeAssignmentDto(
                 targetType = "group",
                 targetKey = "front-wash",
-                propertyName = "colour",
+                attribute = "colour",
                 value = "#FF0000",
             ),
         ))
         // Canonicalised to rgbColour, and the group's two members are expanded in addition to
         // the group-level key.
         assertEquals(setOf(
-            uk.me.cormack.lighting7.fx.FxEngine.PropertyKey("front-wash", "rgbColour"),
-            uk.me.cormack.lighting7.fx.FxEngine.PropertyKey("hex-1", "rgbColour"),
-            uk.me.cormack.lighting7.fx.FxEngine.PropertyKey("hex-2", "rgbColour"),
+            uk.me.cormack.lighting7.fx.FxEngine.TargetAttribute("front-wash", "rgbColour"),
+            uk.me.cormack.lighting7.fx.FxEngine.TargetAttribute("hex-1", "rgbColour"),
+            uk.me.cormack.lighting7.fx.FxEngine.TargetAttribute("hex-2", "rgbColour"),
         ), overlap)
     }
 }

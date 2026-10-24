@@ -39,12 +39,12 @@ object BindingHealthEvaluator {
      * @param validStackUuids uuids of the same stacks as [validStackIds] — a stack variant with
      *   a uuid is judged by this set and its int is ignored
      * @param validCueUuids likewise for cues
-     * @param selectionProperties every property name some patched fixture declares that a
+     * @param selectionAttributes every property name some patched fixture declares that a
      *   continuous control can write (sliders and colour) — the vocabulary of
-     *   [BindingTarget.SelectionProperty]; see [selectionPropertiesOf]
-     * @param colourProperties the subset of [selectionProperties] some patched fixture declares as
+     *   [BindingTarget.SelectionAttribute]; see [selectionAttributesOf]
+     * @param colourAttributes the subset of [selectionAttributes] some patched fixture declares as
      *   a **colour** — what a [ColourAxis] on a selection or encoder-bank target is judged against
-     *   at the write boundary (`refuseAxisOnNonColour`); see [colourPropertiesOf]. Health itself
+     *   at the write boundary (`refuseAxisOnNonColour`); see [colourAttributesOf]. Health itself
      *   does not read it: an axis is refused when it is bound, never reported afterwards, and a
      *   head that stops being a colour under a re-patch simply drops the move.
      * @param validLookUuids Looks that exist in the project
@@ -67,8 +67,8 @@ object BindingHealthEvaluator {
         val validSpeedMasterUuids: Set<UUID> = emptySet(),
         val validStackUuids: Set<UUID> = emptySet(),
         val validCueUuids: Set<UUID> = emptySet(),
-        val selectionProperties: Set<String> = emptySet(),
-        val colourProperties: Set<String> = emptySet(),
+        val selectionAttributes: Set<String> = emptySet(),
+        val colourAttributes: Set<String> = emptySet(),
         val validLookUuids: Set<UUID> = emptySet(),
         val validPaletteUuids: Set<UUID> = emptySet(),
         val validPadUuids: Set<UUID> = emptySet(),
@@ -78,37 +78,37 @@ object BindingHealthEvaluator {
     )
 
     /**
-     * The property names a [BindingTarget.SelectionProperty] may carry: every name that at least
-     * one patched fixture declares and that [PropertyChannelResolver] would accept on a fader —
+     * The property names a [BindingTarget.SelectionAttribute] may carry: every name that at least
+     * one patched fixture declares and that [AttributeChannelResolver] would accept on a fader —
      * sliders and colour, never a setting. Computed once per context, not per binding.
      */
-    fun selectionPropertiesOf(fixtures: Fixtures): Set<String> =
+    fun selectionAttributesOf(fixtures: Fixtures): Set<String> =
         fixtures.fixtures.flatMapTo(HashSet()) { fixture ->
-            fixture.fixtureProperties.map { it.name }
-                .filter { PropertyChannelResolver.describeFixtureProperty(fixture, it).isNotEmpty() }
+            fixture.fixtureAttributes.map { it.name }
+                .filter { AttributeChannelResolver.describeFixtureAttribute(fixture, it).isNotEmpty() }
         }
 
     /**
      * The property names some patched fixture declares as a **colour** — the subset of
-     * [selectionPropertiesOf] a [ColourAxis] may be bound against on a target that names no head.
+     * [selectionAttributesOf] a [ColourAxis] may be bound against on a target that names no head.
      */
-    fun colourPropertiesOf(fixtures: Fixtures): Set<String> =
+    fun colourAttributesOf(fixtures: Fixtures): Set<String> =
         fixtures.fixtures.flatMapTo(HashSet()) { fixture ->
-            fixture.fixtureProperties.map { it.name }.filter {
-                PropertyChannelResolver.describePropertyRead(fixture, it) is PropertyChannelResolver.PropertyRead.Colour
+            fixture.fixtureAttributes.map { it.name }.filter {
+                AttributeChannelResolver.describeAttributeRead(fixture, it) is AttributeChannelResolver.AttributeRead.Colour
             }
         }
 
     fun evaluate(target: BindingTarget, context: Context): AssignmentHealth = when (target) {
-        is BindingTarget.FixtureProperty -> PersistedFixtureReferenceValidator.validateTargetedReference(
+        is BindingTarget.FixtureAttribute -> PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures = context.fixtures,
             target = TargetRef.Fixture(target.fixtureKey),
-            propertyName = target.propertyName,
+            attribute = target.attribute,
         )
-        is BindingTarget.GroupProperty -> PersistedFixtureReferenceValidator.validateTargetedReference(
+        is BindingTarget.GroupAttribute -> PersistedFixtureReferenceValidator.validateTargetedReference(
             fixtures = context.fixtures,
             target = TargetRef.Group(target.groupName),
-            propertyName = target.propertyName,
+            attribute = target.attribute,
         )
         is BindingTarget.CueStackGo -> checkStack(target.stackId, target.stackUuid, context)
         is BindingTarget.CueStackBack -> checkStack(target.stackId, target.stackUuid, context)
@@ -117,17 +117,17 @@ object BindingHealthEvaluator {
         // The fixture and its trigger. Whether the desk is armed is a fact about this second, not
         // about the binding — an unarmed press is announced, never a dead binding.
         is BindingTarget.FireTrigger -> checkTrigger(target.fixtureKey, target.trigger, context)
-        is BindingTarget.SelectionProperty ->
-            if (target.propertyName in context.selectionProperties) AssignmentHealth.Ok
-            else AssignmentHealth.UnknownProperty(target.propertyName)
+        is BindingTarget.SelectionAttribute ->
+            if (target.attribute in context.selectionAttributes) AssignmentHealth.Ok
+            else AssignmentHealth.UnknownAttribute(target.attribute)
         is BindingTarget.SelectTarget -> checkTarget(target.target, context)
         // A strip is judged by its group or fixture alone. The properties its controls derive
         // are the encoder bank's business, and an attribute no selected head declares makes the
         // encoder read unbound — not the strip dead.
         is BindingTarget.Strip -> checkTarget(target.target, context)
         is BindingTarget.EncoderBankSet ->
-            if (target.propertyName in context.selectionProperties) AssignmentHealth.Ok
-            else AssignmentHealth.UnknownProperty(target.propertyName)
+            if (target.attribute in context.selectionAttributes) AssignmentHealth.Ok
+            else AssignmentHealth.UnknownAttribute(target.attribute)
         BindingTarget.ClearSelection -> AssignmentHealth.Ok
         BindingTarget.LocateSelection -> AssignmentHealth.Ok
         // A Look lands whole (absolute-looks plan D1), so the one failure is a Look that is gone.
@@ -135,7 +135,7 @@ object BindingHealthEvaluator {
             uuidHealth(target.lookUuid, context.validLookUuids) { AssignmentHealth.MissingLook(it) }
         // A template's *emptiness* is not a health question: a generic template pressed with
         // nothing selected is a dropped press, which is a fact about the selection at that moment
-        // and not about the binding — the same line `SelectionProperty` draws.
+        // and not about the binding — the same line `SelectionAttribute` draws.
         is BindingTarget.PressPalette ->
             uuidHealth(target.paletteUuid, context.validPaletteUuids) { AssignmentHealth.MissingPalette(it) }
         // The pad, not its record: a pad whose record was deleted is itself swept in the same
@@ -146,7 +146,7 @@ object BindingHealthEvaluator {
         // nothing else: a pick-up needs its pad, a place needs its bank, and a drop addresses
         // nothing, so it can never be dead. What the hand happens to hold is never a health
         // question — it is a fact about this second, like an empty selection under a
-        // `SelectionProperty`.
+        // `SelectionAttribute`.
         is BindingTarget.PickUpPad ->
             uuidHealth(target.padUuid, context.validPadUuids) { AssignmentHealth.MissingPad(it) }
         is BindingTarget.HandPlaceInBank ->
@@ -163,7 +163,7 @@ object BindingHealthEvaluator {
         is BindingTarget.BuskFocusSet -> windowHealth(target.windowName, context)
         is BindingTarget.BuskSheetToggle -> windowHealth(target.windowName, context)
         // Selection-relative and rig-agnostic: an empty selection or an empty rig is a fact about
-        // this second, not about the binding — the `SelectionProperty` line.
+        // this second, not about the binding — the `SelectionAttribute` line.
         BindingTarget.SelectionNext -> AssignmentHealth.Ok
         BindingTarget.SelectionPrev -> AssignmentHealth.Ok
         is BindingTarget.SelectionCells -> AssignmentHealth.Ok
@@ -191,7 +191,7 @@ object BindingHealthEvaluator {
         val fixture = runCatching { context.fixtures.untypedFixture(fixtureKey) }.getOrNull()
             ?: return AssignmentHealth.MissingFixture(fixtureKey)
         val known = FixtureTriggers.of(fixture).any { it.name.equals(trigger, ignoreCase = true) || it.spec.label.equals(trigger, ignoreCase = true) }
-        return if (known) AssignmentHealth.Ok else AssignmentHealth.MissingProperty(fixtureKey, trigger)
+        return if (known) AssignmentHealth.Ok else AssignmentHealth.MissingAttribute(fixtureKey, trigger)
     }
 
     /**

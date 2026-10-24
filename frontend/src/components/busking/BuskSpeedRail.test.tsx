@@ -130,18 +130,18 @@ function row(index: number, overrides: Partial<SpeedMaster> = {}): SpeedMaster {
 }
 
 describe('BuskSpeedRail — the three arms', () => {
-  it('gives master 1 a TAP and no usage badge', () => {
+  it('gives master 1 a TAP and no family badge', () => {
     liveMasters = [live(1, { name: 'Master' })]
     rows = [row(1)]
     render(<BuskSpeedRail />)
 
     expect(screen.getByLabelText('Tap tempo for master 1')).toBeInTheDocument()
     // M1 is where every unmatched category lands by definition, so a badge naming one would
-    // understate it. No routable usage label may appear on its card.
+    // understate it. No routable family label may appear on its card.
     expect(screen.queryByText(/^(Intensity|Colour|Movement|Position)$/)).toBeNull()
   })
 
-  it('gives a manual master its own TAP and its usage badge', () => {
+  it('gives a manual master its own TAP and its family badge', () => {
     liveMasters = [live(1), live(4, { name: 'Strobe', family: 'intensity' })]
     rows = [row(1), row(4, { name: 'Strobe', family: 'intensity' })]
     render(<BuskSpeedRail />)
@@ -491,7 +491,7 @@ describe('BuskSpeedRail — hold to drag the tempo', () => {
 
 /**
  * The rail is the only place on this page a master's *settings* can be reached — its name, its
- * usage, the tempo it boots at, and whether it follows master 1. The glyph is the whole of that
+ * family, the tempo it boots at, and whether it follows master 1. The glyph is the whole of that
  * route: the hold belongs to the tempo fader, and a card cannot answer a hold two ways.
  */
 describe('BuskSpeedRail — the detail sheet', () => {

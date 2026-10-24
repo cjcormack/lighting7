@@ -66,7 +66,7 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
       name: key,
       groups: [],
       elements: [],
-      properties: [
+      attributes: [
         { type: 'slider', name: 'dimmer' },
         { type: 'slider', name: 'zoom' },
       ],
@@ -115,7 +115,7 @@ function template(over: Partial<PaletteSummary>): PaletteSummary {
     kind: 'value',
     requiredEmitters: [],
     lastPressedAt: null,
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:100' }],
     fx: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -130,34 +130,34 @@ const RED = template({
   uuid: 'u3',
   name: 'Red',
   family: 'COLOUR',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'rgbColour', value: '#ff0000' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'rgbColour', value: '#ff0000' }],
 })
 const WIDE = template({
   id: 4,
   uuid: 'u4',
   name: 'Wide',
   family: 'BEAM',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }],
 })
 const SOFT = template({
   id: 5,
   uuid: 'u5',
   name: 'Soft edge',
   family: 'BEAM',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'frost', value: 'pct:60' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'frost', value: 'pct:60' }],
 })
 const HOME = template({
   id: 6,
   uuid: 'u6',
   name: 'Home',
   family: 'POSITION',
-  rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'pos:0,0' }],
+  rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value: 'pos:0,0' }],
 })
 const PULSE = template({ id: 7, uuid: 'u7', name: 'Pulse', kind: 'fx', rows: [] })
-const beamFx = (fxType: string, propertyName: string | null = null) => ({
+const beamFx = (fxType: string, attribute: string | null = null) => ({
   fxType,
   family: 'beam',
-  propertyName,
+  attribute,
   cycle: 4,
   blendMode: 'OVERRIDE',
   order: 'NORMAL',
@@ -166,12 +166,12 @@ const beamFx = (fxType: string, propertyName: string | null = null) => ({
 const WAVE_ZOOM = template({ id: 8, uuid: 'u8', name: 'Slow zoom', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('ZoomWave') })
 const PULSE_IRIS = template({ id: 9, uuid: 'u9', name: 'Iris throb', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('IrisPulse') })
 const GOBO_STEPS = template({ id: 10, uuid: 'u10', name: 'Gobo walk', family: 'BEAM', kind: 'fx', rows: [], fx: beamFx('SlotSteps', 'gobo') })
-const libraryEntry = (name: string, property: string) => ({
+const libraryEntry = (name: string, attribute: string) => ({
   name,
   family: 'beam',
   outputType: 'SLIDER',
   fxMode: 'STANDARD',
-  compatibleProperties: [property],
+  compatibleAttributes: [attribute],
   parameters: [],
 })
 const ZOOM_WAVE = libraryEntry('ZoomWave', 'zoom')
@@ -179,11 +179,11 @@ const IRIS_PULSE = libraryEntry('IrisPulse', 'iris')
 
 const dimmer = sliderProp('dimmer', 'dimmer', chan(1))
 const zoom = sliderProp('zoom', 'zoom', chan(2))
-const DIMMER: NonNullable<CellResolution> = { kind: 'slider', property: dimmer }
-const ZOOM: NonNullable<CellResolution> = { kind: 'slider', property: zoom }
+const DIMMER: NonNullable<CellResolution> = { kind: 'slider', attribute: dimmer }
+const ZOOM: NonNullable<CellResolution> = { kind: 'slider', attribute: zoom }
 const HEADS: WriteTarget[] = [
-  { key: 'hex-1', properties: [dimmer, zoom] },
-  { key: 'hex-2', properties: [dimmer, zoom] },
+  { key: 'hex-1', attributes: [dimmer, zoom] },
+  { key: 'hex-2', attributes: [dimmer, zoom] },
 ]
 const batchOf = (resolution: NonNullable<CellResolution>): CellBatch => ({
   count: 2,
@@ -197,7 +197,7 @@ function slider(resolution: NonNullable<CellResolution>, over: Partial<React.Com
     <SliderCell
       value={{ kind: 'slider', min: 128, max: 128, isUniform: true }}
       resolutions={[resolution]}
-      label={resolution.kind === 'slider' ? resolution.property.name : 'Value'}
+      label={resolution.kind === 'slider' ? resolution.attribute.name : 'Value'}
       batch={batchOf(resolution)}
       projectId={1}
       autoOpen
@@ -266,7 +266,7 @@ describe('the Palettes band', () => {
         { type: 'fixture', key: 'hex-1' },
         { type: 'fixture', key: 'hex-2' },
       ],
-      propertyMask: 'INTENSITY',
+      attributeMask: 'INTENSITY',
       families: ['INTENSITY'],
     })
     await act(async () => {
@@ -312,7 +312,7 @@ describe('the Palettes band', () => {
         value={{ kind: 'position', isUniform: true, pan: 128, tilt: 128, panNormalized: 0.5, tiltNormalized: 0.5 }}
         resolutions={[{ kind: 'position', pan: chan(3), tilt: chan(4), panMin: 0, panMax: 255, tiltMin: 0, tiltMax: 255 }]}
         label="Position"
-        batch={{ count: 1, skipped: 0, resolutions: [], targets: [{ key: 'hex-1', properties: [] }] }}
+        batch={{ count: 1, skipped: 0, resolutions: [], targets: [{ key: 'hex-1', attributes: [] }] }}
         projectId={1}
         autoOpen
         keyboardSeed={null}
@@ -359,7 +359,7 @@ function gobo(over: Partial<React.ComponentProps<typeof SettingCell>> = {}) {
   return render(
     <SettingCell
       value={{ kind: 'setting', isUniform: true, level: 0 }}
-      resolutions={[{ kind: 'setting', property: goboProp }]}
+      resolutions={[{ kind: 'setting', attribute: goboProp }]}
       label="Gobo"
       batch={{ count: 2, skipped: 0, resolutions: [], targets: HEADS }}
       projectId={1}
@@ -392,7 +392,7 @@ describe('the Effects band', () => {
       expect.objectContaining({
         library: 'fx',
         family: 'BEAM',
-        property: 'zoom',
+        attribute: 'zoom',
         pair: { targets: [{ type: 'fixture', key: 'hex-1' }, { type: 'fixture', key: 'hex-2' }], families: ['BEAM'] },
       }),
     )
@@ -423,9 +423,9 @@ describe('the Effects band', () => {
 
   it('lights the effects running on these heads and opens the editor over the cell batch', () => {
     fx.active = [
-      makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' }),
-      makeActiveFx({ id: 42, fxType: 'Pulse', targetKey: 'hex-9', propertyName: 'dimmer' }),
-      makeActiveFx({ id: 43, fxType: 'ZoomWave', targetKey: 'hex-1', propertyName: 'zoom' }),
+      makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', attribute: 'dimmer' }),
+      makeActiveFx({ id: 42, fxType: 'Pulse', targetKey: 'hex-9', attribute: 'dimmer' }),
+      makeActiveFx({ id: 43, fxType: 'ZoomWave', targetKey: 'hex-1', attribute: 'zoom' }),
     ]
     slider(DIMMER)
     const lit = [...document.querySelectorAll('[data-band-effect]')].map((chip) => chip.getAttribute('data-band-effect'))
@@ -447,12 +447,12 @@ describe('the Effects band', () => {
 })
 
 describe('in the cue editor (apply-model plan §3.6)', () => {
-  const storedPulse = (targetKey: string, propertyName = 'dimmer') => ({
+  const storedPulse = (targetKey: string, attribute = 'dimmer') => ({
     targetType: 'fixture' as const,
     targetKey,
-    fxType: propertyName === 'zoom' ? 'ZoomWave' : 'Pulse',
+    fxType: attribute === 'zoom' ? 'ZoomWave' : 'Pulse',
     family: 'intensity',
-    propertyName,
+    attribute,
     cycle: 4,
     blendMode: 'OVERRIDE',
     order: 'NORMAL',
@@ -521,7 +521,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   })
 
   it('lists the cue’s stored effects on this property that reach these heads, and nothing running', () => {
-    fx.active = [makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', propertyName: 'dimmer' })]
+    fx.active = [makeActiveFx({ id: 41, fxType: 'Pulse', targetKey: 'hex-2', attribute: 'dimmer' })]
     inCue()
     expect(document.querySelector('[data-band-effect]')).toBeNull()
     const stored = [...document.querySelectorAll('[data-band-stored-effect]')]
@@ -530,7 +530,7 @@ describe('in the cue editor (apply-model plan §3.6)', () => {
   })
 
   it('lists a stored effect with no property of its own under its family', () => {
-    inCue([], { effects: [{ ...storedPulse('hex-1'), propertyName: null as unknown as string }] })
+    inCue([], { effects: [{ ...storedPulse('hex-1'), attribute: null as unknown as string }] })
     expect([...document.querySelectorAll('[data-band-stored-effect]')].map((chip) => chip.textContent)).toEqual(['Pulse'])
   })
 

@@ -7,9 +7,9 @@ import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
  *
  * Two facts a master can carry beyond its name and tempo:
  *
- * - a **usage**, the effect-library `category` this master is the apply-time default for. A
- *   busked effect with no explicit master is stamped with the usage-matching master's uuid at
- *   the moment it is created (`resolveSpeedMasterForFamily`); nothing resolves usage later,
+ * - a **family**, the effect-library `category` this master is the apply-time default for. A
+ *   busked effect with no explicit master is stamped with the family-matching master's uuid at
+ *   the moment it is created (`resolveSpeedMasterForFamily`); nothing resolves family later,
  *   and a null `speedMasterUuid` still means master 1 everywhere, forever.
  * - a **follow link** to another master, so that master's clock drives this one: the follower
  *   ticks — and beats — at `num/den` of its leader's rate, in phase with it. The server owns the
@@ -18,7 +18,7 @@ import { FX_FAMILY_INFO } from '@/components/fx/fxConstants'
  */
 
 /**
- * The categories a master's usage may name.
+ * The categories a master's family may name.
  *
  * This is the effect library's own `category` vocabulary, minus the two that cannot sensibly own
  * a tempo: `controls` (a settings slider has no beat) and `steps` (the Steps FX's own, which names
@@ -36,19 +36,19 @@ export function isSpeedMasterFamily(value: string | null | undefined): value is 
 }
 
 /**
- * Display label for a usage, borrowed from the effect library's own category labels rather than
+ * Display label for a family, borrowed from the effect library's own category labels rather than
  * minted here — the two would otherwise drift, and "Movement" in one place and "Position" in the
  * other describes one thing twice.
  */
-export function usageLabel(usage: string | null | undefined): string | null {
-  if (usage == null) return null
-  return FX_FAMILY_INFO[usage]?.label ?? usage
+export function masterFamilyLabel(family: string | null | undefined): string | null {
+  if (family == null) return null
+  return FX_FAMILY_INFO[family]?.label ?? family
 }
 
-/** One-line description for the usage select, so the sheet says what routing *does*. */
-export function usageOptionLabel(usage: SpeedMasterFamily): string {
-  const label = usageLabel(usage) ?? usage
-  return usage === 'position' ? `${label} / movement FX` : `${label} FX`
+/** One-line description for the family select, so the sheet says what routing *does*. */
+export function masterFamilyOptionLabel(family: SpeedMasterFamily): string {
+  const label = masterFamilyLabel(family) ?? family
+  return family === 'position' ? `${label} / movement FX` : `${label} FX`
 }
 
 /** A follow ratio as the server stores it: two positive integers, never a float. */
@@ -236,14 +236,14 @@ export interface RoutableMaster {
 
 /**
  * The apply-time routing rule (busking-view plan D1): stamp a busked effect with the master whose
- * usage matches the effect's library category.
+ * family matches the effect's library category.
  *
  * Returns null — meaning master 1 — when nothing matches, which covers an untagged bank, an
  * effect in `controls`, and a category a user's own `.fx.kts` invented. That is the
  * defined behaviour rather than a gap: `null` is master 1 on every wire in this system, and the
  * routing is visible and editable afterwards on the effect itself.
  *
- * Usage is unique per project (the server 409s a second claimant), so "the first match" is "the
+ * Family is unique per project (the server 409s a second claimant), so "the first match" is "the
  * only match" in practice; taking the first keeps this total even if a stale cache shows two.
  */
 export function resolveSpeedMasterForFamily(

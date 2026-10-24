@@ -49,11 +49,11 @@ internal fun Route.routeApiRestGroups(state: State) {
         }
 
         // Get group properties (aggregated property descriptors for all members)
-        get<GroupPropertiesResource> { resource ->
+        get<GroupAttributesResource> { resource ->
             try {
                 val group = state.show.fixtures.untypedGroup(resource.name)
-                val properties = group.generateGroupPropertyDescriptors()
-                call.respond(properties)
+                val attributes = group.generateGroupAttributeDescriptors()
+                call.respond(attributes)
             } catch (e: IllegalStateException) {
                 call.respond(HttpStatusCode.NotFound, ErrorResponse(e.message ?: "Group not found"))
             }
@@ -99,7 +99,7 @@ internal fun Route.routeApiRestGroups(state: State) {
                         // The display name is the last fallback, for an effect a script constructed
                         // itself; a display name need not resolve, so an id comes first.
                         fxType = instance.registrationId ?: instance.effect.registrationId ?: instance.effect.name,
-                        propertyName = instance.target.propertyName,
+                        attribute = instance.target.attribute,
                         cycle = instance.timing.cycle,
                         blendMode = instance.blendMode.name,
                         order = instance.order.javaClass.simpleName,
@@ -151,8 +151,8 @@ data object GroupsResource
 @Resource("/{name}")
 data class GroupResource(val name: String)
 
-@Resource("/{name}/properties")
-data class GroupPropertiesResource(val name: String)
+@Resource("/{name}/attributes")
+data class GroupAttributesResource(val name: String)
 
 @Resource("/{name}/fx")
 data class GroupFxResource(val name: String)
@@ -216,7 +216,7 @@ data class GroupDetailDto(
 @Serializable
 data class AddGroupFxRequest(
     val fxType: String,
-    val propertyName: String,  // "dimmer", "colour", "position", "uv"
+    val attribute: String,  // "dimmer", "colour", "position", "uv"
     /** The FX's own default cycle when omitted — see [AddFxRequest.cycle]. */
     val cycle: Double? = null,
     val blendMode: String = "OVERRIDE",
@@ -259,7 +259,7 @@ data class AddGroupFxResponse(
 data class GroupFxDto(
     val id: Long,
     val fxType: String,
-    val propertyName: String,
+    val attribute: String,
     val cycle: Double,
     val blendMode: String,
     val order: String,
@@ -350,12 +350,12 @@ private fun FixtureGroup<*>.toDetailedDto(): GroupDetailDto {
  * Check whether a group supports a given property, either directly on the
  * fixtures or via multi-element fixture elements.
  *
- * The dispatch itself is [fixturesSupportProperty], shared with the effect arm of a template apply
+ * The dispatch itself is [fixturesSupportAttribute], shared with the effect arm of a template apply
  * — a head is a group of one, and two copies of the trait dispatch could disagree about the same
  * fixture.
  */
-private fun groupSupportsProperty(group: FixtureGroup<*>, propertyName: String): Boolean =
-    fixturesSupportProperty(group.fixtures, propertyName)
+private fun groupSupportsAttribute(group: FixtureGroup<*>, attribute: String): Boolean =
+    fixturesSupportAttribute(group.fixtures, attribute)
 
 private fun applyGroupFx(
     state: State,
@@ -377,23 +377,23 @@ private fun applyGroupFx(
     val elementMode = FxSpecCoercion.Strict.elementMode(request.elementMode)
 
     // No effect may drive a member's one-shot trigger (stage-view plan session 9, D15).
-    TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
+    TriggerIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "effect")
         ?.let { throw TriggerNotStorableException(it) }
     // Nor a member's fixture command (fixture optics plan session 7).
-    CommandIndex.refusalLive(state.show.fixtures, "group", group.name, request.propertyName, "effect")
+    CommandIndex.refusalLive(state.show.fixtures, "group", group.name, request.attribute, "effect")
         ?.let { throw CommandNotStorableException(it) }
 
     // Validate property support (direct or via elements)
-    if (!groupSupportsProperty(group, request.propertyName)) {
+    if (!groupSupportsAttribute(group, request.attribute)) {
         throw IllegalStateException(
-            "Not all fixtures in group support ${request.propertyName} " +
+            "Not all fixtures in group support ${request.attribute} " +
                 "(directly or via elements)"
         )
     }
 
     val target = FxTargetFactory.forGroup(
         group.name,
-        request.propertyName,
+        request.attribute,
         effect.outputType,
         group.fixtures.firstOrNull() as? Fixture,
     )

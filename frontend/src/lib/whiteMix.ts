@@ -2,7 +2,7 @@ import { lampLinearRgb } from './lamp'
 
 /**
  * **A warm/cold white pair as a colour** (venue-visit plan D8) — the client half of the desk's
- * `fixture/property/WhiteMix.kt`, so the warmth control and the colour it shows agree with what
+ * `fixture/attribute/WhiteMix.kt`, so the warmth control and the colour it shows agree with what
  * the desk writes. `src/test/resources/fixture/whiteMix.fixture.json` pins the two to one answer.
  *
  * Each white is the black body at its declared temperature against the view's adapted white

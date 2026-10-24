@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { EffectsArmState } from '@/api/effectsApi'
-import type { TriggerPropertyDescriptor } from '@/store/fixtures'
+import type { TriggerAttributeDescriptor } from '@/store/fixtures'
 
 let arm: EffectsArmState = { armed: false, armedUntilMs: null, rehearsal: false, spent: [], projectId: 1 }
 let visSource = 'output'
@@ -21,7 +21,7 @@ vi.mock('@/hooks/useVisSource', () => ({ useVisSource: () => visSource }))
 
 import { CannonPanel, HOLD_TO_FIRE_MS } from './CannonPanel'
 
-const trigger = (name: string, label: string): TriggerPropertyDescriptor => ({
+const trigger = (name: string, label: string): TriggerAttributeDescriptor => ({
   type: 'trigger', name, displayName: `Tube ${label}`, category: 'trigger', label,
   channel: { universe: 0, channelNo: 1 }, armChannel: { universe: 0, channelNo: 3 }, armName: 'master',
 })

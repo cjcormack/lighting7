@@ -21,7 +21,7 @@ import uk.me.cormack.lighting7.fx.FxDto
 import uk.me.cormack.lighting7.fx.FxEngine
 import uk.me.cormack.lighting7.fx.FxInstance
 import uk.me.cormack.lighting7.fx.FxStacking
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.fx.FxTargetRef
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
@@ -70,10 +70,10 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
     private val quad = listOf(CueTargetDto(TargetRef.Group.TYPE, "quad"))
 
     private fun pulse(targets: List<CueTargetDto>, families: List<String>? = null) =
-        ProgrammerFxRequest(fxType = "Pulse", propertyName = "dimmer", targets = targets, families = families)
+        ProgrammerFxRequest(fxType = "Pulse", attribute = "dimmer", targets = targets, families = families)
 
     private fun colourCycle(targets: List<CueTargetDto>) =
-        ProgrammerFxRequest(fxType = "ColourCycle", propertyName = "rgbColour", targets = targets)
+        ProgrammerFxRequest(fxType = "ColourCycle", attribute = "rgbColour", targets = targets)
 
     private suspend fun HttpClient.press(request: ProgrammerFxRequest): HttpResponse =
         post("/api/rest/projects/$projectId/programmer/fx") {
@@ -357,11 +357,11 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `the family is the property's group, so a Pulse on UV is Colour`() = testApplication {
+    fun `the family is the attribute's group, so a Pulse on UV is Colour`() = testApplication {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val onUv = pulse(quad).copy(propertyName = "uv")
+        val onUv = pulse(quad).copy(attribute = "uv")
 
         val underIntensity = client.press(onUv.copy(families = listOf("INTENSITY")))
         assertEquals(HttpStatusCode.BadRequest, underIntensity.status)
@@ -381,7 +381,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
         val client = jsonClient()
         val cueId = ProgrammerRouteTestSupport.createCue(
             client, projectId, "chase",
-            adHoc = listOf(CueAdHocFxSpec(targetType = "group", targetKey = "quad", fxType = "Pulse", propertyName = "dimmer")),
+            adHoc = listOf(CueAdHocFxSpec(targetType = "group", targetKey = "quad", fxType = "Pulse", attribute = "dimmer")),
         )
         val include = client.post("/api/rest/programmer/include") {
             contentType(ContentType.Application.Json)
@@ -458,21 +458,21 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
 
         val position = live(client.pressed(ProgrammerFxRequest("Circle", "position", targets = spot, stack = true)).fxId)
         assertEquals(BlendMode.ADDITIVE to 1.0, position.blendMode to position.dynamics.amount)
-        assertEquals("128", position.effect.parameters["panCenter"])
-        assertEquals("128", position.effect.parameters["tiltCenter"])
+        assertEquals("128", position.effect.parameters["panCentre"])
+        assertEquals("128", position.effect.parameters["tiltCentre"])
 
         val beam = live(client.pressed(ProgrammerFxRequest("Pulse", "focus", targets = spot, stack = true)).fxId)
         assertEquals(BlendMode.OVERRIDE to 0.5, beam.blendMode to beam.dynamics.amount)
 
-        val centred = setOf("panCenter", "tiltCenter")
+        val centred = setOf("panCentre", "tiltCentre")
         assertEquals(
-            listOf(PropertyMaskGroup.INTENSITY, PropertyMaskGroup.POSITION, PropertyMaskGroup.COLOUR, PropertyMaskGroup.BEAM)
+            listOf(AttributeFamily.INTENSITY, AttributeFamily.POSITION, AttributeFamily.COLOUR, AttributeFamily.BEAM)
                 .map { FxStacking.startFor(it, centred).let { start -> start.blendMode to start.amount } },
             listOf(BlendMode.MULTIPLY to 1.0, BlendMode.ADDITIVE to 1.0, BlendMode.OVERRIDE to 0.5, BlendMode.OVERRIDE to 0.5),
         )
         assertEquals(
             FxStacking.Start(BlendMode.OVERRIDE, 1.0),
-            FxStacking.startFor(PropertyMaskGroup.POSITION, setOf("panCenter")),
+            FxStacking.startFor(AttributeFamily.POSITION, setOf("panCentre")),
             "a Position FX without both centres (Palette Steps) outputs where to go, so it replaces at full",
         )
     }
@@ -497,11 +497,11 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
             client.pressed(
                 ProgrammerFxRequest(
                     "Circle", "position", targets = fixtures("spot-1"), stack = true, blendMode = "OVERRIDE",
-                    parameters = mapOf("panCenter" to "40"),
+                    parameters = mapOf("panCentre" to "40"),
                 ),
             ).fxId,
         )
-        assertEquals("40", absolute.effect.parameters["panCenter"], "a centre the press names is kept")
+        assertEquals("40", absolute.effect.parameters["panCentre"], "a centre the press names is kept")
 
         val unstacked = live(client.pressed(pulse(quad)).fxId)
         assertEquals(BlendMode.OVERRIDE to 1.0, unstacked.blendMode to unstacked.dynamics.amount, "Replace keeps its defaults")
@@ -558,7 +558,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private fun sine(targets: List<CueTargetDto>) =
-        ProgrammerFxRequest(fxType = "SineWave", propertyName = "dimmer", targets = targets)
+        ProgrammerFxRequest(fxType = "SineWave", attribute = "dimmer", targets = targets)
 
     /** An effect palette pressed as a layer onto [targets]; answers the instance it spawned. */
     private suspend fun pressPaletteLayer(client: HttpClient, targets: List<CueTargetDto>): FxInstance {
@@ -568,7 +568,7 @@ class LocalFxRoutesTest : RouteIntegrationTest() {
                 PaletteInput(
                     name = "Chase ${engine.getActiveFx().size}",
                     fx = PaletteFxDto(
-                        fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                        fxType = "Pulse", family = "intensity", attribute = "dimmer",
                         cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                     ),
                 ),

@@ -518,9 +518,9 @@ class FxInstance internal constructor(
         if (!target.accepts(effect.outputType)) {
             logger.warn(
                 "Effect '{}' outputs {} but target {}.{} applies {} — this effect will produce " +
-                    "nothing. Check the effect's compatibleProperties.",
+                    "nothing. Check the effect's compatibleAttributes.",
                 effect.name, effect.outputType,
-                target.targetKey, target.propertyName, target.acceptedOutputType,
+                target.targetKey, target.attribute, target.acceptedOutputType,
             )
         }
     }

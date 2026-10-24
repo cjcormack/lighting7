@@ -60,7 +60,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         val client = jsonClient()
 
         val id = client.add(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", cycle = 10.0, seconds = true),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", cycle = 10.0, seconds = true),
         ).body<AddFxResponse>().fxId
 
         val instance = effect(id)
@@ -86,12 +86,12 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         val master = masterUuid(0)
 
         val refused = client.add(
-            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer", seconds = true, speedMasterUuid = master),
+            AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer", seconds = true, speedMasterUuid = master),
         )
         assertEquals(HttpStatusCode.BadRequest, refused.status)
         assertTrue(engine.getActiveFx().isEmpty())
 
-        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer"))
+        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
         val before = effect(id)
         val update = client.update(id, UpdateFxRequest(seconds = true, speedMasterUuid = master))
@@ -104,7 +104,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
     fun `an omitted division is one bar`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
-        val id = jsonClient().add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer"))
+        val id = jsonClient().add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
         assertEquals(CycleLength.ONE_BAR, effect(id).timing.cycle)
     }
@@ -115,7 +115,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val client = jsonClient()
         val second = masterUuid(1).takeIf { engine.speedMasters.masterStates().size > 1 }
-        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", propertyName = "dimmer"))
+        val id = client.add(AddFxRequest(fxType = "Pulse", fixtureKey = "hex-1", attribute = "dimmer"))
             .body<AddFxResponse>().fxId
 
         val onSeconds = client.update(id, UpdateFxRequest(seconds = true, cycle = 6.0)).body<FxDto>()
@@ -149,7 +149,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         assertEquals(TimingSource.WALL_CLOCK, state.show.fxRegistry.getRegistration("FluorescentFlicker")!!.timingSource)
 
         val id = client.add(
-            AddFxRequest(fxType = "FluorescentFlicker", fixtureKey = "hex-1", propertyName = "dimmer", rateSpeedMasterUuid = master),
+            AddFxRequest(fxType = "FluorescentFlicker", fixtureKey = "hex-1", attribute = "dimmer", rateSpeedMasterUuid = master),
         ).body<AddFxResponse>().fxId
         assertEquals(TimingSource.WALL_CLOCK, effect(id).timingSource)
         assertFalse(effect(id).onSeconds)
@@ -177,7 +177,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedGroup(state, projectId, "front", "hex-1", "hex-2")
         val response = jsonClient().post("/api/rest/groups/front/fx") {
             contentType(ContentType.Application.Json)
-            setBody(AddGroupFxRequest(fxType = "FluorescentFlicker", propertyName = "dimmer"))
+            setBody(AddGroupFxRequest(fxType = "FluorescentFlicker", attribute = "dimmer"))
         }
         assertEquals(HttpStatusCode.OK, response.status, response.toString())
         val id = response.body<AddGroupFxResponse>().fxId
@@ -191,7 +191,7 @@ class FxSecondsTimingTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         val master = java.util.UUID.fromString(masterUuid(0))
         val spec = LookFxSpec(
-            fxType = "Pulse", family = "intensity", propertyName = "dimmer", cycle = 5.0,
+            fxType = "Pulse", family = "intensity", attribute = "dimmer", cycle = 5.0,
             blendMode = "OVERRIDE", order = "NORMAL", seconds = true,
         )
         val target = uk.me.cormack.lighting7.fx.FxTargetFactory.forFixture(

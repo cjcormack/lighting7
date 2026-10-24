@@ -30,9 +30,9 @@ const scopeState = vi.hoisted(() => ({ current: null as null | { kind: 'output' 
 vi.mock('../programmer/ProgrammerScope', () => ({ useProgrammerScope: () => scopeState.current }))
 const lookStore = vi.hoisted(() => ({
   current: null as null | {
-    setValue: (targetKey: string, propertyName: string, value: string) => void
+    setValue: (targetKey: string, attribute: string, value: string) => void
     lookName?: string
-    draft?: { get: (targetKey: string, propertyName: string) => string | undefined }
+    draft?: { get: (targetKey: string, attribute: string) => string | undefined }
     serverRows?: Map<string, unknown>
   },
 }))
@@ -163,7 +163,7 @@ describe('the targets (D4)', () => {
       ],
       // The press pair's mask — the desk's while following — not the marquee's.
       families: ['POSITION'],
-      property: 'dimmer',
+      attribute: 'dimmer',
       from: 'pct:0',
       to: 'pct:100',
       curve: 'LINE',
@@ -207,11 +207,11 @@ describe('the targets (D4)', () => {
   it('offers the Attribute row from what the heads can take: Level · Strobe over a Dimmer marquee whose heads include a strobe', () => {
     draw([column('dimmer', ['group:Front wash'])])
     open()
-    const properties = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
-    expect(properties.map((r) => r.textContent)).toEqual(['Level', 'Strobe'])
+    const attributes = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
+    expect(attributes.map((r) => r.textContent)).toEqual(['Level', 'Strobe'])
     fireEvent.click(radio('Attribute', 'Strobe'))
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'strobe' })
+    expect(lastRequest()).toMatchObject({ attribute: 'strobe' })
   })
 
   it('offers both families live when the marquee spans two, with the first column’s answered', () => {
@@ -223,7 +223,7 @@ describe('the targets (D4)', () => {
     // The Colour family over an RGB and an RGBW head: Colour · White.
     expect(within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio').map((r) => r.textContent)).toEqual(['Colour', 'White'])
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', families: ['POSITION'] })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', families: ['POSITION'] })
   })
 
   it('Over defaults to Heads, and offers Elements with the count where a selected fixture has cells', () => {
@@ -259,8 +259,8 @@ describe('the scope arm (D6)', () => {
     expect(lastRequest()).toMatchObject({ write: false })
     await answer({
       written: [
-        { target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '0' },
-        { target: { type: 'fixture', key: 'par-2' }, propertyName: 'dimmer', value: '255' },
+        { target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '0' },
+        { target: { type: 'fixture', key: 'par-2' }, attribute: 'dimmer', value: '255' },
       ],
     })
     expect(setValue).toHaveBeenCalledTimes(2)
@@ -279,7 +279,7 @@ describe('the scope arm (D6)', () => {
     lookStore.current = {
       setValue: vi.fn(),
       lookName: 'Warm Wash',
-      draft: { get: (key, property) => (key === 'spot-1' && property === 'position' ? '100,90' : undefined) },
+      draft: { get: (key, attribute) => (key === 'spot-1' && attribute === 'position' ? '100,90' : undefined) },
       serverRows: new Map(),
     }
     draw([{ col: 'position', targets: expandSelectionToTargets(rows, new Set(['fixture:spot-1', 'fixture:spot-2'])) }], { scopeLabel: 'Warm Wash' })
@@ -305,8 +305,8 @@ describe('the scope arm (D6)', () => {
     apply()
     await answer({
       written: [
-        { target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '0' },
-        { target: { type: 'fixture', key: 'par-2' }, propertyName: 'dimmer', value: 'pct:100' },
+        { target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '0' },
+        { target: { type: 'fixture', key: 'par-2' }, attribute: 'dimmer', value: 'pct:100' },
       ],
     })
     expect(setValue).not.toHaveBeenCalled()
@@ -316,7 +316,7 @@ describe('the scope arm (D6)', () => {
     vi.clearAllMocks()
     open()
     apply()
-    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'rgbColour', value: '#FF0000;policy=extract' }] })
+    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, attribute: 'rgbColour', value: '#FF0000;policy=extract' }] })
     expect(setValue).not.toHaveBeenCalled()
     expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/#FF0000;policy=extract/), expect.anything())
   })
@@ -396,6 +396,6 @@ describe('the seed', () => {
     expect(document.querySelector('[data-spread-panel]')).not.toBeNull()
     expect(radio('Family', 'Colour')).toHaveAttribute('aria-checked', 'true')
     apply()
-    expect(lastRequest()).toMatchObject({ property: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
+    expect(lastRequest()).toMatchObject({ attribute: 'rgbColour', from: '#FF0007;policy=extract', to: '#2456FF;policy=extract' })
   })
 })

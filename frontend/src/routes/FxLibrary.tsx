@@ -137,7 +137,7 @@ export function ProjectFxLibrary() {
           (needle === '' ||
             row.name.toLowerCase().includes(needle) ||
             row.entry.name.toLowerCase().includes(needle) ||
-            row.entry.compatibleProperties.some((p) => p.toLowerCase().includes(needle))),
+            row.entry.compatibleAttributes.some((p) => p.toLowerCase().includes(needle))),
       )
       .sort((a, b) => a.name.localeCompare(b.name))
     if (category !== 'ALL') return shown

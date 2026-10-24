@@ -122,9 +122,9 @@ export function controlKinds(descriptor: ControlDescriptor): readonly ControlKin
  */
 export function targetControlKind(target: BindingTarget): ControlKind | null {
   switch (target.type) {
-    case 'fixtureProperty':
-    case 'groupProperty':
-    case 'selectionProperty':
+    case 'fixtureAttribute':
+    case 'groupAttribute':
+    case 'selectionAttribute':
     case 'selectionFan':
     case 'speedMasterBpm':
     case 'grandMasterFader':

@@ -3,15 +3,15 @@ import type { FixturePatch, PatchPlacement } from '@/api/patchApi'
 import { toPlacementInput } from '@/lib/extraPlacements'
 import { effectiveLantern, focusFields, FOCUS_KEYS, type LanternFocus, type LanternIndex } from '@/lib/lanterns'
 import {
-  findFocusProperty,
-  findFrostProperty,
-  findIrisProperty,
-  findShutterProperties,
-  findZoomProperty,
+  findFocusAttribute,
+  findFrostAttribute,
+  findIrisAttribute,
+  findShutterAttributes,
+  findZoomAttribute,
   resolveFixtureKind,
   type Fixture,
   type FixtureTypeInfo,
-  type SliderPropertyDescriptor,
+  type SliderAttributeDescriptor,
 } from '@/store/fixtures'
 import { patchesApi, useUpdatePatchMutation } from '@/store/patches'
 import { useDispatch } from 'react-redux'
@@ -140,8 +140,8 @@ export function StageFocusPanel({ projectId, patch, fixture, fixtureType, lanter
   useEffect(() => () => flush(), [flush])
 
   if (fixtureType?.acceptsLantern !== true) {
-    const focusProp = findFocusProperty(fixture?.properties)
-    const mediaSettings = loadableSettings(fixture?.properties)
+    const focusProp = findFocusAttribute(fixture?.attributes)
+    const mediaSettings = loadableSettings(fixture?.attributes)
     return (
       <div className="space-y-4">
         <DmxFocusNote fixture={fixture} />
@@ -218,8 +218,8 @@ function paintDraft(target: object, draft: Draft) {
   }
 }
 
-/** Whether a focus slider declares the range *Focus here* solves (`@FixtureProperty(focusNearM =, focusFarM =)`). */
-function declaresFocusRange(prop: SliderPropertyDescriptor | undefined): boolean {
+/** Whether a focus slider declares the range *Focus here* solves (`@FixtureAttribute(focusNearM =, focusFarM =)`). */
+function declaresFocusRange(prop: SliderAttributeDescriptor | undefined): boolean {
   const near = prop?.focusNearM
   const far = prop?.focusFarM
   return near != null && far != null && near > 0 && far > near
@@ -231,13 +231,13 @@ function declaresFocusRange(prop: SliderPropertyDescriptor | undefined): boolean
  * not have (the design record's §"Noticed on the way").
  */
 function DmxFocusNote({ fixture }: { fixture: Fixture | undefined }) {
-  const props = fixture?.properties
+  const props = fixture?.attributes
   const driven = [
-    findZoomProperty(props) && 'zoom',
-    findFocusProperty(props) && 'focus',
-    findIrisProperty(props) && 'iris',
-    findFrostProperty(props) && 'frost',
-    findShutterProperties(props) && 'framing shutters',
+    findZoomAttribute(props) && 'zoom',
+    findFocusAttribute(props) && 'focus',
+    findIrisAttribute(props) && 'iris',
+    findFrostAttribute(props) && 'frost',
+    findShutterAttributes(props) && 'framing shutters',
   ].filter((x): x is string => typeof x === 'string')
   const name = fixture?.name ?? 'This fixture'
   return (

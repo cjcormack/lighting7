@@ -18,7 +18,7 @@ import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.plugins.ProgrammerHandler
@@ -89,7 +89,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         setProgrammer("hex-1", "dimmer", "255")
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
-        val rows = client.cueRowsByProperty(cueId)
+        val rows = client.cueRowsByAttribute(cueId)
         assertEquals("red", rows.getValue("rgbColour"), "an untouched row must survive Update verbatim")
         assertEquals("255", rows.getValue("dimmer"))
     }
@@ -178,7 +178,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         setProgrammer("hex-1", "rgbColour", "#00ff00")
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
 
-        val rows = client.cueRowsByProperty(cueId)
+        val rows = client.cueRowsByAttribute(cueId)
         assertEquals("200", rows.getValue("dimmer"))
         assertEquals(2, rows.size)
     }
@@ -199,10 +199,10 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
         client.include(cueId)
         ProgrammerHandler.clearEntry(state, TargetRef.Fixture("hex-1"), "dimmer", 0)
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString(), mask = listOf("COLOUR")))
-        assertEquals("200", client.cueRowsByProperty(cueId).getValue("dimmer"))
+        assertEquals("200", client.cueRowsByAttribute(cueId).getValue("dimmer"))
 
         client.update(ProgrammerUpdateRequest(projectId = projectId.toString()))
-        assertNull(client.cueRowsByProperty(cueId)["dimmer"])
+        assertNull(client.cueRowsByAttribute(cueId)["dimmer"])
     }
 
     @Test
@@ -311,7 +311,7 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
             assertTrue(checklist.stacks.flatMap { it.cues }.all { it.isActive })
             assertEquals(
                 listOf("strobe"),
-                checklist.unattributed.map { it.propertyName },
+                checklist.unattributed.map { it.attribute },
                 "a property no cue drives is programmer-over-baseline, not an override",
             )
         }
@@ -799,21 +799,21 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     /** The cue's assignments as `targetKey → value`. */
     private suspend fun HttpClient.cueRows(cueId: Int): Map<String, String> =
         get("/api/rest/projects/$projectId/cues/$cueId")
-            .body<CueDetails>().propertyAssignments.associate { it.targetKey to it.value }
+            .body<CueDetails>().attributeAssignments.associate { it.targetKey to it.value }
 
-    private suspend fun HttpClient.cueRowsByProperty(cueId: Int): Map<String, String> =
+    private suspend fun HttpClient.cueRowsByAttribute(cueId: Int): Map<String, String> =
         get("/api/rest/projects/$projectId/cues/$cueId")
-            .body<CueDetails>().propertyAssignments.associate { it.propertyName to it.value }
+            .body<CueDetails>().attributeAssignments.associate { it.attribute to it.value }
 
-    private fun assignment(type: String, key: String, property: String, value: String) =
-        CuePropertyAssignmentDto(
-            targetType = type, targetKey = key, propertyName = property, value = value,
+    private fun assignment(type: String, key: String, attribute: String, value: String) =
+        CueAttributeAssignmentDto(
+            targetType = type, targetKey = key, attribute = attribute, value = value,
         )
 
     private suspend fun createCue(
         client: HttpClient,
         name: String,
-        rows: List<CuePropertyAssignmentDto> = emptyList(),
+        rows: List<CueAttributeAssignmentDto> = emptyList(),
         stackId: Int? = null,
         layers: List<CueLayerDto> = emptyList(),
     ): Int = ProgrammerRouteTestSupport.createCue(
@@ -823,8 +823,8 @@ class ProgrammerUpdateRouteTest : RouteIntegrationTest() {
     private suspend fun HttpClient.cueLayers(cueId: Int): List<CueLayerDto> =
         get("/api/rest/projects/$projectId/cues/$cueId").body<CueDetails>().layers
 
-    private fun setProgrammer(fixtureKey: String, property: String, value: String) {
-        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), property, value, 0)
+    private fun setProgrammer(fixtureKey: String, attribute: String, value: String) {
+        ProgrammerHandler.set(state, TargetRef.Fixture(fixtureKey), attribute, value, 0)
     }
 
     private fun seedHex(key: String, startChannel: Int) =

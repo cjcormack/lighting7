@@ -62,7 +62,7 @@ adding a dependency changes when an effect re-runs, so decide deliberately:
 - **Add the dep** when the hook genuinely reads a value that can change.
 - **Narrow the input** when only part of an object matters — destructure the
   fields the hook actually uses and depend on those (see `useSliderValue` in
-  `src/hooks/usePropertyValues.ts`).
+  `src/hooks/useAttributeValues.ts`).
 - **Memoise the input** when a `?? []` fallback hands out a fresh identity
   every render (see `templates` in `components/fx/FxColourPalettes.tsx`).
 - **Disable with a reason** only when the narrow deps are provably complete —
@@ -396,7 +396,7 @@ pair's lanterns are focused separately. See the stage-vis doc's §"Fixture bodie
 **What is loaded in a unit is the unit's** (fixture-optics session 3): a scroller's string, a module
 wheel's slots and a media frame's gel are **fitted media** on the patch and each placement
 (`FixturePatch.media`), laid over the type's stock option by option — the placement's, else the
-patch's, else the stock — by `lib/fittedMedia.ts`'s `fittedProperties`, which `FixtureModel` and
+patch's, else the stock — by `lib/fittedMedia.ts`'s `fittedAttributes`, which `FixtureModel` and
 `FixtureAppearanceSource` both run before they dispatch, so every finder in the two dispatches reads
 the unit's own. A gel in a filter slot (a media frame in, a dichroic) multiplies the beam on both
 dispatches. The controls that *set* a slot — the programmer's setting cell, the fixture sheet's
@@ -432,7 +432,7 @@ value past a slider's `activeMax`. See the stage-vis doc's §"Animated colour ba
 
 **A strobe channel is a level factor, and the view keeps to three flashes a second**
 (fixture-optics session 6). A strobe channel's bands are declared (`strobeBands` on a slider,
-`strobeKind` on a setting's options; `findStrobeProperties`), and one pure decode,
+`strobeKind` on a setting's options; `findStrobeAttributes`), and one pure decode,
 `lib/strobeBands.ts` (time passed in), turns them into a 0..1 factor **both** colour dispatches
 multiply into the dimmer's — the 2D `StrobeGate` around whichever leaf answered, the 3D syncs'
 `liveStrobeFactor` (cells take it as their master) — so a closed band is dark on the lens, the beam,
@@ -445,7 +445,7 @@ stage-vis doc's §"Strobe and closed shutters".
 **Heads, wheels and scrollers travel; the view eases toward the DMX** (fixture-optics session 8, D14;
 lighting7 `docs/fixtures-engineering.md` §"Travel and timing channels"). A type declares how fast its
 pan, tilt, beam and colour move (`FixtureTypeInfo.travel`) and a fixture's own timing channels stretch
-it (`SliderPropertyDescriptor.timing`: the Revolution's Focus, Colour and Beam Timing, a **duration**
+it (`SliderAttributeDescriptor.timing`: the Revolution's Focus, Colour and Beam Timing, a **duration**
 of one second a step, 0 its own speed). One pure module, `lib/travel.ts` (time passed in), keeps a
 displayed value per channel and moves it toward the DMX: the beam director through
 `stage3d/beamTravel.ts` (pan/tilt in degrees, every beam channel in DMX, stepped before the dark
@@ -497,7 +497,7 @@ bottom sheet on an upright phone; never in a `render_view` capture. See the stag
 
 **One-shot effects — the cannons** (session 9; lighting7 `docs/fixtures-engineering.md`
 §"@FixtureTrigger", `docs/cues-engineering.md` §"Cue events"). A confetti cannon's tubes are
-**triggers**, never values: a `TriggerPropertyDescriptor` (`type: 'trigger'`, `triggersOf` in
+**triggers**, never values: a `TriggerAttributeDescriptor` (`type: 'trigger'`, `triggersOf` in
 `store/fixtures.ts`) at the end of a fixture's properties, which every control-drawing switch skips
 (the fixture sheet's `buildSheetRows`, the programmer's channel map). `api/effectsApi.ts` reads
 the three outbound frames — `effects.armed` (form 3 in `store/effects.ts`, its countdown anchored to
@@ -520,8 +520,8 @@ instanced mesh pooled per canvas, unlit, invalidating each frame only while a fl
 
 **Fixture commands — resets and lamp control** (fixture-optics session 7; lighting7
 `docs/fixtures-engineering.md` §"@FixtureCommand") take the trigger's shape: a
-`CommandPropertyDescriptor` (`type: 'command'`, `commandsOf` in `store/fixtures.ts`) at the very end of
-a fixture's properties, skipped by every control-drawing switch and by `useTargetProperties`' `expand`
+`CommandAttributeDescriptor` (`type: 'command'`, `commandsOf` in `store/fixtures.ts`) at the very end of
+a fixture's properties, skipped by every control-drawing switch and by `useTargetAttributes`' `expand`
 (which now drops triggers too — a picker offering either offered only a 400). The fixture sheet draws
 **`FixtureCommandsMenu`** (`components/fixtures/`) above the controls: a *Commands* dropdown, each item
 its hold, each behind an `AlertDialog` naming the unit and the command with its description, its hold
@@ -806,7 +806,7 @@ Release folds to its glyph and the scope line drops the fade.
   write when one is chosen, `orderPatch`, since the desk refuses wings there), *Segments* and *Parts*
   (0 off), and a row of **phase dials** — eight notional heads on a palette, the effect's own live
   (`FxScope.headCount`, `spreadHeadCount` — the desk's `buildExpansion` counted: one per fixture
-  where the first fixture carries the effect's property itself (`carriesFxProperty`: a slider or
+  where the first fixture carries the effect's property itself (`carriesFxAttribute`: a slider or
   setting by name, a colour or position by type, the desk's traits), else its heads, a `FLAT` group's
   head filter across the whole strip on its global index, a `PER_FIXTURE` one's within each fixture;
   sixteen dials, then *+n*). Under Segments, Wings or Parts Position's continuous rank snaps to its
@@ -902,10 +902,10 @@ Release folds to its glyph and the scope line drops the fade.
   never empty and never every head (`normalisePick`), so *All* is one state; a group's members are
   resolved by key among the fixtures and their elements, never parsed (`groupSheetMembers`). Locate
   acts on the pick (`LocateTargetsButton`); Park and Release stay the whole target's.
-- **Rows over a pick** (`rowsOverHeads`, `PickPropertyRow`, `FamilyGroups`' `PickFamilyGroups`): a row
+- **Rows over a pick** (`rowsOverHeads`, `PickAttributeRow`, `FamilyGroups`' `PickFamilyGroups`): a row
   is drawn where **every** picked head has it, the desk's own group-aggregation rule — a setting only
   where every head's options match, level for level, since one level is another option elsewhere. One picked head
-  — or one member — draws that head's own `PropertyRow`; several draw a `PickPropertyRow`, which reads
+  — or one member — draws that head's own `AttributeRow`; several draw a `PickAttributeRow`, which reads
   every head through one subscription (`useChannelValues`). **Mixed values** read as a range — the
   fill masked below the lowest head, the thumb at the highest, the field empty with `40–80` as its
   placeholder (`EditorField`'s `mixed`) — a strip of the heads' swatches for a colour, and a hollow dot
@@ -918,7 +918,7 @@ Release folds to its glyph and the scope line drops the fade.
   it back into a group row); a subset of members is each member's own entry carrying the group as
   `sourceGroup`; a fixture's heads — *All* included, since the desk has no all-heads property to write
   — are each head's own entry. **Never a raw channel**: the group visualisers' sliders sent one per
-  member, and `useGroupPropertyValues`' update hooks went with their raw-channel fallback. A position
+  member, and `useGroupAttributeValues`' update hooks went with their raw-channel fallback. A position
   is resolved per head; a group's *All* stays one entry only where every member lands on the same
   bytes (one model), else each member's own. A colour fills an emitter it does not say from each
   head's own channel (the desk reads a missing one as 0), and is one group entry only over members
@@ -1071,7 +1071,7 @@ take it reports a skip. `targetEmitters` must read the **colour descriptor's** `
 `amberChannel` / `uvChannel`: bundled emitters are omitted from the flat descriptor list, so
 scanning categories the way `targetFamilies` does finds no emitter on any head.
 
-**A palette's property vocabulary is closed** (`PaletteProperty`), and that is where "a palette
+**A palette's property vocabulary is closed** (`PaletteAttribute`), and that is where "a palette
 cannot carry a gobo" actually lives: gobo, colour-wheel and macro slots are per-model, so they are
 refused by name at the write boundary and shown *disabled with the reason* in the beam editor
 rather than omitted. The three emitters are *in* the vocabulary — not slotted, and the only
@@ -1086,15 +1086,13 @@ partition; a Look spans families by nature, so filtering by one would hide most 
 most filters.
 
 `src/lib/attributeFamily.ts` owns the family vocabulary and mirrors the backend's
-`PropertyMaskGroup` — `store/programmerOps.ts` exports that name as an *alias* of
-`AttributeFamily`, so the wire keeps its spelling without the two becoming separately-extensible
-types; `maskPicker.test.ts` pins the two lists against each other, and
+`AttributeFamily`, one name on both sides; `maskPicker.test.ts` pins the two lists against each other, and
 `paletteIntent.test.ts` pins the palette vocabulary the same way. It caught a real divergence
 already: `Number('')` is 0 where Kotlin's `toDoubleOrNull()` is null, so the client read `pct:` as
 0% while the server rejected the row.
 
 **Within a cue, later layers win — for every attribute, intensity included**, and the cue's
-own `propertyAssignments` are the last layer and beat all of them. Across cues, HTP still
+own `attributeAssignments` are the last layer and beat all of them. Across cues, HTP still
 governs intensity. That flip is the change an operator coming from presets is most likely to
 be surprised by, so it is said out loud rather than left implied: the programmer's Stack table
 lists **top wins** — *Your values* first, then the layers strongest to weakest, its footer saying
@@ -1126,7 +1124,7 @@ is, and `cueUtils.test.ts` pins that too.
 
 **The `ref:{uuid}` value grammar is gone** — retired in session 4, on both sides at once,
 because a client cannot render rows a server still produces. A cue or the programmer depends on
-a Look through a **layer**, which names it by FK, and a layer's `propertyMask` is what expresses
+a Look through a **layer**, which names it by FK, and a layer's `attributeMask` is what expresses
 "this property comes from that Look". What went with it: `parsePaletteRefUuid` /
 `isPaletteRefValue` / `serializePaletteRef`, `ProgrammerEntry`'s five `palette*` fields,
 `CellPaletteRef` and `describePaletteRef`, `PaletteRefNotice` and the four cell editors' notices,
@@ -1321,7 +1319,7 @@ for — so a host sends `maskToWire(value)` (`undefined` for every attribute: th
 none anyway, and the presses' `families` is the same vocabulary under its own name) and **refuses to
 act while `maskIsEmpty(value)`**, its button disabled and the sentence reading *Pick at least one
 attribute.* A host that writes on every change cannot hold that state in what it stores —
-`serializePropertyMask` folds all four to null and has no "none" — so it goes through
+`serializeAttributeMask` folds all four to null and has no "none" — so it goes through
 **`useMaskDraft(stored, write)`**: the picker's own draft, writing only a change to the folded mask and
 never an empty one, and following the stored mask only when it changes to something it did not send
 itself (it keeps the keys it has sent and not yet seen back, so its own echoes — even one landing after
@@ -1946,8 +1944,8 @@ Position is pan and tilt as one; Beam is one Beam level — zoom, focus, iris or
 those the selection carries (a *Beam property* row, drawn when there are two or more, zoom first),
 and its band, its level and its Effects band all mean that property, as a Beam cell's popup does.
 **The editors are the fixture sheet's pick controls** (`LevelControl` from
-`fixtureSheet/PropertyRow.tsx`; `PickPositionControls`, the pick row's pad, hollow dots and axes,
-from `PickPropertyRow.tsx`; and `writePickPosition`), not a third copy of the level slider or the XY
+`fixtureSheet/AttributeRow.tsx`; `PickPositionControls`, the pick row's pad, hollow dots and axes,
+from `PickAttributeRow.tsx`; and `writePickPosition`), not a third copy of the level slider or the XY
 pad, and they **write Local and only that**: a drag at once, a typed value at the programmer
 fade. `familyHeads.ts` plans the writes — a group as one group entry where every member carries the
 property itself, else each member's own entry (or its cells', for a bar whose dimmer lives on its
@@ -2919,7 +2917,7 @@ flash, a select, a strip, a trigger — and `ControlCell` resolves it beside the
 a pre-axis row can mean), a fine hue trim, saturation, brightness — carried as an optional
 `colourAxis` on the four property targets and on the encoder bank; the bundled emitters (white,
 amber, UV) are offered as faders of their own, expanded off the colour descriptor's channels in
-`hooks/useTargetProperties.ts`. `lib/colourAxis.ts` mirrors `midi/ColourAxis.kt` and owns the
+`hooks/useTargetAttributes.ts`. `lib/colourAxis.ts` mirrors `midi/ColourAxis.kt` and owns the
 null-is-hue rule; nothing on this side resolves an axis. The library is sectioned by kind with
 **Desk first**, and a row's chips are grouped by family with a hairline — see the two sections at
 the end of `docs/midi-surface-engineering.md`.
@@ -2939,7 +2937,7 @@ ring the amount, so nothing on this side computes one — see `docs/midi-surface
 A button can also press a **record**: `applyLook` puts the Look on whole, `pressPalette`
 onto the desk selection, `pressPad` through the pad's whole bank plan, plus the three busk-page
 targets. Four things follow on this side. Their library rows are **not** `TargetRowItem`s — that
-component exists to mount `useTargetProperties` per target — so they are built in `SurfaceLibrary`'s
+component exists to mount `useTargetAttributes` per target — so they are built in `SurfaceLibrary`'s
 `rows` memo from `actionChip`. The **kind row stays at six**: a palette files under *Looks*, a busk
 page under *Desk*, and *Next page* / *Prev page* sit on the Desk row once, because a chip repeated
 per page reads as page-specific. A Look whose `hasDeferredFx` is set is still offered with no
@@ -3029,7 +3027,7 @@ paragraphs.
   `PALETTE_NEEDS_SELECTION`). A per-fixture palette's tap names its own heads and a Look with none
   lands on its own fixtures, so both go out (the menu says so, *Put on or take off its own heads*;
   a generic palette's reads *Put on — select fixtures first*), and nothing is refused from the mask. A palette's tap sends
-  `propertyMask` (its family) as the belief it acts on, though the desk derives a palette layer's mask
+  `attributeMask` (its family) as the belief it acts on, though the desk derives a palette layer's mask
   from its own rows; the response reports the mask applied, so a disagreement shows there rather
   than on the rig. A refusal is the
   desk's sentence, toasted by `errorToastMiddleware`. The hook reports the rest one way: *Apply as
@@ -3324,7 +3322,7 @@ hidden** — a row that appears only in some hosts is how two hosts drift — wi
 families live and the rest the heads can take disabled with the reason, and both live when the
 marquee spans two (Dimmer + Colour), which is the chooser Fan drew for the same case. The
 **Attribute** row appears wherever the family holds more than one property the heads can take
-(`spreadPropertiesOffered`, from the column → `PaletteProperty` map `spreadPropertyForColumn`):
+(`spreadAttributesOffered`, from the column → `PaletteAttribute` map `spreadAttributeForColumn`):
 a Colour marquee over RGBW heads offers Colour · White, a Dimmer marquee over heads with a strobe
 Level · Strobe. **Over: Heads is the default on both sides** (D5) — the old fan popover expanded a bar into its
 cells always; Fan treats a fixture row as one head unless the switch says Elements, offered with
@@ -3590,7 +3588,7 @@ Three surface rules, each pinned by its test:
 
   **A cell's ring asks the desk which properties drive its address, and never works it out.**
   `channelMappingState` carries `properties` on every entry — every `(target, property)` key whose
-  channels include the address, from `PropertyChannelWriter.propertyKeysByChannel`, which is
+  channels include the address, from `AttributeChannelWriter.attributeKeysByChannel`, which is
   `channelsFor` inverted — and the cell aggregates the programmer's state over all of them, plus the
   programmer's channel **sideband** at that address (`ProgrammerState.channels`, one subscription
   for the sheet) — a sideband slot promotes the address over a cue or baseline, never over park or
@@ -4048,7 +4046,7 @@ of one file; the sheet and the three sheets it opens — `FxDetailSheet`, `EditF
 - **Fork (D9) takes one built-in** and is refused over several, over a custom or script row, or on a
   built-in that publishes no script, each with the reason; the detail sheet's footer carries the
   same press. `forkRequest` copies the script, category, output type, mode, parameters,
-  `compatibleProperties` and `timingSource` into `POST /fx/definitions`, named *<name> (Custom)*,
+  `compatibleAttributes` and `timingSource` into `POST /fx/definitions`, named *<name> (Custom)*,
   and the route opens the new definition's editor. **The `fxId` is what must be unique**:
   `FxRegistry.register` overwrites by id and deleting a definition unregisters its id, so a fork
   sharing its source's id would replace the built-in and its delete would remove the built-in until
@@ -4243,7 +4241,7 @@ each was:
   Values grid passes none either but its presses land in the cue (`PressCue`, below), so its cells
   draw both bands and no footer — *Save as palette…* records from the programmer, and *Aim…* writes
   Local. A slider cell whose property no value palette can carry (`paletteCarries`,
-  the closed `PALETTE_PROPERTIES` vocabulary) has no Palettes band and no footer. A setting cell
+  the closed `PALETTE_ATTRIBUTES` vocabulary) has no Palettes band and no footer. A setting cell
   (gobo, prism) passes `palettes={false}` — prism is in that vocabulary, and a value palette cannot
   carry a slotted role — so its popup is the Effects band alone (§11, 11). **Below the editor, the
   Effects band** (`FxBand`, session 6; `ColourEditor` draws it itself, under the cell's editor
@@ -4683,7 +4681,7 @@ Look, a palette layer or a cue is that thing's, and stopping it here would be un
 recook or would quietly edit a library record. And **every head, or none**: an effect drives
 whatever its target names (for a group, every member) and there is no "stop it on these heads
 only", so a partly-covered one is left running and toasts that it was, rather than half vanishing
-from the rig. Matching is on `fixtureKey|propertyName` (`cellFxKey`), the same pairing the
+from the rig. Matching is on `fixtureKey|attribute` (`cellFxKey`), the same pairing the
 grid's FX lens places an effect on a cell by, and the pairs are **collected by the clear loop itself** rather than
 re-derived, so the values half and the effects half cannot reach different heads.
 
@@ -4969,7 +4967,7 @@ Things that will bite:
   the opposite since it shipped.
 
   **"Read-only" has to be said in four places, not one.** `CellState.editable` reaches only the
-  pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `PropertyCell`
+  pointer (`pointer-events-none` on the wrapper); the cell trigger stays tabbable, so `AttributeCell`
   takes `disabled` from it too; `SpreadPopover` — which writes through the desk's spread route or
   `useCellWriters` from the toolbar, nowhere near a cell — gates on the focused palette as well; and the marquee's
   **keyboard** (the Enter/character arm of the grid's window handler, §The programmer's keyboard)
@@ -6014,7 +6012,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   server state is the cue's details and its `GET /cues/{id}/cooked`; the **draft** holds own values
   set and own rows removed, keyed by target type, key and canonical property (`colour` and
   `rgbColour` are one row), notifying per key. A write schedules a flush — 400 ms quiet, 2 s ceiling
-  — that rebuilds the **whole** `propertyAssignments` list from the cue as it stands then
+  — that rebuilds the **whole** `attributeAssignments` list from the cue as it stands then
   (`applyCueRowEntries`: every kept row's `fadeDurationMs`, `moveInDark` and `sortOrder` kept, a new
   row appended after the last order, read-only fields such as `health` dropped) and PATCHes it. An
   entry retires only once the cue agrees **and** a cook read after its save has landed (`markSaved`
@@ -6116,7 +6114,7 @@ are §"Cues, Stacks & Triggers" above). `components/cues/editor/CueValuesGrid.ts
   applied to the cue's `layers` as the desk holds it (`fetchLatestCue`), its layer found there by the
   drawn layer's read-only `id` (`cueListEdits.ts`'s `indexOfDrawn`: another client may have moved the
   list, and a layer the desk no longer holds is left alone), every `sortOrder` restated from its
-  place, the whole list written (never `propertyAssignments`), so the desk pairs each layer with its
+  place, the whole list written (never `attributeAssignments`), so the desk pairs each layer with its
   stored one and keeps its uuid (§3.4). A disabled layer is stored. The tab draws each gesture at
   once and keeps drawing it while any list write waits (`CueRowStore.listsBusy`), until the cue has
   been read again — so a refetch between two writes never draws a removed layer back. *+ Look* and
@@ -6854,7 +6852,7 @@ not stylistic:
    entry over `channelState` costs the whole store a reducer pass and a subscriber scan per channel
    per frame, for a value nothing outside the reading component consumes. Those read the WS layer's
    own per-key subscription through `useSyncExternalStore` instead — `useChannelValue` and its
-   neighbours in `hooks/usePropertyValues.ts`.
+   neighbours in `hooks/useAttributeValues.ts`.
 
 The census as of this writing, so a new slice can see which company it is in: **33 module-scope
 sites across 23 slices** (`grep -n '^lightingApi\.' src/store/*.ts`), and **four deferred**, all

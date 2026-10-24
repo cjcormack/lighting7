@@ -48,7 +48,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
 
     private fun cue(name: String, level: Int = 100): Int = transaction(state.database) {
         DaoCue.new { project = DaoProject[projectId]; this.name = name }.also { cue ->
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue
                 targetType = "fixture"; targetKey = "hex-1"
                 attribute = "dimmer"; value = "$level"; sortOrder = 0
@@ -105,7 +105,7 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         assertTrue(last.cueNumberAuto, "the copy takes an auto number, never the source's")
 
         val details = client.get("$base/cues/${copy.cueId}").body<CueDetails>()
-        assertEquals("dimmer", details.propertyAssignments.single().propertyName)
+        assertEquals("dimmer", details.attributeAssignments.single().attribute)
         assertEquals(listOf(a), details.entries.map { it.stackId }, "one place: the end of A")
     }
 
@@ -119,12 +119,12 @@ class CueDuplicateAndMoveRoutesTest : RouteIntegrationTest() {
         client.addCue(a, one); client.addCue(a, two)
         val run = UUID.randomUUID()
         transaction(state.database) {
-            for ((cueId, property) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
+            for ((cueId, name) in listOf(one to "dimmer", two to "dimmer", one to "uv")) {
                 DaoCueAdHocFxEntity.new {
                     cue = DaoCue[cueId]; targetType = "fixture"; targetKey = "hex-1"
-                    fxType = "Pulse"; family = "intensity"; attribute = property; cycle = 1.0
+                    fxType = "Pulse"; family = "intensity"; attribute = name; cycle = 1.0
                     blendMode = "OVERRIDE"; order = "NORMAL"; parameters = emptyMap()
-                    runUuid = if (property == "dimmer") run else null
+                    runUuid = if (name == "dimmer") run else null
                 }
             }
         }

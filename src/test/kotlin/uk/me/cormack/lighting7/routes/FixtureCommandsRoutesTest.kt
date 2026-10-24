@@ -27,7 +27,7 @@ import uk.me.cormack.lighting7.ai.AiTools
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.CommandNotStorableException
 import uk.me.cormack.lighting7.models.DaoCue
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoFixtureGroup
 import uk.me.cormack.lighting7.models.DaoFixtureGroupMember
 import uk.me.cormack.lighting7.models.DaoFixturePatch
@@ -267,8 +267,8 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         rig(client)
 
         val look = json(client, "looks", """{"name":"Oops","rows":[
-            {"targetType":"fixture","targetKey":"vary","propertyName":"reset","value":"255"},
-            {"targetType":"fixture","targetKey":"mac","propertyName":"lampOff","value":"248"}]}""")
+            {"targetType":"fixture","targetKey":"vary","attribute":"reset","value":"255"},
+            {"targetType":"fixture","targetKey":"mac","attribute":"lampOff","value":"248"}]}""")
         assertEquals(HttpStatusCode.BadRequest, look.status, look.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, look.code())
         assertTrue("rows[0]: 'reset'" in look.bodyAsText() && "rows[1]: 'lampOff'" in look.bodyAsText(), look.bodyAsText())
@@ -280,20 +280,20 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         }.body<CueStackDetails>().id
         val cue = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Q1", cueStackId = stack, propertyAssignments = listOf(
-                uk.me.cormack.lighting7.models.CuePropertyAssignmentDto(targetType = "fixture", targetKey = "rev", propertyName = "resetScroller", value = "149"),
+            setBody(NewCue(name = "Q1", cueStackId = stack, attributeAssignments = listOf(
+                uk.me.cormack.lighting7.models.CueAttributeAssignmentDto(targetType = "fixture", targetKey = "rev", attribute = "resetScroller", value = "149"),
             )))
         }
         assertEquals(HttpStatusCode.BadRequest, cue.status, cue.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, cue.code())
 
-        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","propertyName":"reset","value":"255"}]}""")
+        val template = json(client, "palettes", """{"name":"T","rows":[{"targetType":"deferred","targetKey":"","attribute":"reset","value":"255"}]}""")
         assertEquals(HttpStatusCode.BadRequest, template.status, template.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, template.code())
 
         val effect = client.post("/api/rest/fx/add") {
             contentType(ContentType.Application.Json)
-            setBody("""{"fxType":"Pulse","fixtureKey":"vary","propertyName":"reset","cycle":1.0}""")
+            setBody("""{"fxType":"Pulse","fixtureKey":"vary","attribute":"reset","cycle":1.0}""")
         }
         assertEquals(HttpStatusCode.BadRequest, effect.status, effect.bodyAsText())
         assertTrue("fixture command" in effect.bodyAsText(), effect.bodyAsText())
@@ -302,8 +302,8 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         assertTrue(programmer is ProgrammerErrorOutMessage && "fixture command" in programmer.message, "$programmer")
 
         for (target in listOf(
-            uk.me.cormack.lighting7.midi.BindingTarget.FixtureProperty("vary", "reset"),
-            uk.me.cormack.lighting7.midi.BindingTarget.SelectionProperty("lampOff"),
+            uk.me.cormack.lighting7.midi.BindingTarget.FixtureAttribute("vary", "reset"),
+            uk.me.cormack.lighting7.midi.BindingTarget.SelectionAttribute("lampOff"),
         )) {
             val refused = assertFailsWith<uk.me.cormack.lighting7.midi.BindingRefused> {
                 state.controlSurfaceBindingService.create(
@@ -317,7 +317,7 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         val ai = AiTools(state).executeTool(
             "create_look",
             Json.parseToJsonElement(
-                """{"name":"X","fx":[{"targetType":"fixture","targetKey":"vary","fxType":"Pulse","family":"intensity","propertyName":"reset","cycle":1.0,"blendMode":"OVERRIDE"}]}""",
+                """{"name":"X","fx":[{"targetType":"fixture","targetKey":"vary","fxType":"Pulse","family":"intensity","attribute":"reset","cycle":1.0,"blendMode":"OVERRIDE"}]}""",
             ).jsonObject,
         )
         assertFalse(ai.success, ai.description)
@@ -344,8 +344,8 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
 
         // The MAC's strobe at 210 is its reset; the Fusion's motor mode at 251 is its reset.
         val look = json(client, "looks", """{"name":"Bad","rows":[
-            {"targetType":"fixture","targetKey":"mac","propertyName":"strobe","value":"210"},
-            {"targetType":"fixture","targetKey":"fusion","propertyName":"motorMode","value":"251"}]}""")
+            {"targetType":"fixture","targetKey":"mac","attribute":"strobe","value":"210"},
+            {"targetType":"fixture","targetKey":"fusion","attribute":"motorMode","value":"251"}]}""")
         assertEquals(HttpStatusCode.BadRequest, look.status, look.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, look.code())
         assertTrue("rows[0]: strobe = 210" in look.bodyAsText() && "'reset' command's band (208–217)" in look.bodyAsText(), look.bodyAsText())
@@ -354,8 +354,8 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
 
         // A level outside the band, and the same level on a property that shares nothing, are kept.
         val ok = json(client, "looks", """{"name":"Good","rows":[
-            {"targetType":"fixture","targetKey":"mac","propertyName":"strobe","value":"100"},
-            {"targetType":"fixture","targetKey":"orbit","propertyName":"dimmer","value":"210"}]}""")
+            {"targetType":"fixture","targetKey":"mac","attribute":"strobe","value":"100"},
+            {"targetType":"fixture","targetKey":"orbit","attribute":"dimmer","value":"210"}]}""")
         assertTrue(ok.status.isSuccess(), ok.bodyAsText())
 
         val stack = client.post("/api/rest/projects/$projectId/cue-stacks") {
@@ -364,16 +364,16 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
         }.body<CueStackDetails>().id
         val cue = client.post("/api/rest/projects/$projectId/cues") {
             contentType(ContentType.Application.Json)
-            setBody(NewCue(name = "Q1", cueStackId = stack, propertyAssignments = listOf(
-                uk.me.cormack.lighting7.models.CuePropertyAssignmentDto(targetType = "fixture", targetKey = "orbit", propertyName = "program", value = "200"),
+            setBody(NewCue(name = "Q1", cueStackId = stack, attributeAssignments = listOf(
+                uk.me.cormack.lighting7.models.CueAttributeAssignmentDto(targetType = "fixture", targetKey = "orbit", attribute = "program", value = "200"),
             )))
         }
         assertEquals(HttpStatusCode.BadRequest, cue.status, cue.bodyAsText())
         assertEquals(CommandNotStorableException.CODE, cue.code())
-        assertTrue("propertyAssignments[0]: program = 200 on 'ORBIT'" in cue.bodyAsText(), cue.bodyAsText())
+        assertTrue("attributeAssignments[0]: program = 200 on 'ORBIT'" in cue.bodyAsText(), cue.bodyAsText())
 
         val groupLook = json(client, "looks", """{"name":"Group","rows":[
-            {"targetType":"group","targetKey":"Movers","propertyName":"program","value":"230"}]}""")
+            {"targetType":"group","targetKey":"Movers","attribute":"program","value":"230"}]}""")
         assertEquals(HttpStatusCode.BadRequest, groupLook.status, groupLook.bodyAsText())
         assertTrue("program = 230 on a member of group 'Movers'" in groupLook.bodyAsText(), groupLook.bodyAsText())
     }
@@ -403,12 +403,12 @@ class FixtureCommandsRoutesTest : RouteIntegrationTest() {
             DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "fusion"; attribute = "motorMode"; value = "151" }
             DaoLookRow.new { this.look = look; targetType = "fixture"; targetKey = "orbit"; attribute = "program"; value = "100" }
             // A typed MAC strobe row past its clamp, in the reset band — and an open one, kept.
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "210" }
-            DaoCuePropertyAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "35" }
+            DaoCueAttributeAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "210" }
+            DaoCueAttributeAssignment.new { cue = DaoCue[q1]; targetType = "fixture"; targetKey = "mac"; attribute = "strobe"; value = "35" }
             stripCommandRows(project)
         }
         assertEquals(4, stripped)
         assertEquals(listOf("151", "100"), transaction(state.database) { DaoLookRow.all().map { it.value } })
-        assertEquals(listOf("35"), transaction(state.database) { DaoCuePropertyAssignment.all().map { it.value } })
+        assertEquals(listOf("35"), transaction(state.database) { DaoCueAttributeAssignment.all().map { it.value } })
     }
 }

@@ -12,7 +12,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.TargetRef
 import uk.me.cormack.lighting7.testsupport.LocateTestSupport
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -53,11 +53,11 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
                 NewCue(
                     name = name,
                     cueStackId = stackId,
-                    propertyAssignments = listOf(
-                        CuePropertyAssignmentDto(
+                    attributeAssignments = listOf(
+                        CueAttributeAssignmentDto(
                             targetType = TargetRef.Fixture.TYPE,
                             targetKey = fixtureKey,
-                            propertyName = "dimmer",
+                            attribute = "dimmer",
                             value = dimmer.toString(),
                         ),
                     ),
@@ -142,8 +142,8 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
         // the whole point of running the real resolver rather than a browser-side merge.
         val live = state.show.fxEngine.layerResolver.currentCueLayerState
         val liveByChannel = live.entries.flatMap { (key, value) ->
-            uk.me.cormack.lighting7.fx.PropertyChannelWriter
-                .resolve(state.show.fixtures.untypedFixture(key.targetKey), key.propertyName, value)
+            uk.me.cormack.lighting7.fx.AttributeChannelWriter
+                .resolve(state.show.fixtures.untypedFixture(key.targetKey), key.attribute, value)
                 .map { it.channel to it.value.toInt() }
         }.toMap()
 
@@ -229,8 +229,8 @@ class CuePreviewRouteTest : RouteIntegrationTest() {
 
         val live = state.show.fxEngine.layerResolver.currentCueLayerState
         val liveByChannel = live.entries.flatMap { (key, value) ->
-            uk.me.cormack.lighting7.fx.PropertyChannelWriter
-                .resolve(state.show.fixtures.untypedFixture(key.targetKey), key.propertyName, value)
+            uk.me.cormack.lighting7.fx.AttributeChannelWriter
+                .resolve(state.show.fixtures.untypedFixture(key.targetKey), key.attribute, value)
                 .map { it.channel to it.value.toInt() }
         }.toMap()
         for (channel in previewed.channels) {

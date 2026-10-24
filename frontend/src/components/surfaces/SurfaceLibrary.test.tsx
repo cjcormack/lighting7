@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { DndContext } from '@dnd-kit/core'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { AvailableProperty } from '@/hooks/useTargetProperties'
+import type { AvailableAttribute } from '@/hooks/useTargetAttributes'
 
 /**
  * The library's rows and chips, and the one rule that is invisible until a drag is in flight.
@@ -29,7 +29,7 @@ const stacks = [
 ]
 
 /** Slider and colour are continuous; a position pair and a setting are not (see the hook). */
-const targetProperties: AvailableProperty[] = [
+const targetAttributes: AvailableAttribute[] = [
   { name: 'dimmer', displayName: 'dimmer', type: 'slider', category: 'dimmer', continuous: true },
   { name: 'rgbColour', displayName: 'colour', type: 'colour', category: 'colour', continuous: true },
   // A bundled emitter, as the hook expands it off the colour descriptor's `whiteChannel`.
@@ -74,7 +74,7 @@ const pages = [
 
 // The rig union — every property some patched head declares. The Movers' colour is in it, which is
 // what lets a search for `sat` keep the target rows in play before their own chips are known.
-const rigProperties: AvailableProperty[] = [
+const rigAttributes: AvailableAttribute[] = [
   { name: 'dimmer', displayName: 'dimmer', type: 'slider', category: 'dimmer', continuous: true },
   { name: 'pan', displayName: 'pan', type: 'slider', category: 'pan', continuous: true },
   { name: 'rgbColour', displayName: 'colour', type: 'colour', category: 'colour', continuous: true },
@@ -97,9 +97,9 @@ vi.mock('@/store/windows', () => ({
     { id: 'w3', windowId: 'b', name: 'Screen 2', view: '/show', fullscreen: false, follows: true, user: null, viewOptions: null },
   ],
 }))
-vi.mock('@/hooks/useTargetProperties', () => ({
-  useTargetProperties: () => ({ properties: targetProperties, isLoading: false }),
-  useRigProperties: () => rigProperties,
+vi.mock('@/hooks/useTargetAttributes', () => ({
+  useTargetAttributes: () => ({ attributes: targetAttributes, isLoading: false }),
+  useRigAttributes: () => rigAttributes,
 }))
 
 import { SurfaceLibrary, groupChipsByFamily } from './SurfaceLibrary'
@@ -205,7 +205,7 @@ describe('SurfaceLibrary', () => {
   })
 
   it('offers only the properties a fader can actually drive', () => {
-    // `PropertyChannelResolver` writes a slider and a colour, refuses a setting by name and has no
+    // `AttributeChannelResolver` writes a slider and a colour, refuses a setting by name and has no
     // arm for a position pair — so a `position` chip would be a control that silently does nothing.
     draw()
     const chips = chipsOf('group:Movers')

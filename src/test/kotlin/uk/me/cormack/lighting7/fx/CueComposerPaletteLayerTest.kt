@@ -50,7 +50,7 @@ class CueComposerPaletteLayerTest {
         name: String,
         fxType: String = "Pulse",
         category: String = "dimmer",
-        propertyName: String? = "dimmer",
+        attribute: String? = "dimmer",
     ) = PaletteSnapshot(
         paletteId = name.hashCode(),
         paletteUuid = UUID.nameUUIDFromBytes(name.toByteArray()),
@@ -60,7 +60,7 @@ class CueComposerPaletteLayerTest {
         effect = StoredFx(
             fxType = fxType,
             family = category,
-            propertyName = propertyName,
+            attribute = attribute,
             cycle = 0.5,
             blendMode = "OVERRIDE",
             order = "NORMAL",
@@ -74,20 +74,20 @@ class CueComposerPaletteLayerTest {
         ),
     )
 
-    private fun genericRow(propertyName: String, value: String) =
-        PaletteRowEntry(target = null, propertyName = propertyName, value = value)
+    private fun genericRow(attribute: String, value: String) =
+        PaletteRowEntry(target = null, attribute = attribute, value = value)
 
     private fun layerFor(
         snapshot: PaletteSnapshot,
         sortOrder: Int = 0,
         targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         layerId: Int = 1,
     ) = CookLayer(
         source = LayerSource.palette(snapshot.paletteId, snapshot.paletteUuid, snapshot.name),
         sortOrder = sortOrder,
         targets = targets,
-        propertyMask = propertyMask,
+        attributeMask = attributeMask,
         layerId = layerId,
     )
 
@@ -122,12 +122,12 @@ class CueComposerPaletteLayerTest {
         ).rows
 
         val onHex = rows.single { it.targetKey == "hex-1" }
-        val hexColour = assertIs<CueAssignmentResolver.PropertyValue.Colour>(onHex.value)
+        val hexColour = assertIs<CueAssignmentResolver.AttributeValue.Colour>(onHex.value)
         assertEquals(74u.toUByte(), hexColour.value.white, "the neutral part went to the white emitter")
 
         val onMac = rows.single { it.targetKey == "mac-1" }
-        assertIs<CueAssignmentResolver.PropertyValue.Setting>(onMac.value)
-        assertEquals("colourWheel", onMac.propertyName, "the wheel carries it, not `rgbColour`")
+        assertIs<CueAssignmentResolver.AttributeValue.Setting>(onMac.value)
+        assertEquals("colourWheel", onMac.attribute, "the wheel carries it, not `rgbColour`")
     }
 
     @Test
@@ -190,7 +190,7 @@ class CueComposerPaletteLayerTest {
         ).rows
 
         assertEquals(listOf("mac-1"), rows.map { it.targetKey })
-        assertIs<CueAssignmentResolver.PropertyValue.Position>(rows.single().value)
+        assertIs<CueAssignmentResolver.AttributeValue.Position>(rows.single().value)
     }
 
     @Test
@@ -217,7 +217,7 @@ class CueComposerPaletteLayerTest {
                 layerFor(
                     amber,
                     targets = listOf(CueTargetDto("fixture", "hex-1")),
-                    propertyMask = "INTENSITY",
+                    attributeMask = "INTENSITY",
                 )
             ),
         ).rows
@@ -233,10 +233,10 @@ class CueComposerPaletteLayerTest {
             fadeWeight = 1.0,
             targetKey = "hex-1",
             targetIsGroup = false,
-            propertyName = "dimmer",
-            category = uk.me.cormack.lighting7.fixture.PropertyCategory.DIMMER,
+            attribute = "dimmer",
+            category = uk.me.cormack.lighting7.fixture.AttributeCategory.DIMMER,
             compositionOverride = uk.me.cormack.lighting7.fixture.CompositionRule.UNSET,
-            value = CueAssignmentResolver.PropertyValue.Slider(255u),
+            value = CueAssignmentResolver.AttributeValue.Slider(255u),
         )
         val rows = cook(
             mixedRig(),
@@ -245,8 +245,8 @@ class CueComposerPaletteLayerTest {
             localRows = listOf(local),
         ).rows
 
-        val row = rows.single { it.targetKey == "hex-1" && it.propertyName == "dimmer" }
-        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
+        val row = rows.single { it.targetKey == "hex-1" && it.attribute == "dimmer" }
+        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value)
         assertEquals(null, row.layerWinner, "a local row belongs to no layer")
     }
 
@@ -262,8 +262,8 @@ class CueComposerPaletteLayerTest {
                 layerFor(full, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-1")), layerId = 2),
             ),
         ).rows
-        val row = rows.single { it.propertyName == "dimmer" }
-        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
+        val row = rows.single { it.attribute == "dimmer" }
+        assertEquals(255u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value)
         assertEquals("Full", row.layerWinner?.source?.name)
     }
 
@@ -280,8 +280,8 @@ class CueComposerPaletteLayerTest {
                 layerFor(known, sortOrder = 1, targets = listOf(CueTargetDto("fixture", "hex-1")), layerId = 2),
             ),
         ).rows
-        val row = rows.single { it.propertyName == "dimmer" }
-        assertEquals(128u.toUByte(), assertIs<CueAssignmentResolver.PropertyValue.Slider>(row.value).value)
+        val row = rows.single { it.attribute == "dimmer" }
+        assertEquals(128u.toUByte(), assertIs<CueAssignmentResolver.AttributeValue.Slider>(row.value).value)
     }
 
     /**

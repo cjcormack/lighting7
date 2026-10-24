@@ -225,7 +225,7 @@ class FxFileLoader(
                     outputType = p.outputType,
                     fxMode = p.fxMode,
                     parameters = p.parameters,
-                    compatibleProperties = p.metadata.compatibleProperties,
+                    compatibleAttributes = p.metadata.compatibleAttributes,
                     source = FxSource.BUILT_IN,
                     script = p.scriptBody,
                     defaultTiming = p.metadata.defaultTiming,
@@ -300,7 +300,7 @@ class FxFileLoader(
             var defaultDirection = FxDirection.FORWARD
             var defaultCycle = CycleLength.ONE_BAR
             var timingSource = "BEAT"
-            var compatibleProperties = listOf<String>()
+            var compatibleAttributes = listOf<String>()
             var aliases: List<String>? = null
             val parameters = mutableListOf<FxFileParameter>()
 
@@ -345,7 +345,7 @@ class FxFileLoader(
                 //
                 // Restricted to the keys a parameter actually has, because making the branch live
                 // also made it greedy: it absorbs *any* indented line while a parameter is open, so
-                // an indented top-level key written after the parameter list (`  compatibleProperties:
+                // an indented top-level key written after the parameter list (`  compatibleAttributes:
                 // [dimmer]`) would be swallowed and the effect would register with no compatible
                 // properties and no error. None of the 28 shipped files do that, but this parser has
                 // just cost the built-ins their whole metadata once; an unrecognised key falls
@@ -389,7 +389,7 @@ class FxFileLoader(
                     "defaultCycle" -> defaultCycle = value.toDoubleOrNull()?.takeIf { it > 0.0 }
                         ?: throw IllegalArgumentException("defaultCycle must be a positive number of beats, got '$value'")
                     "timingSource" -> timingSource = value
-                    "compatibleProperties" -> compatibleProperties = parseYamlArray(value)
+                    "compatibleAttributes" -> compatibleAttributes = parseYamlArray(value)
                     "aliases" -> aliases = parseYamlArray(value)
                     "parameters" -> {
                         inParameters = true
@@ -419,7 +419,7 @@ class FxFileLoader(
                 defaultDirection = defaultDirection,
                 defaultCycle = defaultCycle,
                 timingSource = timingSource,
-                compatibleProperties = compatibleProperties,
+                compatibleAttributes = compatibleAttributes,
                 aliases = aliases,
                 parameters = parameters,
             )
@@ -452,7 +452,7 @@ data class FxFileMetadata(
     /** A new instance's cycle, in beats (one bar unless the frontmatter says otherwise). */
     val defaultCycle: Double = CycleLength.ONE_BAR,
     val timingSource: String = "BEAT",
-    val compatibleProperties: List<String> = emptyList(),
+    val compatibleAttributes: List<String> = emptyList(),
     val aliases: List<String>? = null,
     val parameters: List<FxFileParameter> = emptyList(),
 )

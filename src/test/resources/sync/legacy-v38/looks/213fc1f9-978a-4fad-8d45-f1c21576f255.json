@@ -1,0 +1,35 @@
+{
+  "fx": [
+    {
+      "amount": 0.4,
+      "attribute": "dimmer",
+      "blendMode": "OVERRIDE",
+      "cycle": 0.5,
+      "direction": "BACKWARD",
+      "elementFilter": "ODD",
+      "elementMode": "ALL",
+      "family": "intensity",
+      "fxType": "Pulse",
+      "order": "NORMAL",
+      "parameters": {
+        "depth": "0.8"
+      },
+      "parts": 4,
+      "phaseOffset": 0.25,
+      "rateSpeedMasterUuid": "739f9da6-ac3c-4128-ad34-48dad89d43a6",
+      "runs": 2,
+      "seconds": true,
+      "segments": 3,
+      "speedMasterUuid": "739f9da6-ac3c-4128-ad34-48dad89d43a6",
+      "spread": 0.5,
+      "targetKey": "front-wash",
+      "targetType": "group",
+      "timing": "HEAD",
+      "uuid": "781b1044-5e5d-4ce0-827f-07e513197366",
+      "wings": 2
+    }
+  ],
+  "name": "warm-pulse",
+  "notes": "warm pulse",
+  "uuid": "213fc1f9-978a-4fad-8d45-f1c21576f255"
+}

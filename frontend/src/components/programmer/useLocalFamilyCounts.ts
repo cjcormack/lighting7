@@ -36,7 +36,7 @@ import type { AttributeFamily } from '@/lib/attributeFamily'
  * stale count.
  */
 let cachedCounts: {
-  categoryByProperty: Map<string, string>
+  categoryByAttribute: Map<string, string>
   revision: number
   counts: Partial<Record<AttributeFamily, number>>
 } | null = null
@@ -46,11 +46,11 @@ export function useLocalFamilyCounts(): Partial<Record<AttributeFamily, number>>
   // The entry map lives outside Redux, so a revision tick is how a component knows to re-read it.
   const revision = useProgrammerRevision()
 
-  const categoryByProperty = useMemo(() => {
+  const categoryByAttribute = useMemo(() => {
     const map = new Map<string, string>()
     for (const fixture of fixtures ?? []) {
-      for (const property of fixture.properties) {
-        if (!map.has(property.name)) map.set(property.name, property.category)
+      for (const attribute of fixture.attributes) {
+        if (!map.has(attribute.name)) map.set(attribute.name, attribute.category)
       }
     }
     return map
@@ -60,20 +60,20 @@ export function useLocalFamilyCounts(): Partial<Record<AttributeFamily, number>>
     if (
       cachedCounts &&
       cachedCounts.revision === revision &&
-      cachedCounts.categoryByProperty === categoryByProperty
+      cachedCounts.categoryByAttribute === categoryByAttribute
     ) {
       return cachedCounts.counts
     }
     const counts: Partial<Record<AttributeFamily, number>> = {}
     for (const entry of lightingApi.programmer.getState().entries.values()) {
       if (entry.owner === 'layers') continue
-      const category = categoryByProperty.get(entry.propertyName) ?? entry.propertyName
+      const category = categoryByAttribute.get(entry.attribute) ?? entry.attribute
       const family = familyForCategory(category)
       counts[family] = (counts[family] ?? 0) + 1
     }
-    cachedCounts = { categoryByProperty, revision, counts }
+    cachedCounts = { categoryByAttribute, revision, counts }
     return counts
-  }, [categoryByProperty, revision])
+  }, [categoryByAttribute, revision])
 }
 
 /** Total local entries — "12 values, yours". */

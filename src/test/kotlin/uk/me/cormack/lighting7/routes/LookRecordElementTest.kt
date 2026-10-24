@@ -38,18 +38,18 @@ class LookRecordElementTest : RouteIntegrationTest() {
         LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-1", 1)
     }
 
-    private fun setProgrammer(key: String, property: String, value: String) {
-        ProgrammerHandler.set(state, TargetRef.Fixture(key), property, value, 0)
+    private fun setProgrammer(key: String, attribute: String, value: String) {
+        ProgrammerHandler.set(state, TargetRef.Fixture(key), attribute, value, 0)
     }
 
-    private fun clearProgrammer(key: String, property: String) {
-        ProgrammerHandler.clearEntry(state, TargetRef.Fixture(key), property, 0)
+    private fun clearProgrammer(key: String, attribute: String) {
+        ProgrammerHandler.clearEntry(state, TargetRef.Fixture(key), attribute, 0)
     }
 
     private fun layerColour(key: String): Color? {
         val slot = state.show.programmerStore.get(key, "rgbColour") ?: return null
         assertEquals(ProgrammerOwner.LAYERS, slot.owner)
-        return (slot.value.resolved as CueAssignmentResolver.PropertyValue.Colour).value.color
+        return (slot.value.resolved as CueAssignmentResolver.AttributeValue.Colour).value.color
     }
 
     private suspend fun HttpClient.recordLook(request: ProgrammerRecordLookRequest): ProgrammerRecordLookResponse {

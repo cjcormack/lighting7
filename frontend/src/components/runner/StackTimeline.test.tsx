@@ -23,7 +23,7 @@ vi.mock('@/store/fixtures', () => ({
 }))
 vi.mock('@/store/groups', () => ({ useGroupListQuery: () => ({ data: [{ name: 'wash', memberKeys: ['hex-1', 'hex-2'] }] }) }))
 vi.mock('@/store/palettes', () => ({
-  usePaletteListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#8f7bff' }] }] }),
+  usePaletteListQuery: () => ({ data: [{ id: 7, isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#8f7bff' }] }] }),
 }))
 vi.mock('@/store/stageElements', () => ({ useStageElementListQuery: () => ({ data: [{ uuid: 'tabs', name: 'House tabs', kind: 'DRAPE' }] }) }))
 let DESK_SELECTION: { type: 'fixture' | 'group'; key: string }[] = []
@@ -75,7 +75,7 @@ function lavender(over: Partial<TimelineLayer> = {}): TimelineLayer {
     enabled: true,
     amount: 1,
     blendMode: 'OVERRIDE',
-    propertyMask: null,
+    attributeMask: null,
     stomp: false,
     timed: false,
     speedMasterUuid: null,

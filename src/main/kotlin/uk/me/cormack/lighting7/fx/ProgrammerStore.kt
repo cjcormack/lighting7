@@ -92,7 +92,7 @@ value class ProgrammerOwner(val id: String) {
  *
  * **Why this is still a sealed interface with one arm.** It had a second, [Ref], holding a
  * `ref:{uuid}` named-palette reference plus the literal it currently resolved to; the `ref:` value
- * grammar retired in session 4 of the looks-and-layers plan, and a layer with a `propertyMask` is
+ * grammar retired in session 4 of the looks-and-layers plan, and a layer with an `attributeMask` is
  * what replaces it. The shape is left alone because the arm's *reason* has not gone away — a value
  * that remembers where it came from is exactly what nested Looks (`FU-LOOK-NESTED`) would need —
  * and collapsing it to a bare typealias would make reintroducing one a change to every read site
@@ -100,10 +100,10 @@ value class ProgrammerOwner(val id: String) {
  */
 sealed interface ProgrammerValue {
     /** The concrete value the entry contributes to the cascade. */
-    val resolved: CueAssignmentResolver.PropertyValue
+    val resolved: CueAssignmentResolver.AttributeValue
 
     /** A literal value. */
-    data class Hard(override val resolved: CueAssignmentResolver.PropertyValue) : ProgrammerValue
+    data class Hard(override val resolved: CueAssignmentResolver.AttributeValue) : ProgrammerValue
 }
 
 /**
@@ -234,12 +234,12 @@ class ProgrammerStore {
         fun all(): List<Slot>
     }
 
-    /** fixtureKey → propertyName → owner stack. Two-level to keep hot-path reads flat. */
-    private val properties = ConcurrentHashMap<String, ConcurrentHashMap<String, Holder>>()
+    /** fixtureKey → attribute → owner stack. Two-level to keep hot-path reads flat. */
+    private val attributes = ConcurrentHashMap<String, ConcurrentHashMap<String, Holder>>()
 
     /**
      * Channel sideband: packed `(universe << 20 | channel)` → owner stack. Values are
-     * [CueAssignmentResolver.PropertyValue.Slider]-wrapped raw bytes.
+     * [CueAssignmentResolver.AttributeValue.Slider]-wrapped raw bytes.
      */
     private val channels = ConcurrentHashMap<Long, Holder>()
 
@@ -413,7 +413,7 @@ class ProgrammerStore {
     }
 
     /** One property Include staged as an `INCLUDE` slot. */
-    data class IncludedKey(val fixtureKey: String, val propertyName: String)
+    data class IncludedKey(val fixtureKey: String, val attribute: String)
 
     /**
      * Every touched value as it stood when a Record last made the include target say what the
@@ -423,7 +423,7 @@ class ProgrammerStore {
      * Include, and cleared with the target.
      */
     @Volatile
-    var recordedValues: Map<IncludedKey, CueAssignmentResolver.PropertyValue>? = null
+    var recordedValues: Map<IncludedKey, CueAssignmentResolver.AttributeValue>? = null
 
     /** The keys one Include staged, and the source it staged them from. */
     data class IncludedKeys(val target: IncludedTarget, val keys: Set<IncludedKey>)
@@ -548,9 +548,9 @@ class ProgrammerStore {
     private val coverageCounter = AtomicLong(0)
 
     /**
-     * Monotonic counter of **coverage** changes — a (fixtureKey, propertyName) entry gaining
+     * Monotonic counter of **coverage** changes — a (fixtureKey, attribute) entry gaining
      * its first slot or losing its last. The per-tick effect-suppression snapshot
-     * (`FxEngine.programmerSuppression`) caches [activePropertiesByFixture] on this rather
+     * (`FxEngine.programmerSuppression`) caches [activeAttributesByFixture] on this rather
      * than on [epoch]: coverage is all that map reports, and keying on [epoch] made every
      * busk-time fader write rebuild it on every compose pass for a byte-identical result.
      *
@@ -568,17 +568,17 @@ class ProgrammerStore {
     // ── Property entries ────────────────────────────────────────────────────
 
     /**
-     * Record [owner]'s value for (fixtureKey, propertyName), replacing any previous slot the
+     * Record [owner]'s value for (fixtureKey, attribute), replacing any previous slot the
      * same owner held there and moving the owner to the top of the stack.
      */
     fun put(
         owner: ProgrammerOwner,
         fixtureKey: String,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
-    ) = putValue(owner, fixtureKey, propertyName, ProgrammerValue.Hard(value), touched, sourceGroup)
+    ) = putValue(owner, fixtureKey, attribute, ProgrammerValue.Hard(value), touched, sourceGroup)
 
     /**
      * As [put], but for a caller that already has a [ProgrammerValue] — i.e. one writing a
@@ -588,15 +588,15 @@ class ProgrammerStore {
     fun putValue(
         owner: ProgrammerOwner,
         fixtureKey: String,
-        propertyName: String,
+        attribute: String,
         value: ProgrammerValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
     ) {
         val slot = Slot(owner, value, touched, sourceGroup, seq = bumpEpoch())
-        val byProperty = properties.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
+        val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         var covered = false
-        byProperty.compute(propertyName) { _, holder ->
+        byAttribute.compute(attribute) { _, holder ->
             covered = holder != null
             withSlot(holder, slot)
         }
@@ -612,15 +612,15 @@ class ProgrammerStore {
     fun putBeneathTop(
         owner: ProgrammerOwner,
         fixtureKey: String,
-        propertyName: String,
-        value: CueAssignmentResolver.PropertyValue,
+        attribute: String,
+        value: CueAssignmentResolver.AttributeValue,
         touched: Boolean = true,
         sourceGroup: String? = null,
     ) {
         val slot = Slot(owner, ProgrammerValue.Hard(value), touched, sourceGroup, seq = bumpEpoch())
-        val byProperty = properties.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
+        val byAttribute = attributes.computeIfAbsent(fixtureKey) { ConcurrentHashMap() }
         var covered = false
-        byProperty.compute(propertyName) { _, holder ->
+        byAttribute.compute(attribute) { _, holder ->
             covered = holder != null
             val others = holder?.all().orEmpty().filter { it.owner != owner }
             if (others.isEmpty()) Single(slot) else Stack(listOf(others[0], slot) + others.drop(1))
@@ -631,8 +631,8 @@ class ProgrammerStore {
     /** One key's share of a cooked layer stack, ready for [putLayerSlots]. */
     data class LayerSlotWrite(
         val fixtureKey: String,
-        val propertyName: String,
-        val value: CueAssignmentResolver.PropertyValue,
+        val attribute: String,
+        val value: CueAssignmentResolver.AttributeValue,
         /**
          * Rank of the layer that won this key, within the contributing layers
          * ([uk.me.cormack.lighting7.fx.CookWinner.index]). Stamped into the reserved
@@ -676,7 +676,7 @@ class ProgrammerStore {
         var coverageChanged = false
 
         for (write in writes) {
-            named.add(write.fixtureKey to write.propertyName)
+            named.add(write.fixtureKey to write.attribute)
             val slot = Slot(
                 owner = ProgrammerOwner.LAYERS,
                 value = ProgrammerValue.Hard(write.value),
@@ -684,32 +684,32 @@ class ProgrammerStore {
                 sourceGroup = write.sourceGroup,
                 seq = LAYER_SEQ_BASE + write.layerIndex,
             )
-            val byProperty = properties.computeIfAbsent(write.fixtureKey) { ConcurrentHashMap() }
+            val byAttribute = attributes.computeIfAbsent(write.fixtureKey) { ConcurrentHashMap() }
             var before: ProgrammerValue? = null
-            byProperty.compute(write.propertyName) { _, holder ->
+            byAttribute.compute(write.attribute) { _, holder ->
                 if (holder == null) coverageChanged = true
                 before = holder?.top?.value
                 withSlot(holder, slot)
             }
-            val after = byProperty[write.propertyName]?.top?.value
+            val after = byAttribute[write.attribute]?.top?.value
             if (before?.resolved != after?.resolved) {
-                moved.add(CueAssignmentResolver.Key.fixture(write.fixtureKey, write.propertyName))
+                moved.add(CueAssignmentResolver.Key.fixture(write.fixtureKey, write.attribute))
             }
         }
 
-        for ((fixtureKey, byProperty) in properties) {
-            for (propertyName in byProperty.keys) {
-                if (fixtureKey to propertyName in named) continue
+        for ((fixtureKey, byAttribute) in attributes) {
+            for (attribute in byAttribute.keys) {
+                if (fixtureKey to attribute in named) continue
                 var before: ProgrammerValue? = null
-                byProperty.computeIfPresent(propertyName) { _, holder ->
+                byAttribute.computeIfPresent(attribute) { _, holder ->
                     before = holder.top.value
                     val next = withoutOwner(holder, ProgrammerOwner.LAYERS)
                     if (next == null) coverageChanged = true
                     next
                 }
-                val after = byProperty[propertyName]?.top?.value
+                val after = byAttribute[attribute]?.top?.value
                 if (before != null && before.resolved != after?.resolved) {
-                    moved.add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
+                    moved.add(CueAssignmentResolver.Key.fixture(fixtureKey, attribute))
                 }
             }
         }
@@ -720,30 +720,30 @@ class ProgrammerStore {
     }
 
     /** The winning (most recent) slot for a property, or null when no owner holds it. */
-    fun get(fixtureKey: String, propertyName: String): Slot? =
-        properties[fixtureKey]?.get(propertyName)?.top
+    fun get(fixtureKey: String, attribute: String): Slot? =
+        attributes[fixtureKey]?.get(attribute)?.top
 
     /** All slots for a property, most recent first. Cold path — Record/state/tests. */
-    fun slotsFor(fixtureKey: String, propertyName: String): List<Slot> =
-        properties[fixtureKey]?.get(propertyName)?.all() ?: emptyList()
+    fun slotsFor(fixtureKey: String, attribute: String): List<Slot> =
+        attributes[fixtureKey]?.get(attribute)?.all() ?: emptyList()
 
     /**
-     * Remove [owner]'s slot at (fixtureKey, propertyName). No-op if that owner holds no
+     * Remove [owner]'s slot at (fixtureKey, attribute). No-op if that owner holds no
      * entry there; other owners' slots are untouched and the most recent of them becomes
      * the value [get] reports.
      *
-     * Emptied per-fixture inner maps are deliberately NOT removed from [properties]: an
+     * Emptied per-fixture inner maps are deliberately NOT removed from [attributes]: an
      * empty-check-then-remove would race a concurrent [put] on another property of the
      * same fixture — [put]'s `computeIfAbsent` can return the same inner map instance an
      * instant before the reference-equality `remove(key, value)` deletes it, silently
      * losing the fresh write. Empty inner maps are bounded by the fixture count and cost
      * nothing ([coversFixture]/[entries]/[size] all tolerate them).
      */
-    fun clear(owner: ProgrammerOwner, fixtureKey: String, propertyName: String) {
-        val byProperty = properties[fixtureKey] ?: return
+    fun clear(owner: ProgrammerOwner, fixtureKey: String, attribute: String) {
+        val byAttribute = attributes[fixtureKey] ?: return
         var changed = false
         var removedLast = false
-        byProperty.computeIfPresent(propertyName) { _, holder ->
+        byAttribute.computeIfPresent(attribute) { _, holder ->
             val next = withoutOwner(holder, owner)
             if (next !== holder) changed = true
             if (next == null) removedLast = true
@@ -753,9 +753,9 @@ class ProgrammerStore {
         if (removedLast) bumpCoverage()
     }
 
-    /** [owner]'s own slot at (fixtureKey, propertyName), whether or not it is on top. */
-    fun valueFor(owner: ProgrammerOwner, fixtureKey: String, propertyName: String): ProgrammerValue? =
-        properties[fixtureKey]?.get(propertyName)?.all()?.firstOrNull { it.owner == owner }?.value
+    /** [owner]'s own slot at (fixtureKey, attribute), whether or not it is on top. */
+    fun valueFor(owner: ProgrammerOwner, fixtureKey: String, attribute: String): ProgrammerValue? =
+        attributes[fixtureKey]?.get(attribute)?.all()?.firstOrNull { it.owner == owner }?.value
 
     // ── Channel sideband ────────────────────────────────────────────────────
 
@@ -774,7 +774,7 @@ class ProgrammerStore {
     ) {
         val slot = Slot(
             owner,
-            ProgrammerValue.Hard(CueAssignmentResolver.PropertyValue.Slider(value)),
+            ProgrammerValue.Hard(CueAssignmentResolver.AttributeValue.Slider(value)),
             touched,
             sourceGroup = null,
             seq = bumpEpoch(),
@@ -789,7 +789,7 @@ class ProgrammerStore {
     /** The winning sideband value at (universe, channel), or null. Hot path. */
     fun getChannel(universe: Int, channel: Int): UByte? {
         val top = getChannelSlot(universe, channel) ?: return null
-        return (top.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+        return (top.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
     }
 
     /** Remove [owner]'s sideband slot at (universe, channel). */
@@ -807,7 +807,7 @@ class ProgrammerStore {
     fun channelValueFor(owner: ProgrammerOwner, universe: Int, channel: Int): UByte? {
         val slot = channels[packChannelKey(universe, channel)]?.all()?.firstOrNull { it.owner == owner }
             ?: return null
-        return (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+        return (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
     }
 
     /**
@@ -840,9 +840,9 @@ class ProgrammerStore {
         var coverageChanged = false
         // Emptied inner maps are left in place — see [clear] for the race a
         // check-then-remove would open against a concurrent [put] on the same fixture.
-        for (byProperty in properties.values) {
-            for (propertyName in byProperty.keys) {
-                byProperty.computeIfPresent(propertyName) { _, holder ->
+        for (byAttribute in attributes.values) {
+            for (attribute in byAttribute.keys) {
+                byAttribute.computeIfPresent(attribute) { _, holder ->
                     val next = withoutOwner(holder, owner)
                     if (next !== holder) swept++
                     if (next == null) coverageChanged = true
@@ -870,7 +870,7 @@ class ProgrammerStore {
      * did nothing.
      */
     fun clearAll() {
-        properties.clear()
+        attributes.clear()
         channels.clear()
         _lastIncludedTarget.value = null
         // The stack goes with the slots it produced. Leaving it would let the next recook — any
@@ -888,7 +888,7 @@ class ProgrammerStore {
     /** One property entry as seen from outside: winning slot first. */
     data class EntryView(
         val fixtureKey: String,
-        val propertyName: String,
+        val attribute: String,
         /** Most recent first; `slots[0]` is the winning contribution. */
         val slots: List<Slot>,
     )
@@ -902,9 +902,9 @@ class ProgrammerStore {
 
     /** Snapshot of every property entry. Cold path. */
     fun entries(): List<EntryView> = buildList {
-        for ((fixtureKey, byProperty) in properties) {
-            for ((propertyName, holder) in byProperty) {
-                add(EntryView(fixtureKey, propertyName, holder.all()))
+        for ((fixtureKey, byAttribute) in attributes) {
+            for ((attribute, holder) in byAttribute) {
+                add(EntryView(fixtureKey, attribute, holder.all()))
             }
         }
     }
@@ -927,12 +927,12 @@ class ProgrammerStore {
      * Cold path — provenance recomputes on layer events, never per frame.
      */
     fun layerWinnerRankByKey(): Map<CueAssignmentResolver.Key, Int> = buildMap {
-        for ((fixtureKey, byProperty) in properties) {
-            for ((propertyName, holder) in byProperty) {
+        for ((fixtureKey, byAttribute) in attributes) {
+            for ((attribute, holder) in byAttribute) {
                 val top = holder.top
                 if (top.owner != ProgrammerOwner.LAYERS) continue
                 put(
-                    CueAssignmentResolver.Key.fixture(fixtureKey, propertyName),
+                    CueAssignmentResolver.Key.fixture(fixtureKey, attribute),
                     (top.seq - LAYER_SEQ_BASE).toInt(),
                 )
             }
@@ -957,9 +957,9 @@ class ProgrammerStore {
 
     /** The (fixture, property) keys currently holding at least one slot. Cold path. */
     fun activeKeys(): Set<CueAssignmentResolver.Key> = buildSet {
-        for ((fixtureKey, byProperty) in properties) {
-            for (propertyName in byProperty.keys) {
-                add(CueAssignmentResolver.Key.fixture(fixtureKey, propertyName))
+        for ((fixtureKey, byAttribute) in attributes) {
+            for (attribute in byAttribute.keys) {
+                add(CueAssignmentResolver.Key.fixture(fixtureKey, attribute))
             }
         }
     }
@@ -980,24 +980,24 @@ class ProgrammerStore {
      * the key an effect paints before it names the programmer as a key's winner. Two readers, one
      * map.
      */
-    fun activePropertiesByFixture(): Map<String, Set<String>> {
-        if (properties.isEmpty()) return emptyMap()
-        val out = HashMap<String, Set<String>>(properties.size)
-        for ((fixtureKey, byProperty) in properties) {
-            if (byProperty.isEmpty()) continue
-            out[fixtureKey] = HashSet(byProperty.keys)
+    fun activeAttributesByFixture(): Map<String, Set<String>> {
+        if (attributes.isEmpty()) return emptyMap()
+        val out = HashMap<String, Set<String>>(attributes.size)
+        for ((fixtureKey, byAttribute) in attributes) {
+            if (byAttribute.isEmpty()) continue
+            out[fixtureKey] = HashSet(byAttribute.keys)
         }
         return out.ifEmpty { emptyMap() }
     }
 
     /** Number of properties holding at least one slot. Tests / diagnostics. */
-    val size: Int get() = properties.values.sumOf { it.size }
+    val size: Int get() = attributes.values.sumOf { it.size }
 
     /** Number of sideband channels holding at least one slot. Tests / diagnostics. */
     val channelCount: Int get() = channels.size
 
     /** True when no property entry or sideband slot exists. Cold path (walks fixtures). */
-    val isEmpty: Boolean get() = channels.isEmpty() && properties.values.all { it.isEmpty() }
+    val isEmpty: Boolean get() = channels.isEmpty() && attributes.values.all { it.isEmpty() }
 
     /**
      * O(1) hot-path gate: does the programmer hold any property entry for [fixtureKey]?
@@ -1005,7 +1005,7 @@ class ProgrammerStore {
      * can't be answered per fixture without resolving the patch.)
      */
     fun coversFixture(fixtureKey: String): Boolean =
-        properties[fixtureKey]?.isNotEmpty() == true
+        attributes[fixtureKey]?.isNotEmpty() == true
 
     /** O(1) hot-path gate: does the sideband hold any slot at all? */
     val hasSidebandEntries: Boolean get() = channels.isNotEmpty()

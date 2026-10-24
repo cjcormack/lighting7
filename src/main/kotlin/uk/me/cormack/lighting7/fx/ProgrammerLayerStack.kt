@@ -34,7 +34,7 @@ data class ProgrammerLayer(
     val sortOrder: Int,
     val enabled: Boolean = true,
     val targets: List<CueTargetDto> = emptyList(),
-    val propertyMask: String? = null,
+    val attributeMask: String? = null,
     val blendMode: String = "OVERRIDE",
     val amount: Double = 1.0,
     val stomp: Boolean = false,
@@ -56,14 +56,14 @@ data class ProgrammerLayer(
     val cycleOverride: Double? = null,
 ) {
     /** What a cue row holds for this layer beside its source and place: the fields Update retunes. */
-    fun cueFields() = CueLayerFields(enabled, targets, propertyMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
+    fun cueFields() = CueLayerFields(enabled, targets, attributeMask, blendMode, amount, stomp, speedMasterUuid, rateSpeedMasterUuid)
 
     internal fun toCookLayer() = CookLayer(
         source = source,
         sortOrder = sortOrder,
         enabled = enabled,
         targets = targets,
-        propertyMask = propertyMask,
+        attributeMask = attributeMask,
         blendMode = blendMode,
         amount = amount,
         stomp = stomp,
@@ -81,7 +81,7 @@ data class ProgrammerLayer(
 data class CueLayerFields(
     val enabled: Boolean,
     val targets: List<CueTargetDto>,
-    val propertyMask: String?,
+    val attributeMask: String?,
     val blendMode: String,
     val amount: Double,
     val stomp: Boolean,
@@ -165,7 +165,7 @@ data class AppliedSource(val source: LayerSource, val targets: List<AppliedTarge
  *
  * The reason is not the per-tick cost. `FxTarget.composeProgrammerOver` is only reached for keys a
  * running effect covers; everything *else* about the programmer is answered by cold-path coverage
- * oracles — `coversFixture` (the gate in `LayerResolver.fallbackFor`), `activePropertiesByFixture`
+ * oracles — `coversFixture` (the gate in `LayerResolver.fallbackFor`), `activeAttributesByFixture`
  * (effect suppression), `activeKeys` (provenance, blind republish, Clear), `entries` (Record and
  * the wire snapshot). Composing at read would make **every one of those** layer-aware, and each
  * needs the cooked key set — so it would mean cooking anyway, plus cooking per fixture per tick.
@@ -249,7 +249,7 @@ class ProgrammerLayerStack(
     fun add(
         source: LayerSource,
         targets: List<CueTargetDto> = emptyList(),
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         blendMode: String = "OVERRIDE",
         amount: Double = 1.0,
         speedMasterUuid: UUID? = null,
@@ -263,7 +263,7 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = 0, // renumbered below
             targets = layerTargets(source, targets),
-            propertyMask = propertyMask,
+            attributeMask = attributeMask,
             blendMode = blendMode,
             amount = amount,
             speedMasterUuid = speedMasterUuid,
@@ -281,7 +281,7 @@ class ProgrammerLayerStack(
      * list in one store mutation and recooks it once.
      *
      * **A Look is pressed whole** (absolute-looks plan D1, D3, P1): its layer names no targets and
-     * no mask, whatever the door passes in [targets] and [propertyMask]; on puts one layer of it on
+     * no mask, whatever the door passes in [targets] and [attributeMask]; on puts one layer of it on
      * top, off takes every layer of it off. Everything below about targets and coverage is a
      * palette's.
      *
@@ -305,7 +305,7 @@ class ProgrammerLayerStack(
      * way, and so does a **value** template; an *effect* template reports one per target, which is
      * why the pads' ring cannot be driven from the effect list alone.
      *
-     * [propertyMask] applies to the *arriving* palette layer only. It is deliberately **not** part of
+     * [attributeMask] applies to the *arriving* palette layer only. It is deliberately **not** part of
      * the "already on" comparison: a pad that re-pressed with a different mask should still take its
      * layer off rather than stack a second one.
      *
@@ -344,7 +344,7 @@ class ProgrammerLayerStack(
     fun toggle(
         source: LayerSource,
         targets: List<CueTargetDto>,
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         cycleOverride: Double? = null,
         releaseSiblings: Set<UUID> = emptySet(),
         fadeMs: Long = 0,
@@ -357,7 +357,7 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = 0, // renumbered below
             targets = pressTargets,
-            propertyMask = propertyMask.takeUnless { isLook },
+            attributeMask = attributeMask.takeUnless { isLook },
             cycleOverride = cycleOverride,
         )
         // Resolved before the mutation: a palette snapshot can open a transaction, which must never
@@ -409,7 +409,7 @@ class ProgrammerLayerStack(
         // for the old ones.
         override fun sameSettings(layer: ProgrammerLayer, arriving: ProgrammerLayer) =
             layer.enabled == arriving.enabled &&
-                layer.propertyMask == arriving.propertyMask &&
+                layer.attributeMask == arriving.attributeMask &&
                 layer.blendMode == arriving.blendMode &&
                 layer.amount == arriving.amount &&
                 layer.stomp == arriving.stomp &&
@@ -599,20 +599,20 @@ class ProgrammerLayerStack(
         val layer = layers.firstOrNull { it.layerId == layerId } ?: return null
         val rest = layers.filterNot { it.layerId == layerId }
         val without = cookStack(rest, withFx = false).values.rows
-            .associate { (it.targetKey to it.propertyName) to it.value }
+            .associate { (it.targetKey to it.attribute) to it.value }
         val fixtures = fixtures()
         val hints = groupHintsForTargets(fixtures, layer.targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
-        val onTop = ArrayList<ProgrammerWriter.PropertyWrite>()
-        val beneath = ArrayList<ProgrammerWriter.PropertyWrite>()
+        val onTop = ArrayList<ProgrammerWriter.AttributeWrite>()
+        val beneath = ArrayList<ProgrammerWriter.AttributeWrite>()
         for (row in cookStack(layers, withFx = false).values.rows) {
-            if (without[row.targetKey to row.propertyName] == row.value) continue
-            val slots = store.slotsFor(row.targetKey, row.propertyName)
+            if (without[row.targetKey to row.attribute] == row.value) continue
+            val slots = store.slotsFor(row.targetKey, row.attribute)
             if (slots.any { it.owner == ProgrammerOwner.WEB }) continue
             val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
-            if (PropertyChannelWriter.channelsFor(head, row.propertyName).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
+            if (AttributeChannelWriter.channelsFor(head, row.attribute).any { store.getChannelSlot(it.universe.universe, it.channel) != null }) continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
-            val write = ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            val write = ProgrammerWriter.AttributeWrite(
+                head, row.attribute, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
             if (slots.firstOrNull()?.owner == ProgrammerOwner.LAYERS) onTop += write else beneath += write
         }
@@ -671,7 +671,7 @@ class ProgrammerLayerStack(
     fun applyAsValues(
         source: LayerSource,
         targets: List<CueTargetDto>,
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         cycleOverride: Double? = null,
         fadeMs: Long? = null,
     ): ApplyValuesOutcome {
@@ -680,23 +680,23 @@ class ProgrammerLayerStack(
             source = source,
             sortOrder = Int.MAX_VALUE,
             targets = layerTargets(source, targets),
-            propertyMask = propertyMask,
+            attributeMask = attributeMask,
             cycleOverride = cycleOverride,
         )
         val cooked = cookStack(store.layers + layer, withFx = true)
         val fixtures = fixtures()
         val hints = groupHintsForTargets(fixtures, targets.mapNotNull { TargetRef.ofOrNull(it.type, it.key) })
-        val byFade = LinkedHashMap<Long, MutableList<ProgrammerWriter.PropertyWrite>>()
+        val byFade = LinkedHashMap<Long, MutableList<ProgrammerWriter.AttributeWrite>>()
         for (row in cooked.values.rows) {
             if (row.layerWinner?.layerId != layer.layerId) continue
             val head = runCatching { fixtures.untypedGroupableFixture(row.targetKey) }.getOrNull() ?: continue
             val parentKey = targetCoverage.parentOf(CueTargetDto(TargetRef.Fixture.TYPE, row.targetKey))?.key
-            byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.PropertyWrite(
-                head, row.propertyName, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
+            byFade.getOrPut(fadeMs ?: row.fadeDurationMs ?: 0) { ArrayList() } += ProgrammerWriter.AttributeWrite(
+                head, row.attribute, row.value, sourceGroup = row.sourceGroup() ?: hints[row.targetKey] ?: parentKey?.let { hints[it] },
             )
         }
         val eng = engine()
-        for ((fade, writes) in byFade) eng.programmer.writeProperties(ProgrammerOwner.WEB, writes, fadeMs = fade)
+        for ((fade, writes) in byFade) eng.programmer.writeAttributes(ProgrammerOwner.WEB, writes, fadeMs = fade)
         val instances = cooked.effects.mapNotNull { (cookLayer, effect, target) ->
             if (cookLayer.layerId != layer.layerId) return@mapNotNull null
             spawn(cookLayer, effect, target, cycleOverride)?.also {
@@ -735,7 +735,7 @@ class ProgrammerLayerStack(
         layerId: Int,
         enabled: Boolean? = null,
         amount: Double? = null,
-        propertyMask: String? = null,
+        attributeMask: String? = null,
         blendMode: String? = null,
         targets: List<CueTargetDto>? = null,
         stomp: Boolean? = null,
@@ -747,7 +747,7 @@ class ProgrammerLayerStack(
                 else it.copy(
                     enabled = enabled ?: it.enabled,
                     amount = amount?.coerceIn(0.0, 1.0) ?: it.amount,
-                    propertyMask = propertyMask ?: it.propertyMask,
+                    attributeMask = attributeMask ?: it.attributeMask,
                     blendMode = blendMode ?: it.blendMode,
                     targets = layerTargets(it.source, targets ?: it.targets),
                     stomp = stomp ?: it.stomp,
@@ -785,7 +785,7 @@ class ProgrammerLayerStack(
                     sortOrder = 0, // renumbered below
                     enabled = layer.enabled,
                     targets = layerTargets(layer.source, layer.targets),
-                    propertyMask = layer.propertyMask,
+                    attributeMask = layer.attributeMask,
                     // The one point a *stored* blend becomes programmer state, and so the one
                     // place the lenient policy belongs on this path: a row written by another
                     // build may name a blend this one does not know, and Record writes these
@@ -1037,7 +1037,7 @@ class ProgrammerLayerStack(
             cooked.rows.map { row ->
                 ProgrammerStore.LayerSlotWrite(
                     fixtureKey = row.targetKey,
-                    propertyName = row.propertyName,
+                    attribute = row.attribute,
                     value = row.value,
                     // Absent only when a local row won, which cannot happen here — nothing is
                     // passed as a local row. Index 0 is a safe floor either way.
@@ -1052,7 +1052,7 @@ class ProgrammerLayerStack(
         } else {
             cooked.rows.mapNotNull { row ->
                 val fade = row.fadeDurationMs?.takeIf { it > 0 } ?: return@mapNotNull null
-                CueAssignmentResolver.Key.fixture(row.targetKey, row.propertyName)
+                CueAssignmentResolver.Key.fixture(row.targetKey, row.attribute)
                     .takeIf { it in moved }
                     ?.let { it to fade }
             }.toMap()
@@ -1117,7 +1117,7 @@ class ProgrammerLayerStack(
             spawning += build(layer, effect, target, key, priority, override) ?: continue
         }
 
-        val valueMoves = { key: String, property: String -> CueAssignmentResolver.Key.fixture(key, property) in moved }
+        val valueMoves = { key: String, attribute: String -> CueAssignmentResolver.Key.fixture(key, attribute) in moved }
         // Set before the add, so no pass paints an arriving instance at full first.
         if (fadeMs > 0) {
             val nowMs = System.currentTimeMillis()

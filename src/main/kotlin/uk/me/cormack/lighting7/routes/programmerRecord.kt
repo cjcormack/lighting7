@@ -8,8 +8,8 @@ import uk.me.cormack.lighting7.fx.FxSpecCoercion
 import uk.me.cormack.lighting7.fx.ElementFilter
 import uk.me.cormack.lighting7.fx.ElementMode
 import uk.me.cormack.lighting7.fx.TimingSource
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
-import uk.me.cormack.lighting7.fx.canonicalPropertyName
+import uk.me.cormack.lighting7.fx.AttributeFamily
+import uk.me.cormack.lighting7.fx.canonicalAttributeName
 import uk.me.cormack.lighting7.fx.maskAllows
 import uk.me.cormack.lighting7.fx.speedMasterUuidOrNull
 import uk.me.cormack.lighting7.fx.CueApplyData
@@ -19,14 +19,14 @@ import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
 import uk.me.cormack.lighting7.models.DaoCueLayer
 import uk.me.cormack.lighting7.models.DaoLook
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.CueType
 import uk.me.cormack.lighting7.models.DaoCueLayers
 import uk.me.cormack.lighting7.models.withStoredTargets
 import uk.me.cormack.lighting7.models.DaoCue
 import uk.me.cormack.lighting7.models.DaoCueAdHocFxEntity
-import uk.me.cormack.lighting7.models.DaoCuePropertyAssignment
+import uk.me.cormack.lighting7.models.DaoCueAttributeAssignment
 import uk.me.cormack.lighting7.models.DaoCueStack
 import uk.me.cormack.lighting7.models.DaoProject
 import uk.me.cormack.lighting7.models.FxTargetsRef
@@ -104,11 +104,11 @@ data class CueWriteOutcome(
 private val DaoCueAdHocFxEntity.isTimed: Boolean get() = delay != null || interval != null
 
 /** Match key for a property assignment: target plus canonical property name. */
-private fun assignmentKey(targetType: String, targetKey: String, propertyName: String) =
-    Triple(targetType, targetKey, canonicalPropertyName(propertyName))
+private fun assignmentKey(targetType: String, targetKey: String, attribute: String) =
+    Triple(targetType, targetKey, canonicalAttributeName(attribute))
 
-private fun DaoCuePropertyAssignment.matchKey() = assignmentKey(targetType, targetKey, attribute)
-private fun CuePropertyAssignmentDto.matchKey() = assignmentKey(targetType, targetKey, propertyName)
+private fun DaoCueAttributeAssignment.matchKey() = assignmentKey(targetType, targetKey, attribute)
+private fun CueAttributeAssignmentDto.matchKey() = assignmentKey(targetType, targetKey, attribute)
 
 /**
  * Create a cue in [stack] from [recording]. Mirrors the `POST /cues` create path — a new entry at
@@ -167,7 +167,7 @@ internal fun writeRecordingIntoCue(
     cue: DaoCue,
     recording: ProgrammerRecording,
     mode: RecordMode,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     /**
      * Fixture scope, as [targetInScope] reads it. Only [RecordMode.UPDATE_EXISTING] needs it
      * explicitly: it is the one mode that deletes rows the recording does *not* name, so without
@@ -195,7 +195,7 @@ internal fun writeRecordingIntoCue(
         RecordMode.CREATE -> error("unreachable")
 
         RecordMode.MERGE -> {
-            val existing = cue.propertyAssignments.associateBy { it.matchKey() }
+            val existing = cue.attributeAssignments.associateBy { it.matchKey() }
             for (row in recording.rows) {
                 val match = existing[row.matchKey()]
                 if (match != null) {
@@ -203,11 +203,11 @@ internal fun writeRecordingIntoCue(
                     match.fadeDuration = row.fadeDurationMs.asDuration()
                     match.moveInDark = row.moveInDark
                 } else {
-                    DaoCuePropertyAssignment.new {
+                    DaoCueAttributeAssignment.new {
                         this.cue = cue
                         targetType = row.targetType
                         targetKey = row.targetKey
-                        attribute = row.propertyName
+                        attribute = row.attribute
                         value = row.value
                         fadeDuration = row.fadeDurationMs.asDuration()
                         sortOrder = row.sortOrder
@@ -225,7 +225,7 @@ internal fun writeRecordingIntoCue(
                     .forEach { it.delete() }
             }
             val doomed = recording.rows.map { it.matchKey() }.toSet()
-            for (row in cue.propertyAssignments.toList()) {
+            for (row in cue.attributeAssignments.toList()) {
                 if (row.matchKey() in doomed) {
                     row.delete()
                     removed++
@@ -234,11 +234,11 @@ internal fun writeRecordingIntoCue(
             // A recorded *fixture* key whose property is only covered by a group row is not a
             // licence to delete that group row — every other member would silently lose the
             // value too. Say so instead of guessing which the operator meant.
-            val remainingGroupRows = cue.propertyAssignments.filter {
+            val remainingGroupRows = cue.attributeAssignments.filter {
                 it.targetType == TargetRef.Group.TYPE
             }
             for (groupRow in remainingGroupRows) {
-                val property = canonicalPropertyName(groupRow.attribute)
+                val attribute = canonicalAttributeName(groupRow.attribute)
                 val members = try {
                     state.show.fixtures.untypedGroup(groupRow.targetKey).fixtures.map { it.targetKey }
                 } catch (_: Exception) {
@@ -246,11 +246,11 @@ internal fun writeRecordingIntoCue(
                 }
                 val shadowed = recording.rows.filter {
                     it.targetType == TargetRef.Fixture.TYPE &&
-                        canonicalPropertyName(it.propertyName) == property &&
+                        canonicalAttributeName(it.attribute) == attribute &&
                         it.targetKey in members
                 }
                 if (shadowed.isNotEmpty()) {
-                    warnings += "'${groupRow.targetKey}'.$property still covers " +
+                    warnings += "'${groupRow.targetKey}'.$attribute still covers " +
                         shadowed.joinToString { it.targetKey } +
                         " — remove the group row, or record a fixture override instead"
                 }
@@ -259,8 +259,8 @@ internal fun writeRecordingIntoCue(
         }
 
         RecordMode.UPDATE_EXISTING -> {
-            val replaced = ArrayList<DaoCuePropertyAssignment>()
-            for (row in cue.propertyAssignmentsInOrder()) {
+            val replaced = ArrayList<DaoCueAttributeAssignment>()
+            for (row in cue.attributeAssignmentsInOrder()) {
                 // Scope first, and checked before the mask so the count the operator sees names
                 // the narrowing they chose. A group row survives unless *every* member is in the
                 // selection — replacing one would rewrite the value for heads outside it.
@@ -268,7 +268,7 @@ internal fun writeRecordingIntoCue(
                     outOfScope++
                     continue
                 }
-                val group = maskGroupForRow(state.show.fixtures, row.toDto())
+                val group = familyForRow(state.show.fixtures, row.toDto())
                 // A row whose fixture or property no longer resolves has no derivable mask
                 // group. Under a mask that means "leave it alone": a patch change must never
                 // turn a scoped re-record into a delete of rows it can't classify.
@@ -287,7 +287,7 @@ internal fun writeRecordingIntoCue(
                 if (stored != null) {
                     stored.take(row)
                 } else {
-                    DaoCuePropertyAssignment.new {
+                    DaoCueAttributeAssignment.new {
                         this.cue = cue
                         targetType = row.targetType
                         targetKey = row.targetKey
@@ -358,7 +358,7 @@ private fun appendFxChildren(cue: DaoCue, recording: ProgrammerRecording, regist
             this.sortOrder = layer.sortOrder
             this.enabled = layer.enabled
             this.targets = layer.withStoredTargets().targets
-            this.attributeMask = layer.propertyMask
+            this.attributeMask = layer.attributeMask
             this.blendMode = layer.blendMode
             this.amount = layer.amount
             this.stomp = layer.stomp
@@ -414,7 +414,7 @@ private fun matchStoredChildren(
     recorded: List<CueAdHocFxDto>,
 ): List<DaoCueAdHocFxEntity?> {
     fun DaoCueAdHocFxEntity.drives(effect: CueAdHocFxDto) =
-        !isTimed && targetType == effect.targetType && targetKey == effect.targetKey && attribute == effect.propertyName
+        !isTimed && targetType == effect.targetType && targetKey == effect.targetKey && attribute == effect.attribute
     fun DaoCueAdHocFxEntity.isChildOf(effect: CueAdHocFxDto) = drives(effect) && fxType == effect.fxType
     val byUuid = stored.associateBy { it.uuid.toString() }
     val taken = HashSet<DaoCueAdHocFxEntity>()
@@ -437,7 +437,7 @@ private fun matchStoredChildren(
 private fun DaoCueLayer.applyFrom(dto: CueLayerDto): Boolean {
     var changed = false
     if (enabled != dto.enabled) { enabled = dto.enabled; changed = true }
-    if (attributeMask != dto.propertyMask) { attributeMask = dto.propertyMask; changed = true }
+    if (attributeMask != dto.attributeMask) { attributeMask = dto.attributeMask; changed = true }
     if (blendMode != dto.blendMode) { blendMode = dto.blendMode; changed = true }
     if (amount != dto.amount) { amount = dto.amount; changed = true }
     if (stomp != dto.stomp) { stomp = dto.stomp; changed = true }
@@ -468,7 +468,7 @@ private fun CueAdHocFxDto.canonical(registry: FxRegistry): CueAdHocFxDto {
     val beatSeconds = seconds && registration?.timingSource != TimingSource.WALL_CLOCK
     return copy(
         fxType = registration?.id ?: fxType,
-        family = if (propertyName != null) "" else family,
+        family = if (attribute != null) "" else family,
         blendMode = names.blendMode(blendMode)?.name ?: blendMode,
         order = names.order(order)?.javaClass?.simpleName ?: order,
         elementMode = if (overMembers) {
@@ -524,7 +524,7 @@ private fun removeRecordedFxChildren(cue: DaoCue, recording: ProgrammerRecording
 private fun replaceImmediateFxChildren(
     cue: DaoCue,
     recording: ProgrammerRecording,
-    mask: Set<PropertyMaskGroup>?,
+    mask: Set<AttributeFamily>?,
     state: State,
     scope: Set<String>? = null,
     warnings: MutableList<String> = ArrayList(),
@@ -535,7 +535,7 @@ private fun replaceImmediateFxChildren(
     val replacedFx = cue.adHocFxInOrder().filter { effect ->
         !effect.isTimed &&
             fxTargetInScope(state.show.fixtures, effect.target, scope) &&
-            (mask == null || maskAllows(mask, maskGroupForAdHocChild(state, effect)))
+            (mask == null || maskAllows(mask, familyForAdHocChild(state, effect)))
     }
     // Layers, same rule as preset applications had and for the same reason: a Look can span
     // several attribute families, so there is no single property to mask by. A masked re-record
@@ -604,7 +604,7 @@ private fun replaceImmediateFxChildren(
             cue.adHocFx
                 .filter {
                     it.id.value !in pending && !it.isTimed && it.fxType == effect.fxType &&
-                        it.attribute == effect.propertyName
+                        it.attribute == effect.attribute
                 }
                 .map { listOf(CueTargetDto(it.targetType, it.targetKey)) },
         )
@@ -654,10 +654,10 @@ private fun shadowingCoverage(
     return wanted intersect covered
 }
 
-private fun maskGroupForAdHocChild(state: State, effect: DaoCueAdHocFxEntity): PropertyMaskGroup? {
-    val propertyName = effect.attribute ?: return null
+private fun familyForAdHocChild(state: State, effect: DaoCueAdHocFxEntity): AttributeFamily? {
+    val attribute = effect.attribute ?: return null
     val fixture = state.show.fixtures.referenceFixtureFor(effect.target) ?: return null
-    return uk.me.cormack.lighting7.fx.maskGroupForProperty(fixture, propertyName)
+    return uk.me.cormack.lighting7.fx.familyForAttribute(fixture, attribute)
 }
 
 private fun newAdHocChild(cue: DaoCue, effect: CueAdHocFxDto): DaoCueAdHocFxEntity =

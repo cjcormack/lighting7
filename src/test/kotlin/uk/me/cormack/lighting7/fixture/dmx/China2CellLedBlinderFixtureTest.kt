@@ -3,12 +3,12 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.FixtureTypeRegistry
 import uk.me.cormack.lighting7.fixture.createTestTransaction
-import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixPropertyDescriptor
+import uk.me.cormack.lighting7.fixture.group.GroupWhiteMixAttributeDescriptor
 import uk.me.cormack.lighting7.fx.BlendMode
 import uk.me.cormack.lighting7.fx.ColourTarget
 import uk.me.cormack.lighting7.fx.ExtendedColour
 import uk.me.cormack.lighting7.fx.FxOutput
-import uk.me.cormack.lighting7.routes.WhiteMixPropertyDescriptor
+import uk.me.cormack.lighting7.routes.WhiteMixAttributeDescriptor
 import java.awt.Color
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -132,18 +132,18 @@ class China2CellLedBlinderFixtureTest {
     fun `each cell describes its warmth with the type's declared whites, and the parent has none`() {
         val fixture = China2CellLedBlinderFixture(universe, "blinder-1", "Blinder 1", 1)
 
-        assertTrue(fixture.generatePropertyDescriptors().none { it is WhiteMixPropertyDescriptor })
+        assertTrue(fixture.generateAttributeDescriptors().none { it is WhiteMixAttributeDescriptor })
         val cells = checkNotNull(fixture.generateElementDescriptors())
         for ((index, cell) in cells.withIndex()) {
-            val warmth = cell.properties.filterIsInstance<WhiteMixPropertyDescriptor>().single()
+            val warmth = cell.attributes.filterIsInstance<WhiteMixAttributeDescriptor>().single()
             assertEquals("rgbColour", warmth.name)
             assertEquals(5 + index * 2, warmth.warmChannel.channelNo)
             assertEquals(6 + index * 2, warmth.coldChannel.channelNo)
             assertEquals(3000, warmth.warmKelvin)
             assertEquals(6500, warmth.coldKelvin)
-            assertEquals(2, cell.properties.count { it.category == "white" }, "the sliders stay for direct control")
+            assertEquals(2, cell.attributes.count { it.category == "white" }, "the sliders stay for direct control")
         }
-        val allCells = fixture.generateElementGroupPropertyDescriptors()?.filterIsInstance<GroupWhiteMixPropertyDescriptor>()?.single()
+        val allCells = fixture.generateElementGroupAttributeDescriptors()?.filterIsInstance<GroupWhiteMixAttributeDescriptor>()?.single()
         assertEquals("rgbColour", allCells?.name)
         assertEquals(listOf(5 to 6, 7 to 8), allCells?.memberChannels?.map { it.warmChannel.channelNo to it.coldChannel.channelNo })
     }

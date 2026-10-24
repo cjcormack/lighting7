@@ -59,7 +59,7 @@ describe('the pick', () => {
   })
 
   it('writes a group entry on a group’s All, and members carrying the group on a subset', () => {
-    const heads: PickHead[] = keys.map((key) => ({ key, name: key, properties: [] }))
+    const heads: PickHead[] = keys.map((key) => ({ key, name: key, attributes: [] }))
     expect(pickWrite(heads, null, 'front')).toEqual({ kind: 'group', group: 'front', keys })
     expect(pickWrite(heads, new Set(['b']), 'front')).toEqual({ kind: 'heads', keys: ['b'], sourceGroup: 'front' })
     expect(pickWrite(heads, null)).toEqual({ kind: 'heads', keys, sourceGroup: undefined })
@@ -80,12 +80,12 @@ describe('the pick', () => {
 
 describe('rows over heads', () => {
   it('draws only the rows every picked head has, each head with its own descriptor', () => {
-    const a: PickHead = { key: 'a', name: 'A', properties: [sliderProp('dimmer', 'dimmer', chan(1)), sliderProp('zoom', 'zoom', chan(2))] }
-    const b: PickHead = { key: 'b', name: 'B', properties: [sliderProp('dimmer', 'dimmer', chan(11))] }
+    const a: PickHead = { key: 'a', name: 'A', attributes: [sliderProp('dimmer', 'dimmer', chan(1)), sliderProp('zoom', 'zoom', chan(2))] }
+    const b: PickHead = { key: 'b', name: 'B', attributes: [sliderProp('dimmer', 'dimmer', chan(11))] }
     const groups = rowsOverHeads([a, b])
     const rows = groups.flatMap((g) => g.rows)
     expect(rows.map((r) => r.row.id)).toEqual(['dimmer'])
-    const dimmer = rows[0].heads.map((h) => (h.row.kind === 'slider' ? h.row.property.channel.channelNo : null))
+    const dimmer = rows[0].heads.map((h) => (h.row.kind === 'slider' ? h.row.attribute.channel.channelNo : null))
     expect(dimmer).toEqual([1, 11])
   })
 })
@@ -95,7 +95,7 @@ describe('rows over heads — settings', () => {
     { name: 'open', level: 0, displayName: 'Open' },
     { name: second, level: 20, displayName: second },
   ]
-  const head = (key: string, second: string): PickHead => ({ key, name: key, properties: [settingProp('mode', 'setting', chan(1), options(second))] })
+  const head = (key: string, second: string): PickHead => ({ key, name: key, attributes: [settingProp('mode', 'setting', chan(1), options(second))] })
 
   it('draws a setting only where every head has the same options, level for level', () => {
     expect(rowsOverHeads([head('a', 'auto'), head('b', 'auto')]).flatMap((g) => g.rows).map((r) => r.row.id)).toEqual(['mode'])
@@ -120,8 +120,8 @@ describe('a colour over a pick', () => {
     writePickColour(
       { kind: 'heads', keys: ['h1', 'h2'] },
       [
-        { key: 'h1', property: rgb(1) },
-        { key: 'h2', property: rgb(11, 14) },
+        { key: 'h1', attribute: rgb(1) },
+        { key: 'h2', attribute: rgb(11, 14) },
       ],
       { r: 255, g: 0, b: 0 },
     )
@@ -136,15 +136,15 @@ describe('a colour over a pick', () => {
     channelsAt({})
     const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
     const same = [
-      { key: 'm1', property: rgb(1, 4) },
-      { key: 'm2', property: rgb(11, 14) },
+      { key: 'm1', attribute: rgb(1, 4) },
+      { key: 'm2', attribute: rgb(11, 14) },
     ]
     writePickColour({ kind: 'group', group: 'front', keys: ['m1', 'm2'] }, same, { r: 1, g: 2, b: 3, w: 4 })
     expect(setColour.mock.calls.map((c) => [c[0], c[1]])).toEqual([['group', 'front']])
     setColour.mockClear()
     const mixed = [
-      { key: 'm1', property: rgb(1) },
-      { key: 'm2', property: rgb(11, 14) },
+      { key: 'm1', attribute: rgb(1) },
+      { key: 'm2', attribute: rgb(11, 14) },
     ]
     writePickColour({ kind: 'group', group: 'front', keys: ['m1', 'm2'] }, mixed, { r: 1, g: 2, b: 3, w: 4 })
     expect(setColour.mock.calls.map((c) => [c[0], c[1], c[5]])).toEqual([
@@ -212,13 +212,13 @@ describe('a warm/cold white pair over a pick', () => {
   it('is one group entry where the whites match, and each member’s own, carrying the group, where they do not', () => {
     const setColour = vi.spyOn(lightingApi.programmer, 'setColour')
     const cells = [
-      { key: 'b.cell-1', property: whiteMixProp(chan(5), chan(6)) },
-      { key: 'b.cell-2', property: whiteMixProp(chan(7), chan(8)) },
+      { key: 'b.cell-1', attribute: whiteMixProp(chan(5), chan(6)) },
+      { key: 'b.cell-2', attribute: whiteMixProp(chan(7), chan(8)) },
     ]
     writePickWhiteMix({ kind: 'group', group: 'blinders', keys: ['b.cell-1', 'b.cell-2'] }, cells, [255, 154, 63])
     expect(setColour.mock.calls.map((c) => [c[0], c[1], c[2], c[3]])).toEqual([['group', 'blinders', 'rgbColour', { r: 255, g: 154, b: 63 }]])
     setColour.mockClear()
-    const other = [cells[0], { key: 'x.cell-1', property: whiteMixProp(chan(9), chan(10), { warmKelvin: 2700 }) }]
+    const other = [cells[0], { key: 'x.cell-1', attribute: whiteMixProp(chan(9), chan(10), { warmKelvin: 2700 }) }]
     writePickWhiteMix({ kind: 'group', group: 'blinders', keys: ['b.cell-1', 'x.cell-1'] }, other, [255, 154, 63])
     expect(setColour.mock.calls.map((c) => [c[0], c[1], c[5]])).toEqual([
       ['fixture', 'b.cell-1', 'blinders'],

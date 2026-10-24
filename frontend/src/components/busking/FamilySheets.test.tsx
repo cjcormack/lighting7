@@ -107,7 +107,7 @@ function template(over: Partial<PaletteSummary>): PaletteSummary {
     kind: 'value',
     requiredEmitters: [],
     lastPressedAt: null,
-    rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'dimmer', value: 'pct:100' }],
+    rows: [{ targetType: 'deferred', targetKey: '', attribute: 'dimmer', value: 'pct:100' }],
     fx: null,
     layerCount: 0,
     buskPageCount: 0,
@@ -137,9 +137,9 @@ beforeEach(() => {
   )
   templates = [
     template({ id: 1, name: 'Full' }),
-    template({ id: 2, name: 'Centre', family: 'POSITION', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'position', value: 'pos:0,0' }] }),
-    template({ id: 3, name: 'Wide', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'zoom', value: 'pct:100' }] }),
-    template({ id: 4, name: 'Open iris', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', propertyName: 'iris', value: 'pct:100' }] }),
+    template({ id: 2, name: 'Centre', family: 'POSITION', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'position', value: 'pos:0,0' }] }),
+    template({ id: 3, name: 'Wide', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'zoom', value: 'pct:100' }] }),
+    template({ id: 4, name: 'Open iris', family: 'BEAM', rows: [{ targetType: 'deferred', targetKey: '', attribute: 'iris', value: 'pct:100' }] }),
   ]
 })
 

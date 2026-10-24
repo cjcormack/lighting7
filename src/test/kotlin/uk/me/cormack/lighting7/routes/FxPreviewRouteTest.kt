@@ -76,7 +76,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     private fun running(request: AddFxRequest): FxInstance = buildFxInstance(state, request).also { engine.addFx(it) }
 
     private fun sine(targets: List<CueTargetDto>, parameters: Map<String, String> = emptyMap(), programmerOwned: Boolean = false) =
-        AddFxRequest(fxType = "SineWave", propertyName = "dimmer", targets = targets, parameters = parameters, programmerOwned = programmerOwned)
+        AddFxRequest(fxType = "SineWave", attribute = "dimmer", targets = targets, parameters = parameters, programmerOwned = programmerOwned)
 
     private fun draft(vararg fields: Pair<String, Any>): JsonObject = buildJsonObject {
         for ((name, value) in fields) {
@@ -179,7 +179,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
         val answer = preview(
             FxPreviewRequest(
                 targets = group("quad"),
-                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "SineWave", "propertyName" to "dimmer", "order" to "REVERSE"))),
+                fx = listOf(FxPreviewEntry(draft = draft("fxType" to "SineWave", "attribute" to "dimmer", "order" to "REVERSE"))),
                 include = "ONLY",
             ),
         )
@@ -246,7 +246,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
                 targets = group("eight"),
                 fx = listOf(
                     FxPreviewEntry(
-                        draft = draft("fxType" to "SineWave", "propertyName" to "dimmer", "spread" to 0.5, "segments" to 2, "programmerOwned" to true),
+                        draft = draft("fxType" to "SineWave", "attribute" to "dimmer", "spread" to 0.5, "segments" to 2, "programmerOwned" to true),
                     ),
                 ),
             ),
@@ -276,8 +276,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `STACK folds every running FX reaching the rows and ONLY just the ones asked for`() {
         seedHexes(4)
         val under = running(sine(group("quad")))
-        val elsewhere = running(sine(fixture("hex-0")).copy(propertyName = "uv", fxType = "SineWave"))
-        val pulse = draft("fxType" to "Pulse", "propertyName" to "dimmer", "blendMode" to "MULTIPLY", "programmerOwned" to true)
+        val elsewhere = running(sine(fixture("hex-0")).copy(attribute = "uv", fxType = "SineWave"))
+        val pulse = draft("fxType" to "Pulse", "attribute" to "dimmer", "blendMode" to "MULTIPLY", "programmerOwned" to true)
 
         val stack = preview(FxPreviewRequest(targets = fixture("hex-1"), fx = listOf(FxPreviewEntry(draft = pulse))))
         assertEquals(listOf(under.id, null), stack.fx.map { it.fxId }, "the running FX under the draft, in apply order")
@@ -293,7 +293,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `STACK draws every selected head anything paints, so an FX reaching only another selected head is folded`() {
         seedHexes(2)
         val other = running(sine(fixture("hex-1")))
-        val onHex0 = draft("fxType" to "Pulse", "propertyName" to "dimmer", "fixtureKey" to "hex-0")
+        val onHex0 = draft("fxType" to "Pulse", "attribute" to "dimmer", "fixtureKey" to "hex-0")
         val targets = fixture("hex-0") + fixture("hex-1")
 
         val stack = preview(FxPreviewRequest(targets = targets, fx = listOf(FxPreviewEntry(draft = onHex0))))
@@ -315,8 +315,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
             FxPreviewRequest(
                 targets = group("quad") + group("bars"),
                 fx = listOf(
-                    FxPreviewEntry(draft = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour", "targets" to GroupTargets("quad"))),
-                    FxPreviewEntry(draft = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour", "targets" to GroupTargets("bars"))),
+                    FxPreviewEntry(draft = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour", "targets" to GroupTargets("quad"))),
+                    FxPreviewEntry(draft = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour", "targets" to GroupTargets("bars"))),
                 ),
                 include = "ONLY",
             ),
@@ -328,7 +328,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `a held-back FX is reported with its reason and left out of the result`() {
         seedHexes(4)
-        state.show.programmerStore.put(ProgrammerOwner.WEB, "hex-0", "dimmer", CueAssignmentResolver.PropertyValue.Slider(100u))
+        state.show.programmerStore.put(ProgrammerOwner.WEB, "hex-0", "dimmer", CueAssignmentResolver.AttributeValue.Slider(100u))
         val sine = running(sine(group("quad")))
         val answer = preview(FxPreviewRequest(targets = group("quad"), fx = listOf(FxPreviewEntry(fxId = sine.id))))
 
@@ -344,7 +344,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `solo draws the lane as the picked FX alone over what is underneath`() {
         seedHexes(1)
         running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200")))
-        val pulse = draft("fxType" to "SineWave", "propertyName" to "dimmer", "parameters" to mapOf("min" to "50", "max" to "50"), "blendMode" to "MAX")
+        val pulse = draft("fxType" to "SineWave", "attribute" to "dimmer", "parameters" to mapOf("min" to "50", "max" to "50"), "blendMode" to "MAX")
         fun result(solo: Int?) = bytes(
             preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = pulse)), solo = solo))
                 .lanes.single().attributes.single().rows.single().result.planes["level"],
@@ -356,8 +356,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `solo draws the rest of its family's lane as what is underneath`() {
         seedHexes(1)
-        running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200")).copy(propertyName = "uv"))
-        val rainbow = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour")
+        running(sine(fixture("hex-0"), mapOf("min" to "200", "max" to "200")).copy(attribute = "uv"))
+        val rainbow = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour")
         fun uv(solo: Int?): Set<Int> {
             val answer = preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = rainbow)), solo = solo))
             val lane = answer.lanes.single { it.family == "COLOUR" }
@@ -370,7 +370,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     @Test
     fun `a beats window counts a wall-clock FX's beats where the answer reports them`() {
         seedHexes(1)
-        val candle = draft("fxType" to "CandleFlicker", "propertyName" to "dimmer")
+        val candle = draft("fxType" to "CandleFlicker", "attribute" to "dimmer")
         val answer = preview(FxPreviewRequest(targets = fixture("hex-0"), fx = listOf(FxPreviewEntry(draft = candle)), window = FxPreviewWindow(beats = 4.0)))
         val sampleBeats = answer.window.sampleMs / 480.0
         assertTrue(answer.window.beats >= 4.0 && answer.window.beats < 4.0 + sampleBeats, "4 beats of master 1, not ${answer.window.beats}")
@@ -400,8 +400,8 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
     fun `the caps truncate and say which`() {
         for (b in 0 until 9) LocateTestSupport.seedFixture(state, projectId, "led-lightbar-12-pixel-48ch", "bar-$b", 1 + 48 * b)
         LocateTestSupport.seedGroup(state, projectId, "bars", *(0 until 9).map { "bar-$it" }.toTypedArray())
-        val rainbow = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour", "fixtureKey" to "bar-0")
-        val overBars = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour")
+        val rainbow = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour", "fixtureKey" to "bar-0")
+        val overBars = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour")
 
         val rows = preview(FxPreviewRequest(targets = group("bars"), fx = listOf(FxPreviewEntry(draft = overBars)), include = "ONLY"))
         assertEquals(96, rows.rows.size, "108 cells, cut at 96 rows")
@@ -419,7 +419,7 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
         assertEquals(1024, samples.window.samples, "32 cycles would be 1536 samples")
         assertEquals(listOf("ROWS", "SAMPLES"), samples.truncated)
 
-        val onBar1 = draft("fxType" to "RainbowCycle", "propertyName" to "rgbColour", "fixtureKey" to "bar-1")
+        val onBar1 = draft("fxType" to "RainbowCycle", "attribute" to "rgbColour", "fixtureKey" to "bar-1")
         val nine = List(8) { FxPreviewEntry(draft = rainbow) } + FxPreviewEntry(draft = onBar1)
         val fx = preview(FxPreviewRequest(targets = group("bars"), fx = nine, include = "ONLY"))
         assertEquals(8, fx.fx.size)
@@ -464,11 +464,11 @@ class FxPreviewRouteTest : RouteIntegrationTest() {
                 addJsonObject { put("fxId", 99_999) }
                 addJsonObject {
                     putJsonObject("draft") {
-                        put("fxType", "SineWave"); put("propertyName", "dimmer"); put("fixtureKey", "hex-0"); put("amount", 2.0)
+                        put("fxType", "SineWave"); put("attribute", "dimmer"); put("fixtureKey", "hex-0"); put("amount", 2.0)
                     }
                 }
                 addJsonObject { put("fxId", sine.id); putJsonObject("draft") { put("spread", 5.0) } }
-                addJsonObject { putJsonObject("draft") { put("fxType", "NoSuchFx"); put("propertyName", "dimmer"); put("fixtureKey", "hex-0") } }
+                addJsonObject { putJsonObject("draft") { put("fxType", "NoSuchFx"); put("attribute", "dimmer"); put("fixtureKey", "hex-0") } }
             }
             putJsonObject("window") { put("cycles", 1000) }
         }

@@ -231,7 +231,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         val source = standalone("Panto")
         val cueId = transaction(state.database) {
             val cue = DaoCue.new { project = DaoProject[source]; name = "ghosts" }
-            DaoCuePropertyAssignment.new {
+            DaoCueAttributeAssignment.new {
                 this.cue = cue; targetType = "fixture"; targetKey = "ghost-1"; attribute = "dimmer"; value = "200"
             }
             DaoCueAdHocFxEntity.new {
@@ -249,7 +249,7 @@ class CueCopyFromTest : RouteIntegrationTest() {
         assertTrue(problems.any { "no group 'phantoms'" in it }, "$problems")
 
         val details = client.get("/api/rest/projects/$projectId/cues/$copyId").body<CueDetails>()
-        val row = details.propertyAssignments.single()
+        val row = details.attributeAssignments.single()
         assertEquals("ghost-1", row.targetKey)
         assertEquals(AssignmentHealth.MissingFixture("ghost-1"), row.health)
         assertEquals("phantoms", details.adHocFx.single().targetKey)

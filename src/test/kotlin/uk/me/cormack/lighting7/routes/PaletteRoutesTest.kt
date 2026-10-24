@@ -43,7 +43,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
     private fun colourRow(value: String = "#FF9D4A;policy=extract") = PaletteRowDto(
         targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-        propertyName = "rgbColour", value = value,
+        attribute = "rgbColour", value = value,
     )
 
     private fun colourEffect(
@@ -53,7 +53,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     ) = PaletteFxDto(
         fxType = fxType,
         family = category,
-        propertyName = "rgbColour",
+        attribute = "rgbColour",
         cycle = 0.5,
         blendMode = "OVERRIDE",
         order = "UNIFIED",
@@ -165,29 +165,29 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `a slotted property is refused, and the message says where it lives instead`() = testApplication {
+    fun `a slotted attribute is refused, and the message says where it lives instead`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        for (property in listOf("gobo", "goboRotation", "ledMacro")) {
+        for (attribute in listOf("gobo", "goboRotation", "ledMacro")) {
             val resp = client.post(base()) {
                 contentType(ContentType.Application.Json)
                 setBody(
                     PaletteInput(
-                        name = "gobo-$property",
-                        rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", property, "pct:50")),
+                        name = "gobo-$attribute",
+                        rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, "pct:50")),
                     )
                 )
             }
-            assertEquals(HttpStatusCode.BadRequest, resp.status, property)
+            assertEquals(HttpStatusCode.BadRequest, resp.status, attribute)
             // The message has a job beyond refusing: an operator looking for gobo needs to learn
             // *where* it lives, not conclude the desk cannot do it.
             assertTrue(resp.bodyAsText().contains("recorded look"), resp.bodyAsText())
         }
     }
 
-    private fun emitterRow(propertyName: String, value: Int) = PaletteRowDto(
+    private fun emitterRow(attribute: String, value: Int) = PaletteRowDto(
         targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-        propertyName = propertyName, value = "dmx:$value",
+        attribute = attribute, value = "dmx:$value",
     )
 
     @Test
@@ -372,7 +372,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     }
 
     @Test
-    fun `one row per property — a second colour row is refused rather than silently losing`() =
+    fun `one row per attribute — a second colour row is refused rather than silently losing`() =
         testApplication {
             // Every reader downstream takes the first colour row it finds, and nothing says which
             // that is. Reachable before emitters existed but hidden, because `isOfferable`'s old
@@ -393,7 +393,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         }
 
     @Test
-    fun `the same property on two different heads is not a duplicate`() = testApplication {
+    fun `the same attribute on two different heads is not a duplicate`() = testApplication {
         // Per property *per target* — a focus position is one pan/tilt row per head by construction.
         mountTestApp(state)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
@@ -511,12 +511,12 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         val entry = body.entries.single { it.fixtureKey == "hex-1" }
         assertEquals("EXACT", entry.outcome)
-        assertEquals("uv", entry.resolvedPropertyName)
+        assertEquals("uv", entry.resolvedAttributeName)
         assertEquals("200", entry.value)
     }
 
     @Test
-    fun `an intent of the wrong shape for its property is refused`() = testApplication {
+    fun `an intent of the wrong shape for its attribute is refused`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val resp = client.post(base()) {
@@ -599,7 +599,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertEquals("SNAPPED", onMac.outcome)
         assertNotNull(onMac.detail)
         assertNotNull(onMac.deltaE)
-        assertEquals("colourWheel", onMac.resolvedPropertyName, "the wheel, not `rgbColour`")
+        assertEquals("colourWheel", onMac.resolvedAttributeName, "the wheel, not `rgbColour`")
 
         // A head with nothing in this family was never a candidate, so it is absent rather than
         // listed as a failure.
@@ -694,7 +694,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(TogglePaletteRequest(targets = targets, families = listOf("COLOUR")))
         }.body<TogglePaletteResponse>()
         assertEquals("applied", on.action)
-        assertEquals("COLOUR", on.propertyMask, "the layer's mask is still the template's own family")
+        assertEquals("COLOUR", on.attributeMask, "the layer's mask is still the template's own family")
 
         // The layer is on; a mask that excludes its family no longer stops the off press — the mask
         // is about what a press puts on, and toggle's "already on" reading ignores it.
@@ -974,7 +974,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         val on = client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(TogglePaletteRequest(targets = targets, propertyMask = "COLOUR"))
+            setBody(TogglePaletteRequest(targets = targets, attributeMask = "COLOUR"))
         }.body<TogglePaletteResponse>()
         assertEquals("applied", on.action)
         // A *value* template holds no effect, so its count is zero. Still not what drives the pads'
@@ -1088,8 +1088,8 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             contentType(ContentType.Application.Json)
             setBody(TogglePaletteRequest(targets = targets))
         }.body<TogglePaletteResponse>()
-        assertEquals("COLOUR", silent.propertyMask)
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+        assertEquals("COLOUR", silent.attributeMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
 
         client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
@@ -1099,11 +1099,11 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         // Says the wrong thing: the template wins, and the response says so.
         val wrong = client.post("${base()}/${template.id}/toggle") {
             contentType(ContentType.Application.Json)
-            setBody(TogglePaletteRequest(targets = targets, propertyMask = "POSITION"))
+            setBody(TogglePaletteRequest(targets = targets, attributeMask = "POSITION"))
         }.body<TogglePaletteResponse>()
         assertEquals("applied", wrong.action)
-        assertEquals("COLOUR", wrong.propertyMask)
-        assertEquals("COLOUR", state.show.programmerStore.layers.single().propertyMask)
+        assertEquals("COLOUR", wrong.attributeMask)
+        assertEquals("COLOUR", state.show.programmerStore.layers.single().attributeMask)
     }
 
     @Test
@@ -1148,7 +1148,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
                     rows = listOf(
                         uk.me.cormack.lighting7.models.LookRowDto(
                             targetType = DEFERRED_TARGET_TYPE, targetKey = "",
-                            propertyName = "dimmer", value = "128",
+                            attribute = "dimmer", value = "128",
                         ),
                     ),
                 )
@@ -1170,13 +1170,13 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         // Both heads set to the same colour, so the recording should collapse to one row.
         for (key in listOf("hex-1", "hex-2")) {
-            state.show.fxEngine.programmer.writeProperties(
+            state.show.fxEngine.programmer.writeAttributes(
                 uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
                 listOf(
-                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
                         state.show.fixtures.untypedGroupableFixture(key),
                         "rgbColour",
-                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour(
+                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour(
                             uk.me.cormack.lighting7.fx.ExtendedColour(java.awt.Color(255, 157, 74)),
                         ),
                     ),
@@ -1203,7 +1203,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertTrue(body.isGeneric, "both heads agreed, so one value serves any head")
         val row = body.palette.rows.single()
         assertEquals(DEFERRED_TARGET_TYPE, row.targetType)
-        assertEquals("rgbColour", row.propertyName)
+        assertEquals("rgbColour", row.attribute)
         // Read back as an intent, not as the channel bytes it was recorded from.
         assertTrue(row.value.startsWith("#"), row.value)
         assertTrue(row.value.contains("policy="), row.value)
@@ -1220,13 +1220,13 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         LocateTestSupport.seedFixture(state, projectId, "martin-mac-250-mode-4", "mac-1", 40)
         val client = jsonClient()
         for (key in listOf("mover-1", "mac-1")) {
-            state.show.fxEngine.programmer.writeProperties(
+            state.show.fxEngine.programmer.writeAttributes(
                 uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
                 listOf(
-                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
                         state.show.fixtures.untypedGroupableFixture(key),
                         "position",
-                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Position(100u, 200u),
+                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Position(100u, 200u),
                     ),
                 ),
             )
@@ -1261,13 +1261,13 @@ class PaletteRoutesTest : RouteIntegrationTest() {
 
         // Different levels per head — the focus-position shape, in the cheapest family to set up.
         for ((key, level) in listOf("hex-1" to 255, "hex-2" to 128)) {
-            state.show.fxEngine.programmer.writeProperties(
+            state.show.fxEngine.programmer.writeAttributes(
                 uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB,
                 listOf(
-                    uk.me.cormack.lighting7.fx.ProgrammerWriter.PropertyWrite(
+                    uk.me.cormack.lighting7.fx.ProgrammerWriter.AttributeWrite(
                         state.show.fixtures.untypedGroupableFixture(key),
                         "dimmer",
-                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Slider(level.toUByte()),
+                        uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Slider(level.toUByte()),
                     ),
                 ),
             )
@@ -1479,7 +1479,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
      * press lands on the one property the beam effect declares, and a head without it is skipped.
      */
     @Test
-    fun `a beam effect palette saves and presses onto the heads with its property`() = testApplication {
+    fun `a beam effect palette saves and presses onto the heads with its attribute`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedFixture(state, projectId, "etc-source4-revolution-base-frame", "rev-1", 1)
         LocateTestSupport.seedHex(state, projectId, "hex-1", 100)
@@ -1490,7 +1490,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(
                 PaletteInput(
                     name = "zoom-breathe",
-                    fx = colourEffect(fxType = "ZoomWave", category = "beam").copy(propertyName = null),
+                    fx = colourEffect(fxType = "ZoomWave", category = "beam").copy(attribute = null),
                 )
             )
         }
@@ -1511,7 +1511,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertEquals(listOf("hex-1"), body.skipped.map { it.fixtureKey })
         val running = state.show.fxEngine.getActiveFx().single()
         assertEquals("rev-1", running.target.targetKey)
-        assertEquals("zoom", running.target.propertyName)
+        assertEquals("zoom", running.target.attribute)
     }
 
     /**
@@ -1519,20 +1519,20 @@ class PaletteRoutesTest : RouteIntegrationTest() {
      * declares. A script-registered beam effect declaring two, or a sentinel, is refused.
      */
     @Test
-    fun `a beam effect palette needs an effect that drives one named property`() = testApplication {
+    fun `a beam effect palette needs an effect that drives one named attribute`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
         val registry = state.show.fxRegistry
         val sine = registry.getRegistration("SineWave")!!
-        for ((id, properties) in listOf("TwoBeams" to listOf("zoom", "iris"), "AnyBeam" to listOf("slider"))) {
-            registry.register(sine.copy(id = id, aliases = emptySet(), name = id, family = "beam", compatibleProperties = properties))
+        for ((id, attributes) in listOf("TwoBeams" to listOf("zoom", "iris"), "AnyBeam" to listOf("slider"))) {
+            registry.register(sine.copy(id = id, aliases = emptySet(), name = id, family = "beam", compatibleAttributes = attributes))
         }
         try {
             for (id in listOf("TwoBeams", "AnyBeam")) {
                 val resp = client.post(base()) {
                     contentType(ContentType.Application.Json)
                     setBody(
-                        PaletteInput(name = "p-$id", fx = colourEffect(fxType = id, category = "beam").copy(propertyName = null))
+                        PaletteInput(name = "p-$id", fx = colourEffect(fxType = id, category = "beam").copy(attribute = null))
                     )
                 }
                 assertEquals(HttpStatusCode.BadRequest, resp.status, "$id should be refused")
@@ -1550,7 +1550,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             setBody(
                 PaletteInput(
                     name = name,
-                    rows = listOf(PaletteRowDto(targetType = DEFERRED_TARGET_TYPE, targetKey = "", propertyName = "position", value = value)),
+                    rows = listOf(PaletteRowDto(targetType = DEFERRED_TARGET_TYPE, targetKey = "", attribute = "position", value = value)),
                 )
             )
         }.body<PaletteDto>()
@@ -1561,7 +1561,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
      * fewer than two palettes. Pressed, it lands on the property its palettes name.
      */
     @Test
-    fun `a Palette Steps palette is filed under its palettes' family and presses onto their property`() = testApplication {
+    fun `a Palette Steps palette is filed under its palettes' family and presses onto their attribute`() = testApplication {
         mountTestApp(state)
         LocateTestSupport.seedFixture(state, projectId, "fusion-100-spot-mkii-8ch", "spot-1", 1)
         LocateTestSupport.seedFixture(state, projectId, "varytec-easymove-xl-60-spot-11ch", "spot-2", 21)
@@ -1571,7 +1571,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         val refs = listOf(down, centre).joinToString(",") { "pal:${it.uuid}" }
         fun steps(category: String, palettes: String = refs) =
             colourEffect(fxType = "PaletteSteps", category = category, parameters = mapOf("palettes" to palettes))
-                .copy(propertyName = null)
+                .copy(attribute = null)
 
         for ((category, problem) in listOf(
             "colour" to "is in the position family",
@@ -1610,7 +1610,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertEquals(2, body.fxIds.size, body.toString())
         assertEquals(
             setOf("position"),
-            state.show.fxEngine.getActiveFx().map { it.target.propertyName }.toSet(),
+            state.show.fxEngine.getActiveFx().map { it.target.attribute }.toSet(),
             "the steps drive the property the palettes name",
         )
     }
@@ -1620,9 +1620,9 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     fun `a Slot Steps palette names the setting it steps`() = testApplication {
         mountTestApp(state)
         val client = jsonClient()
-        fun slots(property: String?, slots: String) =
+        fun slots(attribute: String?, slots: String) =
             colourEffect(fxType = "SlotSteps", category = "beam", parameters = mapOf("slots" to slots))
-                .copy(propertyName = property)
+                .copy(attribute = attribute)
 
         for ((name, effect, problem) in listOf(
             Triple("no-setting", slots(null, "Gobo 3,Gobo 5"), "must name the setting"),
@@ -1776,7 +1776,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
             assertEquals(2, on.fxCount)
             // Derived server-side from the effect's category, not echoed from the request: an
             // unmasked layer would assert across every family instead of the effect's own.
-            assertEquals("COLOUR", on.propertyMask)
+            assertEquals("COLOUR", on.attributeMask)
 
             val running = state.show.fxEngine.getActiveFx()
             assertEquals(2, running.size)
@@ -1987,7 +1987,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertTrue(body.skipped.isEmpty(), body.skipped.toString())
         val store = state.show.programmerStore
         val onCell2 = store.get("bar-1.pixel-2", "rgbColour")?.value?.resolved
-        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour>(onCell2)
+        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour>(onCell2)
         assertEquals(74u.toUByte(), onCell2.value.white, "extracted to the cell's own white emitter")
         assertNotNull(store.get("bar-1.pixel-5", "rgbColour"))
         assertNull(store.get("bar-1.pixel-3", "rgbColour"), "an unnamed cell is untouched")
@@ -2037,7 +2037,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
     /** The colour the programmer holds on [key], and by which owner. */
     private fun heldColour(key: String): Pair<uk.me.cormack.lighting7.fx.ProgrammerOwner, java.awt.Color>? {
         val slot = state.show.programmerStore.get(key, "rgbColour") ?: return null
-        val colour = slot.value.resolved as uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour
+        val colour = slot.value.resolved as uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour
         return slot.owner to colour.value.color
     }
 
@@ -2061,7 +2061,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         assertTrue(body.skipped.isEmpty(), body.skipped.toString())
         assertHeldBy(uk.me.cormack.lighting7.fx.ProgrammerOwner.WEB, zones("shehds-1"))
         val zone = state.show.programmerStore.get("shehds-1.zone-1", "rgbColour")?.value?.resolved
-        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.PropertyValue.Colour>(zone)
+        assertIs<uk.me.cormack.lighting7.fx.CueAssignmentResolver.AttributeValue.Colour>(zone)
         assertEquals(74u.toUByte(), zone.value.white, "extracted to the zone's own white emitter")
         assertNull(state.show.programmerStore.get("shehds-1", "rgbColour"), "the parent has no colour to hold")
         assertNull(heldColour("shehds-2.zone-1"), "the unselected Shehds is untouched")
@@ -2082,7 +2082,7 @@ class PaletteRoutesTest : RouteIntegrationTest() {
         val body = resp.body<ApplyPaletteResponse>()
 
         assertEquals(zones("shehds-1").toSet(), body.values.map { it.target.key }.toSet())
-        assertTrue(body.values.all { it.propertyName == "rgbColour" && it.value.startsWith("#") }, body.values.toString())
+        assertTrue(body.values.all { it.attribute == "rgbColour" && it.value.startsWith("#") }, body.values.toString())
         assertEquals(3, body.written, "what it would have written")
         for (zone in zones("shehds-1")) assertNull(heldColour(zone), "$zone holds nothing")
         val after = client.get("${base()}/${template.id}").body<PaletteDto>()

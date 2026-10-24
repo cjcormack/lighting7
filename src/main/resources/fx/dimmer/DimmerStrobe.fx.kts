@@ -4,7 +4,7 @@ name: Dimmer Strobe
 family: intensity
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [dimmer, uv]
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: offValue
     type: ubyte

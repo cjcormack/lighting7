@@ -116,7 +116,7 @@ internal fun runFxStormHarness(args: Array<String>) {
         try {
             val library = fetchLibrary(client, cli.baseUrl)
             val sliderEffects = library.filter {
-                it.outputType == FxOutputType.SLIDER.name && "dimmer" in it.compatibleProperties
+                it.outputType == FxOutputType.SLIDER.name && "dimmer" in it.compatibleAttributes
             }
             require(sliderEffects.isNotEmpty()) {
                 "No ${FxOutputType.SLIDER.name} effects with dimmer compatibility found in /fx/library"
@@ -212,7 +212,7 @@ private suspend fun runOneAddRemove(
                     AddFxRequest(
                         fxType = effect.name,
                         fixtureKey = fixtureKey,
-                        propertyName = "dimmer",
+                        attribute = "dimmer",
                         cycle = CycleLength.HALF_BEAT,
                         blendMode = BlendMode.OVERRIDE.name,
                     ),
@@ -268,7 +268,7 @@ internal data class FxLibraryEntry(
     val name: String,
     val category: String,
     val outputType: String,
-    val compatibleProperties: List<String> = emptyList(),
+    val compatibleAttributes: List<String> = emptyList(),
 )
 
 @Serializable

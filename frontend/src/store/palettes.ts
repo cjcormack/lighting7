@@ -241,7 +241,7 @@ export const palettesApi = restApi.injectEndpoints({
       {
         palette: PaletteSummary
         isGeneric: boolean
-        skipped: { fixtureKey: string; propertyName: string; reason: string }[]
+        skipped: { fixtureKey: string; attribute: string; reason: string }[]
       },
       {
         projectId: number

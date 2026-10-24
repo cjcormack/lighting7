@@ -106,7 +106,7 @@ export function PaletteResolvesTo({
       ) : (
         <div className="rounded-md border divide-y max-h-56 overflow-y-auto">
           {entries.map((entry) => (
-            <ResolutionRow key={`${entry.fixtureKey}:${entry.propertyName}`} entry={entry} />
+            <ResolutionRow key={`${entry.fixtureKey}:${entry.attribute}`} entry={entry} />
           ))}
         </div>
       )}

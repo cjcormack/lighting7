@@ -21,7 +21,7 @@ import { readColour, tagClass, type FixtureColour } from '../../lib/fixtureColou
 import { TagMark } from '../fixtureColours/ColourSwatches'
 import {
   findColourSource,
-  findDimmerProperty,
+  findDimmerAttribute,
   findGroupColourSource,
   type Fixture,
   type FixtureTypeInfo,
@@ -336,8 +336,8 @@ function UnitChip({
   const hasLevel = useMemo(
     () =>
       fixture != null &&
-      (findDimmerProperty(fixture.properties) != null ||
-        (fixture.properties != null && findColourSource(fixture.properties) != null) ||
+      (findDimmerAttribute(fixture.attributes) != null ||
+        (fixture.attributes != null && findColourSource(fixture.attributes) != null) ||
         findGroupColourSource(fixture) != null),
     [fixture],
   )

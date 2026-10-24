@@ -73,13 +73,13 @@ class HttpRoundTripTest : RouteIntegrationTest() {
                 ProgrammerSetInMessage(
                     targetType = "fixture",
                     targetKey = "hex-1",
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     value = "200",
                 )
             )
             val changed = awaitOfType<ProgrammerEntryChangedOutMessage>()
             assertEquals("hex-1", changed.targetKey)
-            assertEquals("dimmer", changed.propertyName)
+            assertEquals("dimmer", changed.attribute)
             assertEquals("200", changed.value)
 
             val snapResp = client.post("/api/rest/programmer/record") {
@@ -99,10 +99,10 @@ class HttpRoundTripTest : RouteIntegrationTest() {
         val getResp = client.get("/api/rest/projects/$projectId/cues/$targetCueId")
         assertEquals(HttpStatusCode.OK, getResp.status)
         val details = getResp.body<CueDetails>()
-        val dimmerRow = details.propertyAssignments.singleOrNull {
-            it.targetKey == "hex-1" && it.propertyName == "dimmer"
+        val dimmerRow = details.attributeAssignments.singleOrNull {
+            it.targetKey == "hex-1" && it.attribute == "dimmer"
         }
-        assertNotNull(dimmerRow, "expected snapshot to contain hex-1.dimmer; got ${details.propertyAssignments}")
+        assertNotNull(dimmerRow, "expected snapshot to contain hex-1.dimmer; got ${details.attributeAssignments}")
         assertEquals("200", dimmerRow.value, "snapshot should preserve the programmer write's dimmer value")
         assertEquals("fixture", dimmerRow.targetType)
     }

@@ -18,56 +18,56 @@ import type { FixturePatch } from '../../api/patchApi'
 import type { RiggingDto } from '../../api/riggingApi'
 import {
   findColourSource,
-  findDimmerProperty,
+  findDimmerAttribute,
   findGroupColourSource,
-  findStrobeProperties,
+  findStrobeAttributes,
   type ChannelRef,
-  type ColourPropertyDescriptor,
+  type ColourAttributeDescriptor,
   type ElementDescriptor,
   type Fixture,
   type FixtureTypeInfo,
-  type SettingPropertyDescriptor,
-  type SliderPropertyDescriptor,
-  findPanProperty,
-  findTiltProperty,
-  findPanFineProperty,
-  findTiltFineProperty,
-  findFocusProperty,
-  findZoomProperty,
-  findIrisProperty,
-  findFrostProperty,
-  findGoboProperties,
-  findGoboRotationProperty,
-  findGoboRotationModeProperty,
+  type SettingAttributeDescriptor,
+  type SliderAttributeDescriptor,
+  findPanAttribute,
+  findTiltAttribute,
+  findPanFineAttribute,
+  findTiltFineAttribute,
+  findFocusAttribute,
+  findZoomAttribute,
+  findIrisAttribute,
+  findFrostAttribute,
+  findGoboAttributes,
+  findGoboRotationAttribute,
+  findGoboRotationModeAttribute,
   goboRotationWheel,
-  findFineProperty,
-  findPrismProperty,
-  findPrismRotationProperty,
-  findLedMacroProperty,
-  findRingProperty,
-  findRingSpeedProperty,
-  findMovementMacroProperty,
-  findShutterProperties,
+  findFineAttribute,
+  findPrismAttribute,
+  findPrismRotationAttribute,
+  findLedMacroAttribute,
+  findRingAttribute,
+  findRingSpeedAttribute,
+  findMovementMacroAttribute,
+  findShutterAttributes,
   resolveFixtureKind,
-  type ShutterProperties,
+  type ShutterAttributes,
 } from '../../store/fixtures'
 import { lampHex, lampOutput, unitLamp, type Lamp } from '../../lib/lamp'
 import {
   channelKey,
   getChannelValue,
   subscribeToChannels,
-} from '../../hooks/usePropertyValues'
+} from '../../hooks/useAttributeValues'
 import { useChannelSource } from '../../hooks/useChannelSource'
 import type { ChannelSource } from '../../api/channelSource'
-import type { GroupColourPropertyDescriptor } from '../../api/groupsApi'
-import { computeGroupColourValues } from '../../hooks/useGroupPropertyValues'
+import type { GroupColourAttributeDescriptor } from '../../api/groupsApi'
+import { computeGroupColourValues } from '../../hooks/useGroupAttributeValues'
 import { colourFactor } from '../../hooks/useNormalizedIntensity'
 import {
   computeNormalizedHue,
   computeNormalizedHueCss,
 } from '../../lib/colourMath'
 import { EMPTY_GELS, findGel, type GelIndex } from '../../lib/gels'
-import { colourFilters, fittedProperties, filterColour } from '../../lib/fittedMedia'
+import { colourFilters, fittedAttributes, filterColour } from '../../lib/fittedMedia'
 import { isAnimatedAt, settingColourAt, sourceBandColour, sourceBandLevel } from '../../lib/colourBands'
 import { strobeAnimates, strobeFactor } from '../../lib/strobeBands'
 import { createColourTicker, STILL_COLOUR_TICKER, type ColourTicker } from './colourTicker'
@@ -720,8 +720,8 @@ export function FixtureModel({
   // extra placement is already its own layered over the patch's (`patchAtPlacement`). Everything
   // below reads these, so a scroller's colour and a wheel's gobo are the unit's own.
   const unitProps = useMemo(
-    () => fittedProperties(fixture?.properties, patch.media, gels),
-    [fixture?.properties, patch.media, gels],
+    () => fittedAttributes(fixture?.attributes, patch.media, gels),
+    [fixture?.attributes, patch.media, gels],
   )
   const colourSource = useMemo(
     () => (unitProps ? findColourSource(unitProps) : undefined),
@@ -729,7 +729,7 @@ export function FixtureModel({
   )
   const groupColour = useMemo(() => findGroupColourSource(fixture), [fixture])
   const dimmerProp = useMemo(
-    () => findDimmerProperty(unitProps),
+    () => findDimmerAttribute(unitProps),
     [unitProps],
   )
   // A lantern's lamp (`lib/lamp.ts`): its colour — drifting warmer as it dims, filtered by its gel —
@@ -751,26 +751,26 @@ export function FixtureModel({
   const output = lamp ? lampOutput(lamp) : 1
   // The strobe channels whose bands say what they do (fixture-optics plan D12): a level factor
   // beside the dimmer's, applied by the colour syncs below exactly as the 2D dispatch applies it.
-  const strobeProps = useMemo(() => findStrobeProperties(unitProps), [unitProps])
+  const strobeProps = useMemo(() => findStrobeAttributes(unitProps), [unitProps])
   // Beam-shaping channels. All undefined against a backend that predates the categories,
   // which is what makes the optics below degrade to the old look.
-  const focusProp = useMemo(() => findFocusProperty(unitProps), [unitProps])
-  const zoomProp = useMemo(() => findZoomProperty(unitProps), [unitProps])
-  const irisProp = useMemo(() => findIrisProperty(unitProps), [unitProps])
-  const frostProp = useMemo(() => findFrostProperty(unitProps), [unitProps])
-  const goboProps = useMemo(() => findGoboProperties(unitProps), [unitProps])
+  const focusProp = useMemo(() => findFocusAttribute(unitProps), [unitProps])
+  const zoomProp = useMemo(() => findZoomAttribute(unitProps), [unitProps])
+  const irisProp = useMemo(() => findIrisAttribute(unitProps), [unitProps])
+  const frostProp = useMemo(() => findFrostAttribute(unitProps), [unitProps])
+  const goboProps = useMemo(() => findGoboAttributes(unitProps), [unitProps])
   const goboRotProp = useMemo(
-    () => findGoboRotationProperty(unitProps),
+    () => findGoboRotationAttribute(unitProps),
     [unitProps],
   )
   // A 16-bit index/rotation's low byte (`fineOf`), and the wheel's function channel, which says
   // whether the rotation is an angle or a speed. Both undefined on every type but the Revolution.
   const goboRotFineProp = useMemo(
-    () => findFineProperty(unitProps, goboRotProp),
+    () => findFineAttribute(unitProps, goboRotProp),
     [unitProps, goboRotProp],
   )
   const goboRotModeProp = useMemo(
-    () => findGoboRotationModeProperty(unitProps),
+    () => findGoboRotationModeAttribute(unitProps),
     [unitProps],
   )
   // Which wheel the rotation channel turns: the one it follows (`goboRotationWheel`). The other —
@@ -779,27 +779,27 @@ export function FixtureModel({
     () => goboRotationWheel(goboProps.slice(0, MAX_GOBO_LAYERS), goboRotProp),
     [goboProps, goboRotProp],
   )
-  const prismProp = useMemo(() => findPrismProperty(unitProps), [unitProps])
+  const prismProp = useMemo(() => findPrismAttribute(unitProps), [unitProps])
   const prismRotProp = useMemo(
-    () => findPrismRotationProperty(unitProps),
+    () => findPrismRotationAttribute(unitProps),
     [unitProps],
   )
   const ledMacroProp = useMemo(
-    () => findLedMacroProperty(unitProps),
+    () => findLedMacroAttribute(unitProps),
     [unitProps],
   )
-  const ringProp = useMemo(() => findRingProperty(unitProps), [unitProps])
-  const ringSpeedProp = useMemo(() => findRingSpeedProperty(unitProps), [unitProps])
+  const ringProp = useMemo(() => findRingAttribute(unitProps), [unitProps])
+  const ringSpeedProp = useMemo(() => findRingSpeedAttribute(unitProps), [unitProps])
   const moveMacroProp = useMemo(
-    () => findMovementMacroProperty(unitProps),
+    () => findMovementMacroAttribute(unitProps),
     [unitProps],
   )
 
-  const shutterProps = useMemo(() => findShutterProperties(unitProps), [unitProps])
-  const panProp = useMemo(() => findPanProperty(unitProps), [unitProps])
-  const tiltProp = useMemo(() => findTiltProperty(unitProps), [unitProps])
-  const panFineProp = useMemo(() => findPanFineProperty(unitProps), [unitProps])
-  const tiltFineProp = useMemo(() => findTiltFineProperty(unitProps), [unitProps])
+  const shutterProps = useMemo(() => findShutterAttributes(unitProps), [unitProps])
+  const panProp = useMemo(() => findPanAttribute(unitProps), [unitProps])
+  const tiltProp = useMemo(() => findTiltAttribute(unitProps), [unitProps])
+  const panFineProp = useMemo(() => findPanFineAttribute(unitProps), [unitProps])
+  const tiltFineProp = useMemo(() => findTiltFineAttribute(unitProps), [unitProps])
   const gel =
     !colourSource && fixtureType?.acceptsGel && patch.gelCode ? findGel(gels, patch.gelCode) : null
   // A unit's other colour wheels (the Robe's second) and its other gel-taking loadable settings — a
@@ -1183,17 +1183,17 @@ interface BeamDirectorOpts {
   spec: BodySpec
   /** The patch key to report the beam's landing under (`landedPoints.ts`), or null for none. */
   reportKey: string | null
-  panProp: SliderPropertyDescriptor | undefined
-  tiltProp: SliderPropertyDescriptor | undefined
-  panFineProp: SliderPropertyDescriptor | undefined
-  tiltFineProp: SliderPropertyDescriptor | undefined
+  panProp: SliderAttributeDescriptor | undefined
+  tiltProp: SliderAttributeDescriptor | undefined
+  panFineProp: SliderAttributeDescriptor | undefined
+  tiltFineProp: SliderAttributeDescriptor | undefined
   baseBeamDeg: number
-  focusProp: SliderPropertyDescriptor | undefined
-  /** A zoom slider, or a stepped zoom's setting (`findZoomProperty`). */
+  focusProp: SliderAttributeDescriptor | undefined
+  /** A zoom slider, or a stepped zoom's setting (`findZoomAttribute`). */
   zoomProp: ByteDescriptor | undefined
-  irisProp: SliderPropertyDescriptor | undefined
-  frostProp: SliderPropertyDescriptor | undefined
-  /** Gobo layer A: the first wheel in channel order (`findGoboProperties`). */
+  irisProp: SliderAttributeDescriptor | undefined
+  frostProp: SliderAttributeDescriptor | undefined
+  /** Gobo layer A: the first wheel in channel order (`findGoboAttributes`). */
   goboProp: ByteDescriptor | undefined
   /** Gobo layer B: the second wheel where one exists (the Robe: static, then rotating), multiplied
    *  over layer A in the air and on every surface. */
@@ -1204,7 +1204,7 @@ interface BeamDirectorOpts {
   goboOnSurfaces: boolean
   goboRotProp: ByteDescriptor | undefined
   /** The rotation's fine channel (`fineOf`), folded into the coarse value. */
-  goboRotFineProp: SliderPropertyDescriptor | undefined
+  goboRotFineProp: SliderAttributeDescriptor | undefined
   /** The wheel's function channel: index or rotate (`gobo_rotation_mode`). */
   goboRotModeProp: ByteDescriptor | undefined
   prismProp: ByteDescriptor | undefined
@@ -1212,7 +1212,7 @@ interface BeamDirectorOpts {
   ledMacroProp: ByteDescriptor | undefined
   moveMacroProp: ByteDescriptor | undefined
   /** The framing shutters a DMX head drives from its channels; replaces a lantern's blades. */
-  shutterProps: ShutterProperties | undefined
+  shutterProps: ShutterAttributes | undefined
   /** The type's speeds as rates, or null where nothing travels and every channel is drawn as sent. */
   travelRates: TravelRates | null
   /** The unit's own timing channels, which stretch a move planned while they hold a value. */
@@ -1245,9 +1245,9 @@ function readChannel(source: ChannelSource, key: string | null): number {
 }
 
 function combineFine(
-  coarseProp: SliderPropertyDescriptor | undefined,
+  coarseProp: SliderAttributeDescriptor | undefined,
   coarseRaw: number,
-  fineProp: SliderPropertyDescriptor | undefined,
+  fineProp: SliderAttributeDescriptor | undefined,
   fineRaw: number,
 ): number {
   if (!coarseProp) return 0
@@ -1265,7 +1265,7 @@ const NO_BLADES: readonly [number, number] = [0, 0]
  */
 export function lanternBladesFor(
   spec: Pick<BodySpec, 'cells' | 'blades'>,
-  shutters: ShutterProperties | undefined,
+  shutters: ShutterAttributes | undefined,
 ): BodySpec['blades'] {
   return spec.cells.length === 1 && !shutters ? spec.blades : null
 }
@@ -1308,7 +1308,7 @@ interface ShutterKeys {
   rotation: Array<string | null>
 }
 
-function shutterChannelKeys(shutters: ShutterProperties): ShutterKeys {
+function shutterChannelKeys(shutters: ShutterAttributes): ShutterKeys {
   return {
     depth: shutters.depth.map((p) => (p ? channelKey(p.channel) : null)),
     rotation: shutters.rotation.map((p) => (p ? channelKey(p.channel) : null)),
@@ -1391,7 +1391,7 @@ export function readBeamLevels(
  */
 export function beamBlades(
   lanternPacked: readonly [number, number],
-  shutters: ShutterProperties | undefined,
+  shutters: ShutterAttributes | undefined,
   scratch: BladeScratch,
   mover = false,
 ): readonly [number, number] {
@@ -2144,18 +2144,18 @@ function writeLightRow(
 // colorStateRef is read each frame by useBeamDirector and pushed to the emitter buffers.
 
 interface ColourSyncBaseProps {
-  dimmerProp: SliderPropertyDescriptor | undefined
+  dimmerProp: SliderAttributeDescriptor | undefined
   /**
-   * The strobe channels (`findStrobeProperties`): each band's level factor multiplies the dimmer's
+   * The strobe channels (`findStrobeAttributes`): each band's level factor multiplies the dimmer's
    * (`lib/strobeBands.ts`) — a closed band dark, a strobe flashing under the three-flash rule — and an
    * arm on a flashing band registers with the ticker while it flashes, as an animated colour band
    * does. Absent or empty gates nothing.
    */
-  strobes?: readonly StrobeProperty[]
+  strobes?: readonly StrobeAttribute[]
   /** The unit's colour filters (`colourFilters`): settings whose current slot's colour multiplies
    *  the beam's — a second colour wheel, a media frame's gel, a dichroic in a wheel. Absent or empty
    *  filters nothing. */
-  filters?: readonly SettingPropertyDescriptor[]
+  filters?: readonly SettingAttributeDescriptor[]
   /** Paints the body's lens; null outside a canvas (the tests) and before the bodies exist. */
   lensRef: React.RefObject<LensPainter | null>
   colorStateRef: React.RefObject<ColorState>
@@ -2178,7 +2178,7 @@ interface ColourSyncBaseProps {
 /** A colour arm's travel: the colour family's rate (DMX steps a second) and the unit's colour timing channel. */
 export interface ColourTravel {
   rate: number
-  timing?: SliderPropertyDescriptor
+  timing?: SliderAttributeDescriptor
 }
 
 /** One colour arm's displayed levels, one axis per channel it eases. */
@@ -2196,7 +2196,7 @@ function makeColourTravelState(): ColourTravelState {
 }
 
 /** A setting channel's level as one apply draws it. */
-type LevelOf = (p: SettingPropertyDescriptor) => number
+type LevelOf = (p: SettingAttributeDescriptor) => number
 
 /**
  * Begin one apply of a colour arm and answer its level reader: the DMX where nothing travels, else
@@ -2249,10 +2249,10 @@ export function ColourSync({
   /** False for a patch whose fixture record hasn't resolved (or never will). */
   hasFixture: boolean
   /** Its heads' colour (`findGroupColourSource`): a fixture whose colour lives on its elements. */
-  groupColour?: GroupColourPropertyDescriptor
+  groupColour?: GroupColourAttributeDescriptor
   colourSource:
-    | { type: 'colour'; property: ColourPropertyDescriptor }
-    | { type: 'setting'; property: SettingPropertyDescriptor }
+    | { type: 'colour'; attribute: ColourAttributeDescriptor }
+    | { type: 'setting'; attribute: SettingAttributeDescriptor }
     | undefined
   gel: { color: string } | null
   /** A lantern's lamp — drawn in place of the gel's colour, the gel filtering it. */
@@ -2273,10 +2273,10 @@ export function ColourSync({
     return <GroupColourBeamSync groupColourProp={groupColour} {...refs} />
   }
   if (colourSource?.type === 'colour') {
-    return <ColourBeamSync colourProp={colourSource.property} {...refs} />
+    return <ColourBeamSync colourProp={colourSource.attribute} {...refs} />
   }
   if (colourSource?.type === 'setting') {
-    return <SettingColourBeamSync settingProp={colourSource.property} {...refs} />
+    return <SettingColourBeamSync settingProp={colourSource.attribute} {...refs} />
   }
   if (lamp) {
     return <LampBeamSync lamp={lamp} gelHex={gel?.color ?? null} {...refs} />
@@ -2289,19 +2289,19 @@ interface ColourApplyRefs {
   colorStateRef: React.RefObject<ColorState>
 }
 
-const NO_FILTERS: readonly SettingPropertyDescriptor[] = []
+const NO_FILTERS: readonly SettingAttributeDescriptor[] = []
 
-type StrobeProperty = SliderPropertyDescriptor | SettingPropertyDescriptor
-const NO_STROBES: readonly StrobeProperty[] = []
+type StrobeAttribute = SliderAttributeDescriptor | SettingAttributeDescriptor
+const NO_STROBES: readonly StrobeAttribute[] = []
 
 /** The strobe channels' level factor at [timeS], read from `source` — the 2D `StrobeGate` twin. */
-function liveStrobeFactor(strobes: readonly StrobeProperty[], source: ChannelSource, timeS: number): number {
+function liveStrobeFactor(strobes: readonly StrobeAttribute[], source: ChannelSource, timeS: number): number {
   if (strobes.length === 0) return 1
   return strobeFactor(strobes, (p) => getChannelValue(p.channel, source), timeS)
 }
 
 /** Whether any strobe channel sits on a band that moves with time, so the arm re-applies each frame. */
-function strobesAnimate(strobes: readonly StrobeProperty[], source: ChannelSource): boolean {
+function strobesAnimate(strobes: readonly StrobeAttribute[], source: ChannelSource): boolean {
   if (strobes.length === 0) return false
   return strobeAnimates(strobes, (p) => getChannelValue(p.channel, source))
 }
@@ -2313,7 +2313,7 @@ function strobesAnimate(strobes: readonly StrobeProperty[], source: ChannelSourc
  */
 function filteredHex(
   hex: string,
-  filters: readonly SettingPropertyDescriptor[],
+  filters: readonly SettingAttributeDescriptor[],
   levels: readonly number[],
   timeS: number,
 ): string {
@@ -2325,7 +2325,7 @@ function filteredHex(
 }
 
 /** Whether any filter sits on an animated band, so the arm must re-apply every frame. */
-function filtersAnimate(filters: readonly SettingPropertyDescriptor[], levels: readonly number[]): boolean {
+function filtersAnimate(filters: readonly SettingAttributeDescriptor[], levels: readonly number[]): boolean {
   for (let i = 0; i < filters.length; i++) if (isAnimatedAt(filters[i].options, levels[i])) return true
   return false
 }
@@ -2333,7 +2333,7 @@ function filtersAnimate(filters: readonly SettingPropertyDescriptor[], levels: r
 const NO_LEVELS: readonly number[] = []
 
 /** Each filter's level as this apply draws it. */
-function filterLevels(filters: readonly SettingPropertyDescriptor[], levelOf: LevelOf): readonly number[] {
+function filterLevels(filters: readonly SettingAttributeDescriptor[], levelOf: LevelOf): readonly number[] {
   return filters.length === 0 ? NO_LEVELS : filters.map(levelOf)
 }
 
@@ -2354,7 +2354,7 @@ function applyColour(hex: string, intensity: number, refs: ColourApplyRefs) {
 // 0..1 dimmer factor from the given channel source; 1 when the fixture has no dimmer
 // ("always on"). Mirrors useNormalizedIntensity but reads imperatively.
 function liveDimmerFactor(
-  dimmerProp: SliderPropertyDescriptor | undefined,
+  dimmerProp: SliderAttributeDescriptor | undefined,
   source: ChannelSource,
 ): number {
   if (!dimmerProp) return 1
@@ -2452,8 +2452,8 @@ function RingSync({
   drawn,
   ticker,
 }: {
-  ringProp: SettingPropertyDescriptor
-  speedProp: SliderPropertyDescriptor | undefined
+  ringProp: SettingAttributeDescriptor
+  speedProp: SliderAttributeDescriptor | undefined
   bodies: BodiesHandle
   slot: number
   drawn: boolean
@@ -2491,7 +2491,7 @@ function ColourBeamSync({
   ticker = STILL_COLOUR_TICKER,
   travel,
   ...refs
-}: ColourSyncBaseProps & { colourProp: ColourPropertyDescriptor }) {
+}: ColourSyncBaseProps & { colourProp: ColourAttributeDescriptor }) {
   const source = useChannelSource()
   const [travelState] = useState(makeColourTravelState)
   const channels = useMemo(() => {
@@ -2552,7 +2552,7 @@ function SettingColourBeamSync({
   ticker = STILL_COLOUR_TICKER,
   travel,
   ...refs
-}: ColourSyncBaseProps & { settingProp: SettingPropertyDescriptor }) {
+}: ColourSyncBaseProps & { settingProp: SettingAttributeDescriptor }) {
   const source = useChannelSource()
   const [travelState] = useState(makeColourTravelState)
   const channels = useMemo(() => {
@@ -2684,7 +2684,7 @@ function GroupColourBeamSync({
   ticker = STILL_COLOUR_TICKER,
   lensRef,
   colorStateRef,
-}: ColourSyncBaseProps & { groupColourProp: GroupColourPropertyDescriptor }) {
+}: ColourSyncBaseProps & { groupColourProp: GroupColourAttributeDescriptor }) {
   const refs = { lensRef, colorStateRef }
   const source = useChannelSource()
   const channels = useMemo(() => {
@@ -2746,14 +2746,14 @@ const NEUTRAL_WHITE = new Color('#ffffff')
 const CELL_COLOR = new Color()
 
 interface CellSource {
-  colour: ColourPropertyDescriptor | undefined
-  setting: SettingPropertyDescriptor | undefined
-  dimmer: SliderPropertyDescriptor | undefined
+  colour: ColourAttributeDescriptor | undefined
+  setting: SettingAttributeDescriptor | undefined
+  dimmer: SliderAttributeDescriptor | undefined
   /** White or amber sliders: each with the colour it adds. */
-  whites: Array<{ slider: SliderPropertyDescriptor; colour: Color }>
+  whites: Array<{ slider: SliderAttributeDescriptor; colour: Color }>
 }
 
-function whiteColourOf(p: SliderPropertyDescriptor): Color {
+function whiteColourOf(p: SliderAttributeDescriptor): Color {
   if (p.category === 'amber') return new Color('#ffbf00')
   const words = `${p.name} ${p.displayName}`.toLowerCase()
   if (words.includes('warm')) return WARM_WHITE
@@ -2762,14 +2762,14 @@ function whiteColourOf(p: SliderPropertyDescriptor): Color {
 }
 
 function cellSourceOf(element: ElementDescriptor | undefined): CellSource {
-  const props = element?.properties ?? []
+  const props = element?.attributes ?? []
   const cs = findColourSource(props)
   return {
-    colour: cs?.type === 'colour' ? cs.property : undefined,
-    setting: cs?.type === 'setting' ? cs.property : undefined,
-    dimmer: findDimmerProperty(props),
+    colour: cs?.type === 'colour' ? cs.attribute : undefined,
+    setting: cs?.type === 'setting' ? cs.attribute : undefined,
+    dimmer: findDimmerAttribute(props),
     whites: props
-      .filter((p): p is SliderPropertyDescriptor => p.type === 'slider' && (p.category === 'white' || p.category === 'amber'))
+      .filter((p): p is SliderAttributeDescriptor => p.type === 'slider' && (p.category === 'white' || p.category === 'amber'))
       .map((slider) => ({ slider, colour: whiteColourOf(slider) })),
   }
 }
@@ -2839,9 +2839,9 @@ export function CellColourSync({
 }: {
   elements: ElementDescriptor[] | undefined
   cells: Cell[]
-  dimmerProp: SliderPropertyDescriptor | undefined
+  dimmerProp: SliderAttributeDescriptor | undefined
   /** The fixture's strobe channels: a master gate on every cell, as its dimmer is. */
-  strobes?: readonly StrobeProperty[]
+  strobes?: readonly StrobeAttribute[]
   fallbackHex: string
   lensRef: React.RefObject<LensPainter | null>
   cellStateRef: React.RefObject<CellState | null>

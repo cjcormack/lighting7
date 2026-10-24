@@ -90,7 +90,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
     }.also { assertEquals(HttpStatusCode.Created, it.status, it.bodyAsText()) }.body<CueDetails>().id
 
     private fun pulse(targetType: String, targetKey: String, speedMasterUuid: String? = null) = CueAdHocFxDto(
-        targetType = targetType, targetKey = targetKey, fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+        targetType = targetType, targetKey = targetKey, fxType = "Pulse", family = "intensity", attribute = "dimmer",
         cycle = 1.0, blendMode = "OVERRIDE", order = "NORMAL", speedMasterUuid = speedMasterUuid,
     )
 
@@ -140,7 +140,7 @@ class CueStackTimelineRouteTest : RouteIntegrationTest() {
             act, "Q2",
             effects = listOf(
                 pulse("group", "wash", speedMasterUuid = master1),
-                pulse("fixture", "hex-1").copy(fxType = "SineWave", propertyName = "dimmer"),
+                pulse("fixture", "hex-1").copy(fxType = "SineWave", attribute = "dimmer"),
             ),
         )
         // Q1 again, a second place of the same cue.

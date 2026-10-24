@@ -48,7 +48,7 @@ import { useFxSelectionStore } from '@/components/fixtures-list/fxSelection'
 import { AppliedTableShell, PROGRAMMER_CHIPS_CLASS, type AppliedBand } from './AppliedTableShell'
 import { FxBelowRule } from './FxBelowRule'
 
-type FxColumnKey = 'property' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'amount' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
+type FxColumnKey = 'attribute' | 'target' | 'timing' | 'speed' | 'timingSpeed' | 'amount' | 'direction' | 'runs' | 'dynamics' | 'home' | 'state'
 
 interface FxSheetRow extends SheetRow {
   effect: ActiveFx
@@ -61,7 +61,7 @@ interface FxSheetRow extends SheetRow {
   steps: string | null
 }
 
-const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'property', 'target', 'speed', 'amount', 'runs', 'home', 'state'])
+const SORT_KEYS: ReadonlySet<string> = new Set(['name', 'attribute', 'target', 'speed', 'amount', 'runs', 'home', 'state'])
 
 /**
  * **The FX table** (venue-visit plan S14's Applied FX, the programmer's FX tab since tables-colours
@@ -138,7 +138,7 @@ export function AppliedFxTable({
     const shown = all.filter(
       (row) =>
         (chip == null || row.homeKind === chip) &&
-        matchesFilter(view.q, [row.effect.fxType, row.effect.propertyName, row.target, row.home.label, row.steps]),
+        matchesFilter(view.q, [row.effect.fxType, row.effect.attribute, row.target, row.home.label, row.steps]),
     )
     return sortRows(shown, view.sort, view.dir, sortValue)
   }, [all, chip, view.dir, view.q, view.sort])
@@ -158,7 +158,7 @@ export function AppliedFxTable({
       render: (row: FxSheetRow) => (
         <FxNameCell
           row={row}
-          showProperty={band >= 2}
+          showAttribute={band >= 2}
           library={library}
           palettes={templates}
           onOpen={() => openEditor(row)}
@@ -259,8 +259,8 @@ function sortValue(row: FxSheetRow, key: string): SortValue {
   switch (key) {
     case 'name':
       return row.effect.fxType
-    case 'property':
-      return row.effect.propertyName
+    case 'attribute':
+      return row.effect.attribute
     case 'target':
       return row.target
     case 'speed':
@@ -324,12 +324,12 @@ function cellText(text: string, title?: string, mono = false) {
 }
 
 function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColumnKey>[]; minWidth: number } {
-  const property: SheetColumn<FxSheetRow, FxColumnKey> = {
-    key: 'property',
+  const attribute: SheetColumn<FxSheetRow, FxColumnKey> = {
+    key: 'attribute',
     label: 'Attribute',
     width: band === 0 ? '96px' : '84px',
     value: () => undefined,
-    display: (row) => cellText(row.effect.propertyName, undefined, true),
+    display: (row) => cellText(row.effect.attribute, undefined, true),
   }
   const target: SheetColumn<FxSheetRow, FxColumnKey> = {
     key: 'target',
@@ -421,11 +421,11 @@ function fxColumns(band: AppliedBand): { columns: SheetColumn<FxSheetRow, FxColu
   // Each set's floor — the name column and the tracks' minimums — fits its band: 0 within 1100, 1 within the iPad's 940.
   switch (band) {
     case 0:
-      return { columns: [property, target, timing, speed, amount, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 76 + 52 + 92 + 140 + 100 }
+      return { columns: [attribute, target, timing, speed, amount, direction, runs, home, state], minWidth: 210 + 96 + 150 + 104 + 80 + 76 + 52 + 92 + 140 + 100 }
     case 1:
-      return { columns: [property, target, timingSpeed, dynamics, home, state], minWidth: 190 + 84 + 140 + 140 + 120 + 140 + 100 }
+      return { columns: [attribute, target, timingSpeed, dynamics, home, state], minWidth: 190 + 84 + 140 + 140 + 120 + 140 + 100 }
     default:
-      // The property rides the name column here (`FxNameCell`'s `showProperty`).
+      // The property rides the name column here (`FxNameCell`'s `showAttribute`).
       return { columns: [target, timingSpeed, dynamics, home, state], minWidth: 190 + 140 + 140 + 120 + 140 + 100 }
   }
 }
@@ -496,7 +496,7 @@ function HomeCell({ row }: { row: FxSheetRow }) {
 /** The name, its dot and marks, and the row's menu. */
 function FxNameCell({
   row,
-  showProperty,
+  showAttribute,
   library,
   palettes: templates,
   onOpen,
@@ -506,7 +506,7 @@ function FxNameCell({
 }: {
   row: FxSheetRow
   /** The narrow bands' fold: the property beside the name, its column gone. */
-  showProperty: boolean
+  showAttribute: boolean
   library: Parameters<typeof saveAsPaletteOffer>[1]
   palettes: Parameters<typeof saveAsPaletteOffer>[2]
   onOpen: () => void
@@ -531,8 +531,8 @@ function FxNameCell({
       >
         {effect.fxType}
       </span>
-      {showProperty && (
-        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{effect.propertyName}</span>
+      {showAttribute && (
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{effect.attribute}</span>
       )}
       {row.state === 'spent' && (
         <Badge variant="outline" className="shrink-0 border-dashed px-1 py-0 text-[10px] text-muted-foreground" title="Its runs are done">

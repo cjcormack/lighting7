@@ -1,6 +1,6 @@
 package uk.me.cormack.lighting7.fixture.trait
 
-import uk.me.cormack.lighting7.fixture.property.Strobe
+import uk.me.cormack.lighting7.fixture.attribute.Strobe
 
 /**
  * Trait for targets that have strobe control.

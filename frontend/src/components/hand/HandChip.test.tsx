@@ -47,7 +47,7 @@ const paletteHold = {
     kind: 'value',
     family: 'COLOUR',
     isGeneric: true,
-    rows: [{ propertyName: 'colour', value: '#ff9d4a' }],
+    rows: [{ attribute: 'colour', value: '#ff9d4a' }],
     notes: null,
   },
   look: null,

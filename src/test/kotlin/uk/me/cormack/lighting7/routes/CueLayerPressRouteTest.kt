@@ -17,7 +17,7 @@ import org.junit.Test
 import uk.me.cormack.lighting7.dmx.MockDmxController
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.models.DEFERRED_TARGET_TYPE
 import uk.me.cormack.lighting7.models.LookFxDto
@@ -46,10 +46,10 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         state.show.fixtures.patchListChanged()
     }
 
-    private suspend fun HttpClient.palette(name: String, value: String = "#ff0000", propertyName: String = "rgbColour"): Int {
+    private suspend fun HttpClient.palette(name: String, value: String = "#ff0000", attribute: String = "rgbColour"): Int {
         val resp = post("$base/palettes") {
             contentType(ContentType.Application.Json)
-            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", propertyName, value))))
+            setBody(PaletteInput(name = name, rows = listOf(PaletteRowDto(DEFERRED_TARGET_TYPE, "", attribute, value))))
         }
         assertEquals(HttpStatusCode.Created, resp.status, resp.bodyAsText())
         return resp.body<PaletteDto>().id
@@ -66,7 +66,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                     fx = if (!effect) emptyList() else listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = keys.first(),
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -84,7 +84,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
                 NewCue(
                     name = name,
                     cueStackId = stackId,
-                    propertyAssignments = listOf(CuePropertyAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
+                    attributeAssignments = listOf(CueAttributeAssignmentDto(TargetRef.Fixture.TYPE, "hex-1", "dimmer", "128")),
                 ),
             )
         }
@@ -127,7 +127,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
 
         val on = client.press(q, paletteId = red, keys = arrayOf("hex-1", "hex-2"))
         assertEquals("applied", on.action)
-        assertEquals("COLOUR", on.propertyMask)
+        assertEquals("COLOUR", on.attributeMask)
         assertEquals(listOf("Red: hex-1,hex-2"), on.cue.layers.map { "${it.source?.name}: ${it.targets.joinToString(",") { t -> t.key }}" })
         val redId = on.cue.layers.single().id
 
@@ -192,7 +192,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
 
         val on = client.press(q, lookId = warm, keys = arrayOf("hex-1"), families = listOf("COLOUR"))
         assertEquals("applied", on.action)
-        assertEquals(null, on.propertyMask, "the selection's mask is the palette's, never a Look's")
+        assertEquals(null, on.attributeMask, "the selection's mask is the palette's, never a Look's")
         assertTrue(on.skippedFamilies.isEmpty())
         assertEquals(listOf("Warm: "), client.layers(q), "one layer, naming no targets")
 
@@ -236,12 +236,12 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         val stored = client.get("$base/cues/$q").body<CueDetails>().layers.single()
         val masked = client.patch("$base/cues/$q") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("layers" to listOf(stored.copy(propertyMask = "COLOUR"))))
+            setBody(mapOf("layers" to listOf(stored.copy(attributeMask = "COLOUR"))))
         }
         assertEquals(HttpStatusCode.OK, masked.status, masked.bodyAsText())
 
         client.press(q, paletteId = red, keys = arrayOf("hex-2"))
-        assertEquals("COLOUR", client.get("$base/cues/$q").body<CueDetails>().layers.single { it.lookId == warm }.propertyMask)
+        assertEquals("COLOUR", client.get("$base/cues/$q").body<CueDetails>().layers.single { it.lookId == warm }.attributeMask)
     }
 
     @Test
@@ -309,7 +309,7 @@ class CueLayerPressRouteTest : RouteIntegrationTest() {
         mountTestApp(state)
         seedRig()
         val client = jsonClient()
-        val half = client.palette("Half", "pct:50", propertyName = "dimmer")
+        val half = client.palette("Half", "pct:50", attribute = "dimmer")
         val stackId = client.post("$base/cue-stacks") {
             contentType(ContentType.Application.Json)
             setBody(NewCueStack(name = "Main"))

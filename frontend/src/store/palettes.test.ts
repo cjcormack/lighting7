@@ -45,9 +45,9 @@ describe('the palettePressed bridge', () => {
     installRelativeUrlRequest()
     fetchMock = installRecordingFetch({
       'projects/1/palettes/1/apply': { written: 2, skipped: [] },
-      'projects/1/palettes/2/apply': { written: 0, skipped: [{ fixtureKey: 'p', propertyName: 'c', reason: 'x' }] },
-      'projects/1/palettes/1/toggle': { action: 'applied', fxCount: 0, propertyMask: 'COLOUR' },
-      'projects/1/palettes/2/toggle': { action: 'removed', fxCount: 0, propertyMask: 'COLOUR' },
+      'projects/1/palettes/2/apply': { written: 0, skipped: [{ fixtureKey: 'p', attribute: 'c', reason: 'x' }] },
+      'projects/1/palettes/1/toggle': { action: 'applied', fxCount: 0, attributeMask: 'COLOUR' },
+      'projects/1/palettes/2/toggle': { action: 'removed', fxCount: 0, attributeMask: 'COLOUR' },
       'projects/1/palettes?family=COLOUR': [row(), row({ id: 2, uuid: 'u2', name: 'Blue Wash' })],
       'projects/1/palettes': [row(), row({ id: 2, uuid: 'u2', name: 'Blue Wash' })],
     })

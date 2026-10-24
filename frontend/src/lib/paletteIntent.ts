@@ -71,32 +71,32 @@ export type PaletteIntent =
   | { kind: 'switch'; on: boolean }
 
 /**
- * The closed property vocabulary, mirroring `PaletteProperty` in Kotlin.
+ * The closed property vocabulary, mirroring `PaletteAttribute` in Kotlin.
  *
  * An allow-list, which is where "a template cannot carry a gobo" lives on this side too: the editor
  * offers these and nothing else, so the backend's refusal is a backstop rather than the only guard.
  * `strobe` is **intensity**, not beam — it is an intensity modulation, HTP like a dimmer.
  */
-export interface PaletteProperty {
-  propertyName: string
+export interface PaletteAttribute {
+  attribute: string
   family: AttributeFamily
   label: string
   intent: PaletteIntent['kind']
 }
 
-export const PALETTE_PROPERTIES: readonly PaletteProperty[] = [
-  { propertyName: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' },
-  { propertyName: 'strobe', family: 'INTENSITY', label: 'Strobe', intent: 'percent' },
-  { propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' },
-  { propertyName: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
-  { propertyName: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
-  { propertyName: 'amber', family: 'COLOUR', label: 'Amber', intent: 'level' },
-  { propertyName: 'uv', family: 'COLOUR', label: 'UV', intent: 'level' },
-  { propertyName: 'zoom', family: 'BEAM', label: 'Zoom', intent: 'percent' },
-  { propertyName: 'focus', family: 'BEAM', label: 'Focus', intent: 'percent' },
-  { propertyName: 'iris', family: 'BEAM', label: 'Iris', intent: 'percent' },
-  { propertyName: 'frost', family: 'BEAM', label: 'Frost', intent: 'percent' },
-  { propertyName: 'prism', family: 'BEAM', label: 'Prism', intent: 'switch' },
+export const PALETTE_ATTRIBUTES: readonly PaletteAttribute[] = [
+  { attribute: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' },
+  { attribute: 'strobe', family: 'INTENSITY', label: 'Strobe', intent: 'percent' },
+  { attribute: 'position', family: 'POSITION', label: 'Position', intent: 'position' },
+  { attribute: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
+  { attribute: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
+  { attribute: 'amber', family: 'COLOUR', label: 'Amber', intent: 'level' },
+  { attribute: 'uv', family: 'COLOUR', label: 'UV', intent: 'level' },
+  { attribute: 'zoom', family: 'BEAM', label: 'Zoom', intent: 'percent' },
+  { attribute: 'focus', family: 'BEAM', label: 'Focus', intent: 'percent' },
+  { attribute: 'iris', family: 'BEAM', label: 'Iris', intent: 'percent' },
+  { attribute: 'frost', family: 'BEAM', label: 'Frost', intent: 'percent' },
+  { attribute: 'prism', family: 'BEAM', label: 'Prism', intent: 'switch' },
 ]
 
 /**
@@ -113,20 +113,20 @@ export const PALETTE_EXCLUSIONS: readonly { label: string; reason: string }[] = 
   { label: 'Macros', reason: 'A macro channel means something different on every fixture.' },
 ]
 
-export function palettePropertyFor(propertyName: string): PaletteProperty | null {
-  const canonical = canonicalPaletteProperty(propertyName)
-  return PALETTE_PROPERTIES.find((p) => p.propertyName === canonical) ?? null
+export function paletteAttributeFor(attribute: string): PaletteAttribute | null {
+  const canonical = canonicalPaletteAttribute(attribute)
+  return PALETTE_ATTRIBUTES.find((p) => p.attribute === canonical) ?? null
 }
 
-export function palettePropertiesForFamily(family: AttributeFamily): PaletteProperty[] {
-  return PALETTE_PROPERTIES.filter((p) => p.family === family)
+export function paletteAttributesForFamily(family: AttributeFamily): PaletteAttribute[] {
+  return PALETTE_ATTRIBUTES.filter((p) => p.family === family)
 }
 
-/** Mirrors the backend's `canonicalPropertyName` for the one alias that matters here. */
-function canonicalPaletteProperty(propertyName: string): string {
-  const lower = propertyName.trim().toLowerCase()
+/** Mirrors the backend's `canonicalAttributeName` for the one alias that matters here. */
+function canonicalPaletteAttribute(attribute: string): string {
+  const lower = attribute.trim().toLowerCase()
   if (lower === 'colour' || lower === 'color' || lower === 'rgbcolour') return 'rgbColour'
-  return propertyName.trim()
+  return attribute.trim()
 }
 
 export function serializePaletteIntent(intent: PaletteIntent): string {
@@ -260,23 +260,23 @@ export function paletteIntentSwatch(raw: string): string | null {
  * instead of sending `[]`. Absent reads as empty, same as there.
  */
 export function describePaletteRows(
-  rows: readonly { propertyName: string; value: string }[] | undefined,
+  rows: readonly { attribute: string; value: string }[] | undefined,
 ): string {
   return (rows ?? [])
     .map((row) => {
-      const property = palettePropertyFor(row.propertyName)
+      const attribute = paletteAttributeFor(row.attribute)
       const described = describePaletteIntent(row.value)
       // The colour row's own description already says what it is; an emitter's is a bare number and
       // needs its name in front of it.
-      return property != null && property.intent === 'level'
-        ? `${property.label} ${described}`
+      return attribute != null && attribute.intent === 'level'
+        ? `${attribute.label} ${described}`
         : described
     })
     .join(' · ')
 }
 
 /** The bundled emitters a template may name outright, in the order every surface shows them. */
-export const EMITTER_PROPERTIES: readonly string[] = ['white', 'amber', 'uv']
+export const EMITTER_ATTRIBUTES: readonly string[] = ['white', 'amber', 'uv']
 
 /**
  * The tint each emitter is drawn in — a swatch dot, a slider track, a pad face.
@@ -300,7 +300,7 @@ export const EMITTER_TINTS: Record<string, string> = {
  * first emitter it names — which is the whole of what it asserts, not a stand-in for it.
  */
 export function paletteRowsSwatch(
-  rows: readonly { propertyName: string; value: string }[] | undefined,
+  rows: readonly { attribute: string; value: string }[] | undefined,
 ): string | null {
   // **Absent is empty, and absent is a real wire shape.** `PaletteSummary.rows` is declared
   // required, but the desk's WebSocket `Json` sets `encodeDefaults = false`, so an **effect**
@@ -313,12 +313,12 @@ export function paletteRowsSwatch(
   // degrade instead of crash, and it is right on its own terms — no rows and no colour row are the
   // same question to a swatch.
   if (rows == null) return null
-  const colourRow = rows.find((row) => palettePropertyFor(row.propertyName)?.intent === 'colour')
+  const colourRow = rows.find((row) => paletteAttributeFor(row.attribute)?.intent === 'colour')
   if (colourRow != null) return paletteIntentSwatch(colourRow.value)
-  // Compared against the row's own spelling rather than through `palettePropertyFor`: an emitter
+  // Compared against the row's own spelling rather than through `paletteAttributeFor`: an emitter
   // has no aliases (only the three colour spellings collapse), so the lookup could only ever hand
   // back the string it was given.
-  const emitter = EMITTER_PROPERTIES.find((name) => rows.some((row) => row.propertyName === name))
+  const emitter = EMITTER_ATTRIBUTES.find((name) => rows.some((row) => row.attribute === name))
   return emitter != null ? EMITTER_TINTS[emitter] : null
 }
 

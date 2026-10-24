@@ -7,7 +7,7 @@ import uk.me.cormack.lighting7.dmx.Universe
  * it and the channel that arms it. Declared on a fixture with
  * [@FixtureTrigger][uk.me.cormack.lighting7.fixture.FixtureTrigger].
  *
- * Deliberately **not** a [Slider][uk.me.cormack.lighting7.fixture.property.Slider] and carries no
+ * Deliberately **not** a [Slider][uk.me.cormack.lighting7.fixture.attribute.Slider] and carries no
  * transaction: nothing writes a trigger through a fixture. Its two channels are owned by
  * [TriggerOutput][uk.me.cormack.lighting7.state.TriggerOutput], which holds the fire channel idle
  * except for one backend-timed pulse and the arm channel at the desk's arm — above composition,

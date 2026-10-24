@@ -1,13 +1,13 @@
 package uk.me.cormack.lighting7.testsupport
 
 import uk.me.cormack.lighting7.fixture.Fixture
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.fixture.dmx.DmxColour
 import uk.me.cormack.lighting7.fixture.dmx.DmxSlider
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
 import uk.me.cormack.lighting7.fx.CueAssignmentResolver
 import uk.me.cormack.lighting7.fx.ProgrammerStore
-import uk.me.cormack.lighting7.fx.PropertyChannelWriter
+import uk.me.cormack.lighting7.fx.AttributeChannelWriter
 import uk.me.cormack.lighting7.state.State
 
 /**
@@ -24,20 +24,20 @@ import uk.me.cormack.lighting7.state.State
 fun programmerChannel(state: State, universe: Int, channel: Int): UByte? {
     val store = state.show.programmerStore
     val sideSlot = store.getChannelSlot(universe, channel)
-    val sideValue = (sideSlot?.value?.resolved as? CueAssignmentResolver.PropertyValue.Slider)?.value
+    val sideValue = (sideSlot?.value?.resolved as? CueAssignmentResolver.AttributeValue.Slider)?.value
     val sideSeq = sideSlot?.seq ?: Long.MIN_VALUE
 
-    val property = resolvePropertyComponent(state, store, universe, channel)
+    val attribute = resolveAttributeComponent(state, store, universe, channel)
     return when {
-        property != null && sideValue != null ->
-            if (property.first > sideSeq) property.second else sideValue
-        property != null -> property.second
+        attribute != null && sideValue != null ->
+            if (attribute.first > sideSeq) attribute.second else sideValue
+        attribute != null -> attribute.second
         else -> sideValue
     }
 }
 
 /** (seq, componentValue) of the covering property entry's contribution at this channel. */
-private fun resolvePropertyComponent(
+private fun resolveAttributeComponent(
     state: State,
     store: ProgrammerStore,
     universe: Int,
@@ -50,9 +50,9 @@ private fun resolvePropertyComponent(
         return null
     }
 
-    if (key.propertyName.equals("position", ignoreCase = true)) {
-        val slot = store.get(key.targetKey, key.propertyName) ?: return null
-        val value = slot.value.resolved as? CueAssignmentResolver.PropertyValue.Position ?: return null
+    if (key.attribute.equals("position", ignoreCase = true)) {
+        val slot = store.get(key.targetKey, key.attribute) ?: return null
+        val value = slot.value.resolved as? CueAssignmentResolver.AttributeValue.Position ?: return null
         val pos = fixture as? WithPosition ?: return null
         return when (channel) {
             (pos.pan as? DmxSlider)?.channelNo -> slot.seq to value.pan
@@ -61,13 +61,13 @@ private fun resolvePropertyComponent(
         }
     }
 
-    val slot = store.get(key.targetKey, key.propertyName)
+    val slot = store.get(key.targetKey, key.attribute)
     when (val value = slot?.value?.resolved) {
-        is CueAssignmentResolver.PropertyValue.Slider -> return slot.seq to value.value
-        is CueAssignmentResolver.PropertyValue.Setting -> return slot.seq to value.channelValue
-        is CueAssignmentResolver.PropertyValue.Colour -> {
-            val dmxColour = PropertyChannelWriter
-                .resolveProperty(fixture, key.propertyName)?.value as? DmxColour ?: return null
+        is CueAssignmentResolver.AttributeValue.Slider -> return slot.seq to value.value
+        is CueAssignmentResolver.AttributeValue.Setting -> return slot.seq to value.channelValue
+        is CueAssignmentResolver.AttributeValue.Colour -> {
+            val dmxColour = AttributeChannelWriter
+                .resolveAttribute(fixture, key.attribute)?.value as? DmxColour ?: return null
             return when (channel) {
                 dmxColour.redSlider.channelNo -> slot.seq to value.value.color.red.toUByte()
                 dmxColour.greenSlider.channelNo -> slot.seq to value.value.color.green.toUByte()
@@ -87,24 +87,24 @@ private fun bundledComponentFromColourEntry(
     fixture: Fixture,
     channel: Int,
 ): Pair<Long, UByte>? {
-    val colourProp = fixture.fixtureProperties.find { it.category == PropertyCategory.COLOUR }
+    val colourProp = fixture.fixtureAttributes.find { it.category == AttributeCategory.COLOUR }
         ?: return null
     val slot = store.get(fixture.key, colourProp.name) ?: return null
-    val colour = (slot.value.resolved as? CueAssignmentResolver.PropertyValue.Colour)?.value ?: return null
-    for (prop in fixture.fixtureProperties) {
+    val colour = (slot.value.resolved as? CueAssignmentResolver.AttributeValue.Colour)?.value ?: return null
+    for (prop in fixture.fixtureAttributes) {
         if (!prop.bundleWithColour) continue
         val dmx = prop.classProperty.call(fixture) as? DmxSlider ?: continue
         if (dmx.channelNo != channel) continue
         return when (prop.category) {
-            PropertyCategory.WHITE -> slot.seq to colour.white
-            PropertyCategory.AMBER -> slot.seq to colour.amber
-            PropertyCategory.UV -> slot.seq to colour.uv
+            AttributeCategory.WHITE -> slot.seq to colour.white
+            AttributeCategory.AMBER -> slot.seq to colour.amber
+            AttributeCategory.UV -> slot.seq to colour.uv
             else -> null
         }
     }
     return null
 }
 
-/** The winning programmer value for (fixtureKey, propertyName), unwrapped. */
-fun programmerValue(state: State, fixtureKey: String, propertyName: String): CueAssignmentResolver.PropertyValue? =
-    state.show.programmerStore.get(fixtureKey, propertyName)?.value?.resolved
+/** The winning programmer value for (fixtureKey, attribute), unwrapped. */
+fun programmerValue(state: State, fixtureKey: String, attribute: String): CueAssignmentResolver.AttributeValue? =
+    state.show.programmerStore.get(fixtureKey, attribute)?.value?.resolved

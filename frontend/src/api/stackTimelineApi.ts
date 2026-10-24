@@ -37,7 +37,7 @@ export interface TimelineLayer {
   enabled: boolean
   amount: number
   blendMode: string
-  propertyMask: string | null
+  attributeMask: string | null
   stomp: boolean
   /** Fires on a delay, an interval or a random window rather than at the GO. */
   timed: boolean
@@ -54,7 +54,7 @@ export interface TimelineFx {
   /** The run key: rows of neighbouring cues that share one draw as one run (D7). */
   runUuid: string | null
   fxType: string
-  propertyName: string | null
+  attribute: string | null
   targetType: string
   targetKey: string
   family: string | null
@@ -93,8 +93,8 @@ export interface TimelineLayerFields {
   enabled?: boolean
   amount?: number
   blendMode?: string
-  /** `PropertyMaskGroup` names joined by commas, or null for every attribute. */
-  propertyMask?: string | null
+  /** `AttributeFamily` names joined by commas, or null for every attribute. */
+  attributeMask?: string | null
   stomp?: boolean
   delayMs?: number | null
   intervalMs?: number | null

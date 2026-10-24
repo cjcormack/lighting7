@@ -82,7 +82,7 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
                     fx = if (!withEffect) emptyList() else listOf(
                         LookFxDto(
                             targetType = "fixture", targetKey = "hex-1",
-                            fxType = "Pulse", family = "intensity", propertyName = "dimmer",
+                            fxType = "Pulse", family = "intensity", attribute = "dimmer",
                             cycle = 0.5, blendMode = "OVERRIDE", order = "NORMAL",
                         ),
                     ),
@@ -134,9 +134,9 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         assertTrue(store.layers.isEmpty(), "the layer is gone")
         assertEquals(before, channels(), "and nothing on stage moved")
         assertEquals(2, outcome.written)
-        for (property in listOf("dimmer", "rgbColour")) {
-            val slot = assertNotNull(store.get("hex-1", property), property)
-            assertEquals(ProgrammerOwner.WEB, slot.owner, property)
+        for (attribute in listOf("dimmer", "rgbColour")) {
+            val slot = assertNotNull(store.get("hex-1", attribute), attribute)
+            assertEquals(ProgrammerOwner.WEB, slot.owner, attribute)
             assertTrue(slot.touched, "Record takes it as the operator's own")
         }
     }
@@ -183,13 +183,13 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         val look = jsonClient().createLook("Amber", withEffect = false)
         press(look)
         val hex = state.show.fixtures.untypedGroupableFixture("hex-1")
-        engine.programmer.writeProperty(
-            ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(40u),
+        engine.programmer.writeAttribute(
+            ProgrammerOwner.WEB, hex, "dimmer", CueAssignmentResolver.AttributeValue.Slider(40u),
         )
 
         stack.detach(store.layers.single().layerId)
 
-        val dimmer = store.get("hex-1", "dimmer")!!.value.resolved as CueAssignmentResolver.PropertyValue.Slider
+        val dimmer = store.get("hex-1", "dimmer")!!.value.resolved as CueAssignmentResolver.AttributeValue.Slider
         assertEquals(40u.toUByte(), dimmer.value)
     }
 
@@ -216,16 +216,16 @@ class ProgrammerDetachTest : RouteIntegrationTest() {
         LocateTestSupport.seedHex(state, projectId, "hex-1", 1)
         press(jsonClient().createLook("Amber", withEffect = false))
         val hex = state.show.fixtures.untypedGroupableFixture("hex-1")
-        engine.programmer.writeProperty(ProgrammerOwner.FLASH, hex, "dimmer", CueAssignmentResolver.PropertyValue.Slider(255u))
+        engine.programmer.writeAttribute(ProgrammerOwner.FLASH, hex, "dimmer", CueAssignmentResolver.AttributeValue.Slider(255u))
         val before = channels()
 
         stack.detach(store.layers.single().layerId)
 
         assertEquals(before, channels(), "the flash is still on top")
-        engine.programmer.clearProperty(ProgrammerOwner.FLASH, hex, "dimmer")
+        engine.programmer.clearAttribute(ProgrammerOwner.FLASH, hex, "dimmer")
         val dimmer = store.get("hex-1", "dimmer")!!
         assertEquals(ProgrammerOwner.WEB, dimmer.owner)
-        assertEquals(200u.toUByte(), (dimmer.value.resolved as CueAssignmentResolver.PropertyValue.Slider).value, "the layer's level, kept")
+        assertEquals(200u.toUByte(), (dimmer.value.resolved as CueAssignmentResolver.AttributeValue.Slider).value, "the layer's level, kept")
     }
 
     @Test

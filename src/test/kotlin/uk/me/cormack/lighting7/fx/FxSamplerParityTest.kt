@@ -232,7 +232,7 @@ class FxSamplerParityTest {
     @Test
     fun `a Circle Around a programmer position`() {
         val rig = rig()
-        rig.store.put(ProgrammerOwner.WEB, "vary", "position", CueAssignmentResolver.PropertyValue.Position(100u, 150u))
+        rig.store.put(ProgrammerOwner.WEB, "vary", "position", CueAssignmentResolver.AttributeValue.Position(100u, 150u))
         val circle = fx("Circle", PositionTarget("vary"), blend = BlendMode.ADDITIVE) {
             priority = FxEngine.localFxPriority(0)
         }
@@ -294,7 +294,7 @@ class FxSamplerParityTest {
     @Test
     fun `a held-back FX is sampled but left out of the result`() {
         val rig = rig()
-        rig.store.put(ProgrammerOwner.WEB, "hex-0", "dimmer", CueAssignmentResolver.PropertyValue.Slider(100u))
+        rig.store.put(ProgrammerOwner.WEB, "hex-0", "dimmer", CueAssignmentResolver.AttributeValue.Slider(100u))
         val sine = fx("SineWave", SliderTarget.forGroup("hexes", "dimmer"))
         val samples = assertParity(rig, listOf(sine))
         val held = samples.attribute("dimmer")!!.row("hex-0")!!
@@ -312,7 +312,7 @@ class FxSamplerParityTest {
             programmerLayerFxKey = ProgrammerLayerFxKey(
                 1,
                 StoredFx(
-                    fxType = "SineWave", family = "intensity", propertyName = "dimmer", cycle = CycleLength.ONE_BAR,
+                    fxType = "SineWave", family = "intensity", attribute = "dimmer", cycle = CycleLength.ONE_BAR,
                     blendMode = "OVERRIDE", order = "NORMAL", phaseOffset = 0.0, elementMode = null,
                     elementFilter = null, timing = null, parameters = emptyMap(), speedMasterUuid = null,
                     rateSpeedMasterUuid = null,

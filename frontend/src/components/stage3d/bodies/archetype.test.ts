@@ -2,7 +2,7 @@
 //
 // jsdom only because store/fixtures imports the API facade, which reads `window` at module load.
 import { describe, expect, it } from 'vitest'
-import type { Fixture, FixtureTypeInfo, PropertyDescriptor } from '../../../store/fixtures'
+import type { Fixture, FixtureTypeInfo, AttributeDescriptor } from '../../../store/fixtures'
 import { chan, colourProp, element, settingProp, sliderProp } from '../../../test/fixtureFactories'
 import { bodySpecOf } from '../emitterNeeds'
 import {
@@ -41,8 +41,8 @@ function type(over: Partial<FixtureTypeInfo>): FixtureTypeInfo {
     channelCount: null,
     isRegistered: true,
     capabilities: [],
-    properties: [],
-    elementGroupProperties: null,
+    attributes: [],
+    elementGroupAttributes: null,
     ...over,
   }
 }
@@ -56,7 +56,7 @@ function fixture(over: Partial<Fixture>): Fixture {
     firstChannel: 1,
     channelCount: 1,
     channels: [],
-    properties: [],
+    attributes: [],
     capabilities: [],
     groups: [],
     compatibleLookIds: [],
@@ -94,7 +94,7 @@ function liteobar(): { fixture: Fixture; type: FixtureTypeInfo } {
   return {
     fixture: fixture({
       typeKey: 'kam-liteobar-252-11ch',
-      properties: [sliderProp('dimmer', 'dimmer', chan(1)), sliderProp('strobe', 'strobe', chan(2))],
+      attributes: [sliderProp('dimmer', 'dimmer', chan(1)), sliderProp('strobe', 'strobe', chan(2))],
       elements: cells,
     }),
     type: type({ typeKey: 'kam-liteobar-252-11ch', kind: 'STRIP', lengthM: 1, widthM: 0.08, heightM: 0.08 }),
@@ -103,14 +103,14 @@ function liteobar(): { fixture: Fixture; type: FixtureTypeInfo } {
 
 /** The 2-cell LED blinder: its cells are warm and cold white sliders, not colours. */
 function blinder(): { fixture: Fixture; type: FixtureTypeInfo } {
-  const cell = (i: number): PropertyDescriptor[] => [
+  const cell = (i: number): AttributeDescriptor[] => [
     sliderProp('warmWhite', 'white', chan(2 + i * 2), { displayName: 'Warm white' }),
     sliderProp('coldWhite', 'white', chan(3 + i * 2), { displayName: 'Cold white' }),
   ]
   return {
     fixture: fixture({
       typeKey: 'china-2-cell-led-blinder-8ch',
-      properties: [sliderProp('dimmer', 'dimmer', chan(1))],
+      attributes: [sliderProp('dimmer', 'dimmer', chan(1))],
       elements: [element(0, 'b.cell-0', cell(0)), element(1, 'b.cell-1', cell(1))],
     }),
     type: type({ typeKey: 'china-2-cell-led-blinder-8ch', kind: 'BLINDER', lengthM: 0.3, widthM: 0.3, heightM: 0.15 }),
@@ -151,7 +151,7 @@ describe('the archetype a fixture is drawn as', () => {
   it('reads the tilt off the fixture itself', () => {
     const spec = bodySpecOf(
       { kindOverride: null, lengthM: null },
-      fixture({ properties: [TILT] }),
+      fixture({ attributes: [TILT] }),
       type({ kind: 'PROFILE', acceptsBeamAngle: true }),
     )
     expect(spec.archetype).toBe('mover')
@@ -395,7 +395,7 @@ describe("a type's declared body decides before its words", () => {
   it('draws a declared lens diameter', () => {
     const s = bodySpecOf(
       { kindOverride: null, lengthM: null },
-      fixture({ properties: [TILT] }),
+      fixture({ attributes: [TILT] }),
       type({ kind: 'MOVING_HEAD', acceptsBeamAngle: true, body: { archetype: 'mover', head: 'spot', lensDiameterM: 0.1 } }),
     )
     expect(s.cells[0].halfWidthM).toBeCloseTo(0.05, 9)
@@ -426,7 +426,7 @@ describe('depth of field (fixture-optics plan D9)', () => {
   })
 
   it("is the family's where the type declares none, and the type's where it does", () => {
-    const f = fixture({ properties: [TILT] })
+    const f = fixture({ attributes: [TILT] })
     const family = bodySpecOf({ kindOverride: null, lengthM: null }, f, revolution)
     expect(family.depthOfField).toBe(DEPTH_OF_FIELD['mover:profile'])
     const declared = bodySpecOf({ kindOverride: null, lengthM: null }, f, { ...revolution, depthOfField: 4.5 })
@@ -465,7 +465,7 @@ describe('the beam angle (fixture-optics plan D3)', () => {
     body: { archetype: 'mover', head: 'spot' },
     fieldDeg: 10,
   })
-  const f = fixture({ properties: [TILT] })
+  const f = fixture({ attributes: [TILT] })
   const spec = (t: FixtureTypeInfo) => bodySpecOf({ kindOverride: null, lengthM: null }, f, t)
 
   it("draws a fixed lens at the type's declared field, and the family's where it declares none", () => {
@@ -504,7 +504,7 @@ describe("where a mover's lens sits — the desk's shared vector", () => {
   for (const h of focusInverse.heads) {
     it(`pivots and has its lens where the desk measures from — ${h.name}`, () => {
       const t = type({ kind: 'MOVING_HEAD', heightM: h.heightM, body: { archetype: 'mover', head: h.head } })
-      const spec = bodySpecOf({ kindOverride: null, lengthM: null }, fixture({ properties: [TILT] }), t)
+      const spec = bodySpecOf({ kindOverride: null, lengthM: null }, fixture({ attributes: [TILT] }), t)
       expect(spec.head).toBe(h.head)
       expect(bodyFrames(spec, 'hang').pivotY).toBeCloseTo(h.pivotM, 9)
       // Every cell of the head sits on its face, the lens's distance along the beam from the pivot.
@@ -518,11 +518,11 @@ describe('a lens ring', () => {
     { name: 'OFF', level: 0, displayName: 'Off' },
     { name: 'CHASE', level: 75, displayName: 'Chase', ringChase: true },
   ])
-  const spot = (props: PropertyDescriptor[]) =>
+  const spot = (props: AttributeDescriptor[]) =>
     bodySpecFor(
       bodyInputFor(
         { kindOverride: null },
-        fixture({ properties: props }),
+        fixture({ attributes: props }),
         type({ kind: 'MOVING_HEAD', body: { archetype: 'mover', head: 'spot' } }),
         null,
       ),
@@ -543,7 +543,7 @@ describe('a lens ring', () => {
     const big = bodySpecFor(
       bodyInputFor(
         { kindOverride: null },
-        fixture({ properties: [TILT, ring] }),
+        fixture({ attributes: [TILT, ring] }),
         type({ kind: 'MOVING_HEAD', body: { archetype: 'mover', head: 'spot', lensDiameterM: 1 } }),
         null,
       ),

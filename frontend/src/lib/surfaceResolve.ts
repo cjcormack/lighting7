@@ -4,8 +4,8 @@ import type {
   ControlSurfaceBinding,
   ControlSurfaceType,
   EncoderBankSelection,
-  FixturePropertyTarget,
-  GroupPropertyTarget,
+  FixtureAttributeTarget,
+  GroupAttributeTarget,
   StripDefinition,
 } from '../api/surfacesApi'
 import { withAxis } from '@/lib/colourAxis'
@@ -28,11 +28,11 @@ import { withAxis } from '@/lib/colourAxis'
  * Keep in step with `midi/ControlSurfaceBindingService.kt` and `midi/StripDerivation.kt`.
  */
 
-/** The property a strip fader and its flash button always drive (`STRIP_FADER_PROPERTY`). */
-export const STRIP_FADER_PROPERTY = 'dimmer'
+/** The property a strip fader and its flash button always drive (`STRIP_FADER_ATTRIBUTE`). */
+export const STRIP_FADER_ATTRIBUTE = 'dimmer'
 
 /** What the encoder bank holds before anything sets it (`EncoderBankState.DEFAULT`). */
-export const DEFAULT_ENCODER_BANK: EncoderBankSelection = { propertyName: 'dimmer' }
+export const DEFAULT_ENCODER_BANK: EncoderBankSelection = { attribute: 'dimmer' }
 
 /** The role a control plays within a strip. */
 export type StripRole = 'fader' | 'select' | 'encoder' | 'flash'
@@ -83,17 +83,17 @@ export function stripControlsByControlId(
  * A continuous target on a group or a fixture — the same shape a hand-made binding has, so a
  * derived binding and a fixed one read identically everywhere downstream.
  */
-function propertyTarget(
+function attributeTarget(
   target: { type: 'group' | 'fixture'; key: string },
-  propertyName: string,
+  attribute: string,
   colourAxis?: ColourAxis | null,
-): FixturePropertyTarget | GroupPropertyTarget {
+): FixtureAttributeTarget | GroupAttributeTarget {
   // `withAxis` leaves the field *absent* for hue rather than writing `null`: that is the form
   // every pre-axis row has and the server writes, and `toEqual` in the tests tells the two apart.
-  const base: FixturePropertyTarget | GroupPropertyTarget =
+  const base: FixtureAttributeTarget | GroupAttributeTarget =
     target.type === 'group'
-      ? { type: 'groupProperty', groupName: target.key, propertyName }
-      : { type: 'fixtureProperty', fixtureKey: target.key, propertyName }
+      ? { type: 'groupAttribute', groupName: target.key, attribute }
+      : { type: 'fixtureAttribute', fixtureKey: target.key, attribute }
   return withAxis(base, colourAxis)
 }
 
@@ -109,13 +109,13 @@ export function deriveStripTarget(
 ): BindingTarget {
   switch (role) {
     case 'fader':
-      return propertyTarget(target, STRIP_FADER_PROPERTY)
+      return attributeTarget(target, STRIP_FADER_ATTRIBUTE)
     case 'select':
       return { type: 'selectTarget', target, mode: 'toggle' }
     case 'encoder':
-      return propertyTarget(target, encoderBank.propertyName, encoderBank.colourAxis)
+      return attributeTarget(target, encoderBank.attribute, encoderBank.colourAxis)
     case 'flash':
-      return { type: 'flash', target: propertyTarget(target, STRIP_FADER_PROPERTY) }
+      return { type: 'flash', target: attributeTarget(target, STRIP_FADER_ATTRIBUTE) }
   }
 }
 

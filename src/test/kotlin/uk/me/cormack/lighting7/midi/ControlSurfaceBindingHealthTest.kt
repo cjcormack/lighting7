@@ -111,7 +111,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+            listOf(binding(1, BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
         )
         assertEquals(AssignmentHealth.Ok, service.get(projectId, 1)?.health)
 
@@ -136,7 +136,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureProperty("hex-1", "dimmer"))),
+            listOf(binding(1, BindingTarget.FixtureAttribute("hex-1", "dimmer"))),
         )
         // Force the initial health evaluation (seed bypasses it).
         service.invalidateHealth(projectId)
@@ -202,7 +202,7 @@ class ControlSurfaceBindingHealthTest {
         val service = ControlSurfaceBindingService(FakeDatabase.instance)
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureProperty("hex-missing", "dimmer"))),
+            listOf(binding(1, BindingTarget.FixtureAttribute("hex-missing", "dimmer"))),
         )
         // No provider → health stays at the default Ok.
         service.invalidateHealth(projectId)
@@ -218,7 +218,7 @@ class ControlSurfaceBindingHealthTest {
         )
         service.seedCacheForTest(
             projectId,
-            listOf(binding(1, BindingTarget.FixtureProperty("hex-gone", "dimmer"))),
+            listOf(binding(1, BindingTarget.FixtureAttribute("hex-gone", "dimmer"))),
         )
         service.invalidateHealth(projectId)
 

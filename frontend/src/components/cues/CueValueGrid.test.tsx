@@ -28,7 +28,7 @@ describe('CueValueGrid', () => {
     // A cell-target row: the cook keys it by the head's element key, which is no fixture's key.
     state.fixtures = [makePixelBar('bar', 4)]
     state.rows = [
-      { targetType: 'fixture', targetKey: 'bar.pixel-2', propertyName: 'rgbColour', value: '#b40000' },
+      { targetType: 'fixture', targetKey: 'bar.pixel-2', attribute: 'rgbColour', value: '#b40000' },
     ]
 
     render(<CueValueGrid projectId={1} cueId={1} />)

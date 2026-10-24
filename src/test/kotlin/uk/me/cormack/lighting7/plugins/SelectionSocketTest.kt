@@ -4,7 +4,7 @@ import io.ktor.client.plugins.websocket.sendSerialized
 import io.ktor.client.plugins.websocket.webSocket
 import io.ktor.server.testing.testApplication
 import org.junit.Test
-import uk.me.cormack.lighting7.fx.PropertyMaskGroup
+import uk.me.cormack.lighting7.fx.AttributeFamily
 import uk.me.cormack.lighting7.models.CueTargetDto
 import uk.me.cormack.lighting7.state.SelectionSource
 import uk.me.cormack.lighting7.testsupport.RouteIntegrationTest
@@ -89,7 +89,7 @@ class SelectionSocketTest : RouteIntegrationTest() {
     @Test
     fun `the frame carries the mask and the mover, and set replaces both while toggle keeps the mask`() = testApplication {
         mountTestApp(state)
-        state.deskSelection.set(listOf(hex1), setOf(PropertyMaskGroup.POSITION), SelectionSource.SURFACE)
+        state.deskSelection.set(listOf(hex1), setOf(AttributeFamily.POSITION), SelectionSource.SURFACE)
         val client = createWsClient()
 
         client.webSocket("/api") {
@@ -98,7 +98,7 @@ class SelectionSocketTest : RouteIntegrationTest() {
             assertEquals(SelectionSource.SURFACE, connect.source)
 
             // A marquee: both halves, named by the window. An unknown family name is dropped, as
-            // the client's `parsePropertyMask` drops one, rather than refused — there is no reply.
+            // the client's `parseAttributeMask` drops one, rather than refused — there is no reply.
             sendSerialized<InMessage>(
                 SelectionSetInMessage(listOf(hex1, hex2), families = listOf("colour", "bogus"), sourceName = "Screen 1"),
             )
@@ -107,7 +107,7 @@ class SelectionSocketTest : RouteIntegrationTest() {
             assertEquals(listOf("COLOUR"), set.families)
             assertEquals(SelectionSource.window("Screen 1"), set.source)
             assertEquals(
-                setOf(PropertyMaskGroup.COLOUR), state.deskSelection.state.value.families,
+                setOf(AttributeFamily.COLOUR), state.deskSelection.state.value.families,
                 "the desk holds the parsed vocabulary, not the strings",
             )
 

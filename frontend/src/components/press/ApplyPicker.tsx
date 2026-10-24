@@ -94,7 +94,7 @@ export function ApplyPicker({
   saveFamilies,
   offerNew = true,
   scope,
-  property,
+  attribute,
 }: {
   projectId: number
   open: boolean
@@ -122,7 +122,7 @@ export function ApplyPicker({
   /** `usePress`'s scope — a door that always writes Local passes `'programmer'`. */
   scope?: 'window' | 'programmer'
   /** The effects library's property — a cell's — which `FxPicker` prefers and opens the family of. */
-  property?: string
+  attribute?: string
 }) {
   const form = useEditorForm()
   const { isVenue } = useVenueMode(projectId)
@@ -455,7 +455,7 @@ export function ApplyPicker({
         pair={pair}
         fit={paletteFit}
         family={family}
-        property={property}
+        attribute={attribute}
         scope={scope}
         onBack={library === 'fx' ? undefined : () => setFxView(false)}
       />
@@ -714,7 +714,7 @@ function EffectsArm({
   pair,
   fit,
   family,
-  property,
+  attribute,
   scope,
   onBack,
 }: {
@@ -723,7 +723,7 @@ function EffectsArm({
   pair: PressPair
   fit: PaletteFit
   family: AttributeFamily | null
-  property?: string
+  attribute?: string
   scope?: 'window' | 'programmer'
   /** Back to the palettes — absent where the door opened the effects. */
   onBack?: () => void
@@ -786,8 +786,8 @@ function EffectsArm({
   )
   const context = useMemo(() => ({ library, templates }), [library, templates])
   const fxFit = useMemo<PaletteFit>(
-    () => ({ ...fit, families: family != null ? [family] : fit.families, property: property ?? fit.property }),
-    [fit, family, property],
+    () => ({ ...fit, families: family != null ? [family] : fit.families, attribute: attribute ?? fit.attribute }),
+    [fit, family, attribute],
   )
   const mask = pair.families
   const palettes = useMemo(
@@ -823,9 +823,9 @@ function EffectsArm({
             <FxPicker
               target={target}
               initialFamily={pickerFamilyForSheet(family)}
-              preferredProperty={property ?? fit.property}
+              preferredAttribute={attribute ?? fit.attribute}
               draft={{
-                current: swapping == null ? null : { fxType: swapping.fxType, propertyName: swapping.propertyName ?? '' },
+                current: swapping == null ? null : { fxType: swapping.fxType, attribute: swapping.attribute ?? '' },
                 onPick: (pick) => {
                   const effect = storedFxOf(pick, target)
                   // Taken as picked at once, so a quick second tap swaps it; a write that did not
@@ -863,7 +863,7 @@ function EffectsArm({
             <FxPicker
               target={target}
               initialFamily={pickerFamilyForSheet(family)}
-              preferredProperty={property ?? fit.property}
+              preferredAttribute={attribute ?? fit.attribute}
               current={current}
               onCurrent={setCurrent}
               onEdit={() => setEditing(true)}

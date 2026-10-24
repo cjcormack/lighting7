@@ -12,7 +12,7 @@ import kotlin.test.assertNull
  * the output silently.
  *
  * The normalisation tests are the more important half. Validation alone would have been a trap:
- * `compatibleProperties` is on no editing surface, and the FX edit sheet sends only
+ * `compatibleAttributes` is on no editing surface, and the FX edit sheet sends only
  * `{id, name, script}`, so rejecting a *merged* declaration would have made a script-only edit of
  * any pre-existing position definition fail forever with nothing the operator could do about it.
  */
@@ -22,37 +22,37 @@ class FxDefinitionCompatibilityValidationTest {
 
     @Test
     fun `a POSITION effect may only advertise the position pair`() {
-        assertNull(validateCompatibleProperties(FxOutputType.POSITION, listOf("position")))
-        assertNull(validateCompatibleProperties(FxOutputType.POSITION, listOf("Position")))
+        assertNull(validateCompatibleAttributes(FxOutputType.POSITION, listOf("position")))
+        assertNull(validateCompatibleAttributes(FxOutputType.POSITION, listOf("Position")))
 
         // The A11 shape itself. Reachable only by hand now that normalisation runs first, but the
         // rule is what makes the normalisation safe to be silent.
-        assertNotNull(validateCompatibleProperties(FxOutputType.POSITION, listOf("pan")))
-        assertNotNull(validateCompatibleProperties(FxOutputType.POSITION, listOf("dimmer")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.POSITION, listOf("pan")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.POSITION, listOf("dimmer")))
     }
 
     @Test
     fun `a COLOUR effect may only advertise the colour bundle`() {
         for (alias in listOf("rgbColour", "colour", "color", "rgbcolour")) {
-            assertNull(validateCompatibleProperties(FxOutputType.COLOUR, listOf(alias)), alias)
+            assertNull(validateCompatibleAttributes(FxOutputType.COLOUR, listOf(alias)), alias)
         }
-        assertNotNull(validateCompatibleProperties(FxOutputType.COLOUR, listOf("dimmer")))
-        assertNotNull(validateCompatibleProperties(FxOutputType.COLOUR, listOf("position")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.COLOUR, listOf("dimmer")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.COLOUR, listOf("position")))
     }
 
     @Test
-    fun `a SLIDER effect may advertise any single-value property but not a pair or a bundle`() {
+    fun `a SLIDER effect may advertise any single-value attribute but not a pair or a bundle`() {
         // Arbitrary named sliders and settings are legitimate and unresolvable from the name
         // alone, so they pass — as do the frontend's two sentinels.
         for (ok in listOf("dimmer", "uv", "zoom", "focus", "setting", "slider")) {
-            assertNull(validateCompatibleProperties(FxOutputType.SLIDER, listOf(ok)), ok)
+            assertNull(validateCompatibleAttributes(FxOutputType.SLIDER, listOf(ok)), ok)
         }
 
-        assertNotNull(validateCompatibleProperties(FxOutputType.SLIDER, listOf("position")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.SLIDER, listOf("position")))
         // Both of these resolve to a ColourTarget, which discards an FxOutput.Slider. Category =
         // Colour with the default Output Type = Slider used to write exactly this.
-        assertNotNull(validateCompatibleProperties(FxOutputType.SLIDER, listOf("rgbColour")))
-        assertNotNull(validateCompatibleProperties(FxOutputType.SLIDER, listOf("colour")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.SLIDER, listOf("rgbColour")))
+        assertNotNull(validateCompatibleAttributes(FxOutputType.SLIDER, listOf("colour")))
     }
 
     @Test
@@ -60,15 +60,15 @@ class FxDefinitionCompatibilityValidationTest {
         // Effects plan §3.6: a step list names the desk's palettes and settings, resolved per head,
         // and a definition syncs to desks that predate the output type.
         for (props in listOf(emptyList(), listOf("dimmer"), listOf("setting"), listOf("rgbColour", "position"))) {
-            val message = validateCompatibleProperties(FxOutputType.STEPS, props)
+            val message = validateCompatibleAttributes(FxOutputType.STEPS, props)
             assertNotNull(message, props.toString())
             assert("cannot be forked" in message)
         }
     }
 
     @Test
-    fun `the offending property is named in the message`() {
-        val message = validateCompatibleProperties(FxOutputType.POSITION, listOf("position", "tilt"))
+    fun `the offending attribute is named in the message`() {
+        val message = validateCompatibleAttributes(FxOutputType.POSITION, listOf("position", "tilt"))
         assertNotNull(message)
         kotlin.test.assertTrue("tilt" in message, "message should name the bad entry: $message")
     }
@@ -87,9 +87,9 @@ class FxDefinitionCompatibilityValidationTest {
         // What FxLibrary's new-definition form wrote for every position definition before A11.
         // Without this, a script-only edit of one would 400 forever: the merged declaration is
         // re-validated against a stored list no surface can edit.
-        val healed = normaliseCompatibleProperties(FxOutputType.POSITION, listOf("pan", "tilt"))
+        val healed = normaliseCompatibleAttributes(FxOutputType.POSITION, listOf("pan", "tilt"))
         assertEquals(listOf("position"), healed)
-        assertNull(validateCompatibleProperties(FxOutputType.POSITION, healed))
+        assertNull(validateCompatibleAttributes(FxOutputType.POSITION, healed))
     }
 
     @Test
@@ -98,19 +98,19 @@ class FxDefinitionCompatibilityValidationTest {
         // declaration of any other shape is rejected out loud rather than silently rewritten.
         assertEquals(
             listOf("dimmer", "uv"),
-            normaliseCompatibleProperties(FxOutputType.SLIDER, listOf("dimmer", "uv")),
+            normaliseCompatibleAttributes(FxOutputType.SLIDER, listOf("dimmer", "uv")),
         )
         assertEquals(
             listOf("pan"),
-            normaliseCompatibleProperties(FxOutputType.SLIDER, listOf("pan")),
+            normaliseCompatibleAttributes(FxOutputType.SLIDER, listOf("pan")),
         )
         assertEquals(
             listOf("rgbColour"),
-            normaliseCompatibleProperties(FxOutputType.COLOUR, listOf("rgbColour")),
+            normaliseCompatibleAttributes(FxOutputType.COLOUR, listOf("rgbColour")),
         )
         assertEquals(
             listOf("dimmer"),
-            normaliseCompatibleProperties(FxOutputType.POSITION, listOf("dimmer")),
+            normaliseCompatibleAttributes(FxOutputType.POSITION, listOf("dimmer")),
         )
     }
 }

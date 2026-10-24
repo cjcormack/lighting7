@@ -117,7 +117,7 @@ const warmAmber = {
   family: 'COLOUR',
   kind: 'value',
   isGeneric: true,
-  rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
+  rows: [{ attribute: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
   fx: null,
   requiredEmitters: [],
   lastPressedAt: null,

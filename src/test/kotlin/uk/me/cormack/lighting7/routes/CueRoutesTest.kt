@@ -6,7 +6,7 @@ import kotlinx.serialization.encodeToString
 import uk.me.cormack.lighting7.models.AssignmentHealth
 import uk.me.cormack.lighting7.models.CueAdHocFxDto
 import uk.me.cormack.lighting7.models.CueLayerDto
-import uk.me.cormack.lighting7.models.CuePropertyAssignmentDto
+import uk.me.cormack.lighting7.models.CueAttributeAssignmentDto
 import uk.me.cormack.lighting7.models.CueTargetDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -80,7 +80,7 @@ class CueRoutesTest {
             targetKey = "front-wash",
             fxType = "SineWave",
             family = "intensity",
-            propertyName = "dimmer",
+            attribute = "dimmer",
             cycle = 1.0,
             blendMode = "OVERRIDE",
             order = "NORMAL",
@@ -106,7 +106,7 @@ class CueRoutesTest {
             blendMode = "OVERRIDE",
             order = "NORMAL",
         )
-        assertNull(dto.propertyName)
+        assertNull(dto.attribute)
         assertNull(dto.elementMode)
         assertNull(dto.elementFilter)
         assertNull(dto.timing)
@@ -130,29 +130,29 @@ class CueRoutesTest {
         assertEquals(dto, deserialized)
     }
 
-    // ─── CuePropertyAssignmentDto ────────────────────────────────────────
+    // ─── CueAttributeAssignmentDto ────────────────────────────────────────
 
     @Test
-    fun `CuePropertyAssignmentDto serialization round-trips with all fields`() {
-        val dto = CuePropertyAssignmentDto(
+    fun `CueAttributeAssignmentDto serialization round-trips with all fields`() {
+        val dto = CueAttributeAssignmentDto(
             targetType = "group",
             targetKey = "front-wash",
-            propertyName = "dimmer",
+            attribute = "dimmer",
             value = "200",
             fadeDurationMs = 1500L,
             sortOrder = 2,
         )
         val serialized = json.encodeToString(dto)
-        val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(serialized)
+        val deserialized = json.decodeFromString<CueAttributeAssignmentDto>(serialized)
         assertEquals(dto, deserialized)
     }
 
     @Test
-    fun `CuePropertyAssignmentDto defaults nullable and optional fields correctly`() {
-        val dto = CuePropertyAssignmentDto(
+    fun `CueAttributeAssignmentDto defaults nullable and optional fields correctly`() {
+        val dto = CueAttributeAssignmentDto(
             targetType = "fixture",
             targetKey = "hex-1",
-            propertyName = "colour",
+            attribute = "colour",
             value = "#00ff00",
         )
         assertNull(dto.fadeDurationMs)
@@ -161,35 +161,35 @@ class CueRoutesTest {
     }
 
     @Test
-    fun `CuePropertyAssignmentDto health field round-trips non-Ok variants`() {
-        val deadFixture = CuePropertyAssignmentDto(
+    fun `CueAttributeAssignmentDto health field round-trips non-Ok variants`() {
+        val deadFixture = CueAttributeAssignmentDto(
             targetType = "fixture",
             targetKey = "hex-renamed",
-            propertyName = "dimmer",
+            attribute = "dimmer",
             value = "200",
             health = AssignmentHealth.MissingFixture("hex-renamed"),
         )
-        val round = json.decodeFromString<CuePropertyAssignmentDto>(json.encodeToString(deadFixture))
+        val round = json.decodeFromString<CueAttributeAssignmentDto>(json.encodeToString(deadFixture))
         assertIs<AssignmentHealth.MissingFixture>(round.health)
         assertEquals("hex-renamed", round.health.fixtureKey)
     }
 
     @Test
-    fun `CuePropertyAssignmentDto input without health deserialises to Ok default`() {
-        val inputJson = """{"targetType":"fixture","targetKey":"hex-1","propertyName":"dimmer","value":"200"}"""
-        val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(inputJson)
+    fun `CueAttributeAssignmentDto input without health deserialises to Ok default`() {
+        val inputJson = """{"targetType":"fixture","targetKey":"hex-1","attribute":"dimmer","value":"200"}"""
+        val deserialized = json.decodeFromString<CueAttributeAssignmentDto>(inputJson)
         assertEquals(AssignmentHealth.Ok, deserialized.health)
     }
 
     @Test
-    fun `CuePropertyAssignmentDto supports colour, position, and setting value forms`() {
-        val colour = CuePropertyAssignmentDto("fixture", "hex-1", "colour", "#ff8800;w64;amber128;uv0")
-        val position = CuePropertyAssignmentDto("fixture", "mover-1", "position", "128,200")
-        val setting = CuePropertyAssignmentDto("fixture", "par-1", "gobo", "128")
+    fun `CueAttributeAssignmentDto supports colour, position, and setting value forms`() {
+        val colour = CueAttributeAssignmentDto("fixture", "hex-1", "colour", "#ff8800;w64;amber128;uv0")
+        val position = CueAttributeAssignmentDto("fixture", "mover-1", "position", "128,200")
+        val setting = CueAttributeAssignmentDto("fixture", "par-1", "gobo", "128")
 
         for (dto in listOf(colour, position, setting)) {
             val serialized = json.encodeToString(dto)
-            val deserialized = json.decodeFromString<CuePropertyAssignmentDto>(serialized)
+            val deserialized = json.decodeFromString<CueAttributeAssignmentDto>(serialized)
             assertEquals(dto, deserialized)
         }
     }
@@ -209,7 +209,7 @@ class CueRoutesTest {
                     targetKey = "hex-1",
                     fxType = "Pulse",
                     family = "intensity",
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     cycle = 0.5,
                     blendMode = "ADDITIVE",
                     order = "CENTRE_OUT",
@@ -228,22 +228,22 @@ class CueRoutesTest {
         val newCue = NewCue(name = "Minimal Cue")
         assertEquals(emptyList(), newCue.layers)
         assertEquals(emptyList(), newCue.adHocFx)
-        assertEquals(emptyList(), newCue.propertyAssignments)
+        assertEquals(emptyList(), newCue.attributeAssignments)
     }
 
     @Test
-    fun `NewCue round-trips propertyAssignments alongside other collections`() {
+    fun `NewCue round-trips attributeAssignments alongside other collections`() {
         val newCue = NewCue(
             name = "With Assignments",
-            propertyAssignments = listOf(
-                CuePropertyAssignmentDto("group", "front-wash", "dimmer", "180"),
-                CuePropertyAssignmentDto("fixture", "hex-1", "colour", "#00ffaa"),
+            attributeAssignments = listOf(
+                CueAttributeAssignmentDto("group", "front-wash", "dimmer", "180"),
+                CueAttributeAssignmentDto("fixture", "hex-1", "colour", "#00ffaa"),
             ),
         )
         val serialized = json.encodeToString(newCue)
         val deserialized = json.decodeFromString<NewCue>(serialized)
         assertEquals(newCue, deserialized)
-        assertEquals(2, deserialized.propertyAssignments.size)
+        assertEquals(2, deserialized.attributeAssignments.size)
     }
 
     // ─── CueDetails ─────────────────────────────────────────────────────
@@ -335,15 +335,15 @@ class CueRoutesTest {
                     targetKey = "movers",
                     fxType = "Circle",
                     family = "position",
-                    propertyName = "position",
+                    attribute = "position",
                     cycle = 8.0,
                     blendMode = "OVERRIDE",
                     order = "NORMAL",
                     phaseOffset = 0.0,
                     elementMode = "PER_FIXTURE",
                     parameters = mapOf(
-                        "panCenter" to "128",
-                        "tiltCenter" to "128",
+                        "panCentre" to "128",
+                        "tiltCentre" to "128",
                         "panRadius" to "60",
                         "tiltRadius" to "40",
                     ),
@@ -353,7 +353,7 @@ class CueRoutesTest {
                     targetKey = "strobe-1",
                     fxType = "DimmerStrobe",
                     family = "intensity",
-                    propertyName = "dimmer",
+                    attribute = "dimmer",
                     cycle = 0.25,
                     blendMode = "MAX",
                     order = "UNIFIED",

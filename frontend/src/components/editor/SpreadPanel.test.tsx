@@ -181,17 +181,17 @@ describe('the family segment and the Property row', () => {
     const plan = intentPlan({
       families: ['INTENSITY', 'COLOUR'],
       initial: { family: 'COLOUR' },
-      propertiesFor: (family) =>
+      attributesFor: (family) =>
         family === 'COLOUR'
           ? [
-              { propertyName: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
-              { propertyName: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
+              { attribute: 'rgbColour', family: 'COLOUR', label: 'Colour', intent: 'colour' },
+              { attribute: 'white', family: 'COLOUR', label: 'White', intent: 'level' },
             ]
-          : [{ propertyName: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
+          : [{ attribute: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
     })
     render(<SpreadPanel host="docked" plans={[plan]} />)
-    const properties = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
-    expect(properties.map((r) => r.textContent)).toEqual(['Colour', 'White'])
+    const attributes = within(screen.getByRole('radiogroup', { name: 'Attribute' })).getAllByRole('radio')
+    expect(attributes.map((r) => r.textContent)).toEqual(['Colour', 'White'])
     fireEvent.click(radio('Family', 'Intensity'))
     expect(screen.queryByRole('radiogroup', { name: 'Attribute' })).toBeNull()
   })
@@ -217,7 +217,7 @@ describe('the request', () => {
         { type: 'fixture', key: 'par-2' },
       ],
       families: ['INTENSITY'],
-      property: 'dimmer',
+      attribute: 'dimmer',
       from: 'pct:0',
       to: 'pct:60',
       curve: 'LINE',
@@ -234,7 +234,7 @@ describe('the request', () => {
     render(<SpreadPanel host="docked" plans={[intentPlan({ write: false, onAnswer, mask: ['POSITION'], initial: { family: 'INTENSITY' } })]} />)
     apply()
     expect(lastBody().write).toBe(false)
-    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, propertyName: 'dimmer', value: '128' }], skippedFamilies: ['INTENSITY'] })
+    await answer({ written: [{ target: { type: 'fixture', key: 'par-1' }, attribute: 'dimmer', value: '128' }], skippedFamilies: ['INTENSITY'] })
     expect(toast.warning).toHaveBeenCalledWith('Intensity rows skipped — the selection is Position', { id: expect.any(String) })
     expect(onAnswer).toHaveBeenCalledTimes(1)
     expect(onAnswer.mock.calls[0][0].written[0].value).toBe('128')
@@ -372,7 +372,7 @@ describe('the chosen plan', () => {
       families: ['COLOUR'],
       initial: { family: 'COLOUR' },
       colourPalettes: [
-        { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ propertyName: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] } as never,
+        { id: 1, uuid: 'u-amber', name: 'Amber', family: 'COLOUR', kind: 'value', isGeneric: true, rows: [{ attribute: 'rgbColour', value: '#FFBF00;policy=extract' }], requiredEmitters: [] } as never,
       ],
     })
     render(<SpreadPanel host="docked" plans={[plan]} colourEditor={Stub as never} />)
@@ -521,10 +521,10 @@ describe('the four kinds', () => {
     const plan = intentPlan({
       families: ['INTENSITY', 'POSITION'],
       initial: { family: 'POSITION' },
-      propertiesFor: (family) =>
+      attributesFor: (family) =>
         family === 'POSITION'
-          ? [{ propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' }]
-          : [{ propertyName: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
+          ? [{ attribute: 'position', family: 'POSITION', label: 'Position', intent: 'position' }]
+          : [{ attribute: 'dimmer', family: 'INTENSITY', label: 'Level', intent: 'percent' }],
     })
     render(<SpreadPanel host="popover" plans={[plan]} />)
     open()
@@ -533,7 +533,7 @@ describe('the four kinds', () => {
     expect(pan).toHaveValue(-16)
     fireEvent.change(pan, { target: { value: '-40' } })
     fireEvent.keyDown(pan, { key: 'Enter' })
-    expect(lastBody()).toMatchObject({ property: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
+    expect(lastBody()).toMatchObject({ attribute: 'position', from: 'pos:-40,0', to: 'pos:16,0' })
     // Enter applied and closed the popover.
     expect(document.querySelector('[data-spread-panel]')).toBeNull()
   })
@@ -549,7 +549,7 @@ describe('Fan (venue-visit plan S12)', () => {
       ],
       families: ['POSITION'],
       initial: { family: 'POSITION' },
-      propertiesFor: () => [{ propertyName: 'position', family: 'POSITION', label: 'Position', intent: 'position' }],
+      attributesFor: () => [{ attribute: 'position', family: 'POSITION', label: 'Position', intent: 'position' }],
       ...over,
     })
   const toFan = () => fireEvent.click(radio('Fan mode', 'About each position'))
@@ -588,7 +588,7 @@ describe('Fan (venue-visit plan S12)', () => {
     toFan()
     fireEvent.change(amount('Pan'), { target: { value: '20' } })
     apply()
-    expect(lastBody()).toMatchObject({ property: 'position', mode: 'ABOUT', fan: { pan: 20 } })
+    expect(lastBody()).toMatchObject({ attribute: 'position', mode: 'ABOUT', fan: { pan: 20 } })
     expect(lastBody()).not.toHaveProperty('from')
     expect(lastBody()).not.toHaveProperty('to')
     expect(lastBody()).not.toHaveProperty('base')

@@ -3,7 +3,7 @@ package uk.me.cormack.lighting7.fixture.dmx
 import uk.me.cormack.lighting7.dmx.ControllerTransaction
 import uk.me.cormack.lighting7.dmx.Universe
 import uk.me.cormack.lighting7.fixture.*
-import uk.me.cormack.lighting7.fixture.property.Slider
+import uk.me.cormack.lighting7.fixture.attribute.Slider
 import uk.me.cormack.lighting7.fixture.trait.WithColour
 import uk.me.cormack.lighting7.fixture.trait.WithDimmer
 import uk.me.cormack.lighting7.fixture.trait.WithPosition
@@ -136,21 +136,21 @@ sealed class ImgStageLineWash42LedFixture(
         override fun withTransaction(transaction: ControllerTransaction): Mode13Ch =
             Mode13Ch(this, transaction)
 
-        @FixtureProperty("Pan (coarse, 0–540°)", category = PropertyCategory.PAN,
+        @FixtureAttribute("Pan (coarse, 0–540°)", category = AttributeCategory.PAN,
             axis = PanTiltAxis.PAN, degMin = 0.0, degMax = 540.0)
         override val pan: Slider = DmxSlider(transaction, universe, firstChannel)
 
-        @FixtureProperty("Pan (fine)", category = PropertyCategory.PAN_FINE)
+        @FixtureAttribute("Pan (fine)", category = AttributeCategory.PAN_FINE)
         val panFine: Slider = DmxSlider(transaction, universe, firstChannel + 1)
 
-        @FixtureProperty("Tilt (coarse, 0–180°)", category = PropertyCategory.TILT,
+        @FixtureAttribute("Tilt (coarse, 0–180°)", category = AttributeCategory.TILT,
             axis = PanTiltAxis.TILT, degMin = 0.0, degMax = 180.0)
         override val tilt: Slider = DmxSlider(transaction, universe, firstChannel + 2)
 
-        @FixtureProperty("Tilt (fine)", category = PropertyCategory.TILT_FINE)
+        @FixtureAttribute("Tilt (fine)", category = AttributeCategory.TILT_FINE)
         val tiltFine: Slider = DmxSlider(transaction, universe, firstChannel + 3)
 
-        @FixtureProperty("Pan/tilt movement speed (fast → slow)", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Pan/tilt movement speed (fast → slow)", category = AttributeCategory.SPEED)
         val movementSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 4)
 
         /**
@@ -165,7 +165,7 @@ sealed class ImgStageLineWash42LedFixture(
          * `fullOn()`. Setting the strobe overrides the dimmer; this matches
          * how the fixture behaves at the DMX level.
          */
-        @FixtureProperty(category = PropertyCategory.DIMMER)
+        @FixtureAttribute(category = AttributeCategory.DIMMER)
         override val dimmer: Slider = DmxSlider(
             transaction, universe, firstChannel + 5, max = DIM_MAX,
         )
@@ -173,8 +173,8 @@ sealed class ImgStageLineWash42LedFixture(
         // The strobe's view of the shared channel: the dimmer's range is open (the dimmer alone sets
         // the level), then the manual's strobe and full-on bands. Estimate: the strobe's 1–20 Hz —
         // the manual states none. Checked on the rig by FU-MANUAL-S6-STROBE.
-        @FixtureProperty(
-            category = PropertyCategory.STROBE,
+        @FixtureAttribute(
+            category = AttributeCategory.STROBE,
             strobe = [
                 StrobeBand(0, 134, StrobeKind.OPEN),
                 StrobeBand(135, 239, StrobeKind.STROBE, hzMin = 1.0, hzMax = 20.0),
@@ -186,7 +186,7 @@ sealed class ImgStageLineWash42LedFixture(
             strobeMin = STROBE_MIN, strobeMax = STROBE_MAX, fullOnValue = FULL_ON,
         )
 
-        @FixtureProperty(category = PropertyCategory.COLOUR)
+        @FixtureAttribute(category = AttributeCategory.COLOUR)
         override val rgbColour = DmxColour(
             transaction, universe,
             firstChannel + 6,
@@ -194,18 +194,18 @@ sealed class ImgStageLineWash42LedFixture(
             firstChannel + 8,
         )
 
-        @FixtureProperty(category = PropertyCategory.WHITE, bundleWithColour = true)
+        @FixtureAttribute(category = AttributeCategory.WHITE, bundleWithColour = true)
         override val white: Slider = DmxSlider(transaction, universe, firstChannel + 9)
 
-        @FixtureProperty("Colour macro", category = PropertyCategory.COLOUR)
+        @FixtureAttribute("Colour macro", category = AttributeCategory.COLOUR)
         val colourMacro = DmxFixtureSetting(
             transaction, universe, firstChannel + 10, ColourMacro.entries.toTypedArray(),
         )
 
-        @FixtureProperty("Colour-change speed (slow → fast)", category = PropertyCategory.SPEED)
+        @FixtureAttribute("Colour-change speed (slow → fast)", category = AttributeCategory.SPEED)
         val colourChangeSpeed: Slider = DmxSlider(transaction, universe, firstChannel + 11)
 
-        @FixtureProperty("Built-in program", category = PropertyCategory.SETTING)
+        @FixtureAttribute("Built-in program", category = AttributeCategory.SETTING)
         val program = DmxFixtureSetting(
             transaction, universe, firstChannel + 12, Program.entries.toTypedArray(),
         )

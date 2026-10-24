@@ -21,7 +21,7 @@ val ALL_TABLES: List<Table> = listOf(
     // After the stacks and cues it places (cue model plan session 1).
     DaoCueStackEntries,
     DaoCueLayers,
-    DaoCueAdHocFx, DaoCuePropertyAssignments, DaoCueTriggers,
+    DaoCueAdHocFx, DaoCueAttributeAssignments, DaoCueTriggers,
     DaoCueSlots,
     DaoBuskPages, DaoBuskColumns, DaoBuskBanks, DaoBuskPads,
     DaoUniverseConfigs, DaoRiggings, DaoStageRegions,

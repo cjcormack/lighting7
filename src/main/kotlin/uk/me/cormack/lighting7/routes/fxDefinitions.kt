@@ -73,8 +73,8 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         }
 
         val requestOutputType = FxOutputType.valueOf(request.outputType)
-        val requestCompatible = normaliseCompatibleProperties(requestOutputType, request.compatibleProperties)
-        validateCompatibleProperties(requestOutputType, requestCompatible)?.let {
+        val requestCompatible = normaliseCompatibleAttributes(requestOutputType, request.compatibleAttributes)
+        validateCompatibleAttributes(requestOutputType, requestCompatible)?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@post
         }
@@ -128,7 +128,7 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val request = call.receive<UpdateFxDefinitionRequest>()
 
         // Validate the *merged* declaration in its own read, before the mutating transaction
-        // below. Every request field is optional, so a bad `compatibleProperties` may only
+        // below. Every request field is optional, so a bad `compatibleAttributes` may only
         // conflict with the *stored* outputType (or the reverse) — and the mutations happen
         // inside that transaction, so validating there would have already written the row this
         // rejects.
@@ -149,11 +149,11 @@ internal fun Route.routeApiRestFxDefinitions(state: State) {
         val mergedOutputType = request.outputType?.let { FxOutputType.valueOf(it) } ?: stored.first
         // Normalised, and then written back below even when the request didn't supply the field:
         // an edit sends only `{id, name, script}`, so this is the only chance a definition stored
-        // with the old `[pan, tilt]` has to heal. See [normaliseCompatibleProperties].
-        val mergedCompatible = normaliseCompatibleProperties(
-            mergedOutputType, request.compatibleProperties ?: stored.second,
+        // with the old `[pan, tilt]` has to heal. See [normaliseCompatibleAttributes].
+        val mergedCompatible = normaliseCompatibleAttributes(
+            mergedOutputType, request.compatibleAttributes ?: stored.second,
         )
-        validateCompatibleProperties(mergedOutputType, mergedCompatible)?.let {
+        validateCompatibleAttributes(mergedOutputType, mergedCompatible)?.let {
             call.respond(HttpStatusCode.BadRequest, ErrorResponse(it))
             return@put
         }
@@ -284,7 +284,7 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
     }.singleOrNull()
 
 /**
- * Reject `compatibleProperties` an effect of this [outputType] cannot actually drive.
+ * Reject `compatibleAttributes` an effect of this [outputType] cannot actually drive.
  *
  * The authoring-time half of [uk.me.cormack.lighting7.fx.FxTarget.acceptedOutputType]: a property
  * whose target takes a different [FxOutputType] discards the effect's output, so advertising it
@@ -297,7 +297,7 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
  * a name alone can prove wrong — which is every mismatch [uk.me.cormack.lighting7.fx.FxTargetFactory]
  * can produce from the fixed vocabulary. COLOUR can afford to be strict because every `DmxColour`
  * property in the fixture tree is named `rgbColour`, which is also why
- * [uk.me.cormack.lighting7.fx.ColourTarget] defaults its `propertyName` to it.
+ * [uk.me.cormack.lighting7.fx.ColourTarget] defaults its `attribute` to it.
  *
  * The built-in loader gets no equivalent check on purpose: a misdeclared built-in should fail the
  * build (`FxRegistrationTargetCompatibilityTest`), not quietly shrink the library at boot. Nor
@@ -305,12 +305,12 @@ private fun State.fxDefinitionInCurrentProject(definitionId: Int): DaoFxDefiniti
  *
  * @return an error message naming the offending property, or null when the declaration is sound
  */
-internal fun validateCompatibleProperties(
+internal fun validateCompatibleAttributes(
     outputType: FxOutputType,
-    compatibleProperties: List<String>,
+    compatibleAttributes: List<String>,
 ): String? {
     fun bad(prop: String, expected: String) =
-        "compatibleProperties entry '$prop' cannot take a $outputType output — it would be " +
+        "compatibleAttributes entry '$prop' cannot take a $outputType output — it would be " +
             "discarded, leaving the effect with no visible result. Expected $expected."
 
     // A step effect is not a custom effect's to be (effects plan §3.6): its lists name the desk's
@@ -321,16 +321,16 @@ internal fun validateCompatibleProperties(
             "desk's own and cannot be forked"
     }
 
-    for (prop in compatibleProperties) {
+    for (prop in compatibleAttributes) {
         when (outputType) {
             FxOutputType.POSITION ->
                 if (!prop.equals("position", ignoreCase = true)) return bad(prop, "'position'")
             FxOutputType.COLOUR ->
-                if (canonicalPropertyName(prop) != "rgbColour") return bad(prop, "'rgbColour'")
+                if (canonicalAttributeName(prop) != "rgbColour") return bad(prop, "'rgbColour'")
             FxOutputType.SLIDER -> {
                 if (prop.equals("position", ignoreCase = true))
                     return bad(prop, "a slider or setting property, not the pan/tilt pair")
-                if (canonicalPropertyName(prop) == "rgbColour")
+                if (canonicalAttributeName(prop) == "rgbColour")
                     return bad(prop, "a slider or setting property, not the colour bundle")
             }
             // Refused above: no definition has a STEPS output.
@@ -341,28 +341,28 @@ internal fun validateCompatibleProperties(
 }
 
 /**
- * Repair a `compatibleProperties` list that can only be a mistake, before validating the rest.
+ * Repair a `compatibleAttributes` list that can only be a mistake, before validating the rest.
  *
  * A POSITION effect naming `pan` or `tilt` is the exact shape of sweep item A11 — both axes emitted
  * at once, addressed by one of them — and it is what the desk's own UI used to write: `FxLibrary`'s
  * new-definition form derived the list from the *category*, so every position definition ever saved
  * carries `[pan, tilt]`.
  *
- * Without this the validation added above would be a trap rather than a guard. `compatibleProperties`
+ * Without this the validation added above would be a trap rather than a guard. `compatibleAttributes`
  * is not an editable field on any surface, and the edit sheet sends only `{id, name, script}`, so
  * validating the merged declaration would reject a **script-only** edit of an existing definition
  * on the strength of a stored list the operator cannot reach — permanently, with no in-app remedy.
  * Normalising on write instead means the first save of such a definition heals it.
  *
  * Only this one rewrite is safe to do silently: `pan`/`tilt` under POSITION has no reading under
- * which the operator meant it. Everything else [validateCompatibleProperties] rejects out loud.
+ * which the operator meant it. Everything else [validateCompatibleAttributes] rejects out loud.
  */
-internal fun normaliseCompatibleProperties(
+internal fun normaliseCompatibleAttributes(
     outputType: FxOutputType,
-    compatibleProperties: List<String>,
+    compatibleAttributes: List<String>,
 ): List<String> {
-    if (outputType != FxOutputType.POSITION) return compatibleProperties
-    return compatibleProperties
+    if (outputType != FxOutputType.POSITION) return compatibleAttributes
+    return compatibleAttributes
         .map { if (it.equals("pan", ignoreCase = true) || it.equals("tilt", ignoreCase = true)) "position" else it }
         .distinct()
 }
@@ -387,7 +387,7 @@ internal fun registerUserFx(state: State, definition: DaoFxDefinition): Register
         val name: String,
         val outputType: FxOutputType,
         val parameters: List<ParameterInfo>,
-        val compatibleProperties: List<String>,
+        val compatibleAttributes: List<String>,
         val family: String,
         val defaultTiming: Timing,
         val timingSource: TimingSource,
@@ -402,7 +402,7 @@ internal fun registerUserFx(state: State, definition: DaoFxDefinition): Register
             name = definition.name,
             outputType = definition.outputType,
             parameters = definition.parameters,
-            compatibleProperties = definition.compatibleAttributes,
+            compatibleAttributes = definition.compatibleAttributes,
             family = definition.family,
             defaultTiming = timingOf(definition.defaultTiming) ?: Timing.CYCLE,
             timingSource = definition.timingSource,
@@ -434,7 +434,7 @@ internal fun registerUserFx(state: State, definition: DaoFxDefinition): Register
         outputType = snap.outputType,
         fxMode = snap.fxMode,
         parameters = snap.parameters,
-        compatibleProperties = snap.compatibleProperties,
+        compatibleAttributes = snap.compatibleAttributes,
         source = FxSource.USER,
         sourceDefinitionId = snap.dbId,
         script = snap.script,
@@ -457,7 +457,7 @@ data class FxDefinitionDto(
     val outputType: String,
     val fxMode: String,
     val parameters: List<ParameterInfo>,
-    val compatibleProperties: List<String>,
+    val compatibleAttributes: List<String>,
     val script: String,
     val defaultTiming: Timing,
     val timingSource: String = "BEAT",
@@ -471,7 +471,7 @@ data class CreateFxDefinitionRequest(
     val outputType: String = "SLIDER",
     val fxMode: String = "STANDARD",
     val parameters: List<ParameterInfo> = emptyList(),
-    val compatibleProperties: List<String> = emptyList(),
+    val compatibleAttributes: List<String> = emptyList(),
     val script: String,
     val defaultTiming: Timing = Timing.CYCLE,
     val timingSource: String = "BEAT",
@@ -485,7 +485,7 @@ data class UpdateFxDefinitionRequest(
     val outputType: String? = null,
     val fxMode: String? = null,
     val parameters: List<ParameterInfo>? = null,
-    val compatibleProperties: List<String>? = null,
+    val compatibleAttributes: List<String>? = null,
     val script: String? = null,
     val defaultTiming: Timing? = null,
     val timingSource: String? = null,
@@ -519,7 +519,7 @@ internal fun DaoFxDefinition.toDto(): FxDefinitionDto = FxDefinitionDto(
     outputType = this.outputType.name,
     fxMode = this.fxMode.name,
     parameters = this.parameters,
-    compatibleProperties = this.compatibleAttributes,
+    compatibleAttributes = this.compatibleAttributes,
     script = this.script,
     defaultTiming = timingOf(this.defaultTiming) ?: Timing.CYCLE,
     timingSource = this.timingSource.name,

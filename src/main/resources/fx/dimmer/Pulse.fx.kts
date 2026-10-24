@@ -4,7 +4,7 @@ name: Pulse
 family: intensity
 outputType: SLIDER
 fxMode: STANDARD
-compatibleProperties: [dimmer, uv]
+compatibleAttributes: [dimmer, uv]
 parameters:
   - name: min
     type: ubyte

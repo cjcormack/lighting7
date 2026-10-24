@@ -14,8 +14,13 @@ import kotlinx.serialization.json.JsonPrimitive
 internal fun undeclaredArgumentRefusal(def: ToolDef, input: JsonObject): String? {
     if (def.name in CHECKS_OWN_ARGUMENTS) return null
     val found = undeclaredArgument(def.inputSchema, input) ?: return null
-    RETIRED_ARGUMENTS[def.name to found.path.substringAfterLast('.')]?.let {
+    val key = found.path.substringAfterLast('.')
+    RETIRED_ARGUMENTS[def.name to key]?.let {
         return "'${found.path}' is not an argument of ${def.name}: $it"
+    }
+    RENAMED_ARGUMENTS[key]?.takeIf { it in found.declared }?.let {
+        return "'${found.path}' is not an argument of ${def.name}: it is '$it' now. " +
+            "A client that fetched the tool list before the desk was updated should reconnect for the current one."
     }
     return "'${found.path}' is not an argument of ${def.name}; it takes ${found.declared.joinToString()}. " +
         "A client that fetched the tool list before the desk was updated should reconnect for the current one."
@@ -77,4 +82,15 @@ private val RETIRED_ARGUMENTS: Map<Pair<String, String>, String> = mapOf(
         "apply_palette puts on a layer by default; pass asValues: true for literals",
     ("mark_up_prompt_book" to "cueId") to
         "name the entry the cue is called from — entryId, or stackId and number (a cue may sit in several stacks, so cueId names no place)",
+)
+
+/**
+ * Arguments renamed wherever they appear (terminology plan session 6), by old name: the hint is
+ * given where the new name is declared beside the old one's place.
+ */
+private val RENAMED_ARGUMENTS: Map<String, String> = mapOf(
+    "propertyName" to "attribute",
+    "properties" to "attributes",
+    "propertyMask" to "attributeMask",
+    "propertyAssignments" to "attributeAssignments",
 )

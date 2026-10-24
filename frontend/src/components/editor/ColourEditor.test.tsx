@@ -70,11 +70,11 @@ const rgbw = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: 
 const rgba = colourProp('rgbColour', chan(1), chan(2), chan(3), { amberChannel: chan(5) })
 const dimmer = sliderProp('dimmer', 'dimmer', chan(20))
 
-const par1: WriteTarget = { key: 'par-1', properties: [rgb] }
-const par2: WriteTarget = { key: 'par-2', properties: [rgbw] }
-const dim: WriteTarget = { key: 'dim', properties: [dimmer] }
+const par1: WriteTarget = { key: 'par-1', attributes: [rgb] }
+const par2: WriteTarget = { key: 'par-2', attributes: [rgbw] }
+const dim: WriteTarget = { key: 'dim', attributes: [dimmer] }
 /** One cell of a bar, named the way `rowWriteTargets` and `writeTargetsOf` stamp it. */
-const cell: WriteTarget = { key: 'bar.c2', properties: [rgba], fixtureKey: 'bar', cellIndex: 1 }
+const cell: WriteTarget = { key: 'bar.c2', attributes: [rgba], fixtureKey: 'bar', cellIndex: 1 }
 const FOUR = [par1, par2, dim, cell]
 
 function stubMatchMedia({ narrow = false, short = false, cramped = false } = {}) {
@@ -351,14 +351,14 @@ describe('the picker', () => {
   })
 
   it('folds every colour descriptor of a target into the emitter counts, and counts a head once', () => {
-    expect(emitterHeadCounts([{ key: 'bar', properties: [], elements: [{ index: 1, key: 'bar.c2', displayName: 'Cell 2', properties: [rgba] }] }])).toEqual({
+    expect(emitterHeadCounts([{ key: 'bar', attributes: [], elements: [{ index: 1, key: 'bar.c2', displayName: 'Cell 2', attributes: [rgba] }] }])).toEqual({
       white: 0,
       amber: 1,
       uv: 0,
       any: 1,
     })
     const both = colourProp('rgbColour', chan(1), chan(2), chan(3), { whiteChannel: chan(4), amberChannel: chan(5) })
-    expect(emitterHeadCounts([{ key: 'x', properties: [both] }])).toEqual({ white: 1, amber: 1, uv: 0, any: 1 })
+    expect(emitterHeadCounts([{ key: 'x', attributes: [both] }])).toEqual({ white: 1, amber: 1, uv: 0, any: 1 })
   })
 })
 
@@ -398,7 +398,7 @@ describe('the footer', () => {
       projectId: 1,
       paletteId: 2,
       targets: [{ type: 'fixture', key: 'par-1' }],
-      propertyMask: 'COLOUR',
+      attributeMask: 'COLOUR',
       families: ['COLOUR'],
     })
     expect(apply).not.toHaveBeenCalled()
@@ -478,7 +478,7 @@ function template(id: number, name: string, extra: Record<string, unknown> = {})
     family: 'COLOUR',
     isGeneric: true,
     kind: 'value',
-    rows: [{ propertyName: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
+    rows: [{ attribute: 'rgbColour', value: '#ffaa00', targetType: 'generic', targetKey: null, sortOrder: 0 }],
     fx: null,
     requiredEmitters: [],
     lastPressedAt: '2026-09-18T10:00:00Z',

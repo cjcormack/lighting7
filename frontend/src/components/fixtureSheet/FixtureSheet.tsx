@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type ElementType, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { commandsOf, findColourSource, findDimmerProperty, findWhiteMixProperty, triggersOf, useFixtureTypeListQuery, type Fixture } from '@/store/fixtures'
+import { commandsOf, findColourSource, findDimmerAttribute, findWhiteMixAttribute, triggersOf, useFixtureTypeListQuery, type Fixture } from '@/store/fixtures'
 import { useActiveFxQuery } from '@/store/fixtureFx'
 import { useGroupQuery } from '@/store/groups'
 import { useIsDeskConnected } from '@/store/status'
@@ -9,7 +9,7 @@ import { useProgrammerBlind } from '@/hooks/useProgrammerBlind'
 import { useGelIndex } from '@/hooks/useGelIndex'
 import { useFixtureLookup } from '@/hooks/useFixtureLookup'
 import { fixtureChannelRefs } from '@/hooks/useFixturePark'
-import { getPropertyChannels } from '@/hooks/usePropertyParkStatus'
+import { getAttributeChannels } from '@/hooks/useAttributeParkStatus'
 import { findGel } from '@/lib/gels'
 import type { GroupSummary } from '@/api/groupsApi'
 import type { ActiveFx } from '@/store/fixtureFx'
@@ -141,7 +141,7 @@ function useSheetContext(
   )
   // The picker opens on the family of the row open on the sheet, and starts its effect on that
   // row's property where the effect can take it (Fx board, "Adding"). An open row is keyed by its
-  // head and its id (`PropertyRow`'s `openKey`); a head's row of the same id is the same family.
+  // head and its id (`AttributeRow`'s `openKey`); a head's row of the same id is the same family.
   const openRow = useMemo(() => {
     const rowId = openRowId?.split('\u0000')[1]
     return rowId == null ? null : (rowGroups.flatMap((g) => g.rows).find((r) => r.id === rowId) ?? null)
@@ -152,7 +152,7 @@ function useSheetContext(
     blind,
     effects,
     initialFamily: pickerFamilyForSheet(openRow?.family),
-    preferredProperty: openRow?.keys[0] ?? null,
+    preferredAttribute: openRow?.keys[0] ?? null,
   }
 }
 
@@ -192,12 +192,12 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
   const [pick, pickMode, setPick] = useSheetPick(fixture.key)
   const groups = useMemo(
     () =>
-      buildSheetRows(fixture.properties, {
-        dimmerElsewhere: (fixture.elementGroupProperties ?? []).some((p) => p.category === 'dimmer'),
+      buildSheetRows(fixture.attributes, {
+        dimmerElsewhere: (fixture.elementGroupAttributes ?? []).some((p) => p.category === 'dimmer'),
       }),
-    [fixture.properties, fixture.elementGroupProperties],
+    [fixture.attributes, fixture.elementGroupAttributes],
   )
-  const fixtureDimmer = useMemo(() => findDimmerProperty(fixture.properties), [fixture.properties])
+  const fixtureDimmer = useMemo(() => findDimmerAttribute(fixture.attributes), [fixture.attributes])
   const picked = useMemo(() => pickedHeads(heads, pick), [heads, pick])
   const headGroups = useMemo(() => rowsOverHeads(picked, headRowOptions(fixtureDimmer)), [picked, fixtureDimmer])
   const write = useMemo(() => pickWrite(heads, pick), [heads, pick])
@@ -207,7 +207,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
     [fixture.key, fixture.groups],
   )
   const rowGroups = useMemo(() => [...groups, ...headGroups.map((g) => ({ rows: g.rows.map((r) => r.row) }))], [groups, headGroups])
-  const { context, connected, blind, effects, initialFamily, preferredProperty } = useSheetContext(target, host, reachOf, aim, rowGroups)
+  const { context, connected, blind, effects, initialFamily, preferredAttribute } = useSheetContext(target, host, reachOf, aim, rowGroups)
 
   const trayTarget = useMemo<FxTrayTarget>(() => ({ type: 'fixture', fixture }), [fixture])
   const trayPick = useMemo((): TrayPick | undefined => {
@@ -279,7 +279,7 @@ function FixtureTargetSheet({ fixture, host, titleComponent, focus, aim }: Sheet
             {shownView === 'focus' && <div className="px-3 py-2">{focus}</div>}
           </>
         }
-        tray={<FxTray target={trayTarget} pick={trayPick} initialFamily={initialFamily} preferredProperty={preferredProperty} />}
+        tray={<FxTray target={trayTarget} pick={trayPick} initialFamily={initialFamily} preferredAttribute={preferredAttribute} />}
       />
     </FixtureSheetContext.Provider>
   )
@@ -308,16 +308,16 @@ function FixtureValues({
 }) {
   // A confetti cannon's tubes and a head's resets are not values: the cannon's panel and the
   // Commands menu, above the rows as before.
-  const triggers = useMemo(() => triggersOf(fixture.properties), [fixture.properties])
-  const commands = useMemo(() => commandsOf(fixture.properties), [fixture.properties])
+  const triggers = useMemo(() => triggersOf(fixture.attributes), [fixture.attributes])
+  const commands = useMemo(() => commandsOf(fixture.attributes), [fixture.attributes])
   // A conventional with no colour of its own shows its gel, dimmed by its dimmer.
   const { data: fixtureTypes } = useFixtureTypeListQuery()
   const gels = useGelIndex()
   const type = fixtureTypes?.find((t) => t.typeKey === fixture.typeKey)
   const hasColour =
-    findColourSource(fixture.properties) != null ||
-    findWhiteMixProperty(fixture.properties) != null ||
-    (fixture.elementGroupProperties ?? []).some((p) => p.type === 'colour' || p.type === 'whiteMix')
+    findColourSource(fixture.attributes) != null ||
+    findWhiteMixAttribute(fixture.attributes) != null ||
+    (fixture.elementGroupAttributes ?? []).some((p) => p.type === 'colour' || p.type === 'whiteMix')
   const gel = !hasColour && type?.gelCompactDisplay && fixture.gelCode ? findGel(gels, fixture.gelCode) : null
   const empty = groups.length === 0 && heads.length === 0 && triggers.length === 0 && commands.length === 0
 
@@ -329,7 +329,7 @@ function FixtureValues({
         {commands.length > 0 && (
           <FixtureCommandsMenu fixtureKey={fixture.key} fixtureName={fixture.name} commands={commands} canRun={connected} />
         )}
-        {gel && <GelSwatch gelHex={gel.color} dimmerProp={findDimmerProperty(fixture.properties)} className="h-6 w-full" />}
+        {gel && <GelSwatch gelHex={gel.color} dimmerProp={findDimmerAttribute(fixture.attributes)} className="h-6 w-full" />}
       </div>
       <FamilyGroups groups={groups} headKey={fixture.key} />
       {heads.length > 0 && (
@@ -377,7 +377,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
     [members, group.name],
   )
   const contextRows = useMemo(() => rowGroups.map((g) => ({ rows: g.rows.map((r) => r.row) })), [rowGroups])
-  const { context, connected, blind, effects, initialFamily, preferredProperty } = useSheetContext(target, host, reachOf, undefined, contextRows)
+  const { context, connected, blind, effects, initialFamily, preferredAttribute } = useSheetContext(target, host, reachOf, undefined, contextRows)
 
   const trayTarget = useMemo<FxTrayTarget>(() => ({ type: 'group', group }), [group])
   const trayPick = useMemo((): TrayPick => {
@@ -482,7 +482,7 @@ function GroupSheet({ group, host, titleComponent, onOpenMember }: SheetProps & 
             values
           )
         }
-        tray={<FxTray target={trayTarget} pick={trayPick} initialFamily={initialFamily} preferredProperty={preferredProperty} />}
+        tray={<FxTray target={trayTarget} pick={trayPick} initialFamily={initialFamily} preferredAttribute={preferredAttribute} />}
       />
     </FixtureSheetContext.Provider>
   )
@@ -493,7 +493,7 @@ function memberChannels(members: readonly GroupSheetMember[]): ChannelRef[] {
   const seen = new Set<string>()
   const out: ChannelRef[] = []
   for (const m of members) {
-    const refs = m.elementIndex == null ? fixtureChannelRefs(m.fixture) : m.properties.flatMap(getPropertyChannels)
+    const refs = m.elementIndex == null ? fixtureChannelRefs(m.fixture) : m.attributes.flatMap(getAttributeChannels)
     for (const ref of refs) {
       const key = `${ref.universe}:${ref.channelNo}`
       if (seen.has(key)) continue

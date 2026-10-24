@@ -1,7 +1,7 @@
 package uk.me.cormack.lighting7.fx
 
 import uk.me.cormack.lighting7.fixture.CompositionRule
-import uk.me.cormack.lighting7.fixture.PropertyCategory
+import uk.me.cormack.lighting7.fixture.AttributeCategory
 import uk.me.cormack.lighting7.show.Fixtures
 import uk.me.cormack.lighting7.testsupport.SineSlider
 import kotlin.test.Test
@@ -25,15 +25,15 @@ class FxEngineRepriorityTest {
         fadeWeight = 1.0,
         targetKey = "fx-1",
         targetIsGroup = false,
-        propertyName = "dimmer",
-        category = PropertyCategory.DIMMER,
+        attribute = "dimmer",
+        category = AttributeCategory.DIMMER,
         compositionOverride = CompositionRule.LTP,
-        value = CueAssignmentResolver.PropertyValue.Slider(value),
+        value = CueAssignmentResolver.AttributeValue.Slider(value),
     )
 
     private fun FxEngine.dimmer(): UByte {
         val value = layerResolver.currentCueLayerState[CueAssignmentResolver.Key.fixture("fx-1", "dimmer")]
-        assertIs<CueAssignmentResolver.PropertyValue.Slider>(value)
+        assertIs<CueAssignmentResolver.AttributeValue.Slider>(value)
         return value.value
     }
 

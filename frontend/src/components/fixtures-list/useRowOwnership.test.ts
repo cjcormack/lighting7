@@ -8,12 +8,12 @@ import { buildRowCells } from './useRowValues'
 import { aggregateCellOwnership } from './useRowOwnership'
 import { chan, colourProp, groupSummary, makeFixture, sliderProp } from '@/test/fixtureFactories'
 import type { ProgrammerEntry, ProgrammerKeyState, ProvenanceSource } from '@/api/programmerWsApi'
-import type { CellPropertyKey } from './useRowValues'
+import type { CellAttributeKey } from './useRowValues'
 
 function entry(overrides: Partial<ProgrammerEntry> = {}): ProgrammerEntry {
   return {
     targetKey: 'f1',
-    propertyName: 'dimmer',
+    attribute: 'dimmer',
     value: '200',
     owner: 'web',
     touched: true,
@@ -24,26 +24,26 @@ function entry(overrides: Partial<ProgrammerEntry> = {}): ProgrammerEntry {
 
 /** Build a lookup from a plain `"key|prop" → state` map. */
 function lookupFrom(states: Record<string, ProgrammerKeyState>) {
-  return (targetKey: string, propertyName: string): ProgrammerKeyState =>
-    states[`${targetKey}|${propertyName}`] ?? {}
+  return (targetKey: string, attribute: string): ProgrammerKeyState =>
+    states[`${targetKey}|${attribute}`] ?? {}
 }
 
 function provenance(source: ProvenanceSource): ProgrammerKeyState {
-  return { provenance: { targetKey: 'f1', propertyName: 'dimmer', source } }
+  return { provenance: { targetKey: 'f1', attribute: 'dimmer', source } }
 }
 
-const KEY: CellPropertyKey[] = [{ targetKey: 'f1', propertyName: 'dimmer' }]
+const KEY: CellAttributeKey[] = [{ targetKey: 'f1', attribute: 'dimmer' }]
 
 function layerProvenance(
   layerId: number,
   lookName: string,
-  propertyName = 'dimmer',
+  attribute = 'dimmer',
   targetKey = 'f1',
 ): ProgrammerKeyState {
   return {
     provenance: {
       targetKey,
-      propertyName,
+      attribute,
       source: 'CUE',
       cueId: 4,
       layerId,
@@ -77,9 +77,9 @@ describe('aggregateCellOwnership — the winning layer', () => {
   it('drops the name when the covered properties were won by different layers', () => {
     // Naming one layer over a group row where half the heads came from another is a confident lie
     // about what the cell is showing — the same rule `paletteRef` follows.
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     const result = aggregateCellOwnership(keys, false, lookupFrom({
       'f1|dimmer': layerProvenance(1, 'Warm Wash'),
@@ -91,9 +91,9 @@ describe('aggregateCellOwnership — the winning layer', () => {
   it('counts some-but-not-all as mixed, keeping the name', () => {
     // One layer, but only covering half the cell. The name is still true; the claim that it
     // explains the whole cell is not.
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     const result = aggregateCellOwnership(keys, false, lookupFrom({
       'f1|dimmer': layerProvenance(1, 'Warm Wash'),
@@ -103,20 +103,20 @@ describe('aggregateCellOwnership — the winning layer', () => {
 })
 
 describe('aggregateCellOwnership — a colour carrying a bundled emitter', () => {
-  const COLOUR_KEY: CellPropertyKey[] = [{ targetKey: 'f1', propertyName: 'rgbColour' }]
+  const COLOUR_KEY: CellAttributeKey[] = [{ targetKey: 'f1', attribute: 'rgbColour' }]
 
   /** A cue-won colour from layer [layerId] whose white came from [whiteLayerId]'s row. */
   function colourWithWhite(layerId: number | undefined, whiteLayerId: number | undefined): ProgrammerKeyState {
     return {
       provenance: {
         targetKey: 'f1',
-        propertyName: 'rgbColour',
+        attribute: 'rgbColour',
         source: 'CUE',
         cueId: 4,
         layerId,
         layerSource: layerId == null ? undefined : { kind: 'LOOK', id: 101, uuid: 'u1', name: 'Warm Wash' },
         bundled: [{
-          propertyName: 'white',
+          attribute: 'white',
           cueId: 5,
           layerId: whiteLayerId,
           layerSource: whiteLayerId == null ? undefined : { kind: 'LOOK', id: 102, uuid: 'u2', name: 'Bright White' },
@@ -219,9 +219,9 @@ describe('aggregateCellOwnership', () => {
   })
 
   it('flags a mixed cell and reports the most significant source', () => {
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     const result = aggregateCellOwnership(
       keys,
@@ -236,9 +236,9 @@ describe('aggregateCellOwnership', () => {
   })
 
   it('ranks programmer above effect and cue but below parked', () => {
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     expect(
       aggregateCellOwnership(
@@ -250,9 +250,9 @@ describe('aggregateCellOwnership', () => {
   })
 
   it('stages a value only while blind, and only when the cell agrees on it', () => {
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     const agreeing = lookupFrom({
       'f1|dimmer': { entry: entry({ value: '200' }) },
@@ -283,9 +283,9 @@ describe('aggregateCellOwnership', () => {
   // `CellLayer` answers "where did this come from" instead, covered above.
 
   it('does not stage when only some covered properties are held', () => {
-    const keys: CellPropertyKey[] = [
-      { targetKey: 'f1', propertyName: 'dimmer' },
-      { targetKey: 'f2', propertyName: 'dimmer' },
+    const keys: CellAttributeKey[] = [
+      { targetKey: 'f1', attribute: 'dimmer' },
+      { targetKey: 'f2', attribute: 'dimmer' },
     ]
     const result = aggregateCellOwnership(
       keys,
@@ -310,10 +310,10 @@ describe('buildRowCells keys', () => {
     })
     const cells = buildRowCells(row, ['dimmer', 'colour'])
     expect(cells.find((c) => c.col === 'dimmer')?.keys).toEqual([
-      { targetKey: 'spot', propertyName: 'dimmer' },
+      { targetKey: 'spot', attribute: 'dimmer' },
     ])
     expect(cells.find((c) => c.col === 'colour')?.keys).toEqual([
-      { targetKey: 'spot', propertyName: 'rgbColour' },
+      { targetKey: 'spot', attribute: 'rgbColour' },
     ])
   })
 
@@ -327,8 +327,8 @@ describe('buildRowCells keys', () => {
       textFilter: '',
     })
     expect(buildRowCells(rows[0], ['dimmer'])[0].keys).toEqual([
-      { targetKey: 'a', propertyName: 'dimmer' },
-      { targetKey: 'b', propertyName: 'dimmer' },
+      { targetKey: 'a', attribute: 'dimmer' },
+      { targetKey: 'b', attribute: 'dimmer' },
     ])
   })
 })

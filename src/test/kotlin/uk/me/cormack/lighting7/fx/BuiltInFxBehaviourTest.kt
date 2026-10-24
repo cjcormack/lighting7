@@ -90,7 +90,7 @@ class BuiltInFxBehaviourTest {
      * This is not hypothetical. While the parser was dropping defaults, `GET /fx/library` served
      * `defaultValue: ""`, the Add FX sheet seeded its form from that, and the empty map was
      * persisted. The desk's `cue_ad_hoc_effects` table holds exactly this today —
-     * `SineWave {"min":"","max":""}` and `Circle {"panCenter":"", …}` — so without this rule the
+     * `SineWave {"min":"","max":""}` and `Circle {"panCentre":"", …}` — so without this rule the
      * parser fix would heal newly-added effects and leave those rows dead.
      */
     @Test
@@ -112,7 +112,7 @@ class BuiltInFxBehaviourTest {
 
         val circle = registry.createFx(
             "Circle",
-            mapOf("panCenter" to "", "tiltCenter" to "", "panRadius" to "", "tiltRadius" to ""),
+            mapOf("panCentre" to "", "tiltCentre" to "", "panRadius" to "", "tiltRadius" to ""),
         )
         assertEquals(
             fx("Circle").calculate(0.0).position(), circle.calculate(0.0).position(),
@@ -124,7 +124,7 @@ class BuiltInFxBehaviourTest {
      * The frontmatter parser's parameter-continuation branch must only claim the keys a parameter
      * has. It absorbs indented lines while a parameter entry is open, so without that restriction
      * an indented top-level key written *after* the parameter list is swallowed — and an effect
-     * that silently loses `compatibleProperties` registers fine and then targets nothing.
+     * that silently loses `compatibleAttributes` registers fine and then targets nothing.
      */
     @Test
     fun `an indented top-level key after the parameter list still parses`() {
@@ -140,13 +140,13 @@ class BuiltInFxBehaviourTest {
                 type: ubyte
                 default: "7"
                 description: Minimum
-              compatibleProperties: [dimmer, uv]
+              compatibleAttributes: [dimmer, uv]
             ---*/
             FxOutput.Slider(0u)
             """.trimIndent(),
         )
 
-        assertEquals(listOf("dimmer", "uv"), metadata.compatibleProperties)
+        assertEquals(listOf("dimmer", "uv"), metadata.compatibleAttributes)
         assertEquals(1, metadata.parameters.size, "the stray key must not become a parameter")
         assertEquals("7", metadata.parameters.single().default)
         assertEquals("ubyte", metadata.parameters.single().type)
@@ -428,7 +428,7 @@ class BuiltInFxBehaviourTest {
     fun `Circle produces circular movement`() {
         val effect = fx(
             "Circle",
-            "panCenter" to "128", "tiltCenter" to "128", "panRadius" to "50", "tiltRadius" to "50",
+            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "50",
         )
         // cos(0) = 1, sin(0) = 0
         assertEquals(178.toUByte() to 128.toUByte(), effect.calculate(0.0).position())
@@ -443,7 +443,7 @@ class BuiltInFxBehaviourTest {
         // Centre plus radius overruns 255 — the effect must clamp, not wrap.
         val effect = fx(
             "Circle",
-            "panCenter" to "250", "tiltCenter" to "250", "panRadius" to "50", "tiltRadius" to "50",
+            "panCentre" to "250", "tiltCentre" to "250", "panRadius" to "50", "tiltRadius" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -456,7 +456,7 @@ class BuiltInFxBehaviourTest {
     fun `Figure8 sweeps both axes`() {
         val effect = fx(
             "Figure8",
-            "panCenter" to "128", "tiltCenter" to "128", "panRadius" to "50", "tiltRadius" to "30",
+            "panCentre" to "128", "tiltCentre" to "128", "panRadius" to "50", "tiltRadius" to "30",
         )
         val positions = (0..20).map { effect.calculate(it / 20.0).position() }
         val pans = positions.map { it.first.toInt() }
@@ -503,7 +503,7 @@ class BuiltInFxBehaviourTest {
     fun `RandomPosition stays within range`() {
         val effect = fx(
             "RandomPosition",
-            "panCenter" to "128", "tiltCenter" to "128", "panRange" to "50", "tiltRange" to "50",
+            "panCentre" to "128", "tiltCentre" to "128", "panRange" to "50", "tiltRange" to "50",
         )
         for (i in 0..100) {
             val (pan, tilt) = effect.calculate(i / 100.0).position()
@@ -545,7 +545,7 @@ class BuiltInFxBehaviourTest {
     }
 
     @Test
-    fun `each beam built-in declares exactly its own property`() {
+    fun `each beam built-in declares exactly its own attribute`() {
         val expected = mapOf("ZoomWave" to "zoom", "IrisPulse" to "iris", "FrostPulse" to "frost", "FocusPull" to "focus")
         // Slot Steps drives Beam too (effects plan §3.6), but is filed in the Steps family and steps
         // a setting its row names — it declares only the `setting` sentinel, and emits steps.
@@ -555,10 +555,10 @@ class BuiltInFxBehaviourTest {
         assertEquals(STEPS_CATEGORY, slotSteps.family)
         assertEquals(STEPS_CATEGORY, registry.getRegistration(PALETTE_STEPS_ID)!!.family)
         assertEquals("beam", stepsFxFamily(SLOT_STEPS_ID, null))
-        assertEquals(listOf("setting"), slotSteps.compatibleProperties)
+        assertEquals(listOf("setting"), slotSteps.compatibleAttributes)
         assertEquals(FxOutputType.STEPS, slotSteps.outputType)
         for (reg in beam) {
-            assertEquals(listOf(expected.getValue(reg.id)), reg.compatibleProperties, reg.id)
+            assertEquals(listOf(expected.getValue(reg.id)), reg.compatibleAttributes, reg.id)
             assertEquals(FxOutputType.SLIDER, reg.outputType, reg.id)
         }
     }
@@ -570,7 +570,7 @@ class BuiltInFxBehaviourTest {
         val registration = registry.getRegistration("LightningStrike")!!
         assertEquals(FxMode.STANDARD, registration.fxMode)
         assertEquals("intensity", registration.family)
-        assertEquals(listOf("dimmer"), registration.compatibleProperties)
+        assertEquals(listOf("dimmer"), registration.compatibleAttributes)
     }
 
     @Test
