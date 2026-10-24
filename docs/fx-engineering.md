@@ -1007,7 +1007,8 @@ the key; one painting some of them (a UV wave beside an RGBW colour entry) does 
 holds read *Programmer* while the Circle was what the rig showed — the plan's issue 1.
 
 **Live edits** (W3). `updateFx` on the socket and `PUT /fx/{id}` share one parse,
-`applyFxUpdate` (`routes/lightFx.kt`), and both land in `FxEngine.updateFx`, which keeps the
+`parseFxUpdate` under `applyFxUpdate` (`routes/lightFx.kt`; the FX preview runs the same parse on a
+copy), and both land in `FxEngine.updateFx`, which keeps the
 instance's id, phase, layer identity and fade. A type swap takes the new type's timing source
 (`newTimingSource`), as the add path does — before, a beat effect swapped for a wall-clock one kept
 running on the beat loop. A refusal (`FX_UPDATE_REFUSED`: an unknown blend, type or master uuid;
@@ -1232,7 +1233,7 @@ Nothing on the stage evaluates an FX for a moment it has not reached, so the FX 
 editor plan D7) comes from `fx/FxSampler.kt`: an FX's output on each head over a window, for a running
 FX or a draft (an `FxInstance` never added to the engine), with the engine's own maths and none of its
 state (P3, P4). `FxEngine.sampler(freshFx)` builds one over the engine; the preview route
-(session 1b) is its only caller.
+(`routes/fxPreview.kt`, below) is its only caller.
 
 **What it reuses.** The members and their offsets are the compose pass's: `FxEngine`'s expansion and
 `DistributionPlan`, read through the instance's caches while they are valid and built, never stored,
@@ -1271,7 +1272,8 @@ as the ones asked for; `ONLY` folds those alone.
 
 **Drafts.** A draft is ordered where adding it would put it — a Local draft at the top of its lane,
 any draft after the running FX of its priority — and runs on the masters its uuids name, which only
-adding it would bind to slots. Previewing an edit to a running FX is the route's (session 1b).
+adding it would bind to slots. An edited copy of a running FX (`FxEngine.editedCopy`) carries its id:
+it sorts where that FX is, and under *Include* `STACK` it stands in for it rather than beside it.
 
 **Clocks.** Sampling starts from one reading of every clock (`FxSampleClock`: each master's tick and
 its length, each rate master's scale). A beat FX's tick at a sample is its master's tick plus the
@@ -1300,6 +1302,53 @@ every Order with Spread, Wings, Segments and Parts set, Runs with Bounce, Timing
 under *Within*, a Circle *Around* a programmer position, Amount, Palette Steps, a Seconds FX, each
 element mode and filter, a held-back FX, a Local FX over a layer's, and a beat FX with a wall-clock FX
 *Within* it — and checks that sampling leaves every instance field and the controller as they were.
+
+**The route.** `POST /projects/{id}/fx/preview` asks the sampler, current project only (409
+otherwise), both roles, and writes nothing: no FX is added, no instance field moves, no DMX is sent.
+The project write guard counts it a runtime gesture, so an operator previews on a venue too.
+
+- **The request**: `targets` (the selection, in order), `fx`, `include` (`STACK` | `ONLY`), `window`
+  (one of `cycles` of the first FX, `beats` of its master — a wall-clock FX's rate master, master 1
+  for one on its own seconds — or `seconds`; two cycles when none) and `solo` (an index into the
+  first 8 of `fx`). Each `fx` entry is `{fxId}`, a running FX; `{draft}`, `POST /fx/add`'s
+  body, built by `buildFxInstance` — the add's own write boundary — and never added, its `targets` the
+  request's when it names none; or `{fxId, draft}`, the running FX with `draft`, `PUT /fx/{id}`'s
+  body, run through `parseFxUpdate` (the parse `applyFxUpdate` and the `updateFx` frame share) and
+  applied to a copy. A draft move naming some of the FX's heads is refused: a split is not previewed.
+- **The rows** are the heads `targets` cover (as a press covers them; a target the rig lacks is a
+  problem) that the sampled FX paint — under `STACK`, that any running FX paints too, so every FX
+  reaching the selection is folded — or, with no targets, the asked-for FX's heads. They are grouped
+  by fixture: fixtures in the order of their first head under the first FX's Order, each one's heads
+  together in that Order, ties in rig order — the order the FX's own walks list the heads. Each row
+  carries its `rigIndex`, so the editor can hold rig order, and the row cap cuts at a fixture's end,
+  dropping whole fixtures (a single fixture longer than the cap is cut at it).
+- **The answer**: `window` (`samples`, `sampleMs`, the length in the first FX's master's `beats` and in
+  `seconds`), `clock` (each master the FX run on with its `tickAtStart` and `msPerBeat`, or
+  `seconds: true` for FX on their own clock, which carries no start time: its playhead runs from
+  sample 0), `rows`, `lanes` (by family, Intensity,
+  Colour, Position, Beam; each attribute's rows with `underneath` as one sample, `result`, and each
+  FX's own `output` with its `heldBackReason`), `fx` (every FX folded, in apply order: its `fxId`
+  and, when asked for, its `entry` in the request; per row its `offsets`, the samples its cycle
+  `starts` at, the inclusive `holding` ranges and its `ladder`, null rungs for a split-off copy,
+  which carries its offset but not the ranks it came from; its `slots` and `representative`) and
+  `truncated`. A series is base64 bytes a plane — `level`; `red`, `green`, `blue` and the head's
+  `white`, `amber`, `uv`; `pan`, `tilt` — and a Steps FX's output adds `steps` beside `stepLabels`.
+- **The offset ladder** is each row's rank and rank count after Order, Segments, Wings and Parts, then
+  its offset (Spread): `SpreadShaping.shape` fills it as it shapes (`SpreadShaping.Ladder`), from the
+  ranks `DistributionPlan` gives it, so it is the plan's own steps. A cycle's start is where the
+  member's own clock with its Phase (`FxPhase.beatOwnCyclesAt` / `wallClockOwnCyclesAt`, the clock
+  Bounce counts on; Runs counts it less Phase) crosses a whole number: where its own cycle begins.
+  Under Ping-pong, whose triangle sweep is shaped from that cycle, the turnarounds fall elsewhere.
+- **One snapshot.** The rows, the samples and solo read each FX once (`FxSampler.snapshot()`), so an
+  edit landing mid-request cannot order the rows by one read and sample them by another.
+- **Solo** samples the solo FX alone (`ONLY`) on the same clock and redraws its family's lane: its
+  attribute's *Result* as it alone leaves it, every other attribute in the lane what is underneath (D14).
+- **Caps**: the sampler's (48 samples a cycle, 1024 a row, 96 rows, 8 FX), each cutting the answer and
+  named in `truncated` (`SAMPLES`, `ROWS`, `FX`); and a window longer than 64 cycles, 256 beats or 600
+  seconds is refused. An FX past the 8 brings no rows and is not folded under `STACK`. 400
+  `FX_PREVIEW_INVALID` names every problem at once — an unreadable or refused draft, an FX not
+  running, a target the rig lacks, a bad window, `include` or `solo` — in `problems`, each prefixed by where it is
+  (`fx[2]: …`, `window.cycles: …`).
 
 ## Easing Curves
 
@@ -2000,6 +2049,7 @@ set. Every client hits this: an indicator mounts before its master-1 lookup reso
 | `fx/SpeedMasterBank.kt` | Per-show bank of master clocks, wake channel, per-pass `Frame` |
 | `models/speedMasters.kt` | Exposed DAO for speed_masters table + default-bank seeding |
 | `routes/projectSpeedMasters.kt` | Speed-master CRUD API endpoints + delete guards |
+| `routes/fxPreview.kt` | `POST /projects/{id}/fx/preview`: the FX editor's graph, answered from `fx/FxSampler.kt` (§"Previewing an FX") |
 | `plugins/SpeedMasterSocket.kt` | `speedMasters.*` WS family (live tempo control/streaming, keyed beat frames) |
 | `fx/CycleLength.kt` | Timing constants |
 | `fx/Fx.kt` | Fx, StatefulFx interfaces, FxOutput types |

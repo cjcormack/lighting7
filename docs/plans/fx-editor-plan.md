@@ -187,6 +187,13 @@ finger before the 50 ms floor has sent it. The answer:
 400 `FX_PREVIEW_INVALID` names every problem at once (an unknown FX, a draft the write boundary
 would refuse, a window over the cap); 409 off the current project.
 
+As shipped (session 1b), the route speaks the wire's final names and differs from this sketch in a
+few places; `fx-engineering.md` §"Previewing an FX" is the shape the client is built on. An FX is
+`fxId`; `solo` is an index into `fx` (a draft has no id); an answer's per-row FX output names its FX
+by index into the answer's `fx`, whose `entry` is its place in the request; `heldBackReason` alone says
+an FX is held back; rows carry `rigIndex`, grouped by fixture; the window's `beats` are always
+answered; and a `seconds` clock carries no start time, its playhead running from sample 0.
+
 The client asks again, latest request wins, when the selection changes, on `fxChanged` for an FX in
 the list, after an `updateFx` it sent is answered, on `speedMasters.changed` for a master in `clock`,
 and on `provenanceState` for a row's key (the underneath moved). The playhead advances from `clock`
