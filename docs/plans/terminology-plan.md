@@ -1,6 +1,6 @@
 # Terminology: one vocabulary across the desk, the code and the archive, in MagicQ's words where they fit
 
-> **Document status: AGREED 2026-10-23; session 5 of 7 done.** The questions asked and their answers are in
+> **Document status: AGREED 2026-10-23; session 6 of 7 done.** The questions asked and their answers are in
 > §11. The survey behind them is a one-page artifact for human readers,
 > <https://claude.ai/artifact/8Nu94UPNfSvrBmyQcdpd9V>, private to Chris and a convenience; this plan
 > is the authority.
@@ -156,8 +156,8 @@ so a new one looks as it does now.
 | Runs | `nShot`, `nShotStartTick`… | `runs`, `runsStartTick`… (`runForever`, `spent` unchanged) |
 | FX | `EffectRegistration`, `EffectSpawner`, `EffectEnvelope`, `EffectSpecCoercion`, `EffectDto`, `effectType`, `effectMode`, MCP `clear_effects`, `active_effects` | `FxRegistration`, `FxSpawner`, `FxEnvelope`, `FxSpecCoercion`, `FxDto`, `fxType`, `fxMode`, `clear_fx`, `active_fx` |
 | Palette | `Template*` classes, `tmpl:{uuid}`, MIDI `pressTemplate` | `Palette*`, `pal:{uuid}`, `pressPalette` |
-| Family | `category`, `usage`, `PropertyCategory`, `TEMPLATE_EFFECT_FAMILIES`, value `dimmer` | `family`, `AttributeFamily`, `PALETTE_FX_FAMILIES`, value `intensity` |
-| Attribute | `@FixtureProperty`, `propertyName`, `properties`, the `property/` interfaces | `@FixtureAttribute`, `attribute`, `attributes`, `attribute/` |
+| Family | `category`, `usage`, `PropertyMaskGroup`, `TEMPLATE_EFFECT_FAMILIES`, value `dimmer` | `family`, `AttributeFamily`, `PALETTE_FX_FAMILIES`, value `intensity`; `PropertyCategory`, an attribute's finer role, is `AttributeCategory` |
+| Attribute | `@FixtureProperty`, `propertyName`, `properties`, `propertyMask`, `propertyAssignments`, the `property/` interfaces, MIDI `fixtureProperty`, `groupProperty`, `selectionProperty` | `@FixtureAttribute`, `attribute`, `attributes`, `attributeMask`, `attributeAssignments`, `attribute/`, `fixtureAttribute`, `groupAttribute`, `selectionAttribute` |
 | Fan | `POST /programmer/spread`, curve `WINGS`, `parts`, `mode: FAN` | `POST /programmer/fan`, `MIRROR_OUT`, `runs`, `mode: BETWEEN` / `ABOUT` |
 | Spelling | `panCenter`, `tiltCenter`, `CENTER_*` | `panCentre`, `tiltCentre`, `CENTRE_*` |
 
@@ -181,7 +181,7 @@ effect tubes, which keep theirs (above), not FX.
 
 ## 5. Storage, migration and sync
 
-**The database moves in two one-shot steps** in `initDatabase`, recorded in `PRAGMA user_version`
+**The database moves in three one-shot steps** in `initDatabase`, recorded in `PRAGMA user_version`
 as `CLAUDE.md` §Database prescribes:
 
 - **4: FX rewrites (session 3).** §4.2's table, in place, logging each FX it rewrites by its Look, cue
@@ -191,12 +191,16 @@ as `CLAUDE.md` §Database prescribes:
   `RENAME COLUMN` in one transaction. `step_timing` changes type, so its tables are rebuilt the way
   `CueModelMigration` rebuilds `cues`. It runs before `createMissingTablesAndColumns`, which would
   otherwise create the new columns empty beside the old.
+- **6: the attribute names (session 6).** The surface bindings' attribute targets and their
+  `propertyName`, and the position FX's `panCenter` / `tiltCenter`, through `LegacyNames`; backed up
+  first to `<db>.pre-attribute-<utc>.db` when anything moves (`state/AttributeNamesMigration.kt`).
 
 **The archive bumps once, to `formatVersion` 38, in session 4.** The importer gains one file,
 `sync/LegacyNames.kt`: old folder, field, enum and FX-id names mapped by field to new ones, and §4.2's
 rewrites as functions. By P3 it applies to any archive, whatever its version, so the FX rewrites
 landing in session 3 need no bump of their own. `MIN_SUPPORTED_FORMAT_VERSION` stays 5. Session 5's
-wire renames touch no archive.
+wire renames touch no archive. Session 6 bumps it again, to 39, for the two stored names session 5
+left: the bindings' attribute targets and the centre parameters, read through `LegacyNames`.
 
 **Surface bindings** stored as `pressTemplate` or `stackEffectSize` are rewritten in step 5 and read
 through `LegacyNames` on import.
@@ -273,11 +277,14 @@ Each session is one PR. Sessions run in order; session 2 can land at any point a
   requires. Values moved in session 4.
 - `Effect*` → `Fx*` and `Template*` → `Palette*` across Kotlin and TypeScript.
 
-### Session 6: Attribute in the code (backend + frontend)
+### Session 6: Attribute in the code (backend + frontend) — done, `11f07af`
 
 - `@FixtureProperty` → `@FixtureAttribute`, `fixture/property/` → `fixture/attribute/`,
-  `PropertyCategory` → `AttributeFamily`, and every identifier that says property for a fixture
-  attribute. Storage and wire already moved in sessions 4 and 5.
+  `PropertyMaskGroup` → `AttributeFamily`, `PropertyCategory` → `AttributeCategory`, and every
+  identifier that says property for a fixture attribute. Storage moved in session 4; the wire did not
+  move in session 5, so it moves here: `propertyName` → `attribute`, `properties` → `attributes`,
+  `propertyMask` → `attributeMask`, `propertyAssignments` → `attributeAssignments`, across REST,
+  WebSocket, MCP and the TypeScript client.
 - The largest diff in the plan and the least risky: no behaviour, no stored name but the two below.
 - The surface bindings `fixtureProperty`, `groupProperty` and `selectionProperty` and their
   `propertyName`, moved from session 5: they are stored (`control_surface_bindings`) and synced, so
