@@ -5,6 +5,8 @@ import { cn } from '@/lib/utils'
 import { EditorLabel } from '@/components/editor/EditorLabel'
 import { EditedMark } from '@/components/fx/FxEditor'
 import { SplitFxEditor, type SplitSession } from '@/components/fx/SplitFxEditor'
+import { FxGraphStrip } from '@/components/fxEditor/FxGraphStrip'
+import { useFxPreview } from '@/components/fxEditor/useFxPreview'
 import { defaultParameters, differsFromPalette, draftOf, isCueFx, isPaletteLayerInstance } from '@/components/fx/fxEditorModel'
 import { targetEmitters } from '@/components/fixtures-list/rowModel'
 import { ApplyPicker } from '@/components/press/ApplyPicker'
@@ -90,6 +92,9 @@ export function fxOnSelection(
  * to palette** in place of Revert. Pressing the pad off and on spawns the palette's settings again.
  * A pad's effect has no stop here: the pad is what releases it, and stopping the instance alone would
  * leave the layer to respawn it at its next recook. The operator's own effect keeps pause and stop.
+ *
+ * Under the open row's editor is the FX editor's **graph strip** (FX editor plan §4.6): the running FX
+ * on its own heads, the lane after every FX reaching them, over what is underneath.
  */
 export function FxSheet({
   projectId,
@@ -310,6 +315,14 @@ export function FxSheet({
                     onFollow={setEditingId}
                     onStop={pad ? undefined : stop}
                   />
+                  <div className="mt-3">
+                    <RunningFxStrip
+                      projectId={projectId}
+                      effect={e}
+                      running={all ?? EMPTY}
+                      fxName={(fxType) => findFxEntry(library, fxType)?.name ?? fxType}
+                    />
+                  </div>
                 </div>
               )}
             </Fragment>
@@ -333,3 +346,35 @@ export function FxSheet({
     </div>
   )
 }
+
+/**
+ * A running FX's graph strip, on its own heads: `{fxId}` with no targets, everything reaching them
+ * folded — so a change to any running FX may move it, and every one is listed.
+ */
+function RunningFxStrip({
+  projectId,
+  effect,
+  running,
+  fxName,
+}: {
+  projectId: number
+  effect: ActiveFx
+  running: readonly ActiveFx[]
+  fxName: (fxType: string) => string
+}) {
+  const listed = useMemo(() => running.map((e) => e.id), [running])
+  const preview = useFxPreview({ projectId, targets: NO_TARGETS, fxIds: [effect.id], listed, ownHeads: true })
+  return (
+    <FxGraphStrip
+      answer={preview.answer}
+      error={preview.error}
+      waiting="Asking the desk…"
+      draw="result"
+      caption="On its heads, over what is underneath."
+      fxName={fxName}
+      bounce={effect.direction === 'BOUNCE'}
+    />
+  )
+}
+
+const NO_TARGETS: readonly CueTarget[] = []

@@ -116,6 +116,16 @@ vi.mock('@/components/press/ApplyPicker', async () => {
   }
 })
 vi.mock('@/components/hand/HandLayerTargets', () => ({ HandCueLayerStrip: () => null }))
+// The open FX row's graph strip asks the desk's preview; each ask is read and refused, so the next goes out.
+const previews = vi.hoisted(() => ({ asks: [] as Record<string, unknown>[] }))
+vi.mock('@/store/fxPreview', () => ({
+  usePreviewFxMutation: () => [
+    (body: Record<string, unknown>) => {
+      previews.asks.push(body)
+      return { unwrap: () => Promise.reject(new Error('not asked here')) }
+    },
+  ],
+}))
 vi.mock('@/store/looks', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/store/looks')>()),
   useLookListQuery: () => ({ data: [{ id: 4, uuid: 'u4', name: 'Warm', families: [], rowCount: 1, fxCount: 1, targetCount: 1 }] }),
@@ -301,6 +311,7 @@ beforeEach(() => {
   data.selection = []
   data.library = [PULSE, SINE]
   data.addFx.mockReset()
+  previews.asks.length = 0
   socket.sent.length = 0
   stack.handlers = null
   picker.props = null
@@ -515,6 +526,30 @@ describe('the FX tab', () => {
     expect(edited).toMatchObject({ seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3, spread: 0.5, wings: 2, segments: 2, parts: 3, delayMs: 500, cycle: 2 })
     expect(Number(edited.parameters.max)).toBe(128)
     expect('uuid' in edited).toBe(false)
+  })
+
+  it('the open row draws its FX alone on its own targets, include ONLY, saying what is underneath is not drawn', async () => {
+    data.cue = cueOf({ adHocFx: [pulse()] })
+    render(<Editor tab="fx" />)
+    expect(previews.asks).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: /Open Pulse/ }))
+    await waitFor(() => expect(previews.asks).toHaveLength(1))
+    const target = { type: 'fixture', key: 'orbit-sr' }
+    expect(previews.asks[0]).toMatchObject({
+      projectId: 1,
+      targets: [target],
+      include: 'ONLY',
+      fx: [{ draft: { fxType: 'Pulse', attribute: 'dimmer', targets: [target], seconds: true, amount: 0.5, direction: 'BOUNCE', runs: 3 } }],
+    })
+    expect(previews.asks[0]).not.toHaveProperty('notional')
+    expect(document.querySelector('[data-fx-graph-strip="this"]')).toHaveTextContent('What is underneath at its GO is not drawn.')
+    // An edit redraws it: the next ask carries the moved field before anything is saved.
+    const high = screen.getByRole('spinbutton', { name: /^High/ })
+    fireEvent.change(high, { target: { value: '50' } })
+    fireEvent.keyDown(high, { key: 'Enter' })
+    await waitFor(() => expect(previews.asks.length).toBeGreaterThan(1))
+    const last = previews.asks.at(-1) as { fx: { draft: { parameters: Record<string, string> } }[] }
+    expect(Number(last.fx[0].draft.parameters.max)).toBe(128)
   })
 
   it('a reorder keeps every field of every effect, the spread shape included', () => {

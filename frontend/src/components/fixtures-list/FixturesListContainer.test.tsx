@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import type { CellSelection } from '../sheet/useCellSelection'
@@ -115,8 +116,10 @@ vi.mock('@/store/selection', () => ({
 // The plain lists draw the kit's selection bar as their row C (CLAUDE.md §List shell), and it asks
 // the viewport's height; jsdom has no `matchMedia`, and a desk is tall.
 vi.mock('../../hooks/useMediaQuery', () => ({ useMediaQuery: () => false }))
+/** Include's one-shot request, which a test sets; none by default. */
+const include = vi.hoisted(() => ({ request: { nonce: 0, fixtureKeys: [] as string[], groupKeys: [] as string[] } }))
 vi.mock('../../store/includeSelection', () => ({
-  useIncludeSelectionRequest: () => ({ nonce: 0, targetKeys: [] }),
+  useIncludeSelectionRequest: () => include.request,
 }))
 vi.mock('./useCellWriters', () => ({
   useCellWriters: () => ({}),
@@ -230,6 +233,7 @@ beforeEach(() => {
   table.editorOpen = false
   table.keyboardOpens = []
   table.revealCell = null
+  include.request = { nonce: 0, fixtureKeys: [], groupKeys: [] }
 })
 afterEach(cleanup)
 
@@ -246,6 +250,19 @@ describe('the ?select= deep link', () => {
     render(<FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" enableDeepLinkSelect={false} />)
     expect(router.searchParamReads).toBe(0)
     expect(rowSelection.select).not.toHaveBeenCalled()
+  })
+})
+
+describe('Include’s request', () => {
+  it('is applied again after StrictMode’s simulated remount, whose unmount clears the selection', () => {
+    include.request = { nonce: 4, fixtureKeys: ['a'], groupKeys: [] }
+    render(
+      <StrictMode>
+        <FixturesListContainer projectId={1} grouped={false} selectionScope="programmer" respondToIncludeSelection enableDeepLinkSelect={false} />
+      </StrictMode>,
+    )
+    const applied = rowSelection.setSelection.mock.calls.filter(([ids]) => [...ids].includes('fixture:a'))
+    expect(applied).toHaveLength(2)
   })
 })
 

@@ -2,6 +2,13 @@ import { Sun, Palette, Move, Aperture, SlidersHorizontal, ListOrdered, type Luci
 import { ORDER_LABELS, ORDER_OPTIONS, orderLabel } from '@/lib/orderLabels'
 
 /**
+ * The heads an FX palette is drawn on with nothing to count (FX editor plan D15): its phase dials
+ * and its graph strip's notional heads. [NOTIONAL_HEADS_WORD] is the number in the strip's copy.
+ */
+export const NOTIONAL_HEADS = 8
+export const NOTIONAL_HEADS_WORD = 'eight'
+
+/**
  * An FX's cycle, in **beats a cycle** — the one spelling every surface uses
  * (`FU-FE-FX-SPEED-SPELLING`, settled by venue-visit plan S15). The editor's Cycle segment draws
  * these labels and every chip reads them through [getCycleLabel], so a cycle is never *1*

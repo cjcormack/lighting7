@@ -6,6 +6,8 @@ import { formatError } from '@/lib/formatError'
 import {
   usePreviewFxMutation,
   type FxPreviewAnswer,
+  type FxPreviewDraft,
+  type FxPreviewEntry,
   type FxPreviewRequest,
   type FxPreviewWindowRequest,
 } from '@/store/fxPreview'
@@ -28,6 +30,17 @@ export interface FxPreviewAsk {
    * edit applied to a copy — so the graph follows a gesture before the 50 ms floor sends it.
    */
   draft?: UpdateFxRequest
+  /**
+   * FX not yet added — a palette's, a cue's — asked as `{draft}` after [fxIds], each built by the
+   * add's own write boundary and never added. With no [fxIds] the first is the picked FX.
+   */
+  drafts?: readonly FxPreviewDraft[]
+  /** `STACK`, the default: every running FX reaching the rows is folded too. `ONLY`: the FX asked for alone. */
+  include?: 'STACK' | 'ONLY'
+  /** Draw [drafts] on this many heads the rig does not have, with no [targets] (`include: ONLY`). */
+  notional?: number
+  /** Ask with no [targets]: the asked-for FX's own heads are the rows. */
+  ownHeads?: boolean
   /** Every FX in the list: an `fxChanged` for any of them asks again. Absent, [fxIds]. */
   listed?: readonly number[]
   window?: FxPreviewWindowRequest
@@ -44,8 +57,9 @@ export interface FxPreviewState {
 /**
  * **The FX editor's preview** (FX editor plan §3.3): `POST /fx/preview` over the selection with
  * the picked FX, `include: STACK` — the desk folds every FX reaching the selection beside it — and
- * the window and solo the graph chose, asked again — the latest ask wins, an answer to an older one
- * dropped — whenever what it drew may have moved:
+ * the window and solo the graph chose. The strip's hosts (§4.6) ask the same way with drafts, over
+ * an FX's own heads, or on notional heads. It is asked again — the latest ask wins, an answer to an
+ * older one dropped — whenever what it drew may have moved:
  *
  * - the ask itself changes: the selection, the FX in the list, or the inspector's unsent move;
  * - `fxChanged` for an FX in the list — which is also how an `updateFx` this window sent is
@@ -66,18 +80,30 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
   const [state, setState] = useState<FxPreviewState>({ answer: null, error: null })
   const key = askKey(ask)
   // What an answer must still match to be drawn: everything but the unsent move, whose answer is
-  // newer than the one drawn even after the finger has moved on.
-  const baseKey = askKey(ask == null ? null : { ...ask, draft: undefined })
+  // newer than the one drawn even after the finger has moved on — the inspector's `draft`, and a
+  // draft's settings, of which only what it is and where it runs must still match.
+  const baseKey = askKey(
+    ask == null
+      ? null
+      : { ...ask, draft: undefined, drafts: ask.drafts?.map((d) => ({ fxType: d.fxType, attribute: d.attribute, targets: d.targets })) },
+  )
 
   const request = useMemo((): (FxPreviewRequest & { projectId: number }) | null => {
-    if (ask == null || ask.fxIds.length === 0 || ask.targets.length === 0) return null
+    if (ask == null) return null
+    const fx: FxPreviewEntry[] = [
+      ...ask.fxIds.map((fxId, i): FxPreviewEntry => (i === 0 && ask.draft != null ? { fxId, draft: ask.draft } : { fxId })),
+      ...(ask.drafts ?? []).map((draft): FxPreviewEntry => ({ draft })),
+    ].slice(0, PREVIEW_MAX_FX)
+    const notional = ask.notional != null && ask.notional > 0 ? ask.notional : null
+    if (fx.length === 0 || (notional == null && ask.targets.length === 0 && ask.ownHeads !== true)) return null
     return {
       projectId: ask.projectId,
-      targets: ask.targets.map((t) => ({ type: t.type, key: t.key })),
-      fx: ask.fxIds.slice(0, PREVIEW_MAX_FX).map((fxId, i) => (i === 0 && ask.draft != null ? { fxId, draft: ask.draft } : { fxId })),
-      include: 'STACK',
+      targets: notional != null ? [] : ask.targets.map((t) => ({ type: t.type, key: t.key })),
+      fx,
+      include: ask.include ?? 'STACK',
+      ...(notional != null ? { notional } : {}),
       ...(ask.window != null ? { window: ask.window } : {}),
-      ...(ask.solo != null && ask.solo >= 0 && ask.solo < Math.min(ask.fxIds.length, PREVIEW_MAX_FX) ? { solo: ask.solo } : {}),
+      ...(ask.solo != null && ask.solo >= 0 && ask.solo < fx.length ? { solo: ask.solo } : {}),
     }
     // Keyed by content — the listed FX included, so one joining the list asks again — and a
     // re-render that rebuilt the same arrays asks nothing.
@@ -137,10 +163,13 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
     }
   }, [])
 
-  const fxKey = request == null ? '' : [...new Set([...(ask?.listed ?? []), ...request.fx.map((e) => e.fxId)])].join(',')
+  const fxKey =
+    request == null ? '' : [...new Set([...(ask?.listed ?? []), ...request.fx.flatMap((e) => (e.fxId != null ? [e.fxId] : []))])].join(',')
   const answer = state.answer
   const clockKey = (answer?.clock ?? []).flatMap((c) => (c.speedMasterUuid != null ? [c.speedMasterUuid] : [])).join(',')
-  const rowKeys = useMemo(() => (answer == null ? [] : previewKeys(answer)), [answer])
+  // Notional heads hold nothing on the desk, so nothing underneath them moves.
+  const onRig = request?.notional == null
+  const rowKeys = useMemo(() => (answer == null || !onRig ? [] : previewKeys(answer)), [answer, onRig])
   const rowKeysKey = rowKeys.map(([k, a]) => `${k}|${a}`).join('\u0000')
 
   const asking = request != null
@@ -194,7 +223,19 @@ export function useFxPreview(ask: FxPreviewAsk | null): FxPreviewState {
 function askKey(ask: FxPreviewAsk | null): string {
   if (ask == null) return ''
   const listed = [...(ask.listed ?? [])].sort((a, b) => a - b)
-  return JSON.stringify([ask.projectId, ask.targets.map((t) => [t.type, t.key]), ask.fxIds, listed, ask.window ?? null, ask.solo ?? null, ask.draft ?? null])
+  return JSON.stringify([
+    ask.projectId,
+    ask.targets.map((t) => [t.type, t.key]),
+    ask.fxIds,
+    listed,
+    ask.window ?? null,
+    ask.solo ?? null,
+    ask.draft ?? null,
+    ask.drafts ?? null,
+    ask.include ?? 'STACK',
+    ask.notional ?? null,
+    ask.ownHeads === true,
+  ])
 }
 
 /** Every (row key, attribute) the answer drew: what is underneath each of them is a reason to ask again. */

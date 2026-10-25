@@ -224,6 +224,22 @@ describe('the graph', () => {
     expect(labels('Colour')).toHaveLength(6)
     expect(screen.getByText('Narrow: the picked FX’s lane only, its first 6 rows.')).toBeTruthy()
   })
+
+  it('lays every row out under the phone arm’s scrollRows, six of them shown and the rest a scroll away', () => {
+    const rows = Array.from({ length: 8 }, (_, i) => row(`h${i}`, i, { label: `H${i}` }))
+    const answer = answerOf({
+      rows,
+      lanes: [{ family: 'COLOUR', attributes: [{ attribute: 'rgbColour', kind: 'COLOUR', rows: rows.map((_, i) => attributeRow(i, colourSeries([[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]]))) }] }],
+      fx: [previewFx(8, { family: 'COLOUR', attribute: 'rgbColour' })],
+    })
+    draw(answer, { narrow: true, scrollRows: true })
+    expect(labels('Colour')).toHaveLength(8)
+    const scroll = document.querySelector<HTMLElement>('[data-fx-graph-scroll]')!
+    const canvas = document.querySelector<HTMLElement>('[data-fx-graph-canvas="COLOUR"]')!
+    expect(parseFloat(scroll.style.maxHeight)).toBeLessThan(parseFloat(canvas.style.height) + 28)
+    expect(scroll.contains(document.querySelector('[data-fx-playhead]'))).toBe(true)
+    expect(screen.getByText('Narrow: the picked FX’s lane only, 6 rows at a time — scroll for more.')).toBeTruthy()
+  })
 })
 
 describe('reading the answer as the stage runs it', () => {

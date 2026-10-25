@@ -5239,7 +5239,8 @@ lists** since session 2: the right side is the Colour · Fan dock (§The dock), 
 (`components/fxEditor/`): list · graph · inspector over the window's pair (`useWindowFxPair` — the
 desk's selection while the window follows it, else the programmer list's rows). The graph (session 5)
 draws the preview's answer; Shapes, the offset ladder, Match, hover lights and the graph's handles
-(session 6) tie the inspector to it. Things that will bite:
+(session 6) tie the inspector to it; the FX palette editor, the cue editor's FX tab and the busk FX
+tab draw its graph strip, and the fixture sheet's tray opens it (session 7). Things that will bite:
 
 - **The view is a per-window fact** (`lib/fxEditorView.ts`, `sessionStorage`, P6): *Selection ·
   All* (`programmer.fx.view`, Selection the default), the picked FX, the one Solo marks, the
@@ -5293,8 +5294,10 @@ draws the preview's answer; Shapes, the offset ladder, Match, hover lights and t
   keeps the old order, and the phase dials in place of the ladder.
 - **Widths are the editor's own** (`useContainerBand`, `FX_EDITOR_BAND_FLOORS`): from 1100 three
   columns, list 248 · graph · inspector 340; from 760 list · graph, the inspector over the graph's
-  right half while something is picked or the picker is open; below 760 one column, the inspector
-  under the list.
+  right half while something is picked or the picker is open; below 760 one column (§4.2's phone
+  arm): the list folds to a row of lane chips (`LaneChips` — each family's word and FX count, lit
+  while it holds the picked FX), one lane opened under them (`programmer.fx.phoneLane`, per window),
+  then the graph, then the inspector.
 - **The preview** (`useFxPreview`, `store/fxPreview.ts`, whose types mirror `routes/fxPreview.kt`)
   asks `POST /fx/preview` over the selection with the picked FX (else the list's top card), `include:
   STACK` — the desk folds every FX reaching the selection beside it, and naming more would cut those
@@ -5309,7 +5312,11 @@ draws the preview's answer; Shapes, the offset ladder, Match, hover lights and t
   `NON_SAVE_ENDPOINTS` (it would flash *Saving…*) and `SILENT_ENDPOINTS` (a refused ask is followed
   by one that answers). It sends the graph's `window` and, while a card is solo'd, `solo` — an index
   into the ask, so a solo'd FX that is not the picked one is asked for beside it. The list reads only
-  the apply order and the held-back reasons.
+  the apply order and the held-back reasons. The strip's hosts ask through the same hook with
+  `drafts` (`{draft}` entries, `fxStripDraft.ts`' `previewDraftOf` — only the fields the FX says,
+  no master beside *Seconds*), `include: ONLY`, `notional` (heads the rig lacks, no targets, no row
+  keys to hear) or `ownHeads` (no targets: the FX's own heads); with none of those an ask with no
+  targets is still no ask.
 - **The graph draws the answer and computes nothing** (P2; `FxGraph.tsx`). `fxPreviewDecode.ts`
   decodes the base64 planes once per answer into `Uint8Array`s per row, attribute and FX (a Steps
   output's steps as an `Int32Array` beside its labels); `fxGraphModel.ts` lays a lane out —
@@ -5329,7 +5336,9 @@ draws the preview's answer; Shapes, the offset ladder, Match, hover lights and t
   held-back FX hatched under *This FX*; *representative* and `truncated` in words. *As seen* takes an
   element's Intensity from its fixture's row where the element has none. The path panel sits beside the
   lanes while that leaves them a plot, else under them. Below the 760 arm it draws the picked FX's
-  lane alone, six rows at most, and says so; the column's rows size to their content there
+  lane alone and says so: every row laid out, six of them shown and the rest a scroll away
+  (`scrollRows`, the editor's; `narrow` without it cuts at six). The playhead sits inside the
+  scroller (`RowScroll`), so it spans every row. The column's rows size to their content there
   (`auto-rows-max`), since the graph under the list is tall.
 - **The inspector and the graph meet through one context** (`components/fx/fxGraphLink.ts`'s
   `FxGraphLink`), which `FxEditorSelection` provides around its three columns only — never the sheets
@@ -5394,6 +5403,39 @@ draws the preview's answer; Shapes, the offset ladder, Match, hover lights and t
   stage's) or under `prefers-reduced-motion` (`hooks/useReducedMotion.ts`) it holds still and asks
   for no frames; let go, it asks for a beat, since it runs on from where it was held. The hover
   holds a row by its key, so a re-ask that reorders the rows keeps naming the same head.
+- **The graph strip** (D15, §4.6, `FxGraphStrip.tsx`) is the graph cut to the picked FX's lane for
+  the hosts that edit one FX: `FxGraph`'s own lane drawing (`GraphLane`, `layoutLane`, the path panel
+  for its lane only) and playhead, eight rows shown and the rest a scroll away, no toolbar, hover
+  read-out, lights, ladder or handles — the link stays the FX editor's, and no host provides it. Each
+  host owns its ask and says in a caption what it draws on. *This FX* (`draw="this"`) is
+  `ownOutputOnly` over the answer: each row's own output as its result, nothing underneath, never
+  parked or held back, since with `include: ONLY` the desk still folds over what is underneath now;
+  where the FX holds (its Runs not begun or spent) the desk fills its own output with what is
+  underneath, so those samples keep the FX's nearest own value under the hatching. A draft's moving
+  fields are, like the inspector's `draft`, outside the hook's stale check — only what it is and where
+  it runs must still match — so the strip redraws during a drag.
+  - **The FX palette editor** (`PaletteRunsOn`, in place of its old stripe and beat ruler): the draft
+    as a `{draft}`, `include: ONLY` and `programmerOwned` (the band a pressed palette runs in, so a
+    programmer value does not hold it back), redrawn as it changes — *On the selection* (the
+    window's, `useWindowSelectionTargets(false)`: the editor is the Palettes page's), drawn as *Result*
+    over what the heads hold, or *On eight heads* (`notional: NOTIONAL_HEADS`, the desk's
+    `NotionalRig`), drawn as *This FX*; with nothing selected only the second. A palette FX that names
+    no attribute drives what `FxSpawner` resolves (`storedFxAttribute`): Palette Steps' from the
+    palettes it steps (`paletteStepsAttribute`, the desk's `paletteStepsShape`), else the family's
+    own, or a Beam FX's one declared attribute. Off the current project the desk refuses the ask and
+    the strip says so; it draws no guess.
+  - **The cue editor's FX tab**: the open row's FX, as edited, over its own targets, `include: ONLY`,
+    drawn as *This FX*, the caption saying what is underneath at its GO is not drawn.
+  - **The busk FX tab**: under the open row's editor, the running FX on its own heads (`ownHeads`,
+    `include: STACK`), drawn as *Result*, every running FX `listed`, since any of them may fold in.
+- **The fixture sheet's tray opens the FX editor** (⤢, `OpenInFxEditor`, mounted only inside a
+  router): the sheet's fixture or group selected through `selectWindowHeads`, as *All*'s row press,
+  the FX tab set to *Selection*, a modal host closed (`SheetCloseContext`, which `FixtureDetailModal`,
+  `GroupDetailModal` and `BuskFixtureSheet` provide — a member's sheet closes its group's too — since
+  one outside the routed page outlives the navigation), then `/projects/{id}/programmer?table=fx`.
+  Off the programmer page the window's own selection goes as Include's request, which the
+  programmer list takes up as it mounts. The list forgets the request it applied on unmount, as the
+  unmount clears its selection, so `React.StrictMode`'s remount applies it again.
 
 **The FX lens** (D3, session 2) answers *side by side* without a split: a Values cell an FX
 drives carries a violet chip — the wave and the division (`lensDivision`: `½` for a fraction of a

@@ -1,6 +1,8 @@
+import { useContext } from 'react'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet'
 import { useFixtureListQuery } from '../../store/fixtures'
 import { FixtureSheet } from '../fixtureSheet/FixtureSheet'
+import { SheetCloseContext } from '../fixtureSheet/sheetContext'
 
 interface FixtureDetailModalProps {
   fixtureKey: string | null
@@ -16,18 +18,26 @@ interface FixtureDetailModalProps {
 export function FixtureDetailModal({ fixtureKey, onClose }: FixtureDetailModalProps) {
   const { data: fixtureList } = useFixtureListQuery()
   const fixture = fixtureKey ? fixtureList?.find((f) => f.key === fixtureKey) : null
+  // A member's sheet over a group's: leaving the page closes both.
+  const parentClose = useContext(SheetCloseContext)
+  const close = () => {
+    onClose()
+    parentClose?.()
+  }
 
   return (
-    <Sheet open={fixtureKey !== null} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
-        <SheetDescription className="sr-only">The fixture&apos;s values, its channels and its FX</SheetDescription>
-        {fixture ? (
-          // Keyed by fixture so the open row and the view reset when the sheet moves to another.
-          <FixtureSheet key={fixture.key} fixture={fixture} host="popup" titleComponent={SheetTitle} />
-        ) : (
-          <SheetTitle className="p-4">Fixture</SheetTitle>
-        )}
-      </SheetContent>
-    </Sheet>
+    <SheetCloseContext.Provider value={close}>
+      <Sheet open={fixtureKey !== null} onOpenChange={(open) => !open && onClose()}>
+        <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-lg">
+          <SheetDescription className="sr-only">The fixture&apos;s values, its channels and its FX</SheetDescription>
+          {fixture ? (
+            // Keyed by fixture so the open row and the view reset when the sheet moves to another.
+            <FixtureSheet key={fixture.key} fixture={fixture} host="popup" titleComponent={SheetTitle} />
+          ) : (
+            <SheetTitle className="p-4">Fixture</SheetTitle>
+          )}
+        </SheetContent>
+      </Sheet>
+    </SheetCloseContext.Provider>
   )
 }

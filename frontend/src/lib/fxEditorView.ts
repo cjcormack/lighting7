@@ -5,8 +5,9 @@ import { createSyncStore, sessionStorageArea, type SyncStore } from './syncStore
 /**
  * **The FX editor's view state** (FX editor plan P6): which view the programmer's FX tab shows —
  * *Selection*, the FX editor, or *All*, the table of every running FX — the FX picked in the list,
- * the one Solo marks, the lanes folded to their headers, and the graph's toolbar: its window,
- * *Result · This FX*, *Rig order*, *Colour as seen* and the playhead's pause. Per window
+ * the one Solo marks, the lanes folded to their headers, the lane the phone arm opens, and the
+ * graph's toolbar: its window, *Result · This FX*, *Rig order*, *Colour as seen* and the playhead's
+ * pause. Per window
  * (`sessionStorage`), as the busk view's focus is; nothing here reaches the desk.
  */
 
@@ -39,6 +40,14 @@ const foldedStore = createSyncStore<readonly AttributeFamily[]>({
   key: 'programmer.fx.folded',
   fallback: [],
   parse: (parsed) => (Array.isArray(parsed) ? ATTRIBUTE_FAMILIES.filter((f) => parsed.includes(f)) : []),
+  storage: sessionStorageArea,
+})
+
+/** The one lane the phone arm opens under its lane chips; null folds them all (§4.2). */
+const phoneLaneStore = createSyncStore<AttributeFamily | null>({
+  key: 'programmer.fx.phoneLane',
+  fallback: null,
+  parse: (parsed) => ATTRIBUTE_FAMILIES.find((f) => f === parsed) ?? null,
   storage: sessionStorageArea,
 })
 
@@ -92,6 +101,9 @@ export function toggleLaneFold(family: AttributeFamily): void {
   foldedStore.set(folded.includes(family) ? folded.filter((f) => f !== family) : [...folded, family])
 }
 
+export const usePhoneLane = (): AttributeFamily | null => useStore(phoneLaneStore)
+export const setPhoneLane = (family: AttributeFamily | null): void => phoneLaneStore.set(family)
+
 export const useFxGraphOptions = (): FxGraphOptions => useStore(graphStore)
 export function setFxGraphOption<K extends keyof FxGraphOptions>(key: K, value: FxGraphOptions[K]): void {
   graphStore.set({ ...graphStore.getSnapshot(), [key]: value })
@@ -103,5 +115,6 @@ export function resetFxEditorViewStores(): void {
   pickedStore.reset()
   soloStore.reset()
   foldedStore.reset()
+  phoneLaneStore.reset()
   graphStore.reset()
 }

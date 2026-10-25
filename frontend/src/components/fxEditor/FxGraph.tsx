@@ -37,6 +37,7 @@ import {
   sampleAt,
   startBeatOf,
   truncatedWords,
+  visibleHeight,
   type LaneLayout,
   type PlayheadClock,
 } from './fxGraphModel'
@@ -60,9 +61,9 @@ import {
 export type GraphContextOf = (canvas: HTMLCanvasElement) => GraphCtx | null
 const canvasContext: GraphContextOf = (canvas) => canvas.getContext('2d')
 
-const PATH_PX = 132
+export const PATH_PX = 132
 /** The least plot the lanes keep beside the path panel before it moves under them. */
-const MIN_PLOT_PX = 160
+export const MIN_PLOT_PX = 160
 
 export interface FxGraphProps {
   answer: FxPreviewAnswer | null
@@ -71,6 +72,8 @@ export interface FxGraphProps {
   empty: boolean
   /** Below the editor's 760 arm: the picked FX's lane alone, at most six rows. */
   narrow: boolean
+  /** With [narrow], every row laid out and six of them shown, the rest a scroll away (§4.2's phone arm). */
+  scrollRows?: boolean
   fxName: (fxType: string) => string
   fixtureName: (fixtureKey: string) => string | undefined
   /** The FX Solo marks, while the ask carries it. */
@@ -104,6 +107,7 @@ export function FxGraph({
   error,
   empty,
   narrow,
+  scrollRows = false,
   fxName,
   fixtureName,
   solo,
@@ -134,6 +138,7 @@ export function FxGraph({
       answer={answer}
       error={error}
       narrow={narrow}
+      scrollRows={narrow && scrollRows}
       fxName={fxName}
       fixtureName={fixtureName}
       solo={solo}
@@ -152,7 +157,7 @@ export function FxGraph({
 }
 
 /** What the pointer rests on: a sample and a row by its key, which outlive a re-ask that reorders the rows. */
-interface Hover {
+export interface Hover {
   sample: number
   key: string
   x: number
@@ -162,6 +167,7 @@ function GraphBody({
   answer,
   error,
   narrow,
+  scrollRows,
   fxName,
   fixtureName,
   solo,
@@ -208,12 +214,12 @@ function GraphBody({
           order,
           rows: answer.rows,
           stepsAttributes: stepsAttributes(lane),
-          maxRows: narrow ? NARROW_ROWS : undefined,
+          maxRows: narrow && !scrollRows ? NARROW_ROWS : undefined,
           fixtureName,
           attributeLabel,
         }),
       ),
-    [answer.rows, fixtureName, lanes, lanesWidth, narrow, order],
+    [answer.rows, fixtureName, lanes, lanesWidth, narrow, order, scrollRows],
   )
   const linkedIndex = linkedRow == null ? -1 : answer.rows.findIndex((r) => r.key === linkedRow)
   const drawOptions = useMemo(
@@ -266,7 +272,8 @@ function GraphBody({
   useEffect(() => () => onHoverRowRef.current?.(null), [])
 
   const truncated = truncatedWords(answer.truncated)
-  const hiddenRows = narrow ? Math.max(0, ...layouts.flatMap((l) => l.sections.map((s) => countRows(lanes, s.attribute) - s.rows.length))) : 0
+  const hiddenRows = narrow && !scrollRows ? Math.max(0, ...layouts.flatMap((l) => l.sections.map((s) => countRows(lanes, s.attribute) - s.rows.length))) : 0
+  const scrolled = scrollRows === true && layouts.some((l) => visibleHeight(l, NARROW_ROWS) != null)
   const pathRows = useMemo(() => pathRowsOf(decoded, order, drawOptions), [decoded, drawOptions, order])
 
   return (
@@ -285,12 +292,13 @@ function GraphBody({
           {truncated != null && <EditorReadout>{truncated}</EditorReadout>}
           {narrow && (
             <EditorReadout>
-              {`Narrow: the picked FX’s lane only${hiddenRows > 0 ? `, its first ${NARROW_ROWS} rows` : ''}.`}
+              {`Narrow: the picked FX’s lane only${hiddenRows > 0 ? `, its first ${NARROW_ROWS} rows` : scrolled ? `, ${NARROW_ROWS} rows at a time — scroll for more` : ''}.`}
             </EditorReadout>
           )}
         </div>
       )}
       <div ref={measure} className={cn('flex min-w-0 gap-3 px-3 py-2', !pathBeside && 'flex-col')}>
+        <RowScroll height={scrolled ? scrollHeight(layouts, NARROW_ROWS) : null}>
         <div className="relative min-w-0 flex-1" data-fx-graph-lanes>
           {lanes.map((lane, i) => (
             <GraphLane
@@ -320,6 +328,7 @@ function GraphBody({
             <div aria-hidden className="pointer-events-none absolute top-0 bottom-0 w-px bg-foreground/35" style={{ left: hovered.x }} />
           )}
         </div>
+        </RowScroll>
         {pathRows.length > 0 && (narrow ? lanes.some((l) => l.family === 'POSITION') : true) && (
           <PathPanel
             rows={pathRows}
@@ -336,7 +345,26 @@ function GraphBody({
   )
 }
 
-function hasPosition(decoded: DecodedPreview): boolean {
+/** The lanes in a scroller [height] tall, or as they are with none. */
+export function RowScroll({ height, children }: { height: number | null; children: ReactNode }) {
+  if (height == null) return <>{children}</>
+  return (
+    <div data-fx-graph-scroll className="min-w-0 flex-1 overflow-y-auto" style={{ maxHeight: height }}>
+      {children}
+    </div>
+  )
+}
+
+/** The lanes' height that shows [rows] rows of each, its header and foot included. */
+export function scrollHeight(layouts: readonly LaneLayout[], rows: number): number {
+  return layouts.reduce((h, l) => h + LANE_HEADER_PX + (visibleHeight(l, rows) ?? l.height) + LANE_FOOT_PX, 0)
+}
+
+/** A lane's word line over its canvas (`h-5`) and the space under it (`pb-2`). */
+const LANE_HEADER_PX = 20
+const LANE_FOOT_PX = 8
+
+export function hasPosition(decoded: DecodedPreview): boolean {
   return decoded.lanes.some((l) => l.attributes.some((a) => a.kind === 'POSITION'))
 }
 
@@ -344,9 +372,9 @@ function countRows(lanes: readonly DecodedLane[], attribute: string): number {
   return lanes.flatMap((l) => l.attributes).find((a) => a.attribute === attribute)?.rows.length ?? 0
 }
 
-const attributeLabel = (attribute: string) => paletteAttributeFor(attribute)?.label ?? attribute
+export const attributeLabel = (attribute: string) => paletteAttributeFor(attribute)?.label ?? attribute
 
-function stepsAttributes(lane: DecodedLane): Set<string> {
+export function stepsAttributes(lane: DecodedLane): Set<string> {
   return new Set(lane.attributes.filter((a) => a.rows.some((r) => r.fx.some((o) => o.output.steps != null))).map((a) => a.attribute))
 }
 
@@ -367,7 +395,7 @@ function intensityResults(decoded: DecodedPreview, rows: FxPreviewAnswer['rows']
   return out
 }
 
-function pathRowsOf(decoded: DecodedPreview, order: readonly number[], options: LaneDrawOptions): PathRow[] {
+export function pathRowsOf(decoded: DecodedPreview, order: readonly number[], options: LaneDrawOptions): PathRow[] {
   const attribute = decoded.lanes.flatMap((l) => l.attributes).find((a) => a.kind === 'POSITION')
   if (attribute == null) return []
   const out: PathRow[] = []
@@ -385,7 +413,7 @@ function pathRowsOf(decoded: DecodedPreview, order: readonly number[], options: 
 }
 
 /** The lanes' column width, measured, and followed while a ResizeObserver can say. */
-function useWidth(): [(el: HTMLElement | null) => void, number] {
+export function useWidth(): [(el: HTMLElement | null) => void, number] {
   const [width, setWidth] = useState(0)
   const observer = useRef<ResizeObserver | null>(null)
   const ref = useCallback((el: HTMLElement | null) => {
@@ -439,7 +467,7 @@ export function useGraphPlayhead(answer: FxPreviewAnswer | null, frozen: boolean
   return playhead
 }
 
-const GraphLane = memo(function GraphLane({
+export const GraphLane = memo(function GraphLane({
   lane,
   layout,
   options,
@@ -450,6 +478,7 @@ const GraphLane = memo(function GraphLane({
   editor,
   contextOf,
   onHover,
+  underneath = true,
 }: {
   lane: DecodedLane
   layout: LaneLayout
@@ -461,6 +490,8 @@ const GraphLane = memo(function GraphLane({
   editor: LinkedEditor | null
   contextOf: GraphContextOf
   onHover: (hover: Hover | null) => void
+  /** The key names *Underneath*: false where the lane draws none. */
+  underneath?: boolean
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const cancel = useDragCancel()
@@ -535,7 +566,7 @@ const GraphLane = memo(function GraphLane({
           <>
             <Key colour={own ? 'bg-violet-500' : 'bg-zinc-400'}>{own ? 'This FX' : 'Result'}</Key>
             {!own && pickedFx?.family === family && <Key colour="bg-violet-500">This FX</Key>}
-            <Key colour="border-t border-dashed border-zinc-400 bg-transparent">Underneath</Key>
+            {underneath && <Key colour="border-t border-dashed border-zinc-400 bg-transparent">Underneath</Key>}
           </>
         ) : null}
         {representative.map((f) => (
@@ -570,7 +601,7 @@ const GraphLane = memo(function GraphLane({
 
 function Key({ colour, children }: { colour: string; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
       <i className={cn('inline-block h-0.5 w-3.5', colour)} />
       {children}
     </span>
@@ -587,7 +618,7 @@ function prepare(canvas: HTMLCanvasElement, width: number, height: number, conte
 }
 
 /** The path panel: each element's pan and tilt over the window, a dot where the playhead is. */
-function PathPanel({
+export function PathPanel({
   rows,
   samples,
   scale,

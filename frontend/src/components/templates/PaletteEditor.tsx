@@ -85,7 +85,7 @@ import {
  * template holds a *value* or an *effect*, never both, and like the family it is fixed at creation
  * (fx-templates D1). Choosing Effect swaps the family-native control for `FxFields` —
  * the live effect editor's fields, reused rather than redrawn, minus every row that needs a fixture —
- * and swaps the resolves-to panel for `PaletteRunsOn`.
+ * and swaps the resolves-to panel for `PaletteRunsOn`, whose graph strip draws the draft.
  *
  * Three things this editor deliberately does not do:
  *
@@ -477,10 +477,10 @@ export function PaletteEditor({
 
           {/* Live against the real patch, so "usable on any fixture with colour" is something you
               can read *before* saving — including where it degrades. An effect has nothing per-head
-              to resolve, so it gets the head count and the tempo instead. */}
+              to resolve, so it gets the head count, the tempo and the desk's graph strip instead. */}
           {holdsFx ? (
             fxDraft != null && (
-              <PaletteRunsOn family={family} effect={fxDraft} entry={fxEntry} />
+              <PaletteRunsOn projectId={projectId} family={family} effect={fxDraft} entry={fxEntry} />
             )
           ) : (
             <PaletteResolvesTo projectId={projectId} rows={rows} />

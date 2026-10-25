@@ -254,4 +254,60 @@ describe('useFxPreview', () => {
     await flush()
     expect(wire.asks).toHaveLength(2)
   })
+
+  describe('the strip’s asks (FX editor plan §4.6)', () => {
+    const DRAFT = { fxType: 'Circle', attribute: 'position', cycle: 4 }
+
+    it('asks a draft over the selection, include ONLY, with no running FX named', () => {
+      renderHook(() => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [], drafts: [DRAFT], include: 'ONLY' }))
+      expect(wire.asks.map((a) => a.body)).toEqual([
+        { projectId: 1, targets: [{ type: 'group', key: 'front' }], fx: [{ draft: DRAFT }], include: 'ONLY' },
+      ])
+    })
+
+    it('asks a draft on notional heads with no targets, and hears no row’s key, which the desk does not hold', async () => {
+      renderHook(() => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [], drafts: [DRAFT], include: 'ONLY', notional: 8 }))
+      expect(wire.asks[0].body).toEqual({ projectId: 1, targets: [], fx: [{ draft: DRAFT }], include: 'ONLY', notional: 8 })
+      await act(async () => wire.asks[0].resolve(answer('notional-1')))
+      await flush()
+      expect(wire.keys.size).toBe(0)
+    })
+
+    it('asks again when a draft changes, and not for a re-render with the same one', async () => {
+      const { rerender } = renderHook(({ cycle }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [], drafts: [{ ...DRAFT, cycle }], include: 'ONLY' }), {
+        initialProps: { cycle: 4 },
+      })
+      await act(async () => wire.asks[0].resolve(answer('hex-1')))
+      rerender({ cycle: 4 })
+      expect(wire.asks).toHaveLength(1)
+      rerender({ cycle: 8 })
+      expect(wire.asks).toHaveLength(2)
+      expect(wire.asks[1].body).toMatchObject({ fx: [{ draft: { cycle: 8 } }] })
+    })
+
+    it('draws an answer to an earlier move of a draft mid-drag, and drops one to another FX’s', async () => {
+      const { result, rerender } = renderHook(
+        ({ fxType, cycle }) => useFxPreview({ projectId: 1, targets: SELECTION, fxIds: [], drafts: [{ fxType, attribute: 'dimmer', cycle }], include: 'ONLY' }),
+        { initialProps: { fxType: 'Pulse', cycle: 4 } },
+      )
+      rerender({ fxType: 'Pulse', cycle: 5 })
+      await act(async () => wire.asks[0].resolve(answer('hex-1', 'first')))
+      expect(result.current.answer?.fx[0].fxType).toBe('first')
+      expect(wire.asks[1].body).toMatchObject({ fx: [{ draft: { cycle: 5 } }] })
+      rerender({ fxType: 'SineWave', cycle: 5 })
+      await act(async () => wire.asks[1].resolve(answer('hex-1', 'second')))
+      expect(result.current.answer?.fx[0].fxType).toBe('first')
+      expect(wire.asks[2].body).toMatchObject({ fx: [{ draft: { fxType: 'SineWave' } }] })
+    })
+
+    it('asks a running FX on its own heads with no targets only when told to', () => {
+      renderHook(() => useFxPreview({ projectId: 1, targets: [], fxIds: [7], ownHeads: true }))
+      expect(wire.asks.map((a) => a.body)).toEqual([{ projectId: 1, targets: [], fx: [{ fxId: 7 }], include: 'STACK' }])
+    })
+
+    it('asks nothing for a draft with neither targets nor notional heads', () => {
+      renderHook(() => useFxPreview({ projectId: 1, targets: [], fxIds: [], drafts: [DRAFT], include: 'ONLY' }))
+      expect(wire.asks).toEqual([])
+    })
+  })
 })

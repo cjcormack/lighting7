@@ -73,6 +73,14 @@ vi.mock('@/hooks/useFixtureLookup', () => ({
   }),
 }))
 vi.mock('@/components/fixtureSheet/fxLabels', () => ({ useFxDetail: () => () => '½ · M1' }))
+/** The strip's ask, read rather than sent: the desk's preview is `useFxPreview.test.tsx`'s. */
+const previews = vi.hoisted(() => ({ asks: [] as unknown[] }))
+vi.mock('@/components/fxEditor/useFxPreview', () => ({
+  useFxPreview: (ask: unknown) => {
+    previews.asks.push(ask)
+    return { answer: null, error: null }
+  },
+}))
 /** The editor stand-in: one move, held where the split editor holds it. */
 vi.mock('@/components/fx/FxEditor', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/components/fx/FxEditor')>()),
@@ -185,6 +193,24 @@ describe('FxSheet', () => {
     render(<FxSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} families={null} />)
     fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
     expect(screen.getByTestId('fx-editor')).toHaveAttribute('data-effect', '21')
+  })
+
+  it('draws the graph strip under the open row only: its FX on its own heads, over what is underneath', () => {
+    state.effects = [padCircle(), ownPulse]
+    previews.asks = []
+    render(<FxSheet projectId={1} selectedTargets={new Map([['fixture:spot-1', spot1]])} families={null} />)
+    expect(document.querySelector('[data-fx-graph-strip]')).toBeNull()
+    expect(previews.asks).toHaveLength(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Pulse' }))
+    const strips = [...document.querySelectorAll('[data-fx-graph-strip]')]
+    expect(strips).toHaveLength(1)
+    expect(strips[0].closest('[data-effects-editor]')).not.toBeNull()
+    expect(strips[0]).toHaveAttribute('data-fx-graph-strip', 'result')
+    // It folds every FX on its heads, so a change to any running FX asks again.
+    expect(previews.asks.at(-1)).toMatchObject({ projectId: 1, targets: [], fxIds: [22], listed: [21, 22], ownHeads: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Circle' }))
+    expect(document.querySelectorAll('[data-fx-graph-strip]')).toHaveLength(1)
+    expect(previews.asks.at(-1)).toMatchObject({ fxIds: [21] })
   })
 
   it('says what to select, and what to press, when there is nothing to list', () => {

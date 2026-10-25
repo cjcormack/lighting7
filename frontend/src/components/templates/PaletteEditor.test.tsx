@@ -126,6 +126,13 @@ vi.mock('@/store/busk', () => ({
 }))
 // The speed-master picker reaches for the live bank; the branch under test is the form around it.
 vi.mock('@/components/fx/SpeedMasterSelect', () => ({ SpeedMasterSelect: () => null }))
+// The FX branch's graph strip asks the desk over the window's selection; its asks are
+// `PaletteRunsOn.test.tsx`'s, and here the strip only waits.
+vi.mock('@/components/fx/selectionFxTarget', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/components/fx/selectionFxTarget')>()),
+  useWindowSelectionTargets: () => [],
+}))
+vi.mock('@/components/fxEditor/useFxPreview', () => ({ useFxPreview: () => ({ answer: null, error: null }) }))
 
 const { PaletteEditor } = await import('./PaletteEditor')
 

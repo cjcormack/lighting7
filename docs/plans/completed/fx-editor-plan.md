@@ -1,12 +1,12 @@
 # FX editor: a list, a graph and an inspector for the FX on a selection
 
-> **Document status: AGREED 2026-10-23; sessions 1a, 1b, 2, 3a, 3b, 4, 5 and 6 of 9 done.** The fifteen questions and their answers are
+> **Document status: AGREED 2026-10-23; all nine sessions done (1a, 1b, 2, 3a, 3b, 4, 5, 6, 7).** The fifteen questions and their answers are
 > in §11, every one answered as recommended. Each session has a **gate** on the terminology plan
-> ([`terminology-plan.md`](completed/terminology-plan.md)) in §6; check it before starting. Every word here is
+> ([`terminology-plan.md`](terminology-plan.md)) in §6; check it before starting. Every word here is
 > that plan's (§4 there): *FX*, *Cycle*, *Amount*, *Order*, *Segments*, *Parts*, *element*, *attribute*, *family*,
 > *Intensity*, *Runs*, *Timing: Per cycle | Per head*. The design record is
-> [`fx-editor-design/`](fx-editor-design/INDEX.md); its one page,
-> [`fx-editor-design/fx-editor.html`](fx-editor-design/fx-editor.html), draws the views and runs a
+> [`fx-editor-design/`](../fx-editor-design/INDEX.md); its one page,
+> [`fx-editor-design/fx-editor.html`](../fx-editor-design/fx-editor.html), draws the views and runs a
 > working copy of the graph; it is live at <https://claude.ai/artifact/Dj9DW378cSMLMRbSUPp66r>,
 > private to Chris and a convenience (the checked-in files are the authority). Where this plan and
 > the page disagree, the plan wins on behaviour and the page on layout and copy.
@@ -476,11 +476,13 @@ Why each gate is where it is:
 - **Tests**: each Shape writes its fields in one `updateFx` and lights from them; a handle's drag
   writes through the floor and its release lands; Match copies once.
 
-### Session 7: the other hosts (frontend)
+### Session 7: the other hosts (frontend) — done, `94492d8c`
 
 **Gate: as session 4.** Needs 5.
 
 - §4.6, and the phone arm of §4.2.
+- The preview route's `notional: n`, agreed with Chris during the session: nothing sampled a draft over
+  heads the rig lacks, which D15's eight heads need (`fx-engineering.md` §"Previewing an FX").
 - **Tests**: the palette editor's strip asks with a draft and redraws on a field change; the tray's ⤢
   lands on the programmer with the target selected.
 

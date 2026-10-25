@@ -9,7 +9,7 @@ every word here is that plan's.
 
 **Status: approved 2026-10-23.** Chris answered the fifteen questions in one round, every one as
 recommended; the decisions are D1–D15 and the answers §11 of the plan,
-[`../fx-editor-plan.md`](../fx-editor-plan.md). Where the plan and the page disagree, the plan wins on behaviour and the page on
+[`../completed/fx-editor-plan.md`](../completed/fx-editor-plan.md). Where the plan and the page disagree, the plan wins on behaviour and the page on
 layout and copy.
 
 ## Asked and answered
